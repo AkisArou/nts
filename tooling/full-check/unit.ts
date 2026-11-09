@@ -1,15 +1,22 @@
-// The full check's systemd user unit: one long-running service at low
-// priority, from a controller worktree of its own at `verified`.
+// The full check's systemd user units: the controller, one long-running
+// service at low priority from a controller worktree of its own at `verified`;
+// the hourly count, a service its own timer starts; and each part's records
+// unit, which the controller starts itself (service.ts, background.ts) and so
+// is not installed.
 //
-//   node tooling/full-check/unit.ts                  print the unit
-//   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the unit, reload systemd
+//   node tooling/full-check/unit.ts                  print the controller's unit, and the count's service and timer
+//   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the three, reload systemd
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00 --memory-high=20G
 //
-// Then `systemctl --user enable --now nts-full-check` starts it, `journalctl
-// --user -u nts-full-check -f` follows it, and `systemctl --user stop
-// nts-full-check` stops it and every process it started (the unit's cgroup).
-// The schedule lives on the ExecStart line: edit it with `--install` and new
-// options, or `systemctl --user edit --full nts-full-check`.
+// Then `systemctl --user enable --now nts-full-check` starts the controller,
+// `systemctl --user enable --now nts-full-check-count.timer` the count, and
+// `journalctl --user -u nts-full-check -f` follows the controller.
+// `systemctl --user stop nts-full-check` stops it and every process it
+// started (the unit's cgroup), except the records units, which run on and are
+// adopted by name when it starts again: `systemctl --user stop
+// nts-full-check-records-core` stops one. The schedule lives on the
+// controller's ExecStart line: edit it with `--install` and new options, or
+// `systemctl --user edit --full nts-full-check`.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -19,9 +26,23 @@ import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs } from "../landing/pool.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, type Layout } from "./state.ts";
+import { layout as defaultLayout, type Layout, type Part } from "./state.ts";
 
 export const UNIT = "nts-full-check";
+/** The hourly count's service, and the timer of that name that starts it (service.ts --count). */
+export const COUNT_UNIT = `${UNIT}-count`;
+/** A part's records unit (service.ts): one name for each part, so a second cannot start while one runs. */
+export const recordsUnitName = (part: Part) => `${UNIT}-records-${part}`;
+
+/**
+ * How every unit of the full check runs: landing checks and agents come first,
+ * so the lowest priority and a small CPU and IO weight; the measurement CPUs
+ * 4-5 excluded; the first to go when the machine runs out of memory; and no
+ * core dumps of the gate's deliberate crashes stored.
+ */
+export function lowPriority(cpus = "0-3 6-31"): string[] {
+  return ["Nice=19", "CPUWeight=20", "IOWeight=20", `CPUAffinity=${cpus}`, "OOMScoreAdjust=500", "LimitCORE=0"];
+}
 
 export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; memoryHigh: string; env: NodeJS.ProcessEnv };
 
@@ -30,9 +51,12 @@ const quote = (value: string) => `"${value.replaceAll("\\", "\\\\").replaceAll('
 /** An ExecStart argument, where `$` also expands a variable. */
 const argument = (value: string) => quote(value).replaceAll("$", "$$$$");
 
+/** The gate's host capabilities, as the controller and the count are given them. */
+const environment = (env: NodeJS.ProcessEnv) =>
+  Object.entries({ ...hostEnvironment(env), ...FIXED_AMBIENT }).filter(([, value]) => value).map(([name, value]) => `Environment=${quote(`${name}=${value}`)}`);
+
 export function unitText(options: UnitOptions): string {
   const { layout, schedule } = options;
-  const environment = { ...hostEnvironment(options.env), ...FIXED_AMBIENT };
   const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--wide-at=${schedule.wide.join(",")}`, `--nightly-at=${schedule.nightly}`];
   return [
     "[Unit]",
@@ -46,23 +70,55 @@ export function unitText(options: UnitOptions): string {
     `ExecStart=${exec.map(argument).join(" ")}`,
     "Restart=always",
     "RestartSec=60",
-    // Landing checks come first: the lowest priority, a small CPU and IO
-    // weight, the measurement CPUs 4-5 excluded, and the first to go when the
-    // machine runs out of memory.
-    "Nice=19",
-    "CPUWeight=20",
-    "IOWeight=20",
-    "CPUAffinity=0-3 6-31",
+    ...lowPriority(),
     `MemoryHigh=${options.memoryHigh}`,
-    "OOMScoreAdjust=500",
-    // The gate's deliberate crashes store no core dumps.
-    "LimitCORE=0",
     "KillMode=control-group",
     "TimeoutStopSec=120",
-    ...Object.entries(environment).filter(([, value]) => value).map(([name, value]) => `Environment=${quote(`${name}=${value}`)}`),
+    ...environment(options.env),
     "",
     "[Install]",
     "WantedBy=default.target",
+    "",
+  ].join("\n");
+}
+
+/**
+ * The count's service: service.ts --count once, from the controller's tree,
+ * holding that tree's lock shared while it reads it, so the controller never
+ * moves the tree to `verified` under it (service.ts's followVerified). A count
+ * that hangs is stopped after half an hour, and the next hour counts again.
+ */
+export function countServiceText(options: Pick<UnitOptions, "node" | "layout" | "env">): string {
+  const { layout } = options;
+  const exec = ["flock", "--shared", layout.controllerLock, options.node, join(layout.controller, "tooling/full-check/service.ts"), "--count"];
+  return [
+    "[Unit]",
+    "Description=nts full check: the hourly count of branches, worktrees and ~/.cache, after the pool's upkeep",
+    "",
+    "[Service]",
+    "Type=oneshot",
+    `WorkingDirectory=${layout.controller.replaceAll("%", "%%")}`,
+    `ExecStart=${exec.map(argument).join(" ")}`,
+    "TimeoutStartSec=30min",
+    ...lowPriority(),
+    ...environment(options.env),
+    "",
+  ].join("\n");
+}
+
+/** The count's timer: hourly, and at once after an hour the machine was off or the timer stopped (Persistent). */
+export function countTimerText(): string {
+  return [
+    "[Unit]",
+    "Description=nts full check: the count, hourly",
+    "",
+    "[Timer]",
+    "OnCalendar=hourly",
+    "Persistent=true",
+    `Unit=${COUNT_UNIT}.service`,
+    "",
+    "[Install]",
+    "WantedBy=timers.target",
     "",
   ].join("\n");
 }
@@ -92,9 +148,11 @@ function run(command: string, args: string[], cwd: string): string {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {
     const options = parseUnitOptions(process.argv.slice(2));
-    const layout = defaultLayout();
-    const text = unitText({ node: process.execPath, layout, schedule: options.schedule, memoryHigh: options.memoryHigh, env: process.env });
-    if (!options.install) process.stdout.write(text);
+    const layout = defaultLayout(), unitOptions = { node: process.execPath, layout, schedule: options.schedule, memoryHigh: options.memoryHigh, env: process.env };
+    const files: [string, string][] = [
+      [`${UNIT}.service`, unitText(unitOptions)], [`${COUNT_UNIT}.service`, countServiceText(unitOptions)], [`${COUNT_UNIT}.timer`, countTimerText()],
+    ];
+    if (!options.install) process.stdout.write(files.map(([name, text]) => `# ${name}\n${text}`).join("\n"));
     else {
       const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
       if (!existsSync(join(layout.controller, ".git"))) {
@@ -106,11 +164,16 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       // The service launches gates from this tree, so it has the inputs no
       // commit carries (inputs.sh), made again on every install.
       linkInputs(sharedCheckout(root))(layout.controller);
-      const file = join(homedir(), ".config/systemd/user", `${UNIT}.service`);
-      mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, text);
+      const dir = join(homedir(), ".config/systemd/user");
+      mkdirSync(dir, { recursive: true });
+      for (const [name, text] of files) writeFileSync(join(dir, name), text);
       run("systemctl", ["--user", "daemon-reload"], root);
-      console.log(`wrote ${file}\nstart it: systemctl --user enable --now ${UNIT}\nfollow it: journalctl --user -u ${UNIT} -f`);
+      console.log([
+        `wrote ${files.map(([name]) => join(dir, name)).join(", ")}`,
+        `start the controller: systemctl --user enable --now ${UNIT}`,
+        `start the hourly count: systemctl --user enable --now ${COUNT_UNIT}.timer`,
+        `follow the controller: journalctl --user -u ${UNIT} -f`,
+      ].join("\n"));
     }
   } catch (error) {
     console.error(`unit: ${error instanceof Error ? error.message : String(error)}`);

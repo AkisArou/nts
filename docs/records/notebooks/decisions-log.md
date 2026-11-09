@@ -1635,6 +1635,37 @@ As built (#597):
   reopens it; a culprit that names none, or an issue `gh` cannot reach,
   leaves a task line in the full check's status instead.
 
+## Records and the count run beside the parts (11-09)
+
+The user asked (#611) that the core keep running on every new `main` while a
+records run records: on 11-09 the records run for be64f8805's 127 pending rows
+began at 18:14 UTC and held the controller's cycle for over 70 minutes, while
+main gained five commits no core run checked; and the count, which the cycle
+ran only when nothing else was due, last ran ten hours before.
+
+As built:
+- background work runs in a systemd user unit of its own, named for its kind
+  (`tooling/full-check/background.ts`): the controller writes the unit's name
+  and its outcome's file into its state before the unit starts, and a
+  controller that restarts finds it by that name, waiting while it runs,
+  reading the outcome once it ends, and starting it once more, then giving
+  it up as a task, when it ended without one; the nightly benchmarks are to
+  use the same units (#604);
+- a part's records run records in `nts-full-check-records-<part>`, in a
+  records tree of that part's (`~/.cache/nts-full-check/records/<part>`, its
+  cargo target its own), on that tree's own code at the run's commit, with the
+  run's pin made before the next core run builds over it; the controller
+  applies the delta on the newest main in the same tree once the unit ends,
+  and stays the only writer of its state, of main and of the queue; a tree
+  per part, so the core's records and the wide steps' never wait for each
+  other;
+- the count runs from its own hourly timer (`nts-full-check-count.timer`,
+  `service.ts --count`), writes its own file, which the status's `count`
+  reads in the same shape, and keeps the pin a records unit records with out
+  of its sweep; it holds the controller's tree's lock shared while it reads
+  that tree, and the controller moves the tree to `verified` only while
+  nobody holds it.
+
 ## One memory ledger for the machine (11-09)
 
 The user asked for one memory admission pool for the machine ("fix it", #590),

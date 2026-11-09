@@ -160,6 +160,15 @@ landing checks' and agents', so those come first.
 - **The wide steps** (integrity, the profile, compile time, addons, interop,
   on-device and the rest, about an hour more) run on the newest `verified`
   commit a few times a day, and every night before the benchmarks.
+- **Records and the count run beside the parts,** each in a unit of its own,
+  so neither part waits for them. A part's records run (below) records in
+  `nts-full-check-records-<part>`, in that part's records tree, while the
+  core goes on running on each new `main`; the hourly count runs from its own
+  timer, `nts-full-check-count.timer`, whatever the parts are doing. The
+  controller names a records unit in its state before the unit starts, and a
+  controller that restarts finds it by that name: it waits while the unit
+  runs, applies what it recorded once it ends, and starts it once more, never
+  beside a running one, when it ended without saying how.
 
 What follows from a run:
 
@@ -250,9 +259,11 @@ regression becomes a task.
   not keep rounds of it (`-r2`, `-before`, `-fold`).
 - **Where things live:** the pool is `~/.cache/nts-pool/<n>`
   (`node tooling/landing/pool.ts status`); the landing check keeps
-  `~/.cache/nts-landing/{tree,target,runs}`; the full check, one user unit
-  `nts-full-check` running from a tree at `verified`, keeps
-  `~/.cache/nts-full-check/`. A tree's cargo target is its own: two trees
+  `~/.cache/nts-landing/{tree,target,runs}`; the full check, its controller
+  `nts-full-check` running from a tree at `verified` beside its records units
+  and the count's timer, keeps `~/.cache/nts-full-check/`: the controller's
+  tree, the gate's tree and target, a records tree for each part, its state,
+  the count's file and the runs. A tree's cargo target is its own: two trees
   sharing one run each other's compiled crates.
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; each keeps three days of them. A control or a bisect is a
@@ -303,6 +314,11 @@ the first node task.
   spec; `plan.md` keeps the priorities and the order of the streams; a
   task's branch names its issue; no periodic check reads the issues
   ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
+- **Records and the count run beside the parts** (11-09): a part's records
+  run records in a unit and a tree of its own while the core runs on each new
+  `main`, and a restarted controller adopts it by name; the count runs hourly
+  from its own timer and writes its own file
+  ([log](records/notebooks/decisions-log.md#records-and-the-count-run-beside-the-parts-11-09)).
 - **One memory ledger for the machine** (11-09): every heavy job reserves its
   peak in one queue, in priority order (the landing check, agents' work, the
   full check); a gate run holds one reservation that grows and shrinks with

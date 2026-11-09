@@ -27,7 +27,9 @@
 //   - an nts folder of ~/.cache is kept by an entry of keep.json, which says
 //     why and, for a tool's folder, which file writes it: an entry whose
 //     writer no longer names its folder is red too, so the list cannot
-//     outlive the tools it describes.
+//     outlive the tools it describes;
+//   - a pin is used when it is main's or verified's, or a records unit of the
+//     full check records with it now.
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
@@ -62,6 +64,8 @@ export type CountInput = {
   /** The commits whose pins main uses. */
   main: string | null;
   verified: string | null;
+  /** The pins the full check's records units record with now (service.ts's recordingPins), by folder name. */
+  held?: string[];
   now: number;
 };
 
@@ -184,7 +188,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   return value;
 }
 
-export type Context = { cache: string; main: string | null; verified: string | null; now: number; root: string; plan: string };
+export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string };
 const days = (ms: number) => (ms / DAY).toFixed(1);
 const display = (path: string, context: Context) => `~/.cache/${relative(context.cache, path)}`;
 /** "3 folders, 1.5 to 9.0 days old (a, b, c)": a group of leftovers as one line, its first names shown. */
@@ -251,7 +255,9 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
       break;
     }
     case "pins": {
-      const used = new Set(["tree", "target", "build.lock", ...[context.main, context.verified].flatMap(sha => sha ? [sha.slice(0, 12)] : [])]);
+      // A records unit records with its run's pin for hours, while main and
+      // verified move past that run: the pin is in use until the unit ends.
+      const used = new Set(["tree", "target", "build.lock", ...[context.main, context.verified].flatMap(sha => sha ? [sha.slice(0, 12)] : []), ...context.held]);
       for (const child of children) {
         if (used.has(child.name) || (child.name.includes(".partial-") && context.now - child.mtimeMs < DAY)) continue;
         lines.push(`${display(child.path, context)}: a pin main does not use (it uses the pins of main${context.verified ? " and verified" : ""})`);
@@ -299,7 +305,7 @@ function nodeTestRoots(input: CountInput, context: Context): string[] {
 }
 
 function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[]): void {
-  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, now: input.now, root: input.root, plan: input.plan };
+  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan };
   for (const entry of folders(input.cache).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
     const rule = keep[entry.name];
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);

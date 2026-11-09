@@ -1,8 +1,10 @@
 // node --test tooling/full-check/unit.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseUnitOptions, unitText } from "./unit.ts";
+import { COUNT_UNIT, countServiceText, countTimerText, lowPriority, parseUnitOptions, recordsUnitName, UNIT, unitText } from "./unit.ts";
 import { layout } from "./state.ts";
+
+const ENV = { PATH: "/usr/bin:/home/u/.cargo/bin", HOME: "/home/u", SSH_AUTH_SOCK: "/run/user/1000/ssh-%agent", NODE_OPTIONS: "--inspect", SECRET_TOKEN: "x" };
 
 test("the unit runs the service from its controller at low priority, off the measurement CPUs, with the schedule on its command line", () => {
   const text = unitText({
@@ -10,7 +12,7 @@ test("the unit runs the service from its controller at low priority, off the mea
     layout: layout("/home/u/.cache"),
     schedule: { wide: ["10:00", "16:00"], nightly: "03:00" },
     memoryHigh: "20G",
-    env: { PATH: "/usr/bin:/home/u/.cargo/bin", HOME: "/home/u", SSH_AUTH_SOCK: "/run/user/1000/ssh-%agent", NODE_OPTIONS: "--inspect", SECRET_TOKEN: "x" },
+    env: ENV,
   });
   const line = (pattern: RegExp) => assert.match(text, pattern);
   line(/^ExecStart="\/opt\/node 24\/bin\/node" "\/home\/u\/\.cache\/nts-full-check\/controller\/tooling\/full-check\/service\.ts" "--wide-at=10:00,16:00" "--nightly-at=03:00"$/m);
@@ -21,6 +23,23 @@ test("the unit runs the service from its controller at low priority, off the mea
   line(/^Environment="SSH_AUTH_SOCK=\/run\/user\/1000\/ssh-%%agent"$/m);
   line(/^Environment="TZ=UTC"$/m);
   assert.doesNotMatch(text, /NODE_OPTIONS|SECRET_TOKEN/, "only the gate's host capabilities pass");
+});
+
+test("the hourly count is a service its own timer starts: once from the controller's tree, holding the tree's lock shared while it reads it", () => {
+  const service = countServiceText({ node: "/opt/node/bin/node", layout: layout("/home/u/.cache"), env: ENV });
+  const lines = service.split("\n");
+  assert.ok(lines.includes(`ExecStart="flock" "--shared" "/home/u/.cache/nts-full-check/controller.lock" "/opt/node/bin/node" "/home/u/.cache/nts-full-check/controller/tooling/full-check/service.ts" "--count"`), service);
+  for (const setting of ["Type=oneshot", "WorkingDirectory=/home/u/.cache/nts-full-check/controller", "TimeoutStartSec=30min", ...lowPriority()]) assert.ok(lines.includes(setting), setting);
+  assert.ok(lines.includes('Environment="TZ=UTC"'));
+  assert.doesNotMatch(service, /NODE_OPTIONS|SECRET_TOKEN|Restart=|\[Install\]/, "the timer starts it, and only the gate's host capabilities pass");
+  const timer = countTimerText().split("\n");
+  for (const setting of ["OnCalendar=hourly", "Persistent=true", `Unit=${COUNT_UNIT}.service`, "WantedBy=timers.target"]) assert.ok(timer.includes(setting), setting);
+  assert.equal(COUNT_UNIT, `${UNIT}-count`);
+});
+
+test("each part's records unit has one name, so a second cannot start while one runs, and every unit runs at the controller's priority", () => {
+  assert.deepEqual([recordsUnitName("core"), recordsUnitName("wide")], ["nts-full-check-records-core", "nts-full-check-records-wide"]);
+  assert.deepEqual(lowPriority("0-3,6-31"), ["Nice=19", "CPUWeight=20", "IOWeight=20", "CPUAffinity=0-3,6-31", "OOMScoreAdjust=500", "LimitCORE=0"]);
 });
 
 test("the unit's options", () => {

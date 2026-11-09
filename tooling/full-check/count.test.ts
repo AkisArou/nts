@@ -278,6 +278,18 @@ test("the count lists the three kinds of leftover the full check removes itself,
   assert.match(result.removable.find(one => one.path.endsWith("runs/last-week"))!.why, /^logs of gates run by hand, 7\.0 days old; logs are kept three days$/);
 });
 
+test("the pin a records unit records with is in use, whatever main and verified are: it is neither a line nor a leftover", t => {
+  const cache = cacheFixture(t), sha = "d".repeat(12);
+  mkdirSync(join(cache, "nts-pins", sha));
+  writeFileSync(join(cache, "nts-pins", sha, "provenance.json"), JSON.stringify({ sha, built_by: "full-check" }));
+  const when = new Date(NOW - 2 * DAY);
+  utimesSync(join(cache, "nts-pins", sha), when, when);
+  const named = (result: ReturnType<typeof count>) => [result.removable.some(one => one.path.endsWith(`nts-pins/${sha}`)), result.red.some(line => line.includes(`nts-pins/${sha}`))];
+  assert.deepEqual(named(count(input(t, { cache }), KEEP)), [true, true], "a day old, neither main's nor verified's: the full check's own leftover");
+  // Main and verified moved past the run while its records unit records with its pin, for hours.
+  assert.deepEqual(named(count(input(t, { cache, held: [sha] }), KEEP)), [false, false]);
+});
+
 test("a name that is not UTF-8 is walked by its bytes: the sweep removes its folder, and a fresh one keeps its folder unsettled", t => {
   const cache = cacheFixture(t), raw = (dir: string) => Buffer.concat([Buffer.from(join(cache, dir, "bad-")), Buffer.from([0xff])]);
   mkdirSync(join(cache, "nts-messages/run-bytes/captured"), { recursive: true });

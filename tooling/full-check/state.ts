@@ -1,9 +1,11 @@
-// Where the full check keeps its tree, target, runs and state, and the state
+// Where the full check keeps its trees, target, runs and state, and the state
 // itself: one JSON file, written whole and renamed into place, so a stopped
 // service resumes from the last complete write and never from half of one.
+// The controller is its only writer; the hourly count keeps its own file.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { Job } from "./background.ts";
 import type { ProbeVerdict } from "./culprit.ts";
 import type { LandingAnswer } from "./queue.ts";
 
@@ -16,8 +18,22 @@ export type Layout = {
   target: string;
   /** The worktree the service's own code runs from, at `verified`. */
   controller: string;
+  /**
+   * Held shared by a process that reads the controller's tree while the
+   * service runs (the hourly count), and alone by the service to move that
+   * tree to `verified` (service.ts's followVerified).
+   */
+  controllerLock: string;
+  /**
+   * Each part's records tree: its records unit records there at the run's
+   * commit, and the controller applies their delta there on main. Each builds
+   * what it builds in its own `target/`.
+   */
+  records: Readonly<Record<Part, string>>;
   runs: string;
   state: string;
+  /** The hourly count's own result (service.ts --count). */
+  count: string;
   lock: string;
 };
 
@@ -28,8 +44,11 @@ export function layout(cache = join(homedir(), ".cache")): Layout {
     tree: join(home, "tree"),
     target: join(home, "target"),
     controller: join(home, "controller"),
+    controllerLock: join(home, "controller.lock"),
+    records: { core: join(home, "records", "core"), wide: join(home, "records", "wide") },
     runs: join(home, "runs"),
     state: join(home, "state.json"),
+    count: join(home, "count.json"),
     lock: join(home, "service.lock"),
   };
 }
@@ -77,7 +96,8 @@ export type ProbeRecord = {
 };
 
 /**
- * A part's last records run, and what came of it. Its rows are in its `delta`,
+ * A part's last records run, and what came of it. It records in the part's
+ * records unit (`job`), beside the core; its rows are then in its `delta`,
  * which is applied on main and submitted as a records commit; the full check
  * follows that commit until the landing check lands it, and applies the delta
  * again on the newest main after a refusal, a few times at most (service.ts's
@@ -87,6 +107,10 @@ export type RecordsRun = {
   /** The commit the rows were recorded at. */
   commit: string;
   at: string;
+  /** The green run whose checks listed the rows: the recorder reads its logs, and leaves its log, delta and outcome beside them. */
+  run?: string;
+  /** The records unit that records them (background.ts), while it runs and after. */
+  job?: Job;
   /** The records commit in the landing queue, or null while none is. */
   submitted: string | null;
   result: string;
@@ -157,7 +181,6 @@ export type State = {
   /** The last commit `verified` was pushed at, and when a push last failed. */
   pushed?: string;
   push_failed_at?: string;
-  count?: { at: string; verdict: string; lines: string[] };
   /** Task lines printed for the coordinator, newest last. */
   tasks: { at: string; line: string }[];
   now?: Doing;
@@ -174,6 +197,8 @@ export function readState(file: string): State {
   // One records run for both parts, from before each part kept its own: it was the core's.
   const { records, ...rest } = value;
   if (records && !rest.core?.records) rest.core = { ...rest.core, records };
+  // The count the cycle kept, from before the count had a timer and a file of its own.
+  delete (rest as { count?: unknown }).count;
   return { ...emptyState(), ...rest };
 }
 
@@ -181,6 +206,22 @@ export function writeState(file: string, state: State): void {
   mkdirSync(dirname(file), { recursive: true });
   const partial = `${file}.${process.pid}.partial`;
   writeFileSync(partial, JSON.stringify(state, null, 2) + "\n");
+  renameSync(partial, file);
+}
+
+/** What the hourly count found, and when (service.ts --count). */
+export type CountRecord = { at: string; verdict: string; lines: string[] };
+
+/** The count's own file, as the last count wrote it; null before the first. */
+export function readCount(file: string): CountRecord | null {
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) as CountRecord : null;
+}
+
+/** Written whole and renamed into place, as the state is. */
+export function writeCount(file: string, count: CountRecord): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const partial = `${file}.${process.pid}.partial`;
+  writeFileSync(partial, JSON.stringify(count, null, 2) + "\n");
   renameSync(partial, file);
 }
 

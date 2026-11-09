@@ -2,14 +2,15 @@
 // reads its verdicts from the commit it measures: a step FAILs at a commit
 // whose tree has `RED/<step>` (or `RED/<step>.<anything>`), is HELD where it
 // has `HELD/<step>`, and prints `LOG/<step>` into its log; and stand-ins for
-// the records' recorder and main's own --apply. Tests only; no network, no
-// systemd, no real gate.
+// the records' recorder, main's own --apply and the units background work
+// runs in. Tests only; no network, no systemd, no real gate.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/delta.ts";
+import type { Units, UnitSpec } from "./background.ts";
 import type { Bench, BenchAttempt } from "./bench.ts";
 import { Git } from "./git.ts";
 import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
@@ -159,12 +160,53 @@ export function stubQueue(): StubQueue {
   };
 }
 
-/** The full check's tree at a commit, as pinned.sh leaves one: checked out and cleaned, with no inputs to link here. */
-export function checkoutIn(repo: Repository): (commit: string) => void {
+/**
+ * One of the full check's trees at a commit, the gate's by default, as
+ * prepareTree leaves one: made a worktree of the repository the first time,
+ * else checked out and cleaned, with no inputs to link here.
+ */
+export function checkoutIn(repo: Repository, dir = repo.layout.tree): (commit: string) => void {
   return commit => {
-    const tree = new Git(repo.layout.tree, ENV);
+    if (!existsSync(join(dir, ".git"))) { repo.git.run(["worktree", "add", "--detach", "-q", dir, commit]); return; }
+    const tree = new Git(dir, ENV);
     tree.run(["checkout", "--detach", "-q", "--force", commit]);
     tree.run(["clean", "-fdq"]);
+  };
+}
+
+export type StubUnits = Units & {
+  /** Every spec a start was given, refused ones included. */
+  specs: UnitSpec[];
+  /** The running unit ends, having done `work`, what its command would. */
+  finish(name: string, work: (spec: UnitSpec) => void): void;
+  /** The running unit is gone, having done nothing: stopped by hand, killed, or the machine restarted. */
+  stop(name: string): void;
+};
+
+/**
+ * Stand-in units (background.ts's Units): a unit started runs until the test
+ * ends it, and a second start of a name that runs is refused, as systemd
+ * refuses it. Share one between harnesses that stand for one machine: the
+ * units outlive a controller.
+ */
+export function stubUnits(): StubUnits {
+  const running = new Map<string, UnitSpec>(), specs: UnitSpec[] = [];
+  const unit = (name: string) => {
+    const spec = running.get(name);
+    if (!spec) throw new Error(`${name} is not running`);
+    return spec;
+  };
+  return {
+    specs,
+    start(spec) {
+      specs.push(spec);
+      if (running.has(spec.name)) return `Unit ${spec.name}.service was already loaded or has a fragment file.`;
+      running.set(spec.name, spec);
+      return null;
+    },
+    running: name => running.has(name),
+    finish(name, work) { work(unit(name)); running.delete(name); },
+    stop(name) { unit(name); running.delete(name); },
   };
 }
 

@@ -1,15 +1,24 @@
 // The full check after landing (docs/workflow.md, "After landing: the full
 // check"): one service, run by the systemd user unit nts-full-check (unit.ts),
 // at low priority in its own tree and target under ~/.cache/nts-full-check.
+// What takes hours beside it runs in units of its own (background.ts): each
+// part's records run, which the controller starts and adopts by name, and the
+// hourly count, which its own timer starts.
 //
 //   node tooling/full-check/service.ts                     the loop the unit runs
 //   node tooling/full-check/service.ts --once              one cycle, then exit
 //   node tooling/full-check/service.ts --status [--json]   what it is doing, what it last did, and the task lines
+//   node tooling/full-check/service.ts --count             the hourly count once, written to its own file (the timer's command)
+//   node tooling/full-check/service.ts --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>
+//                                                          a records unit's work, in the records tree it runs from (recordsUnit)
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00   (local time; schedule.ts)
 //
 // Each cycle does the first of these that is due:
-//   0. a records commit the landing check refused or held, its delta applied
-//      again on the newest main and submitted (seconds; followRecords);
+//   0. a part's records unit that ended, what it recorded applied on the
+//      newest main and submitted; or a records commit the landing check
+//      refused or held, its delta applied again on the newest main and
+//      submitted (seconds; followRecords). A records unit still running holds
+//      nothing: the cycle goes on;
 //   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
 //      the schedule, if verified moved since their last run; the nightly slot
 //      also makes the benchmarks due (bench.ts), whatever wide slot came after
@@ -19,9 +28,7 @@
 //   3. due benchmarks on the newest `verified`, admitted by the measurement
 //      lock once CPU 4 and its sibling 5 are quiet: an attempt the lock does
 //      not admit keeps them due, asked again ten minutes later, until they run
-//      or the next nightly slot replaces them;
-//   4. the count step (count.ts), once an hour, after the pool's upkeep
-//      (tooling/landing/pool.ts's prune: free trees idle past its limit go).
+//      or the next nightly slot replaces them.
 //
 // What follows a run:
 //   - green core: refs/heads/verified moves to that commit and is pushed;
@@ -29,27 +36,38 @@
 //     run, and the service submits `git revert` of it to the landing queue,
 //     first, and reopens the culprit's issue with a comment (revert.ts); a
 //     culprit that names no issue gets a task line for an issue instead;
-//   - green, with pending cases or accepted changes listed: records.ts records
-//     them on that commit's pin, the part's own kinds only, applies their
-//     delta case by case on the newest main and submits that records commit;
-//     each cycle then follows it until the landing check lands it, applying
-//     the delta again on the newest main after a refusal, a few times at most;
+//   - green, with pending cases or accepted changes listed: the part's records
+//     unit records them at that commit with its pin, the part's own kinds
+//     only, in the part's records tree, while the core goes on; once it ends,
+//     their delta is applied case by case on the newest main and that records
+//     commit submitted; each cycle then follows it until the landing check
+//     lands it, applying the delta again on the newest main after a refusal,
+//     a few times at most;
 //   - a benchmark run: nts-bench's results-only commit is submitted the same
 //     way, and the rows full.md marks slower than their own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
 //     main moves, or after half an hour.
+//
+// The records unit's command line (--record and its values) and its outcome
+// (RecordsOutcome) are a cross-version contract: the unit runs its records
+// tree's code, the run's commit, while the controller that starts it runs
+// `verified`'s, which is the same or older, and a controller restarted on
+// newer code may start it once more or read what it wrote.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {candidateCommand} from '../landing/candidate-environment.ts';
 import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
+import { gateCpus, inheritedCpus } from "../gate/affinity.ts";
+import { GateResource } from "../gate/gate-resource.ts";
 import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
 import { prepareTree } from "../landing/service.ts";
+import { look, newJob, start, startAgain, systemdUnits, writeOutcome, type Outcome, type Seen, type Units, type UnitSpec } from "./background.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
 import { count as countMachine, countLines, gather, sweep as sweepLeftovers, type CountResult, type Removable } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
@@ -63,13 +81,13 @@ import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } f
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, resultsCommit, slowerRows, type Bench, type BenchAttempt } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueNightly, dueSlot, nextNightly, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, PARTS, probeKey, readState, writeState, type BenchRun, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { lowPriority, recordsUnitName } from "./unit.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
 export const KEEP_RUNS_MS = 3 * DAY;
 const HELD_RETRY_MS = HOUR / 2;
-const COUNT_EVERY_MS = HOUR;
 
 export type Effects = {
   layout: Layout;
@@ -78,22 +96,18 @@ export type Effects = {
   gate: Gate;
   /** The landing check's queue (queue.ts). */
   queue: LandingQueue;
-  recorder: Recorder;
-  /** The full check's tree at a commit, set up as pinned.sh sets a gate tree up: checked out, cleaned, its inputs linked. */
-  checkout: (commit: string) => void;
-  /** main's own record-pending.ts --apply in the full check's tree at main (records.ts). */
+  /** The units the full check's background work runs in: each part's records unit (background.ts). */
+  units: Units;
+  /** The Node a tree's own code runs on: the one its .tool-versions pins. */
+  node: (tree: string) => string;
+  /** One of the full check's trees at a commit, set up as pinned.sh sets a gate tree up: checked out, cleaned, its inputs linked. */
+  checkout: (tree: string, commit: string) => void;
+  /** main's own record-pending.ts --apply in a part's records tree at main (records.ts). */
   applier: Applier;
   /** nts-bench on the tree, through the measurement lock (bench.ts). */
   bench: Bench;
   /** Where pins live (pin.ts's PINS). */
   pins: string;
-  count: () => CountResult;
-  /** Remove the leftovers the count found removable (count.ts's sweep), a line each. */
-  sweep: (removable: readonly Removable[]) => string[];
-  /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
-  prunePool: () => string[];
-  /** Recomputable cache upkeep, report-only, on the hourly count cycle. */
-  pruneNodeCache: () => NodeCacheRetention;
   /** Push a commit to the remote's `verified`. */
   push: (commit: string) => { ok: boolean; line: string };
   /** Comment on GitHub issue `n` and reopen it (revert.ts's reopenIssue). */
@@ -104,9 +118,10 @@ export type Effects = {
 };
 
 const short = (sha: string) => sha.slice(0, 12);
+const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /** One cycle: the first due piece of work, or nothing. */
-export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "count" | "idle"> {
+export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "idle"> {
   const state = readState(fx.layout.state);
   housekeeping(fx, state);
   interruptedBenchmarks(fx, state);
@@ -153,11 +168,6 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   const due = state.benchmarks_due;
   if (due && verified && !(due.asked && now.getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS)
     && await runBenchmarks(fx, state, verified) === "done") return "benchmarks";
-  if (!state.count || now.getTime() - Date.parse(state.count.at) >= COUNT_EVERY_MS) {
-    upkeepPool(fx);
-    runCount(fx, state);
-    return "count";
-  }
   return "idle";
 }
 
@@ -203,7 +213,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     clearCulprits(fx, state, part, commit);
     if (part === "core") moveVerified(fx, state, commit);
     writeState(fx.layout.state, state);
-    await writeRecords(fx, state, part, commit, m.run, listed);
+    writeRecords(fx, state, part, commit, m.run, listed);
     return;
   }
   fx.log(`${part} RED at ${short(commit)}: ${failed.join(", ")}; logs ${m.run}`);
@@ -403,47 +413,54 @@ function landedReverts(git: Git, tip: string, state: State): Set<string> {
 
 /** How many times one run's delta is applied on main and submitted: the first time, and again after refusals. */
 export const RECORDS_ATTEMPTS = 3;
+/** The records unit's outcome, in the run's folder beside the recorder's log (recordJob). */
+export const RECORDS_OUTCOME = "record-pending.outcome.json";
+/** The records unit's own output, in the run's folder: what its command said, a crash's stack included. */
+export const RECORDS_UNIT_LOG = "record-pending.unit.log";
 
+/** What a records unit's outcome says beside the recorder's exit status: what it wrote under the record roots, and elsewhere. */
+export type RecordsOutcome = { files: string[]; refused: string[] };
+
+/** Whether a part's records unit records them now: started, and its outcome not read yet. */
+const recording = (records: RecordsRun | undefined): records is RecordsRun & { job: NonNullable<RecordsRun["job"]>; run: string } =>
+  !!records?.job && !!records.run && !records.job.ended && !records.settled;
 /** Whether the full check still follows a part's records: their delta was applied on main, and nothing has settled them. */
 const following = (records: RecordsRun | undefined): records is RecordsRun & { delta: string } => !!records?.delta && !records.settled;
 
-async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): Promise<void> {
+/**
+ * After a part's green run that listed rows to record: the run's compiler kept
+ * as a pin now, before the next core run builds over it, and the part's
+ * records unit started at the run's commit (startRecords). The controller goes
+ * on with the core while it records, and follows it each cycle
+ * (followRecording).
+ */
+function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): void {
   const previous = state[part].records;
   if (previous?.commit === commit) return;
   if (!listed.pending.length && !listed.accepted.length) return;
   // One delta of a part's rows in flight at a time: recorded again now, the
-  // rows still waiting to land would be measured twice, hours each, and the
-  // two records commits would race for the same cases.
+  // rows still being recorded or waiting to land would be measured twice,
+  // hours each, and the two records commits would race for the same cases.
+  if (recording(previous)) {
+    fx.log(`records: the ${part} rows at ${short(previous.commit)} are still being recorded in ${previous.job.unit}; the ${part} run at ${short(commit)} records nothing until they are`);
+    return;
+  }
   if (following(previous)) {
     fx.log(`records: the ${part} rows recorded at ${short(previous.commit)} still wait for the landing check (${previous.result}); the ${part} run at ${short(commit)} records nothing until they land or are given up`);
     return;
   }
   fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s) listed by the ${part} run at ${short(commit)}`);
   const at = fx.now().toISOString();
-  const records: RecordsRun = { commit, at, submitted: null, result: "recording" };
+  const records: RecordsRun & { run: string } = { commit, at, run, submitted: null, result: "starting its records unit" };
   state[part].records = records;
   try {
-    const recorded = doing(fx, state, "records", commit, () => {
-      const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
-      const tree = new Git(fx.layout.tree, fx.git.env);
-      return { pin, ...recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run, part)) };
+    doing(fx, state, "records", commit, () => {
+      records.pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
+      startRecords(fx, state, part, records);
     }, at);
-    records.pin = recorded.pin;
-    if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, RECORDER_LOG)}`);
-    if (recorded.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote outside the records (${recorded.refused.join(", ")}); see ${run}.`);
-    // What the recorder recorded is its delta; the record files it left in the tree go when the tree is set up at main.
-    const delta = join(run, DELTA_FILE), rows = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")).rows.length : null;
-    if (!rows) {
-      records.result = rows === null && recorded.files.length ? `wrote ${recorded.files.length} record file(s) and no delta` : "recorded nothing";
-      fx.log(`records: ${records.result}`);
-      if (rows === null && recorded.files.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote records and no delta (${delta}), so none of them can land; see ${run}.`);
-      else if (recorded.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} exited ${recorded.status}; see ${run}.`);
-      return;
-    }
-    fx.log(`records: ${rows} row(s) recorded at ${short(commit)}, in ${delta}`);
-    await applyAndSubmit(fx, state, part, Object.assign(records, { delta }), fx.git.commit("refs/heads/main")!);
   } catch (error) {
-    records.result = `failed: ${error instanceof Error ? error.message : String(error)}`;
+    records.settled = fx.now().toISOString();
+    records.result = `failed: ${message(error)}`;
     fx.log(`records: ${records.result}`);
   } finally {
     writeState(fx.layout.state, state);
@@ -451,8 +468,124 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
 }
 
 /**
+ * A part's records unit: service.ts --record in the part's records tree, at
+ * the run's commit, on that tree's own code and Node, which nothing else
+ * changes while it records. It records with the run's pin and leaves its log,
+ * delta and outcome in the run's folder.
+ */
+export function recordsUnit(layout: Layout, part: Part, records: { commit: string; run: string; pin: string }, node: string): UnitSpec {
+  const tree = layout.records[part];
+  return {
+    name: recordsUnitName(part), cwd: tree, log: join(records.run, RECORDS_UNIT_LOG),
+    command: [node, join(tree, "tooling/full-check/service.ts"), `--record=${part}`, `--commit=${records.commit}`, `--run=${records.run}`,
+      `--pin=${records.pin}`, `--outcome=${join(records.run, RECORDS_OUTCOME)}`],
+  };
+}
+
+/**
+ * The part's records unit started at the run's commit, its tree set up there
+ * afresh: what an earlier start that stopped wrote is gone, its delta too. The
+ * job is in the state before the unit exists (background.ts's start). A start
+ * that fails is a start all the same: the next cycle finds the unit gone with
+ * no outcome, and starts it once more or gives it up (followRecording).
+ */
+function startRecords(fx: Effects, state: State, part: Part, records: RecordsRun & { run: string }, again = false): void {
+  const tree = fx.layout.records[part], now = fx.now(), save = () => writeState(fx.layout.state, state);
+  let spec: UnitSpec | null = null, error: string | null = null;
+  try {
+    if (!records.pin) throw new Error("the records have no pin to record with");
+    fx.checkout(tree, records.commit);
+    rmSync(join(records.run, DELTA_FILE), { force: true });
+    spec = recordsUnit(fx.layout, part, { commit: records.commit, run: records.run, pin: records.pin }, fx.node(tree));
+  } catch (cause) { error = `its tree could not be set up: ${message(cause)}`; }
+  if (!again || !records.job) records.job = newJob(recordsUnitName(part), join(records.run, RECORDS_OUTCOME), now);
+  else if (!spec) Object.assign(records.job, { starts: records.job.starts + 1, at: now.toISOString() });
+  if (spec) error = again ? startAgain(fx.units, spec, records.job, now, save) : start(fx.units, spec, records.job, save);
+  records.result = error ? `${records.job.unit} did not start: ${error}` : `recording in ${records.job.unit} since ${records.job.at}${again ? ", started again" : ""}`;
+  fx.log(`records of the ${part} rows at ${short(records.commit)}: ${records.result}; logs ${records.run}`);
+  save();
+}
+
+/**
+ * A part's records unit as it is now. Running, the cycle goes on beside it.
+ * Ended, what it recorded is applied on the newest main and submitted
+ * (recorded). Gone without an outcome, it is started once more, and then the
+ * run is given up as a task, its rows pending for the next records run.
+ * Returns whether it applied a delta.
+ */
+async function followRecording(fx: Effects, state: State, part: Part, records: RecordsRun & { job: NonNullable<RecordsRun["job"]>; run: string }): Promise<boolean> {
+  let seen: Seen<RecordsOutcome>;
+  try { seen = look<RecordsOutcome>(records.job, fx.units, fx.now()); }
+  catch (error) {
+    fx.log(`records: whether ${records.job.unit} runs cannot be told (${message(error)}); asked again next cycle`);
+    return false;
+  }
+  if (seen.state === "running") return false;
+  if (seen.state === "lost") {
+    if (seen.again) {
+      fx.log(`records of the ${part} rows at ${short(records.commit)}: ${seen.why}; it is started once more`);
+      startRecords(fx, state, part, records, true);
+      return false;
+    }
+    records.settled = fx.now().toISOString();
+    records.result = `${seen.why}, started ${records.job.starts} time(s); see ${join(records.run, RECORDS_UNIT_LOG)}`;
+    task(fx, state, `- The full check's ${part} records at ${short(records.commit)} did not finish: ${records.result}. Their rows stay pending for the next records run.`);
+    writeState(fx.layout.state, state);
+    return false;
+  }
+  writeState(fx.layout.state, state);
+  return recorded(fx, state, part, records, seen.outcome);
+}
+
+/**
+ * What the records unit recorded: its delta, which is applied on the newest
+ * main and submitted; or nothing to apply, and why, and the task a recorder
+ * that went wrong leaves. Returns whether it applied a delta.
+ */
+async function recorded(fx: Effects, state: State, part: Part, records: RecordsRun & { run: string }, outcome: Outcome & RecordsOutcome): Promise<boolean> {
+  const { commit, run } = records;
+  try {
+    if (outcome.status !== 0) fx.log(`record-pending exited ${outcome.status}; see ${join(run, RECORDER_LOG)}`);
+    if (outcome.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote outside the records (${outcome.refused.join(", ")}); see ${run}.`);
+    // What the recorder recorded is its delta; the record files it left in the tree go when the tree is set up at main.
+    const delta = join(run, DELTA_FILE), rows = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")).rows.length : null;
+    if (!rows) {
+      records.result = rows === null && outcome.files.length ? `wrote ${outcome.files.length} record file(s) and no delta` : "recorded nothing";
+      fx.log(`records: ${records.result}`);
+      if (rows === null && outcome.files.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote records and no delta (${delta}), so none of them can land; see ${run}.`);
+      else if (outcome.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} exited ${outcome.status}; see ${run}.`);
+      return false;
+    }
+    fx.log(`records: ${rows} row(s) recorded at ${short(commit)}, in ${delta}`);
+    await applyAndSubmit(fx, state, part, Object.assign(records, { delta }), fx.git.commit("refs/heads/main")!);
+    return true;
+  } catch (error) {
+    records.result = `failed: ${message(error)}`;
+    fx.log(`records: ${records.result}`);
+    return false;
+  } finally {
+    writeState(fx.layout.state, state);
+  }
+}
+
+/** The records unit's work, as its command line gives it (parseOptions's --record). */
+export type RecordJob = { part: Part; commit: string; run: string; pin: string; outcome: string };
+
+/**
+ * The records unit's work, in its own tree at the run's commit: the recorder
+ * (record-pending.ts --after, recordPending) with the run's pin, and then, as
+ * its last act, its outcome: the recorder's exit status and what it wrote,
+ * under the record roots and elsewhere. Nothing is committed: the controller
+ * applies the delta on main.
+ */
+export function recordJob(tree: string, job: RecordJob, recorder: Recorder): void {
+  const recorded = recordAt(new Git(tree), job.commit, dir => recorder(dir, job.pin, job.run, job.part));
+  writeOutcome<RecordsOutcome>(job.outcome, { status: recorded.status, files: recorded.files, refused: recorded.refused });
+}
+
+/**
  * A part's delta applied on `main`, the newest, by main's own
- * record-pending.ts --apply in the full check's tree, and what applied
+ * record-pending.ts --apply in the part's records tree, and what applied
  * committed there and submitted. Each call is an attempt, whatever comes of
  * it; one that commits nothing because nothing is left to apply settles the
  * records.
@@ -462,8 +595,8 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
   Object.assign(records, { attempts: attempt, base: main, submitted: null });
   delete records.answer;
   try {
-    const tree = new Git(fx.layout.tree, fx.git.env);
-    const applied = doing(fx, state, "records", records.commit, () => applyAt(tree, main, fx.checkout, dir => fx.applier(dir, records.delta, log),
+    const dir = fx.layout.records[part], tree = new Git(dir, fx.git.env);
+    const applied = doing(fx, state, "records", records.commit, () => applyAt(tree, main, commit => fx.checkout(dir, commit), at => fx.applier(at, records.delta, log),
       output => recordsMessage({ commit: records.commit, part, run, pin: records.pin, main, attempt, output })));
     if (applied.refused.length) task(fx, state, `- record-pending.ts --apply on main ${short(main)} wrote outside the records (${applied.refused.join(", ")}); see ${log}.`);
     const counts = appliedIn(applied.output), said = counts ? countsText(counts) : `see ${log}`;
@@ -488,7 +621,8 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
 }
 
 /**
- * Each part's records commit as the landing check answers it. Landed or
+ * Each part's records unit while it records (followRecording), and each
+ * part's records commit as the landing check answers it. Landed or
  * withdrawn settles it. Refused, held, unknown to the queue, or never
  * submitted, its delta is applied again on the newest main and submitted,
  * RECORDS_ATTEMPTS times in all, and then it is a task. A refusal, or an
@@ -496,12 +630,16 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
  * same main come to the same end. A held one, which could not be checked, and
  * one the queue lost are taken up at once; a held one is withdrawn before it
  * is replaced, so it never lands behind its replacement. Returns whether it
- * applied a delta again.
+ * applied a delta.
  */
 async function followRecords(fx: Effects, state: State): Promise<boolean> {
   let again = false;
   for (const part of PARTS) {
     const records = state[part].records;
+    if (recording(records)) {
+      if (await followRecording(fx, state, part, records)) again = true;
+      continue;
+    }
     if (!following(records)) continue;
     const answer = records.submitted ? fx.queue.answer(records.submitted) : null;
     if (answer === "waiting") continue;
@@ -660,7 +798,30 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
   return "done";
 }
 
-function runCount(fx: Effects, state: State): void {
+export type CountEffects = {
+  /** The machine counted (count.ts), the pins the full check's records units use now kept out of its leftovers. */
+  count: () => CountResult;
+  /** Remove the leftovers the count found removable (count.ts's sweep), a line each. */
+  sweep: (removable: readonly Removable[]) => string[];
+  /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
+  prunePool: () => string[];
+  /** Recomputable cache upkeep, report-only. */
+  pruneNodeCache: () => NodeCacheRetention;
+  /** The count's own file (the layout's `count`). */
+  file: string;
+  now: () => Date;
+  log: (line: string) => void;
+};
+
+/**
+ * The hourly count (`--count`, from its own timer, whatever the controller is
+ * doing): the pool's upkeep and the Node compile cache's, then the count, the
+ * leftovers it may remove removed and the machine counted again, so it says
+ * what remains; and what it found written to the count's own file. It writes
+ * nothing of the controller's: the controller is its state's only writer.
+ */
+export function countOnce(fx: CountEffects): CountRecord {
+  upkeepPool(fx);
   try {
     const cache = fx.pruneNodeCache();
     fx.log(`Node compile cache: ${cache.state}, removed ${cache.removed} entries / ${cache.removedBytes} bytes, kept ${cache.keptBytes} bytes`);
@@ -676,18 +837,24 @@ function runCount(fx: Effects, state: State): void {
       result = fx.count();
     }
   }
-  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${error instanceof Error ? error.message : String(error)}`], removable: [] }; }
-  state.count = { at: fx.now().toISOString(), verdict: result.verdict, lines: [...result.red, ...result.notes] };
+  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${message(error)}`], removable: [] }; }
+  const counted = { at: fx.now().toISOString(), verdict: result.verdict, lines: [...result.red, ...result.notes] };
   for (const line of countLines(result)) fx.log(line);
-  writeState(fx.layout.state, state);
+  writeCount(fx.file, counted);
+  return counted;
 }
 
-/** The pool's hourly upkeep, before the count reads the machine; a failure is a line, never a stopped cycle. */
-function upkeepPool(fx: Effects): void {
+/** The pool's hourly upkeep, before the count reads the machine; a failure is a line, never a stopped count. */
+function upkeepPool(fx: Pick<CountEffects, "prunePool" | "log">): void {
   let lines: string[];
   try { lines = fx.prunePool(); }
-  catch (error) { lines = [`pool: upkeep failed: ${error instanceof Error ? error.message : String(error)}`]; }
+  catch (error) { lines = [`pool: upkeep failed: ${message(error)}`]; }
   for (const line of lines) fx.log(line);
+}
+
+/** The pins the records units record with now: the count keeps them, whatever main and verified are by then. */
+export function recordingPins(state: State): string[] {
+  return PARTS.flatMap(part => { const records = state[part].records; return recording(records) && records.pin ? [basename(dirname(records.pin))] : []; });
 }
 
 /**
@@ -728,10 +895,15 @@ function clearCulprits(fx: Effects, state: State, part: Part, green: string): vo
   });
 }
 
-/** Old runs and probes go; landed reverts lose the ref that kept them; verified is pushed. */
+/** Old runs and probes go, but not the runs records still record or apply from; landed reverts lose the ref that kept them; verified is pushed. */
 function housekeeping(fx: Effects, state: State): void {
   const now = fx.now().getTime();
   const kept = new Set([state.core.last_run?.run, state.wide.last_run?.run, state.core.last_green?.run, state.wide.last_green?.run]);
+  for (const part of PARTS) {
+    const records = state[part].records;
+    if (recording(records)) kept.add(records.run);
+    if (following(records)) kept.add(dirname(records.delta));
+  }
   if (existsSync(fx.layout.runs)) {
     // run.mjs points runs/latest at its newest run; a link is judged by its own age.
     for (const name of readdirSync(fx.layout.runs)) {
@@ -811,15 +983,13 @@ function production(options: { schedule: Schedule }): Effects {
     layout, git,
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
-    recorder: recordPending,
-    checkout: commit => prepareTree(sharedCheckout(ROOT), layout.tree, commit),
+    // Each unit at the controller's own priority and on its own CPUs, never the measurement pair.
+    units: systemdUnits(lowPriority(gateCpus(inheritedCpus()))),
+    node: tree => nodeToolchain(nodePin(tree), launcherEnvironment(process.env)).node,
+    checkout: (tree, commit) => prepareTree(sharedCheckout(ROOT), tree, commit),
     applier: (tree, delta, log) => applyRecords(tree, delta, log),
     bench: benchWithLock(ROOT, layout.target),
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
-    count: () => countMachine(gather(ROOT)),
-    sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),
-    prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
-    pruneNodeCache: () => pruneNodeCompileCache(),
     push: commit => {
       const r = git.try(["push", "--quiet", "origin", `${commit}:refs/heads/verified`]);
       return r.status === 0 ? { ok: true, line: `pushed verified ${short(commit)} to origin` } : { ok: false, line: `could not push verified ${short(commit)}: ${r.stderr.trim()}; trying again next cycle` };
@@ -828,6 +998,19 @@ function production(options: { schedule: Schedule }): Effects {
     now: () => new Date(),
     log: stamp,
     schedule: options.schedule,
+  };
+}
+
+/** The count's effects on this machine: it reads the controller's state, and writes only the count's own file. */
+function countEffects(layout: Layout): CountEffects {
+  return {
+    count: () => countMachine({ ...gather(ROOT), held: recordingPins(readState(layout.state)) }),
+    sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),
+    prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
+    pruneNodeCache: () => pruneNodeCompileCache(),
+    file: layout.count,
+    now: () => new Date(),
+    log: stamp,
   };
 }
 
@@ -867,24 +1050,30 @@ let unfollowed: string | undefined;
  * new code gets the inputs no commit carries, linked again after the checkout
  * (inputs.sh): without them it cannot even list its steps. A commit whose
  * inputs cannot be linked is not followed; the tree goes back to the code it
- * ran, and says so once.
+ * ran, and says so once. The tree moves only while no other process reads it:
+ * the hourly count holds its lock shared while it counts (unit.ts), and the
+ * tree follows on a later cycle.
  */
 export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: Inputs): boolean {
   if (resolve(root) !== resolve(layout.controller)) return false;
   const verified = git.commit("refs/heads/verified"), head = git.commit("HEAD");
   if (!verified || !head || verified === head || !git.isAncestor(head, verified)) return false;
   if (git.run(["status", "--porcelain", "--untracked-files=no"])) return false;
-  const link = inputs ?? linkInputs(sharedCheckout(layout.controller));
-  git.run(["checkout", "--detach", "-q", verified]);
-  try { link(layout.controller); }
-  catch (error) {
-    git.run(["checkout", "--detach", "-q", head]);
-    let back = "";
-    try { link(layout.controller); } catch (again) { back = `; its own inputs could not be linked again either: ${again instanceof Error ? again.message : String(again)}`; }
-    if (unfollowed !== verified) stamp(`the controller stays at ${short(head)}: verified ${short(verified)}'s inputs could not be linked: ${error instanceof Error ? error.message : String(error)}${back}`);
-    unfollowed = verified;
-    return false;
-  }
+  const alone = GateResource.tryAcquire(layout.controllerLock);
+  if (!alone) return false;
+  try {
+    const link = inputs ?? linkInputs(sharedCheckout(layout.controller));
+    git.run(["checkout", "--detach", "-q", verified]);
+    try { link(layout.controller); }
+    catch (error) {
+      git.run(["checkout", "--detach", "-q", head]);
+      let back = "";
+      try { link(layout.controller); } catch (again) { back = `; its own inputs could not be linked again either: ${message(again)}`; }
+      if (unfollowed !== verified) stamp(`the controller stays at ${short(head)}: verified ${short(verified)}'s inputs could not be linked: ${message(error)}${back}`);
+      unfollowed = verified;
+      return false;
+    }
+  } finally { alone.close(); }
   stamp(`the controller moved to verified ${short(verified)}; restarting on its code`);
   return true;
 }
@@ -903,7 +1092,8 @@ type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null; re
  * Other tools read it (signalbox's Full check tab), so within a version
  * fields are only added; one removed, renamed or reshaped bumps `version`.
  * Version 2 moved the records into each part (`core.records`,
- * `wide.records`) and counts accepted changes, not only improvements.
+ * `wide.records`) and counts accepted changes, not only improvements; a
+ * records run's `run` and `job` (its unit) were added to it since.
  */
 export type FullCheckStatus = {
   version: 2; kind: "full-check"; at: string;
@@ -918,7 +1108,8 @@ export type FullCheckStatus = {
   culprits: Culprit[];
   /** The last attempt or night and how it ended, its slower rows, the night still due and what holds it, and when the nightly slot was last answered. */
   benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null; slot: string | null };
-  count: State["count"] | null;
+  /** What the hourly count last found, from the count's own file. */
+  count: CountRecord | null;
   tasks: State["tasks"];
 };
 
@@ -929,6 +1120,8 @@ export type StatusInputs = {
   /** When a commit landed, as an ISO time. */
   landedAt: (commit: string) => string;
   controller: { pid: number; alive: boolean } | null;
+  /** The count's own file, as the last count wrote it. */
+  count: CountRecord | null;
   now: Date;
 };
 
@@ -951,7 +1144,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     wide: { ...part(state.wide), slot: state.wide.slot ?? null },
     culprits: state.culprits,
     benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
-    count: state.count ?? null,
+    count: inputs.count,
     tasks: state.tasks,
   };
 }
@@ -984,7 +1177,7 @@ export function statusText(s: FullCheckStatus): string {
   ].join("\n");
 }
 
-/** The status on this machine: the full check's state, its lock, the repository and the landing check's answers. */
+/** The status on this machine: the full check's state, its lock, the count's file, the repository and the landing check's answers. */
 export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus {
   const git = new Git(ROOT);
   const main = git.commit("refs/heads/main"), verified = git.commit("refs/heads/verified");
@@ -992,18 +1185,28 @@ export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus
   // A commit the landing check has no answer for counts from when it was committed.
   const landedAt = (commit: string) => landed.get(commit) ?? new Date(git.run(["log", "-1", "--format=%cI", commit])).toISOString();
   return fullCheckStatus(readState(layout.state), {
-    main, verified, unverified: main && verified ? firstParents(git, verified, main) : null, landedAt, controller: lockHolder(layout.lock), now,
+    main, verified, unverified: main && verified ? firstParents(git, verified, main) : null, landedAt, controller: lockHolder(layout.lock), count: readCount(layout.count), now,
   });
 }
 
-export function parseOptions(argv: readonly string[]): { once: boolean; status: boolean; json: boolean; schedule: Schedule; ignored: string[] } {
+export type Options = { once: boolean; status: boolean; json: boolean; count: boolean; record: RecordJob | null; schedule: Schedule; ignored: string[] };
+
+export function parseOptions(argv: readonly string[]): Options {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let once = false, status = false, json = false;
-  const ignored: string[] = [];
+  let once = false, status = false, json = false, count = false;
+  const ignored: string[] = [], job: Partial<RecordJob> = {};
+  const value = (arg: string, name: Exclude<keyof RecordJob, "part">) => {
+    const given = arg.slice(name.length + 3);
+    if (name === "commit" ? !/^[0-9a-f]{40}$/.test(given) : !isAbsolute(given)) throw new Error(`--${name} takes ${name === "commit" ? "a full commit name" : "an absolute path"}, not ${JSON.stringify(given)}`);
+    job[name] = given;
+  };
   for (const arg of argv) {
     if (arg === "--once") once = true;
     else if (arg === "--status") status = true;
     else if (arg === "--json") json = true;
+    else if (arg === "--count") count = true;
+    else if (/^--record=(?:core|wide)$/.test(arg)) job.part = arg.slice(9) as Part;
+    else if (/^--(?:commit|run|pin|outcome)=/.test(arg)) value(arg, arg.slice(2, arg.indexOf("=")) as Exclude<keyof RecordJob, "part">);
     // A unit written before the benchmarks stayed due until the next nightly
     // slot still passes the wait that bounded them; it starts, and says so.
     else if (/^--bench-wait=\d+$/.test(arg)) ignored.push(arg);
@@ -1012,10 +1215,13 @@ export function parseOptions(argv: readonly string[]): { once: boolean; status: 
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json]] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
+    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json] | --count | --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
   }
   if (json && !status) throw new Error("--json is for --status");
-  return { once, status, json, schedule, ignored };
+  const given = Object.keys(job).length;
+  if (given && (!job.part || !job.commit || !job.run || !job.pin || !job.outcome)) throw new Error("--record takes --commit, --run, --pin and --outcome, all of them");
+  if ([once, status, count, given > 0].filter(Boolean).length > 1) throw new Error("--once, --status, --count and --record are each a command of its own");
+  return { once, status, json, count, record: given ? job as RecordJob : null, schedule, ignored };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -1024,6 +1230,16 @@ async function main(argv: readonly string[]): Promise<number> {
   if (options.status) {
     const status = machineStatus(layout);
     console.log(options.json ? JSON.stringify(status, null, 2) : statusText(status));
+    return 0;
+  }
+  // A records unit's work: this code is its records tree's, at the run's commit (recordsUnit).
+  if (options.record) {
+    recordJob(ROOT, options.record, recordPending);
+    return 0;
+  }
+  // The hourly count, beside the controller: it takes no lock of the controller's.
+  if (options.count) {
+    countOnce(countEffects(layout));
     return 0;
   }
   mkdirSync(layout.home, { recursive: true });
