@@ -35,6 +35,8 @@ one page that changes as work goes; the designs it builds are in
   wide steps' five `runtime/node` reds are reconciled, and the hourly count
   is green, with the full check sweeping the leftovers it may remove.
 - **In flight:**
+  - full-check runs create their own candidate environment and own their
+    oracle resolution sessions (`full-check/run-environment`);
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
