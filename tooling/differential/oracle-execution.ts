@@ -1,9 +1,16 @@
 // The recorder and the native differential execute the same population under
 // one CPU allowance and the census's resident-memory owner. Virtual address
 // reservations are not memory consumption, and a signal alone proves no cap.
+//
+// Two memory bounds hold an oracle: the resident scope, which the kernel
+// enforces, and the JavaScript heap, which V8 enforces and node sizes from that
+// scope's memory bound when no flag sets it (1072 MiB in a 2 GiB scope). A run
+// V8 stops at its heap limit ends with SIGABRT and V8's own words on stderr,
+// before the scope is full; that stop is the oracle's memory budget, at the
+// heap limit the run had, which is measured in a scope like its own.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {basename,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {activeCommand,COMMAND_ACTIVITY_POLL_MS,COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,type ActiveResult} from '../gate/active-command.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError,publishPressure} from '../gate/step-result.ts';
@@ -25,6 +32,47 @@ export class OracleBudgetError extends CaseBudgetError{
 }
 export type OracleCommandResult={stdoutHex:string;stderrHex:string;run:Omit<ActiveResult,'error'|'stdoutRaw'|'stderrRaw'>&{error?:string};limits:OracleLimits;residentPeakBytes:number;budget?:OracleBudget};
 let ordinal=0;
+
+/**
+ * V8's own line when it stopped a run at the JavaScript heap's limit, or null.
+ * V8 says "JavaScript heap out of memory" for a table or an array past its own
+ * size limit too (`invalid table size`), which is no heap limit: only a line
+ * that names the heap limit is that stop.
+ */
+export function v8HeapStop(stderr:string):string|null{
+  return /^FATAL ERROR: .*\bheap limit\b.* - JavaScript heap out of memory$/m.exec(stderr)?.[0]??null;
+}
+
+/** The node an oracle command runs: the program past the wrappers that start it, `taskset -c <cpus>` and `prlimit --<limit>`; null when it is no node. */
+export function oracleNode(command:string,args:readonly string[]):string|null{
+  const line=[command,...args];
+  let at=0;
+  for(;;){
+    const word=basename(line[at]??'');
+    if(word==='taskset'){at+=line[at+1]?.startsWith('-')?3:2;continue;}
+    if(word==='prlimit'){at++;while(line[at]?.startsWith('--'))at++;continue;}
+    break;
+  }
+  const program=line[at];
+  return program&&/^node\d*$/.test(basename(program))?program:null;
+}
+
+const HEAP_PROBE="process.stdout.write(String(require('node:v8').getHeapStatistics().heap_size_limit))";
+/**
+ * The JavaScript heap limit a run had: node sizes it at start from the memory
+ * bound of the cgroup it starts in, unless a flag in its environment sets it,
+ * so the same node, with the same environment, in a resident scope of the same
+ * size, says what it was. Null when that cannot be told.
+ */
+async function heapLimit(node:string,limits:OracleLimits,env:NodeJS.ProcessEnv,cwd:string):Promise<number|null>{
+  const resident=memoryRun().worker('heap'+ordinal++,limits.residentBytes);
+  const scope=resident.scope(node,['-e',HEAP_PROBE],env);
+  try{
+    const probe=await activeCommand('systemd-run',scope.argv,{cwd,env:scope.env,eachProcessCpuSeconds:limits.cpuSeconds,idleMs:COMMAND_IDLE_GUARD_MS,maxBuffer:2**20});
+    const bytes=Number(probe.stdout.trim());
+    return probe.status===0&&Number.isSafeInteger(bytes)&&bytes>0?bytes:null;
+  }finally{resident.stop(scope);resident.close();}
+}
 export async function runOracleCommand(command:string,args:string[],options:{source:string;cwd?:string;env:NodeJS.ProcessEnv;limits?:OracleLimits;idleMs?:number}):Promise<OracleCommandResult>{
   const limits=options.limits??oracleExecutionLimits(options.source);
   const memory=memoryRun(),resident=memory.worker('execution'+ordinal++,limits.residentBytes);
@@ -42,9 +90,14 @@ export async function runOracleCommand(command:string,args:string[],options:{sou
     // systemd-run can return an encoded child exit. Do not invent a signal
     // from that number: only the supervisor's observed signal is provenance.
     const signal=result.signal;
-    const budget:OracleBudget|undefined=disposition==='budget'
+    let budget:OracleBudget|undefined=disposition==='budget'
       ?{phase:'execute',outcome:'memory-cap',bound:limits.residentBytes,signal,reason:`oracle memory-cap: ${options.source} exceeded its ${limits.residentBytes} byte resident budget`}
       :result.timeout?{phase:'execute',outcome:'timeout',bound:limits.cpuSeconds,signal,reason:'oracle timed out: '+result.timeout}:undefined;
+    // V8's stop at its heap limit, which is the bound the row names: the scope was not full.
+    const stop=!budget&&signal==='SIGABRT'?v8HeapStop(stderrRaw.toString('utf8')):null;
+    const node=stop?oracleNode(command,args):null,heap=node?await heapLimit(node,limits,options.env,options.cwd??process.cwd()):null;
+    if(stop&&heap)budget={phase:'execute',outcome:'memory-cap',bound:heap,signal,
+      reason:`oracle memory-cap: ${options.source} stopped at V8's ${heap} byte JavaScript heap limit, which node set from its ${limits.residentBytes} byte resident scope: ${stop}`};
     return {stdoutHex:stdoutRaw.toString('hex'),stderrHex:stderrRaw.toString('hex'),run:{...result,error:result.error?.message},limits,residentPeakBytes:Number(readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')),...(budget?{budget}:{})};
   }finally{resident.stop(scope);resident.close();}
 }

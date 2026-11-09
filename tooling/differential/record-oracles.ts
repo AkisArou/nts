@@ -13,7 +13,7 @@ import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_ME
 import {reserveJob} from "../gate/memory-ledger.ts";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
-import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
+import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget,type OracleLimits} from "./oracle-execution.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
@@ -233,6 +233,65 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
     if ((at + 1) % 16 === 0 || at + 1 === ordered.length) atomic(path, manifest);
   }
 }
+/** How much of a failed child's stderr its failure file keeps: its end, where V8 and node say why a process stopped. */
+export const STDERR_TAIL_BYTES = 4096;
+
+/**
+ * An oracle run that failed, and the end of the failing child's stderr, which
+ * its failure file keeps beside the failure's own words: a signal alone says
+ * that a process stopped, not why.
+ */
+export class OracleRunFailure extends Error {
+  readonly failure: Error;
+  readonly stderrTail: string;
+  constructor(failure: Error, stderrTail: string) {
+    super(failure.message, { cause: failure });
+    this.name = "OracleRunFailure";
+    this.failure = failure;
+    this.stderrTail = stderrTail;
+  }
+}
+
+/** The end of a child's kept stderr, whole lines only, or "" when it said nothing. */
+export function stderrTail(file: string, bytes = STDERR_TAIL_BYTES): string {
+  if (!existsSync(file)) return "";
+  const text = readFileSync(file, "utf8");
+  if (text.length <= bytes) return text.trim();
+  const end = text.slice(-bytes);
+  return end.slice(end.indexOf("\n") + 1).trim();
+}
+
+/** What a failure file says: the failure, then the end of the failing child's stderr. */
+export function failureText(failure: Error, tail: string): string {
+  return tail ? `${failure.message}\n\nThe end of the child's stderr:\n${tail}\n` : `${failure.message}\n`;
+}
+
+/**
+ * One arm's run of a driver's oracle, with its execution and what it printed
+ * kept in `dir`. A run its oracle cannot vouch for measured nothing (`proven`
+ * throws), one stopped at its own bound is that bound's budget, and any other
+ * unfinished run measured nothing. Each failure carries the end of the
+ * child's stderr.
+ */
+export async function runOracleArm(dir: string, arm: number, command: string, args: string[],
+  options: { source: string; env: NodeJS.ProcessEnv; limits?: OracleLimits }, proven: () => void = () => {}): Promise<void> {
+  const stderr = join(dir, `${arm}.stderr`);
+  try {
+    // The resident owner and CPU supervisor prove a case's budget stop.
+    // An unproven signal never supplies a count, even after a done row.
+    const execution = await runOracleCommand(command, args, options);
+    atomic(join(dir, `${arm}.execution.json`), execution);
+    writeFileSync(join(dir, `${arm}.stdout`), Buffer.from(execution.stdoutHex, "hex"));
+    writeFileSync(stderr, Buffer.from(execution.stderrHex, "hex"));
+    proven();
+    if (execution.budget) throw new OracleBudgetError(execution.budget);
+    const run = execution.run;
+    if (run.status !== 0 || run.error || run.hung || run.runaway) throw new ToolingInstrumentError('tooling-setup', `oracle not measured: ${options.source}: ${run.hung ?? run.runaway ?? run.error ?? run.signal ?? run.status}`);
+  } catch (error) {
+    throw new OracleRunFailure(error instanceof Error ? error : new Error(String(error)), stderrTail(stderr));
+  }
+}
+
 async function measureDriver(plan: Plan, evidence: string, identity: string, preparation?:OraclePreparation[]) {
   const cpu: number[] = [];
   let delivered = -1;
@@ -252,22 +311,15 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
     let prepared:ReturnType<typeof oracleExecution>|undefined;
     const finish=()=>{const result=finishOracleSnapshot(snapshotOwner);if(!result.ready)throw new ToolingInstrumentError('tooling-setup',result.why);};
     try{
-    prepared=oracleExecution(snapshotOwner,script);
+    const oracle=prepared=oracleExecution(snapshotOwner,script);
     atomic(join(dir, `${arm}.oracle.json`), prepared);
     const env: NodeJS.ProcessEnv = { ...process.env, ...prepared.env, NTS_DIFF_RESULTS: results, NTS_CPU_EVENTS: timings, NO_COLOR: "1" };
     delete env.FORCE_COLOR; delete env.CLICOLOR_FORCE;
-    // The resident owner and CPU supervisor prove a case's budget stop.
-    // An unproven signal never supplies a count, even after a done row.
-    const execution = await runOracleCommand("taskset", ["-c", "4", process.execPath, ...prepared.args, script], {source:plan.source,env});
-    const run=execution.run;
-    atomic(join(dir, `${arm}.execution.json`),execution);
-    writeFileSync(join(dir, `${arm}.stdout`), Buffer.from(execution.stdoutHex,"hex"));
-    writeFileSync(join(dir, `${arm}.stderr`), Buffer.from(execution.stderrHex,"hex"));
-    finish();
-    const loader=oracleLoaderReady(prepared);
-    if(!loader.ready)throw new Error(`oracle not measured: ${plan.source}: ${loader.why}`);
-    if(execution.budget)throw new OracleBudgetError(execution.budget);
-    if (run.status !== 0 || run.error || run.hung || run.runaway) throw new ToolingInstrumentError('tooling-setup',`oracle not measured: ${plan.source}: ${run.hung ?? run.runaway ?? run.error ?? run.signal ?? run.status}`);
+    await runOracleArm(dir, arm, "taskset", ["-c", "4", process.execPath, ...prepared.args, script], {source:plan.source,env}, () => {
+      finish();
+      const loader=oracleLoaderReady(oracle);
+      if(!loader.ready)throw new Error(`oracle not measured: ${plan.source}: ${loader.why}`);
+    });
     const text = readFileSync(results, "utf8");
     delivered = completeRows(text, plan.case_count).length;
     if (baseline !== undefined && baseline !== text) throw new Error(`unstable oracle: ${plan.source}`);
@@ -308,10 +360,11 @@ export async function recordAll(evidence: string, output: string, measure = meas
       table = addRecord(table, plan, measurement.cpu, measurement.count);
       console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
     } catch (error) {
-      const failure = error instanceof Error ? error : new Error(String(error));
+      const run = error instanceof OracleRunFailure ? error : undefined;
+      const failure = run ? run.failure : error instanceof Error ? error : new Error(String(error));
       const message = failure.message.split(/\r?\n/,1)[0]!.slice(0,280);
       const detail=join(evidence,identity,'failure.txt');
-      if(!failed.has(identity)){mkdirSync(dirname(detail),{recursive:true});writeFileSync(detail,failure.message+'\n');}
+      if(!failed.has(identity)){mkdirSync(dirname(detail),{recursive:true});writeFileSync(detail,failureText(failure,run?.stderrTail??''));}
       failed.set(identity, failure);
       const budget=failure instanceof OracleBudgetError?failure.budget:failure instanceof OracleCompileBudgetError
         ?failure.budget:undefined;

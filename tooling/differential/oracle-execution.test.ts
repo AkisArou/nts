@@ -6,7 +6,7 @@ import {closeMemoryRun} from '../census/worker-memory.ts';
 import {COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,CommandNotMeasuredError} from '../gate/active-command.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {testScratch} from '../gate/test-scratch.ts';
-import {ORACLE_PLANNER_LIMITS,oracleExecutionLimits,runOracleCommand,runOraclePlanner} from './oracle-execution.ts';
+import {ORACLE_PLANNER_LIMITS,oracleExecutionLimits,oracleNode,runOracleCommand,runOraclePlanner,v8HeapStop} from './oracle-execution.ts';
 
 after(closeMemoryRun);
 test('the recorder and native launcher share the stated population policy',()=>{
@@ -27,6 +27,47 @@ test('only an observed CPU or own resident bound is a case budget',async()=>{
   assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,128*2**20);
   const stopped=await runOracleCommand(process.execPath,['-e',"process.kill(process.pid,'SIGABRT')"],{source:'private',env:process.env});
   assert.equal(stopped.budget,undefined,'an unproven signal is never a resident hit');
+});
+
+test("V8's own line names a stop at the heap limit, and a size limit is no heap limit",()=>{
+  const reached='FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory';
+  const ineffective='FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory';
+  assert.equal(v8HeapStop(`\n<--- Last few GCs --->\n\n[1:0x1]  6025 ms: Scavenge 1017.6 (1020.7) -> 1017.6 (1023.0) MB\n${ineffective}\n----- Native stack trace -----\n`),ineffective);
+  assert.equal(v8HeapStop(reached+'\n'),reached);
+  assert.equal(v8HeapStop('FATAL ERROR: invalid table size Allocation failed - JavaScript heap out of memory\n'),null);
+  assert.equal(v8HeapStop('console.error said: '+reached+'\n'),null,'a line that only quotes V8 is no stop');
+  assert.equal(v8HeapStop(''),null);
+});
+test('the node an oracle command runs is found past the wrappers that start it',()=>{
+  assert.equal(oracleNode('taskset',['-c','4','/opt/node/bin/node','--import','data:x','driver.mjs']),'/opt/node/bin/node');
+  assert.equal(oracleNode('taskset',['0x10','node','driver.mjs']),'node');
+  assert.equal(oracleNode('prlimit',['--core=0','--cpu=2:3','node','--input-type=module','-e','x']),'node');
+  assert.equal(oracleNode(process.execPath,['driver.mjs']),process.execPath);
+  assert.equal(oracleNode('sh',['-c','node driver.mjs']),null);
+  assert.equal(oracleNode('taskset',['-c','4','./program']),null);
+});
+
+// node sizes its JavaScript heap from the resident scope it starts in unless a
+// flag sets it, so a shell's own NODE_OPTIONS must not decide which bound a run meets.
+const SIZED=(()=>{const env={...process.env};delete env.NODE_OPTIONS;return env;})();
+const HEAP_LIMIT="process.stdout.write(String(require('node:v8').getHeapStatistics().heap_size_limit))";
+const FILL_HEAP='const held=[];for(;;)held.push({a:1,b:[1,2,3,4,5,6,7,8]});';
+test('a run V8 stops at its heap limit is held to that limit, never to the resident scope it did not fill',async()=>{
+  const limits={cpuSeconds:15,residentBytes:512*2**20};
+  const probe=await runOracleCommand(process.execPath,['-e',HEAP_LIMIT],{source:'private',env:SIZED,limits});
+  const heap=Number(probe.run.stdout);
+  assert.ok(Number.isSafeInteger(heap)&&heap>0&&heap<limits.residentBytes,'node set its heap limit below the scope: '+probe.run.stdout);
+  // Started as the native differential starts it, past a wrapper.
+  const stopped=await runOracleCommand('prlimit',['--core=0',process.execPath,'-e',FILL_HEAP],{source:'private',env:SIZED,limits});
+  assert.equal(stopped.run.signal,'SIGABRT');
+  assert.ok(stopped.residentPeakBytes<limits.residentBytes,'the resident scope was never full');
+  assert.ok(stopped.budget,'no budget: '+stopped.run.stderr);
+  const {reason,...budget}=stopped.budget;
+  assert.deepEqual(budget,{phase:'execute',outcome:'memory-cap',bound:heap,signal:'SIGABRT'});
+  assert.match(reason,new RegExp(`^oracle memory-cap: private stopped at V8's ${heap} byte JavaScript heap limit, which node set from its ${limits.residentBytes} byte resident scope: FATAL ERROR: .*heap limit.* - JavaScript heap out of memory$`));
+  // The control differs in one thing: a flag sets the heap past the scope, so the kernel stops the run at the resident bound first.
+  const capped=await runOracleCommand(process.execPath,['--max-old-space-size=4096','-e',FILL_HEAP],{source:'private',env:SIZED,limits});
+  assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,limits.residentBytes);
 });
 
 test('the shared execution transports stdout and stderr byte for byte',async()=>{
