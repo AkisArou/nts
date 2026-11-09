@@ -17,6 +17,7 @@ import {
   FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,
 } from "./canonical-environment.ts";
 import {newTestScratch} from "./test-scratch.ts";
+import {toolingSliceArgs} from "./tooling-slice.ts";
 import {ownMemory} from "./test-memory.ts";
 import {readLedger} from "./memory-ledger.ts";
 
@@ -357,12 +358,13 @@ fi
   }
 });
 
-// Two waits come before a run's first step, both in the memory ledger: the
-// run's own reservation, and its startup capture's. No room for the run's
-// first block holds the run; room for that block but not for the capture's
-// 2 GiB beside it holds the capture.
-for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'waiting',/memory: gate run .* waits for 1\.0 GiB \(agent\)/],
-  ['for its startup capture\'s memory',4*2**20,'admitted',/memory: oracle dependency capture waits for 2\.0 GiB \(agent\)/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
+/**
+ * A gate runner started at its test's startup arm: its tree copied, its one
+ * step a stand-in, a memory reading of `availableKiB` and a ledger of its own,
+ * in a unit of its own inside the tooling run's slice -- stopped with that
+ * slice, and with this test, however the test itself ends.
+ */
+function startupRunner(t:{after(fn:()=>void):void},availableKiB:number){
   const {run,base}=fixture(t),root=join(run,'repo'),gate=join(root,'tooling/gate');
   mkdirSync(gate,{recursive:true});
   const source=new URL('./',import.meta.url).pathname;
@@ -387,25 +389,62 @@ fi
 `);
   const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
-  const unit='nts-startup-wait-'+run.split('/').pop()!;
-  const child=spawn('systemd-run',['--user','--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
+  const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
+  const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('exit',(code,signal)=>{terminal={code,signal};});
-  await waitFor(`the run to wait ${where}`,()=>waiting.test(output),{stopped:()=>terminal?output:undefined});
+  return {root,directory,memory,unit,child,output:()=>output,terminal:()=>terminal};
+}
+/** What a unit's processes have used of the CPU, in seconds, as systemd counts it; NaN once the unit has gone. */
+const cpuSeconds=(unit:string)=>Number(spawnTest('systemctl',['--user','show',unit,'-p','CPUUsageNSec','--value'],{encoding:'utf8'}).stdout.trim()||NaN)/1e9;
+
+// Two waits come before a run's first step, both in the memory ledger: the
+// run's own reservation, and its startup capture's. No room for the run's
+// first block holds the run; room for that block but not for the capture's
+// 2 GiB beside it holds the capture.
+for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'waiting',/memory: gate run .* waits for 1\.0 GiB \(agent\)/],
+  ['for its startup capture\'s memory',4*2**20,'admitted',/memory: oracle dependency capture waits for 2\.0 GiB \(agent\)/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
+  const {root,directory,memory,unit,output,terminal}=startupRunner(t,availableKiB);
+  await waitFor(`the run to wait ${where}`,()=>waiting.test(output()),{stopped:()=>terminal()?output():undefined});
   assert.equal(existsSync(join(directory,'summary.json')),false,'the runner is still preparing, not dispatching');
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER)[state].length,1,`the run's reservation is ${state} in the test's own ledger`);
   const signaled=spawnTest('systemctl',['--user','kill','--signal=SIGTERM',unit],{encoding:'utf8'});
   assert.equal(signaled.status,0,signaled.stderr);
-  await waitFor('the run to end on SIGTERM',()=>!!terminal,{timeoutMs:5000});
-  assert.equal(terminal!.code,130,output);
-  assert.equal(terminal!.signal,null,output);
+  await waitFor('the run to end on SIGTERM',()=>!!terminal(),{timeoutMs:5000});
+  assert.equal(terminal()!.code,130,output());
+  assert.equal(terminal()!.signal,null,output());
   const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8'));
   assert.equal(summary.interrupted,'signal SIGTERM');
   assert.equal(summary.steps[0].verdict,'NOT RUN');
   assert.equal(existsSync(join(root,'step-launched')),false);
   assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn, or its reservation released');
+});
+
+// A runner whose launcher has gone writes to a pipe with no reader. Its first
+// failed write must stop it: an EPIPE reported to the same dead stderr would
+// fail again, a loop that held a core for good and never let SIGTERM in.
+test("a runner waiting in the memory ledger stops when its output has no reader, without holding a core",async t=>{
+  const {root,directory,memory,unit,child,output,terminal}=startupRunner(t,0);
+  await waitFor('the run to wait in the memory ledger',()=>/memory: gate run .* waits for 1\.0 GiB/.test(output()),{stopped:()=>terminal()?output():undefined});
+  // Whatever read the run's output has gone.
+  child.stdout.destroy();child.stderr.destroy();
+  const before=cpuSeconds(unit);let used=0;
+  // Its request leaves the queue, as a cleanup removing it would: the run
+  // says so as it asks again, and that line has nowhere to go.
+  rmSync(join(memory.NTS_MEMORY_LEDGER,'waiting'),{recursive:true,force:true});
+  await waitFor('the run to stop by itself once its output has no reader',()=>{
+    const now=cpuSeconds(unit);if(!Number.isNaN(now))used=now-before;
+    return !!terminal();
+  },{timeoutMs:30_000,stopped:()=>used>2?`it used ${used.toFixed(1)} s of CPU after its output lost its reader: it spins`:undefined});
+  assert.ok(used<2,`${used.toFixed(1)} s of CPU after its output lost its reader`);
+  assert.equal(terminal()!.code,1);
+  const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8'));
+  assert.equal(summary.interrupted,'its output has no reader');
+  assert.equal(summary.steps[0].verdict,'NOT RUN');
+  assert.equal(existsSync(join(root,'step-launched')),false);
+  assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn');
 });

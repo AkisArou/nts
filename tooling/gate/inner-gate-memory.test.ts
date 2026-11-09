@@ -32,6 +32,7 @@ import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {ownMemory} from "./test-memory.ts";
 import {readLedger} from "./memory-ledger.ts";
+import {toolingSliceArgs} from "./tooling-slice.ts";
 
 const GATE = fileURLToPath(new URL("./", import.meta.url));
 const WAITING = /memory: gate run .* waits for 1\.0 GiB \(agent\)/;
@@ -91,7 +92,9 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
   // Should the run not end on SIGTERM, systemd escalates to SIGKILL after five
   // seconds rather than its default ninety.
-  const child = spawn("systemd-run", ["--user", `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
+  // In the tooling run's slice, so a test stopped before its own cleanup
+  // stops the run with it.
+  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
     `--working-directory=${f.root}`, ...setenv, process.execPath, join(f.gate, "run.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
   // The event, not a timer: the run says it waits, or it ends.
   const waiting = await new Promise<boolean>(resolve => {

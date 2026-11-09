@@ -1318,8 +1318,22 @@ function takeTreeLock() {
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(sig, () => stop(`signal ${sig}`));
 }
+// **A run whose output nobody reads any more stops**, as SIGPIPE stops a
+// pipeline's writer: whoever started it has gone. Its writes then fail
+// (EPIPE), and an error left to the handler below would be reported to the
+// same dead stderr, fail again, and be reported again: a run spinning on its
+// own errors, holding a core for good and never reaching its SIGTERM handler.
+// The run's own files, its logs and summary, are still written.
+let outputGone = false;
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error) => {
+    if (outputGone) return;
+    outputGone = true;
+    stop(error.code === "EPIPE" ? "its output has no reader" : `its output cannot be written: ${error.code ?? error.message}`);
+  });
+}
 process.on("uncaughtException", (e) => {
-  process.stderr.write(`run.mjs: ${e.stack ?? e}\n`);
+  if (!outputGone) process.stderr.write(`run.mjs: ${e.stack ?? e}\n`);
   interrupted = `runner crashed: ${e.message}`;
   stop(interrupted);
 });
