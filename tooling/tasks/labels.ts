@@ -1,8 +1,10 @@
 // Keep GitHub's labels equal to .github/labels.json: a missing label is made,
 // a changed colour or description is written. A label GitHub has and the file
-// does not is reported, never deleted: removing one strips it from issues.
+// does not is reported, and deleted only with --prune: deleting one strips it
+// from every issue and pull request that carries it, so a sync that prunes
+// first says which ones carry it.
 //
-//   node tooling/tasks/labels.ts sync [--dry-run]
+//   node tooling/tasks/labels.ts sync [--prune] [--dry-run]
 import { pathToFileURL } from "node:url";
 import { gh, type Gh } from "./new.ts";
 import { readSpec, type Label, type LabelSpec } from "./spec.ts";
@@ -21,20 +23,31 @@ export function syncPlan(spec: LabelSpec, have: readonly Label[]): Plan {
   return { make, edit, extra: have.map(label => label.name).filter(name => !named.has(name)).sort() };
 }
 
-export function sync(run: Gh, spec: LabelSpec, dry: boolean, say: (line: string) => void): Plan {
+/** How many issues and pull requests, open or closed, carry a label. */
+function carriers(run: Gh, name: string): number {
+  const count = (what: "issue" | "pr") => (JSON.parse(run([what, "list", "--state", "all", "--label", name, "--limit", "1000", "--json", "number"])) as unknown[]).length;
+  return count("issue") + count("pr");
+}
+
+export function sync(run: Gh, spec: LabelSpec, options: { dry: boolean; prune: boolean }, say: (line: string) => void): Plan {
   const have = JSON.parse(run(["label", "list", "--limit", "500", "--json", "name,color,description"])) as Label[];
   const plan = syncPlan(spec, have);
-  for (const label of plan.make) { say(`make ${label.name}`); if (!dry) run(["label", "create", label.name, "--color", label.color, "--description", label.description]); }
-  for (const label of plan.edit) { say(`edit ${label.name}`); if (!dry) run(["label", "edit", label.name, "--color", label.color, "--description", label.description]); }
-  for (const name of plan.extra) say(`kept, not in .github/labels.json: ${name}`);
+  for (const label of plan.make) { say(`make ${label.name}`); if (!options.dry) run(["label", "create", label.name, "--color", label.color, "--description", label.description]); }
+  for (const label of plan.edit) { say(`edit ${label.name}`); if (!options.dry) run(["label", "edit", label.name, "--color", label.color, "--description", label.description]); }
+  for (const name of plan.extra) {
+    if (!options.prune) { say(`kept, not in .github/labels.json: ${name}`); continue; }
+    const n = carriers(run, name);
+    say(`delete ${name}${n ? ` (carried by ${n} issue(s) or pull request(s))` : ""}`);
+    if (!options.dry) run(["label", "delete", name, "--yes"]);
+  }
   return plan;
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const argv = process.argv.slice(2);
-  if (argv[0] !== "sync") { console.error("usage: node tooling/tasks/labels.ts sync [--dry-run]"); process.exitCode = 2; }
+  if (argv[0] !== "sync") { console.error("usage: node tooling/tasks/labels.ts sync [--prune] [--dry-run]"); process.exitCode = 2; }
   else {
-    try { sync(gh, readSpec(), argv.includes("--dry-run"), line => console.log(line)); }
+    try { sync(gh, readSpec(), { dry: argv.includes("--dry-run"), prune: argv.includes("--prune") }, line => console.log(line)); }
     catch (error) { console.error(`labels: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 2; }
   }
 }

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDrafts, draftProblems, type Draft, type Gh } from "./new.ts";
-import { syncPlan } from "./labels.ts";
+import { sync, syncPlan } from "./labels.ts";
 import { bodyProblems, labelProblems, readSpec, renderCard, REQUIRED } from "./spec.ts";
 
 const spec = readSpec();
@@ -82,4 +82,26 @@ test("the label sync makes what is missing, writes what changed, and only report
   assert.deepEqual(plan.edit.map(label => label.name), ["area:compiler"]);
   assert.deepEqual(plan.extra, ["bug"]);
   assert.equal(plan.make.length, spec.labels.length - 2);
+});
+
+test("--prune deletes a label the file lacks, and says how many issues carry it; without it nothing is deleted", () => {
+  const calls: string[][] = [];
+  const have = [...spec.labels, { name: "wontfix", color: "ffffff", description: "x" }];
+  const run: Gh = args => {
+    calls.push([...args]);
+    if (args[0] === "label" && args[1] === "list") return JSON.stringify(have);
+    if (args[1] === "list" && args.includes("--label")) return JSON.stringify(args[0] === "issue" ? [{ number: 1 }, { number: 2 }] : [{ number: 3 }]);
+    return "";
+  };
+  const lines: string[] = [];
+  sync(run, spec, { dry: false, prune: false }, line => lines.push(line));
+  assert.ok(!calls.some(args => args[1] === "delete"), "no --prune: nothing is deleted");
+  assert.deepEqual(lines, ["kept, not in .github/labels.json: wontfix"]);
+  calls.length = 0; lines.length = 0;
+  sync(run, spec, { dry: false, prune: true }, line => lines.push(line));
+  assert.deepEqual(calls.filter(args => args[1] === "delete"), [["label", "delete", "wontfix", "--yes"]]);
+  assert.deepEqual(lines, ["delete wontfix (carried by 3 issue(s) or pull request(s))"]);
+  calls.length = 0;
+  sync(run, spec, { dry: true, prune: true }, () => {});
+  assert.ok(!calls.some(args => args[1] === "delete"), "a dry run deletes nothing");
 });
