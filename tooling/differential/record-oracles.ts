@@ -332,7 +332,7 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
 
 }
 export async function recordAll(evidence: string, output: string, measure = measureDriver) {
-  if (process.env.NTS_BENCH_CPUS !== "4") throw new Error("record under tooling/gate/with-lock.sh --wait; measured children use CPU 4");
+  if (process.env.NTS_BENCH_CPUS !== "4") throw new Error("record under tooling/gate/with-lock.sh --wait --key record-oracles; measured children use CPU 4");
   const manifest = json(join(evidence, "plans.json")) as Manifest;
   let table: Table = existsSync(output) ? json(output) : { version: 1, rows: [] };
   const measured = new Map<string, { cpu: number[]; count: number }>();
@@ -439,7 +439,7 @@ async function recordNamed(names: string[]) {
   const stage = join(evidence, "recorded-table.json");
   writeTable(stage, before);
   const script = fileURLToPath(import.meta.url);
-  const measure = spawnSync("sh", [join(root, "tooling/gate/with-lock.sh"), "--wait", process.execPath, script, "record", evidence, stage], { cwd: root, stdio: "inherit" });
+  const measure = spawnSync("sh", [join(root, "tooling/gate/with-lock.sh"), "--wait", "--key", "record-oracles", process.execPath, script, "record", evidence, stage], { cwd: root, stdio: "inherit" });
   if (measure.status !== 0) throw new Error(`recording refused; checked-in records unchanged; evidence: ${evidence}`);
   const identities = new Set(plans.map(plan => `${plan.source}\0${identity(plan).signature}`));
   if (!readFileSync(join(root, GENERATOR)).equals(originalHeader)) throw new Error(`generator header changed during recording; nothing published; evidence: ${evidence}`);

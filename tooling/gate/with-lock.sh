@@ -2,9 +2,27 @@
 # Run a command while holding the measurement lock, and release it only if we
 # were the ones who took it.
 #
-#   tooling/gate/with-lock.sh --wait target/release/nts-bench
-#   tooling/gate/with-lock.sh --wait taskset -c 4 perf stat <program>
-#   tooling/gate/with-lock.sh --no-quiet-wait target/release/nts-bench --count ...
+#   tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench
+#   tooling/gate/with-lock.sh --wait --key perf-<what> taskset -c 4 <command>
+#   tooling/gate/with-lock.sh --no-quiet-wait --key bench-session target/release/nts-bench --count ...
+#
+# **A measurement reserves its memory before it takes the lock.** Outside a
+# reservation, the wrapper becomes `node tooling/gate/admit.ts --key <key> --
+# sh with-lock.sh <its own arguments>`: the session waits in the machine's
+# memory ledger (memory-ledger.ts) without holding the lock, and takes the
+# lock once admitted. admit.ts becomes this script, so the reservation lasts
+# exactly as long as the session, and its peak goes to the key's history
+# (the tree's target/gate-costs), which sizes the key's next session. What
+# the command starts -- each case of an nts-bench session, and every tool in
+# it that reserves memory (reserveJob) -- runs inside the reservation and asks
+# the ledger for nothing, so no wait for memory ever holds CPUs 4-5. The key
+# names a kind of session, so that its history is that kind's peaks:
+# `bench-session` for nts-bench (the nightly's), `perf-<what>` for an agent's
+# ad-hoc measurement. Without one, outside a reservation, the wrapper refuses
+# (exit 2) and names this way. Inside one (NTS_MEMORY_RESERVATION) -- the
+# nightly's `admit.ts --key bench-session -- with-lock.sh`, a gate step's, a
+# recording's -- it measures inside that one and reserves nothing. Exit 125 is
+# admit.ts's: the ledger, or a key it cannot size.
 #
 # After taking the lock, wait up to 180 seconds for the reserved physical
 # core (CPUs 4-5) to be quiet. Other busy cores do not prevent measurement.
@@ -100,15 +118,51 @@ if [ "${1-}" = "--self-test" ]; then
     exit 0
 fi
 
+# The leading flags, read without shifting this script's arguments: the
+# reservation below is asked for with them as they came.
+key=
+leading() {
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --wait|--no-quiet-wait) shift ;;
+            --key) key=${2-}; shift; if [ $# -gt 0 ]; then shift; fi ;;
+            --key=*) key=${1#--key=}; shift ;;
+            *) break ;;
+        esac
+    done
+    command_count=$#
+    command_words=$*
+}
+leading "$@"
+if [ "$command_count" -eq 0 ]; then
+    echo "usage: tooling/gate/with-lock.sh [--wait] [--no-quiet-wait] --key <name> <command> [args...]" >&2
+    exit 2
+fi
+
+if [ -z "${NTS_MEMORY_RESERVATION-}" ]; then
+    if [ -z "$key" ]; then
+        cat >&2 <<'REFUSAL'
+with-lock: a measurement reserves its memory under a key before it takes the measurement lock, so that a wait for memory never holds CPUs 4-5:
+  sh tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench ...
+  sh tooling/gate/with-lock.sh --wait --key perf-<what> taskset -c 4 <command>
+The key's earlier sessions size its reservation, and what the command starts runs inside it.
+Started inside a reservation already (node tooling/gate/admit.ts --key <name> -- sh tooling/gate/with-lock.sh ...), it needs none.
+REFUSAL
+        exit 2
+    fi
+    exec node "$(dirname -- "$0")/admit.ts" --key "$key" --what "measurement $key: $command_words" -- sh "$0" "$@"
+fi
+
 wait_for_it=false
 quiet_wait=true
-while [ "${1-}" = "--wait" ] || [ "${1-}" = "--no-quiet-wait" ]; do
-    if [ "$1" = "--wait" ]; then
-        wait_for_it=true
-    else
-        quiet_wait=false
-    fi
-    shift
+while :; do
+    case "${1-}" in
+        --wait) wait_for_it=true; shift ;;
+        --no-quiet-wait) quiet_wait=false; shift ;;
+        --key) shift; if [ $# -gt 0 ]; then shift; fi ;;
+        --key=*) shift ;;
+        *) break ;;
+    esac
 done
 
 mkdir -p "$(dirname "$lock")"

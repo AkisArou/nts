@@ -220,7 +220,8 @@ node tooling/bench/layouts-record.ts /fresh/layout-run results/layout-ranges/nam
 Run builds and measurements in a named bounded user scope, with swap disabled,
 core dumps disabled, nice 19, and orchestration pinned off CPUs 4–5, as required
 by AGENTS.md. The build checks 14 GiB available memory and 40 GiB free disk
-before every link. The measure command acquires `with-lock.sh --wait`; only
+before every link. The measure command acquires `with-lock.sh --wait --key bench-layouts`,
+which reserves the sitting's memory before it takes the lock; only
 workload children are pinned to CPU 4. Do not wrap it in another measurement
 lock. Build and measurement output directories must be fresh. The recorder
 rewrites only its two generated range files in the chosen results directory.
@@ -259,7 +260,7 @@ at the recorded layout count and pins, not a universal bound. Unmeasured rows
 have no calibrated range.
 
 A future-reference range table must come from a dedicated sitting with no
-capture experiment and low load, taken under `tooling/gate/with-lock.sh --wait`.
+capture experiment and low load, taken under `tooling/gate/with-lock.sh --wait --key bench-layouts`.
 Keep a loaded sitting as the change's evidence; its ranges are upper bounds.
 Pass a provenance JSON with `"calibration": true, "captureExperiments": false`
 to `layouts-record.ts` only for the dedicated quiet sitting. Publication

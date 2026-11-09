@@ -1,9 +1,11 @@
 // The nightly benchmarks (docs/workflow.md, Benchmarks): after the nightly
 // wide steps, nts-bench measures `verified`, on CPU 4 with its sibling idle,
-// through the measurement lock -- the entry point a person runs, asked
-// without --wait:
+// through the measurement lock -- the entry point a person runs:
 //
-//   tooling/gate/with-lock.sh target/release/nts-bench --root <tree>
+//   tooling/gate/with-lock.sh --key bench-session target/release/nts-bench --root <tree>
+//
+// here asked without --wait, and inside the session's reservation, which
+// admit.ts holds (below), so with-lock.sh is given no key.
 //
 // A measurement waits for the reserved core and nothing else (AGENTS.md, The
 // machine): gates, landing checks and agents' work run on the other CPUs, and

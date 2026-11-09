@@ -17,7 +17,8 @@ better JIT, so losing to it is losing on the code we generate rather than on the
 
 Measured on one pinned binary, both sides, machine idle. A run that reports variance above about
 1.2x across its five repetitions is a contended run and is not a number -- measure under
-`tooling/gate/with-lock.sh --wait`, which admits a run once CPU 4 and its sibling 5 are quiet.
+`tooling/gate/with-lock.sh --wait --key <name>`, which reserves the run's memory under its key
+and admits it once CPU 4 and its sibling 5 are quiet.
 
 | row | nts C | nts LLVM | nts f64 | node | bun | nts/node | nts/bun |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

@@ -37,6 +37,8 @@ if (mode === 'build' || mode === 'check') {
   const check = spawnSync(process.execPath, [...args, '--check'], {stdio: 'inherit'});
   if (check.status !== 0 || check.signal || check.error) throw Error('layout sampling preflight failed');
   const lock = join(import.meta.dirname, '../gate/with-lock.sh');
-  const run = spawnSync('sh', [lock, '--wait', process.execPath, ...args], {stdio: 'inherit'});
+  // The sitting reserves its memory under its key before it takes the lock;
+  // the sampler's own reservation (reserveLayoutJob) is then that one.
+  const run = spawnSync('sh', [lock, '--wait', '--key', 'bench-layouts', process.execPath, ...args], {stdio: 'inherit'});
   if (run.status !== 0 || run.signal || run.error) throw Error('layout sampling failed; raw state retained');
 }

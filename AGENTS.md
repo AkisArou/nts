@@ -284,10 +284,16 @@ then a guard once fixed), `tests/memory/`.
   `LimitCORE=0` for a unit. On 2026-10-27 the gate's deliberate crashes made
   2,669 dumps in an hour (4 GB). systemd-coredump, which no mask excludes, ran
   at 40% on CPU 5, so measurement could not start.
-- Benchmark on CPU 4 with sibling 5 idle, under
-  `tooling/gate/with-lock.sh --wait`, from a worktree pinned to a commit.
-  The wrapper waits only for CPUs 4–5 to be quiet and sets `NTS_BENCH_CPUS=4`;
-  a command other than `nts-bench` needs its own `taskset -c 4`.
+- Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a
+  commit, under
+  `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;
+  an ad-hoc measurement names its own key:
+  `tooling/gate/with-lock.sh --wait --key perf-<what> taskset -c 4 <command>`.
+  The wrapper reserves the session's memory under its key before it takes
+  the lock, so a wait for memory never holds CPUs 4–5, and what the command
+  starts runs inside that reservation; without a key it refuses. It waits
+  only for CPUs 4–5 to be quiet and sets `NTS_BENCH_CPUS=4`; a command other
+  than `nts-bench` needs its own `taskset -c 4`.
   Compare ratios within one run, never absolute times across runs.
   `nts-bench` links the compiler crates directly: run a plain
   `cargo build --release` (no `-p`) before measuring a compiler change.

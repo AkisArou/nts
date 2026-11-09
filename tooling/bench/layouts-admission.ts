@@ -67,7 +67,8 @@ export async function withLayoutLock(command:string[],stem:string,timeout=1_500_
   mkdirSync(dirname(stem),{recursive:true});
   const stdout=openSync(stem+'.stdout','wx'),stderr=openSync(stem+'.stderr','wx');
   const start=new Date().toISOString();
-  const r=spawnSync('sh',[join(import.meta.dirname,'../gate/with-lock.sh'),'--wait',...command],{stdio:['ignore',stdout,stderr],timeout});
+  // The sitting reserves its memory under its key before it takes the lock (with-lock.sh).
+  const r=spawnSync('sh',[join(import.meta.dirname,'../gate/with-lock.sh'),'--wait','--key','bench-layouts',...command],{stdio:['ignore',stdout,stderr],timeout});
   closeSync(stdout);closeSync(stderr);
   const refused=r.status===75&&readFileSync(stem+'.stderr','utf8').includes('CPUs 4-5 did not become quiet');
   let sample:any=null;
