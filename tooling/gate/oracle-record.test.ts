@@ -243,6 +243,28 @@ test('an oracle run that measured nothing keeps the end of its stderr, in whole 
   assert.ok(said.endsWith(tail!)&&said.split('\n').includes(tail!.split('\n')[0]!),'whole lines, the last one last');
 });
 
+test('a plan of no cases is never measured: it names the no-oracle row or cases it needs, and its no-oracle row records it',async t=>{
+  const root=testScratch(t,'oracle-record-empty'),saved=process.env.NTS_BENCH_CPUS;
+  t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  const source='tests/programs/empty/main.ts';mkdirSync(join(root,'tests/programs/empty'),{recursive:true});writeFileSync(join(root,source),'export const x=1;');
+  const empty={...plan,source,source_digest:'a'.repeat(32),repository_root:root,case_count:0,cases:[],driver:'empty driver'};
+  writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[empty]}));
+  const output=join(root,'counts.json'),never=async()=>assert.fail('a population of no cases was measured');
+  await assert.rejects(recordAll(root,output,never),/recording incomplete/);
+  const [finding]=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings;
+  assert.equal(finding.outcome,'not-measured');
+  assert.equal(finding.error,`oracle not measured: ${source} plans no cases; record why with \`record-oracles.ts no-oracle\`, or give it cases`);
+  assert.equal(readFileSync(finding.detail,'utf8'),finding.error+'\n');
+  assert.equal(existsSync(output),false,'nothing is published');
+  // The control differs in one thing: the table holds the plan's no-oracle row.
+  writeFileSync(output,JSON.stringify({version:1,rows:[noOracleRecord(empty,'exports no callable function')]})+'\n');
+  await recordAll(root,output,never);
+  assert.ok(lines.includes(`no-oracle ${source} exports no callable function`),lines.join('\n'));
+  assert.deepEqual(JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8')).findings,[]);
+});
+
 test("no-oracle records carry no numeric count and require an empty source identity", () => {
   assert.throws(() => noOracleRecord(plan, "reason"), /empty/);
   const row = noOracleRecord({ ...plan, case_count: 0, cases: [] }, "reason");

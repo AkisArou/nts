@@ -1,0 +1,5 @@
+{
+  "//": "The project these shared modules belong to. A program that imports one from outside benchmarks/ has it emitted by the Node oracle inside the nearest project above it, which checks that project's whole program. Without this file that project is benchmarks/tsconfig.json, the editor's aggregate of every case, so one case's declaration stopped another program's oracle. The modules import nothing outside this folder.",
+  "extends": "../../tsconfig.fixtures.json",
+  "include": ["*.ts"]
+}

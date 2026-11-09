@@ -352,6 +352,9 @@ export async function recordAll(evidence: string, output: string, measure = meas
     let measurement = measured.get(identity);
     try {
       if (failed.has(identity)) throw failed.get(identity);
+      // A population of no cases has no oracle to prepare or run, so no count
+      // can be measured: a no-oracle row, with its reason, is its record.
+      if (plan.case_count === 0) throw new Error(`oracle not measured: ${plan.source} plans no cases; record why with \`record-oracles.ts no-oracle\`, or give it cases`);
       if (measurement === undefined) {
         measurement = await measure(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
         measured.set(identity, measurement);
