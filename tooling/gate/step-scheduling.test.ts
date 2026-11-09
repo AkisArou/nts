@@ -538,3 +538,17 @@ if (held.status !== 0 || held.memoryKilled) throw new Error("the case did not ru
   assert.equal(format.memory.reserved_bytes, Math.floor(GiB / 10));
   assert.equal(format.memory.over, true, "it held more than its share, and its next run reserves by it");
 });
+
+test("an unmeasured step reserves at most the widest step's share, half of what the ledger can give", t => {
+  // 32 GiB, 30 of them the ledger can give, and ten slots: an unmeasured
+  // eight-slot step's share would be 24 GiB; it reserves 15.
+  const { result, summary, step, output } = memoryRun(t, {
+    steps: "format", availableKiB: 20 * 2 ** 20,
+    rows: { format: { slots: 8, min: 1, bound: 60 } },
+    times: "format\t100\t20\t1\n",
+    payload: ":\n",
+  });
+  assert.equal(result.status, 0, output);
+  assert.equal(summary.verdict, "green");
+  assert.deepEqual([step("format").memory.reserved_bytes, step("format").memory.basis], [15 * GiB, "share"]);
+});

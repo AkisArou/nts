@@ -730,3 +730,36 @@ test("admit.ts --key reserves what its key held, and its watcher has the command
   assert.match(refused.stderr, /--workers and --at-most size a --key/);
   assert.match(admit(f, ["--key", "admitted-job", "--bytes", "1G", "--", "true"]).stderr, /one of --key and --bytes says what to reserve/);
 });
+
+test("an unmeasured key is never sized past the widest step's share: half of what the ledger can give", t => {
+  const f = fixture(t); // 64 GiB, 62 of it the ledger can give
+  const wide = jobSizing({ key: "wide", units: 24 }, f.env);
+  assert.deepEqual([wide.bytes, wide.basis], [31 * GiB, "share"], "24 workers' share would be all of it");
+  seedJobs(f, { huge: 70 * GiB });
+  assert.deepEqual([jobSizing({ key: "fresh" }, f.env).bytes, jobSizing({ key: "fresh" }, f.env).basis], [31 * GiB, "largest"]);
+  assert.equal(jobSizing({ key: "huge" }, f.env).bytes, 62 * GiB, "a measured reservation stays capped at all the ledger can give");
+});
+
+test("a request that cannot fit now holds nobody behind it, then holds the queue once it could fit, and is admitted when memory frees", async t => {
+  const f = fixture(t);
+  f.memory(10, 64); // memory nobody reserved holds most of the machine
+  const big = f.ask({ bytes: 30 * GiB, what: "big" });
+  await waitFor("the big request to wait", () => f.of("big").length >= 1, { stopped: f.stopped });
+  assert.equal(f.of("big")[0]!.fits, false);
+  assert.match(f.lines.find(line => line.startsWith("memory: big waits")) ?? "", /it holds nobody behind it until memory nobody reserved frees$/);
+  const small = await f.ask({ bytes: 4 * GiB, what: "small" });
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["small"], "the small request passed the big one, which could not fit");
+  // Now the big one could fit were every admitted job to end, so it holds the
+  // queue again: a second small request waits behind it.
+  f.memory(33);
+  const seen = f.of("big").length;
+  await waitFor("the big request to look again", () => f.of("big").length > seen && f.of("big").at(-1)!.fits, { stopped: f.stopped });
+  const later = f.ask({ bytes: 4 * GiB, what: "later small" });
+  await waitFor("the later small request to wait behind it", () => f.of("later small").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("later small").every(decision => !decision.admitted && decision.fits), "it fits, and waits behind the big one");
+  small.release();
+  const admitted = await big;
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["big"], "admitted once memory freed, ahead of the later small one");
+  admitted.release();
+  (await later).release();
+});

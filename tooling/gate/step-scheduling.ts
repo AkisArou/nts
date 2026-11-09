@@ -31,8 +31,11 @@
 // reservation. A key never measured in this history reserves the largest
 // reservation of its kind here; with none, its share of the machine: of what
 // the ledger can ever give (MemTotal less the system's floor), its width over
-// the slots, so a run whose every slot is busy fits. There is no declared
-// number anywhere: the step table names none.
+// the slots, so a run whose every slot is busy fits. Either way an unmeasured
+// key reserves at most half of what the ledger can give, the widest step's
+// share (`unmeasuredLimit`): a guess is never so large that the machine,
+// with a desktop running, never has it free. There is no declared number
+// anywhere: the step table names none.
 //
 // **A reservation decides when work starts, never its verdict.** The kernel
 // cap a step's census runs under (censusCapBytes) is never below one census
@@ -189,6 +192,17 @@ export function peakReservation(peaks: readonly number[]): number {
 /** A share of the machine: `width` of its `slots`, never more than all of it. */
 export function machineShare(totalBytes: number, width: number, slots: number): number {
   return Math.floor(totalBytes * Math.min(width, slots) / slots);
+}
+
+/**
+ * The most a key sized without a measurement of its own reserves, of the
+ * `capacityBytes` the ledger can give: half, as wide as the widest step (12
+ * of the gate's 24 slots here). A share for a job as wide as the machine,
+ * a cargo build of 24 jobs, would be all of it, which no machine running a
+ * desktop ever has free; the key is measured on its first run either way.
+ */
+export function unmeasuredLimit(capacityBytes: number): number {
+  return Math.floor(capacityBytes / 2);
 }
 
 export type MemorySizing = {

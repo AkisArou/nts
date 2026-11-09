@@ -84,7 +84,7 @@
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {censusCapBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {censusCapBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {stepBound, stepBoundReason} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -707,8 +707,9 @@ let pending = [];
 // **A step reserves what it was measured to hold** (step-scheduling.ts): per
 // unit -- the step, or one token -- 1.25 times the largest of the peaks its
 // last few runs left in this target's history; never measured here, the
-// largest a unit of its kind reserves here; with none, its share of the
-// machine (`planMemory`). The run samples each running step's slice every
+// largest a unit of its kind reserves here, or with none its share of the
+// machine, and either way no more than the widest step's share
+// (`planMemory`). The run samples each running step's slice every
 // SAMPLE_MS on the ledger's own basis (cgroupCharge), and its peak goes to the
 // step's summary row -- `over` when it passed what the step was counted for,
 // and the ledger's entry says so -- and to the history, for its next run.
@@ -774,7 +775,9 @@ function sizing(step) {
   if (!sized) {
     const unit = step.elastic ? "token" : "step";
     const { bytes, basis } = unitReservation(HISTORY, { step: step.name }, unit, shareOf(step, step.elastic ? 1 : width(step.name)));
-    sized = { unit, bytes: Math.max(1, Math.min(bytes, capacity)), basis };
+    // Unmeasured, the whole step reserves at most the widest step's share.
+    const most = basis === "measured" ? capacity : Math.floor(unmeasuredLimit(capacity) / (step.elastic ? width(step.name) : 1));
+    sized = { unit, bytes: Math.max(1, Math.min(bytes, most)), basis };
     MEMORY.set(step.name, sized);
   }
   return sized;

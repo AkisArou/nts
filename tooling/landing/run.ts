@@ -40,6 +40,7 @@ import { machineBudget } from "./selection.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommand } from "./candidate-environment.ts";
+import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
 
 export const PROFILE = "nts-dev";
@@ -71,6 +72,8 @@ export type RunOptions = {
 };
 
 const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
+/** The workers a landing build is sized by: the gate's build step's, its row's slots. */
+const BUILD_WIDTH = STEPS.find(row => row.name === "build")!.slots;
 
 /**
  * The environment a landing run starts from: the launcher's host
@@ -159,9 +162,11 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
   const timed = timing ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   // admit.ts becomes the build once the ledger admits it, so the reservation
   // lasts exactly as long as the build, however the build ends. It reserves
-  // what this tree's earlier landing builds held per cargo job, in its
-  // target's history, and adds this build's peak to it.
-  const admitted = [ADMIT, "--key", "landing-build", "--workers", String(slots), "--priority", "landing",
+  // what this tree's earlier landing builds held, in its target's history,
+  // and adds this build's peak to it. Never measured, it sizes as the gate's
+  // build step does, at the build row's width: not one share per cargo job,
+  // which for 24 jobs would be the whole machine.
+  const admitted = [ADMIT, "--key", "landing-build", "--workers", String(BUILD_WIDTH), "--priority", "landing",
     "--what", `landing build of ${options.commit.slice(0, 12)}`, "--", ...timed];
   const launch = gateCommand(node, admitted);
   const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);

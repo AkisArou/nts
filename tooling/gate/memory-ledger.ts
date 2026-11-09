@@ -30,6 +30,14 @@
 // ahead of an earlier one only from the room left once that one has its own,
 // and a request that does not fit holds everything behind it.
 //
+// **A request the machine cannot give now holds nobody.** One that could not
+// fit even were every admitted job to end -- MemAvailable is low with memory
+// that nobody reserved -- waits without holding the requests behind it, says
+// so, and holds them again once it could fit, so smaller ones do not starve
+// it. It is not refused: a machine briefly full of memory nobody reserved
+// delays a job rather than failing it. Only a request larger than the
+// machine could ever give, MemTotal less the floor, is refused (`neverFits`).
+//
 // **A reservation can grow and shrink**, for a job whose need moves while it
 // runs (a gate run, as its steps start and end). `grow` asks for more exactly
 // as a new request would: at the reservation's priority, behind every request
@@ -85,7 +93,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { defaultSlots } from "./budget.ts";
-import { historyFile, KEY, machineShare, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
+import { historyFile, KEY, machineShare, readCostHistory, unitReservation, unmeasuredLimit, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
 export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
@@ -502,7 +510,10 @@ export type Decision = {
   roomBytes: number;
   /** Requests ahead of this one in the queue. */
   ahead: number;
+  /** Whether it could fit were every admitted job to end: one that could not holds nobody behind it. */
+  fits: boolean;
 };
+
 
 export type ReserveOptions = {
   /** Read for RESERVATION_ENV, LEDGER_ENV and NTS_MEMINFO; process.env unless given. */
@@ -704,10 +715,19 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   const { availableBytes } = readMeminfo(context.meminfo);
   let table: Table | undefined;
   const read = () => table ??= processTable();
-  const pendingBytes = [...admitted.values()].reduce((sum, entry) => sum + Math.max(0, entry.bytes - context.used(entry, read)), 0);
+  const usedBy = new Map([...admitted.values()].map(entry => [entry.id, context.used(entry, read)]));
+  const usedBytes = [...usedBy.values()].reduce((sum, bytes) => sum + bytes, 0);
+  const pendingBytes = [...admitted.values()].reduce((sum, entry) => sum + Math.max(0, entry.bytes - usedBy.get(entry.id)!), 0);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
-  const queue = [...waiting, self].sort(queueOrder);
-  const go = admissible(roomBytes, queue).has(self.id);
+  // What the queue could be given were every admitted job to end.
+  const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
+  // What a request would hold, a growth with its reservation.
+  const whole = (entry: LedgerEntry) => entry.bytes + (entry.grows === null ? 0 : admitted.get(entry.grows)?.bytes ?? 0);
+  const fits = whole(self) <= freeBytes;
+  const everyone = [...waiting, self].sort(queueOrder);
+  // A request that could not fit now holds nobody behind it.
+  const queue = everyone.filter(entry => whole(entry) <= freeBytes);
+  const go = fits && admissible(roomBytes, queue).has(self.id);
   if (go && grown !== undefined) {
     // The growth joins its reservation: one entry, and one measure, per job.
     writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes });
@@ -716,7 +736,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   else if (go) writeEntry(dir, "admitted", self);
   else if (!listed) writeEntry(dir, "waiting", self);
   return {
-    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: queue.indexOf(self) },
+    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits },
     registered: !go,
   };
 }
@@ -758,7 +778,8 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
         waitedFrom = Date.now();
         context.report(`memory: ${self.what} ${waits()} (${self.priority}): ${gib(decision.availableBytes)} available, `
           + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
-          + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : ""));
+          + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : "")
+          + (decision.fits ? "" : "; it could not fit even were every admitted job to end, so it holds nobody behind it until memory nobody reserved frees"));
       }
       await pause(context.every, undefined, { signal });
     }
@@ -896,7 +917,8 @@ export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: 
  * `historyFile`); never measured there, the largest a job worker reserves
  * there; with none, one slot's share of what the ledger can give (MemTotal
  * less the system's floor), per worker. Never more than the machine could
- * give, nor than the job's own cap.
+ * give, nor than the job's own cap; unmeasured, never more than the widest
+ * step's share (`unmeasuredLimit`).
  */
 export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.ProcessEnv = process.env): JobSizing {
   const units = request.units ?? 1;
@@ -907,7 +929,9 @@ export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.Process
   const { totalBytes } = machineMemory(env);
   const capacity = totalBytes - SYSTEM_FLOOR_BYTES;
   const unit = unitReservation(readCostHistory(history), { job: request.key }, "worker", machineShare(capacity, 1, defaultSlots(cpus().length)));
-  const bytes = Math.max(1, Math.min(unit.bytes * units, capacity, request.atMostBytes ?? Infinity));
+  // Unmeasured, never more than the widest step's share: a guess the machine has free.
+  const most = unit.basis === "measured" ? capacity : unmeasuredLimit(capacity);
+  const bytes = Math.max(1, Math.min(unit.bytes * units, most, request.atMostBytes ?? Infinity));
   return { bytes, basis: unit.basis, history, units };
 }
 

@@ -27,8 +27,7 @@ import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type 
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {ownMemory} from "../gate/test-memory.ts";
 import {gib, jobSizing, readLedger} from "../gate/memory-ledger.ts";
-import {machineBudget} from "./selection.ts";
-import {cpus} from "node:os";
+import {STEPS} from "../gate/step-table.mjs";
 import {waitFor} from "../gate/test-wait.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
@@ -299,13 +298,14 @@ await new Promise(resolve => { const watcher = watch(waiting, () => { if (asked(
 
 test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority", async t => {
   const f = fixture(t);
-  // The build reserves what this tree's earlier landing builds held per cargo
-  // job, 8 GiB in all. 61 GiB available, 2 kept for the system: a 56 GiB job
-  // leaves too little for them, until the build asks and the job ends.
-  const slots = machineBudget(cpus().length).slots, history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
+  // The build reserves what this tree's earlier landing builds held, 8 GiB in
+  // all, per worker of the build step's row. 61 GiB available, 2 kept for the
+  // system: a 56 GiB job leaves too little for them, until the build asks and
+  // the job ends.
+  const workers = STEPS.find(row => row.name === "build")!.slots, history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(8 * 2 ** 30 / slots / 1.25)] } } }) + "\n");
-  const sized = jobSizing({ key: "landing-build", units: slots }, f.memory);
+  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(8 * 2 ** 30 / workers / 1.25)] } } }) + "\n");
+  const sized = jobSizing({ key: "landing-build", units: workers }, f.memory);
   assert.equal(sized.basis, "measured");
   const asked = gib(sized.bytes).replace(".", "\\.");
   const env: NodeJS.ProcessEnv = { ...process.env, ...f.memory };
@@ -323,6 +323,21 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} admitted with ${asked} after \\d+ s`));
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
+});
+
+test("a tree with no history sizes its landing build as the build step, at its row's width, not one share per cargo job", t => {
+  const f = fixture(t);
+  const workers = STEPS.find(row => row.name === "build")!.slots;
+  const sized = jobSizing({ key: "landing-build", units: workers }, f.memory), cargo = jobSizing({ key: "landing-build", units: 24 }, f.memory);
+  assert.equal(sized.basis, "share");
+  assert.ok(sized.bytes < cargo.bytes, "less than cargo's 24 jobs' shares would be");
+  // The build copies its own entry in the ledger, which admit.ts names in its environment.
+  const entry = join(f.own, "build-entry.json");
+  const ran = runLanding(f.options(["build", "rustfmt"], { build: ["sh", "-c",
+    `cat "$NTS_MEMORY_LEDGER/admitted/$NTS_MEMORY_RESERVATION.json" > ${JSON.stringify(entry)}; mkdir -p "$CARGO_TARGET_DIR/${PROFILE}"; printf '#!/bin/sh\\n' > "$NTS_BIN"; chmod +x "$NTS_BIN"`] }));
+  assert.equal(ran.state, "green", ran.message);
+  const held = JSON.parse(readFileSync(entry, "utf8")) as { bytes: number; unmeasured?: string[] };
+  assert.deepEqual([held.bytes, held.unmeasured], [sized.bytes, ["landing-build"]]);
 });
 
 test("pressure that never clears, and a hung step, hold the change for a person", t => {
