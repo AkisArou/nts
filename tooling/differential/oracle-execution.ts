@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {activeCommand,type ActiveResult} from '../gate/active-command.ts';
+import {activeCommand,COMMAND_ACTIVITY_POLL_MS,COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,type ActiveResult} from '../gate/active-command.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError,publishPressure} from '../gate/step-result.ts';
-import {memoryRun,memoryCause,memoryDisposition,closeMemoryRun} from '../census/worker-memory.ts';
+import {memoryRun,memoryCause,memoryDisposition,closeMemoryRun,compileActive} from '../census/worker-memory.ts';
 
 import {ORACLE_EXECUTION_POLICY as policy} from './oracle-execution-policy.ts';
 import type {OracleBudget} from './oracle-runtime.ts';
@@ -47,6 +47,27 @@ export async function runOracleCommand(command:string,args:string[],options:{sou
       :result.timeout?{phase:'execute',outcome:'timeout',bound:limits.cpuSeconds,signal,reason:'oracle timed out: '+result.timeout}:undefined;
     return {stdoutHex:stdoutRaw.toString('hex'),stderrHex:stderrRaw.toString('hex'),run:{...result,error:result.error?.message},limits,residentPeakBytes:Number(readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')),...(budget?{budget}:{})};
   }finally{resident.stop(scope);resident.close();}
+}
+
+/** The planner computes a calls-mode oracle's population by capturing and
+ * checking the case's program, so it is held as the case's compile is: every
+ * process of its session to the compile's CPU bound, and the shared inactivity
+ * guard for one that sleeps with no output and no CPU. Past its CPU bound it
+ * planned no population, which is the case's budget in the plan phase. One that
+ * went silent or ran away measured nothing; the supervisor publishes that as
+ * the step's hold. In a census worker the planner shares the worker's resident
+ * scope, and a kill at its limit is the pool's memory-cap bucket. */
+export type OraclePlannerLimits={cpuSeconds:number;idleMs:number};
+export const ORACLE_PLANNER_LIMITS:Readonly<OraclePlannerLimits>={cpuSeconds:COMPILE_CPU_BOUND_SECONDS,idleMs:COMMAND_IDLE_GUARD_MS};
+export type OraclePlanned={plan:string}|{budget:OracleBudget&{phase:'plan'}};
+export async function runOraclePlanner(planner:string,args:readonly string[],options:{env:NodeJS.ProcessEnv;cwd?:string;limits?:OraclePlannerLimits}):Promise<OraclePlanned>{
+  const limits=options.limits??ORACLE_PLANNER_LIMITS;
+  const result=await compileActive({},planner,args,{cwd:options.cwd??process.cwd(),env:options.env,maxBuffer:64*2**20,
+    eachProcessCpuSeconds:limits.cpuSeconds,idleMs:limits.idleMs,pollMs:Math.min(COMMAND_ACTIVITY_POLL_MS,limits.idleMs/4)});
+  if(result.timeout&&!result.memoryKilled)return {budget:{phase:'plan',outcome:'timeout',bound:limits.cpuSeconds,signal:result.signal,reason:'oracle planner timed out: '+result.timeout}};
+  if(result.status!==0||result.signal||result.error||result.memoryKilled)
+    throw new ToolingInstrumentError('tooling-setup','oracle planner held: '+(result.error?.message??result.signal??'exit '+result.status)+'\n'+result.out);
+  return {plan:result.stdout};
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

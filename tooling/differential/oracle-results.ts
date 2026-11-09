@@ -13,7 +13,10 @@ import type {OracleIdentity,OraclePrepared} from './oracle-emit.ts';
 export const resultHash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 export type ProgramAnswer={version:1;subject:string;project:string;entry:string}&(
   {kind:'calls';driverSha256:string;count:number;rows:string[];stdout:number[];stderr:number[];replay?:OraclePrepared}
-  |{kind:'budget';driverSha256:string;budget:OracleBudget}
+  // A planned population's budget names its driver. A planner past its bound
+  // planned no population, so its budget names none.
+  |{kind:'budget';driverSha256:string;budget:OracleBudget&{phase:'prepare'|'execute'}}
+  |{kind:'budget';driverSha256?:never;budget:OracleBudget&{phase:'plan'}}
   |{kind:'observation';observation:{result:string;printed:{stdout:string;stderr:string};complete:true}});
 export type ProgramCapture={observations:HostObservation[];dependencyObservations?:HostObservation[];session:NodeResolutionSession};
 export type ProgramOracleHandoff={file:string;sha256:string};
@@ -53,7 +56,7 @@ function measured(value:ProgramAnswer):void{
     if(!digest(value.driverSha256)||!Number.isSafeInteger(value.count)||value.count<0||!Array.isArray(value.rows)||value.rows.length!==value.count||value.rows.some(row=>typeof row!=='string')||
       [value.stdout,value.stderr].some(bytes=>!Array.isArray(bytes)||bytes.some(byte=>!Number.isInteger(byte)||byte<0||byte>255)))invalid('has an incomplete call result: '+value.subject);
   }else if(value.kind==='budget'){
-    if(!digest(value.driverSha256)||!['prepare','execute'].includes(value.budget?.phase)||!['timeout','memory-cap'].includes(value.budget?.outcome)||!Number.isFinite(value.budget.bound)||value.budget.bound<=0||typeof value.budget.reason!=='string'||!value.budget.reason)invalid('has an invalid case budget: '+value.subject);
+    if((value.budget?.phase==='plan'?'driverSha256' in value:!digest(value.driverSha256))||!['plan','prepare','execute'].includes(value.budget?.phase)||!['timeout','memory-cap'].includes(value.budget?.outcome)||!Number.isFinite(value.budget.bound)||value.budget.bound<=0||typeof value.budget.reason!=='string'||!value.budget.reason)invalid('has an invalid case budget: '+value.subject);
     if('rows' in value||'count' in value||'complete' in value)invalid('budget cannot claim Node coverage');
   }else if(value.kind==='observation'){
     if(value.observation?.complete!==true||typeof value.observation.result!=='string'||typeof value.observation.printed?.stdout!=='string'||typeof value.observation.printed.stderr!=='string')invalid('cannot store an unmeasured observation: '+value.subject);
@@ -136,7 +139,9 @@ export function openProgramOracleResults(handoff:ProgramOracleHandoff,expected:O
     },
     calls(project:string,entry:string,driverSha256:string):Extract<ProgramAnswer,{kind:'calls'|'budget'}>{
       const value=this.forProject(project);
-      if((value.kind!=='calls'&&value.kind!=='budget')||value.project!==project||value.entry!==entry||value.driverSha256!==driverSha256)invalid('call population changed: '+project);
+      // A planner past its bound planned no driver: its budget answers each driver of its entry.
+      const unplanned=value.kind==='budget'&&value.budget.phase==='plan';
+      if((value.kind!=='calls'&&value.kind!=='budget')||value.project!==project||value.entry!==entry||!unplanned&&value.driverSha256!==driverSha256)invalid('call population changed: '+project);
       return value;
     },
   };

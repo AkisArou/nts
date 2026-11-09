@@ -109,3 +109,15 @@ test('a finalized budget answer is authenticated without inventing call rows',t=
   assert.deepEqual(reader.calls(f.project,f.entry,'d'.repeat(64)),value);
   writeFileSync(f.entry,'changed');assert.throws(()=>reader.calls(f.project,f.entry,'d'.repeat(64)),/changed/);
 });
+
+test('a planner past its bound planned no driver, so its budget answers each driver of its entry',t=>{
+  const f=fixture(t),writer=createProgramOracleResults(f.directory,f.identity),capture={observations:f.fs.captured(),session:f.session};
+  const budget={phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL',reason:'oracle planner timed out'};
+  const value:ProgramAnswer={version:1,subject:f.value.subject,project:f.project,entry:f.entry,kind:'budget',budget};
+  assert.throws(()=>writer.add({...value,driverSha256:'d'.repeat(64)} as unknown as ProgramAnswer,capture),/invalid case budget/,'an unplanned population names no driver');
+  assert.throws(()=>writer.add({...value,budget:{...budget,phase:'execute'}} as unknown as ProgramAnswer,capture),/invalid case budget/,'a planned population names its driver');
+  writer.add(value,capture);writer.publish();
+  const reader=openProgramOracleResults(programOracleHandoff(f.directory),f.identity);
+  for(const driver of ['d'.repeat(64),'e'.repeat(64)])assert.deepEqual(reader.calls(f.project,f.entry,driver),value);
+  assert.throws(()=>reader.calls(f.project,f.entry+'.other','d'.repeat(64)),/call population changed/);
+});
