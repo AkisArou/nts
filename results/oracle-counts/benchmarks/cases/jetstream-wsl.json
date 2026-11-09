@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/jetstream-wsl",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/jetstream-wsl/case.ts",
+      "signature": "20ccd73c9c02804135ac939d0cec6aa7d1ae1d32bcdd293a269b58abddd289a0",
+      "keys": {
+        "c": "b817f51bdb88866add9e6374eda98cce",
+        "jvm": "59b7b839e1928769c1b97b193a960ec3",
+        "llvm": "66d410f18bf6250fabaf564d452691a1"
+      },
+      "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f",
+      "driver_sha256": "3e2af3e40e9e4c906f530ee2d6759faa48a1542f5baf069eca06ca641d547465",
+      "input_domain": {
+        "identity": "1180ffc404928e955b278db16f966992",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 4
+    }
+  ]
+}

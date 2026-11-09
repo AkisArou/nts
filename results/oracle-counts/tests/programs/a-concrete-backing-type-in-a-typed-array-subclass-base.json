@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-concrete-backing-type-in-a-typed-array-subclass-base",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-concrete-backing-type-in-a-typed-array-subclass-base/src/main.ts",
+      "signature": "2e0fd354b864553b291fca3ad2229a6ed74f1831d9129eb781d0fa91161c1f3a",
+      "keys": {
+        "c": "4434e82c24e44006d3d23289f188feca",
+        "jvm": "8c2439677bcb4ab292a5134e47dd7cd6",
+        "llvm": "ff2fcf618afd0c6eff96692718d9a2d4"
+      },
+      "cases_sha256": "35bd34f8f1a546549b8f9887f0398ac936180d97e3633efd0f16d2dd42a66736",
+      "driver_sha256": "653335c9c470409b04f482ed62bae53d2cc620877cfbaa428c4e3b015ec6238f",
+      "populations": {
+        "backingByte": {
+          "count": 29,
+          "cases_sha256": "35bd34f8f1a546549b8f9887f0398ac936180d97e3633efd0f16d2dd42a66736"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-facade-called-through-live-imports",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-facade-called-through-live-imports/src/main.ts",
+      "signature": "73321a966fa722f6f413c8668d39f605d526e2a24f49c9d6d2ef6be1b8bd21a8",
+      "keys": {
+        "c": "2f039ff54ff41ca6ae7c6768a0f64c57",
+        "jvm": "0da101e14a186e5aed12b87f65146de4",
+        "llvm": "ea6e9e41e1dbfd7346f54b2bb27c2fbc"
+      },
+      "cases_sha256": "3d8ff46335b1fa1cf9119707134b574e9c7f98a6aa0e4a9d32c007ccb2f9fab4",
+      "driver_sha256": "f08df33b111cc94cec995e486782fd2782c8670ea1c5fadc0c5ee9601fc1124f",
+      "populations": {
+        "throughFacade": {
+          "count": 29,
+          "cases_sha256": "3d8ff46335b1fa1cf9119707134b574e9c7f98a6aa0e4a9d32c007ccb2f9fab4"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

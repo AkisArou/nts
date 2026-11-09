@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-iterable-interface-kept-in-a-nullable-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-iterable-interface-kept-in-a-nullable-field/src/main.ts",
+      "signature": "d8387c1c00de5351a7d0e13a94570735f9e974a04e8cd1a6f597d2d2fd266f86",
+      "keys": {
+        "c": "2906bf27ae1ebdb7aebbd239e679bd4f",
+        "jvm": "5e60c779353d312af7799cec69f9e13d",
+        "llvm": "fdbbcfff0c8b9c023cb4aa8e336d43e5"
+      },
+      "cases_sha256": "c15a4f0aae6b191c9115d168dce12390d2cdf43720feae6e32ae0047fef2285a",
+      "driver_sha256": "a66d391330c8d64c59a04fc78053a9266e2fc9fd5b1a675ce837f0cd88c55eb0",
+      "populations": {
+        "present": {
+          "count": 29,
+          "cases_sha256": "c15a4f0aae6b191c9115d168dce12390d2cdf43720feae6e32ae0047fef2285a"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

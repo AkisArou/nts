@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/jetstream-gaussian-blur",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/jetstream-gaussian-blur/case.ts",
+      "signature": "20ccd73c9c02804135ac939d0cec6aa7d1ae1d32bcdd293a269b58abddd289a0",
+      "keys": {
+        "c": "b817f51bdb88866add9e6374eda98cce",
+        "jvm": "59b7b839e1928769c1b97b193a960ec3",
+        "llvm": "66d410f18bf6250fabaf564d452691a1"
+      },
+      "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f",
+      "driver_sha256": "5e1bbf251b4a6e8d590ac9f0e084052d213daa1d804d17d62102c93dbdcdbcab",
+      "input_domain": {
+        "identity": "eae076ed400a3b7f9833f07b2bf31653",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "runIterations": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 4
+    }
+  ]
+}

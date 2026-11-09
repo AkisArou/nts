@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-resizable-array-buffer-with-a-small-maximum",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-resizable-array-buffer-with-a-small-maximum/src/main.ts",
+      "signature": "036e6daf678e5e6a5278271dc01525bf7273efd2d568697f6c158769229cc6da",
+      "keys": {
+        "c": "cea7debb4c7d4fb2e3371dbde9db140d",
+        "jvm": "f5a6def84476169b40bcb58d8b289a63",
+        "llvm": "1fc0187532db659d0ad64671483c0f4e"
+      },
+      "cases_sha256": "40ce34fadbef33265f2268fbb5fe47a30f9f7f44fdb56cfed72fe5c680d06d28",
+      "driver_sha256": "193d5c4782d4a4da59295ace847ffc004731a79f19a0bce080abfe51fd23214f",
+      "populations": {
+        "resize": {
+          "count": 1,
+          "cases_sha256": "40ce34fadbef33265f2268fbb5fe47a30f9f7f44fdb56cfed72fe5c680d06d28"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

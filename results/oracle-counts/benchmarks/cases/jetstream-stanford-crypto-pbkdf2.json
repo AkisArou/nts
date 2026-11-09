@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/jetstream-stanford-crypto-pbkdf2",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/jetstream-stanford-crypto-pbkdf2/case.ts",
+      "signature": "daf6733c490c194970113b50c0c962fb3cb8394798de00d42d05ff9fadb31b95",
+      "keys": {
+        "c": "6422cb55df9930093e76dc20ace7ec2f",
+        "jvm": "2e18e3fbeedcb9380acb79641f614b24",
+        "llvm": "f9b6fcab4ac9a9332ffec22889c0a3ad"
+      },
+      "cases_sha256": "0d97ed42738b775ba7bd97cf1a810c4bbdf52cd6ec94d6ecd52b2b6cddb838ef",
+      "driver_sha256": "a2eed3bf642cd06340eb2927d3b31de4cb31283544e7f4c1f55cf4234f149282",
+      "input_domain": {
+        "identity": "1180ffc404928e955b278db16f966992",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "runIteration": {
+          "count": 1,
+          "cases_sha256": "8bc6477c93e57f383f1630aec9bf5b9a434d44bdbeadf58bbf6fa011bdccb92d"
+        },
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 5
+    }
+  ]
+}

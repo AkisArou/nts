@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/jetstream-crypto-md5-sp",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/jetstream-crypto-md5-sp/case.ts",
+      "signature": "fe20af8e1fbdef5f679d80df04e8317048d53cd543e1973638ba6c6d4b62ee40",
+      "keys": {
+        "c": "04e167d3cc8c4daa2091ac05641f926c",
+        "jvm": "3125fbca010b695618d061832081d289",
+        "llvm": "b10345c31638bee3e212a1f3a525ac7d"
+      },
+      "cases_sha256": "2b06f2c02727d1013ae339c1570d106c0ca72ed62fc549573307530a6d13e7dd",
+      "driver_sha256": "7d9a85682e89473fa2014e2f7b4b4a665b157ec98b0ad78045ec9e6d3a1bedd8",
+      "input_domain": {
+        "identity": "4c57fabb3d0a37f01e4a5c942cfe186b",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "b64_hmac_md5": {
+          "count": 10,
+          "cases_sha256": "50f3cbed73529b6ff35e8a28b8a2d938038d995109cd8e920eafb78700515fde"
+        },
+        "b64_md5": {
+          "count": 5,
+          "cases_sha256": "b9352eb70b6b5e9bf7187cbb4c433cac451180ed779b2b16979c7a080b58c430"
+        },
+        "hex_hmac_md5": {
+          "count": 10,
+          "cases_sha256": "c4a1b74c7b943cce10dff1faf0f0dc87626da0ee7537b6830c95bd4932c80ce0"
+        },
+        "hex_md5": {
+          "count": 5,
+          "cases_sha256": "5b9f4fd86ef8345a41b4dbb5841bd88600d2a6e73a3b0895cf17463909e985ce"
+        },
+        "md5_vm_test": {
+          "count": 1,
+          "cases_sha256": "b70aeafd9d6c113469822df775882048b2491e51249a789d693644550921187e"
+        },
+        "render": {
+          "count": 4,
+          "cases_sha256": "bad75ae590beece70f5f8c92084ffd0d52d1bcaef883a5f10f75d49e9ffb8f7b"
+        },
+        "str_hmac_md5": {
+          "count": 10,
+          "cases_sha256": "2ae31e0a48288ed6c1cdb9efeef945d8a34602eaeeb70a947fb9fc2ea104399d"
+        },
+        "str_md5": {
+          "count": 5,
+          "cases_sha256": "aa31f9890341a133bf84e7abd650cb72041a86e7b5647bcd37d540f2833d9c67"
+        },
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 54
+    }
+  ]
+}

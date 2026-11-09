@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/jetstream-offline-assembler",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/jetstream-offline-assembler/case.ts",
+      "signature": "7ef2c28f2196c889e7381c2f1c18d6bb754a87e9a5fa867b6f0a2e419a0ff491",
+      "keys": {
+        "c": "8b9edafd9fc1b6ad47a9a8cdd100aefd",
+        "jvm": "4e8b6e28fb2c5b13b770212889acf80f",
+        "llvm": "447a9bdbfd1f5e07e7e5bebe831e06f6"
+      },
+      "cases_sha256": "f6d2b1d4a303f25a5932fa986cc14f1bddc1c7e1200b3ae4f8ebf5a377ad8198",
+      "driver_sha256": "2edfb1768952d5791cf1ccd66a07a607c6eba1492fe353d5d6570700cc11a329",
+      "input_domain": {
+        "identity": "4c57fabb3d0a37f01e4a5c942cfe186b",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 4,
+          "cases_sha256": "bad75ae590beece70f5f8c92084ffd0d52d1bcaef883a5f10f75d49e9ffb8f7b"
+        },
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 8
+    }
+  ]
+}
