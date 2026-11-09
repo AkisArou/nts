@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
 import { RESUME_AT_GB, memAvailableGB } from "../gate/admission.ts";
-import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment } from "../gate/canonical-environment.ts";
+import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-environment.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
 import { STEPS } from "../gate/step-table.mjs";
@@ -35,6 +35,7 @@ import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
+import { candidateCommand } from "./candidate-environment.ts";
 
 export const PROFILE = "nts-dev";
 export type StepResult = {
@@ -127,7 +128,7 @@ export function runLanding(options: RunOptions): Ran {
   if (options.steps.includes("build")) {
     for (let attempt = 1; ; attempt++) {
       admit("the build");
-      const built = buildCompiler(options, launcher, owned, attempt);
+      const built = buildCompiler(options, selected.node, launcher, owned, attempt);
       if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
       results.push(built);
       if (built.verdict === "PASS") break;
@@ -142,7 +143,7 @@ export function runLanding(options: RunOptions): Ran {
   for (let attempt = 1; pending.length; attempt++) {
     admit(attempt === 1 ? "the steps" : `${pending.join(" ")} again`);
     const dir = attempt === 1 ? run : join(run, `attempt-${attempt}`);
-    const measured = runSteps(options, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" ") }, dir, pending);
+    const measured = runSteps(options, selected.node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" ") }, dir, pending);
     if ("held" in measured) { for (const step of pending) rows.set(step, { name: step, verdict: "NOT RUN", reason: measured.held }); results.push(...rest.map(step => rows.get(step)!)); return finish("held", measured.held); }
     for (const row of measured.rows) rows.set(row.name, { ...row, ...(attempt > 1 ? { attempt } : {}) });
     const retry = measured.rows.filter(row => row.verdict === "INSTRUMENT" && instrumentPolicy(row.instrument?.kind, row.instrument?.completedFailures)?.disposition === "retry");
@@ -158,14 +159,13 @@ export function runLanding(options: RunOptions): Ran {
   return finish("green", "green");
 }
 
-function buildCompiler(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
+function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(machineBudget(cpus().length).slots)];
-  const env = gateEnvironment(launcher, { run: options.run, owned, oracleRoot: options.tree }).env;
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1));
-  const r = spawnSync(launch.command, launch.args, { cwd: options.tree, env, encoding: "utf8", maxBuffer: 1 << 30 });
+  const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
   writeFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
@@ -179,11 +179,10 @@ function buildCompiler(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: 
 }
 
 type Summary = { identities?: { commit?: string | null }; interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
-function runSteps(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): { rows: StepResult[] } | { held: string } {
+function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): { rows: StepResult[] } | { held: string } {
   mkdirSync(dir, { recursive: true });
-  const env = gateEnvironment(launcher, { run: dir, owned, oracleRoot: options.tree }).env;
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
-  const r = spawnSync(launch.command, launch.args, { cwd: options.tree, env, encoding: "utf8", maxBuffer: 1 << 30 });
+  const r = candidateCommand(node, { tree: options.tree, run: dir, owned, command: [launch.command, ...launch.args] }, launcher);
   writeFileSync(join(dir, "gate.log"), `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let summary: Summary;
   try { summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) as Summary; }
