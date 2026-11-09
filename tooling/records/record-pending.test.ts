@@ -2,12 +2,13 @@
 // which recorders it runs, and what it lets them write. The recorders here are
 // stand-ins that write rows through the same merge helpers the real ones use.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
-import { acceptedIn, auditRecord, findPending, KIND_STEPS, KINDS, oracleRefreshes, partOf, recordPending, type Runner } from "./record-pending.ts";
+import { acceptedIn, applyCommand, applyDelta, auditRecord, findPending, KIND_STEPS, KINDS, oracleRefreshes, partOf, recordPending, sourceDigests, type BenchmarkDigests, type Kind, type Runner } from "./record-pending.ts";
+import { appliedIn, DELTA_FILE, parseDelta, serializeDelta, type Delta } from "./delta.ts";
 import { improvedLine, refusesDifferentlyLine } from "./pending.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts";
@@ -224,4 +225,202 @@ test("each kind is recorded after the part that runs its checks, and names only 
   assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["benchmark-runs", "dex"]);
   const steps = new Set(STEPS.map(step => step.name));
   for (const kind of KINDS) for (const step of KIND_STEPS[kind]) assert.ok(steps.has(step), `${kind}: ${step} is a gate step`);
+});
+
+// The delta, and --apply: the rows a records run wrote, merged by case into a
+// main that moved on while it ran.
+
+const write = (root: string, path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
+const rewrite = (root: string, path: string, change: (text: string) => string) => writeFileSync(join(root, path), change(readFileSync(join(root, path), "utf8")));
+const CORE: Kind[] = ["oracle-counts", "typescript", "benchmarks", "outcomes"];
+/** The digests the stand-in compile rows carry (cell), as main computes them unless a test says otherwise. */
+const asRecorded: BenchmarkDigests = async (_root, paths) => new Map(paths.map(path => [path, { source: "1".repeat(64), driver: "2".repeat(64) }]));
+
+/** A tree recorded in with a delta, and main: a copy of it from before the records run, which then moves on its own. */
+function recordedBeside(t: { after(fn: () => void): void }, kinds: Kind[] = CORE, overrides: Partial<Record<string, () => void>> = {}) {
+  const root = tree(t), main = testScratch(t, "record-pending-main"), file = join(testScratch(t, "record-pending-run"), DELTA_FILE), lines: string[] = [];
+  cpSync(root, main, { recursive: true });
+  assert.equal(recordPending(root, kinds, recorders(root, overrides).run, line => lines.push(line), new Map(), file), 0, lines.join("\n"));
+  return { root, main, lines, file, delta: parseDelta(readFileSync(file, "utf8")) };
+}
+async function applied(main: string, delta: Delta, benchmarks = asRecorded) {
+  const lines: string[] = [];
+  return { counts: await applyDelta(main, delta, { say: line => lines.push(line), benchmarks }), lines };
+}
+
+test("the recorder writes the delta of what it recorded: each case's row before and after, and a digest of its sources", t => {
+  const { root, main, lines, file, delta } = recordedBeside(t);
+  assert.ok(lines.includes(`record-pending: the delta of its 16 row(s) is ${file}`), lines.join("\n"));
+  assert.equal(delta.commit, null, "a tree outside a checkout names no commit");
+  assert.deepEqual(delta.rows.filter(row => row.record === "results/typescript/c/cases.tsv").map(row => [row.case, row.key, row.before === null]),
+    [["tests/typescript/family/new.ts", "tests/typescript/family/new.ts", true], ["tests/typescript/family/recorded.ts", "tests/typescript/family/recorded.ts", false]]);
+  const improved = delta.rows.find(row => row.record === "results/typescript/c/cases.tsv" && row.before !== null)!;
+  assert.deepEqual([improved.before, improved.after], [`tests/typescript/family/recorded.ts\t${JSON.stringify(refused)}`, `tests/typescript/family/recorded.ts\t{"kind":"pass"}`]);
+  assert.deepEqual(delta.rows.filter(row => row.record === "results/benchmarks/llvm/outcomes.tsv").map(row => row.key),
+    ["benchmarks/cases/new\0compile", "benchmarks/cases/recorded\0compile"], "a compile row's key is its benchmark and scope");
+  const shard = delta.rows.find(row => row.record === "results/oracle-counts/tests/programs/new.json")!;
+  assert.deepEqual([shard.kind, shard.case, shard.key, shard.before, shard.after], ["oracle-counts", "tests/programs/new", "tests/programs/new", null, readFileSync(join(root, shard.record), "utf8")]);
+  assert.equal(delta.headers["results/typescript/jvm/cases.tsv"], readFileSync(join(root, "results/typescript/jvm/cases.tsv"), "utf8").split("\n")[0]);
+  assert.deepEqual(Object.keys(delta.headers).sort(), [...BACKENDS.map(backend => `results/benchmarks/${backend}/outcomes.tsv`), ...BACKENDS.map(backend => `results/typescript/${backend}/cases.tsv`)].sort(),
+    "a header for each line record, none for a file-per-case one");
+  for (const row of delta.rows) assert.match(row.sources, /^[0-9a-f]{64}$/, `${row.case}'s sources`);
+  // An outcomes fixture's digest is of its program, not of its record: the one rewritten here is the one main has.
+  const outcome = delta.rows.find(row => row.case === "tests/outcomes/recorded")!;
+  assert.equal(sourceDigests(main, [{ kind: "outcomes", name: "tests/outcomes/recorded" }]).get("outcomes\0tests/outcomes/recorded"), outcome.sources);
+});
+
+test("a delta applies by case over a main that moved on in the same records, its rows landing beside main's own", async t => {
+  const { root, main, delta } = recordedBeside(t);
+  // While the records ran, main landed a case of its own in each record, its rows
+  // beside the ones the records run adds, and an unrelated change elsewhere.
+  write(main, "tests/typescript/family/later.ts", "/*---\nfeatures: []\n---*/\nassert.sameValue(2, 2);\n");
+  write(main, "benchmarks/cases/aaa/case.ts", "export function run(): number { return 2; }\n");
+  for (const backend of BACKENDS) {
+    rewrite(main, `results/typescript/${backend}/cases.tsv`, text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/later.ts", refused]])));
+    rewrite(main, `results/benchmarks/${backend}/outcomes.tsv`, text => mergeBenchmarkRecord(text, [cell("aaa", { kind: "pass" })]));
+  }
+  write(main, "results/oracle-counts/benchmarks/cases/aaa.json", `{"fixture":"benchmarks/cases/aaa"}\n`);
+  write(main, "docs/elsewhere.md", "main moved\n");
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 16, already: 0, skipped: 0 }, lines.join("\n"));
+  assert.deepEqual(appliedIn(lines.join("\n")), counts, "it ends with the line the full check reads back");
+  for (const backend of BACKENDS) {
+    assert.deepEqual(readFileSync(join(main, `results/typescript/${backend}/cases.tsv`), "utf8").split("\n").slice(1), [
+      `tests/typescript/family/later.ts\t${JSON.stringify(refused)}`, `tests/typescript/family/new.ts\t{"kind":"pass"}`, `tests/typescript/family/recorded.ts\t{"kind":"pass"}`, ""],
+      "main's row, the delta's pending row and its improvement, in the record's own order");
+    assert.match(readFileSync(join(main, `results/benchmarks/${backend}/outcomes.tsv`), "utf8"), /^benchmarks\/cases\/aaa\t.*\nbenchmarks\/cases\/new\t.*\nbenchmarks\/cases\/recorded\t.*"kind":"pass"/m);
+  }
+  for (const kind of CORE) assert.deepEqual(findPending(main, kind).map(one => one.name).filter(name => !name.endsWith("/aaa") && !name.endsWith("later.ts")), [], `${kind}: the delta's cases are recorded`);
+  for (const row of delta.rows.filter(row => row.kind === "oracle-counts" || row.kind === "outcomes")) assert.equal(readFileSync(join(main, row.record), "utf8"), row.after, `${row.record} is the recorded file`);
+  assert.equal(existsSync(join(root, "docs/elsewhere.md")), false, "the tree recorded in is not main");
+});
+
+test("a case whose row main changed, or whose row main no longer has, is skipped and said; the rest of its record applies", async t => {
+  const { main, delta } = recordedBeside(t);
+  const otherwise: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1003", where: "body" }] };
+  rewrite(main, "results/typescript/c/cases.tsv", text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/new.ts", otherwise]])));
+  rewrite(main, "results/typescript/llvm/cases.tsv", text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/recorded.ts", otherwise]])));
+  rmSync(join(main, "tests/outcomes/recorded/outcome.json"));
+  const before = readFileSync(join(main, "results/typescript/c/cases.tsv"), "utf8");
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 13, already: 0, skipped: 3 }, lines.join("\n"));
+  const skipped = lines.filter(line => line.startsWith("  skipped "));
+  assert.deepEqual(skipped, [
+    "  skipped results/typescript/c/cases.tsv: tests/typescript/family/new.ts: a row of another measurement was recorded for it; the next records run takes it up",
+    "  skipped results/typescript/llvm/cases.tsv: tests/typescript/family/recorded.ts: its row changed; the next records run takes it up",
+    "  skipped tests/outcomes/recorded/outcome.json: tests/outcomes/recorded: its row is gone; the next records run takes it up",
+  ]);
+  assert.equal(readFileSync(join(main, "results/typescript/c/cases.tsv"), "utf8"), mergeTypeScriptRecord(before, new Map([["tests/typescript/family/recorded.ts", { kind: "pass" }]])),
+    "main's own row stays, and the record's other row applies");
+  assert.equal(existsSync(join(main, "tests/outcomes/recorded/outcome.json")), false, "a row main deleted stays deleted: its case is pending again");
+});
+
+test("a case main deleted, or whose sources main changed, is skipped: a row applies only to the case it was measured from", async t => {
+  const { main, delta } = recordedBeside(t);
+  rmSync(join(main, "benchmarks/cases/new"), { recursive: true });
+  rewrite(main, "tests/typescript/family/new.ts", text => text.replace("assert.sameValue(1, 1)", "assert.sameValue(1, 2)"));
+  rewrite(main, "tests/programs/new/src/main.ts", text => `${text}export const changed = true;\n`);
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 8, already: 0, skipped: 8 }, lines.join("\n"));
+  const why = (record: string) => lines.find(line => line.startsWith(`  skipped ${record}: `))?.split(": ").slice(2).join(": ");
+  for (const backend of BACKENDS) {
+    assert.equal(why(`results/benchmarks/${backend}/outcomes.tsv`), "it is not a pending case here; the next records run takes it up");
+    assert.equal(why(`results/typescript/${backend}/cases.tsv`), "its sources changed; the next records run takes it up");
+  }
+  assert.equal(why("results/oracle-counts/tests/programs/new.json"), "its sources changed; the next records run takes it up");
+  assert.ok(lines.includes("  skipped results/oracle-counts/benchmarks/cases/new.json: benchmarks/cases/new: it is not a pending case here; the next records run takes it up"), lines.join("\n"));
+  assert.equal(findPending(main, "typescript").length, 3, "the edited case stays pending on every backend");
+});
+
+test("a compile row is held to main's own source and driver digests: computed otherwise there, it is another case's row", async t => {
+  // ff64edcbb changed how a benchmark's source identity is computed while a
+  // records run held rows digested the old way; the text rebase then refused all 73.
+  const { main, delta } = recordedBeside(t);
+  const changed: BenchmarkDigests = async (_root, paths) => new Map(paths.map(path => [path, { source: (path.endsWith("/new") ? "3" : "1").repeat(64), driver: "2".repeat(64) }]));
+  const { counts, lines } = await applied(main, delta, changed);
+  assert.deepEqual(counts, { applied: 13, already: 0, skipped: 3 }, lines.join("\n"));
+  for (const backend of BACKENDS) {
+    assert.ok(lines.includes(`  skipped results/benchmarks/${backend}/outcomes.tsv: benchmarks/cases/new: its source digest is 333333333333 here, not the recorded 111111111111; the next records run takes it up`), lines.join("\n"));
+  }
+  const unknown: BenchmarkDigests = async () => { throw new Error("typescript/sync is not installed"); };
+  const again = await applied(recordedBeside(t).main, delta, unknown);
+  assert.equal(again.counts.skipped, 6, again.lines.join("\n"));
+  assert.ok(again.lines.some(line => line.endsWith("its source digest cannot be computed here: typescript/sync is not installed; the next records run takes it up")), again.lines.join("\n"));
+});
+
+test("a compile row is held to its own digests, not to its directory's: a population declaration main added skips only the oracle count", async t => {
+  const { main, delta } = recordedBeside(t);
+  write(main, "benchmarks/cases/new/case.domains.json", '{"version":1,"functions":{}}\n');
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 15, already: 0, skipped: 1 }, lines.join("\n"));
+  assert.deepEqual(lines.filter(line => line.startsWith("  skipped ")),
+    ["  skipped results/oracle-counts/benchmarks/cases/new.json: benchmarks/cases/new: its sources changed; the next records run takes it up"]);
+  for (const backend of BACKENDS) assert.ok(lines.includes(`  applied results/benchmarks/${backend}/outcomes.tsv: benchmarks/cases/new (pending)`), lines.join("\n"));
+});
+
+test("a row main has already is said, and a delta applied twice changes nothing the second time", async t => {
+  const { main, delta } = recordedBeside(t);
+  await applied(main, delta);
+  const once = new Map([...files(main)]);
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 0, already: 16, skipped: 0 }, lines.join("\n"));
+  assert.ok(lines.includes("  already recorded results/typescript/c/cases.tsv: tests/typescript/family/new.ts"), lines.join("\n"));
+  assert.deepEqual(files(main), once);
+});
+
+test("one row main's rule refuses keeps no other from its record", async t => {
+  const { main, delta } = recordedBeside(t);
+  // main improved the case itself, and a delta row would take it back down.
+  rewrite(main, "results/typescript/jvm/cases.tsv", text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/recorded.ts", { kind: "pass" }]])));
+  const worse = delta.rows.map(row => row.record === "results/typescript/jvm/cases.tsv" && row.before !== null
+    ? { ...row, before: `tests/typescript/family/recorded.ts\t{"kind":"pass"}`, after: `tests/typescript/family/recorded.ts\t${JSON.stringify(refused)}` } : row);
+  const { counts, lines } = await applied(main, { ...delta, rows: worse });
+  assert.deepEqual(counts, { applied: 15, already: 0, skipped: 1 }, lines.join("\n"));
+  assert.ok(lines.some(line => line.startsWith("  skipped results/typescript/jvm/cases.tsv: tests/typescript/family/recorded.ts: its record refuses it here: ")
+    && line.includes("the ratchet does not accept it")), lines.join("\n"));
+  assert.match(readFileSync(join(main, "results/typescript/jvm/cases.tsv"), "utf8"), /^tests\/typescript\/family\/new\.ts\t\{"kind":"pass"\}\ntests\/typescript\/family\/recorded\.ts\t\{"kind":"pass"\}$/m);
+});
+
+test("a line record main does not have yet starts from the header its recorder wrote", async t => {
+  const dex = (root: string) => () => write(root, "results/dex/outcomes.tsv", dexRecord(null, ["benchmarks/cases/new", "benchmarks/cases/recorded", "tests/programs/new", "tests/programs/recorded"]
+    .map(path => ({ path, value: { outcome: { kind: "pass" as const } } }))));
+  const root = tree(t), main = testScratch(t, "record-pending-main"), file = join(testScratch(t, "record-pending-run"), DELTA_FILE);
+  cpSync(root, main, { recursive: true });
+  assert.equal(recordPending(root, ["dex"], recorders(root, { "tooling/android/dex-record.ts": dex(root) }).run, () => {}, new Map(), file), 0);
+  const delta = parseDelta(readFileSync(file, "utf8"));
+  assert.equal(delta.headers["results/dex/outcomes.tsv"], "# nts-dex-outcomes {\"version\":1}");
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 4, already: 0, skipped: 0 }, lines.join("\n"));
+  assert.equal(readFileSync(join(main, "results/dex/outcomes.tsv"), "utf8"), readFileSync(join(root, "results/dex/outcomes.tsv"), "utf8"));
+  // A TypeScript record is written whole by a full --record, never started from a
+  // delta: without it, main's pending TypeScript cases cannot even be listed.
+  const fresh = recordedBeside(t);
+  rmSync(join(fresh.main, "results/typescript/c/cases.tsv"));
+  const missing = await applied(fresh.main, fresh.delta);
+  assert.ok(missing.lines.includes("  skipped results/typescript/c/cases.tsv: tests/typescript/family/new.ts: the pending typescript cases cannot be listed here: "
+    + `ENOENT: no such file or directory, open '${join(fresh.main, "results/typescript/c/cases.tsv")}'; the next records run takes it up`), missing.lines.join("\n"));
+  assert.equal(existsSync(join(fresh.main, "results/typescript/c/cases.tsv")), false);
+});
+
+test("--apply refuses a delta it cannot read, or one that names a record no recorder writes, before writing anything", async t => {
+  const root = tree(t), before = files(root), scratch = testScratch(t, "record-pending-apply");
+  const file = (name: string, text: string) => { const path = join(scratch, name); writeFileSync(path, text); return path; };
+  const errors: string[] = [], said: string[] = [];
+  const original = console.error;
+  console.error = (line: string) => { errors.push(line); };
+  t.after(() => { console.error = original; });
+  const row = { kind: "typescript", record: "results/typescript/c/cases.tsv", case: "tests/typescript/family/new.ts", key: "tests/typescript/family/new.ts",
+    before: null, after: `tests/typescript/family/new.ts\t{"kind":"pass"}`, sources: "a".repeat(64) };
+  const elsewhere: Delta = { version: 1, commit: null, headers: {}, rows: [row, { ...row, kind: "outcomes", record: "tooling/gate/all.sh", case: "tests/outcomes/x", key: "tests/outcomes/x" }] };
+  assert.equal(await applyCommand(root, [file("unreadable.json", "{")], line => said.push(line)), 1);
+  assert.equal(await applyCommand(root, [file("version.json", JSON.stringify({ version: 2, commit: null, headers: {}, rows: [] }))]), 1);
+  assert.equal(await applyCommand(root, [file("elsewhere.json", serializeDelta(elsewhere))], line => said.push(line)), 1);
+  assert.equal(await applyCommand(root, [join(scratch, "missing.json")]), 1);
+  assert.equal(await applyCommand(root, []), 2);
+  assert.match(errors.join("\n"), /tooling\/gate\/all\.sh: tests\/outcomes\/x: no outcomes recorder writes that record/);
+  assert.equal(said.length, 0, "nothing is applied from a malformed delta, the well-formed rows of it included");
+  assert.deepEqual(files(root), before);
+  const empty = file("empty.json", serializeDelta({ version: 1, commit: null, headers: {}, rows: [] }));
+  assert.equal(await applyCommand(root, [empty], line => said.push(line)), 0);
+  assert.deepEqual(appliedIn(said.join("\n")), { applied: 0, already: 0, skipped: 0 });
 });

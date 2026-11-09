@@ -3,15 +3,18 @@
 // The loop over a scratch repository with a local bare origin and a stand-in
 // gate (repository-fixture.ts): it takes the newest main, moves and pushes
 // verified on a green core only, reverts the first red commit and submits the
-// revert first, and records after a green run that listed pending cases.
+// revert first, and records after a green run that listed pending cases: the
+// rows land on main as it is then, and a refused records commit is applied
+// again on the newest main until it lands or its attempts run out.
 import assert from "node:assert/strict";
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test} from "node:test";
-import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
+import {applyEveryRow, assertMessage, checkoutIn, ENV, fakeGate, recording, repository, stubBench, stubQueue, type FakeGate, type Repository, type StubQueue} from "./repository-fixture.ts";
 import {QUIET_ASK_SECONDS} from "./bench.ts";
-import type { Recorder } from "./records.ts";
-import {cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordPending, statusText, type Effects} from "./service.ts";
+import type { Applier, Recorder } from "./records.ts";
+import {cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordPending, RECORDS_ATTEMPTS, statusText, type Effects} from "./service.ts";
+import {DELTA_FILE} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
@@ -19,11 +22,11 @@ import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSes
 import {hostEnvironment} from '../gate/canonical-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 
-type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[] };
+type Harness = Effects & { lines: string[]; queue: StubQueue; submitted: StubQueue["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[] };
 
-function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; quiet?: Effects["quiet"]; prunePool?: Effects["prunePool"]; issue?: Effects["issue"] } = {}): Harness {
+function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; applier?: Applier; queue?: StubQueue; schedule?: Effects["schedule"]; bench?: Effects["bench"]; quiet?: Effects["quiet"]; prunePool?: Effects["prunePool"]; issue?: Effects["issue"] } = {}): Harness {
   const lines: string[] = [], told: { n: number; comment: string }[] = [];
-  const queue = stubQueue();
+  const queue = options.queue ?? stubQueue();
   return {
     layout: repo.layout,
     git: repo.git,
@@ -32,6 +35,8 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     submitted: queue.submitted,
     withdrawn: queue.withdrawn,
     recorder: options.recorder ?? (() => ({ status: 0, output: "" })),
+    checkout: checkoutIn(repo),
+    applier: options.applier ?? applyEveryRow,
     bench: options.bench ?? stubBench(),
     quiet: options.quiet ?? (() => true),
     benchWindowMs: 4 * 3_600_000,
@@ -268,18 +273,16 @@ test("a culprit whose revert does not apply stays in where it cannot be taken ou
   assert.ok(!fx.lines.some(line => line.startsWith("culprit search held")), fx.lines.join("\n"));
 });
 
-test("a green run that listed pending cases records them, commits exactly the records and submits the commit", async t => {
+test("a green run that listed pending cases records them, commits exactly the records on main and submits the commit", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);
-  const recorder: Recorder = (tree, pin, run, part) => {
+  const recorder = recording({ "results/oracle-counts/tests/programs/new-case.json": "{\"cases\": 3}\n" }, (tree, pin, run, part) => {
     assert.equal(part, "core", "the core's green run records the core's kinds");
     assert.ok(existsSync(pin), "the recorder runs with the run's pin");
-    mkdirSync(join(tree, "results/oracle-counts/tests/programs"), { recursive: true });
-    writeFileSync(join(tree, "results/oracle-counts/tests/programs/new-case.json"), "{\"cases\": 3}\n");
     writeFileSync(join(tree, "scratch-output.txt"), "not a record\n");
     writeFileSync(join(run, RECORDER_LOG), "record-pending: 1 row(s) recorded\n");
     return { status: 0, output: "" };
-  };
+  });
   const fx = harness(repo, gate, { recorder });
   const commit = repo.commit({ "LOG/typescript-c": "  pending: tests/programs/new-case is not recorded in results/oracle-counts/tests/programs/new-case.json yet\n" }, "a new case");
   await cycle(fx);
@@ -293,8 +296,10 @@ test("a green run that listed pending cases records them, commits exactly the re
   assert.deepEqual(fx.submitted, [{ commit: records, first: false }]);
   assert.equal(repo.git.run(["rev-parse", `${records}^`]), commit);
   assert.deepEqual(repo.git.run(["diff", "--name-only", commit, records]).split("\n"), ["results/oracle-counts/tests/programs/new-case.json"], "only what the recorder wrote under the records");
-  assertMessage(repo.git, records, /^records: the pending and accepted rows at /, /1 pending/);
+  assertMessage(repo.git, records, /^records: the pending and accepted rows at /, /--apply\nmerged their delta case by case on main /, /1 row\(s\) applied, 0 already recorded, 0 skipped/);
   assert.ok(fx.lines.some(line => line.includes("TASK") && line.includes("scratch-output.txt")), "what it wrote elsewhere is named");
+  assert.deepEqual([state.core.records?.delta, state.core.records?.attempts, state.core.records?.base, state.core.records?.settled],
+    [join(state.core.last_green!.run, DELTA_FILE), 1, commit, undefined], "the delta, kept in the run's folder, is followed until it lands");
   const pin = join(repo.root, "pins", commit.slice(0, 12));
   assert.equal(JSON.parse(readFileSync(join(pin, "provenance.json"), "utf8")).sha, commit);
 
@@ -309,6 +314,126 @@ test("a green run that listed pending cases records them, commits exactly the re
   repo.git.run(["cherry-pick", records]);
   await cycle(fx);
   assert.equal(repo.git.commit(ref), null);
+});
+
+const NEW_CASE = { "LOG/typescript-c": "  pending: tests/programs/new-case is not recorded in results/oracle-counts/tests/programs/new-case.json yet\n" };
+const newCase = () => recording({ "results/oracle-counts/tests/programs/new-case.json": "{\"cases\": 3}\n" });
+const answer = (state: "landed" | "refused" | "held", message: string, tip?: string) => ({ state, at: "2026-11-06T12:00:00.000Z", message, ...(tip ? { tip } : {}) });
+
+test("rows recorded at a commit land as a records commit on main as it is when they are applied", async t => {
+  const repo = repository(t);
+  let landed = "";
+  // A records run takes hours, and main moves on while it runs, in the same records.
+  const recorder = recording({ "results/oracle-counts/tests/programs/new-case.json": "{\"cases\": 3}\n" }, () => {
+    landed = repo.commit({ "results/oracle-counts/tests/programs/other.json": "{\"cases\": 1}\n", "elsewhere.txt": "x\n" }, "landed while the records ran");
+    return { status: 0, output: "" };
+  });
+  const fx = harness(repo, fakeGate(repo), { recorder });
+  const commit = repo.commit(NEW_CASE, "a new case");
+  assert.equal(await cycle(fx), "core");
+  const records = readState(repo.layout.state).core.records!;
+  assert.equal(records.commit, commit);
+  assert.equal(repo.git.run(["rev-parse", `${records.submitted}^`]), landed, "its parent is main, not the commit its rows were recorded at");
+  assert.deepEqual(repo.git.run(["diff", "--name-only", landed, records.submitted!]).split("\n"), ["results/oracle-counts/tests/programs/new-case.json"]);
+  assert.deepEqual([records.base, records.attempts], [landed, 1]);
+});
+
+test("a records commit the landing check refused is applied again on the newest main and submitted; a landed one is settled", async t => {
+  const repo = repository(t);
+  const fx = harness(repo, fakeGate(repo), { recorder: newCase() });
+  const commit = repo.commit(NEW_CASE, "a new case");
+  assert.equal(await cycle(fx), "core");
+  const first = readState(repo.layout.state).core.records!.submitted!;
+  // Refused as 4815f13f5 was, for a conflict with a commit that landed first.
+  fx.queue.answers.set(first, answer("refused", `${first.slice(0, 12)} conflicts with main in results/benchmarks/c/outcomes.tsv`));
+  assert.equal(await cycle(fx), "count", "on the main it was made on, the same rows would be refused the same way");
+  assert.equal(fx.submitted.length, 1);
+  const moved = repo.commit({ "elsewhere.txt": "x\n" }, "main moves on");
+  assert.equal(await cycle(fx), "records", "applied again first, before the core takes the new main");
+  const again = readState(repo.layout.state).core.records!;
+  assert.deepEqual([again.attempts, again.base, again.answer, again.settled], [2, moved, undefined, undefined]);
+  assert.equal(repo.git.run(["rev-parse", `${again.submitted}^`]), moved, "made on the newest main");
+  assert.deepEqual(fx.submitted.map(one => one.commit), [first, again.submitted]);
+  assert.equal(repo.git.commit(`refs/full-check/records/${commit.slice(0, 12)}`), again.submitted, "kept reachable until it lands");
+  assert.ok(fx.lines.some(line => line.includes(`refused: ${first.slice(0, 12)} conflicts with main`) && line.includes(`applied again on main ${moved.slice(0, 12)}`)), fx.lines.join("\n"));
+  // While those rows wait, the core's next green run does not record them a second time.
+  assert.equal(await cycle(fx), "core");
+  assert.equal(fx.submitted.length, 2);
+  assert.ok(fx.lines.some(line => line.includes(`the core rows recorded at ${commit.slice(0, 12)} still wait for the landing check`)), fx.lines.join("\n"));
+  fx.queue.answers.set(again.submitted!, answer("landed", "LANDED", "f".repeat(40)));
+  await cycle(fx);
+  const landed = readState(repo.layout.state).core.records!;
+  assert.deepEqual([landed.result, landed.answer?.state, typeof landed.settled], ["landed as ffffffffffff", "landed", "string"]);
+  // Settled, nothing more is followed; the next green run that lists cases records them.
+  repo.commit({ "later.txt": "x\n" }, "later");
+  assert.equal(await cycle(fx), "core");
+  assert.equal(fx.submitted.length, 3);
+  assert.equal(readState(repo.layout.state).core.records!.attempts, 1);
+});
+
+test("a held records commit is withdrawn and replaced; past its attempts, a records commit is a task and its rows stay pending", async t => {
+  const repo = repository(t);
+  const fx = harness(repo, fakeGate(repo), { recorder: newCase() });
+  const commit = repo.commit(NEW_CASE, "a new case");
+  await cycle(fx);
+  const first = readState(repo.layout.state).core.records!.submitted!;
+  fx.queue.answers.set(first, answer("held", "held: the check could not finish"));
+  assert.equal(await cycle(fx), "records", "a held one is applied again at once");
+  assert.deepEqual(fx.withdrawn, [first], "withdrawn first, so a retry by hand cannot land it behind its replacement");
+  for (let attempt = 2; attempt < RECORDS_ATTEMPTS; attempt++) {
+    fx.queue.answers.set(readState(repo.layout.state).core.records!.submitted!, answer("refused", "red: tooling FAIL"));
+    repo.commit({ [`moved-${attempt}.txt`]: "x\n" }, `main moves on ${attempt}`);
+    assert.equal(await cycle(fx), "records");
+  }
+  const last = readState(repo.layout.state).core.records!;
+  assert.equal(last.attempts, RECORDS_ATTEMPTS);
+  fx.queue.answers.set(last.submitted!, answer("refused", "red: tooling FAIL"));
+  repo.commit({ "moved-last.txt": "x\n" }, "main moves on again");
+  assert.equal(await cycle(fx), "core", "not applied again: the core takes the new main");
+  const given = readState(repo.layout.state);
+  assert.ok(given.tasks.some(one => one.line === `- The full check's core records of ${commit.slice(0, 12)} did not land: refused: red: tooling FAIL; `
+    + `not applied again: ${RECORDS_ATTEMPTS} attempt(s) made. Their rows stay pending for the next records run; see ${dirname(last.delta!)}.`), JSON.stringify(given.tasks));
+  // Settled, its cases are recorded anew by the core's green run on the new main.
+  assert.equal(fx.submitted.length, RECORDS_ATTEMPTS + 1);
+  assert.deepEqual([given.core.records!.commit, given.core.records!.attempts], [repo.git.commit("refs/heads/main"), 1]);
+});
+
+test("an attempt that failed waits for main to move, and a records commit the queue lost is submitted again at once", async t => {
+  const repo = repository(t);
+  let fail = true;
+  const applier: Applier = (tree, delta, log) => {
+    if (!fail) return applyEveryRow(tree, delta, log);
+    writeFileSync(log, "record-pending --apply: a broken main\n");
+    return { status: 1, output: "record-pending --apply: a broken main\n" };
+  };
+  const fx = harness(repo, fakeGate(repo), { recorder: newCase(), applier });
+  repo.commit(NEW_CASE, "a new case");
+  assert.equal(await cycle(fx), "core");
+  let records = readState(repo.layout.state).core.records!;
+  assert.match(records.result, /^record-pending\.ts --apply exited 1 on main [0-9a-f]{12} \(attempt 1\); see .*record-pending\.apply-1\.log$/);
+  assert.deepEqual([records.submitted, records.settled, fx.submitted.length], [null, undefined, 0]);
+  fail = false;
+  assert.equal(await cycle(fx), "count", "the same main would fail the same way");
+  repo.commit({ "elsewhere.txt": "x\n" }, "main moves on");
+  assert.equal(await cycle(fx), "records");
+  records = readState(repo.layout.state).core.records!;
+  assert.deepEqual([records.attempts, fx.submitted.map(one => one.commit)], [2, [records.submitted]]);
+  // The landing queue loses it (its state cleared by hand, say).
+  fx.submitted.length = 0;
+  assert.equal(await cycle(fx), "records", "on the same main, at once");
+  assert.ok(fx.lines.some(line => line.includes("the landing queue has no record of it")), fx.lines.join("\n"));
+  assert.equal(readState(repo.layout.state).core.records!.attempts, 3);
+});
+
+test("a recorder that leaves records and no delta lands nothing, and is a task", async t => {
+  const repo = repository(t);
+  const recorder: Recorder = tree => { mkdirSync(join(tree, "results"), { recursive: true }); writeFileSync(join(tree, "results/a.tsv"), "row\n"); return { status: 0, output: "" }; };
+  const fx = harness(repo, fakeGate(repo), { recorder });
+  repo.commit(NEW_CASE, "a new case");
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.deepEqual([state.core.records?.result, state.core.records?.delta, fx.submitted.length], ["wrote 1 record file(s) and no delta", undefined, 0]);
+  assert.ok(state.tasks.some(one => one.line.includes("wrote records and no delta")), JSON.stringify(state.tasks));
 });
 
 test("the wide steps run on verified at a slot, not on main", async t => {
@@ -574,7 +699,10 @@ test('records use the newly verified environment before the controller can resta
   candidateEnvironmentFixture(repo.dir);candidateVersion(repo.dir,'new-verified');
   nodeInstallation(installations,process.versions.node,join(repo.root,'nodes.jsonl'));
   repo.git.run(['add','-f','tooling','.tool-versions']);
-  const script=resolutionSubject(observed,session,0)+`import {mkdirSync} from 'node:fs';mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');\n`;
+  // Like record-pending.ts --after, it leaves the delta of what it recorded in the run's folder.
+  const delta={version:1,commit:null,headers:{},rows:[{kind:'outcomes',record:'results/fresh.tsv',case:'results',key:'results',before:null,after:'fresh row\n',sources:'0'.repeat(64)}]};
+  const script=resolutionSubject(observed,session,0)+`import {mkdirSync} from 'node:fs';mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');`
+    +`writeFileSync(process.argv[4]+'/${DELTA_FILE}',${JSON.stringify(JSON.stringify(delta))});\n`;
   const commit=repo.commit({'tooling/records/record-pending.ts':script,'LOG/tests':'pending: private-case is not recorded in results/fresh.tsv yet\n'},'new verified environment');
   let calls=0;
   const fx=harness(repo,fakeGate(repo),{recorder:(tree,pin,run,part)=>{
@@ -695,29 +823,27 @@ test("each part records after its own green run: the wide kinds after the wide r
   const repo = repository(t);
   const gate = fakeGate(repo);
   const parts: string[] = [];
-  const recorder: Recorder = (tree, _pin, run, part) => {
+  const recorder: Recorder = (tree, pin, run, part) => {
     parts.push(part);
-    mkdirSync(join(tree, "results/records"), { recursive: true });
-    writeFileSync(join(tree, `results/records/${part}.tsv`), "row\n");
     writeFileSync(join(run, RECORDER_LOG), "recorded\n");
-    return { status: 0, output: "" };
+    return recording({ [`results/records/${part}.tsv`]: "row\n" })(tree, pin, run, part);
   };
-  const schedule = { wide: ["10:00"], nightly: "03:00" };
-  const morning = harness(repo, gate, { now: new Date(2026, 10, 6, 9, 0), schedule, recorder });
+  const schedule = { wide: ["10:00"], nightly: "03:00" }, queue = stubQueue();
+  const morning = harness(repo, gate, { now: new Date(2026, 10, 6, 9, 0), schedule, recorder, queue });
   const first = repo.commit({
     "LOG/typescript-c": "  pending: tests/typescript/a.ts is not recorded in results/typescript/c/cases.tsv yet\n",
     "LOG/integrity": "  pending: tests/programs/b is not recorded in results/dex/outcomes.tsv yet\n",
   }, "each part lists a case of its own");
   assert.equal(await cycle(morning), "core");
   assert.deepEqual(parts, ["core"]);
-  const later = harness(repo, gate, { now: new Date(2026, 10, 6, 10, 30), schedule, recorder });
+  const later = harness(repo, gate, { now: new Date(2026, 10, 6, 10, 30), schedule, recorder, queue });
   assert.equal(await cycle(later), "wide");
   assert.deepEqual(parts, ["core", "wide"], "the wide run is not skipped because the core already recorded this commit");
   const state = readState(repo.layout.state);
   assert.equal(state.core.records?.commit, first);
   assert.equal(state.wide.records?.commit, first);
   assert.deepEqual(state.wide.last_green?.listed, { pending: 1, accepted: 0 });
-  assert.equal(morning.submitted.length + later.submitted.length, 2, "one records commit for each part");
+  assert.equal(queue.submitted.length, 2, "one records commit for each part");
 });
 
 test("a state written before each part kept its records reads them as the core's", t => {

@@ -192,6 +192,14 @@ in two ways:
   of the part whose checks hold that record, the core or the wide steps, and
   only what those checks listed: each pending case and accepted change, by
   the record its line names.
+- **A records run lands by case.** It records at its green run's commit,
+  which `main` has moved past by the time the rows land, so what it wrote is
+  a delta, case by case, and `main`'s own `record-pending.ts --apply` merges
+  it onto the newest `main`: a row goes in only where `main` left that case's
+  row as it was and the case is still the one measured. Every other row is
+  said, and waits for the next records run. A records commit the landing
+  check refuses or holds is applied again on the newest `main`, a few times
+  at most, and then is a task; while it waits, that part records nothing new.
 - **An oracle past its own CPU or resident bound has a budget row,** with
   the phase, bound and observed stop, and no invented count. Checks retry it
   and print it loudly. A completed count is an improvement; replacing a count

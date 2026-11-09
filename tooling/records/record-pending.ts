@@ -6,8 +6,9 @@
 // its row rewritten too. Every other row stays byte for byte. It prints what it
 // recorded, and it does not commit.
 //
-//   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [kind ...]
-//   NTS_BIN=<verified's pin> node tooling/records/record-pending.ts --after core|wide <run> [kind ...]
+//   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [--delta <file>] [kind ...]
+//   NTS_BIN=<verified's pin> node tooling/records/record-pending.ts --after core|wide <run> [--delta <file>] [kind ...]
+//   node tooling/records/record-pending.ts --apply <delta>
 //
 // The kinds are oracle-counts, typescript, benchmarks, benchmark-runs,
 // outcomes and dex, all six when none is named, in that order: a benchmark's
@@ -37,24 +38,47 @@
 // What the recorders wrote is then audited against the rule: a removed row, a
 // row added for a case that was not pending, or a rewritten row whose change
 // the ratchet does not accept is refused, and that record's bytes are put back.
+//
+// `--delta <file>` writes what passed the audit as a delta (tooling/records/
+// delta.ts): each changed row, by case, with the row before and after and a
+// digest of the sources its case was measured from. The full check's call
+// writes one into its run folder (DELTA_FILE) without being asked. It is
+// rewritten after each kind, so a run that stops keeps the kinds it finished.
+//
+// `--apply <delta>` merges a delta into this tree, case by case, as main's
+// own code reads its records. A row applies only when the tree left that
+// case's row as the delta found it (its row equals the delta's "before"), and
+// the case is still the one it was measured from: one it adds is pending here
+// too, and its sources here have the delta's digest; a benchmark's compile
+// row is held instead to its own source and driver digests, recomputed here,
+// which cover exactly what a compile reads. What applies is then
+// audited by this tree's rule, as the recorders' own writes are. Every row
+// that does not apply is said, with why, and the next records run takes it
+// up. A row this tree already has is already recorded. It exits 0 once it has
+// merged what applies, 1 for a delta it cannot read or that names a record
+// no recorder writes (before writing anything), and it does not commit.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { benchmarkCases } from "../bench/build-records.ts";
-import { compareBenchmarkOutcome, parseBenchmarkOutcome, parseBenchmarkRecord } from "../bench/outcomes.ts";
+import { benchmarkCases, benchmarkIdentities } from "../bench/build-records.ts";
+import { compileKey } from "../bench/compile-producer.ts";
+import { compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkOutcome, parseBenchmarkRecord } from "../bench/outcomes.ts";
 import { selectTypescript } from "../census/suites/typescript.ts";
-import { compareTypeScriptObservation, parseObservation, parseTypeScriptRecord, pendingCases } from "../census/typescript-record.ts";
+import { compareTypeScriptObservation, mergeTypeScriptRecord, parseObservation, parseTypeScriptRecord, pendingCases } from "../census/typescript-record.ts";
 import { acceptedChange, improves, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
-import { pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures } from "../differential/oracle-records.ts";
-import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
-import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets } from "../android/dex-record.ts";
+import { GENERATOR, pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures } from "../differential/oracle-records.ts";
+import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, mergeRunRecord, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
+import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets, written } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import { WIDE } from "../gate/owed.mjs";
+import { appliedLine, DELTA_FILE, MalformedDelta, parseDelta, serializeDelta, type ApplyCounts, type Delta, type DeltaRow } from "./delta.ts";
 import { inventory, listedIn, pendingLine } from "./pending.ts";
 
 export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex"] as const;
@@ -193,6 +217,10 @@ function snapshot(root: string, kind: Kind, pending: readonly Pending[]): Map<st
 
 /** One row of a line record: its key, its case, and its exact line. */
 type LineKind = "typescript" | "benchmarks" | "benchmark-runs" | "dex";
+const isLine = (kind: Kind): kind is LineKind => kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex";
+/** The case a file-per-case record holds: an oracle-count shard's fixture, or an outcome.json's fixture. */
+const caseOfRecord = (kind: "oracle-counts" | "outcomes", file: string): string =>
+  kind === "oracle-counts" ? file.slice(`${RECORDS}/`.length, -".json".length) : file.slice(0, -`/${RECORD}`.length);
 function rows(text: string, kind: LineKind): { header: string; rows: Map<string, { name: string; line: string }> } {
   const [header = "", ...lines] = text.split("\n");
   const result = new Map<string, { name: string; line: string }>();
@@ -265,7 +293,7 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
     return recorded;
   }
   if (kind === "oracle-counts") {
-    const fixture = file.slice(`${RECORDS}/`.length, -".json".length);
+    const fixture = caseOfRecord(kind, file);
     if(before!==null){
       const old=JSON.parse(before),next=JSON.parse(after);
       assert.ok(old.rows?.some((row:{kind?:string})=>row.kind==='budget'),`${file}: a recorded population was rewritten; a count has no improvement`);
@@ -283,7 +311,7 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
     assert.ok(pending.has(fixture), `${file} was written for ${fixture}, which was not pending`);
     return [`${fixture} (pending)`];
   }
-  const fixture = file.slice(0, -`/${RECORD}`.length), now = JSON.parse(after);
+  const fixture = caseOfRecord("outcomes", file), now = JSON.parse(after);
   if (before === null) {
     assert.ok(pending.has(fixture), `${file} was written for ${fixture}, which was not pending`);
     return [`${fixture} ${now.category} (pending)`];
@@ -291,6 +319,104 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
   const was = JSON.parse(before), change = judge(was, now);
   assert.ok(acceptedChange(change), `${file} was rewritten, and the ratchet does not accept it`);
   return [`${fixture} ${was.category} -> ${now.category} (${label(change)})`];
+}
+
+/**
+ * The cases one audited change of a record file records, row by row: a line
+ * record's changed lines, or a file-per-case record's whole file. What the
+ * delta holds, before each case's sources are digested.
+ */
+function changedRows(kind: Kind, file: string, before: string | null, after: string): Omit<DeltaRow, "sources">[] {
+  if (isLine(kind)) {
+    const was = before === null ? new Map<string, { name: string; line: string }>() : rows(before, kind).rows;
+    return [...rows(after, kind).rows].filter(([key, row]) => was.get(key)?.line !== row.line)
+      .map(([key, row]) => ({ kind, record: file, case: row.name, key, before: was.get(key)?.line ?? null, after: row.line }));
+  }
+  const name = caseOfRecord(kind, file);
+  return [{ kind, record: file, case: name, key: name, before, after }];
+}
+
+/**
+ * What a case's row is measured from, relative to the root: a TypeScript case
+ * is its file, a benchmark or an example its directory, an outcomes fixture
+ * its directory without its own record, and an oracle count its fixture and
+ * the case generator the store's header names.
+ */
+function sourcesOf(kind: Kind, name: string): { paths: string[]; except: string | null } {
+  switch (kind) {
+    case "outcomes": return { paths: [name], except: `${name}/${RECORD}` };
+    case "oracle-counts": return { paths: [name, GENERATOR], except: null };
+    default: return { paths: [name], except: null };
+  }
+}
+
+/** Whether `root` is a checkout: its sources are then the files git tracks there. */
+const inCheckout = (root: string) => existsSync(join(root, ".git"));
+
+/** The files under each of `paths` (a file or a directory): those git tracks in a checkout, else every regular file there. */
+function filesUnder(root: string, paths: readonly string[]): Map<string, string[]> {
+  const under = new Map(paths.map(path => [path, [] as string[]]));
+  if (!inCheckout(root)) {
+    for (const path of paths) {
+      const full = join(root, path);
+      if (!existsSync(full)) continue;
+      under.set(path, statSync(full).isDirectory()
+        ? readdirSync(full, { withFileTypes: true, recursive: true }).filter(entry => entry.isFile()).map(entry => relative(root, join(entry.parentPath, entry.name)))
+        : [path]);
+    }
+    return under;
+  }
+  // One listing of the whole tree, each file then given to the path it is under.
+  const listed = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+  if (listed.status !== 0) throw new Error(`git ls-files in ${root}: ${(listed.stderr ?? listed.error?.message ?? "").trim()}`);
+  for (const file of listed.stdout.split("\0").filter(Boolean)) {
+    for (let at = file; ; at = at.slice(0, at.lastIndexOf("/"))) {
+      under.get(at)?.push(file);
+      if (!at.includes("/")) break;
+    }
+  }
+  return under;
+}
+
+const sha256 = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * A digest of each case's sources, by `kind\0name`: every file of them, by
+ * path and content (sourcesOf, filesUnder); null for a case none of whose
+ * sources is there. Two trees agree on it only where the case is the one its
+ * row was measured from. A source outside a case's own paths, such as a
+ * benchmark's shared module, is not in it; a benchmark's compile row carries
+ * its whole source graph's digest, which --apply holds to the tree's too.
+ */
+export function sourceDigests(root: string, cases: readonly { kind: Kind; name: string }[]): Map<string, string | null> {
+  const wanted = new Map(cases.map(one => [`${one.kind}\0${one.name}`, sourcesOf(one.kind, one.name)]));
+  const files = filesUnder(root, [...new Set([...wanted.values()].flatMap(one => one.paths))]);
+  const content = new Map<string, string>();
+  const digestOf = (file: string) => {
+    if (!content.has(file)) content.set(file, sha256(readFileSync(join(root, file))));
+    return content.get(file)!;
+  };
+  const digests = new Map<string, string | null>();
+  for (const [id, { paths, except }] of wanted) {
+    const present = [...new Set(paths.flatMap(path => files.get(path) ?? []))].filter(file => file !== except && existsSync(join(root, file))).sort();
+    digests.set(id, present.length ? sha256(JSON.stringify(present.map(file => [file, digestOf(file)]))) : null);
+  }
+  return digests;
+}
+
+/** The commit a checkout is at, or null outside one. */
+function headCommit(root: string): string | null {
+  if (!inCheckout(root)) return null;
+  const head = spawnSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: root, encoding: "utf8" });
+  return head.status === 0 ? head.stdout.trim() : null;
+}
+
+/** A delta written whole and renamed into place, so a reader never sees half of one. */
+function keepDelta(file: string, delta: Delta): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const partial = `${file}.${process.pid}.partial`;
+  writeFileSync(partial, serializeDelta(delta));
+  renameSync(partial, file);
 }
 
 export type Runner = (args: string[], root: string) => number;
@@ -313,10 +439,13 @@ const runNode: Runner = (args, root) => {
  * Record every pending row of the named kinds, and every change the ratchet
  * accepts. A kind runs only with something to record: a pending case, a
  * budget to refresh, or an accepted change a check listed (`accepted`, by
- * kind). Returns the exit status.
+ * kind). With `delta`, what passed the audit is written there too, after each
+ * kind. Returns the exit status.
  */
-export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line), accepted: ReadonlyMap<Kind, readonly Pending[]> = new Map()): number {
+export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line), accepted: ReadonlyMap<Kind, readonly Pending[]> = new Map(), delta?: string): number {
   let failed = 0, recorded = 0;
+  const out: Delta = { version: 1, commit: headCommit(root), headers: {}, rows: [] };
+  if (delta) keepDelta(delta, out);
   for (const kind of kinds) {
     const missing = findPending(root, kind);
     const refreshes = kind === 'oracle-counts' ? oracleRefreshes(root) : [];
@@ -334,11 +463,13 @@ export function recordPending(root: string, kinds: readonly Kind[], run: Runner 
       if (status !== 0) { say(`  ${kind}: the recorder exited ${status}`); failed += 1; }
       else if(kind==='oracle-counts')for(const name of args.slice(1))rmSync(oracleImprovementPath(name),{force:true});
     }
+    const changed: Omit<DeltaRow, "sources">[] = [];
     for (const [file, was] of before) {
       const now = existsSync(join(root, file)) ? read(root, file) : null;
       const names = new Set(pending.filter(one => one.record === file).map(one => one.name));
       try {
         for (const row of auditRecord(kind, file, was, now, names)) { say(`  recorded ${file}: ${row}`); recorded += 1; }
+        if (now !== null && now !== was) changed.push(...changedRows(kind, file, was, now));
       } catch (error) {
         say(`  REFUSED ${error instanceof Error ? error.message : String(error)}; put back as it was`);
         if (was === null) rmSync(join(root, file), { force: true }); else writeFileSync(join(root, file), was);
@@ -352,25 +483,228 @@ export function recordPending(root: string, kinds: readonly Kind[], run: Runner 
       rmSync(join(root, file), { force: true });
       failed += 1;
     }
+    if (delta && changed.length) {
+      const sources = sourceDigests(root, changed.map(row => ({ kind, name: row.case })));
+      for (const row of changed) {
+        const digest = sources.get(`${kind}\0${row.case}`);
+        if (!digest) { say(`  REFUSED ${row.record}: ${row.case} is recorded, but none of its sources is in the tree; it is not in the delta`); failed += 1; continue; }
+        out.rows.push({ ...row, sources: digest });
+        // What a tree without this record yet starts it from.
+        if (isLine(kind)) out.headers[row.record] ??= read(root, row.record).split("\n", 1)[0]!;
+      }
+      keepDelta(delta, out);
+    }
   }
+  if (delta) say(`record-pending: the delta of its ${out.rows.length} row(s) is ${delta}`);
   say(`record-pending: ${recorded} row(s) recorded${failed ? `, ${failed} problem(s)` : ""}; nothing is committed`);
   return failed ? 1 : 0;
 }
 
+/** The digests the benchmark check holds a compile row to, by benchmark: its source graph's and the compile driver's. */
+export type BenchmarkDigests = (root: string, paths: readonly string[]) => Promise<Map<string, { source: string; driver: string }>>;
+
+/** build-records.ts's own identities of these benchmarks, computed in `root`. */
+export const benchmarkDigests: BenchmarkDigests = async (root, paths) => {
+  const base = process.env.TMPDIR ?? join(homedir(), ".cache/nts/benchmark-records");
+  mkdirSync(base, { recursive: true });
+  const scratch = mkdtempSync(join(base, "apply-"));
+  try {
+    const sources = await benchmarkIdentities(root, [...paths], scratch), driver = compileKey(root);
+    return new Map(paths.map(path => [path, { source: sources.get(path)!, driver }]));
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+};
+
+/**
+ * A delta row no recorder could have written fails the whole delta, before
+ * anything is written: an unknown kind, a record its kind does not write, a
+ * line of another case, or a key that is not the row's own.
+ */
+function checkDelta(delta: Delta): void {
+  const bad = (row: DeltaRow, why: string): never => { throw new MalformedDelta(`malformed records delta: ${row.record}: ${row.case}: ${why}`); };
+  for (const row of delta.rows) {
+    if (!(KINDS as readonly string[]).includes(row.kind)) bad(row, `no recorder is of kind ${row.kind}`);
+    const kind = row.kind as Kind;
+    const records = kind === "typescript" ? BACKENDS.map(typescriptRecord) : kind === "benchmarks" ? BACKENDS.map(benchmarkRecord)
+      : kind === "benchmark-runs" ? BENCH_AGREE_BACKENDS.map(runsRecord) : kind === "dex" ? [DEX_RECORD]
+      : kind === "outcomes" ? (/^tests\/outcomes\/[^/]+$/.test(row.case) ? [outcomesRecord(row.case.slice("tests/outcomes/".length))] : [])
+      : (() => { try { return [recordPath(row.case)]; } catch { return []; } })();
+    if (!records.includes(row.record)) bad(row, `no ${kind} recorder writes that record`);
+    if (!isLine(kind)) { if (row.key !== row.case) bad(row, "its key is not its case"); continue; }
+    for (const line of [row.before, row.after]) {
+      if (line === null) continue;
+      let keys: string[] = [];
+      try { keys = [...rows(`\n${line}\n`, kind).rows.keys()]; } catch { /* not a row */ }
+      if (line.includes("\n") || !line.startsWith(`${row.case}\t`) || keys.length !== 1 || keys[0] !== row.key) bad(row, "it is not one row of its case");
+    }
+  }
+  for (const [record, header] of Object.entries(delta.headers)) {
+    if (header.includes("\n")) throw new MalformedDelta(`malformed records delta: the header of ${record} is not one line`);
+  }
+}
+
+/** `text` with these rows in: a line record's own merge (started from the delta's header where there is no record yet), or a case's whole file. */
+function merged(kind: Kind, text: string | null, these: readonly DeltaRow[], header: string | undefined): string {
+  if (!isLine(kind)) { assert.equal(these.length, 1, "a file-per-case record has one row"); return these[0]!.after; }
+  if (text === null) {
+    assert.ok(header !== undefined, "there is no such record, and the delta has no header for one");
+    // A record of one row, which the merge then reads, checks and writes in its own order.
+    text = `${header}\n${these[0]!.after}\n`;
+  }
+  const updates = these.map(row => { const tab = row.after.indexOf("\t"); return { path: row.after.slice(0, tab), value: JSON.parse(row.after.slice(tab + 1)) }; });
+  switch (kind) {
+    case "typescript": return mergeTypeScriptRecord(text, new Map(updates.map(one => [one.path, one.value])));
+    case "benchmarks": return mergeBenchmarkRecord(text, updates.map(one => ({ path: one.path, ...one.value })));
+    case "benchmark-runs": return mergeRunRecord(text, new Map(updates.map(one => [one.path, one.value])));
+    case "dex": return written(text, updates);
+  }
+}
+
+export type ApplyOptions = { say?: (line: string) => void; benchmarks?: BenchmarkDigests };
+
+/**
+ * Merge a delta into the tree at `root`, case by case (the rule is this
+ * module's comment's), write the records it applies to, and say what applied,
+ * what was there already, and what did not apply and why. A malformed delta
+ * throws a MalformedDelta before anything is written.
+ */
+export async function applyDelta(root: string, delta: Delta, options: ApplyOptions = {}): Promise<ApplyCounts> {
+  const say = options.say ?? ((line: string) => console.log(line));
+  checkDelta(delta);
+  const counts: ApplyCounts = { applied: 0, already: 0, skipped: 0 };
+  const since = delta.commit ? ` since ${delta.commit.slice(0, 12)}` : "";
+  const head = headCommit(root);
+  say(`record-pending --apply: ${delta.rows.length} row(s) recorded${delta.commit ? ` at ${delta.commit.slice(0, 12)}` : ""}, into ${root}${head ? ` at ${head.slice(0, 12)}` : ""}`);
+  const skip = (row: DeltaRow, why: string) => { say(`  skipped ${row.record}: ${row.case}: ${why}; the next records run takes it up`); counts.skipped += 1; };
+
+  // The tree's own records: each one's text, and a line record's rows by key.
+  const texts = new Map<string, string | null>(), lines = new Map<string, Map<string, string>>();
+  const textOf = (record: string) => {
+    if (!texts.has(record)) texts.set(record, existsSync(join(root, record)) ? read(root, record) : null);
+    return texts.get(record)!;
+  };
+  const rowOf = (row: DeltaRow): string | null => {
+    const kind = row.kind as Kind, text = textOf(row.record);
+    if (!isLine(kind) || text === null) return text;
+    if (!lines.has(row.record)) lines.set(row.record, new Map([...rows(text, kind).rows].map(([key, one]) => [key, one.line])));
+    return lines.get(row.record)!.get(row.key) ?? null;
+  };
+  // The cases pending in the tree, by kind, as every check finds them; or why they cannot be found.
+  const pendingByKind = new Map<Kind, Set<string> | Error>();
+  const pendingAt = (kind: Kind) => {
+    if (!pendingByKind.has(kind)) {
+      try { pendingByKind.set(kind, new Set(findPending(root, kind).map(one => `${one.record}\0${one.name}`))); }
+      catch (error) { pendingByKind.set(kind, error instanceof Error ? error : new Error(String(error))); }
+    }
+    return pendingByKind.get(kind)!;
+  };
+  // A compile row is held to its own digests below; every other row to its case's files.
+  const sources = sourceDigests(root, delta.rows.filter(row => row.kind !== "benchmarks").map(row => ({ kind: row.kind as Kind, name: row.case })));
+
+  let ready: DeltaRow[] = [];
+  for (const row of delta.rows) {
+    const here = rowOf(row);
+    if (here === row.after) { say(`  already recorded ${row.record}: ${row.case}`); counts.already += 1; continue; }
+    if (here !== row.before) {
+      skip(row, here === null ? `its row is gone${since}` : row.before === null ? `a row of another measurement was recorded for it${since}` : `its row changed${since}`);
+      continue;
+    }
+    if (row.before === null) {
+      const pending = pendingAt(row.kind as Kind);
+      if (pending instanceof Error) { skip(row, `the pending ${row.kind} cases cannot be listed here: ${pending.message}`); continue; }
+      if (!pending.has(`${row.record}\0${row.case}`)) { skip(row, "it is not a pending case here"); continue; }
+    }
+    const digest = row.kind === "benchmarks" ? row.sources : sources.get(`${row.kind}\0${row.case}`);
+    if (digest !== row.sources) { skip(row, digest === null ? "its sources are gone" : `its sources changed${since}`); continue; }
+    ready.push(row);
+  }
+
+  // A benchmark's compile row is held to the digests of its whole source graph
+  // and of the compile driver, as the benchmark check holds it: a change to
+  // what they cover, or to how they are computed, makes the row another case's.
+  // Its directory's digest would be both less and more: a shared module is
+  // outside it, and a population declaration (case.domains.json), which no
+  // compile reads, inside.
+  const compile = ready.filter(row => row.kind === "benchmarks");
+  if (compile.length) {
+    let digests = new Map<string, { source: string; driver: string }>(), failure = "";
+    try { digests = await (options.benchmarks ?? benchmarkDigests)(root, [...new Set(compile.map(row => row.case))]); }
+    catch (error) { failure = `: ${error instanceof Error ? error.message : String(error)}`; }
+    const refused = new Set<DeltaRow>();
+    for (const row of compile) {
+      const cell = JSON.parse(row.after.slice(row.after.indexOf("\t") + 1)) as { source: string; driver: string }, here = digests.get(row.case);
+      const why = !here ? `its source digest cannot be computed here${failure}`
+        : cell.source !== here.source ? `its source digest is ${here.source.slice(0, 12)} here, not the recorded ${cell.source.slice(0, 12)}`
+        : cell.driver !== here.driver ? `its compile driver's digest is ${here.driver.slice(0, 12)} here, not the recorded ${cell.driver.slice(0, 12)}` : null;
+      if (why) { skip(row, why); refused.add(row); }
+    }
+    ready = ready.filter(row => !refused.has(row));
+  }
+
+  // Each record takes its rows by its own merge, and what that makes is
+  // audited by the rule the recorders' writes are held to. One row the format
+  // or the rule refuses keeps no other from its record: each is then taken alone.
+  for (const [record, group] of Map.groupBy(ready, row => row.record)) {
+    const kind = group[0]!.kind as Kind, was = textOf(record), pending = pendingAt(kind);
+    const names = new Set(pending instanceof Error ? [] : [...pending].filter(id => id.startsWith(`${record}\0`)).map(id => id.slice(record.length + 1)));
+    const merge = (text: string | null, these: readonly DeltaRow[]) => {
+      const next = merged(kind, text, these, delta.headers[record]);
+      auditRecord(kind, record, text, next, names);
+      return next;
+    };
+    let text = was, applied: DeltaRow[] = [];
+    try { text = merge(was, group); applied = group; }
+    catch {
+      for (const row of group) {
+        try { text = merge(text, [row]); applied.push(row); }
+        catch (error) { skip(row, `its record refuses it here: ${error instanceof Error ? error.message : String(error)}`); }
+      }
+    }
+    if (!applied.length) continue;
+    mkdirSync(dirname(join(root, record)), { recursive: true });
+    writeFileSync(join(root, record), text!);
+    for (const row of applied) { say(`  applied ${record}: ${row.case} (${row.before === null ? "pending" : "an accepted change"})`); counts.applied += 1; }
+  }
+  say(appliedLine(counts));
+  return counts;
+}
+
+/** `--apply <delta>` on the command line: 0 once what applies is merged, 1 for a delta it cannot take, 2 for a wrong call. */
+export async function applyCommand(root: string, args: readonly string[], say = (line: string) => console.log(line)): Promise<number> {
+  if (args.length !== 1) { console.error("usage: node tooling/records/record-pending.ts --apply <delta>"); return 2; }
+  let delta: Delta;
+  try { delta = parseDelta(readFileSync(args[0]!, "utf8")); }
+  catch (error) { console.error(`record-pending --apply: ${args[0]}: ${error instanceof Error ? error.message : String(error)}`); return 1; }
+  try { await applyDelta(root, delta, { say }); }
+  catch (error) {
+    if (!(error instanceof MalformedDelta)) throw error;
+    console.error(`record-pending --apply: ${args[0]}: ${error.message}`);
+    return 1;
+  }
+  return 0;
+}
+
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   const argv = process.argv.slice(2);
-  const after = argv[0] === "--after" ? { part: argv[1], run: argv[2] } : null;
-  const named = after ? argv.slice(3) : argv;
-  const unknown = named.filter(kind => !(KINDS as readonly string[]).includes(kind));
-  const badAfter = after && ((after.part !== "core" && after.part !== "wide") || !after.run || !existsSync(after.run));
-  if (unknown.length || badAfter || !process.env.NTS_BIN) {
-    console.error(`usage: NTS_BIN=<main's pin> node tooling/records/record-pending.ts [--after core|wide <run>] [${KINDS.join("|")} ...]${unknown.length ? `; unknown: ${unknown.join(" ")}` : ""}${badAfter ? `; --after needs core or wide and an existing run folder` : ""}`);
-    process.exitCode = 2;
-  } else {
-    const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-    const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
-    const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), unowned: [] };
-    for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);
-    process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind);
+  const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+  if (argv[0] === "--apply") process.exitCode = await applyCommand(root, argv.slice(1));
+  else {
+    const after = argv[0] === "--after" ? { part: argv[1], run: argv[2] } : null;
+    let named = after ? argv.slice(3) : argv;
+    // The full check's call leaves its delta in its run's folder.
+    let delta = after?.run ? join(after.run, DELTA_FILE) : undefined, badDelta = false;
+    if (named[0] === "--delta") { delta = named[1]; badDelta = !delta; named = named.slice(2); }
+    const unknown = named.filter(kind => !(KINDS as readonly string[]).includes(kind));
+    const badAfter = after && ((after.part !== "core" && after.part !== "wide") || !after.run || !existsSync(after.run));
+    if (unknown.length || badAfter || badDelta || !process.env.NTS_BIN) {
+      console.error(`usage: NTS_BIN=<main's pin> node tooling/records/record-pending.ts [--after core|wide <run>] [--delta <file>] [${KINDS.join("|")} ...]`
+        + ` | node tooling/records/record-pending.ts --apply <delta>${unknown.length ? `; unknown: ${unknown.join(" ")}` : ""}`
+        + `${badAfter ? `; --after needs core or wide and an existing run folder` : ""}${badDelta ? "; --delta needs a file" : ""}`);
+      process.exitCode = 2;
+    } else {
+      const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
+      const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), unowned: [] };
+      for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);
+      process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind, delta && resolve(delta));
+    }
   }
 }

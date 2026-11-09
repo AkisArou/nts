@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ProbeVerdict } from "./culprit.ts";
+import type { LandingAnswer } from "./queue.ts";
 
 export type Layout = {
   /** ~/.cache/nts-full-check: everything the full check owns. */
@@ -75,8 +76,33 @@ export type ProbeRecord = {
   at: string;
 };
 
-/** The last records commit a part's green run wrote and submitted, or what came of trying. */
-export type RecordsRun = { commit: string; at: string; submitted: string | null; result: string };
+/**
+ * A part's last records run, and what came of it. Its rows are in its `delta`,
+ * which is applied on main and submitted as a records commit; the full check
+ * follows that commit until the landing check lands it, and applies the delta
+ * again on the newest main after a refusal, a few times at most (service.ts's
+ * followRecords). `settled` is when it stopped following it.
+ */
+export type RecordsRun = {
+  /** The commit the rows were recorded at. */
+  commit: string;
+  at: string;
+  /** The records commit in the landing queue, or null while none is. */
+  submitted: string | null;
+  result: string;
+  /** The recorder's delta (tooling/records/delta.ts), in the run's folder; absent when it recorded nothing. */
+  delta?: string;
+  /** The compiler the rows were measured with. */
+  pin?: string;
+  /** How many times the delta was applied on main, the first time included. */
+  attempts?: number;
+  /** The main the last attempt applied it on. */
+  base?: string;
+  /** The landing check's last answer to a submission. */
+  answer?: LandingAnswer;
+  /** When the full check stopped following it: landed, withdrawn, nothing to apply, or given up. */
+  settled?: string;
+};
 
 /**
  * A part's runs, and its records: each part records the kinds its own checks

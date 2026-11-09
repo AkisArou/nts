@@ -1,16 +1,20 @@
 // A scratch repository with a local bare origin, and a stand-in gate that
 // reads its verdicts from the commit it measures: a step FAILs at a commit
 // whose tree has `RED/<step>` (or `RED/<step>.<anything>`), is HELD where it
-// has `HELD/<step>`, and prints `LOG/<step>` into its log. Tests only; no
-// network, no systemd, no real gate.
+// has `HELD/<step>`, and prints `LOG/<step>` into its log; and stand-ins for
+// the records' recorder and main's own --apply. Tests only; no network, no
+// systemd, no real gate.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
+import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/delta.ts";
 import type { Bench } from "./bench.ts";
 import { Git } from "./git.ts";
 import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
+import type { LandingAnswer } from "./queue.ts";
+import type { Applier, Recorder } from "./records.ts";
 import { layout, type Layout } from "./state.ts";
 
 export type Repository = {
@@ -119,16 +123,67 @@ export function stubBench(options: { slower?: string[]; stray?: boolean } = {}):
   return Object.assign(bench, { calls });
 }
 
-/** A landing queue that records what it was given, and what was withdrawn from it. */
-export function stubQueue(): { submitted: { commit: string; first: boolean }[]; withdrawn: string[]; submit(commit: string, options?: { first?: boolean }): void; withdraw(commit: string): "withdrawn" | "unknown" } {
-  const submitted: { commit: string; first: boolean }[] = [], withdrawn: string[] = [];
+export type StubQueue = {
+  submitted: { commit: string; first: boolean }[]; withdrawn: string[];
+  /** The landing check's answers, by commit, as a test gives them; a submitted commit with none waits. */
+  answers: Map<string, LandingAnswer>;
+  submit(commit: string, options?: { first?: boolean }): void;
+  withdraw(commit: string): "withdrawn" | "unknown";
+  answer(commit: string): LandingAnswer | "waiting" | null;
+};
+
+/** A landing queue that records what it was given and what was withdrawn from it, and answers as a test says. */
+export function stubQueue(): StubQueue {
+  const submitted: { commit: string; first: boolean }[] = [], withdrawn: string[] = [], answers = new Map<string, LandingAnswer>();
   return {
-    submitted, withdrawn,
+    submitted, withdrawn, answers,
     submit(commit, options) { submitted.push({ commit, first: options?.first === true }); },
     withdraw(commit) {
       if (!submitted.some(entry => entry.commit === commit) || withdrawn.includes(commit)) return "unknown";
       withdrawn.push(commit); return "withdrawn";
     },
+    answer(commit) {
+      if (answers.has(commit)) return answers.get(commit)!;
+      return submitted.some(entry => entry.commit === commit) && !withdrawn.includes(commit) ? "waiting" : null;
+    },
+  };
+}
+
+/** The full check's tree at a commit, as pinned.sh leaves one: checked out and cleaned, with no inputs to link here. */
+export function checkoutIn(repo: Repository): (commit: string) => void {
+  return commit => {
+    const tree = new Git(repo.layout.tree, ENV);
+    tree.run(["checkout", "--detach", "-q", "--force", commit]);
+    tree.run(["clean", "-fdq"]);
+  };
+}
+
+/**
+ * A stand-in for main's own record-pending.ts --apply in which every row of
+ * the delta applies, as its whole file (record-pending.test.ts holds the real
+ * one to its rule); its log ends as the real one's does.
+ */
+export const applyEveryRow: Applier = (tree, delta, log) => {
+  const rows = parseDelta(readFileSync(delta, "utf8")).rows;
+  for (const row of rows) {
+    mkdirSync(dirname(join(tree, row.record)), { recursive: true });
+    writeFileSync(join(tree, row.record), row.after);
+  }
+  const output = `${appliedLine({ applied: rows.length, already: 0, skipped: 0 })}\n`;
+  writeFileSync(log, output);
+  return { status: 0, output };
+};
+
+/** A recorder that writes these record files, and their delta where the full check's call leaves it; `then` runs after. */
+export function recording(files: Record<string, string>, then: Recorder = () => ({ status: 0, output: "" })): Recorder {
+  return (tree, pin, run, part) => {
+    const rows = Object.entries(files).map(([record, after]) => {
+      mkdirSync(dirname(join(tree, record)), { recursive: true });
+      writeFileSync(join(tree, record), after);
+      return { kind: "outcomes", record, case: dirname(record), key: dirname(record), before: null, after, sources: "0".repeat(64) };
+    });
+    writeFileSync(join(run, DELTA_FILE), serializeDelta({ version: 1, commit: null, headers: {}, rows }));
+    return then(tree, pin, run, part);
   };
 }
 

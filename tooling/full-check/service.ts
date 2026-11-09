@@ -9,6 +9,8 @@
 //            --bench-wait=240   minutes the nightly benchmarks wait for a quiet machine
 //
 // Each cycle does the first of these that is due:
+//   0. a records commit the landing check refused or held, its delta applied
+//      again on the newest main and submitted (seconds; followRecords);
 //   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
 //      the schedule, if verified moved since their last run; the nightly slot
 //      also makes the benchmarks due (bench.ts), if nts-bench has not
@@ -27,9 +29,11 @@
 //     run, and the service submits `git revert` of it to the landing queue,
 //     first, and reopens the culprit's issue with a comment (revert.ts); a
 //     culprit that names no issue gets a task line for an issue instead;
-//   - green, with pending cases or accepted changes listed: records.ts writes
-//     them on that commit's pin, the part's own kinds only, and submits the
-//     records commit;
+//   - green, with pending cases or accepted changes listed: records.ts records
+//     them on that commit's pin, the part's own kinds only, applies their
+//     delta case by case on the newest main and submits that records commit;
+//     each cycle then follows it until the landing check lands it, applying
+//     the delta again on the newest main after a refusal, a few times at most;
 //   - a benchmark run: nts-bench's results-only commit is submitted the same
 //     way, and the rows full.md marks slower than their own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
@@ -46,19 +50,21 @@ import {nodePin} from '../bootstrap/node.ts';
 import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
+import { prepareTree } from "../landing/service.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
 import { count as countMachine, countLines, gather, sweep as sweepLeftovers, type CountResult, type Removable } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
 import { landedTimes, landingQueue, submitTo, type LandingQueue } from "./queue.ts";
-import { recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
+import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
+import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.ts";
 import { listedIn, type Listed } from "../records/pending.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, PARTS, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -74,6 +80,10 @@ export type Effects = {
   /** The landing check's queue (queue.ts). */
   queue: LandingQueue;
   recorder: Recorder;
+  /** The full check's tree at a commit, set up as pinned.sh sets a gate tree up: checked out, cleaned, its inputs linked. */
+  checkout: (commit: string) => void;
+  /** main's own record-pending.ts --apply in the full check's tree at main (records.ts). */
+  applier: Applier;
   /** nts-bench on the tree, through the measurement lock (bench.ts). */
   bench: Bench;
   /** Whether the machine is quiet within a short wait (bench.ts). */
@@ -103,9 +113,10 @@ export type Effects = {
 const short = (sha: string) => sha.slice(0, 12);
 
 /** One cycle: the first due piece of work, or nothing. */
-export async function cycle(fx: Effects): Promise<Part | "benchmarks" | "count" | "idle"> {
+export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "count" | "idle"> {
   const state = readState(fx.layout.state);
   housekeeping(fx, state);
+  if (await followRecords(fx, state)) return "records";
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
   const slot = dueSlot(fx.schedule, state.wide.slot ? new Date(state.wide.slot) : undefined, now);
@@ -407,36 +418,137 @@ function landedReverts(git: Git, tip: string, state: State): Set<string> {
   return landed;
 }
 
+/** How many times one run's delta is applied on main and submitted: the first time, and again after refusals. */
+export const RECORDS_ATTEMPTS = 3;
+
+/** Whether the full check still follows a part's records: their delta was applied on main, and nothing has settled them. */
+const following = (records: RecordsRun | undefined): records is RecordsRun & { delta: string } => !!records?.delta && !records.settled;
+
 async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): Promise<void> {
-  if (state[part].records?.commit === commit) return;
+  const previous = state[part].records;
+  if (previous?.commit === commit) return;
   if (!listed.pending.length && !listed.accepted.length) return;
+  // One delta of a part's rows in flight at a time: recorded again now, the
+  // rows still waiting to land would be measured twice, hours each, and the
+  // two records commits would race for the same cases.
+  if (following(previous)) {
+    fx.log(`records: the ${part} rows recorded at ${short(previous.commit)} still wait for the landing check (${previous.result}); the ${part} run at ${short(commit)} records nothing until they land or are given up`);
+    return;
+  }
   fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s) listed by the ${part} run at ${short(commit)}`);
   const at = fx.now().toISOString();
+  const records: RecordsRun = { commit, at, submitted: null, result: "recording" };
+  state[part].records = records;
   try {
     const recorded = doing(fx, state, "records", commit, () => {
       fx.admit();
       const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
       const tree = new Git(fx.layout.tree, fx.git.env);
-      return recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run, part), recordsMessage(commit, part, run, pin, listed));
+      return { pin, ...recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run, part)) };
     }, at);
+    records.pin = recorded.pin;
     if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, RECORDER_LOG)}`);
-    if (recorded.kind !== "committed") {
-      state[part].records = { commit, at, submitted: null, result: recorded.kind === "refused" ? `wrote only outside the records: ${recorded.refused.join(", ")}` : "recorded nothing" };
-      fx.log(`records: ${state[part].records!.result}`);
-      if (recorded.kind === "refused" || recorded.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} ${recorded.kind === "refused" ? `wrote outside the records (${recorded.refused.join(", ")})` : `exited ${recorded.status}`}; see ${run}.`);
+    if (recorded.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote outside the records (${recorded.refused.join(", ")}); see ${run}.`);
+    // What the recorder recorded is its delta; the record files it left in the tree go when the tree is set up at main.
+    const delta = join(run, DELTA_FILE), rows = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")).rows.length : null;
+    if (!rows) {
+      records.result = rows === null && recorded.files.length ? `wrote ${recorded.files.length} record file(s) and no delta` : "recorded nothing";
+      fx.log(`records: ${records.result}`);
+      if (rows === null && recorded.files.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote records and no delta (${delta}), so none of them can land; see ${run}.`);
+      else if (recorded.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} exited ${recorded.status}; see ${run}.`);
       return;
     }
-    fx.git.run(["update-ref", `refs/full-check/records/${short(commit)}`, recorded.commit]);
-    const submitted = await submitTo(fx.queue, recorded.commit, { first: false });
-    fx.log(`records ${short(recorded.commit)} (${recorded.files.length} file(s)): ${submitted.line}`);
-    if (recorded.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} also wrote outside the records (${recorded.refused.join(", ")}); see ${run}.`);
-    state[part].records = { commit, at, submitted: submitted.submitted ? recorded.commit : null, result: submitted.line };
+    fx.log(`records: ${rows} row(s) recorded at ${short(commit)}, in ${delta}`);
+    await applyAndSubmit(fx, state, part, Object.assign(records, { delta }), fx.git.commit("refs/heads/main")!);
   } catch (error) {
-    state[part].records = { commit, at, submitted: null, result: `failed: ${error instanceof Error ? error.message : String(error)}` };
-    fx.log(`records: ${state[part].records!.result}`);
+    records.result = `failed: ${error instanceof Error ? error.message : String(error)}`;
+    fx.log(`records: ${records.result}`);
   } finally {
     writeState(fx.layout.state, state);
   }
+}
+
+/**
+ * A part's delta applied on `main`, the newest, by main's own
+ * record-pending.ts --apply in the full check's tree, and what applied
+ * committed there and submitted. Each call is an attempt, whatever comes of
+ * it; one that commits nothing because nothing is left to apply settles the
+ * records.
+ */
+async function applyAndSubmit(fx: Effects, state: State, part: Part, records: RecordsRun & { delta: string }, main: string): Promise<void> {
+  const attempt = (records.attempts ?? 0) + 1, run = dirname(records.delta), log = join(run, `record-pending.apply-${attempt}.log`);
+  Object.assign(records, { attempts: attempt, base: main, submitted: null });
+  delete records.answer;
+  try {
+    const tree = new Git(fx.layout.tree, fx.git.env);
+    const applied = doing(fx, state, "records", records.commit, () => applyAt(tree, main, fx.checkout, dir => fx.applier(dir, records.delta, log),
+      output => recordsMessage({ commit: records.commit, part, run, pin: records.pin, main, attempt, output })));
+    if (applied.refused.length) task(fx, state, `- record-pending.ts --apply on main ${short(main)} wrote outside the records (${applied.refused.join(", ")}); see ${log}.`);
+    const counts = appliedIn(applied.output), said = counts ? countsText(counts) : `see ${log}`;
+    if (applied.kind === "failed") records.result = `record-pending.ts --apply exited ${applied.status} on main ${short(main)} (attempt ${attempt}); see ${log}`;
+    else if (applied.kind === "none") {
+      records.settled = fx.now().toISOString();
+      records.result = `nothing left to commit on main ${short(main)}: ${said}`;
+    } else {
+      // Reachable until it lands: the queue holds a commit, not a branch.
+      fx.git.run(["update-ref", `refs/full-check/records/${short(records.commit)}`, applied.commit]);
+      const submitted = await submitTo(fx.queue, applied.commit, { first: false });
+      records.submitted = submitted.submitted ? applied.commit : null;
+      records.result = `${said} on main ${short(main)} (attempt ${attempt}): ${submitted.line}`;
+    }
+    fx.log(`records of the ${part} rows at ${short(records.commit)}: ${records.result}`);
+  } catch (error) {
+    records.result = `failed on main ${short(main)} (attempt ${attempt}): ${error instanceof Error ? error.message : String(error)}`;
+    fx.log(`records: ${records.result}`);
+  } finally {
+    writeState(fx.layout.state, state);
+  }
+}
+
+/**
+ * Each part's records commit as the landing check answers it. Landed or
+ * withdrawn settles it. Refused, held, unknown to the queue, or never
+ * submitted, its delta is applied again on the newest main and submitted,
+ * RECORDS_ATTEMPTS times in all, and then it is a task. A refusal, or an
+ * attempt that failed, waits for main to move first: the same rows on the
+ * same main come to the same end. A held one, which could not be checked, and
+ * one the queue lost are taken up at once; a held one is withdrawn before it
+ * is replaced, so it never lands behind its replacement. Returns whether it
+ * applied a delta again.
+ */
+async function followRecords(fx: Effects, state: State): Promise<boolean> {
+  let again = false;
+  for (const part of PARTS) {
+    const records = state[part].records;
+    if (!following(records)) continue;
+    const answer = records.submitted ? fx.queue.answer(records.submitted) : null;
+    if (answer === "waiting") continue;
+    if (answer) records.answer = answer;
+    if (answer?.state === "landed" || answer?.state === "withdrawn") {
+      records.settled = fx.now().toISOString();
+      records.result = answer.state === "landed" ? `landed as ${short(answer.tip ?? records.submitted!)}` : `withdrawn: ${answer.message}`;
+      fx.log(`records ${short(records.submitted!)} of the ${part} rows at ${short(records.commit)}: ${records.result}`);
+      writeState(fx.layout.state, state);
+      continue;
+    }
+    const why = !records.submitted ? `nothing was submitted (${records.result})` : answer ? `${answer.state}: ${answer.message}` : "the landing queue has no record of it";
+    const attempts = records.attempts ?? 1, kept = existsSync(records.delta), main = fx.git.commit("refs/heads/main")!;
+    if (attempts >= RECORDS_ATTEMPTS || !kept) {
+      if (answer?.state === "held") fx.queue.withdraw(records.submitted!);
+      records.settled = fx.now().toISOString();
+      records.result = `${why}; not applied again: ${kept ? `${attempts} attempt(s) made` : `its delta ${records.delta} is gone`}`;
+      task(fx, state, `- The full check's ${part} records of ${short(records.commit)} did not land: ${records.result}. Their rows stay pending for the next records run; see ${dirname(records.delta)}.`);
+      writeState(fx.layout.state, state);
+      continue;
+    }
+    const atOnce = answer?.state === "held" || (records.submitted !== null && answer === null);
+    if (!atOnce && main === records.base) continue;
+    if (answer?.state === "held") fx.queue.withdraw(records.submitted!);
+    fx.log(`records ${records.submitted ? short(records.submitted) : "(none submitted)"} of the ${part} rows at ${short(records.commit)}: ${why}; their delta is applied again on main ${short(main)}`);
+    await applyAndSubmit(fx, state, part, records, main);
+    again = true;
+  }
+  return again;
 }
 
 /**
@@ -641,6 +753,8 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
     recorder: recordPending,
+    checkout: commit => prepareTree(sharedCheckout(ROOT), layout.tree, commit),
+    applier: (tree, delta, log) => applyRecords(tree, delta, log),
     bench: benchWithLock(ROOT, layout.target),
     quiet: quietWithin(ROOT),
     benchWindowMs: options.quietWait * 60_000,
