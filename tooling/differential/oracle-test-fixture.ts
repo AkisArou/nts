@@ -1,6 +1,7 @@
 // A directly launched oracle test owns the same canonical services as tooling.
-import {rmSync} from 'node:fs';
-import {newTestScratch} from '../gate/test-scratch.ts';
+import {rmSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {newTestScratch,testScratch} from '../gate/test-scratch.ts';
 
 import {after} from 'node:test';
 import {ENVIRONMENT_CONTEXT, gateEnvironment, oracleToolchainLocation, sealOracleRun, type GateEnvironment} from '../gate/canonical-environment.ts';
@@ -11,6 +12,12 @@ let setup:Promise<void>|undefined,finish:(()=>void)|undefined;
 // belongs to this test file. Register its cleanup at module (file) scope.
 after(()=>finish?.());
 export function setupOracleTestEnvironment():Promise<void>{return setup??=ownOracleTestEnvironment();}
+
+/** A real oracle test owns its admission reading, independently of host load. */
+export function oracleTestMemory(t:{after(fn:()=>void):void}):string{
+  const file=join(testScratch(t,'oracle-test-memory'),'meminfo');
+  writeFileSync(file,'MemAvailable: 64000000 kB\n');return file;
+}
 
 async function ownOracleTestEnvironment():Promise<void>{
   if(process.env[ENVIRONMENT_CONTEXT]){

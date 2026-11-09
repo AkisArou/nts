@@ -12,7 +12,8 @@ import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
-const [library,previousHelper]=process.argv.slice(2);
+const admitted=process.argv.includes('--admitted');
+const [library,previousHelper]=process.argv.slice(2).filter(arg=>arg!=='--admitted');
 assert.ok(library,'the library test executable is required');
 const own=newTestScratch('oracle-pressure'),tree=join(own,'tree'),run=join(own,'run'),home=join(own,'home');
 const cleanup:(()=>void)[]=[];
@@ -37,7 +38,10 @@ ${names}
 NTS_STEPS
 elif [ "$2" = tests ]; then
   export NTS_MEMINFO=${quote(low)}
-  exec ${quote(resolve(library))} --exact source_contracts::tests::a_source_export_alias_uses_the_recorded_abi_binding --nocapture
+  # Deliberately withhold the step's admission, so this child must still
+  # obtain host admission. A genuinely admitted child now uses its grant.
+  ${admitted?'# retain the gate step admission':'unset NTS_GATE_TOKEN_HELD'}
+  exec ${quote(resolve(library))} --exact source_contracts::tests::${admitted?'unavailable_bindings_do_not_compare_unexecuted_module_output':'a_source_export_alias_uses_the_recorded_abi_binding'} --nocapture
 else exit 1
 fi
 `);
@@ -49,12 +53,19 @@ fi
   const step=summary.steps.find((step:{name:string})=>step.name==='tests');
   assert.ok(step,result.stdout+result.stderr);
   const log=readFileSync(join(run,'tests.log'),'utf8');
+  if(admitted){
+    assert.equal(step.verdict,'PASS',log);assert.equal(step.exit,0,log);
+    assert.match(log,/unavailable_bindings_do_not_compare_unexecuted_module_output .*ok/);
+    assert.match(log,/test result: ok\. 1 passed/);
+    console.log(JSON.stringify({status:result.status,step:step.verdict,admitted:true}));
+  }else{
   assert.match(log,/check stage OraclePressure/,result.stdout+result.stderr);assert.match(log,/oracle preparation awaits host memory admission/);
   assert.match(log,/panicked/);
   console.log(JSON.stringify({status:result.status,step:step.verdict,kind:step.instrument?.kind,reason:step.reason,panicked:/panicked/.test(log)}));
   assert.equal(step.verdict,'INSTRUMENT',log);assert.equal(step.instrument?.kind,'memory-pressure');
   assert.equal(step.exit,101,'the library assertion still fails; only its owning step is held');
   assert.equal(summary.steps.filter((step:{verdict:string})=>step.verdict==='FAIL').length,0);
+  }
 }finally{
   spawnSync('systemctl',['--user','stop',unit],{stdio:'ignore'});
   for(const fn of cleanup.reverse())fn();

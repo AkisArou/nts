@@ -238,6 +238,8 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
         std::env::temp_dir().join(format!("nts-cli-provider-capture-{}", std::process::id()));
     std::fs::create_dir(&directory).unwrap();
     let scope = CaptureScope(directory);
+    let memory = scope.0.join("meminfo");
+    std::fs::write(&memory, "MemAvailable: 64000000 kB\n").unwrap();
     let parent_ledger = std::env::var("NTS_ORACLE_DEPENDENCIES")
         .ok()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
@@ -277,6 +279,7 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
                 "--json",
             ])
             .env("NTS_BACKEND", "jvm")
+            .env("NTS_MEMINFO", &memory)
             .env("NTS_RC", "0");
         if let Some(raw) = &capability {
             command.env("NTS_ORACLE_DEPENDENCIES", raw);

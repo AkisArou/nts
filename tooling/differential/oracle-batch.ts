@@ -2,16 +2,28 @@
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {activeCommand,COMPILE_CPU_BOUND_SECONDS} from '../gate/active-command.ts';
-import {Admission} from '../gate/admission.ts';
+import {Admission,memAvailableGB} from '../gate/admission.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {memoryRun,memoryCause,memoryDisposition} from '../census/worker-memory.ts';
 import type {OracleBudget} from './oracle-execution.ts';
-import {OracleWorker,TypeScriptDiagnosticError,type OracleOptions,type OraclePrepared} from './oracle-emit.ts';
+import {OracleWorker,TypeScriptDiagnosticError,ownerRunScope,type OracleOptions,type OraclePrepared} from './oracle-emit.ts';
 
 export type OracleRequest={key:string;options:OracleOptions};
 // The measured case peak plus margin; the census aggregate remains authoritative.
 export const ORACLE_COMPILE_MEMORY_BYTES=3*2**30;
 let residentWorker=0;
+/** A held step already passed the gate's admission. Its authenticated grant
+ * and reservation cover preparation too; the resident scope still caps it. */
+function admittedStep(env:NodeJS.ProcessEnv):boolean{
+  if(env.NTS_GATE_TOKEN_HELD!=='1'||!env.NTS_GATE_STEP||!env.NTS_ORACLE_DEPENDENCIES)return false;
+  const cap=JSON.parse(env.NTS_ORACLE_DEPENDENCIES);
+  if(cap?.admission?.kind!=='gate')return false;
+  // ownerStep is telemetry; a consumer may label its work independently.
+  if(!ownerRunScope(cap,env))throw new ToolingInstrumentError('tooling-setup','oracle preparation has no owned admission for step '+env.NTS_GATE_STEP);
+  const bytes=Number(env.NTS_GATE_STEP_MEMORY_BYTES);
+  if(!Number.isSafeInteger(bytes)||bytes<1)throw new ToolingInstrumentError('tooling-setup','oracle preparation has no resident reservation for step '+env.NTS_GATE_STEP);
+  return true;
+}
 export type OraclePreparation={prepared:OraclePrepared}|{instrument:string}|{timeout:string;budget?:OracleBudget}|{memoryCap:string;budget?:OracleBudget};
 export class OracleCompileBudgetError extends CaseBudgetError{
   readonly outcome:'timeout'|'memory-cap';
@@ -34,11 +46,12 @@ export async function prepareOracles(requests:OracleRequest[],options:{
   if(new Set(requests.map(request=>request.key)).size!==requests.length)throw Error('oracle preparation keys must be unique');
   const outputRoots=[options.directory,...requests.map(request=>request.options.directory)];
   const result:Record<string,OraclePreparation>={};
-  const admission=new Admission({report});let next=0;
+  const stepAdmitted=requests.length>0&&admittedStep(options.env);
+  const admission=new Admission({report,read:()=>memAvailableGB(options.env.NTS_MEMINFO)});let next=0;
   const bytes=options.memoryBytes??ORACLE_COMPILE_MEMORY_BYTES;
   const settled=await Promise.allSettled(Array.from({length:Math.min(options.workers,requests.length)},async(_,index)=>{
     // No toolchain is verified or started for an empty population.
-    while(!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
+    while(!stepAdmitted&&!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
     // The census owner supplies the aggregate cap and signal/exit drain too.
     const memory=memoryRun(),resident=memory.worker('oracle'+residentWorker++,bytes);
     let closeWorker=()=>{};
@@ -47,7 +60,7 @@ export async function prepareOracles(requests:OracleRequest[],options:{
       closeWorker=()=>worker.close();
       while(true){
         if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');
-        while(!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
+        while(!stepAdmitted&&!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
         // Claim only after admission: another worker may drain the queue while we wait.
         const request=requests[next];if(!request)break;
         const ordinal=next++,own=join(directory,'request-'+ordinal);mkdirSync(own,{recursive:true});
@@ -90,7 +103,7 @@ export async function prepareOracles(requests:OracleRequest[],options:{
         }catch(error){
           outcome={status:error instanceof OracleCompileBudgetError?error.outcome:'instrument',members:[request.key],reason:String(error),
             ...(error instanceof TypeScriptDiagnosticError?{compilerStatus:error.status,diagnostics:error.diagnostics}: {})};
-          if(options.signal?.aborted)throw error;
+          if(options.signal?.aborted||error instanceof PressureError)throw error;
           result[request.key]=error instanceof OracleCompileBudgetError
             ?error.outcome==='timeout'?{timeout:error.message,budget:error.budget}:{memoryCap:error.message,budget:error.budget}
             :{instrument:String(error)};
