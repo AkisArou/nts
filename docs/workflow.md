@@ -20,7 +20,7 @@ follows; this page is the why and the whole picture.
    minutes or less. Green: `main` moves to the change at once and is pushed.
 4. The **full check** runs continuously on the newest `main`, after landing.
    Green: that commit is marked `verified`. Red: the commit that broke it is
-   found and reverted automatically, and fixing it becomes a task.
+   found and reverted automatically, and its task's issue is reopened.
 5. The agent ends when its task lands, and its worktree goes back to the
    pool.
 
@@ -51,6 +51,11 @@ follows; this page is the why and the whole picture.
   `tooling/tasks/branch.ts`. `node tooling/landing/pool.ts take --issue <N>`
   takes a tree on it, and the hourly count names a branch while its issue is
   open.
+- **A landing closes its issue.** A change from issue N's branch that does
+  not name the issue lands with `Fixes #N` added to its last commit, and
+  GitHub closes the issue when `main` reaches it. A slice that leaves its
+  task open says `Part of #N` in its message; a change that names its issue
+  either way keeps its own words (`tooling/tasks/links.ts`).
 - **Nothing valuable sits on a branch.** Unfinished work on a branch is
   either an open task's, or it is deleted. Old
   branches are not kept "just in case": that is how work gets forgotten.
@@ -160,7 +165,10 @@ What follows from a run:
   flaky or machine red reverts nothing. Then the culprit search finds the
   commit that broke it, among those since that part's last green run. The full check reverts that commit (the
   revert passes the landing check like any change), and re-landing it with a
-  fix becomes a task. When that part goes green with the commit still in, it
+  fix is a task again: the issue the commit names is reopened, with a comment
+  that gives the red steps, their logs, the search and the revert. A commit
+  that names no issue leaves a task line in the full check's status, for an
+  issue. When that part goes green with the commit still in, it
   was no culprit: a revert of it still waiting to land is withdrawn.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
   result, and only until the full check finds it: within about an hour for
@@ -268,6 +276,11 @@ the first node task.
   spec; `plan.md` keeps the priorities and the order of the streams; a
   task's branch names its issue; no periodic check reads the issues
   ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
+- **A landing closes its issue, and a revert reopens it** (11-09): the
+  landing adds `Fixes #N` from the branch unless the change names its issue,
+  and the full check comments on and reopens the issue a reverted commit
+  names
+  ([log](records/notebooks/decisions-log.md#a-landing-closes-its-issue-and-a-revert-reopens-it-11-09)).
 - **Records are evidence, never instructions** (11-09): `docs/records/` is read
   when a page, an issue or a code comment links it, a page holds where the two
   disagree, and search tools skip it through `.ignore`

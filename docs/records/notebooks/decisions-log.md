@@ -1616,3 +1616,21 @@ Decided with it:
 
 131 issues were made from the plan on 11-09 (#467 to #597), after a check
 against `main` that dropped two finished tasks and rewrote nine.
+
+## A landing closes its issue, and a revert reopens it (11-09)
+
+The user approved that a task's issue follows its change: the landing service
+closes the issue when the task lands, and the full check reopens it, with a
+comment, when it reverts the task's commit.
+
+As built (#597):
+- a change from issue N's branch that names the issue neither as closed (a
+  GitHub closing keyword) nor as `Part of #N` lands with `Fixes #N` added to
+  its last commit, ahead of its trailers; GitHub closes the issue when `main`
+  reaches the commit;
+- a slice that leaves its task open says `Part of #N`, so a task landed in
+  several slices closes with its last;
+- the full check reads the issues a culprit's message names and comments on
+  each (the red steps, their logs, the culprit search and the revert), then
+  reopens it; a culprit that names none, or an issue `gh` cannot reach,
+  leaves a task line in the full check's status instead.

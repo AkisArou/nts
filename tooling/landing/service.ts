@@ -3,7 +3,9 @@
 //
 // For each change, in queue order:
 //
-//   1. rebase it onto main; a conflict refuses it, naming the files;
+//   1. rebase it onto main; a conflict refuses it, naming the files; a change
+//      from issue N's branch that does not name the issue says "Fixes #N"
+//      (tooling/tasks/links.ts), so the issue closes when main reaches it;
 //   2. select its landing steps (selection.ts over owed-range.ts's answer);
 //   3. run them in the landing tree (run.ts); red refuses it with the failing
 //      steps and the run's directory; an unfinished measurement holds it;
@@ -20,7 +22,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
-import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, pushedMain, pushMain, rebaseOnto, revParse, type BranchOutcome, type Git } from "./git.ts";
+import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingIssue, pushedMain, pushMain, rebaseOnto, revParse, type BranchOutcome, type Git } from "./git.ts";
+import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
 import { LANDING_HOME, Queue, type Checking, type Entry, type Result } from "./queue.ts";
@@ -129,10 +132,13 @@ export function landOne(config: Config, queue: Queue, entry: Checking): Result {
         : `${short(entry.sha)} conflicts with main ${short(base)} in ${rebased.files.join(", ") || "files git did not name"} (at ${short(rebased.conflict)}): rebase it onto main and submit it again`;
       return queue.answer(entry, { state: "refused", base, message });
     }
-    const tip = rebased.tip;
-    if (isAncestor(g, tip, base)) {
+    if (isAncestor(g, rebased.tip, base)) {
       return finishLanding(config, queue, entry, base, base, null, null, `${short(entry.sha)} is on main already`);
     }
+    // A task's issue closes when main reaches the change; the commit checked
+    // is the one that lands.
+    const issue = entry.branch === null ? null : issueOfBranch(entry.branch);
+    const tip = issue === null ? rebased.tip : namingIssue(g, base, rebased.tip, issue);
     queue.update({ base, tip, phase: "checking" });
     const paths = changedPaths(g, base, tip);
     let selected: Selected;

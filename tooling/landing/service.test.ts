@@ -287,3 +287,18 @@ test("the costs of passing steps are kept by kind of change, and old runs are pr
   assert.deepEqual(prune(runs, 3, made + 3 * 86_400_000 + 60_000), [old]);
   assert.equal(existsSync(old), false);
 });
+
+test("a change from an issue's branch lands saying Fixes #N, and one from a branch named for no issue lands as it is", t => {
+  const f = service(t);
+  const issue = f.task("42-a-task", { "src/a.txt": "a\n" });
+  const other = f.task("fix/b", { "src/b.txt": "b\n" });
+  const ei = f.submit("42-a-task", issue.sha), eo = f.submit("fix/b", other.sha);
+  assert.deepEqual(drain(f.config).answered.map(r => r.state), ["landed", "landed"]);
+  const ri = f.queue.result(ei.id)!, ro = f.queue.result(eo.id)!;
+  assert.notEqual(ri.tip, issue.sha, "a was on main's line, and lands with its issue named");
+  assert.equal(f.s.git(["log", "-1", "--format=%B", ri.tip!]), "task 42-a-task\n\nFixes #42");
+  assert.deepEqual(f.checked[0], ri.tip, "the commit checked is the commit that lands");
+  assert.equal(f.s.git(["log", "-1", "--format=%B", ro.tip!]), "task fix/b");
+  assert.equal(f.s.git(["branch", "--list", "42-a-task"]), "", "the task's branch is deleted: everything on it landed");
+  assert.equal(f.s.git(["ls-remote", "--heads", "origin", "42-a-task"]), "");
+});

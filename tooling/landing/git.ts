@@ -5,17 +5,18 @@
 // --ff-only` keeps in step.
 import { spawnSync } from "node:child_process";
 import { dirname } from "node:path";
+import { issuesNamed, withFixes } from "../tasks/links.ts";
 
 export type Git = { root: string; env?: NodeJS.ProcessEnv };
 export class GitError extends Error {}
 
-function run(git: Git, args: readonly string[], cwd = git.root): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync("git", args, { cwd, env: git.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20 });
+function run(git: Git, args: readonly string[], cwd = git.root, env = git.env ?? process.env, input?: string): { status: number; stdout: string; stderr: string } {
+  const r = spawnSync("git", args, { cwd, env, encoding: "utf8", maxBuffer: 64 << 20, input });
   if (r.error) throw new GitError(`git ${args[0]}: ${r.error.message}`);
   return { status: r.status ?? 1, stdout: r.stdout ?? "", stderr: (r.stderr ?? "").trim() };
 }
-function checked(git: Git, args: readonly string[], cwd = git.root): string {
-  const r = run(git, args, cwd);
+function checked(git: Git, args: readonly string[], cwd = git.root, env?: NodeJS.ProcessEnv, input?: string): string {
+  const r = run(git, args, cwd, env, input);
   if (r.status !== 0) throw new GitError(`git ${args.join(" ")}: ${r.stderr || `exit ${r.status}`}`);
   return r.stdout.trim();
 }
@@ -69,6 +70,23 @@ export function rebaseOnto(git: Git, onto: string, sha: string): Rebased {
     tip = update[1]!;
   }
   return { tip, replayed: pending.length, skipped: marks.length - pending.length };
+}
+
+/**
+ * `tip` naming issue `n`, so that GitHub closes the issue when main reaches
+ * it: "Fixes #n" added to the last commit's message. A change that names the
+ * issue already, in any of its commits since `base` (as fixed, or as "Part of"
+ * it when the task goes on), lands as it is. The new commit keeps the old
+ * one's tree, parents and author; only its message and committer differ, as
+ * a replayed commit's committer does.
+ */
+export function namingIssue(git: Git, base: string, tip: string, n: number): string {
+  if (issuesNamed(checked(git, ["log", "--format=%B", `${base}..${tip}`])).includes(n)) return tip;
+  const [tree, parents, name, email, date] = checked(git, ["log", "-1", "--format=%T%x00%P%x00%an%x00%ae%x00%ad", "--date=raw", tip]).split("\0");
+  const message = withFixes(checked(git, ["log", "-1", "--format=%B", tip]), n);
+  const env = { ...(git.env ?? process.env), GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: date! };
+  const parentArgs = (parents ?? "").split(" ").filter(Boolean).flatMap(parent => ["-p", parent]);
+  return checked(git, ["commit-tree", tree!, ...parentArgs, "-F", "-"], git.root, env, message);
 }
 
 /** The files `commit` conflicts in when picked onto `onto`. */

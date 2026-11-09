@@ -25,7 +25,8 @@
 //   - green core: refs/heads/verified moves to that commit and is pushed;
 //   - red: culprit.ts finds the first red commit since that part's last green
 //     run, and the service submits `git revert` of it to the landing queue,
-//     first, and prints the task line for docs/plan.md (it never edits it);
+//     first, and reopens the culprit's issue with a comment (revert.ts); a
+//     culprit that names no issue gets a task line for an issue instead;
 //   - green, with pending or improved cases listed: records.ts writes them on
 //     that commit's pin and submits the records commit;
 //   - a benchmark run: nts-bench's results-only commit is submitted the same
@@ -49,7 +50,8 @@ import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.
 import { pinnedGate, type Gate } from "./measure.ts";
 import { landingQueue, submitTo, type LandingQueue } from "./queue.ts";
 import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
-import { makeRevert, taskLine, type Finding } from "./revert.ts";
+import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
+import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State } from "./state.ts";
@@ -85,6 +87,8 @@ export type Effects = {
   pruneNodeCache: () => NodeCacheRetention;
   /** Push a commit to the remote's `verified`. */
   push: (commit: string) => { ok: boolean; line: string };
+  /** Comment on GitHub issue `n` and reopen it (revert.ts's reopenIssue). */
+  issue: (n: number, comment: string) => { ok: boolean; line: string };
   /** Return once a heavy phase may start (AGENTS.md: 14 GB available). */
   admit: () => void;
   now: () => Date;
@@ -236,7 +240,7 @@ function pushVerified(fx: Effects, state: State): void {
 function task(fx: Effects, state: State, line: string): void {
   state.tasks.push({ at: fx.now().toISOString(), line });
   state.tasks = state.tasks.slice(-50);
-  fx.log(`TASK for docs/plan.md: ${line}`);
+  fx.log(`TASK for an issue: ${line}`);
 }
 
 /** The red's culprit, its revert submitted first, and the task line. */
@@ -298,7 +302,7 @@ async function revertCulprit(fx: Effects, state: State, finding: Finding): Promi
   const made = makeRevert(fx.git, main, finding);
   if ("conflict" in made) {
     state.culprits.push({ commit: finding.culprit, part: finding.part, steps: finding.steps, run: finding.run, found_at: fx.now().toISOString(), revert: null, reason: made.conflict });
-    task(fx, state, taskLine(finding, null, made.conflict));
+    reopen(fx, state, finding, null, made.conflict);
     return;
   }
   // Reachable until it lands: the queue holds a commit, not a branch.
@@ -306,7 +310,19 @@ async function revertCulprit(fx: Effects, state: State, finding: Finding): Promi
   const submitted = await submitTo(fx.queue, made.commit, { first: true });
   fx.log(`revert ${short(made.commit)} of ${short(finding.culprit)}: ${submitted.line}`);
   state.culprits.push({ commit: finding.culprit, part: finding.part, steps: finding.steps, run: finding.run, found_at: fx.now().toISOString(), revert: made.commit, ...(submitted.submitted ? {} : { reason: submitted.line }) });
-  task(fx, state, taskLine(finding, made.commit));
+  reopen(fx, state, finding, made.commit);
+}
+
+/**
+ * The culprit's task is open again: each issue its commit names (as fixed, or
+ * as "Part of") is reopened with what went red. A commit that names none, or
+ * an issue that cannot be told, leaves a task line for an issue instead.
+ */
+function reopen(fx: Effects, state: State, finding: Finding, revert: string | null, why?: string): void {
+  const issues = issuesNamed(fx.git.run(["log", "-1", "--format=%B", finding.culprit]));
+  const told = issues.map(n => fx.issue(n, issueComment(finding, revert, why)));
+  for (const outcome of told) fx.log(outcome.line);
+  if (!told.length || told.some(outcome => !outcome.ok)) task(fx, state, taskLine(finding, revert, why));
 }
 
 /** The probe the search measures with: a composition, its steps, cached per step. */
@@ -612,6 +628,7 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
       const r = git.try(["push", "--quiet", "origin", `${commit}:refs/heads/verified`]);
       return r.status === 0 ? { ok: true, line: `pushed verified ${short(commit)} to origin` } : { ok: false, line: `could not push verified ${short(commit)}: ${r.stderr.trim()}; trying again next cycle` };
     },
+    issue: (n, comment) => reopenIssue(ghIn(ROOT), n, comment),
     admit: admitWhenMemory(stamp),
     now: () => new Date(),
     log: stamp,
@@ -681,7 +698,7 @@ function statusLines(state: State): string[] {
     `benchmarks: ${state.bench ? `${short(state.bench.commit)} at ${state.bench.at}: ${state.bench.result}; ${state.bench.run}` : "none"}`,
     `count: ${state.count ? `${state.count.verdict} at ${state.count.at}, ${state.count.lines.length} line(s)` : "never"}`,
     ...state.count?.lines.map(line => `  ${line}`) ?? [],
-    "tasks for docs/plan.md:", ...state.tasks.map(t => `  ${t.at} ${t.line}`),
+    "tasks for an issue:", ...state.tasks.map(t => `  ${t.at} ${t.line}`),
   ];
 }
 

@@ -91,7 +91,10 @@ node tooling/landing/check.ts <commit>             # queue it; run it in the bac
 One service, `nts-landing-check`, checks one change at a time against the
 newest `main`, in ten minutes or less. A conflict refuses it, naming the
 files. Green fast-forwards and pushes `main`, deletes your branch here and on
-GitHub, and resets your pool tree. Red names the failing steps and the run's
+GitHub, and resets your pool tree. It also closes your issue: a change from
+issue N's branch that does not name the issue gets `Fixes #N` in its last
+commit, so a slice that leaves the task open says `Part of #N` in its
+message. Red names the failing steps and the run's
 logs. Memory pressure retries by itself; any other unfinished run holds the
 change (`check.ts retry <id>`), as does a step stopped at its time bound. A
 single case past its own bound (a compile past ten CPU minutes, a compiled
@@ -104,8 +107,9 @@ change owes only what it reaches.
 **After landing, the full check** (`nts-full-check`) runs the core on every
 new `main` and the wide steps on `verified` a few times a day. A red there is
 measured again at the tip and at the last green commit, then bisected to its
-first red commit, which is reverted ahead of other landings and becomes a
-task. Record, benchmark and bisect against `verified`. Stop it only with
+first red commit, which is reverted ahead of other landings; the issue that
+commit names is reopened, with the red steps and their logs. Record, benchmark
+and bisect against `verified`. Stop it only with
 `systemctl --user stop nts-full-check`. A tool that keeps a folder in
 `~/.cache` adds it to `tooling/full-check/keep.json`.
 

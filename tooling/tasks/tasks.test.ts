@@ -1,12 +1,13 @@
 // The task spec (spec.ts), the creation tool (new.ts), the label sync
-// (labels.ts) and the branch rule (branch.ts), against the real
-// .github/labels.json and a stand-in for gh.
+// (labels.ts), the branch rule (branch.ts) and how a commit names its issue
+// (links.ts), against the real .github/labels.json and a stand-in for gh.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDrafts, draftProblems, type Draft, type Gh } from "./new.ts";
 import { sync, syncPlan } from "./labels.ts";
 import { bodyProblems, labelProblems, readSpec, renderCard, REQUIRED } from "./spec.ts";
 import { BRANCH, issueBranch, issueOfBranch, slugOf } from "./branch.ts";
+import { issuesNamed, withFixes } from "./links.ts";
 
 const spec = readSpec();
 const card = renderCard({ Goal: "g", Why: "w", Paths: "p", "Done when": "d", "Tests and rows": "t", Parent: "Stream" });
@@ -117,4 +118,24 @@ test("a task's branch is its issue number and a slug, and only the number counts
   assert.throws(() => issueBranch(0), /positive integer/);
   assert.equal(slugOf("Map and Set: by the proven layout, their contents", 4), "map-and-set-by");
   assert.ok(BRANCH.test("547-records-listed-kinds"));
+});
+
+test("a commit names its issue as closed, with GitHub's keywords, or as Part of it; a bare mention or a longer number does not count", () => {
+  assert.deepEqual(issuesNamed("gate: one ledger\n\nFixes #590\n"), [590]);
+  assert.deepEqual(issuesNamed("Closes: #12, resolved #13 and fixed #14"), [12, 13, 14]);
+  assert.deepEqual(issuesNamed("records: by kind\n\nPart of #547\n\nFixes #547\n"), [547], "each issue once");
+  assert.deepEqual(issuesNamed("see #590, the pull request #69 and T335"), []);
+  assert.deepEqual(issuesNamed("Fixes #5900"), [5900]);
+  assert.ok(!issuesNamed("Fixes #5900").includes(590), "#5900 is not #590");
+});
+
+test("Fixes #N goes in a paragraph of its own, ahead of the trailers", () => {
+  const trailer = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
+  assert.equal(withFixes(`tasks: a thing\n\nWhy it is.\n\n${trailer}\n`, 42), `tasks: a thing\n\nWhy it is.\n\nFixes #42\n\n${trailer}\n`);
+  assert.equal(withFixes(`tasks: a thing\n\n${trailer}\n  continued\nSigned-off-by: A <a@b>`, 42), `tasks: a thing\n\nFixes #42\n\n${trailer}\n  continued\nSigned-off-by: A <a@b>\n`);
+  assert.equal(withFixes("tasks: a thing", 42), "tasks: a thing\n\nFixes #42\n", "a subject alone");
+  assert.equal(withFixes("docs: the rule\n\nNote: a paragraph, not trailers.\nIt goes on.\n", 7), "docs: the rule\n\nNote: a paragraph, not trailers.\nIt goes on.\n\nFixes #7\n");
+  assert.equal(withFixes("fix: the subject looks like one\n", 7), "fix: the subject looks like one\n\nFixes #7\n", "the subject is never a trailer block");
+  assert.deepEqual(issuesNamed(withFixes(`a\n\n${trailer}`, 42)), [42]);
+  assert.throws(() => withFixes("a", 0), /positive integer/);
 });

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { advanceMain, changedPaths, deleteBranch, openPullBases, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
+import { advanceMain, changedPaths, deleteBranch, namingIssue, openPullBases, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 
 test("a change is replayed onto the newest main, skipping what main already has", t => {
@@ -135,4 +135,25 @@ test("a branch an open pull request is based on stays on the remote, and so does
   // A remote that is not on GitHub has no pull requests: the scratch origin is a bare directory.
   assert.deepEqual(openPullBases(git, "origin"), { read: new Map() });
   assert.deepEqual(deleteBranch(git, "fix/base", submitted, "origin").at(-1), { where: "remote", state: "deleted" });
+});
+
+test("a task's change names its issue in its last commit, keeping its tree, parents and author; one that names it already is kept", t => {
+  const s = scratchRepo(t), git: Git = { root: s.root, env: s.env };
+  const base = s.git(["rev-parse", "HEAD"]);
+  s.git(["switch", "-q", "-c", "42-a-task"]);
+  const first = s.commit({ "src/a.txt": "a\n" }, "the first half");
+  const tip = s.commit({ "src/b.txt": "b\n" }, "the second half\n\nWhy it is.\n\nCo-Authored-By: Claude <noreply@example.invalid>");
+  const named = namingIssue(git, base, tip, 42);
+  assert.notEqual(named, tip);
+  assert.equal(s.git(["log", "-1", "--format=%B", named]), "the second half\n\nWhy it is.\n\nFixes #42\n\nCo-Authored-By: Claude <noreply@example.invalid>");
+  assert.equal(s.git(["rev-parse", `${named}^{tree}`]), s.git(["rev-parse", `${tip}^{tree}`]), "the same tree");
+  assert.equal(s.git(["rev-parse", `${named}^`]), first, "the same parent: only the last commit changes");
+  const format = "%an %ae %ad";
+  assert.equal(s.git(["log", "-1", `--format=${format}`, "--date=raw", named]), s.git(["log", "-1", `--format=${format}`, "--date=raw", tip]), "the same author and date");
+  assert.equal(s.git(["log", "-1", "--format=%cn", named]), "Landing");
+  assert.equal(namingIssue(git, base, named, 42), named, "named once");
+  const part = s.commit({ "src/c.txt": "c\n" }, "a slice\n\nPart of #43");
+  assert.equal(namingIssue(git, base, part, 43), part, "a slice that leaves its task open lands as it is");
+  assert.equal(namingIssue(git, first, part, 43), part, "named by any commit of the change");
+  assert.match(s.git(["log", "-1", "--format=%B", namingIssue(git, named, part, 44)]), /^a slice\n\nPart of #43\n\nFixes #44$/, "another issue named is not this one");
 });

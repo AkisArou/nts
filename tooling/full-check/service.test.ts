@@ -12,13 +12,14 @@ import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type Fak
 import {QUIET_ASK_SECONDS} from "./bench.ts";
 import type { Recorder } from "./records.ts";
 import {cycle, followVerified, parseOptions, partSteps, RECORDER_LOG, recordPending, type Effects} from "./service.ts";
+import {reopenIssue, type Gh} from "./revert.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
 
-type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[] };
+type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[] };
 
-function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; quiet?: Effects["quiet"]; prunePool?: Effects["prunePool"] } = {}): Harness {
-  const lines: string[] = [];
+function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; quiet?: Effects["quiet"]; prunePool?: Effects["prunePool"]; issue?: Effects["issue"] } = {}): Harness {
+  const lines: string[] = [], told: { n: number; comment: string }[] = [];
   const queue = stubQueue();
   return {
     layout: repo.layout,
@@ -40,11 +41,13 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
       const r = repo.git.try(["push", "-q", "origin", `${commit}:refs/heads/verified`]);
       return { ok: r.status === 0, line: r.status === 0 ? `pushed ${commit}` : r.stderr };
     },
+    issue: (n, comment) => { told.push({ n, comment }); return options.issue?.(n, comment) ?? { ok: true, line: `issue #${n} is open again` }; },
     admit: () => {},
     now: () => options.now ?? new Date(2026, 10, 6, 12, 0),
     log: line => lines.push(line),
     schedule: options.schedule ?? { wide: ["10:00"], nightly: "03:00" },
     lines,
+    told,
   };
 }
 
@@ -120,7 +123,7 @@ test("a red core is searched, and the first red commit's revert is made on main 
   assert.equal(repo.git.commit(`refs/full-check/reverts/${b.slice(0, 12)}`), revert, "kept reachable until it lands");
   assertMessage(repo.git, revert, /^Revert "b: breaks typescript-c"/, new RegExp(`This reverts commit ${b}\\.`), /typescript-c/, new RegExp(`Full-check-run: ${state.core.last_run!.run}`));
   assert.equal(repo.git.run(["ls-tree", "-r", "--name-only", revert, "--", "RED/"]), "", "the revert takes the culprit's change out");
-  assert.ok(fx.lines.some(line => line.startsWith("TASK for docs/plan.md: - Land ") && line.includes(b.slice(0, 12)) && line.includes("typescript-c")), fx.lines.join("\n"));
+  assert.ok(fx.lines.some(line => line.startsWith("TASK for an issue: - Land ") && line.includes(b.slice(0, 12)) && line.includes("typescript-c")), fx.lines.join("\n"));
   // The tip and the last green commit measured again, two bisection probes
   // for four candidates, and the culprit measured again.
   const searched = gate.measured.filter(m => m.label === "core-probe").length;
@@ -554,4 +557,46 @@ test("the hourly count removes what it found removable, then counts again", asyn
   assert.equal(counted, 2, "what is left is counted after the sweep");
   assert.equal(readState(repo.layout.state).count?.verdict, "PASS");
   assert.ok(fx.lines.includes(`swept ~/.cache/nts-messages/run-stopped: ${left.why}`), fx.lines.join("\n"));
+});
+
+test("a culprit that names its issue reopens it, with the red steps, their logs and the revert; one that names none, or one gh cannot tell, is a task line", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  const fx = harness(repo, gate);
+  repo.commit({ "src.txt": "base\n" }, "good");
+  await cycle(fx);
+  repo.commit({ "a.txt": "a\n" }, "a: harmless");
+  const b = repo.commit({ "RED/typescript-c": "", "b.txt": "b\n" }, "b: breaks typescript-c\n\nFixes #42");
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  const revert = state.culprits[0]!.revert!;
+  assert.equal(state.culprits[0]!.commit, b);
+  assert.deepEqual(fx.told.map(one => one.n), [42]);
+  const comment = fx.told[0]!.comment, run = state.core.last_run!.run;
+  assert.match(comment, new RegExp(`^The full check found that ${b.slice(0, 12)} \\("b: breaks typescript-c"\\) turned typescript-c red in its core run`));
+  assert.ok(comment.includes(`\`${run}/typescript-c.log\``), comment);
+  assert.ok(comment.includes(`Its revert, ${revert.slice(0, 12)}, is queued first`), comment);
+  assert.ok(fx.lines.includes("issue #42 is open again"), fx.lines.join("\n"));
+  assert.ok(!fx.lines.some(line => line.startsWith("TASK")), "the reopened issue is the task");
+
+  // gh cannot tell the issue: the task line is kept, and says why.
+  const failing = repository(t), down = harness(failing, fakeGate(failing), { issue: n => ({ ok: false, line: `issue #${n} was not told: no network` }) });
+  failing.commit({ "src.txt": "base\n" }, "good");
+  await cycle(down);
+  failing.commit({ "RED/typescript-c": "" }, "breaks it\n\nPart of #7");
+  await cycle(down);
+  assert.deepEqual(down.told.map(one => one.n), [7]);
+  assert.ok(down.lines.includes("issue #7 was not told: no network"));
+  assert.ok(down.lines.some(line => line.startsWith("TASK for an issue: - Land ")), down.lines.join("\n"));
+});
+
+test("an issue is told before it is reopened, and a failure of either is said", () => {
+  const calls: { args: readonly string[]; input?: string }[] = [];
+  const gh = (fail?: string): Gh => (args, input) => { calls.push({ args, input }); return args[1] === fail ? { status: 1, stderr: `${fail} refused` } : { status: 0, stderr: "" }; };
+  assert.deepEqual(reopenIssue(gh(), 42, "what went red"), { ok: true, line: "issue #42 is open again, with the red steps, their logs and the revert" });
+  assert.deepEqual(calls, [{ args: ["issue", "comment", "42", "--body-file", "-"], input: "what went red" }, { args: ["issue", "reopen", "42"], input: undefined }]);
+  calls.length = 0;
+  assert.deepEqual(reopenIssue(gh("comment"), 42, "x"), { ok: false, line: "issue #42 was not told: comment refused" });
+  assert.equal(calls.length, 1, "an issue that was not told is not reopened");
+  assert.deepEqual(reopenIssue(gh("reopen"), 42, "x"), { ok: false, line: "issue #42 was told, but not reopened: reopen refused" });
 });
