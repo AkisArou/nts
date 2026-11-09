@@ -1566,3 +1566,17 @@ named by no task in `docs/plan.md`. A link is never followed and nothing
 outside `~/.cache` is touched. What stays report-only: folders no rule keeps,
 pins anyone else built (a peer's evidence), the node test roots, branches and
 worktrees.
+
+## Hand-run gate logs are swept (11-09)
+
+The user approved a third kind for the full check's hourly sweep: the logs of
+gates run by hand (`~/.cache/nts-gate/runs`, from `all.sh` and `pinned.sh`)
+once they are past three days. The landing and full checks prune their own
+runs; a gate run by hand has no service to prune it, so its logs stayed until
+someone removed them, and the count was red each time one passed three days
+(the first on 11-09, a run of 11-06).
+
+A run's folder goes when it is past three days and nothing inside it changed
+for those three days, so a run still writing is never removed; `latest`, the
+link to the newest run, is never followed. Everything else the count reports
+stays report-only.

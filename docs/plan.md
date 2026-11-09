@@ -311,8 +311,7 @@ ids, kept so the records that cite them still resolve.
   stopped runs had left 167 GB): `conformance262.ts` in #193, then
   `outcomes-check.ts` and the rest; it includes the per-case temp folders
   tests leak (#197). Tests already keep theirs there through
-  `tooling/gate/test-scratch.ts`. A gate run by hand keeps three days of its logs
-  (`~/.cache/nts-gate/runs`), as the landing and full checks keep theirs.
+  `tooling/gate/test-scratch.ts`.
 - Check benchmark identities at landing: a fast step that computes every
   case's identity and the compile key (`benchmarkIdentities`, `compileKey` in
   `tooling/bench`) and compares them with the recorded compile rows, compiling

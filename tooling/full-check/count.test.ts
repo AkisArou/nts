@@ -246,7 +246,7 @@ test("keep.json is well formed, and a writer is matched by any of the ways the t
   assert.throws(() => readKeep(bad), /nts-x\/y has an unknown kind tidy/);
 });
 
-test("the count lists the two kinds of leftover the full check removes itself, and only those", t => {
+test("the count lists the three kinds of leftover the full check removes itself, and only those", t => {
   const cache = cacheFixture(t), at = (path: string, ageDays: number) => { const when = new Date(NOW - ageDays * DAY); utimesSync(join(cache, path), when, when); };
   const pin = (sha: string, by: string) => {
     mkdirSync(join(cache, "nts-pins", sha));
@@ -260,11 +260,18 @@ test("the count lists the two kinds of leftover the full check removes itself, a
   mkdirSync(join(cache, "nts-messages/still-written"));
   writeFileSync(join(cache, "nts-messages/still-written/log"), "now\n");
   at("nts-messages/still-written", 2);
+  // A hand-run gate's logs past three days, still written inside: kept. The
+  // services' own old runs (nts-landing, nts-full-check) stay lines only.
+  mkdirSync(join(cache, "nts-gate/runs/still-writing"));
+  writeFileSync(join(cache, "nts-gate/runs/still-writing/gate.log"), "now\n");
+  at("nts-gate/runs/still-writing", 4);
   const result = count(input(t, { cache, plan: PLAN.replace("#3e8c1cab3", "#3e8c1cab3 (`3e8c1cab3000`)") }), KEEP);
   assert.deepEqual(result.removable.map(one => one.path.slice(cache.length + 1)).sort(), [
-    `nts-jvm-verifies/failed-past-its-week`, `nts-messages/run-stopped`, `nts-pins/${"d".repeat(12)}`, `nts/outcomes/12345`]);
+    `nts-gate/runs/last-week`, `nts-jvm-verifies/failed-past-its-week`, `nts-messages/run-stopped`, `nts-pins/${"d".repeat(12)}`, `nts/outcomes/12345`]);
   assert.ok(result.red.some(line => line.includes(`nts-pins/${"e".repeat(12)}: a pin main does not use`)), "a peer's pin is still named");
+  assert.ok(result.red.some(line => line.includes("nts-landing/runs: 1 folder(s)")), "a service's old run is still named");
   assert.match(result.removable.find(one => one.path.endsWith("run-stopped"))!.why, /^left by tooling\/messages\.ts 2\.0 days ago$/);
+  assert.match(result.removable.find(one => one.path.endsWith("runs/last-week"))!.why, /^logs of gates run by hand, 7\.0 days old; logs are kept three days$/);
 });
 
 test("a name that is not UTF-8 is walked by its bytes: the sweep removes its folder, and a fresh one keeps its folder unsettled", t => {

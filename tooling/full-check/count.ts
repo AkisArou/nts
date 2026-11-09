@@ -3,9 +3,10 @@
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
 // keeps, or a node test root a stopped runner left (n<pid in base 36>). Each
 // red line names the item and why. It reports; of what it reports, the full
-// check removes two kinds itself (sweep below): what a stopped run left in a
-// tool's scratch root past that root's age, and the full check's own pins of
-// commits that are neither main nor verified. Everything else stays a line.
+// check removes three kinds itself (sweep below): what a stopped run left in a
+// tool's scratch root past that root's age, the full check's own pins of
+// commits that are neither main nor verified, and the logs of gates run by
+// hand past three days. Everything else stays a line.
 //
 //   node tooling/full-check/count.ts          the lines, exit 0 green, 1 red, 2 not counted
 //
@@ -147,7 +148,7 @@ function folders(dir: string): Entry[] {
  *   kept     nothing inside;
  *   pool     only pool slots, ~/.cache/nts-pool/<n>;
  *   runs     a service's folder: its runs/ is a folder of logs;
- *   logs     a folder of runs' logs, each kept three days;
+ *   logs     a folder of runs' logs no service prunes, each kept three days, then swept;
  *   pins     pin.ts's tree, target and lock, and the pins of main and verified;
  *   scratch  a tool's scratch root: what a run leaves for a day (or `days`) is a leftover;
  *   folders  each folder in it kept by a rule of its own.
@@ -231,6 +232,13 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
       const logs = keep.kind === "runs" ? join(entry.path, "runs") : entry.path;
       const old = folders(logs).filter(run => run.name !== "latest" && context.now - run.mtimeMs > 3 * DAY);
       if (old.length) lines.push(`${display(logs, context)}: ${aged(old, context)} of ${keep.who}; logs are kept three days`);
+      // A service prunes its own runs. Logs no service prunes go once nothing
+      // inside them changed for those three days: a run may still be writing.
+      if (keep.kind === "logs") {
+        for (const run of old) {
+          if (settled(run.path, context.now - 3 * DAY)) removable.push({ path: run.path, why: `logs of ${keep.who}, ${days(context.now - run.mtimeMs)} days old; logs are kept three days` });
+        }
+      }
       break;
     }
     case "pins": {

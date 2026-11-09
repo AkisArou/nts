@@ -417,7 +417,7 @@ function runCount(fx: Effects, state: State): void {
   let result: CountResult;
   try {
     result = fx.count();
-    // The two kinds of leftover the full check removes itself; what is left is
+    // The three kinds of leftover the full check removes itself; what is left is
     // counted again, so the count says what remains.
     if (result.removable.length) {
       for (const line of fx.sweep(result.removable)) fx.log(line);
