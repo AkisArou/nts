@@ -1,7 +1,7 @@
 import { waitFor, testProcessResult, TEST_HANG_MS } from "../../gate/test-wait.ts";
 // Fake compiler input for the real resident worker pool's kernel controls.
 import { createInterface } from "node:readline";
-import { closeSync, constants, existsSync, openSync, readFileSync, readSync, watch, writeFileSync } from "node:fs";
+import { closeSync, constants, existsSync, openSync, readdirSync, readFileSync, readSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileSync, inResidentWorker } from "../worker-memory.ts";
 if (!inResidentWorker()) throw new Error("fixture outside resident scope");
@@ -76,6 +76,13 @@ for await (const path of createInterface({ input: process.stdin })) {
       } finally { closeSync(release); }
     }
   }
+  if (path.startsWith("gate-")) {
+    // Says it runs, and ends only once the test lets it.
+    writeFileSync(join(directory, `ready-${path}`), "ready");
+    await deadlineWait(join(directory, `go-${path}`));
+  }
   if (path === "lost") process.exit(17);
-  process.stdout.write(`${JSON.stringify({ path, bucket: "strict-pass", pid: process.pid, held: held?.length ?? 0 })}\n`);
+  // What waits in the job's memory ledger as this case starts.
+  const ledger = path === "probe-ledger" ? { waitingInLedger: readdirSync(join(process.env.NTS_MEMORY_LEDGER!, "waiting")).filter(name => name.endsWith(".json")).length } : {};
+  process.stdout.write(`${JSON.stringify({ path, bucket: "strict-pass", pid: process.pid, held: held?.length ?? 0, ...ledger })}\n`);
 }

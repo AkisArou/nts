@@ -1,6 +1,6 @@
-// Memory admission for work that starts one case at a time: the gate's token
-// pool (elastic steps take a token per case) and the conformance runner's
-// feeder (a worker gets its next path only when it asks).
+// The census feed, which gives a worker its next case only when it asks; a run
+// temporary's disk admission; and the host-memory admission the tools that do
+// not yet reserve in the memory ledger (memory-ledger.ts) still hold.
 //
 // **Below 12 GB nothing new starts; at 14 GB it starts again; what is running
 // is never stopped.** A case already running finishes on its own timeout. A
@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 
 export const HOLD_BELOW_GB = 12;
@@ -164,22 +165,41 @@ export type FedWorker = { write: (path: string, release: () => void) => void; en
 const untokened: CaseToken = () => Promise.resolve(() => {});
 const never = new AbortController().signal;
 
+export type FeedOptions = {
+  /** Each case's gate token (`CaseToken`); none outside a gate. */
+  token?: CaseToken;
+  /**
+   * Whether the job's memory reservation is outranked now (memory-ledger.ts),
+   * asked before each case: while it is, no new case starts.
+   */
+  outranked?: () => boolean;
+  /** How often a feed held by `outranked` looks again. */
+  everyMs?: number;
+};
+
 /**
- * The conformance runner's feed: one queue of paths shared by its workers,
- * held by `admission`. `feed(worker)` hands that worker its next path when
- * memory allows, or closes its input when no path is left -- at once, since a
- * finished worker waits for nothing. A worker that exits while its feed waits
- * is never written to, and a path is taken only when it is written.
+ * The census feed: one queue of paths shared by a job's workers.
+ * `feed(worker)` hands that worker its next path, or closes its input when no
+ * path is left -- at once, since a finished worker waits for nothing. A
+ * worker that exits while its feed waits is never written to, and a path is
+ * taken only when it is written.
+ *
+ * **Its memory is the job's reservation**, held for the whole job, so no case
+ * asks the machine for memory of its own. **While that reservation is
+ * outranked** -- a request of higher priority waits in the ledger -- no new
+ * case starts: the job gives way case by case as its running ones end, and
+ * never stops one, so a landing check never waits for the rest of an agent's
+ * census.
  *
  * **Inside a gate each case holds one of its tokens**, from the write until
  * the worker returns it, so the step's share of the machine follows its work
- * the way an elastic step's does. No token is held through the memory wait: a
- * worker waits for admission first, then reserves its path and asks for the
- * token, then reads admission again before it writes. A reserved path whose
- * worker stops while it waits, or that memory turns away, goes back to the
+ * the way an elastic step's does. No token is held while the feed gives way:
+ * a worker reserves its path and asks for the token only when the job is not
+ * outranked, and looks again before it writes. A reserved path whose worker
+ * stops while it waits, or that the job gives way with, goes back to the
  * queue, so no worker waits for a token while no path is left for it.
  */
-export function createFeed(paths: readonly string[], admission: Admission, everyMs = 2000, token: CaseToken = untokened) {
+export function createFeed(paths: readonly string[], { token = untokened, outranked = () => false, everyMs = 1000 }: FeedOptions = {}) {
   let next = 0;
   let written = 0;
   const returned: number[] = [];
@@ -192,10 +212,10 @@ export function createFeed(paths: readonly string[], admission: Admission, every
       for (;;) {
         if (worker.exited()) return;
         if (!remaining()) return worker.end();
-        const admitted = await admission.ready(everyMs, () => worker.exited() || !remaining());
-        if (worker.exited()) return;
-        // Another worker may have taken the last path while this one waited.
-        if (!admitted || !remaining()) return worker.end();
+        if (outranked()) {
+          await pause(everyMs, undefined, { signal: worker.signal }).catch(() => {});
+          continue;
+        }
         const reserved = returned.pop() ?? next++;
         const release = await token(paths[reserved]!, worker.signal ?? never);
         if (release === null || worker.exited()) {
@@ -204,8 +224,8 @@ export function createFeed(paths: readonly string[], admission: Admission, every
           if (worker.exited()) return;
           continue;
         }
-        // Memory may have fallen while the token was awaited.
-        if (!admission.open()) {
+        // Outranked while the token was awaited: the case gives way, with its token.
+        if (outranked()) {
           release();
           returned.push(reserved);
           continue;

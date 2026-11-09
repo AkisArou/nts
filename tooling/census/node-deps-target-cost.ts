@@ -6,6 +6,8 @@ import {dirname,join,resolve} from 'node:path';
 import {getPriority,homedir} from 'node:os';
 import {spawnCounted,counterProblem,COUNTER_SCOPE} from '../gate/cputime.mjs';
 import {needed,forbidden} from '../gate/node-deps-elf.ts';
+import {reserveJob} from '../gate/memory-ledger.ts';
+import {stepMemoryBytes} from '../gate/step-table.mjs';
 
 const tree=resolve(import.meta.dirname,'../..');
 function affinityList(text) {
@@ -92,6 +94,9 @@ const plans=linux?[
 ];
 // Refuse absent inspection/emulation prerequisites before the first counted exec.
 for(const program of ['file',...(linux?['readelf','/usr/bin/qemu-aarch64-static']:['llvm-objdump'])])run(program,['--version'],process.env);
+// Building dependency archives and programs is the addons step's work: its
+// memory, reserved once for every measured build.
+await reserveJob({bytes:stepMemoryBytes('addons'),what:`node dependency target costs (${plans.length} targets)`});
 const rows=[];
 function inventory(directory) {
  const result={};
@@ -102,8 +107,6 @@ function inventory(directory) {
 }
 function run(program,args,env) {const r=spawnSync(program,args,{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout;}
 async function measure(name,args,env) {
- while(Number(/^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync('/proc/meminfo','utf8'))?.[1])<14*1024**2)
-  await new Promise(resolve=>setTimeout(resolve,10000));
  const prefix=join(out,name),stdout=openSync(prefix+'.stdout','w'),stderr=openSync(prefix+'.stderr','w');
  const start=new Date().toISOString(),load=readFileSync('/proc/loadavg','utf8').trim(),clock=performance.now();
  const {measurement}=spawnCounted('/usr/bin/time',['-v','-o',prefix+'.rusage','--',nts,...args],{cwd:tree,env,stdio:['ignore',stdout,stderr],counterFile:prefix+'.perf',timeoutMs:900000});

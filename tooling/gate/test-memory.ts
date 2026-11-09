@@ -17,3 +17,29 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
   writeFileSync(meminfo, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\n`);
   return { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: join(dir, "ledger") };
 }
+
+type Reading = Parameters<typeof ownMemory>[1];
+// What a test's own environment may carry from a gate step it runs in -- the
+// step's reservation, and the run's priority -- which must not reach a tool
+// the test has given memory of its own.
+const HANDED = ["NTS_MEMORY_RESERVATION", "NTS_MEMORY_PRIORITY"];
+
+/** A copy of `env` without what a gate step hands the test it runs. */
+export function withoutHanded(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const own: NodeJS.ProcessEnv = { ...env };
+  for (const name of HANDED) delete own[name];
+  return own;
+}
+
+/** `env` for a tool a test starts, with its own reading and ledger under `dir` in place of any reservation the test runs inside. */
+export function ownMemoryEnv(dir: string, env: NodeJS.ProcessEnv = process.env, reading?: Reading): NodeJS.ProcessEnv {
+  return withoutHanded({ ...env, ...ownMemory(dir, reading) });
+}
+
+/** The same for this test process, which runs a job (the census pool) itself: its own reading and ledger under `dir`. */
+export function useOwnMemory(dir: string, reading?: Reading): OwnMemory {
+  for (const name of HANDED) delete process.env[name];
+  const memory = ownMemory(dir, reading);
+  Object.assign(process.env, memory);
+  return memory;
+}

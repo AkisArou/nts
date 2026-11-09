@@ -14,6 +14,7 @@ import { serializeTypeScriptRecord,TYPESCRIPT_OBSERVATIONS_VERSION,type TypeScri
 import { OUTPUT_PREFIX_VERSION } from '../conformance/output-prefix.ts';
 import { provenanceOf } from '../conformance/pin.ts';
 import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import { ownMemoryEnv } from '../gate/test-memory.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 
@@ -45,7 +46,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     writeFileSync(rows,JSON.stringify({fingerprint,under:metadata.under,harness:metadata.harness,output_prefix:OUTPUT_PREFIX_VERSION,
       observations:TYPESCRIPT_OBSERVATIONS_VERSION,oracleIdentity:typescriptOracleIdentity()})+'\n'+(observed?JSON.stringify({path:target,...observed})+'\n':''));
     const result=spawnSync(process.execPath,['tooling/census/conformance262.ts','--suite','typescript',mode,record,'--sample','1','--jobs','1','--rows',rows,'--resume','--json',report],
-      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:{...process.env,NTS_BIN:binary,NTS_CENSUS_DIR:join(scratch,'run'),NTS_GATE_STEP:'sampling-fixture'}});
+      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),{...process.env,NTS_BIN:binary,NTS_CENSUS_DIR:join(scratch,'run'),NTS_GATE_STEP:'sampling-fixture'})});
     return {...result,json:existsSync(report)?JSON.parse(readFileSync(report,'utf8')):undefined};
   };
   await t.test('a recorded case outside the sample is not run or missing',()=>{
@@ -79,7 +80,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     rmSync(report,{force:true});
     writeFileSync(rows,JSON.stringify({fingerprint,under:'test/language',harness:harnessHashOf('js'),output_prefix:OUTPUT_PREFIX_VERSION})+'\n'+JSON.stringify({path:paths[0],bucket:'strict-pass'})+'\n');
     const result=spawnSync(process.execPath,['tooling/census/conformance262.ts','--recorded',record,'--sample','1','--jobs','1','--rows',rows,'--resume','--json',report],
-      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:{...process.env,NTS_BIN:binary,NTS_TEST262_PROTOCOL:protocol,NTS_CENSUS_DIR:join(scratch,'js-run'),NTS_GATE_STEP:'sampling-fixture'}});
+      {cwd:fixture,encoding:'utf8',maxBuffer:16*1024*1024,env:ownMemoryEnv(join(scratch,'memory'),{...process.env,NTS_BIN:binary,NTS_TEST262_PROTOCOL:protocol,NTS_CENSUS_DIR:join(scratch,'js-run'),NTS_GATE_STEP:'sampling-fixture'})});
     assert.equal(result.status,0,result.stdout+result.stderr);
     const json=JSON.parse(readFileSync(report,'utf8'));assert.equal(json.population,1);assert.deepEqual(json.comparison.MISSING,[]);
   });

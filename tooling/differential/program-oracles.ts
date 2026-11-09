@@ -15,7 +15,6 @@ import {OUTCOMES,outcomeFixtures,runMode,materialise} from '../conformance/outco
 import {ownCensusScratch} from '../census/census-scratch.ts';
 import {memoryRun,closeMemoryRun} from '../census/worker-memory.ts';
 import {runMemoryWorkers} from '../census/worker-pool.ts';
-import {Admission} from '../gate/admission.ts';
 import {ToolingInstrumentError,publishToolingFailure} from '../gate/step-result.ts';
 
 export const PROGRAM_EMIT_PROJECTS=Object.freeze([
@@ -97,7 +96,7 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
     let done=0,budgets=0;
     const report=(message:string)=>process.stderr.write('  '+message+'\n');
     await runMemoryWorkers({paths,jobs:Math.min(jobs,paths.length),memory:memoryRun(),workerBytes:1536*1024**2,recycleAfterCases:16,
-      admission:new Admission({report}),token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
+      what:'program oracle references',token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
       args:index=>[join(dirname(fileURLToPath(import.meta.url)),'program-oracle-worker.ts'),join(scratch,'w'+index),join(directory,'executables')],report,
       onRow:(row:{path:string;bucket:string;why?:string;answer?:ProgramAnswer;capture?:ProgramCapture})=>{
         if(row.bucket!=='oracle-reference'||!row.answer||!row.capture)errors.push(row.path+': '+(row.why??row.bucket));

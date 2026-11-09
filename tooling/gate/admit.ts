@@ -1,6 +1,8 @@
-// Run a command once the machine's memory ledger admits it:
+// Run a command once the machine's memory ledger admits it, or say what the
+// ledger holds:
 //
 //   node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]
+//   node tooling/gate/admit.ts --status [--json]
 //
 // It waits its turn in the ledger (./memory-ledger.ts), printing a line when
 // it starts waiting and one when it is admitted, and then *becomes* the
@@ -13,17 +15,25 @@
 // exit status is the command's own.
 //
 // Started inside another reservation (NTS_MEMORY_RESERVATION, set by the
-// handle of whoever reserved), it runs at once inside that one.
+// handle of whoever reserved), it runs at once inside that one. Without
+// --priority, its priority is NTS_MEMORY_PRIORITY's, else an agent's.
 //
 // Exit status: the command's; 125 when admit itself fails (usage, the
 // ledger, a size that can never fit), 126 when the command cannot be run, 127
 // when it is not found. A SIGINT, SIGTERM or SIGHUP while it waits withdraws
 // its request, and admit then ends by that signal.
+//
+// `--status` prints the reservations admitted (what each is for, its
+// priority, what it reserved and uses now, its owner and since when) and the
+// queue in its order (what each request asks, and how long it has waited);
+// `--json`, the same as `check.ts status --json`'s envelope: version, kind
+// ("memory") and at, numbers as numbers.
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseBytes, PRIORITIES, reserve, type Priority } from "./memory-ledger.ts";
+import { gib, ledgerStatus, parseBytes, PRIORITIES, priorityOf, reserve, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 
-const USAGE = "usage: node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]";
+const USAGE = "usage: node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+  + "       node tooling/gate/admit.ts --status [--json]";
 
 class Refusal extends Error {
   status: number;
@@ -45,7 +55,7 @@ type Options = { bytes: number; priority: Priority; what: string; command: strin
 
 function parse(argv: readonly string[]): Options {
   let bytes: number | undefined, what: string | undefined;
-  let priority: Priority = "agent";
+  let priority: Priority | undefined;
   let at = 0;
   for (; at < argv.length && argv[at] !== "--"; at++) {
     const arg = argv[at]!, equals = arg.startsWith("--") ? arg.indexOf("=") : -1;
@@ -67,6 +77,7 @@ function parse(argv: readonly string[]): Options {
   const [command, ...args] = argv.slice(at + 1);
   if (bytes === undefined) throw new Refusal("--bytes is required", 125, true);
   if (command === undefined || command === "") throw new Refusal("no command after --", 125, true);
+  try { priority ??= priorityOf(process.env); } catch (error) { throw new Refusal((error as Error).message, 125); }
   return { bytes, priority, what: what ?? [command, ...args].join(" "), command, args };
 }
 
@@ -91,7 +102,34 @@ function locate(command: string): string {
   throw seen ? new Refusal(`${command}: not executable`, 126) : new Refusal(`${command}: command not found`, 127);
 }
 
+/** The ledger's state as a person reads it. */
+function describeStatus(status: LedgerStatus): string {
+  const { machine } = status;
+  const clock = (iso: string) => iso.slice(11, 19);
+  const lines = [
+    `memory ledger ${status.ledger} at ${status.at}`,
+    `  machine: ${gib(machine.total_bytes)}, ${gib(machine.available_bytes)} available; ${gib(status.pending_bytes)} promised to running jobs, `
+      + `${gib(machine.floor_bytes)} kept for the system; room for ${gib(Math.max(0, status.room_bytes))}`,
+    `  admitted (${status.admitted.length})${status.admitted.length ? ":" : ": none"}`,
+    ...status.admitted.map(entry => `    ${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
+      + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`),
+    `  waiting (${status.waiting.length})${status.waiting.length ? ":" : ": none"}`,
+    ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(10)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
+      + `waited ${Math.round(entry.waited_s)} s  pid ${entry.waiter_pid}${entry.live ? "" : "  (gone)"}  ${entry.what}`),
+  ];
+  return lines.join("\n") + "\n";
+}
+
+function status(argv: readonly string[]): void {
+  const extra = argv.filter(arg => arg !== "--status" && arg !== "--json");
+  if (extra.length) throw new Refusal(`--status takes only --json, not ${extra.join(" ")}`, 125, true);
+  const state = ledgerStatus();
+  // To fd 1 itself, as `say` writes fd 2: a status reader may be a pipe.
+  writeSync(1, argv.includes("--json") ? `${JSON.stringify(state, null, 2)}\n` : describeStatus(state));
+}
+
 async function main(argv: readonly string[]): Promise<void> {
+  if (argv[0] === "--status") return status(argv);
   const options = parse(argv);
   const file = locate(options.command);
   const execve = process.execve?.bind(process);

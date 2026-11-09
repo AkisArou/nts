@@ -8,6 +8,7 @@ import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {test} from "node:test";
 import {COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, replaceCalibrationModules, compileArm, compileCommand, discoverCompileTimeFixtures} from "./compile-counter.ts";
 import {testScratch} from "./test-scratch.ts";
+import {ownMemoryEnv} from "./test-memory.ts";
 
 test("compile-time fixture discovery requires a config and includes each configured directory", t => {
   const root = testScratch(t, "counter-discovery");
@@ -117,7 +118,7 @@ test("selected publication refuses absent modules, drift, incomplete repeats and
 test("the recorder rejects an unrecorded selection before creating a run", t => {
   const root = testScratch(t, "counter-selection"), out = join(root, "not-created");
   const result = spawnTest(process.execPath, [fileURLToPath(new URL("compile-counter-calibrate.ts", import.meta.url)),
-    "--module", "runtime/node/not-a-recorded-module", "--run-dir", out], { encoding: "utf8", env: { ...process.env, NTS_BIN: process.execPath } });
+    "--module", "runtime/node/not-a-recorded-module", "--run-dir", out], { encoding: "utf8", env: ownMemoryEnv(join(root, "memory"), { ...process.env, NTS_BIN: process.execPath }) });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /module is not in the baseline table/);
   assert.equal(existsSync(out), false);

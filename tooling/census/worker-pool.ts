@@ -6,10 +6,17 @@
 // dispatch until it is answered, requeued or lost, or its worker fails; a
 // worker that stops while it waits for one cancels the wait. The workers
 // themselves never ask: what they run is already counted.
+//
+// The pool's memory is the job's reservation in the machine's memory ledger
+// (memory-ledger.ts's `reserveJob`): inside a gate step, the run's; alone, its
+// own, of the resident run's aggregate budget, which the kernel enforces
+// anyway. No case asks for memory of its own, and while the reservation is
+// outranked no new case starts.
 import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { Admission, createFeed, type CaseToken } from "../gate/admission.ts";
+import { createFeed, type CaseToken } from "../gate/admission.ts";
+import { reserveJob, type Reservation } from "../gate/memory-ledger.ts";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
 
 export type ResidentPoolOptions = {
@@ -21,8 +28,9 @@ export type ResidentPoolOptions = {
   args: (index: number) => string[];
   onRow: (row: any) => void;
   report?: (message: string) => void;
-  admission: Admission;
   token: CaseToken;
+  /** What the job's memory reservation is for, when the pool has to make one. */
+  what?: string;
   /** Reclaim a warm producer's heaps after this many completed cases. */
   recycleAfterCases?: number;
 };
@@ -30,10 +38,13 @@ export type ResidentPoolOptions = {
 type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
-async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission, token, recycleAfterCases }: ResidentPoolOptions,
-  work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, token, recycleAfterCases }: ResidentPoolOptions,
+  work: Dispatch[], isolated: boolean, reservation: Reservation, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
-  const queue = createFeed(work.map((_, index) => String(index)), admission, undefined, (entry, signal) => token(work[Number(entry)]!.path, signal));
+  // Asked before each case, which takes far longer than the ledger's answer.
+  const queue = createFeed(work.map((_, index) => String(index)), {
+    token: (entry, signal) => token(work[Number(entry)]!.path, signal), outranked: () => reservation.outranked(),
+  });
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
@@ -202,19 +213,25 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
     options.memory.close();
     throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive completed-case count');
   }
-  if (!(options.admission instanceof Admission)) {
-    options.memory.close();
-    throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit admission policy");
-  }
   if (typeof options.token !== "function") {
     options.memory.close();
     throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit token policy");
   }
-  const { paths, jobs, memory, report = () => {} } = options;
+  const { paths, memory, report = () => {} } = options;
   let budgetBytes: number;
   try { budgetBytes = memory.effectiveBudgetBytes(); }
   catch (error) { memory.close(); throw error; }
-  const pressure = await round(options, paths.map((path, ordinal) => ({ path, ordinal })), false);
+  let reservation: Reservation;
+  try { reservation = await reserveJob({ bytes: budgetBytes, what: options.what ?? `resident workers for ${paths.length} case(s)` }, { report }); }
+  catch (error) { memory.close(); throw error; }
+  try { return await rounds(options, budgetBytes, reservation); }
+  // A reservation this pool made ends with it; one it ran inside is its job's.
+  finally { if (!reservation.inherited) reservation.release(); }
+}
+
+async function rounds(options: ResidentPoolOptions, budgetBytes: number, reservation: Reservation): Promise<ResidentPoolSummary> {
+  const { paths, jobs, report = () => {} } = options;
+  const pressure = await round(options, paths.map((path, ordinal) => ({ path, ordinal })), false, reservation);
   const replays = pressure.filter((p): p is Pressure & { dispatch: Dispatch } => p.dispatch !== undefined);
   const summary: ResidentPoolSummary = {
     pressureRequeues: replays.length,
@@ -225,7 +242,7 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   };
   for (const { dispatch } of replays.sort((a, b) => a.dispatch.ordinal - b.dispatch.ordinal)) {
     const isolated = new MemoryRun({ budgetBytes });
-    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, jobs + summary.isolatedReplays);
+    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, reservation, jobs + summary.isolatedReplays);
     summary.isolatedReplays++;
   }
   report(`resident pressure requeues: ${summary.pressureRequeues}; idle restarts ${summary.idlePressureRestarts}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}`);

@@ -9,6 +9,7 @@ import { spawnTest } from "../gate/test-wait.ts";
 
 import { test } from "node:test";
 import { newTestScratch } from "../gate/test-scratch.ts";
+import { ownMemoryEnv } from "../gate/test-memory.ts";
 
 test("a JavaScript checkpoint from before prefix validation cannot be resumed", () => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -38,7 +39,7 @@ test("a JavaScript checkpoint from before prefix validation cannot be resumed", 
       const run = spawnTest(process.execPath, ["tooling/census/conformance262.ts", "--under", "test/language",
         "--jobs", "1", "--recorded", population, "--rows", rows, "--resume", "--json", report], {
         cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, NTS_BIN: binary, NTS_TEST262_PROTOCOL: protocol, NTS_CENSUS_DIR: join(scratch, "run") },
+        env: ownMemoryEnv(join(scratch, "memory"), { ...process.env, NTS_BIN: binary, NTS_TEST262_PROTOCOL: protocol, NTS_CENSUS_DIR: join(scratch, "run") }),
       }, "output-prefix checkpoint census result");
       if (version === undefined) {
         assert.equal(run.status, 2, run.stdout + run.stderr);

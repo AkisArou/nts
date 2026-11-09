@@ -149,6 +149,16 @@ export const STEPS = [
 ];
 
 /**
+ * What the gate reserves for a step while it runs, in bytes: its row's `mem`.
+ * A tool doing that step's work outside the gate reserves the same.
+ */
+export function stepMemoryBytes(name) {
+  const row = STEPS.find((step) => step.name === name);
+  if (!row) throw new Error(`no step ${name} in the step table`);
+  return Math.floor(row.mem * 2 ** 30);
+}
+
+/**
  * What is wrong with the table, or null: a stated bound that is not a positive
  * number of seconds, a step that depends on no step, or steps that wait for one
  * another. The runner waits for a step's `needs` and `after` while they are

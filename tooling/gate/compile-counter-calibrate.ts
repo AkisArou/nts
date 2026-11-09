@@ -9,8 +9,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setTimeout as poll } from "node:timers/promises";
-import { Admission } from "./admission.ts";
+import { reserveJob } from "./memory-ledger.ts";
+import { stepMemoryBytes } from "./step-table.mjs";
 import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibrationRecord, replaceCalibrationModules, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
@@ -77,7 +77,10 @@ const measuredEnvironment=measuredCompileEnvironment(process.env);
 const work_settings=compileWorkSettings(measuredEnvironment);
 const tasks = Array.from({ length: 5 }, (_, repeat) => modules.map(module => ({ module, repeat: repeat + 1 }))).flat();
 const rows: (CalibrationRun & { cpu_s: number; instructions: number })[] = [];
-const admission = new Admission({ report: console.log });
+// The compile-time step's work, or compile-time-rc's: that step's memory,
+// reserved once for every repetition.
+await reserveJob({ bytes: stepMemoryBytes(arm === "rc" ? "compile-time-rc" : "compile-time"), what: `compile counter calibration (${arm}, ${tasks.length} compiles)` },
+  { report: console.log });
 let next = 0;
 let failed = false;
 writeFileSync(join(out, "provenance.json"), JSON.stringify({ arm, work_profile: COMPILE_WORK_PROFILE, work_settings, counter_scope: COUNTER_SCOPE, root, commit, nts, sha256,
@@ -86,9 +89,6 @@ writeFileSync(join(out, "provenance.json"), JSON.stringify({ arm, work_profile: 
   scope_note: "all threads and descendants from exec; these module commands have no process descendants; sum raw cpu_core and cpu_atom" }, null, 2) + "\n");
 await Promise.all(Array.from({ length: jobs }, async () => {
   while (!failed && next < tasks.length) {
-    // A referenced timer keeps a standalone recorder alive while admission holds.
-    while (!failed && !admission.open()) await poll(2000);
-    if (failed || next >= tasks.length) return;
     const task = tasks[next++];
     const name = `${task.module.replaceAll("/", "_")}-${task.repeat}`;
     const began = performance.now();

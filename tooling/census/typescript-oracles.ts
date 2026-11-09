@@ -6,7 +6,6 @@ import { dirname,join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
 import { REPOSITORY } from '../differential/oracle-emit.ts';
-import { Admission } from '../gate/admission.ts';
 import { acquireToken } from '../gate/tokens.mjs';
 import { ToolingInstrumentError,publishToolingFailure } from '../gate/step-result.ts';
 import { populationOf } from './project.ts';
@@ -53,7 +52,7 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
     const errors:string[]=[],report=(message:string)=>process.stderr.write('  '+message+'\n');
     if(paths.length)await runMemoryWorkers({
       paths,jobs:Math.min(jobs,paths.length),memory:memoryRun(),workerBytes:Number(process.env.NTS_CENSUS_MEMORY_CAP_KB??6_000_000)*1024,
-      admission:new Admission({report}),token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
+      what:'TypeScript oracle references',token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
       args:index=>[join(dirname(fileURLToPath(import.meta.url)),'attempt262-worker.ts'),join(scratch,'w'+index),'','',REPOSITORY,'0','','c','roots','oracle',inputs],
       report,onRow:(row:{path:string;bucket:string;why?:string;result?:TypeScriptOracleResult;session?:NodeResolutionSession})=>{
         if(row.bucket!=='oracle-reference'||!row.result||!row.session)errors.push(row.path+': '+(row.why??row.bucket));

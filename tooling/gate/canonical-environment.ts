@@ -66,7 +66,7 @@ const EXPERIMENTS = new Set([
   "NTS_BIN", "NTS_SUITE_BIN", "NTS_CHECKERS", "NTS_INTEROP_PROJECTS", "NTS_DOCTEST_CRATES", "NTS_COREDUMPS",
   "NTS_RC_NAIVE", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
   "NTS_KEEP_TEMP", "NTS_TRACE_LOWERING", "NTS_ARRIVALS", "NTS_DIFF_OBJECT_CACHE", "NTS_DIFF_NO_OBJECT_CACHE",
-  "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_MIN_AVAILABLE_GB", "NTS_CENSUS_RUN_MAX_BYTES",
+  "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_RUN_MAX_BYTES",
   // The memory reading admission decides by, and the memory ledger a run
   // queues in (memory-ledger.ts). A test gives its inner runs owned ones, so
   // the host's memory and the machine's queue never decide it; set by a

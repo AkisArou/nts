@@ -32,8 +32,10 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 //    when the change reaches the compiler or a runtime, since reference
 //    counting is decided in core.
 //
-// Every heavy step waits for memory (`admission.ts`, the thresholds AGENTS.md
-// sets) and runs niced, off the measurement CPUs 4-5, in a capped scope.
+// Every heavy step waits its turn in the machine's memory ledger for its
+// scope's MemoryMax, through admit.ts, so it holds that reservation exactly as
+// long as it runs and nothing between steps; and it runs niced, off the
+// measurement CPUs 4-5, in that capped scope.
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { availableParallelism,homedir } from "node:os";
@@ -41,7 +43,7 @@ import {gateEnvironment,sealOracleRun} from "./canonical-environment.ts";
 import {finishRunTemporary} from "./run-temporary.ts";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { memAvailableGB, RESUME_AT_GB } from "./admission.ts";
+import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.ts";
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
 let launchEnvironment:NodeJS.ProcessEnv=process.env;
@@ -105,31 +107,20 @@ function text(command: string, args: readonly string[]): string {
   return result.stdout;
 }
 
-/** Wait until the machine has the memory AGENTS.md asks of a heavy phase. */
-function admitted(what: string): void {
-  let said = false;
-  for (;;) {
-    const free = memAvailableGB();
-    if (free === null || free >= RESUME_AT_GB) {
-      return;
-    }
-    if (!said) {
-      console.log(`  waiting for ${RESUME_AT_GB} GB before ${what} (${free.toFixed(1)} GB free)`);
-      said = true;
-    }
-    spawnSync("sleep", ["30"]);
-  }
-}
+const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
 
-/** A heavy command: admitted, niced, off CPUs 4-5, in a capped scope. */
+/**
+ * A heavy command: admitted by the memory ledger for its scope's MemoryMax
+ * (never more than the machine could hold), niced, off CPUs 4-5, in that
+ * capped scope.
+ */
 function heavy(what: string, memoryMax: string, command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
-  admitted(what);
+  const bytes = Math.min(parseBytes(memoryMax), machineMemory().totalBytes - SYSTEM_FLOOR_BYTES);
   const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), command, ...args];
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
     ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
-  const [program, ...rest] = scoped;
-  return run(program, rest, env);
+  return run(process.execPath, [ADMIT, "--bytes", String(bytes), "--what", `inner loop: ${what}`, "--", ...scoped], env);
 }
 
 function changedPaths(base: string): string[] {

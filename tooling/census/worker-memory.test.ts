@@ -2,15 +2,25 @@ import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/tes
 import assert from "node:assert/strict";
 import { constants, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { after, afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
-import { Admission } from "../gate/admission.ts";
+import { readLedger, reserve } from "../gate/memory-ledger.ts";
+import { useOwnMemory } from "../gate/test-memory.ts";
 import { createTokenPool } from "../gate/tokenpool.mjs";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
+
+// The pools here reserve their memory in a ledger of this file's own, against
+// an 8 GiB reading, never the machine's.
+const memoryDirectory = newTestScratch("resident-run-memory");
+after(() => rmSync(memoryDirectory, { recursive: true, force: true }));
+const ownMemory = useOwnMemory(memoryDirectory, { availableKiB: 8 * 2 ** 20, totalKiB: 32 * 2 ** 20 });
+afterEach(() => {
+  for (const [name, value] of Object.entries(ownMemory)) assert.equal(process.env[name], value, `a pool's release left ${name} as this file set it`);
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fixture = join(HERE, "fixtures/resident-worker.ts");
@@ -47,20 +57,31 @@ async function gatePool(n: number) {
   };
 }
 
-test("a resident pool requires an explicit admission policy before setup", async () => {
-  let closed = 0, setup = 0;
-  const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
-  const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {} };
-  // Model an untyped caller; typed callers must supply the required policy.
-  await assert.rejects(runMemoryWorkers(options as Parameters<typeof runMemoryWorkers>[0]), /resident workers require an explicit admission policy/);
-  assert.equal(setup, 0, "missing admission fails before any worker or memory setup");
-  assert.equal(closed, 1, "the pool still closes the run it owns");
-});
+/**
+ * A landing check's request in this file's ledger and reading, made at once:
+ * it is waiting when this returns, and withdrawn when test `t` ends. It is a
+ * job of its own, not one inside a pool's reservation, which this process
+ * names while the pool runs. Its 7 GiB does not fit beside a pool in the
+ * 8 GiB read less the 2 kept for the system, so it outranks the pool until it
+ * is withdrawn; `ended` settles once it has.
+ */
+function landingAhead(t: { after(fn: () => void): void }): { withdraw: () => void; ended: Promise<unknown> } {
+  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...process.env, ...ownMemory };
+  delete env.NTS_MEMORY_RESERVATION;
+  t.after(() => ahead.abort());
+  const ended = reserve({ bytes: 7 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
+  ended.catch(() => {});
+  if (readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.length !== 1) {
+    ahead.abort();
+    assert.fail("the landing request does not wait in the ledger");
+  }
+  return { withdraw: () => ahead.abort(), ended };
+}
 
 test("a resident pool requires an explicit token policy before setup", async () => {
   let closed = 0, setup = 0;
   const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
-  const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {}, admission: new Admission({ read: () => 32 }) };
+  const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {} };
   // Model an untyped caller; typed callers must supply the required policy.
   await assert.rejects(runMemoryWorkers(options as Parameters<typeof runMemoryWorkers>[0]), /resident workers require an explicit token policy/);
   assert.equal(setup, 0, "a missing token policy fails before any worker or memory setup");
@@ -73,7 +94,7 @@ test('a bounded resident pool recycles only after completed cases and returns ev
   t.after(gate.close);
   const rows:{path:string;pid:number;bucket:string}[]=[],paths=Array.from({length:8},(_,index)=>'safe-'+index);
   const options={paths,jobs:1,memory,workerBytes:128*2**20,recycleAfterCases:2,
-    admission:new Admission({read:()=>32}),token:gate.token,
+    token:gate.token,
     args:(index:number)=>[fixture,directory,String(index)],onRow:(row:{path:string;pid:number;bucket:string})=>rows.push(row)};
   const summary=await runMemoryWorkers(options);
   assert.deepEqual(rows.map(row=>row.path),paths);
@@ -168,7 +189,7 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
   const rows: any[] = [];
   await runMemoryWorkers({
     paths: ["before", "oom", "after"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }), token: gate.token,
+    token: gate.token,
     args: () => [fixture, directory], onRow: (row) => rows.push(row),
   });
   assert.deepEqual(rows.map((row) => [row.path, row.bucket]), [["before", "strict-pass"], ["oom", "memory-cap"], ["after", "strict-pass"]]);
@@ -192,7 +213,7 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
   const reports: string[] = [];
   const summary = await runMemoryWorkers({
     paths: ["pressure-a", "pressure-b"], jobs: 2, memory, workerBytes: 640 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }), token: gate.token,
+    token: gate.token,
     args: (index) => [fixture, directory, String(index)],
     onRow: (row) => rows.push(row),
     report: message => {
@@ -240,27 +261,29 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
     const result = spawnTest("mkfifo", [join(directory, `release-${name}`)], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   }
-  let admitting = true;
   const rows: any[] = [];
   const reports: string[] = [];
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
   const gate = await gatePool(2);
   t.after(gate.close);
+  let landing: ReturnType<typeof landingAhead> | undefined;
   const summary = await runMemoryWorkers({
     paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
     args: index => [fixture, directory, String(index)],
-    admission: new Admission({ read: () => admitting ? 32 : 0 }), token: gate.token,
+    token: gate.token,
     onRow: row => {
       rows.push(row);
       if (row.path === "idle-holder") {
-        admitting = false;
+        // Its worker stays idle, asking no token for its next case, while a
+        // request of higher priority waits ahead of the pool.
+        landing = landingAhead(t);
         writeFileSync(join(directory, "idle-reported"), "idle");
       }
     },
     report: message => {
       reports.push(message);
       if (message.startsWith("resident pressure: idle worker ")) {
-        admitting = true;
+        landing?.withdraw();
         try { writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
         catch (error) { if (error.code !== "ENXIO") throw error; } // The trigger may also be collateral damage.
       }
@@ -276,6 +299,7 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
   await gate.settled();
   assert.equal(gate.seen.grant, 3 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
+  await assert.rejects(landing!.ended, { name: "AbortError" }, "the landing request ended only when it was withdrawn");
 });
 
 test("a worker death without any OOM evidence is an instrument failure", async t => {
@@ -286,7 +310,7 @@ test("a worker death without any OOM evidence is an instrument failure", async t
   const gate = await gatePool(1);
   t.after(gate.close);
   await assert.rejects(runMemoryWorkers({ paths: ["lost"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }), token: gate.token,
+    token: gate.token,
     args: () => [fixture, directory], onRow: row => rows.push(row) }), /no OOM kill recorded/);
   assert.deepEqual(rows, []);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
@@ -303,7 +327,7 @@ test("a worker lost while it waits for a token cancels the wait, and the failed 
   // One token, two workers, two cases that hold it: one worker runs its case
   // and the other waits for the token with its case reserved.
   const run = runMemoryWorkers({ paths: ["hold-a", "hold-b"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }), token: gate.token,
+    token: gate.token,
     args: index => [fixture, directory, String(index)], onRow: () => {} });
   const busy = () => readdirSync(directory).filter(name => name.startsWith("busy-"));
   await waitFor("one worker holding the token and one waiting for it", () => busy().length === 1 && gate.waiting() === 1);
@@ -323,7 +347,7 @@ test("no worker asks for a token once every case is taken", { timeout: TEST_HANG
   t.after(gate.close);
   const rows: any[] = [];
   await runMemoryWorkers({ paths: ["one", "two", "three"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }), token: gate.token,
+    token: gate.token,
     args: index => [fixture, directory, String(index)], onRow: row => rows.push(row) });
   assert.deepEqual(rows.map(row => row.path).sort(), ["one", "three", "two"]);
   await gate.settled();
@@ -370,7 +394,7 @@ for (const [control, method, call, path, message] of [
     const gate = await gatePool(1);
     t.after(gate.close);
     await assert.rejects(runMemoryWorkers({ paths: [path], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
-      admission: new Admission({ read: () => 32 }), token: gate.token,
+      token: gate.token,
       args: index => [fixture, directory, String(index)], onRow: () => {} }), new RegExp(message));
     assert.equal(existsSync(join(CGROUP, memory.group)), false);
     await gate.settled();
@@ -595,4 +619,33 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
   const record = JSON.parse(readFileSync(join(directory, "instrument.json"), "utf8"));
   assert.equal(record.verdict, "FAIL"); assert.equal(record.kind, "case-budget");
   assert.match(record.reason, /named-budget-case.*exceeds the outcomes step's 134217728 byte budget/);
+});
+
+test("a pool whose reservation is outranked starts no new case until the request ahead of it has gone", async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "outranked-pool" }), gate = await gatePool(1);
+  t.after(gate.close);
+  const rows: { path: string; waitingInLedger?: number }[] = [], asked: string[] = [];
+  // The feed decides on the next case as soon as a row has been taken in; an
+  // immediate callback from that row runs once it has.
+  let decided!: () => void;
+  const afterFirst = new Promise<void>(resolve => { decided = resolve; });
+  const pool = runMemoryWorkers({
+    paths: ["gate-a", "probe-ledger"], jobs: 1, memory, workerBytes: 64 * 2 ** 20,
+    token: (path, signal) => { asked.push(path); return gate.token(path, signal); },
+    args: (index: number) => [fixture, directory, String(index)],
+    onRow: row => { rows.push(row); if (row.path === "gate-a") setImmediate(decided); },
+  });
+  await waitFor("the first case to run", () => existsSync(join(directory, "ready-gate-a")));
+  const landing = landingAhead(t);
+  writeFileSync(join(directory, "go-gate-a"), "go");
+  await afterFirst;
+  assert.deepEqual(asked, ["gate-a"], "the next case asked for no token while the pool was outranked");
+  landing.withdraw();
+  await pool;
+  await assert.rejects(landing.ended, { name: "AbortError" });
+  assert.deepEqual(rows.map(row => row.path), ["gate-a", "probe-ledger"]);
+  assert.equal(rows[1]?.waitingInLedger, 0, "the next case started only once the landing request had gone");
+  await gate.settled();
 });

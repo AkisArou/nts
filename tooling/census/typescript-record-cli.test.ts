@@ -14,6 +14,7 @@ import {OUTPUT_PREFIX_VERSION} from "../conformance/output-prefix.ts";
 import {typescriptOracleIdentity} from "./suites/typescript.ts";
 import {publishPin, provenanceOf} from "../conformance/pin.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
+import {ownMemoryEnv} from "../gate/test-memory.ts";
 import {removable} from "../gate/run-temporary.ts";
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
@@ -81,8 +82,11 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const sourceOracle = typescriptOracleIdentity();
   const one = join(scratch, "one.tsv"), expected = join(scratch, "expected.tsv"), rows = join(scratch, "rows.jsonl"), json = join(scratch, "report.json"),instrumentFile=join(scratch,'instrument.json');
   writeFileSync(one, serializeTypeScriptRecord({ metadata: recorded.metadata, cases: new Map([[target, pass]]) }));
-  const meminfo=join(scratch,"low-meminfo");
-  writeFileSync(meminfo,"MemAvailable: 0 kB\n");
+  // A ledger and a reading of the run's own, never the machine's. The
+  // starved machine has 1 GiB and none of it available: a request for any
+  // memory could never fit beside the ledger's 2 GiB floor, so it would fail
+  // the run at once.
+  const memory=join(scratch,"memory"),starved=join(scratch,"starved-memory");
   function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION,
     oracleIdentity: ReturnType<typeof typescriptOracleIdentity> | null = sourceOracle, consumerRoot=root, lowMemory=false) {
     writeFileSync(expected, contents);
@@ -95,9 +99,9 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
-          ...(lowMemory?{NTS_MEMINFO:meminfo,NTS_CENSUS_MIN_AVAILABLE_GB:"1000000"}:{}),
-          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile } });
+        env: ownMemoryEnv(lowMemory?starved:memory, { ...process.env, NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
+          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile },
+          lowMemory?{availableKiB:0,totalKiB:2**20}:undefined) });
   }
   for (const [before, after, word, status] of [
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "REGRESSED", 1], [invalid, abort, "CHANGED", 1],
@@ -156,7 +160,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(resumed.status,0,resumed.stdout+resumed.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).observations[target],pass);
   assert.doesNotMatch(resumed.stderr,/memory:|waiting for|holding new cases/);
-  assert.match(resumed.stdout,/needed 0 to start/);
+  assert.equal(existsSync(join(starved,"ledger")),false,"a fully resumed run asks the memory ledger for nothing");
 
   // A case the record has no row for is pending: listed, and not a failure.
   const pending = invoke(contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), row(pass));

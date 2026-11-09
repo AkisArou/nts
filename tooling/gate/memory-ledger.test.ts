@@ -19,6 +19,7 @@ import {
 } from "./memory-ledger.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
+import { withoutHanded } from "./test-memory.ts";
 
 const GiB = 2 ** 30;
 const ADMIT = fileURLToPath(new URL("admit.ts", import.meta.url));
@@ -354,11 +355,13 @@ test("releasing a reservation withdraws its growth, and a growth whose reservati
   await assert.rejects(stranded, { name: "AbortError" });
 });
 
-/** admit.ts under the fixture's ledger and memory reading, and nothing inherited from this process's. */
+/**
+ * admit.ts under the fixture's ledger and memory reading, and nothing
+ * inherited from this process's: inside a gate step, neither the step's
+ * reservation nor the run's priority.
+ */
 function admitEnv(f: Fixture, extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...f.env };
-  delete env.NTS_MEMORY_RESERVATION;
-  return { ...env, ...extra };
+  return { ...withoutHanded({ ...process.env, ...f.env }), ...extra };
 }
 const admit = (f: Fixture, args: string[], extra?: Readonly<Record<string, string>>) =>
   spawnTest(process.execPath, [ADMIT, ...args], { encoding: "utf8", env: admitEnv(f, extra) }, `admit.ts ${args.join(" ")}`);
@@ -574,4 +577,72 @@ test("admit.ts waits its turn; a signal while it waits withdraws its request, an
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stderr, /^memory: dropped killed's request for 10\.0 GiB: pid \d+, which waited for it, has exited\n/);
   assert.deepEqual(readLedger(f.dir).waiting, []);
+});
+
+// A job in a process of its own, since a job names its reservation in its
+// process's environment: it reserves, reserves again from a later call, and
+// says what it saw; with `--keep`, it exits without releasing.
+const JOB = `const [ledger, keep] = process.argv.slice(1);
+const { reserveJob, readLedger } = await import(ledger);
+const given = process.env.NTS_MEMORY_LEDGER, listening = process.listenerCount("exit");
+const job = await reserveJob({ bytes: 2 ** 30, what: "job" }, { report: () => {} });
+const named = process.env.NTS_MEMORY_RESERVATION === job.id;
+const again = await reserveJob({ bytes: 2 ** 31, what: "a later call of the job" });
+const held = readLedger().admitted.map(e => [e.what, e.bytes, e.priority]);
+if (keep !== "--keep") job.release();
+process.stdout.write(JSON.stringify({ inherited: job.inherited, named, again: [again.inherited, again.id === job.id], held,
+  cleared: process.env.NTS_MEMORY_RESERVATION === undefined,
+  restored: process.env.NTS_MEMORY_LEDGER === given && process.listenerCount("exit") === listening }));`;
+
+const job = (f: Fixture, extra: Readonly<Record<string, string>> = {}, keep = false) =>
+  spawnTest(process.execPath, ["--input-type=module", "-e", JOB, LEDGER, ...(keep ? ["--keep"] : [])], { encoding: "utf8", env: admitEnv(f, extra) }, "a job reserving once");
+
+test("a job reserves once: alone, a reservation of its own that what it starts runs inside; inside one, nothing", async t => {
+  const f = fixture(t);
+  const alone = job(f, { NTS_MEMORY_PRIORITY: "full-check" });
+  assert.equal(alone.status, 0, alone.stderr);
+  assert.deepEqual(JSON.parse(alone.stdout), { inherited: false, named: true, again: [true, true], held: [["job", GiB, "full-check"]], cleared: true, restored: true },
+    "its later call ran inside it, at the priority its environment named, and its release took its name back and left the ledger it was given");
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+  const kept = job(f, {}, true);
+  assert.equal(kept.status, 0, kept.stderr);
+  assert.deepEqual(readLedger(f.dir).admitted, [], "a job that exits without releasing ends its reservation as it goes");
+  // Inside a gate step's reservation (here, this process's), it asks nothing.
+  const step = await f.ask({ bytes: 4 * GiB, what: "step" });
+  const inside = job(f, step.env);
+  assert.equal(inside.status, 0, inside.stderr);
+  assert.deepEqual(JSON.parse(inside.stdout), { inherited: true, named: true, again: [true, true], held: [["step", 4 * GiB, "agent"]], cleared: false, restored: true });
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => e.id), [step.id], "and the step's reservation is as it was");
+  step.release();
+});
+
+test("admit.ts --status: the reservations admitted, with what each uses, and the queue in its order", async t => {
+  const f = fixture(t); // 20 available
+  const held = await f.ask({ bytes: 12 * GiB, what: "held job", priority: "full-check" }); // room for 6 now, less what it uses
+  const owner = ownerProcess(t);
+  const agent = f.ask({ bytes: 7 * GiB, what: "agent job", owner: { pid: owner.pid } });
+  await waitFor("the agent's request to wait", () => f.of("agent job").length >= 1, { stopped: f.stopped });
+  const landing = f.ask({ bytes: 7 * GiB, what: "landing job", priority: "landing" });
+  await waitFor("the landing request to wait", () => f.of("landing job").length >= 1, { stopped: f.stopped });
+  const json = admit(f, ["--status", "--json"]);
+  assert.equal(json.status, 0, json.stderr);
+  const status = JSON.parse(json.stdout);
+  assert.deepEqual([status.version, status.kind, typeof status.at, status.ledger], [1, "memory", "string", f.dir]);
+  assert.deepEqual(status.machine, { total_bytes: 64 * GiB, available_bytes: 20 * GiB, floor_bytes: 2 * GiB });
+  const [entry, ...others] = status.admitted;
+  assert.deepEqual(others, []);
+  assert.deepEqual([entry.what, entry.priority, entry.bytes, entry.owner_pid, entry.since, entry.live], ["held job", "full-check", 12 * GiB, process.pid, readLedger(f.dir).admitted[0]!.since, true]);
+  assert.ok(Number.isSafeInteger(entry.used_bytes) && entry.used_bytes > 0 && entry.used_bytes < 12 * GiB, "what this process uses, measured");
+  assert.equal(status.pending_bytes, 12 * GiB - entry.used_bytes);
+  assert.equal(status.room_bytes, 20 * GiB - status.pending_bytes - 2 * GiB);
+  assert.deepEqual(status.waiting.map((w: { what: string; priority: string; bytes: number; owner_pid: number; grows: null }) => [w.what, w.priority, w.bytes, w.owner_pid, w.grows]),
+    [["landing job", "landing", 7 * GiB, process.pid, null], ["agent job", "agent", 7 * GiB, owner.pid, null]], "in the queue's order");
+  assert.ok(status.waiting.every((w: { waited_s: number }) => typeof w.waited_s === "number" && w.waited_s >= 0));
+  const text = admit(f, ["--status"]);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /^memory ledger .* at \S+\n  machine: 64\.0 GiB, 20\.0 GiB available; /);
+  assert.match(text.stdout, /\n  admitted \(1\):\n    full-check +12\.0 GiB, using .*  pid \d+  since \d\d:\d\d:\d\d  held job\n/);
+  assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n$/);
+  held.release();
+  for (const request of [await agent, await landing]) request.release();
 });

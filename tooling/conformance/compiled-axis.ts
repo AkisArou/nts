@@ -2,7 +2,8 @@
 import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from "node:fs";
 import {dirname,join,resolve} from "node:path";
 import {activeCommand,CommandNotMeasuredError} from "../gate/active-command.ts";
-import {Admission} from "../gate/admission.ts";
+import {reserveJob} from "../gate/memory-ledger.ts";
+import {stepMemoryBytes} from "../gate/step-table.mjs";
 import {ToolingInstrumentError,PressureError} from "../gate/step-result.ts";
 import {memoryEvents} from "../census/worker-memory.ts";
 import {reportCheckFailure,checkFailurePolicy} from "../differential/check-report.ts";
@@ -13,15 +14,17 @@ const root=resolve(import.meta.dirname,"../.."),out=resolve(process.env.NTS_ADDO
 mkdirSync(out,{recursive:true});
 const selected=process.argv.slice(2);
 const modules=selected.length?selected:readdirSync(join(root,"runtime/node")).filter(name=>existsSync(join(root,"runtime/node",name,"tsconfig.json"))).sort();
-const admission=new Admission({report:message=>process.stderr.write(message+"\n")});
-const env=nodeEnvironment(process.env,{NTS_ADDON_OUT:out});
+// Building the runtime's node modules as addons and running node's tests on
+// them is the addons step's work: its memory, reserved once for every module,
+// and the processes this starts run inside it.
+const reservation=await reserveJob({bytes:stepMemoryBytes("addons"),what:`compiled axis over ${modules.length} node module(s)`});
+const env=nodeEnvironment(process.env,{NTS_ADDON_OUT:out,...reservation.env});
 writeFileSync(join(out,"axis.environment.json"),JSON.stringify(env,null,2)+"\n");
 const incomplete:unknown[]=[];
 let total=0,hollow=0,unmeasured=0,artifactFailures=0,completedFailures=0;
 let partialReal=0,partialHollow=0,undetermined=0;
 
 async function command(module:string,phase:string,executable:string,args:string[],extra:NodeJS.ProcessEnv={}){
-  while(!admission.open())await new Promise(resolve=>setTimeout(resolve,2000));
   const group=/^0::(.+)$/m.exec(readFileSync("/proc/self/cgroup","utf8"))?.[1];
   if(!group||group==="/"||group.split("/").includes(".."))throw new ToolingInstrumentError("tooling-setup","command has no observable owned cgroup");
   const before=memoryEvents(group),aggregateBefore=memoryEvents(dirname(group),true).oom;

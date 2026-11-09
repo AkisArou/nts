@@ -3,8 +3,10 @@
 //   node tooling/census/contents.ts record <raw-dir>
 // record replaces results/content-provider/{summary.json,report.md}; its delta
 // is against the committed summary. Git history retains previous coverage.
-// Run collection in a named, bounded unit off CPUs 4-5. Two workers, 14 GiB
-// admission/12 GiB hold, 40 GiB disk floor. No code is emitted or executed.
+// Run collection in a named, bounded unit off CPUs 4-5. Two workers, the
+// integrity step's memory reserved once in the memory ledger (listing every
+// program is that step's work), 40 GiB disk floor. No code is emitted or
+// executed.
 // Non-typechecking or failed inputs are retained as unmeasured; collect exits
 // nonzero after completing the population, and report lists every failure.
 import {spawn, spawnSync} from "node:child_process";
@@ -12,8 +14,9 @@ import {closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync,
   renameSync, statfsSync, writeFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {setTimeout as delay} from "node:timers/promises";
 import {parseModule, render, repositoryRelative, summarize, type Case, type Row, type Summary} from "./contents-report.ts";
+import {reserveJob} from "../gate/memory-ledger.ts";
+import {stepMemoryBytes} from "../gate/step-table.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 function git(args: string[]): string {
@@ -24,9 +27,10 @@ function git(args: string[]): string {
 function save(path: string, value: unknown) {
   writeFileSync(path + ".tmp", JSON.stringify(value, null, 2) + "\n"); renameSync(path + ".tmp", path);
 }
+// What the machine was doing at each case, for the census's record.
 function conditions(out: string) {
   const m = /^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync("/proc/meminfo", "utf8"));
-  if (!m) throw new Error("MemAvailable missing: admission fails closed");
+  if (!m) throw new Error("MemAvailable missing from /proc/meminfo");
   const d = statfsSync(out);
   return {utc: new Date().toISOString(), memoryGiB: Number(m[1]) / 2 ** 20,
     diskGiB: d.bavail * d.bsize / 2 ** 30, load: readFileSync("/proc/loadavg", "utf8").trim()};
@@ -65,19 +69,16 @@ async function collect(out: string, selected: string[]) {
   const rows: Row[] = [], active: unknown[] = [];
   const checkpoint = (state: string) => save(join(out, "checkpoint.json"), {state, total: cases.length,
     completed: rows.length, active, utc: new Date().toISOString()});
-  let next = 0, held = true;
-  async function admit() {
-    for (;;) {
-      const c = conditions(out);
-      if (c.diskGiB < 40) throw new Error("disk below 40 GiB");
-      if (c.memoryGiB < 12) held = true;
-      if (c.memoryGiB >= 14) held = false;
-      if (!held) return c;
-      await delay(10000);
-    }
+  let next = 0;
+  await reserveJob({bytes: stepMemoryBytes("integrity"), what: `content-provider census of ${cases.length} case(s)`});
+  // The machine as a case starts; below the disk floor the census stops.
+  function starting() {
+    const c = conditions(out);
+    if (c.diskGiB < 40) throw new Error("disk below 40 GiB");
+    return c;
   }
   async function run(item: Case) {
-    const start = await admit(), folder = join(out, item.family + "-" + item.name);
+    const start = starting(), folder = join(out, item.family + "-" + item.name);
     mkdirSync(folder);
     const argv = ["taskset", "-c", "0-3,6-31", "timeout", "-k", "5", "240", binary!,
       "contents-census", item.config, "--rc", "--backend", "c", ...(item.entry ? ["--entry", item.entry] : [])];

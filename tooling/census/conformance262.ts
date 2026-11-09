@@ -141,7 +141,6 @@ import { provenanceOf } from "../conformance/pin.ts";
 import {ToolingInstrumentError,publishToolingFailure} from "../gate/step-result.ts";
 import { memoryRun, closeMemoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
-import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
@@ -275,9 +274,6 @@ function machineState() {
 }
 const machineAtStart = machineState();
 
-// Admission is sized only after saved rows have removed completed cases.
-// A fully resumed selection starts no workers and requests no case memory.
-let REQUIRED_GB = 0;
 /** The least memory seen while the run was going, sampled at each progress mark. */
 let lowestAvailableGb = machineAtStart.available_gb;
 const describeMachine = (m) =>
@@ -514,20 +510,18 @@ async function runAll(all) {
   } else if (rowsFile) writeFileSync(rowsFile, `${JSON.stringify(header)}\n`);
   let done = 0;
   const started = Date.now();
-  // A worker asks for its next path when it has finished the last one, so
-  // holding the feed holds the run case by case: below 12 GB no worker gets a
-  // new case, the ones running finish on their own timeout, and the feed
-  // resumes at 14 GB (`tooling/gate/admission.ts`).
+  // The workers' memory is the run's reservation in the machine's memory
+  // ledger, made only once saved rows have removed completed cases: a fully
+  // resumed selection starts no workers and asks for nothing. A worker asks
+  // for its next path when it has finished the last one, so while the
+  // reservation is outranked the run gives way case by case
+  // (`tooling/census/worker-pool.ts`).
   if (paths.length > 0) {
     const workers = Math.min(jobs, paths.length);
-    REQUIRED_GB = Math.max(RESUME_AT_GB, Number(process.env.NTS_CENSUS_MIN_AVAILABLE_GB ??
-      (workers * 0.2 + MEMORY_CAP_KB / 1e6 + 2).toFixed(1)));
     const report = (message: string) => process.stderr.write(`  ${message}\n`);
-    // The shared feeder waits before dispatch, including the first case.
-    const admission = new Admission({ resumeAt: REQUIRED_GB, report });
     try {
       await runMemoryWorkers({
-        paths, jobs: workers, admission, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024,
+        paths, jobs: workers, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024, what: `conformance262 --backend ${BACKEND}: ${paths.length} case(s)`,
         // One gate token per in-flight case: an elastic step's share follows its work.
         token: (path, signal) => acquireToken({ project: path, binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" }, signal),
         args: (index) => [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
@@ -1043,7 +1037,7 @@ say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
 // the warning names the control, rather than leaving a busy box unrecordable.
 const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
 const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
-say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB (needed ${REQUIRED_GB} to start)`);
+say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB`);
 say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);
 if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4) {
   say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");

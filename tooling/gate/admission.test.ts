@@ -1,6 +1,6 @@
-// Memory admission: the hysteresis itself, then both runners' shapes driven
-// through a hold -- the gate's token pool with real token.sh clients, and the
-// conformance feed with a real worker process on a pipe.
+// Memory admission: the hysteresis itself, the token pool driven through a hold
+// with real token.sh clients, and the census feed, which gives way while its
+// job's reservation is outranked, with a real worker process on a pipe.
 //
 //   node --test tooling/gate/admission.test.ts
 import { test } from "node:test";
@@ -19,6 +19,12 @@ import { waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Whether the feed's job is outranked, which a test moves by assignment. */
+function ranked(start = false) {
+  const state = { outranked: start };
+  return { state, outranked: () => state.outranked };
+}
 
 /** An admission reading `gb.value`, so a test moves memory by assignment. */
 function scripted(start: number) {
@@ -167,8 +173,8 @@ test("token pool: a running case finishes through a hold, and the next waits for
   }
 });
 
-test("conformance feed: a delayed running case finishes, the next path waits, the last input closes at once", async () => {
-  const { gb, admission } = scripted(20);
+test("census feed: a delayed running case finishes, the next path waits while the job is outranked, the last input closes at once", async () => {
+  const job = ranked();
   // A real pipe, with a response deliberately later than the old 700 ms
   // readiness sleep. Scheduling latency must not decide whether it completed.
   const worker = spawn(
@@ -179,13 +185,13 @@ test("conformance feed: a delayed running case finishes, the next path waits, th
   let exited = false;
   worker.on("exit", () => { exited = true; });
   const closed = once(worker, "close"); // Includes the last stdout row.
-  const queue = createFeed(["a", "b"], admission, 20);
+  const queue = createFeed(["a", "b"], { outranked: job.outranked, everyMs: 20 });
   const feed = () => queue.feed({ write: (p) => worker.stdin.write(`${p}\n`), end: () => worker.stdin.end(), exited: () => exited });
   const rows: { path: string; at: number }[] = [];
   const output = createInterface({ input: worker.stdout });
   output.on("line", (line) => {
     rows.push(JSON.parse(line));
-    if (rows.length === 1) gb.value = 10; // the hold starts as the first case comes back
+    if (rows.length === 1) job.state.outranked = true; // a request ahead of the job arrives as the first case comes back
     void feed();
   });
   try {
@@ -194,43 +200,43 @@ test("conformance feed: a delayed running case finishes, the next path waits, th
     assert.equal(queue.dispatched, 1);
     await Promise.race([firstRow, closed.then(() => { throw new Error("worker closed before its first row"); })]);
     assert.equal(rows.length, 1, "the first case completed");
-    assert.equal(queue.dispatched, 1, "b was not dispatched below 12 GB");
+    assert.equal(queue.dispatched, 1, "b was not dispatched while the job was outranked");
     const resumed = Date.now();
-    gb.value = 14;
-    assert.equal((await closed)[0], 0, "the worker's input closed after b without waiting on memory");
+    job.state.outranked = false;
+    assert.equal((await closed)[0], 0, "the worker's input closed after b without waiting again");
     assert.deepEqual(rows.map((r) => r.path), ["a", "b"]);
-    assert.ok(rows[1].at >= resumed, "b started only after the resume");
+    assert.ok(rows[1].at >= resumed, "b started only once the job went on");
   } finally {
     // Cancel a waiting feed before closing stdin, even when an assertion fails.
     exited = true;
-    gb.value = 14;
+    job.state.outranked = false;
     worker.stdin.end();
     await closed;
     output.close();
   }
 });
 
-test("conformance feed: a worker that exits while it waits is never written to", async () => {
-  const { gb, admission } = scripted(10);
+test("census feed: a worker that exits while it waits is never written to", async () => {
+  const job = ranked(true);
   const writes: string[] = [];
   let exited = false;
-  const queue = createFeed(["a"], admission, 10);
+  const queue = createFeed(["a"], { outranked: job.outranked, everyMs: 10 });
   const pending = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => exited });
   exited = true;
-  gb.value = 20;
+  job.state.outranked = false;
   await pending;
   assert.deepEqual(writes, []);
   assert.equal(queue.dispatched, 0, "the path stays in the queue for a worker that is alive");
 });
 
-test("conformance feed: two workers waiting for the last path -- one gets it, the other's input closes", async () => {
-  const { gb, admission } = scripted(10);
+test("census feed: two workers waiting for the last path -- one gets it, the other's input closes", async () => {
+  const job = ranked(true);
   const one: string[] = [];
   const two: string[] = [];
-  const queue = createFeed(["last"], admission, 10);
+  const queue = createFeed(["last"], { outranked: job.outranked, everyMs: 10 });
   const a = queue.feed({ write: (p) => one.push(p), end: () => one.push("<end>"), exited: () => false });
   const b = queue.feed({ write: (p) => two.push(p), end: () => two.push("<end>"), exited: () => false });
-  gb.value = 20;
+  job.state.outranked = false;
   await Promise.all([a, b]);
   assert.deepEqual([...one, ...two].sort(), ["<end>", "last"]);
 });
@@ -262,11 +268,10 @@ function tokens() {
   return { token, asked, waiting, state };
 }
 
-test("conformance feed: a case holds its token from its write until its worker returns it", async () => {
-  const { admission } = scripted(20);
+test("census feed: a case holds its token from its write until its worker returns it", async () => {
   const gate = tokens();
   const writes: [string, () => void][] = [];
-  const queue = createFeed(["a"], admission, 10, gate.token);
+  const queue = createFeed(["a"], { token: gate.token, everyMs: 10 });
   const fed = queue.feed({ write: (p, release) => writes.push([p, release]), end: () => {}, exited: () => false });
   await waitFor("a token request", () => gate.waiting.length === 1);
   assert.deepEqual(writes, [], "nothing is written before the token is granted");
@@ -279,13 +284,12 @@ test("conformance feed: a case holds its token from its write until its worker r
   assert.equal(gate.state.held, 0, "the release returns it once, however often it is called");
 });
 
-test("conformance feed: a worker that stops while it waits for a token cancels the wait and gives its path back", async () => {
-  const { admission } = scripted(20);
+test("census feed: a worker that stops while it waits for a token cancels the wait and gives its path back", async () => {
   const gate = tokens();
   const stopped = new AbortController();
   let exited = false;
   const writes: string[] = [];
-  const queue = createFeed(["only"], admission, 10, gate.token);
+  const queue = createFeed(["only"], { token: gate.token, everyMs: 10 });
   const a = queue.feed({ write: (p) => writes.push(`a:${p}`), end: () => writes.push("a:<end>"), exited: () => exited, signal: stopped.signal });
   await waitFor("the reserved path's token request", () => gate.waiting.length === 1);
   exited = true;
@@ -300,18 +304,18 @@ test("conformance feed: a worker that stops while it waits for a token cancels t
   assert.deepEqual(writes, ["b:only"], "the path went back to the queue, and the next worker took it");
 });
 
-test("conformance feed: memory that falls while a token is awaited turns the case back, with its token", async () => {
-  const { gb, admission } = scripted(20);
+test("census feed: a job outranked while a token is awaited turns the case back, with its token", async () => {
+  const job = ranked();
   const gate = tokens();
   const writes: string[] = [];
-  const queue = createFeed(["a"], admission, 10, gate.token);
+  const queue = createFeed(["a"], { token: gate.token, outranked: job.outranked, everyMs: 10 });
   const fed = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => false });
   await waitFor("a token request", () => gate.waiting.length === 1);
-  gb.value = 5;
+  job.state.outranked = true;
   gate.waiting[0].grant();
-  await waitFor("the token returned after the memory check", () => gate.state.held === 0 && gate.asked.length === 1);
-  assert.deepEqual(writes, [], "a case is never written below the hold line");
-  gb.value = 20;
+  await waitFor("the token returned after the second look", () => gate.state.held === 0 && gate.asked.length === 1);
+  assert.deepEqual(writes, [], "no case starts while the job is outranked");
+  job.state.outranked = false;
   await waitFor("the case asked for a token again", () => gate.waiting.length === 1);
   gate.waiting[0].grant();
   await fed;
@@ -319,11 +323,10 @@ test("conformance feed: memory that falls while a token is awaited turns the cas
   assert.deepEqual(gate.asked, ["a", "a"]);
 });
 
-test("conformance feed: no worker asks for a token while no path is left for it", async () => {
-  const { admission } = scripted(20);
+test("census feed: no worker asks for a token while no path is left for it", async () => {
   const gate = tokens();
   const ends: string[] = [];
-  const queue = createFeed(["one"], admission, 10, gate.token);
+  const queue = createFeed(["one"], { token: gate.token, everyMs: 10 });
   const a = queue.feed({ write: () => {}, end: () => ends.push("a"), exited: () => false });
   const b = queue.feed({ write: () => {}, end: () => ends.push("b"), exited: () => false });
   await waitFor("one request and one closed input", () => gate.waiting.length === 1 && ends.length === 1);

@@ -12,6 +12,7 @@ import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
 import {gateEnvironment,hostEnvironment,oracleToolchainLocation,sealOracleRun,type GateEnvironment} from '../gate/canonical-environment.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 
 test('a recorded budget is retried without treating its missing count as zero',()=>{
@@ -73,9 +74,10 @@ appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
 const result=spawnSync(${JSON.stringify(join(dirname(binary),'oracle-plan'))},process.argv.slice(2),{stdio:'inherit'});
 process.exitCode=result.status??1;
 `,{mode:0o755});
-  const meminfo=join(root,'meminfo');writeFileSync(meminfo,'MemAvailable: 64000000 kB\n');
+  // The producers' pool reserves in a ledger of the run's own, against an
+  // ample reading, never the machine's.
   privateRun=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),standalone:true,
-    oracleAdmissionContext:'gate',owned:{NTS_BIN:join(profile,'nts'),NTS_MEMINFO:meminfo}}));
+    oracleAdmissionContext:'gate',owned:{NTS_BIN:join(profile,'nts'),...ownMemory(join(root,'memory'))}}));
   const privateEnv=privateRun.env;
   const missing=spawnSync(process.execPath,['--input-type=module','-e',`
 import assert from 'node:assert/strict';

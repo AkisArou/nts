@@ -18,7 +18,9 @@
 // candidates/{tree,target,runs/CANDIDATE-<sha>-<time>} namespace and never
 // update the main history or re-record policy tables.
 //
-// It waits for memory before it starts; the gate admits its individual steps.
+// Its gate run reserves its memory in the machine's memory ledger, as every
+// gate run does (tooling/gate/run.mjs); this holds no reservation of its own
+// across that run, which would count the run's memory twice.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -49,12 +51,6 @@ let plan: ReturnType<typeof fullPlan>;
 try { plan = fullPlan(ROOT, HOME, process.argv.slice(2)); }
 catch (error) { console.log(`  NOT RUN: ${String(error)}`); process.exit(2); }
 const { candidate, commit, label, run } = plan;
-
-const available = () => Number(/MemAvailable:\s+(\d+)/.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) / 1048576;
-if (available() < 16) {
-  console.log(`  NOT RUN: ${available().toFixed(1)} GB available, under the 16 the wide steps start at`);
-  process.exit(2);
-}
 
 const short = commit.slice(0, 12);
 mkdirSync(run, { recursive: true });
