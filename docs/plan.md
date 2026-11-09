@@ -324,6 +324,12 @@ ids, kept so the records that cite them still resolve.
   the runtime sources benchmarks import. Today `benches` is deferred to the
   full check, so an edit that moves a row's source or driver is found only
   after it lands, where it holds the core.
+- The full check records only what its checks listed. Every listed line
+  names its record (`refuses differently` as well as `improved` and
+  `pending`; today the full check reads only the last two), and a records
+  kind with nothing listed does not run: at 89809ede4 the TypeScript census
+  ran on all three backends with nothing of its own pending, while the
+  records run held the core for hours.
 - `tooling/cli/tests/case_roots.rs`'s
   `native_checker_errors_keep_their_count_diagnostics_and_exit` once found its
   own scratch folder already gone when it removed it (`remove scratch:
