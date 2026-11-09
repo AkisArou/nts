@@ -267,10 +267,15 @@ const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".ca
  * a degraded run is one every other lane then has to clear. This file has
  * already been OOM-killed three times on this box. The state is part of the
  * claim, so it is in the output.
+ *
+ * The readings are the kernel's, unless the run was given its own
+ * (NTS_MEMINFO, NTS_VMSTAT): a test gives its census an ample machine that
+ * pages nothing (tooling/gate/test-memory.ts), so the host's paging never
+ * decides whether its writer writes.
  */
 function machineState() {
   const info = Object.fromEntries(
-    readFileSync("/proc/meminfo", "utf8")
+    readFileSync(process.env.NTS_MEMINFO ?? "/proc/meminfo", "utf8")
       .split("\n")
       .map((line) => /^(\w+):\s+(\d+)/.exec(line))
       .filter(Boolean)
@@ -279,7 +284,7 @@ function machineState() {
   const gb = (kb) => (kb / 1024 / 1024).toFixed(1);
   const [one, five] = loadavg();
   const vm = Object.fromEntries(
-    readFileSync("/proc/vmstat", "utf8")
+    readFileSync(process.env.NTS_VMSTAT ?? "/proc/vmstat", "utf8")
       .split("\n")
       .map((line) => line.split(" "))
       .filter(([key]) => key === "pswpin" || key === "pswpout")
@@ -626,7 +631,7 @@ function classify(row) {
     case "oracle":
       return { outcome: "no-verdict", cause: `oracle: node fails the case: ${row.why}` };
     case "crash":
-      return { outcome: "no-verdict", cause: `crash (${row.why})${row.first ? `: ${row.first}` : ""}` };
+      return { outcome: "no-verdict", cause: `crash (${row.why})${row.first ? `: ${row.first}` : ""}`, ...(row.stopped ? { stopped: row.stopped } : {}) };
     case "memory-cap":
       return { outcome: "no-verdict", cause: row.residentWorkerBytes
         ? `resident memory cap (worker ${(row.residentWorkerBytes / 2 ** 30).toFixed(2)} GiB, run ${(row.residentRunBytes / 2 ** 30).toFixed(2)} GiB; ${row.why})`
@@ -1177,6 +1182,17 @@ for (const [cause, n] of count(cases.filter((c) => c.outcome === "fail"), (c) =>
 say();
 say(`  no verdict (${tally["no-verdict"]} case(s)):`);
 for (const [cause, n] of count(cases.filter((c) => c.outcome === "no-verdict"), (c) => c.cause).slice(0, sites)) say(`    ${String(n).padStart(6)}  ${cause}`);
+// **A compiler that stopped is a defect to reproduce**, and its case's scratch
+// goes when the run ends: what it printed as it stopped is kept here, in the
+// run's log. On 2026-11-09 a landing's only red was test/harness/nans.js
+// "crash (emit): exit 101", and nothing said what had panicked.
+const stops = cases.filter((c) => c.stopped !== undefined);
+if (stops.length > 0) say(`  the compiler stopped on ${stops.length} case(s); what it printed as it stopped:`);
+for (const c of stops.slice(0, 50)) {
+  say(`    ${c.record.path}`);
+  for (const line of c.stopped.split("\n")) say(`      ${line}`);
+}
+if (stops.length > 50) say(`    ... ${stops.length - 50} more`);
 say();
 say(`  refused (${refused.length} case(s), ${rankAny.length} distinct root cause(s)), by family of the first root:`);
 for (const [f, n] of count(refused, family)) say(`    ${String(n).padStart(6)}  ${f}`);

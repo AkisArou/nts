@@ -21,6 +21,21 @@ import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conf
 import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/compile-diagnostics.ts";
 import { outputOracle } from "./output-oracle.ts";
 
+/**
+ * What the compiler printed as it stopped, as it printed it: its panic, from
+ * the line that names it up to the note after it, or else its last lines. The
+ * row's `buildDiagnostic` is the stop's stable identity, with its paths and
+ * numbers taken out, for a record; this is what a reader of the run's log needs
+ * to find the defect, since the case's scratch goes when the run ends.
+ */
+export function stoppedWith(output: string): string {
+  const lines = output.split("\n").map((line) => line.trimEnd()).filter((line) => line.trim() !== "");
+  const at = lines.findIndex((line) => /^thread '[^']*'(?: \(\d+\))? (?:panicked at |has overflowed its stack)|^memory allocation of \d+ bytes failed/.test(line.trim()));
+  if (at === -1) return lines.length ? lines.slice(-6).join("\n") : "(it printed nothing)";
+  const note = lines.findIndex((line, index) => index > at && /^note: /.test(line.trim()));
+  return lines.slice(at, note === -1 ? at + 6 : note).join("\n").slice(0, 2000);
+}
+
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
 const FIRST_CODE = /NTS\d{4}/;
@@ -475,7 +490,7 @@ export async function attempt(dir, body, tools, origin?) {
     // and its record is the stop itself, not a refusal printed before it.
     if (compilerStopped(emit.status, emit.signal)) {
       return { bucket: "crash", why: "emit", first: emit.signal ?? `exit ${emit.status}`,
-        buildDiagnostic: compilerStop(diagnostics, emit.status, emit.signal) };
+        buildDiagnostic: compilerStop(diagnostics, emit.status, emit.signal), stopped: stoppedWith(diagnostics) };
     }
     const type_error = FIRST_TYPE_ERROR.exec(diagnostics);
     if (type_error) {
