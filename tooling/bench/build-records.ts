@@ -16,12 +16,18 @@ import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-resu
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { compileEnvironment, compileKey, observeCompile, projectFor, regularFiles } from "./compile-producer.ts";
-import { STEPS } from "../gate/step-table.mjs";
 import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
   serializeBenchmarkRecord, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const BACKENDS = ["c", "llvm", "jvm"] as const;
+/**
+ * Each compile's own kernel cap: the one its rows were recorded under, a
+ * limit and never a reservation. compile-producer.ts takes it from
+ * NTS_GATE_STEP_MEMORY_BYTES, and stays as it is, because it is the compile
+ * key and would move every recorded row's driver.
+ */
+const COMPILE_CAP_BYTES = 6 * 2 ** 30;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 /** Measured compile cells against their rows: what the ratchet does not accept fails; what it accepts is listed. */
@@ -129,11 +135,10 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const scratch = mkdtempSync(join(base, "compile-"));
   let resident = false, reservation: Awaited<ReturnType<typeof reserveJob>> | undefined;
   try {
-    // A compile's memory is its step's reservation (NTS_GATE_STEP_MEMORY_BYTES).
-    // Outside a step, as the records writer runs, it is the benches step's own,
-    // so a check reproduces what was recorded; it stays out of compile-producer.ts,
-    // which is the compile key and would move every recorded row's driver.
-    process.env.NTS_GATE_STEP_MEMORY_BYTES ??= String(STEPS.find(step => step.name === "benches")!.mem * 2 ** 30);
+    // One compile at a time, under COMPILE_CAP_BYTES, in the benches step as
+    // in the records writer, whatever the step's own census cap: so a check
+    // reproduces what was recorded, in a fresh tree as in a warm one.
+    process.env.NTS_GATE_STEP_MEMORY_BYTES = String(COMPILE_CAP_BYTES);
     const environment = compileEnvironment(process.env, scratch, binary);
     const all = benchmarkCases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
@@ -165,8 +170,8 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
         continue;
       }
       // The compiles' memory, reserved once as the first one to measure starts:
-      // the step's, inside one; alone, the benches step's, as above.
-      reservation ??= await reserveJob({ bytes: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES), what: `benchmark compile records (${mode})` },
+      // the step's, inside one; alone, what this job's earlier runs held.
+      reservation ??= await reserveJob({ key: "bench-compile-records", atMostBytes: COMPILE_CAP_BYTES, what: `benchmark compile records (${mode})` },
         { report: message => console.error(message) });
       resident = true;
       const outcome = await withToken(() => observeCompile({ backend, project: projectFor(ROOT, path, scratch), output: join(scratch, "output"), binary, root: ROOT, env: environment }), { project: path, backend });

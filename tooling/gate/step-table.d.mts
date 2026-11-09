@@ -5,7 +5,6 @@ export type StepRow = {
   slots: number;
   min?: number;
   elastic?: boolean;
-  mem: number;
   fe?: boolean;
   nts?: boolean;
   needs?: readonly string[];
@@ -19,7 +18,5 @@ export type StepRow = {
   doc: string;
 };
 export const STEPS: readonly StepRow[];
-/** What the gate reserves for a step while it runs, in bytes: its row's `mem`. */
-export function stepMemoryBytes(name: string): number;
 /** What is wrong with the table, or null. */
 export function stepTableProblem(steps?: readonly StepRow[]): string | null;

@@ -8,7 +8,6 @@ import {body,orderingWarnings,symbolOrder,textSymbols,type Symbol} from "./layou
 import {readOnlyConstants} from "./layouts-elf.ts";
 import {random} from "./layouts-interval.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import {stepMemoryBytes} from "../gate/step-table.mjs";
 import {createHash} from "node:crypto";
 
 export type LinkArm={name:string;command:string;args:string[];cwd:string;hot:string[]};
@@ -21,8 +20,8 @@ function diskFloor(out:string){
   if(disk.bavail*disk.bsize<40*1024**3)throw Error("layout link below the 40 GiB disk floor");
 }
 
-/** A layout job's memory: the benches step's, whose work building and running benchmark binaries is, reserved once. */
-export const reserveLayoutJob=(what:string)=>reserveJob({bytes:stepMemoryBytes("benches"),what});
+/** A layout job's memory, reserved once: what its earlier runs held, per the scheduling history. */
+export const reserveLayoutJob=(what:string)=>reserveJob({key:"bench-layouts",what});
 
 export async function linkLayouts(plan:LinkPlan,out:string){
   if(plan.arms.length!==2||new Set(plan.arms.map(a=>a.name)).size!==2||plan.seeds.length<5||new Set(plan.seeds).size!==plan.seeds.length)throw Error("two arms and five unique seeds required");

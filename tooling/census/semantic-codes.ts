@@ -37,7 +37,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { flagsOf, HARNESS_FILE, materialise, workspace } from "./project.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
-import { stepMemoryBytes } from "../gate/step-table.mjs";
 import { provenanceOf } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -203,9 +202,9 @@ expectedChecker.patches = (upstream.patches ?? []).map(({id, sha256}) => ({id, s
 const results = [];
 let next = 0;
 const started = Date.now();
-// The checker over the test262 corpus is the test262-cases step's work: its
-// memory, reserved once for the whole run.
-await reserveJob({ bytes: stepMemoryBytes("test262-cases"), what: `semantic-codes over ${records.length} file(s)` }, { report: (line) => console.log(line) });
+// The checker over the test262 corpus: its memory, reserved once for the
+// whole run, by what its earlier runs held per worker.
+await reserveJob({ key: "semantic-codes", units: jobs, what: `semantic-codes over ${records.length} file(s)` }, { report: (line) => console.log(line) });
 console.log(`  checking ${records.length} file(s) with ${jobs} worker(s)`);
 await Promise.all(
   Array.from({ length: jobs }, async (_, slot) => {

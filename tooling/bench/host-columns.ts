@@ -10,7 +10,6 @@ import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
 import { COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
-import { stepMemoryBytes } from "../gate/step-table.mjs";
 type Receipt = {
   command: string[];
   cwd: string;
@@ -222,9 +221,9 @@ export async function hostColumns(
   input: string[],
   out: string,
 ): Promise<Hosts> {
-  // Building and running a case's host columns is the benches step's work:
-  // its memory, reserved once for the case (inside a reservation, that one).
-  await reserveJob({ bytes: stepMemoryBytes("benches"), what: `benchmark host columns for ${name}` });
+  // Building and running a case's host columns: inside a reservation (a
+  // benchmark session's), that one; alone, what this job held before.
+  await reserveJob({ key: "bench-host-columns", what: `benchmark host columns for ${name}` });
   const pins = pinnedComparators(root),
     directory = join(out, name + ".hosts");
   mkdirSync(directory, { recursive: true });

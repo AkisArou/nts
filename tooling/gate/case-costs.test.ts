@@ -140,7 +140,7 @@ test("percentiles retain slow tails and an empty population is explicit", () => 
   assert.equal(d.p50,1); assert.equal(d.p99,1); assert.equal(d.max,100); assert.equal(d.sum,199);
 });
 
-test("aggregate peaks retain each scope and compare bytes with the step reservation", t => {
+test("aggregate peaks retain each scope beside the step's reservation", t => {
   const dir = fixture(t);
   const scopes = [
     { cgroup: "/run/a", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: 512 * 2 ** 20 },
@@ -148,16 +148,14 @@ test("aggregate peaks retain each scope and compare bytes with the step reservat
     { cgroup: "/run/c", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: null },
   ];
   writeFileSync(join(dir, "aggregate-1-0.jsonl"), scopes.map(row => JSON.stringify({ event: "aggregate.peak", step: "examples", ...row })).join("\n") + "\n");
-  const result = summarizeCosts(dir, [], [{ ...step, mem_gb: 6 }]);
+  const result = summarizeCosts(dir, [], [{ ...step, memory: { reserved_bytes: 6 * 2 ** 30 } }]);
   const data = result.steps.examples as any;
-  assert.equal(data.aggregate_memory.reserved_step_mem_bytes, 6 * 2 ** 30);
+  assert.equal(data.aggregate_memory.reserved_step_bytes, 6 * 2 ** 30);
   assert.equal(data.aggregate_memory.max_scope_peak_bytes, 768 * 2 ** 20);
   assert.equal(data.aggregate_memory.measured_scopes, 2);
   assert.equal(data.aggregate_memory.unknown_scopes, 1);
   assert.deepEqual(data.aggregate_memory.scopes, scopes);
-  assert.equal(data.aggregate_memory.warning, null);
-  const tight = summarizeCosts(dir, [], [{ ...step, mem_gb: 1 }]).steps.examples as any;
-  assert.match(tight.aggregate_memory.warning, /exceeds half/);
+  assert.equal((summarizeCosts(dir, [], [step]).steps.examples as any).aggregate_memory.reserved_step_bytes, null, "a step the run did not size has no reservation");
   assert.equal(result.status, "complete");
 });
 

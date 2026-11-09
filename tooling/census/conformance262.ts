@@ -521,7 +521,7 @@ async function runAll(all) {
     const report = (message: string) => process.stderr.write(`  ${message}\n`);
     try {
       await runMemoryWorkers({
-        paths, jobs: workers, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024, what: `conformance262 --backend ${BACKEND}: ${paths.length} case(s)`,
+        paths, jobs: workers, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024, key: `conformance262-${BACKEND}`, what: `conformance262 --backend ${BACKEND}: ${paths.length} case(s)`,
         // One gate token per in-flight case: an elastic step's share follows its work.
         token: (path, signal) => acquireToken({ project: path, binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" }, signal),
         args: (index) => [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],

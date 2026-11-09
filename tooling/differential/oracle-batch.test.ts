@@ -156,17 +156,21 @@ try{
     assert.equal(inside.status,0,inside.stdout+inside.stderr);
     assert.doesNotMatch(inside.stderr,/memory: /);
     assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER).admitted.map(entry=>entry.id),[held.id],'the preparation ran in the step\'s reservation and made none');
-    // Alone: it reserves its workers' allowance, waiting for room before any compiler starts.
+    // Alone: it reserves by its key's history, never more than its workers'
+    // allowance, waiting for room before any compiler starts.
     const alone=spawn(process.execPath,['--experimental-test-module-mocks',script,'alone'],{cwd:tree,env,stdio:['ignore','pipe','pipe']});
     let output='';alone.stdout.on('data',bytes=>{output+=bytes;});alone.stderr.on('data',bytes=>{output+=bytes;});
     const closed=new Promise<number|null>((resolve,reject)=>{alone.once('error',reject);alone.once('close',resolve);});
     try{
       await waitFor('the preparation to wait in the ledger',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.what==='oracle preparation of 2 program(s)'));
+      const waiting=readLedger(memory.NTS_MEMORY_LEDGER).waiting.find(entry=>entry.what==='oracle preparation of 2 program(s)')!;
+      assert.ok(waiting.bytes<=3*2**30,`never more than one worker's ${3*2**30} byte allowance: ${waiting.bytes}`);
+      assert.deepEqual(waiting.unmeasured,['oracle-preparation'],'never measured in this history, it says so');
       assert.equal(existsSync(join(root,'alone','preparation','request-0')),false,'no compiler starts before the reservation');
       ownMemory(memoryDirectory,ample);
       assert.equal(await closed,0,output);
     }finally{if(alone.exitCode===null)alone.kill();}
-    assert.match(output,/memory: oracle preparation of 2 program\(s\) waits for 3\.0 GiB \(agent\)/);
+    assert.match(output,/memory: oracle preparation of 2 program\(s\) waits for \d+\.\d [MG]iB \(agent\)/);
     assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER).admitted.map(entry=>entry.id),[held.id],'its own reservation ended with it');
   }finally{removable(root);}
 });

@@ -3,10 +3,9 @@
 //   node tooling/census/contents.ts record <raw-dir>
 // record replaces results/content-provider/{summary.json,report.md}; its delta
 // is against the committed summary. Git history retains previous coverage.
-// Run collection in a named, bounded unit off CPUs 4-5. Two workers, the
-// integrity step's memory reserved once in the memory ledger (listing every
-// program is that step's work), 40 GiB disk floor. No code is emitted or
-// executed.
+// Run collection in a named, bounded unit off CPUs 4-5. Two workers, their
+// memory reserved once in the memory ledger by what earlier runs held, 40 GiB
+// disk floor. No code is emitted or executed.
 // Non-typechecking or failed inputs are retained as unmeasured; collect exits
 // nonzero after completing the population, and report lists every failure.
 import {spawn, spawnSync} from "node:child_process";
@@ -16,7 +15,6 @@ import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {parseModule, render, repositoryRelative, summarize, type Case, type Row, type Summary} from "./contents-report.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import {stepMemoryBytes} from "../gate/step-table.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 function git(args: string[]): string {
@@ -70,7 +68,7 @@ async function collect(out: string, selected: string[]) {
   const checkpoint = (state: string) => save(join(out, "checkpoint.json"), {state, total: cases.length,
     completed: rows.length, active, utc: new Date().toISOString()});
   let next = 0;
-  await reserveJob({bytes: stepMemoryBytes("integrity"), what: `content-provider census of ${cases.length} case(s)`});
+  await reserveJob({key: "census-contents", units: 2, what: `content-provider census of ${cases.length} case(s)`});
   // The machine as a case starts; below the disk floor the census stops.
   function starting() {
     const c = conditions(out);

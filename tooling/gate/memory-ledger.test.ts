@@ -14,9 +14,12 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, lockLedger, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, jobSizing, ledgerStatus, lockLedger, noteOver, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
+import { peakReservation, readCostHistory } from "./step-scheduling.ts";
+import { defaultSlots } from "./budget.ts";
+import { cpus } from "node:os";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import { withoutHanded } from "./test-memory.ts";
@@ -79,6 +82,8 @@ test("the landing check outranks agents' work, which outranks the full check, wh
 
 type Fixture = {
   dir: string; meminfo: string; env: NodeJS.ProcessEnv;
+  /** The fixture's own scheduling history, where its jobs' peaks go. */
+  history: string;
   /** Sets MemAvailable (and MemTotal) as the kernel would, in one rename. */
   memory(availableGiB: number, totalGiB?: number): void;
   /** What each admitted job uses, by what it is for; unset is nothing. */
@@ -101,7 +106,7 @@ function fixture(t: TestContext): Fixture {
   // Every request still waiting when its test ends is withdrawn.
   const ending = new AbortController();
   t.after(() => ending.abort());
-  const env = { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: dir };
+  const env = { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: dir, NTS_GATE_COSTS_DIR: join(root, "costs") };
   const ask = (request: ReserveRequest, extra: Partial<ReserveOptions> = {}) => {
     const asked = reserve(request, {
       env, everyMs: 10, signal: ending.signal, report: line => lines.push(line), observe: decision => decisions.push(decision),
@@ -111,7 +116,7 @@ function fixture(t: TestContext): Fixture {
     return asked;
   };
   return {
-    dir, meminfo, env, memory, used, decisions, lines, ask,
+    dir, meminfo, env, history: join(root, "costs", "steps.json"), memory, used, decisions, lines, ask,
     of: what => decisions.filter(decision => decision.what === what),
     stopped: () => failures.length ? String(failures[0]) : undefined,
   };
@@ -539,7 +544,7 @@ test("admit.ts becomes its command: the command's exit status, its signal, and i
   assert.deepEqual([missing.status, missing.stderr], [127, "admit: no-such-command-for-admit: command not found\n"]);
   const usage = admit(f, ["--", "true"]);
   assert.equal(usage.status, 125);
-  assert.match(usage.stderr, /^admit: --bytes is required\nusage: node tooling\/gate\/admit\.ts --bytes/);
+  assert.match(usage.stderr, /^admit: one of --key and --bytes says what to reserve\nusage: node tooling\/gate\/admit\.ts --key/);
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] }, "neither reached the ledger");
 });
 
@@ -585,9 +590,9 @@ test("admit.ts waits its turn; a signal while it waits withdraws its request, an
 const JOB = `const [ledger, keep] = process.argv.slice(1);
 const { reserveJob, readLedger } = await import(ledger);
 const given = process.env.NTS_MEMORY_LEDGER, listening = process.listenerCount("exit");
-const job = await reserveJob({ bytes: 2 ** 30, what: "job" }, { report: () => {} });
+const job = await reserveJob({ key: "job", atMostBytes: 2 ** 30, what: "job" }, { report: () => {} });
 const named = process.env.NTS_MEMORY_RESERVATION === job.id;
-const again = await reserveJob({ bytes: 2 ** 31, what: "a later call of the job" });
+const again = await reserveJob({ key: "a-later-call", atMostBytes: 2 ** 31, what: "a later call of the job" });
 const held = readLedger().admitted.map(e => [e.what, e.bytes, e.priority]);
 if (keep !== "--keep") job.release();
 process.stdout.write(JSON.stringify({ inherited: job.inherited, named, again: [again.inherited, again.id === job.id], held,
@@ -645,4 +650,83 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n$/);
   held.release();
   for (const request of [await agent, await landing]) request.release();
+});
+
+const MiB = 2 ** 20;
+/** A history in which `key` held `bytes` per worker, as 1.25 times it reserves; whole MiB of at least 128. */
+const peakFor = (bytes: number) => Math.floor(bytes / 1.25);
+function seedJobs(f: Fixture, jobs: Record<string, number>): void {
+  mkdirSync(join(f.history, ".."), { recursive: true });
+  writeFileSync(f.history, JSON.stringify({ version: 3, steps: {}, jobs: Object.fromEntries(Object.entries(jobs).map(([key, bytes]) => [key, { unit: "worker", peaks: [peakFor(bytes)] }])) }) + "\n");
+}
+
+// A job of two workers holding 96 MiB as it releases: the last sample of its
+// reservation sees them, whatever its sampling thread had seen by then.
+const MEASURED_JOB = `const [ledger] = process.argv.slice(1);
+const { reserveJob, readLedger } = await import(ledger);
+const job = await reserveJob({ key: "held-job", units: 2, what: "measured job" }, { report: () => {} });
+const held = Buffer.alloc(96 * 2 ** 20, 1);
+const entry = readLedger().admitted.find(e => e.id === job.id);
+job.release();
+process.stdout.write(JSON.stringify({ bytes: entry.bytes, unmeasured: entry.unmeasured ?? [], held: held.length }));`;
+
+test("a job reserves what its earlier runs held per worker, and the peak it held goes to its history as it releases", t => {
+  const f = fixture(t);
+  seedJobs(f, { "held-job": GiB });
+  const run = spawnTest(process.execPath, ["--input-type=module", "-e", MEASURED_JOB, LEDGER], { encoding: "utf8", env: admitEnv(f) }, "a measured job");
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), { bytes: 2 * GiB, unmeasured: [], held: 96 * MiB }, "1 GiB a worker, as its history says");
+  const kept = readCostHistory(f.history).jobs.get("held-job")!;
+  assert.equal(kept.unit, "worker");
+  assert.equal(kept.peaks.length, 2, "the seeded peak, and this run's");
+  assert.ok(kept.peaks[1]! >= 48 * MiB, `half of what the job held, per worker: ${kept.peaks[1]}`);
+  assert.equal(peakReservation(kept.peaks), GiB, "a smaller run does not shrink the reservation");
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+});
+
+test("a job never measured reserves the largest of its kind, or its share of the machine, and the ledger's status says so, and when it is over", async t => {
+  const f = fixture(t);
+  const share = jobSizing({ key: "fresh" }, f.env);
+  assert.equal(share.basis, "share");
+  assert.equal(share.bytes, Math.floor(62 * GiB / defaultSlots(cpus().length)), "one slot's share of what the ledger can give: the machine less the system's floor");
+  seedJobs(f, { other: 3 * GiB });
+  assert.deepEqual([jobSizing({ key: "fresh", units: 2 }, f.env).bytes, jobSizing({ key: "fresh", units: 2 }, f.env).basis], [6 * GiB, "largest"]);
+  assert.equal(jobSizing({ key: "fresh", units: 2, atMostBytes: 4 * GiB }, f.env).bytes, 4 * GiB, "never more than the job's own cap");
+  assert.throws(() => jobSizing({ key: "Not A Key" }, f.env), TypeError);
+  const held = await f.ask({ bytes: 4 * GiB, what: "fresh job", unmeasured: ["fresh"] });
+  await noteOver(f.dir, held.id, "fresh");
+  await noteOver(f.dir, held.id, "fresh");
+  const [entry] = ledgerStatus({ env: f.env }).admitted;
+  assert.deepEqual([entry!.what, entry!.unmeasured, entry!.over], ["fresh job", ["fresh"], ["fresh"]], "each key once");
+  const text = admit(f, ["--status"]);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /fresh job\n      unmeasured \(sized by the largest of its kind, or its share of the machine\): fresh\n      over \(held more than it reserved\): fresh\n/);
+  held.release();
+});
+
+// A command admit.ts becomes: it holds 160 MiB until the ledger's entry for
+// it says it is over, which its watcher writes once it has seen them.
+const HOLD_UNTIL_OVER = `const { readFileSync, watch } = require("node:fs"), { join } = require("node:path");
+const held = Buffer.alloc(160 * 2 ** 20, 1);
+const dir = join(process.env.NTS_MEMORY_LEDGER, "admitted"), file = join(dir, process.env.NTS_MEMORY_RESERVATION + ".json");
+const over = () => { try { return (JSON.parse(readFileSync(file, "utf8")).over ?? []).includes("admitted-job"); } catch { return false; } };
+// Watching before it looks, so a note written between the two is not missed.
+const watcher = watch(dir, () => { if (over()) watcher.close(); });
+if (over()) watcher.close();
+process.on("exit", () => process.stdout.write(String(held.length)));`;
+
+test("admit.ts --key reserves what its key held, and its watcher has the command's peak in the history once the command's output ends", t => {
+  const f = fixture(t);
+  seedJobs(f, { "admitted-job": 128 * MiB });
+  const run = admit(f, ["--key", "admitted-job", "--what", "admitted job", "--", process.execPath, "-e", HOLD_UNTIL_OVER]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, String(160 * MiB));
+  const kept = readCostHistory(f.history).jobs.get("admitted-job")!;
+  assert.equal(kept.peaks.length, 2, "the seeded peak, and the command's, written before its output ended");
+  assert.ok(kept.peaks[1]! > 128 * MiB, `the command's peak, past what it reserved: ${kept.peaks[1]}`);
+  assert.ok(peakReservation(kept.peaks) > 160 * MiB, "its next run reserves by it");
+  const refused = admit(f, ["--bytes", "1G", "--workers", "2", "--", "true"]);
+  assert.equal(refused.status, 125);
+  assert.match(refused.stderr, /--workers and --at-most size a --key/);
+  assert.match(admit(f, ["--key", "admitted-job", "--bytes", "1G", "--", "true"]).stderr, /one of --key and --bytes says what to reserve/);
 });

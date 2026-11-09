@@ -26,7 +26,7 @@ function fixture(t:TestContext){
 
 test('the derived producer retains every previous producer module',()=>{
   // Names from the former 17-path declaration; folders remain source-owned.
-  const previous=['oracle-dependencies.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','dependency-inputs.ts','package-manager.ts','gate-resource.ts','durable-record.ts','active-command.ts','step-result.ts','canonical-environment.ts','run-temporary.ts','worker-memory.ts','admission.ts','case-costs.ts','memory-calibration.ts','tooling-slice.ts'];
+  const previous=['oracle-dependencies.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','dependency-inputs.ts','package-manager.ts','gate-resource.ts','durable-record.ts','active-command.ts','step-result.ts','canonical-environment.ts','run-temporary.ts','worker-memory.ts','admission.ts','case-costs.ts','tooling-slice.ts'];
   const files=moduleClosure([ENTRY],{sourceRoot:SOURCE}),names=files.map(file=>basename(file));
   assert.deepEqual(previous.filter(name=>!names.includes(name)),[]);
   assert.equal(dependencyCapability(SOURCE,join(SOURCE,'tmp','unused')).producerSha256,expected(SOURCE));

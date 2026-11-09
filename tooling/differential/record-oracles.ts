@@ -11,7 +11,6 @@ const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import {stepMemoryBytes} from "../gate/step-table.mjs";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
@@ -406,11 +405,11 @@ async function main() {
   const arguments_ = process.argv.slice(2);
   const [mode, first, second, third, fourth] = arguments_;
   const named = /^(tests\/programs|benchmarks\/cases)\//.test(mode ?? "");
-  // Planning, preparing and measuring oracles is the program-oracles step's
-  // work: its memory, reserved once for the whole recording. The measuring
+  // Planning, preparing and measuring oracles: their memory, reserved once
+  // for the whole recording, by what earlier recordings held. The measuring
   // child a named recording starts runs inside it.
   if (named || ["plan", "plan-rc", "record"].includes(mode!)) {
-    await reserveJob({ bytes: stepMemoryBytes("program-oracles"), what: `record-oracles ${named ? `${arguments_.length} fixture(s)` : mode}` },
+    await reserveJob({ key: "record-oracles", what: `record-oracles ${named ? `${arguments_.length} fixture(s)` : mode}` },
       { report: line => console.error(line) });
   }
   if (named) await recordNamed(arguments_);

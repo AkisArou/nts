@@ -67,12 +67,25 @@
 // holder crashes, and could only be taken back by checking that its writer is
 // dead and then removing it. Two waiters can both make that check, and the
 // second then removes the lock the first has just taken again.
+//
+// **What a job reserves is what it was measured to hold** (`reserveJob`,
+// `admit.ts --key`): a job names a key, and its reservation comes from the
+// peaks its earlier runs left in the scheduling history of the tree it runs
+// in (step-scheduling.ts). A watcher (memory-watch.ts), started once the job
+// is admitted, samples what the reservation's measure holds every second, and
+// the peak goes to that history when the reservation ends. An entry says
+// which of its keys were sized without a measurement of their own
+// (`unmeasured`), and which have held more than they reserved (`over`).
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { cpus, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
+import { defaultSlots } from "./budget.ts";
+import { historyFile, KEY, machineShare, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
 export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
@@ -289,17 +302,23 @@ function readProcessCharge(pid: number): number {
   catch (error) { if (gone(error)) return 0; throw error; }
 }
 
-/** What an admitted job uses now. `table` is read once per decision, when a tree is measured. */
-function measured(entry: LedgerEntry, table: () => Table): number {
+/**
+ * What an admitted job uses now. `table` is read once per decision, when a
+ * tree is measured. `exclude`, a process in the measure that is not the
+ * job's (the watcher of its peak, in the job's cgroup), is not counted.
+ */
+function measured(entry: LedgerEntry, table: () => Table, exclude?: number): number {
   const { tree, cgroup } = entry.measure;
   let bytes = 0;
   let inside: ReadonlySet<number> = new Set();
   if (cgroup !== null) {
     bytes += readCgroupCharge(cgroup);
-    if (tree) inside = new Set(cgroupMembers(cgroup.path));
+    const members = tree || exclude !== undefined ? cgroupMembers(cgroup.path) : [];
+    if (tree) inside = new Set(members);
+    if (exclude !== undefined && members.includes(exclude)) bytes -= readProcessCharge(exclude);
   }
-  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid)) bytes += readProcessCharge(pid);
-  return bytes;
+  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid) && pid !== exclude) bytes += readProcessCharge(pid);
+  return Math.max(0, bytes);
 }
 
 /** Whether `pid`'s memory is in what `entry` measures: its owner's tree, or its cgroup. */
@@ -356,6 +375,10 @@ export type LedgerEntry = {
   owner: ProcessIdentity; waiter: ProcessIdentity; measure: Measure; since: string;
   /** For a waiting request to grow an admitted reservation, that reservation's id; null for one of its own. */
   grows: string | null;
+  /** The steps or jobs this reservation sized without a measurement of their own in their history. */
+  unmeasured?: string[];
+  /** The steps or jobs of this reservation that held more than they reserved. */
+  over?: string[];
 };
 type State = "waiting" | "admitted";
 
@@ -365,6 +388,8 @@ function identity(value: unknown): value is ProcessIdentity {
   const who = value as ProcessIdentity;
   return typeof who === "object" && who !== null && typeof who.boot === "string" && Number.isSafeInteger(who.pid) && who.pid > 0 && typeof who.start === "string";
 }
+
+const keyList = (value: unknown) => value === undefined || (Array.isArray(value) && value.every(key => typeof key === "string" && KEY.test(key)));
 
 function parseEntry(text: string, file: string): LedgerEntry {
   const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2; grows?: string | null };
@@ -377,7 +402,8 @@ function parseEntry(text: string, file: string): LedgerEntry {
       || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
       || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
-      || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))) {
+      || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))
+      || !keyList(entry.unmeasured) || !keyList(entry.over)) {
     throw new Error(`${file} is not a memory ledger entry`);
   }
   return entry;
@@ -460,7 +486,11 @@ export type OwnerSpec = {
   cgroup?: string;
 };
 
-export type ReserveRequest = { bytes: number; what: string; priority?: Priority; owner?: OwnerSpec };
+export type ReserveRequest = {
+  bytes: number; what: string; priority?: Priority; owner?: OwnerSpec;
+  /** The steps or jobs these bytes were sized for without a measurement of their own: the entry says so. */
+  unmeasured?: readonly string[];
+};
 
 /** One decision on one request: what it saw and what it decided. */
 export type Decision = {
@@ -496,6 +526,8 @@ export type ReserveOptions = {
 
 export type Reservation = {
   id: string;
+  /** The ledger's directory. */
+  ledger: string;
   /** Inside a parent's reservation: nothing was asked, and `release` leaves the parent's. */
   inherited: boolean;
   /** What a child process needs to run inside this reservation. */
@@ -524,6 +556,12 @@ export type Reservation = {
    * running is ever stopped for it. Read without the lock.
    */
   outranked(): boolean;
+  /**
+   * Says in the entry that `key`, a step or job of this reservation, held
+   * more than it reserved. Inside a parent's reservation it says nothing:
+   * the parent measures what runs inside it.
+   */
+  noteOver(key: string): Promise<void>;
   /** Ends the reservation, withdrawing a growth that waits; a second call does nothing. */
   release(): void;
 };
@@ -566,7 +604,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
   let held = bytes;
   const { priority } = entry;
   return {
-    id: entry.id, inherited: true, env: reservationEnv(entry.id, dir),
+    id: entry.id, ledger: dir, inherited: true, env: reservationEnv(entry.id, dir),
     get bytes() { return held; },
     grow: async more => { amount(more, what, "grows by"); held += more; },
     shrink: async less => {
@@ -575,8 +613,40 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
       held -= less;
     },
     outranked: () => outrankedIn(dir, priority),
+    noteOver: async () => {},
     release: () => {},
   };
+}
+
+/**
+ * Rewrites the admitted entry `id` in `dir` under the lock, as `change`
+ * makes it from the entry as it stands (null: leave it); an entry that is
+ * gone (released, or dropped once its owner exited) stays gone.
+ */
+async function rewriteEntry(dir: string, id: string, change: (entry: LedgerEntry) => LedgerEntry | null, every = POLL_MS): Promise<void> {
+  for (let retry = LOCK_RETRY_MS; ; retry = Math.min(2 * retry, Math.max(every, LOCK_RETRY_MS))) {
+    const lock = lockLedger(dir);
+    if (lock === null) { await pause(retry); continue; }
+    try {
+      const file = entryPath(dir, "admitted", id);
+      let entry: LedgerEntry;
+      try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+      catch (error) { if (gone(error)) return; throw error; }
+      const next = change(entry);
+      if (next !== null) writeEntry(dir, "admitted", next);
+      return;
+    } finally { lock.release(); }
+  }
+}
+
+/**
+ * Says in admitted entry `id` that `key` held more than it reserved: its
+ * holder does, and so does the watcher of a job's peak (memory-watch.ts),
+ * which writes nothing else.
+ */
+export async function noteOver(dir: string, id: string, key: string): Promise<void> {
+  if (!KEY.test(key)) throw new TypeError(`memory: ${JSON.stringify(key)} is not a step or job key`);
+  await rewriteEntry(dir, id, entry => entry.over?.includes(key) ? null : { ...entry, over: [...entry.over ?? [], key] });
 }
 
 function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure {
@@ -705,24 +775,10 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   let bytes = self.bytes;
   let released = false;
   let growing: { id: string; withdraw: AbortController } | null = null;
-  // Writes the entry with what the handle holds now, under the lock. An entry
-  // that is gone (released, or dropped once its owner exited) stays gone.
-  const rewrite = async (): Promise<void> => {
-    for (let retry = LOCK_RETRY_MS; ; retry = Math.min(2 * retry, Math.max(context.every, LOCK_RETRY_MS))) {
-      const lock = lockLedger(dir);
-      if (lock === null) { await pause(retry); continue; }
-      try {
-        const file = entryPath(dir, "admitted", self.id);
-        let entry: LedgerEntry;
-        try { entry = parseEntry(readFileSync(file, "utf8"), file); }
-        catch (error) { if (gone(error)) return; throw error; }
-        if (!released) writeEntry(dir, "admitted", { ...entry, bytes });
-        return;
-      } finally { lock.release(); }
-    }
-  };
+  // Writes the entry with what the handle holds now.
+  const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null : { ...entry, bytes }, context.every);
   return {
-    id: self.id, inherited: false, env: reservationEnv(self.id, dir),
+    id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir),
     get bytes() { return bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
       amount(more, self.what, "grows by");
@@ -751,6 +807,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (outcome.waitedMs !== null) context.report(`memory: ${self.what} grew by ${gib(more)} to ${gib(bytes)} after ${Math.round(outcome.waitedMs / 1000)} s`);
     },
     outranked: () => !released && outrankedIn(dir, self.priority),
+    noteOver: async key => { if (!released) await noteOver(dir, self.id, key); },
     async shrink(less) {
       amount(less, self.what, "gives back");
       if (released) return;
@@ -795,9 +852,12 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const meminfo = meminfoPath(env);
   const never = neverFits(bytes, readMeminfo(meminfo).totalBytes, `${what} asks ${gib(bytes)}`);
   if (never !== null) throw new RangeError(never);
+  const unmeasured = [...new Set(request.unmeasured ?? [])];
+  if (!keyList(unmeasured)) throw new TypeError(`memory: ${what}'s unmeasured keys are not step or job keys: ${unmeasured.join(", ")}`);
   const self: LedgerEntry = {
     version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
     measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(), grows: null,
+    ...(unmeasured.length ? { unmeasured } : {}),
   };
   const used = options.used;
   const context: Context = {
@@ -816,32 +876,130 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
 // A job's memory, and the ledger's state.
 // ---------------------------------------------------------------------------
 
+/** A job that reserves memory outside any step. */
+export type JobRequest = {
+  /** Its name in the scheduling history, where its earlier runs left their peaks. */
+  key: string;
+  what: string;
+  /** Its parallel workers: the history keeps its peak per worker. */
+  units?: number;
+  /** The most it can ever hold, its own kernel cap where it has one: it never reserves more. */
+  atMostBytes?: number;
+};
+
+/** What a job reserves, why, and the history its peak goes to. */
+export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: string; units: number };
+
+/**
+ * What a job reserves in the environment `env`: per worker, what its own
+ * peaks in the history of the target it runs against say (step-scheduling.ts's
+ * `historyFile`); never measured there, the largest a job worker reserves
+ * there; with none, one slot's share of what the ledger can give (MemTotal
+ * less the system's floor), per worker. Never more than the machine could
+ * give, nor than the job's own cap.
+ */
+export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.ProcessEnv = process.env): JobSizing {
+  const units = request.units ?? 1;
+  if (!KEY.test(request.key)) throw new TypeError(`memory: a job's key is lower-case words joined by hyphens, not ${JSON.stringify(request.key)}`);
+  if (!Number.isSafeInteger(units) || units < 1) throw new RangeError(`memory: ${request.key} runs a positive whole number of workers, not ${units}`);
+  if (request.atMostBytes !== undefined) amount(request.atMostBytes, request.key, "holds at most");
+  const history = historyFile(env);
+  const { totalBytes } = machineMemory(env);
+  const capacity = totalBytes - SYSTEM_FLOOR_BYTES;
+  const unit = unitReservation(readCostHistory(history), { job: request.key }, "worker", machineShare(capacity, 1, defaultSlots(cpus().length)));
+  const bytes = Math.max(1, Math.min(unit.bytes * units, capacity, request.atMostBytes ?? Infinity));
+  return { bytes, basis: unit.basis, history, units };
+}
+
+const WATCHER = new URL("./memory-watch.ts", import.meta.url);
+/** How often the watcher of a job's peak samples what its reservation's measure holds. */
+export const WATCH_MS = POLL_MS;
+
+/**
+ * Watches the peak of a job that `admit.ts` is about to become, from a
+ * process of its own (memory-watch.ts): it samples what the reservation's
+ * measure holds every WATCH_MS, says in the entry when that passes what the
+ * job reserved, and adds the most it saw, per worker, to the history under
+ * the job's key once the reservation has ended. It runs under `setsid -f`:
+ * in a session of its own, and orphaned at once, so it is in neither the
+ * job's process tree nor its process group -- the job's measure does not
+ * count it, and a signal to the job's group does not end it before it has
+ * written the peak. It holds the job's standard output and error open, so a
+ * caller that reads the job's output to its end has the peak written by
+ * then. It stays in the job's cgroup, so stopping the job's unit stops it
+ * too, and where that cgroup is the job's measure it does not count itself.
+ * A watcher that does not start leaves the job unmeasured, and the job runs:
+ * the history is observation-only.
+ */
+export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units"> & { key: string },
+  report: (line: string) => void): void {
+  const started = spawnSync("setsid", ["-f", process.execPath, fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, String(job.units)],
+    { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } });
+  if (started.status !== 0) report(`memory: ${job.key}'s peak goes unmeasured: its watcher did not start (${started.error?.message ?? `setsid ended ${started.status ?? started.signal}`})`);
+}
+
+/**
+ * Samples a job's peak on a thread of its own process (memory-watch.ts),
+ * every WATCH_MS while its reservation is held: a job that blocks in a child
+ * process is sampled all the same. `stop` ends it, and returns the most the
+ * reservation's measure held, its own last sample included.
+ */
+function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string): { stop(): number } {
+  const shared = new SharedArrayBuffer(8), cell = new BigInt64Array(shared);
+  let worker: Worker | null = null;
+  try {
+    worker = new Worker(WATCHER, { workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared } });
+    worker.unref();
+    // A sampler that fails leaves the job less measured, never stopped.
+    worker.on("error", () => {});
+  } catch { worker = null; }
+  return {
+    stop() {
+      let last = 0;
+      try {
+        const entry = admittedEntry(reservation.ledger, reservation.id);
+        if (entry !== null) last = entryUsage(entry);
+      } catch { /* the last sample is missed */ }
+      void worker?.terminate();
+      worker = null;
+      return Math.max(last, Number(Atomics.load(cell, 0)));
+    },
+  };
+}
+
 /**
  * The memory a job holds while it runs, reserved once at its start. Inside a
  * reservation already -- a gate step's, or one this process reserved before,
  * named by RESERVATION_ENV in the job's environment -- it is that one, and
- * nothing is asked: the job keeps sizing itself by its step's budget.
- * Otherwise it reserves `bytes` of its own, at the priority PRIORITY_ENV
- * names (an agent's by default), and names it in the job's environment, so
- * that the job's later calls and the processes it starts run inside it; it
- * ends when the handle is released or the process exits. A job that starts a
- * gate run holds none across it: the run reserves its own.
+ * nothing is asked or measured: the job keeps sizing itself by its step's
+ * budget, and its memory is the step's. Otherwise it reserves what
+ * `jobSizing` says, at the priority PRIORITY_ENV names (an agent's by
+ * default), and names the reservation in the job's environment, so that the
+ * job's later calls and the processes it starts run inside it; it ends when
+ * the handle is released or the process exits, and then the most it held,
+ * sampled while it ran, goes to the job's history (`samplePeak`). A job that
+ * starts a gate run holds none across it: the run reserves its own.
  *
  * The job's environment is `options.env`, this process's by default: where
- * the ledger, the reading and a reservation already held are found.
+ * the ledger, the reading, the history and a reservation already held are
+ * found.
  */
-export async function reserveJob(request: { bytes: number; what: string },
+export async function reserveJob(request: JobRequest,
   options: { env?: NodeJS.ProcessEnv; signal?: AbortSignal; report?: (line: string) => void } = {}): Promise<Reservation> {
   const env = options.env ?? process.env;
-  const held = await reserve({ ...request, priority: priorityOf(env) },
-    { env, signal: options.signal, report: options.report ?? (line => process.stderr.write(`${line}\n`)) });
+  const report = options.report ?? (line => process.stderr.write(`${line}\n`));
+  const sizing = jobSizing(request, env);
+  const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), unmeasured: sizing.basis === "measured" ? [] : [request.key] },
+    { env, signal: options.signal, report });
   if (held.inherited) return held;
+  const sampler = samplePeak(held, request.key);
   // What the environment named before, so that the release leaves it so: a
   // ledger the job was already given stays its ledger.
   const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
   Object.assign(env, held.env);
   const release = () => {
     process.off("exit", release);
+    const peak = sampler.stop();
     held.release();
     for (const [name, value] of Object.entries(held.env)) {
       if (env[name] !== value) continue;
@@ -849,16 +1007,34 @@ export async function reserveJob(request: { bytes: number; what: string },
       if (was === undefined) delete env[name];
       else env[name] = was;
     }
+    if (peak <= 0) return;
+    const warning = writeCostHistory(sizing.history, { jobs: [{ key: request.key, peak: Math.ceil(peak / sizing.units) }] });
+    if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
   process.once("exit", release);
   return {
-    id: held.id, inherited: false, env: held.env,
+    id: held.id, ledger: held.ledger, inherited: false, env: held.env,
     get bytes() { return held.bytes; },
     grow: (bytes, growOptions) => held.grow(bytes, growOptions),
     shrink: bytes => held.shrink(bytes),
     outranked: () => held.outranked(),
+    noteOver: key => held.noteOver(key),
     release,
   };
+}
+
+/** The admitted entry `id` in `dir` while its owner lives; null once it is released, or dropped, or its owner has exited. */
+export function admittedEntry(dir: string, id: string): LedgerEntry | null {
+  const file = entryPath(dir, "admitted", id);
+  let entry: LedgerEntry;
+  try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+  catch (error) { if (gone(error)) return null; throw error; }
+  return alive(entry.owner) ? entry : null;
+}
+
+/** What an admitted entry's measure holds now, as a decision counts it; `exclude`, a process in it that is not the job's, is not counted. */
+export function entryUsage(entry: LedgerEntry, options: { exclude?: number } = {}): number {
+  return measured(entry, processTable, options.exclude);
 }
 
 /** The ledger as a status reader prints it: kind "memory", in `check.ts status --json`'s envelope. */
@@ -867,7 +1043,13 @@ export type LedgerStatus = {
   machine: { total_bytes: number; available_bytes: number; floor_bytes: number };
   /** What the live admitted jobs have still to take, and the room that leaves the queue: as the next decision counts them. */
   pending_bytes: number; room_bytes: number;
-  admitted: { id: string; what: string; priority: Priority; bytes: number; used_bytes: number; owner_pid: number; since: string; live: boolean }[];
+  /**
+   * `unmeasured`: the steps or jobs a reservation sized without a measurement
+   * of their own in their history; `over`: those that held more than they
+   * reserved.
+   */
+  admitted: { id: string; what: string; priority: Priority; bytes: number; used_bytes: number; owner_pid: number; since: string; live: boolean;
+    unmeasured: string[]; over: string[] }[];
   /** In the queue's order. */
   waiting: { id: string; what: string; priority: Priority; bytes: number; grows: string | null; owner_pid: number; waiter_pid: number; since: string; waited_s: number; live: boolean }[];
 };
@@ -884,6 +1066,7 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
   const admitted = view.admitted.map(entry => ({
     id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes,
     used_bytes: entry.live ? measured(entry, read) : 0, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
+    unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
   }));
   // A dead entry is dropped by the next decision, so it promises nothing.
   const pending = admitted.reduce((sum, entry) => sum + (entry.live ? Math.max(0, entry.bytes - entry.used_bytes) : 0), 0);

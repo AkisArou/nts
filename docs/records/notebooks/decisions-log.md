@@ -1655,3 +1655,35 @@ As built:
   runs any command through the ledger. The 12/14 GB host waits are gone.
 - Each step's memory peak is recorded, for sizing the reservations from
   measurement rather than the step table's declared numbers.
+
+## Reservations are measured peaks (11-09)
+
+The coordinator decided, on #590, that what a step or job reserves in the
+memory ledger comes from what it was measured to hold, not from numbers the
+step table declared: in the core run at be64f8805 most steps held a small
+part of their row (jvm 0.2 GiB of 8) and some held more than it (tooling 5.3
+GiB of 0.5).
+
+As built:
+- the gate's scheduling history (`<target>/gate-costs/steps.json`, version
+  3) keeps, beside each step's CPU seconds, the charged peaks of its last
+  five runs per unit (the step, or one token of an elastic step), and the
+  peaks of jobs that reserve outside a step (`reserveJob`, `admit.ts --key`)
+  per worker; every canonical gate run and every job writes it, and it is per
+  target, so a landing tree learns its own builds;
+- a unit reserves 1.25 times the largest kept peak, at least 128 MiB; a key
+  never measured in its history reserves the largest of its kind there, and
+  with none its share of the machine (MemTotal times its width over the
+  slots);
+- the runner samples each step's slice every 250 ms on the ledger's basis;
+  a step that held more than it was counted for is `over` in its summary row
+  and in the ledger's status, which also names the keys sized unmeasured;
+- a step's census aggregate runs under twice its reservation, never below its
+  share or one census worker's own cap, so a case replayed alone meets only
+  its own limit in a fresh tree as in a warm one; a cap that grows with its
+  grant while the step runs is #609;
+- the step table's `mem`, the hand calibration (memory-calibration.ts and
+  results/gate-memory-calibration.json) and its warning are gone;
+- the nightly benchmark reserves its session at the full check's priority
+  before the measurement lock admits it, so a wait in the ledger never holds
+  the lock.

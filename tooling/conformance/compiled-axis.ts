@@ -3,7 +3,6 @@ import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from "node:
 import {dirname,join,resolve} from "node:path";
 import {activeCommand,CommandNotMeasuredError} from "../gate/active-command.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import {stepMemoryBytes} from "../gate/step-table.mjs";
 import {ToolingInstrumentError,PressureError} from "../gate/step-result.ts";
 import {memoryEvents} from "../census/worker-memory.ts";
 import {reportCheckFailure,checkFailurePolicy} from "../differential/check-report.ts";
@@ -15,9 +14,9 @@ mkdirSync(out,{recursive:true});
 const selected=process.argv.slice(2);
 const modules=selected.length?selected:readdirSync(join(root,"runtime/node")).filter(name=>existsSync(join(root,"runtime/node",name,"tsconfig.json"))).sort();
 // Building the runtime's node modules as addons and running node's tests on
-// them is the addons step's work: its memory, reserved once for every module,
-// and the processes this starts run inside it.
-const reservation=await reserveJob({bytes:stepMemoryBytes("addons"),what:`compiled axis over ${modules.length} node module(s)`});
+// them: their memory, reserved once for every module by what earlier runs
+// held, and the processes this starts run inside it.
+const reservation=await reserveJob({key:"compiled-axis",what:`compiled axis over ${modules.length} node module(s)`});
 const env=nodeEnvironment(process.env,{NTS_ADDON_OUT:out,...reservation.env});
 writeFileSync(join(out,"axis.environment.json"),JSON.stringify(env,null,2)+"\n");
 const incomplete:unknown[]=[];

@@ -9,9 +9,10 @@
 //
 // The pool's memory is the job's reservation in the machine's memory ledger
 // (memory-ledger.ts's `reserveJob`): inside a gate step, the run's; alone, its
-// own, of the resident run's aggregate budget, which the kernel enforces
-// anyway. No case asks for memory of its own, and while the reservation is
-// outranked no new case starts.
+// own, sized by what the pool's earlier runs under its key held per worker,
+// never more than the resident run's aggregate budget, which the kernel
+// enforces anyway. No case asks for memory of its own, and while the
+// reservation is outranked no new case starts.
 import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -31,6 +32,8 @@ export type ResidentPoolOptions = {
   token: CaseToken;
   /** What the job's memory reservation is for, when the pool has to make one. */
   what?: string;
+  /** Its key in the scheduling history, when the pool has to make one: its earlier runs' peaks size it. */
+  key?: string;
   /** Reclaim a warm producer's heaps after this many completed cases. */
   recycleAfterCases?: number;
 };
@@ -222,7 +225,10 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   try { budgetBytes = memory.effectiveBudgetBytes(); }
   catch (error) { memory.close(); throw error; }
   let reservation: Reservation;
-  try { reservation = await reserveJob({ bytes: budgetBytes, what: options.what ?? `resident workers for ${paths.length} case(s)` }, { report }); }
+  try {
+    reservation = await reserveJob({ key: options.key ?? "resident-workers", units: Math.max(1, options.jobs), atMostBytes: budgetBytes,
+      what: options.what ?? `resident workers for ${paths.length} case(s)` }, { report });
+  }
   catch (error) { memory.close(); throw error; }
   try { return await rounds(options, budgetBytes, reservation); }
   // A reservation this pool made ends with it; one it ran inside is its job's.

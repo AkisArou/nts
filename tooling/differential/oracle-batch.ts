@@ -37,12 +37,13 @@ export async function prepareOracles(requests:OracleRequest[],options:{
   const bytes=options.memoryBytes??ORACLE_COMPILE_MEMORY_BYTES,workers=Math.min(options.workers,requests.length);let next=0;
   // The preparation's memory is its job's reservation: inside a gate step's,
   // or any other its environment names, it asks for nothing; alone, it
-  // reserves its workers' resident allowances, which the census run caps
-  // anyway, once in the machine's memory ledger. No compile waits on the
-  // host's memory. An empty population reserves nothing and starts nothing.
+  // reserves what earlier preparations held per worker, never more than its
+  // workers' resident allowances, which the census run caps anyway, once in
+  // the machine's memory ledger. No compile waits on the host's memory. An
+  // empty population reserves nothing and starts nothing.
   let reservation:Awaited<ReturnType<typeof reserveJob>>|null=null;
   if(workers>0){
-    try{reservation=await reserveJob({bytes:Math.min(workers*bytes,memoryRun().budgetBytes),what:'oracle preparation of '+requests.length+' program(s)'},
+    try{reservation=await reserveJob({key:'oracle-preparation',units:workers,atMostBytes:Math.min(workers*bytes,memoryRun().budgetBytes),what:'oracle preparation of '+requests.length+' program(s)'},
       {env:options.env,signal:options.signal,report:options.report});}
     catch(error){if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');throw error;}
   }

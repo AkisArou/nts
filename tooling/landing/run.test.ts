@@ -26,7 +26,9 @@ import {moduleClosure} from "../gate/module-closure-fixture.ts";
 import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {ownMemory} from "../gate/test-memory.ts";
-import {readLedger} from "../gate/memory-ledger.ts";
+import {gib, jobSizing, readLedger} from "../gate/memory-ledger.ts";
+import {machineBudget} from "./selection.ts";
+import {cpus} from "node:os";
 import {waitFor} from "../gate/test-wait.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
@@ -297,8 +299,15 @@ await new Promise(resolve => { const watcher = watch(waiting, () => { if (asked(
 
 test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority", async t => {
   const f = fixture(t);
-  // 61 GiB available, 2 kept for the system: a 56 GiB job leaves too little
-  // for the build's 8, until the build asks and the job ends.
+  // The build reserves what this tree's earlier landing builds held per cargo
+  // job, 8 GiB in all. 61 GiB available, 2 kept for the system: a 56 GiB job
+  // leaves too little for them, until the build asks and the job ends.
+  const slots = machineBudget(cpus().length).slots, history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
+  mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
+  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(8 * 2 ** 30 / slots / 1.25)] } } }) + "\n");
+  const sized = jobSizing({ key: "landing-build", units: slots }, f.memory);
+  assert.equal(sized.basis, "measured");
+  const asked = gib(sized.bytes).replace(".", "\\.");
   const env: NodeJS.ProcessEnv = { ...process.env, ...f.memory };
   delete env.NTS_MEMORY_RESERVATION;
   const holder = spawn(process.execPath, [fileURLToPath(new URL("../gate/admit.ts", import.meta.url)), "--bytes", "56G", "--what", "holder", "--",
@@ -310,8 +319,8 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   const ran = runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "green", ran.message);
   const build = readFileSync(join(f.run, "build.log"), "utf8");
-  assert.match(build, /memory: landing build of [0-9a-f]{12} waits for 8\.0 GiB \(landing\): /);
-  assert.match(build, /memory: landing build of [0-9a-f]{12} admitted with 8\.0 GiB after \d+ s/);
+  assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} waits for ${asked} \\(landing\\): `));
+  assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} admitted with ${asked} after \\d+ s`));
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
 });

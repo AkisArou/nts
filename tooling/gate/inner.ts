@@ -32,10 +32,11 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 //    when the change reaches the compiler or a runtime, since reference
 //    counting is decided in core.
 //
-// Every heavy step waits its turn in the machine's memory ledger for its
-// scope's MemoryMax, through admit.ts, so it holds that reservation exactly as
-// long as it runs and nothing between steps; and it runs niced, off the
-// measurement CPUs 4-5, in that capped scope.
+// Every heavy step waits its turn in the machine's memory ledger through
+// admit.ts, for what its earlier runs in this tree held (`--key`), never more
+// than its scope's MemoryMax, so it holds that reservation exactly as long as
+// it runs and nothing between steps, and its peak sizes its next run; and it
+// runs niced, off the measurement CPUs 4-5, in that capped scope.
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { availableParallelism,homedir } from "node:os";
@@ -44,6 +45,7 @@ import {finishRunTemporary} from "./run-temporary.ts";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.ts";
+import { defaultSlots } from "./budget.ts";
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
 let launchEnvironment:NodeJS.ProcessEnv=process.env;
@@ -109,18 +111,25 @@ function text(command: string, args: readonly string[]): string {
 
 const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
 
+/** A heavy phase: its key in the tree's history, what it is, its scope's MemoryMax, and the workers it runs. */
+type Phase = { key: string; what: string; memoryMax: string; workers: number };
+
+/** The workers a cargo phase runs: the gate's slots on this machine. */
+const CARGO_WORKERS = defaultSlots(availableParallelism());
+
 /**
- * A heavy command: admitted by the memory ledger for its scope's MemoryMax
- * (never more than the machine could hold), niced, off CPUs 4-5, in that
- * capped scope.
+ * A heavy command: admitted by the memory ledger for what this phase held
+ * before in this tree, never more than its scope's MemoryMax or what the
+ * machine could hold; niced, off CPUs 4-5, in that capped scope.
  */
-function heavy(what: string, memoryMax: string, command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
-  const bytes = Math.min(parseBytes(memoryMax), machineMemory().totalBytes - SYSTEM_FLOOR_BYTES);
+function heavy(phase: Phase, command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
+  const most = Math.min(parseBytes(phase.memoryMax), machineMemory().totalBytes - SYSTEM_FLOOR_BYTES);
   const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), command, ...args];
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
-    ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
+    ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${phase.memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
-  return run(process.execPath, [ADMIT, "--bytes", String(bytes), "--what", `inner loop: ${what}`, "--", ...scoped], env);
+  return run(process.execPath, [ADMIT, "--key", phase.key, "--workers", String(phase.workers), "--at-most", String(most),
+    "--what", `inner loop: ${phase.what}`, "--", ...scoped], env);
 }
 
 function changedPaths(base: string): string[] {
@@ -180,15 +189,16 @@ function main(argv: readonly string[]): number {
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
-    step("clippy", () => heavy("clippy", "14G", "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
-    step("tests", () => heavy("the tests", "16G", "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: join(ROOT, "target/nts-dev/nts") })) &&
+    step("clippy", () => heavy({ key: "inner-clippy", what: "clippy", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
+    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: join(ROOT, "target/nts-dev/nts") })) &&
     // Native vendor integrity and complete reachable graphs over the corpus.
-    (!nativeFrontend || step("frontend-tsrs", () => heavy("native frontend checks", "16G", "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));
+    (!nativeFrontend || step("frontend-tsrs", () => heavy({ key: "inner-frontend-tsrs", what: "native frontend checks", memoryMax: "16G", workers: 4 },
+      "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));
 
   if (going && agree) {
     const before = text("node", ["tooling/conformance/pin.ts", base]).trim().split("\n").at(-1) ?? "";
     const after = join(ROOT, "target/nts-dev/nts");
-    const built = step("build", () => heavy("the compiler", "14G", "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]));
+    const built = step("build", () => heavy({ key: "inner-build", what: "the compiler", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]));
     const runs: [string, string][] = [["c", "0"], ["llvm", "0"], ["jvm", "0"]];
     if (reachesCounting(changed)) {
       runs.push(["c", "1"], ["llvm", "1"]);
@@ -199,7 +209,7 @@ function main(argv: readonly string[]): number {
         break;
       }
       fine = step(`agree ${backend}${rc === "1" ? " rc" : ""}`, () =>
-        heavy("agree", "12G", "node", ["tooling/differential/agree.mjs", before, after, `--base=${base}`], {
+        heavy({ key: "inner-agree", what: "agree", memoryMax: "12G", workers: 4 }, "node", ["tooling/differential/agree.mjs", before, after, `--base=${base}`], {
           NTS_BACKEND: backend,
           NTS_RC: rc,
           NTS_AGREE_JOBS: "4",

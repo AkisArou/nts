@@ -196,10 +196,10 @@ export async function captureDependencies(capability:DependencyCapability,signal
       const before=performance.now();
       const inputRecord=join(capability.directory,'install-inputs.json');publish(inputRecord,inputSet);
       const inputSha256=hash(readFileSync(inputRecord));
-      // The build's memory is its resident budget, reserved once in the
-      // machine's memory ledger; inside a gate step, the step's reservation.
+      // The build's memory: inside a gate step, the step's reservation; alone,
+      // what earlier captures held, never more than its resident budget.
       let reservation:Awaited<ReturnType<typeof reserveJob>>;
-      try{reservation=await reserveJob({bytes:CAPTURE_BYTES,what:'oracle dependency capture'},{env,signal,report:message=>process.stderr.write(message+'\n')});}
+      try{reservation=await reserveJob({key:'oracle-dependency-capture',atMostBytes:CAPTURE_BYTES,what:'oracle dependency capture'},{env,signal,report:message=>process.stderr.write(message+'\n')});}
       catch(error){if(signal?.aborted)throw new ToolingInstrumentError('tooling-setup','oracle dependency capture canceled while it waited for memory');throw error;}
       const memory=new MemoryRun({budgetBytes:CAPTURE_BYTES,id:'oracledependency'+process.pid});
       let run:Awaited<ReturnType<typeof activeCommand>>,peakBytes:number,cpu:Record<string,number>;

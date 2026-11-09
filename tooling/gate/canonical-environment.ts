@@ -67,11 +67,12 @@ const EXPERIMENTS = new Set([
   "NTS_RC_NAIVE", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
   "NTS_KEEP_TEMP", "NTS_TRACE_LOWERING", "NTS_ARRIVALS", "NTS_DIFF_OBJECT_CACHE", "NTS_DIFF_NO_OBJECT_CACHE",
   "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_RUN_MAX_BYTES",
-  // The memory reading admission decides by, and the memory ledger a run
-  // queues in (memory-ledger.ts). A test gives its inner runs owned ones, so
-  // the host's memory and the machine's queue never decide it; set by a
-  // launcher, either makes the run an experiment.
-  "NTS_MEMINFO", "NTS_MEMORY_LEDGER",
+  // The memory reading admission decides by, the memory ledger a run queues
+  // in (memory-ledger.ts), and the history its steps are sized by
+  // (step-scheduling.ts). A test gives its inner runs owned ones, so the
+  // host's memory, the machine's queue and the tree's peaks never decide it;
+  // set by a launcher, any of them makes the run an experiment.
+  "NTS_MEMINFO", "NTS_MEMORY_LEDGER", "NTS_GATE_COSTS_DIR",
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";

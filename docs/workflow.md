@@ -309,6 +309,13 @@ the first node task.
   its steps; a job yields while one of higher priority waits; and no tool
   waits for the host's free memory itself
   ([log](records/notebooks/decisions-log.md#one-memory-ledger-for-the-machine-11-09)).
+- **Reservations are measured peaks** (11-09): a step or job reserves 1.25
+  times the largest of its last five peaks, sampled on the ledger's own
+  basis and kept in its tree's scheduling history; never measured there, the
+  largest of its kind, else its share of the machine; nothing declares a
+  number; a step's census runs under twice its reservation, never below one
+  worker's own cap, so a verdict never depends on the history
+  ([log](records/notebooks/decisions-log.md#reservations-are-measured-peaks-11-09)).
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit

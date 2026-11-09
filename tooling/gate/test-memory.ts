@@ -2,25 +2,30 @@
 // starts that reserves memory, decides by. A run reserves its memory in the
 // machine's ledger (memory-ledger.ts), so a test's run that used the real one
 // would queue behind the machine's own jobs, and be decided by the host's
-// free memory. Each gets a reading of its own (NTS_MEMINFO) and a ledger of
-// its own (NTS_MEMORY_LEDGER), as gateEnvironment's owned values or in the
-// tool's environment, so neither the host nor a neighbour ever decides it.
+// free memory; and it sizes its steps and jobs by the scheduling history of
+// its target (step-scheduling.ts), where a test's run would both read the
+// tree's real peaks and write its own among them. Each gets a reading of its
+// own (NTS_MEMINFO), a ledger of its own (NTS_MEMORY_LEDGER) and a history
+// of its own (NTS_GATE_COSTS_DIR), as gateEnvironment's owned values or in
+// the tool's environment, so neither the host, nor a neighbour, nor the
+// tree's history ever decides it.
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export type OwnMemory = { NTS_MEMINFO: string; NTS_MEMORY_LEDGER: string };
+export type OwnMemory = { NTS_MEMINFO: string; NTS_MEMORY_LEDGER: string; NTS_GATE_COSTS_DIR: string };
 
 /**
- * A memory reading and an empty ledger under `dir`: by default an ample
- * machine, 61 GiB, all of it available. Called again, it changes the reading
- * at once, as a reader polling it sees it: whole, never half written.
+ * A memory reading, an empty ledger and an empty history under `dir`: by
+ * default an ample machine, 61 GiB, all of it available. Called again, it
+ * changes the reading at once, as a reader polling it sees it: whole, never
+ * half written.
  */
 export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000) } = {}): OwnMemory {
   mkdirSync(dir, { recursive: true });
   const meminfo = join(dir, "meminfo");
   writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\n`);
   renameSync(`${meminfo}.next`, meminfo);
-  return { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: join(dir, "ledger") };
+  return { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: join(dir, "ledger"), NTS_GATE_COSTS_DIR: join(dir, "costs") };
 }
 
 type Reading = Parameters<typeof ownMemory>[1];

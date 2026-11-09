@@ -11,7 +11,8 @@ import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {spawn} from "node:child_process";
 import {once} from "node:events";
-import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
+import {censusCapBytes, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
+  unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
 
@@ -34,21 +35,72 @@ test("completed CPU history survives small runs and corrupt or failed cache writ
   ] }));
   const seed = readPreviousStepCpu(previous);
   assert.deepEqual([...seed], [["typescript-c", 2663]]);
-  assert.equal(writeStepCpuHistory(file, [{ name: "rustfmt", verdict: "PASS", cpu: 2 }], seed), undefined);
-  assert.deepEqual([...readStepCpuHistory(file)], [["rustfmt", 2], ["typescript-c", 2663]]);
-  assert.equal(writeStepCpuHistory(file, [{ name: "typescript-c", verdict: "PASS", cpu: 600 },
-    { name: "blockers", verdict: "FAIL", cpu: 1 }]), undefined);
-  assert.deepEqual([...readStepCpuHistory(file)], [["rustfmt", 2], ["typescript-c", 600]]);
+  const cpu = () => [...stepCpu(readCostHistory(file))];
+  assert.equal(writeCostHistory(file, { steps: [{ name: "rustfmt", verdict: "PASS", cpu: 2 }] }, seed), undefined);
+  assert.deepEqual(cpu(), [["rustfmt", 2], ["typescript-c", 2663]]);
+  assert.equal(writeCostHistory(file, { steps: [{ name: "typescript-c", verdict: "PASS", cpu: 600 },
+    { name: "blockers", verdict: "FAIL", cpu: 1 }] }), undefined);
+  assert.deepEqual(cpu(), [["rustfmt", 2], ["typescript-c", 600]]);
+  writeFileSync(file, JSON.stringify({ version: 2, steps: { "typescript-c": 1067 } }));
+  assert.deepEqual(cpu(), [["typescript-c", 1067]], "a history from before memory was measured keeps its CPU seconds");
   writeFileSync(file, JSON.stringify({ version: 1, steps: { "typescript-c": 1067 } }));
-  assert.equal(readStepCpuHistory(file).size, 0, "a wall-time history from before is not read as work");
-  writeFileSync(file, "partial{"); assert.equal(readStepCpuHistory(file).size, 0);
+  assert.equal(readCostHistory(file).steps.size, 0, "a wall-time history from before is not read as work");
+  writeFileSync(file, "partial{"); assert.equal(readCostHistory(file).steps.size, 0);
   const blocked = join(own, "not-a-directory"); writeFileSync(blocked, "preserve");
-  assert.equal(typeof writeStepCpuHistory(join(blocked, "steps.json"), []), "string");
+  assert.equal(typeof writeCostHistory(join(blocked, "steps.json"), {}), "string");
   assert.equal(readFileSync(blocked, "utf8"), "preserve");
+  assert.equal(typeof writeCostHistory(join(own, "removed", "costs", "steps.json"), { jobs: [{ key: "agree", peak: 1 }] }), "string",
+    "a history whose directory's parent has gone is not made again: a test's removed scratch stays removed");
   writeFileSync(previous, JSON.stringify({ schema: 1, environment: { canonical: false }, steps: [
     { name: "typescript-c", verdict: "PASS", cpu: 1 },
   ] }));
   assert.equal(readPreviousStepCpu(previous).size, 0);
+});
+
+test("a key's last few peaks are kept, per unit, and one small run does not shrink its reservation", t => {
+  const file = join(testScratch(t, "step-scheduling-peaks"), "costs/steps.json");
+  const MiB = 2 ** 20;
+  const run = (peak: number) => assert.equal(writeCostHistory(file, { steps: [{ name: "tests", verdict: "PASS", cpu: 10, memory: { unit: "step", peak } }],
+    jobs: [{ key: "agree", peak: peak / 2 }] }), undefined);
+  for (const peak of [800, 1000, 900, 950, 990, 100]) run(peak * MiB);
+  const history = readCostHistory(file);
+  assert.deepEqual(history.steps.get("tests"), { cpu: 10, memory: { unit: "step", peaks: [1000, 900, 950, 990, 100].map(peak => peak * MiB) } },
+    `the last ${KEPT_PEAKS} peaks, oldest first, beside the CPU seconds`);
+  assert.deepEqual(history.jobs.get("agree"), { unit: "worker", peaks: [500, 450, 475, 495, 50].map(peak => peak * MiB) });
+  assert.equal(peakReservation(history.steps.get("tests")!.memory!.peaks), 1250 * MiB, "1.25 times the largest: the small last run shrinks nothing");
+  assert.equal(peakReservation([MiB]), LEAST_RESERVATION_BYTES, "never less than the least reservation");
+  assert.equal(peakReservation([1000 * MiB + 1]), 1251 * MiB, "rounded up to a whole MiB");
+  // A step that changed unit (fixed, now elastic) starts its peaks again.
+  assert.equal(writeCostHistory(file, { steps: [{ name: "tests", memory: { unit: "token", peak: 64 * MiB } }] }), undefined);
+  assert.deepEqual(readCostHistory(file).steps.get("tests"), { cpu: 10, memory: { unit: "token", peaks: [64 * MiB] } });
+  writeFileSync(file, JSON.stringify({ version: 3, steps: { tests: { memory: { unit: "step", peaks: [] } } }, jobs: {} }));
+  assert.equal(readCostHistory(file).steps.size, 0, "a key with no peaks is not a history");
+});
+
+test("an unmeasured step reserves the largest of its kind, and with nothing measured, its share of the machine", () => {
+  const GiB = 2 ** 30, MiB = 2 ** 20;
+  const history = { steps: new Map([
+    ["tests", { cpu: 1, memory: { unit: "step" as const, peaks: [4 * GiB] } }],
+    ["format", { memory: { unit: "step" as const, peaks: [64 * MiB] } }],
+    ["integrity", { memory: { unit: "token" as const, peaks: [400 * MiB] } }],
+  ]), jobs: new Map([["agree", { unit: "worker" as const, peaks: [800 * MiB] }]]) };
+  assert.deepEqual(unitReservation(history, { step: "tests" }, "step", 1), { bytes: 5 * GiB, basis: "measured" });
+  assert.deepEqual(unitReservation(history, { step: "format" }, "step", 1), { bytes: LEAST_RESERVATION_BYTES, basis: "measured" });
+  assert.deepEqual(unitReservation(history, { step: "clippy" }, "step", 1), { bytes: 5 * GiB, basis: "largest" }, "the largest fixed step's");
+  assert.deepEqual(unitReservation(history, { step: "examples" }, "token", 1), { bytes: 500 * MiB, basis: "largest" }, "the largest token's");
+  assert.deepEqual(unitReservation(history, { step: "integrity" }, "step", 7), { bytes: 5 * GiB, basis: "largest" },
+    "peaks measured per token say nothing of the step as a whole");
+  assert.deepEqual(unitReservation(history, { job: "record-oracles" }, "worker", 1), { bytes: 1000 * MiB, basis: "largest" }, "the largest job worker's");
+  const empty = { steps: new Map(), jobs: new Map() };
+  assert.deepEqual(unitReservation(empty, { step: "tests" }, "step", machineShare(32 * GiB, 8, 24)), { bytes: Math.floor(32 * GiB / 3), basis: "share" });
+  assert.equal(machineShare(32 * GiB, 48, 24), 32 * GiB, "never more than the machine");
+});
+
+test("a census cap is twice its reservation, never below its share or one worker's own cap", () => {
+  const GiB = 2 ** 30;
+  assert.equal(censusCapBytes(4 * GiB, 2 * GiB, 1 * GiB), 8 * GiB, "room for a peak past the reservation to be measured");
+  assert.equal(censusCapBytes(GiB / 4, 3 * GiB, GiB), 3 * GiB, "an empty history's share");
+  assert.equal(censusCapBytes(GiB / 4, GiB / 2, 6 * GiB), 6 * GiB, "a case alone meets only its own cap");
 });
 
 test("a split step's measured work is shared among its successors, never copied to each", () => {
@@ -92,7 +144,10 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
   oracleWorkspaceFixture(t,root);
   const baseline = "tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n";
   writeFileSync(join(gate, "times.tsv"), baseline);
-  writeFileSync(join(target, "gate-costs/steps.json"), JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000, "typescript-oracles": 16000 } }) + "\n");
+  // The run's history is the test's own, as its memory is.
+  const memory = ownMemory(join(own, "memory")), historyFile = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
+  mkdirSync(memory.NTS_GATE_COSTS_DIR);
+  writeFileSync(historyFile, JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000, "typescript-oracles": 16000 } }) + "\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const observed = join(own, "starts.jsonl");
@@ -110,7 +165,7 @@ fi
   // TypeScript producer's capture directory.
   const planned = gateEnvironment(hostEnvironment(process.env), { run, oracleRoot:root, owned: {
     NTS_GATE_STEPS: "tests typescript-c", NTS_GATE_SLOTS: "12",
-    ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, NTS_BIN: compiler,
+    ...memory, CARGO_TARGET_DIR: target, NTS_BIN: compiler,
   } });
   assert.equal(JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!).directory,join(run,"tmp/oracle-dependencies"));
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
@@ -125,19 +180,25 @@ fi
   const admissions = [...actual.stderr.matchAll(/^-- ([a-z-]+) started /gm)].map(match => match[1]);
   assert.deepEqual(admissions, ["typescript-oracles", "tests", "typescript-c"], "measured CPU work takes precedence over the committed baseline");
   assert.equal(readFileSync(join(gate, "times.tsv"), "utf8"), baseline, "scheduling must never rewrite timing-verdict baselines");
-  const history = JSON.parse(readFileSync(join(target, "gate-costs/steps.json"), "utf8")) as { version: number; steps: Record<string, number> };
-  assert.equal(history.version, 2);
   // Only a canonical run writes the history (run.mjs); this test's run is
   // canonical alone and not inside a gate, whose variables make it an experiment.
   const measured = summary.steps.find(step => step.name === "typescript-c")?.cpu;
   const written = summary.environment?.canonical === true && typeof measured === "number" && measured > 0;
-  assert.equal(history.steps["typescript-c"], written ? measured : 8000,
+  assert.equal(JSON.parse(readFileSync(historyFile, "utf8")).version, written ? 3 : 2);
+  assert.equal(stepCpu(readCostHistory(historyFile)).get("typescript-c"), written ? measured : 8000,
     "a canonical run records the step's measured CPU; any other run leaves the history as it was");
 });
 
-const GiB = 2 ** 30;
-type MemoryRow = { slots: number; min?: number; mem: number; elastic?: boolean; after?: string[]; bound: number };
-type MemoryStep = { name: string; verdict: string; started_at: string; wall: number; memory_peak_bytes: number | null };
+const GiB = 2 ** 30, MiB = 2 ** 20;
+type MemoryRow = {
+  slots: number; min?: number; elastic?: boolean; after?: string[]; bound: number;
+  /** GiB the step reserves (one token's, for an elastic step), as its history in the test's own target says; none, and it has no history. */
+  reserve?: number;
+};
+type MemoryStep = { name: string; verdict: string; reason?: string; started_at: string; wall: number; memory_peak_bytes: number | null;
+  memory: { peak_bytes: number | null; reserved_bytes: number; over: boolean; basis: string } };
+/** The peak a history holds for a step to reserve `bytes`, a whole MiB of at least 128: 1.25 times it, rounded up to a MiB. */
+const peakFor = (bytes: number) => Math.floor(bytes / 1.25);
 
 // Exits once its argument exists, or, with --entry, once the ledger directory
 // it names holds a request: the fixture's steps wait on events, never on time.
@@ -154,6 +215,10 @@ type MemoryFixture = {
   /** A shell script every step runs, given the step's name and the fixture's directory. */
   payload: string;
   availableKiB: number;
+  /** The machine's size, 32 GiB unless given. */
+  totalKiB?: number;
+  /** Values the launcher's code owns beyond the fixture's. */
+  owned?: Record<string, string>;
   /** The run's place in the ledger's queue, as its launcher's code gives it. */
   priority?: "landing" | "agent" | "full-check";
   /** Runs before the runner starts, with the fixture's directory and memory. */
@@ -164,9 +229,10 @@ type MemoryFixture = {
  * A real runner over `steps` in a scratch repository: the real step table with
  * `rows` in place of those steps' own, every step running `payload`, on a
  * 32 GiB machine with `availableKiB` of it available, read from a file the
- * test writes, and a memory ledger of the run's own.
+ * test writes, a memory ledger of the run's own, and a history of its own in
+ * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, priority, before }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   t.after(() => { removable(own); rmSync(own, { recursive: true, force: true }); });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
@@ -178,7 +244,7 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
     if (name === "tooling/gate/run.mjs") writeFileSync(destination, readFileSync(original));
     else if (name === "tooling/gate/step-table.mjs") {
       writeFileSync(destination, `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(original).href)};
-const rows = ${JSON.stringify(rows)};
+const rows = ${JSON.stringify(Object.fromEntries(Object.entries(rows).map(([name, { reserve: _, ...row }]) => [name, row])))};
 export const STEPS = REAL.map(row => Object.hasOwn(rows, row.name) ? { name: row.name, ...rows[row.name] } : row);
 export { stepTableProblem };
 `);
@@ -199,17 +265,22 @@ else
   exec sh "$(dirname "$0")/payload.sh" "$2" ${JSON.stringify(own)}
 fi
 `);
-  const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB: 32 * 2 ** 20 });
+  const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB });
+  const history = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
+  mkdirSync(memory.NTS_GATE_COSTS_DIR);
+  writeFileSync(history, JSON.stringify({ version: 3, jobs: {}, steps: Object.fromEntries(Object.entries(rows).flatMap(([name, row]) => row.reserve === undefined ? []
+    : [[name, { memory: { unit: row.elastic ? "token" : "step", peaks: [peakFor(row.reserve * GiB)] } }]])) }) + "\n");
   before?.(own, memory);
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, CARGO_TARGET_DIR: target, ...(priority ? { NTS_MEMORY_PRIORITY: priority } : {}),
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, CARGO_TARGET_DIR: target, ...(priority ? { NTS_MEMORY_PRIORITY: priority } : {}), ...owned,
   } });
   const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
-    verdict: string; steps: MemoryStep[]; memory: { priority: string; peak_bytes: number; growths: number; withdrawn: number; waited_s: number };
+    verdict: string; steps: MemoryStep[];
+    memory: { priority: string; peak_bytes: number; growths: number; withdrawn: number; shrinks: number; outranked: number; waited_s: number; unmeasured: string[]; over: string[] };
   };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
-  return { result, summary, step, output: result.stdout + result.stderr };
+  return { result, summary, step, output: result.stdout + result.stderr, history, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
 }
 
 test("steps whose memory together is more than the run can reserve run one after the other", t => {
@@ -217,7 +288,7 @@ test("steps whose memory together is more than the run can reserve run one after
   // format and cannot grow by records' 3 more beside it.
   const { result, summary, step, output } = memoryRun(t, {
     steps: "format records", availableKiB: 6.5 * 2 ** 20,
-    rows: { format: { slots: 1, mem: 3, bound: 60 }, records: { slots: 1, mem: 3, bound: 60 } },
+    rows: { format: { slots: 1, reserve: 3, bound: 60 }, records: { slots: 1, reserve: 3, bound: 60 } },
     times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
     payload: `
 case $1 in
@@ -247,9 +318,9 @@ test("a fixed step waiting for memory is not starved by an elastic step's tokens
   const { result, summary, output } = memoryRun(t, {
     steps: "integrity records format", availableKiB: 6.5 * 2 ** 20,
     rows: {
-      integrity: { elastic: true, slots: 16, min: 1, mem: 16, bound: 60 },
-      records: { slots: 1, mem: 0.1, bound: 60 },
-      format: { slots: 1, mem: 3, after: ["records"], bound: 60 },
+      integrity: { elastic: true, slots: 16, min: 1, reserve: 1, bound: 60 },
+      records: { slots: 1, reserve: 0.125, bound: 60 },
+      format: { slots: 1, reserve: 3, after: ["records"], bound: 60 },
     },
     times: "integrity\t100\t800\t8\nformat\t100\t50\t1\nrecords\t100\t1\t1\n",
     payload: `
@@ -300,7 +371,7 @@ test("a run that waits to grow gives back what it does not use, so a request que
   t.after(() => { if (neighbour && neighbour.exitCode === null && neighbour.signalCode === null) neighbour.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
     steps: "format records", availableKiB: 10 * 2 ** 20,
-    rows: { format: { slots: 1, mem: 3, bound: 60 }, records: { slots: 1, mem: 8, after: ["format"], bound: 60 } },
+    rows: { format: { slots: 1, reserve: 3, bound: 60 }, records: { slots: 1, reserve: 8, after: ["format"], bound: 60 } },
     times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
     payload: `
 case $1 in
@@ -357,7 +428,7 @@ test("a run outranked by a request of higher priority starts nothing new and giv
   t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
     steps: "integrity", availableKiB: 6.5 * 2 ** 20, priority: "full-check",
-    rows: { integrity: { elastic: true, slots: 8, min: 1, mem: 8, bound: 60 } },
+    rows: { integrity: { elastic: true, slots: 8, min: 1, reserve: 1, bound: 60 } },
     times: "integrity\t100\t800\t8\n",
     payload: `
 own=$2 gate=$(dirname "$0")
@@ -395,4 +466,75 @@ esac
   assert.match(output, /memory: no request of higher priority waits any more: the run goes on after \d+ s/);
   assert.ok(summary.memory.outranked >= 1 && summary.memory.shrinks >= 1, JSON.stringify(summary.memory));
   assert.equal(summary.memory.priority, "full-check");
+});
+
+test("a step's charged peak sizes its next run, and a step that held more than it reserved is over", t => {
+  // format reserves 128 MiB and holds 300: a child it started holds them as
+  // its main process ends, and the run samples what still runs then. records,
+  // never measured here, reserves the largest of its kind, and copies the
+  // run's ledger entry while the run holds it.
+  const { result, summary, step, output, history, canonical } = memoryRun(t, {
+    steps: "format records", availableKiB: 16 * 2 ** 20,
+    rows: { format: { slots: 1, reserve: 0.125, bound: 120 }, records: { slots: 1, after: ["format"], bound: 120 } },
+    times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
+    payload: `
+own=$2
+case $1 in
+  format)
+    python3 -c 'import signal, sys; held = bytes([1]) * (300 * 2 ** 20); open(sys.argv[1], "w").close(); signal.pause()' "$own/held" &
+    exec node "$(dirname "$0")/until.mjs" "$own/held" ;;
+  records) cat "$NTS_MEMORY_LEDGER/admitted/$NTS_MEMORY_RESERVATION.json" > "$own/entry.json" ;;
+esac
+` });
+  assert.equal(result.status, 0, output);
+  assert.equal(summary.verdict, "green", "a step over its reservation is told, never failed");
+  const format = step("format"), records = step("records");
+  assert.ok(format.memory.peak_bytes! >= 300 * MiB, `format's peak, on the ledger's basis: ${format.memory.peak_bytes}`);
+  assert.deepEqual([format.memory.reserved_bytes, format.memory.over, format.memory.basis], [128 * MiB, true, "measured"]);
+  assert.deepEqual([records.memory.reserved_bytes, records.memory.over, records.memory.basis], [128 * MiB, false, "largest"]);
+  assert.match(output, /memory(?:\x1b\[0m)?: format held \d+\.\d MiB, past its 128\.0 MiB reservation/);
+  assert.match(output, /OVER +format +held/);
+  assert.deepEqual([summary.memory.over, summary.memory.unmeasured], [["format"], ["records"]]);
+  const entry = JSON.parse(readFileSync(join(dirname(history), "../../entry.json"), "utf8")) as { what: string; unmeasured?: string[] };
+  assert.match(entry.what, /^gate run /);
+  assert.deepEqual(entry.unmeasured, ["records"], "the run's entry names the steps it sized without a measurement");
+  if (!canonical) return;
+  // The next run in this target reserves by what this one held.
+  const kept = readCostHistory(history).steps.get("format")!.memory!;
+  assert.equal(kept.peaks.length, 2);
+  assert.equal(kept.peaks[1], format.memory.peak_bytes);
+  assert.ok(peakReservation(kept.peaks) >= 375 * MiB, `${peakReservation(kept.peaks)}`);
+  assert.equal(readCostHistory(history).steps.get("records")!.memory!.unit, "step", "records is measured now");
+});
+
+test("a narrow census step with no history passes a case that needs more than its share but fits one worker's own cap", t => {
+  // A 3 GiB machine, 2 of them kept for the system, and ten slots: one
+  // slot's share of the 1 GiB the ledger can give is 102 MiB, and with
+  // nothing measured format reserves that, so twice its reservation is 205.
+  // Its one case, run alone as a serial census case, holds 750 MiB, which
+  // fits a worker's own 1 GiB cap: the census aggregate is never below that
+  // cap, so the case passes here as in a tree whose history knew it.
+  const { result, summary, step, output } = memoryRun(t, {
+    steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
+    rows: { format: { slots: 1, bound: 300 } },
+    owned: { NTS_CENSUS_MEMORY_CAP_KB: String(2 ** 20) },
+    times: "format\t100\t20\t1\n",
+    payload: `
+case $1 in
+  format) exec node "$(dirname "$0")/census-case.ts" ;;
+esac
+`,
+    before: own => writeFileSync(join(own, "repo/tooling/gate/census-case.ts"), `import { compileSync, serialRun } from ${JSON.stringify(new URL("../census/worker-memory.ts", import.meta.url).href)};
+const cap = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB);
+serialRun({ memoryCapKb: cap });
+const held = compileSync({ memoryCapKb: cap }, "python3", ["-c", "held = bytes([1]) * (750 * 2 ** 20); print(len(held))"], { encoding: "utf8" });
+if (held.status !== 0 || held.memoryKilled) throw new Error("the case did not run to its end: " + held.stderr);
+`),
+  });
+  assert.equal(result.status, 0, output);
+  assert.equal(summary.verdict, "green", JSON.stringify(step("format")));
+  const format = step("format");
+  assert.equal(format.memory.basis, "share");
+  assert.equal(format.memory.reserved_bytes, Math.floor(GiB / 10));
+  assert.equal(format.memory.over, true, "it held more than its share, and its next run reserves by it");
 });

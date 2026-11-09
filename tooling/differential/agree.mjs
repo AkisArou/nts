@@ -399,13 +399,13 @@ if (examples.length === 0) {
   process.exit(2);
 }
 
-// Each worker is a lowering, a clang build and a node process -- about a gigabyte
-// at the top. Cores are rarely what this box runs out of; the job reserves
-// 1.5 GB a worker once in the machine's memory ledger, and the checks it starts
-// run inside that reservation (inside a gate step or an inner-loop phase, the
-// one it was started in).
+// Each worker is a lowering, a clang build and a node process. Cores are
+// rarely what this box runs out of; the job reserves once in the machine's
+// memory ledger what its earlier runs held per worker, and the checks it
+// starts run inside that reservation (inside a gate step or an inner-loop
+// phase, the one it was started in).
 const JOBS = Number(process.env.NTS_AGREE_JOBS ?? Math.min(8, availableParallelism()));
-await reserveJob({ bytes: Math.ceil(JOBS * 1.5e9), what: `agree.mjs: ${examples.length} example(s), ${JOBS} at a time` });
+await reserveJob({ key: "agree", units: JOBS, what: `agree.mjs: ${examples.length} example(s), ${JOBS} at a time` });
 
 // Every temporary file under `~/.cache`, never `/tmp`: `/tmp` here is a tmpfs
 // that fills, and runs out of inodes before it runs out of bytes.

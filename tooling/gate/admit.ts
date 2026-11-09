@@ -1,8 +1,16 @@
 // Run a command once the machine's memory ledger admits it, or say what the
 // ledger holds:
 //
+//   node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority ...] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]
 //   node tooling/gate/admit.ts --status [--json]
+//
+// With `--key`, the command reserves what its earlier runs under that key
+// were measured to hold, per worker, in the scheduling history of the target
+// it runs against (memory-ledger.ts's `jobSizing`), never more than
+// `--at-most` (its own kernel cap, say). Its peak is watched while it runs
+// and added to that history once it ends, so its next run reserves by it.
+// With `--bytes`, it reserves that much, and nothing is measured.
 //
 // It waits its turn in the ledger (./memory-ledger.ts), printing a line when
 // it starts waiting and one when it is admitted, and then *becomes* the
@@ -24,15 +32,17 @@
 // its request, and admit then ends by that signal.
 //
 // `--status` prints the reservations admitted (what each is for, its
-// priority, what it reserved and uses now, its owner and since when) and the
-// queue in its order (what each request asks, and how long it has waited);
-// `--json`, the same as `check.ts status --json`'s envelope: version, kind
-// ("memory") and at, numbers as numbers.
+// priority, what it reserved and uses now, its owner and since when, the steps
+// or jobs it sized without a measurement of their own, and those that held
+// more than they reserved) and the queue in its order (what each request
+// asks, and how long it has waited); `--json`, the same as `check.ts status
+// --json`'s envelope: version, kind ("memory") and at, numbers as numbers.
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
-import { gib, ledgerStatus, parseBytes, PRIORITIES, priorityOf, reserve, type LedgerStatus, type Priority } from "./memory-ledger.ts";
+import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 
-const USAGE = "usage: node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
+  + "       node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
   + "       node tooling/gate/admit.ts --status [--json]";
 
 class Refusal extends Error {
@@ -51,10 +61,10 @@ function say(line: string): void {
   try { writeSync(2, `${line}\n`); } catch { /* there is nowhere left to say it */ }
 }
 
-type Options = { bytes: number; priority: Priority; what: string; command: string; args: string[] };
+type Options = { bytes: number; job: (JobSizing & { key: string }) | null; priority: Priority; what: string; command: string; args: string[] };
 
 function parse(argv: readonly string[]): Options {
-  let bytes: number | undefined, what: string | undefined;
+  let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined;
   let priority: Priority | undefined;
   let at = 0;
   for (; at < argv.length && argv[at] !== "--"; at++) {
@@ -67,6 +77,13 @@ function parse(argv: readonly string[]): Options {
     };
     if (flag === "--bytes") {
       try { bytes = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
+    } else if (flag === "--at-most") {
+      try { atMost = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
+    } else if (flag === "--key") key = value();
+    else if (flag === "--workers") {
+      const given = value();
+      if (!/^[1-9]\d*$/.test(given) || !Number.isSafeInteger(Number(given))) throw new Refusal(`--workers is a positive whole number, not ${given}`, 125, true);
+      workers = Number(given);
     } else if (flag === "--priority") {
       const given = value();
       if (!(PRIORITIES as readonly string[]).includes(given)) throw new Refusal(`--priority is one of ${PRIORITIES.join(", ")}, not ${given}`, 125, true);
@@ -75,10 +92,16 @@ function parse(argv: readonly string[]): Options {
     else throw new Refusal(`unknown argument ${arg}; the command goes after --`, 125, true);
   }
   const [command, ...args] = argv.slice(at + 1);
-  if (bytes === undefined) throw new Refusal("--bytes is required", 125, true);
+  if ((bytes === undefined) === (key === undefined)) throw new Refusal("one of --key and --bytes says what to reserve", 125, true);
+  if (key === undefined && (workers !== undefined || atMost !== undefined)) throw new Refusal("--workers and --at-most size a --key", 125, true);
   if (command === undefined || command === "") throw new Refusal("no command after --", 125, true);
   try { priority ??= priorityOf(process.env); } catch (error) { throw new Refusal((error as Error).message, 125); }
-  return { bytes, priority, what: what ?? [command, ...args].join(" "), command, args };
+  let job: Options["job"] = null;
+  if (key !== undefined) {
+    try { job = { key, ...jobSizing({ key, units: workers, atMostBytes: atMost }) }; }
+    catch (error) { throw new Refusal((error as Error).message, 125, error instanceof TypeError); }
+  }
+  return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args };
 }
 
 const runnable = (file: string) => {
@@ -112,7 +135,9 @@ function describeStatus(status: LedgerStatus): string {
       + `${gib(machine.floor_bytes)} kept for the system; room for ${gib(Math.max(0, status.room_bytes))}`,
     `  admitted (${status.admitted.length})${status.admitted.length ? ":" : ": none"}`,
     ...status.admitted.map(entry => `    ${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
-      + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`),
+      + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`
+      + (entry.unmeasured.length ? `\n      unmeasured (sized by the largest of its kind, or its share of the machine): ${entry.unmeasured.join(" ")}` : "")
+      + (entry.over.length ? `\n      over (held more than it reserved): ${entry.over.join(" ")}` : "")),
     `  waiting (${status.waiting.length})${status.waiting.length ? ":" : ": none"}`,
     ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(10)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
       + `waited ${Math.round(entry.waited_s)} s  pid ${entry.waiter_pid}${entry.live ? "" : "  (gone)"}  ${entry.what}`),
@@ -145,7 +170,8 @@ async function main(argv: readonly string[]): Promise<void> {
   }
   let reservation: Awaited<ReturnType<typeof reserve>>;
   try {
-    reservation = await reserve({ bytes: options.bytes, what: options.what, priority: options.priority }, { report: say, signal: waiting.signal });
+    reservation = await reserve({ bytes: options.bytes, what: options.what, priority: options.priority,
+      unmeasured: options.job && options.job.basis !== "measured" ? [options.job.key] : [] }, { report: say, signal: waiting.signal });
   } catch (error) {
     if (stoppedBy === undefined) throw error;
     // The request is withdrawn. End by the signal, as the command would have.
@@ -153,6 +179,8 @@ async function main(argv: readonly string[]): Promise<void> {
     process.kill(process.pid, stoppedBy);
     return;
   }
+  // Watched from outside: this process becomes the command.
+  if (options.job && !reservation.inherited) watchPeak(reservation, options.job, say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;
   try { execve(file, [options.command, ...options.args], env); }

@@ -14,6 +14,17 @@ import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.t
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
+/** One census worker's own kernel cap, in KiB, unless NTS_CENSUS_MEMORY_CAP_KB says otherwise. */
+const WORKER_CAP_KB = 6_000_000;
+
+/**
+ * One census worker's own kernel cap, in bytes: what a case may hold alone.
+ * The gate never caps a step's census aggregate below it (run.mjs's
+ * censusCap), so a case replayed alone meets only this limit.
+ */
+export function workerCapBytes(env: NodeJS.ProcessEnv = process.env): number {
+  return Number(env.NTS_CENSUS_MEMORY_CAP_KB ?? WORKER_CAP_KB) * 1024;
+}
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const integer = (value: number, what: string) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${what} must be a positive integer, got ${value}`);
@@ -279,7 +290,7 @@ type MemoryResult<T> = T & { memoryKilled: boolean; residentLimitBytes: number; 
 export function serialRun(tools: CompilerTools): void {
   if (inResidentWorker()) return;
   const run = memoryRun();
-  const worker = run.worker("serial", Number(tools.memoryCapKb ?? 6_000_000) * 1024);
+  const worker = run.worker("serial", Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024);
   const scope = worker.scope(process.execPath, [...process.execArgv, ...process.argv.slice(1)]);
   scope.env.NTS_CENSUS_CASE_CONCURRENCY = "exclusive";
   const activeCase = join(run.directory, "serial-case.txt");
@@ -322,7 +333,7 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
   // Standalone callers are bounded too. Serial runners and parallel census
   // workers enter a scope once, then compile without a per-case bus round trip.
   memoryRun();
-  const bytes = Number(tools.memoryCapKb ?? 6_000_000) * 1024;
+  const bytes = Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024;
   let worker = direct!.workers.get(bytes);
   if (!worker) {
     worker = direct!.run.worker(`direct${direct!.workers.size}`, bytes);

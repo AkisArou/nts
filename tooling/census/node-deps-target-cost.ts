@@ -7,7 +7,6 @@ import {getPriority,homedir} from 'node:os';
 import {spawnCounted,counterProblem,COUNTER_SCOPE} from '../gate/cputime.mjs';
 import {needed,forbidden} from '../gate/node-deps-elf.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
-import {stepMemoryBytes} from '../gate/step-table.mjs';
 
 const tree=resolve(import.meta.dirname,'../..');
 function affinityList(text) {
@@ -94,9 +93,9 @@ const plans=linux?[
 ];
 // Refuse absent inspection/emulation prerequisites before the first counted exec.
 for(const program of ['file',...(linux?['readelf','/usr/bin/qemu-aarch64-static']:['llvm-objdump'])])run(program,['--version'],process.env);
-// Building dependency archives and programs is the addons step's work: its
-// memory, reserved once for every measured build.
-await reserveJob({bytes:stepMemoryBytes('addons'),what:`node dependency target costs (${plans.length} targets)`});
+// Building dependency archives and programs: their memory, reserved once for
+// every measured build, by what earlier runs held.
+await reserveJob({key:'node-deps-target-cost',what:`node dependency target costs (${plans.length} targets)`});
 const rows=[];
 function inventory(directory) {
  const result={};

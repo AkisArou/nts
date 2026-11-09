@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { admission, benchWithLock, resultsCommit, slowerRows } from "./bench.ts";
 import { repository, stubBench } from "./repository-fixture.ts";
+import { readLedger } from "../gate/memory-ledger.ts";
+import { useOwnMemory } from "../gate/test-memory.ts";
 
 test("the results-only commit on verified is the run to submit; anything else is named", t => {
   const repo = repository(t);
@@ -39,9 +41,13 @@ test("the nightly waits for the reserved core alone: with-lock.sh asked without 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const gate = join(root, "controller/tooling/gate"), target = join(root, "target"), tree = join(root, "tree"), run = join(root, "run");
   for (const dir of [gate, tree, run]) mkdirSync(dir, { recursive: true });
-  // A stand-in with-lock.sh: it says what it was asked to run, and admits it or refuses it as the test says.
+  // The session reserves in a ledger of the test's own, against a reading of its own.
+  const memory = useOwnMemory(join(root, "memory"));
+  // A stand-in with-lock.sh: it says what it was asked to run, and inside
+  // which reservation, and admits it or refuses it as the test says.
   writeFileSync(join(gate, "with-lock.sh"), [
     'printf "%s\\n" "$@" > "$(dirname "$0")/argv"',
+    'printf "%s\\n" "$NTS_MEMORY_PRIORITY" "${NTS_MEMORY_RESERVATION:+a reservation}" > "$(dirname "$0")/memory"',
     'if [ -e "$(dirname "$0")/refuse" ]; then echo "with-lock: pid 4242 is measuring; not starting another" >&2; exit 75; fi',
     'echo "nts-bench measured"',
     "",
@@ -49,9 +55,13 @@ test("the nightly waits for the reserved core alone: with-lock.sh asked without 
   const bench = benchWithLock(join(root, "controller"), target);
   assert.deepEqual(bench(tree, run), { admitted: true, status: 0 });
   assert.deepEqual(readFileSync(join(gate, "argv"), "utf8").split("\n").filter(Boolean), [join(target, "release/nts-bench"), "--root", tree]);
+  assert.deepEqual(readFileSync(join(gate, "memory"), "utf8").split("\n").filter(Boolean), ["full-check", "a reservation"],
+    "the session holds its memory before the lock admits it, at the full check's priority");
+  assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).admitted.filter(entry => entry.live).length, 0, "the session's reservation ends with it");
   writeFileSync(join(gate, "refuse"), "");
   assert.deepEqual(bench(tree, run), { admitted: false, reason: "with-lock: pid 4242 is measuring; not starting another" });
-  assert.match(readFileSync(join(run, "bench.log"), "utf8"), /^nts-bench measured\nwith-lock: pid 4242 is measuring/);
+  // Between the two, what the ledger says of the first session's reservation, which ended with it.
+  assert.match(readFileSync(join(run, "bench.log"), "utf8"), /^nts-bench measured\n(?:memory: .*\n)*with-lock: pid 4242 is measuring/);
 });
 
 test("why a run was not admitted is the last refusal its log gives, the lock's or nts-bench's", () => {

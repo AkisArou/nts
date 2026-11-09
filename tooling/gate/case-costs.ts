@@ -1,7 +1,6 @@
 // Observations only: none of these values participates in admission or verdicts.
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { memoryWarning } from "./memory-calibration.ts";
 
 /** The run's memory as run.mjs counts it: its reservation, what its running steps are counted for, and what waits. */
 export type MemoryState = {
@@ -19,7 +18,8 @@ type Phase = { phase: string; wall_s: number; self_cpu_s: number | null; child_c
 export type Check = { project: string; binary_sha: string; pid: number; step: string; start: number; end: number;
   wall_s: number; cpu_resolution_s: number | null; self_peak_rss_kb: number | null;
   child_peak_rss_kb: number | null; phases: Phase[]; complete: boolean };
-export type TimedStep = { name: string; started_at?: string; wall?: number; mem_gb?: number };
+/** A step as the runner reports it: `memory.reserved_bytes` is the most it was counted for in the run's reservation. */
+export type TimedStep = { name: string; started_at?: string; wall?: number; memory?: { reserved_bytes?: number } };
 let aggregateCounter = 0;
 
 export function recordAggregatePeak(group: string, scopeBudgetBytes: number, env: NodeJS.ProcessEnv = process.env): void {
@@ -284,9 +284,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
             unavailable: rows.filter(row => row.status === "unavailable").length,
             cross_run_hits: rows.filter(row => String(row.status).startsWith("hit-") && row.run && row.baseline_run && row.run !== row.baseline_run).length }];
         })) },
-      aggregate_memory: { reserved_step_mem_bytes: step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30),
+      aggregate_memory: { reserved_step_bytes: step.memory?.reserved_bytes ?? null,
         scopes, max_scope_peak_bytes: peaks.length ? Math.max(...peaks) : null,
-        warning: memoryWarning(peaks.length ? Math.max(...peaks) : null, step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30)),
         measured_scopes: peaks.length, unknown_scopes: scopes.length - peaks.length },
       coverage: { started: cases.length, completed: completed.length, incomplete: cases.length - completed.length,
         expected_program_checks: CHECK_STEPS.has(step.name) ? tokens.filter(r => r.grant !== undefined).length : null,

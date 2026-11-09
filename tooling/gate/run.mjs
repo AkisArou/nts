@@ -40,17 +40,18 @@
 //     accepted. A step that did nothing is never counted as one that passed.
 //
 // **Scheduling.** Each step has a row below: the slots (workers) it can use,
-// the memory it needs, whether it starts frontends, and what it needs or must
-// follow. The budget is a pool of NTS_GATE_SLOTS tokens (see "Tokens"). Most
-// steps are *elastic*: started with their whole pool of workers, each of which
-// takes a token around the process it runs, so a step's share of the machine
-// follows its work while it runs. The rest -- cargo, nts-suite, the test
-// binaries, parallel inside one process -- hold a fixed grant of slots from
-// start to end. Steps start longest first: their CPU seconds over the slots
-// they can use (`workEstimate`); short fixed steps ride beside the budget so
-// the first verdicts arrive in the first minutes. Memory comes from the
-// machine's memory ledger: the run holds one reservation, which grows as its
-// steps and tokens need it and shrinks as they end (see "Memory").
+// whether it starts frontends, and what it needs or must follow. The budget is
+// a pool of NTS_GATE_SLOTS tokens (see "Tokens"). Most steps are *elastic*:
+// started with their whole pool of workers, each of which takes a token
+// around the process it runs, so a step's share of the machine follows its
+// work while it runs. The rest -- cargo, nts-suite, the test binaries,
+// parallel inside one process -- hold a fixed grant of slots from start to
+// end. Steps start longest first: their CPU seconds over the slots they can
+// use (`workEstimate`); short fixed steps ride beside the budget so the first
+// verdicts arrive in the first minutes. Memory comes from the machine's memory
+// ledger: the run holds one reservation, which grows as its steps and tokens
+// need it -- each by what its history measured -- and shrinks as they end (see
+// "Memory").
 //
 // Environment:
 //   NTS_GATE_STEPS        steps to run, space separated (default: all)
@@ -76,10 +77,14 @@
 //   NTS_GATE_STEP         the step's name, sent with each token request
 //   NTS_MEMORY_RESERVATION the run's reservation: a tool in the step that
 //                         reserves memory runs inside it and asks for nothing
+//   NTS_GATE_STEP_MEMORY_BYTES the kernel cap of the step's census aggregate
+//                         (step-scheduling.ts's censusCapBytes)
+//   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
+//                         unless the launcher's code owns another, as a test does)
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
+import {censusCapBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {stepBound, stepBoundReason} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -94,9 +99,10 @@ import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
-import {gib, machineMemory, neverFits, priorityOf, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
+import {cgroupCharge, gib, machineMemory, priorityOf, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
+import {workerCapBytes} from "../census/worker-memory.ts";
 import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
-import {frontendBudget} from "./budget.ts";
+import {defaultSlots, frontendBudget} from "./budget.ts";
 import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {finishRunTemporary} from "./run-temporary.ts";
@@ -197,7 +203,7 @@ const intEnv = (name, fallback) => {
   if (!Number.isFinite(n) || n <= 0) usage(`${name}=${v} is not a positive number`);
   return n;
 };
-const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", Math.max(1, Math.floor((cores * 3) / 4)))));
+const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", defaultSlots(cores))));
 // The run's place in the machine's memory queue: the launcher's code says
 // (the landing check, the full check), and a shell's own value never reaches
 // here (canonical-environment.ts).
@@ -284,10 +290,13 @@ function readTimes() {
 }
 const BASE = readTimes();
 const estimate = (name) => BASE.get(name)?.wall ?? 60;
-// The CPU seconds each step's checks took when they last passed, retained
-// across runs; separate from the committed timing-verdict baseline.
-const CPU_HISTORY_FILE = join(target, "gate-costs", "steps.json");
-const CPU_HISTORY = new Map([...readPreviousStepCpu(join(dirname(RUN_DIR), "latest", "summary.json")), ...readStepCpuHistory(CPU_HISTORY_FILE)]);
+// What each step cost in this target when it last ran (step-scheduling.ts):
+// the CPU seconds its checks took when they last passed, separate from the
+// committed timing-verdict baseline, and the peaks that size its memory.
+const COSTS_DIR = resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs"));
+const HISTORY_FILE = join(COSTS_DIR, "steps.json");
+const HISTORY = readCostHistory(HISTORY_FILE);
+const CPU_HISTORY = new Map([...readPreviousStepCpu(join(dirname(RUN_DIR), "latest", "summary.json")), ...stepCpu(HISTORY)]);
 const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => BASE.get(name)?.cpu, STEP_SUCCESSORS);
 
 // ---------------------------------------------------------------------------
@@ -371,8 +380,8 @@ function stepEnv(step, slots, scope) {
   e.NTS_GATE_STEP_ATTEMPT = RUN_DIR;
   e.NTS_GATE_STEP_RESULT = join(RUN_DIR, `${step.name}.instrument.json`);
   // Resident worker scopes are siblings of the land unit, so their run slice
-  // needs this step's own reserved budget as an enforced aggregate ceiling.
-  e.NTS_GATE_STEP_MEMORY_BYTES = String(stepBytes(step));
+  // needs an enforced aggregate ceiling of this step's own (censusCap).
+  e.NTS_GATE_STEP_MEMORY_BYTES = String(censusCap(step));
   if (step.elastic && tokenAddr) e.NTS_GATE_TOKENS = tokenAddr;
   else e.NTS_GATE_TOKEN_HELD = "1";
   const s = String(slots);
@@ -389,7 +398,7 @@ function stepEnv(step, slots, scope) {
   if (step.name === "compile-time" && plan.includes("integrity-runtime")) e.NTS_COMPILE_TIMES_FROM = shared;
   if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
   if (step.name === "c-compiles" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
-  e.NTS_GATE_COSTS_DIR = join(target, "gate-costs");
+  e.NTS_GATE_COSTS_DIR = COSTS_DIR;
   // The release build's own test262 protocol binary, so the test262 steps do
   // not `cargo run` a debug copy and queue on cargo's lock behind `tests`.
   // Its `select` and `inventory` output is byte-identical to the debug
@@ -418,7 +427,9 @@ function report(name) {
   let block = `\n${color(1, name)}\n`;
   if (log) block += log.endsWith("\n") ? log : `${log}\n`;
   const how = r.elastic ? `up to ${r.peak_tokens} token${r.peak_tokens === 1 ? "" : "s"}` : `${r.slots} slot${r.slots === 1 ? "" : "s"}`;
-  if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${how})` : ""}\n`;
+  const held = r.memory?.peak_bytes != null ? `, held ${gib(r.memory.peak_bytes)} of ${gib(r.memory.reserved_bytes)}` : "";
+  if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${how}${held})` : ""}\n`;
+  if (r.memory?.over) block += `${color(33, "  memory")}: ${name} held ${gib(r.memory.peak_bytes)}, past its ${gib(r.memory.reserved_bytes)} reservation; its next run reserves by what it held\n`;
   if (r.verdict === "FAIL") block += `${color(31, "FAILED")}: ${name}\n`;
   else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
   else if (r.verdict === "INSTRUMENT") block += `${color(33, "INSTRUMENT")}: ${name} -- ${r.reason}\n`;
@@ -494,8 +505,8 @@ function captureCost(name, log) {
 // Scheduling.
 // ---------------------------------------------------------------------------
 // What the running steps hold: slots, frontends, and the bytes of the run's
-// memory reservation they are counted for -- a fixed step its row's `mem`, an
-// elastic step its share per token held.
+// memory reservation they are counted for -- a fixed step its reservation, an
+// elastic step one token's per token held (see "Memory").
 function used(includeElastic = true) {
   let slots = 0, bytes = 0, fe = 0, riding = 0;
   const locks = new Set();
@@ -515,7 +526,7 @@ function used(includeElastic = true) {
     }
     if (r.rider) riding += r.slots;
     else slots += r.slots;
-    bytes += stepBytes(s);
+    bytes += stepBytes(s, r.slots);
     if (s.fe) fe += r.slots;
   }
   return { slots, bytes, fe, locks, riding, elastic };
@@ -591,9 +602,9 @@ function admit(step, u) {
   }
   if (slots === 0) return { slots: 0 };
   // Memory is granted before slots are used, rider or not: the step's whole
-  // row within the run's reservation.
-  const short = u.bytes + stepBytes(step) - reserved();
-  return short > 0 ? { slots: 0, short } : { slots, rider };
+  // reservation within the run's.
+  const bytes = stepBytes(step, slots), short = u.bytes + bytes - reserved();
+  return short > 0 ? { slots: 0, short, bytes } : { slots, rider };
 }
 
 // ---------------------------------------------------------------------------
@@ -617,7 +628,7 @@ function admit(step, u) {
 // it holds (`workEstimate` minus the token-seconds it has used), plus
 // the seconds its oldest worker has waited, so a short step is never starved
 // by a long one; the favoured step's claim counts double. A token is granted
-// only with its step's share of memory (`tokenBytes`) in the run's
+// only with one token's reservation of its step (`tokenBytes`) in the run's
 // reservation. Tokens, and the memory they would take, are kept back for the
 // first fixed step that waits (`withhold`, `withholdBytes`).
 // ---------------------------------------------------------------------------
@@ -647,7 +658,7 @@ const tok = createTokenPool({
     const c = left / (held + 1) + waitedS;
     return BY_NAME.get(step)?.favoured ? 2 * c : c;
   },
-  // A token is a case starting, so it needs its share of memory in the run's
+  // A token is a case starting, so it needs its step's token reservation in the run's
   // reservation, beside what a waiting fixed step has withheld; when it does
   // not fit, the run may ask the ledger for more.
   eligible: (step) => {
@@ -690,15 +701,28 @@ let pending = [];
 // is the only thing that decides whether there is memory for it: no step and
 // no token reads the host's free memory. The reservation is measured as the
 // run's own slice cgroup, which holds every step's slice, so the ledger sees
-// the whole run as one job. A running fixed step is counted for its row's
-// `mem`, an elastic step for `mem / slots` per token it holds (`used()`).
+// the whole run as one job. A running fixed step is counted for its own
+// reservation, an elastic step for one token's per token it holds (`used()`).
+//
+// **A step reserves what it was measured to hold** (step-scheduling.ts): per
+// unit -- the step, or one token -- 1.25 times the largest of the peaks its
+// last few runs left in this target's history; never measured here, the
+// largest a unit of its kind reserves here; with none, its share of the
+// machine (`planMemory`). The run samples each running step's slice every
+// SAMPLE_MS on the ledger's own basis (cgroupCharge), and its peak goes to the
+// step's summary row -- `over` when it passed what the step was counted for,
+// and the ledger's entry says so -- and to the history, for its next run.
+// Unmeasured steps are named in the run's entry from the start. The kernel
+// cap a step's census runs under (`censusCap`) is never the reservation
+// itself, so a peak past it is measured rather than cut off.
 //
 // **It grows by what waits.** When a step that has its slots, or a token that
 // has a free slot, does not fit beside what runs, the run asks the ledger for
-// the shortfall, rounded up to a whole BLOCK and never past what the machine
-// could ever give it (`capacity`), one growth at a time; once it is admitted,
-// scheduling and token grants run again. A growth no longer needed while it
-// waits is withdrawn, so it never holds the ledger's queue for nothing.
+// the shortfall, rounded up to a whole BLOCK, one growth at a time, and only
+// when the whole shortfall fits within what the machine could ever give it
+// (`capacity`); once it is admitted, scheduling and token grants run again. A
+// growth no longer needed while it waits is withdrawn, so it never holds the
+// ledger's queue for nothing.
 //
 // **It gives back what it does not use.** Whatever the reservation holds
 // beyond two blocks above what runs and what a waiting step has claimed goes
@@ -727,16 +751,42 @@ let pending = [];
 // the full check had finished.
 // ---------------------------------------------------------------------------
 const GiB = 2 ** 30;
-// One gibibyte: the rows reserve 0.1 to 8 of them, so a run grows from one
-// block to its peak in a few dozen growths, each one ledger decision, and is
-// never more than a block above what it asked for.
+// One gibibyte: steps reserve a few hundred megabytes to a few gibibytes
+// each, so a run grows from one block to its peak in a few dozen growths,
+// each one ledger decision, and is never more than a block above what it
+// asked for.
 const BLOCK = GiB;
-const stepBytes = (step) => Math.floor(step.mem * GiB);
-const tokenBytes = (step) => Math.ceil(stepBytes(step) / step.slots);
+const SAMPLE_MS = 250;
 let reservation = null;
 // What the machine could ever give this run: MemTotal less the floor the
-// ledger keeps for the system. A step whose own row exceeds it never starts.
+// ledger keeps for the system. No step reserves more: one that needs it all
+// runs alone.
 let capacity = 0, totalBytes = 0;
+// What each step reserves per unit, and why: name -> { unit, bytes, basis }.
+const MEMORY = new Map();
+// What each step that ran to its own end held at most, per unit, for the history: name -> { unit, peak }.
+const observations = new Map();
+// A step's share of what the ledger can ever give the run: a run whose every
+// slot is busy with unmeasured steps fits in it.
+const shareOf = (step, units = width(step.name)) => machineShare(capacity, units, SLOTS);
+function sizing(step) {
+  let sized = MEMORY.get(step.name);
+  if (!sized) {
+    const unit = step.elastic ? "token" : "step";
+    const { bytes, basis } = unitReservation(HISTORY, { step: step.name }, unit, shareOf(step, step.elastic ? 1 : width(step.name)));
+    sized = { unit, bytes: Math.max(1, Math.min(bytes, capacity)), basis };
+    MEMORY.set(step.name, sized);
+  }
+  return sized;
+}
+/** Every planned step's reservation, once the machine's size is known. */
+const planMemory = () => { for (const name of plan) sizing(BY_NAME.get(name)); };
+const tokenBytes = (step) => sizing(step).bytes;
+// A fixed step's reservation; an elastic step's for `slots` tokens, as it is
+// counted while it runs without a token server, and while it drains.
+const stepBytes = (step, slots = width(step.name)) => Math.min(capacity, step.elastic ? sizing(step).bytes * slots : sizing(step).bytes);
+// The kernel cap of the step's census aggregate (NTS_GATE_STEP_MEMORY_BYTES).
+const censusCap = (step) => censusCapBytes(stepBytes(step), shareOf(step), workerCapBytes(env));
 let growth = null; // { bytes, controller, withdrawn } while a growth waits
 // What the run must hold for the first step that waits only for memory to
 // start beside what runs (schedule); 0 when none waits.
@@ -776,11 +826,18 @@ function wantMemory() {
   memoryCheck ??= setImmediate(() => { memoryCheck = null; adjustMemory(); });
 }
 
-// A step that can never fit the machine, in the ledger's words; null for the rest.
-function neverFitting(step) {
-  const token = Boolean(step.elastic && tokenAddr), bytes = token ? tokenBytes(step) : stepBytes(step);
-  return bytes > capacity ? neverFits(bytes, totalBytes, `${token ? `one token of ${step.name}` : step.name} asks ${gib(bytes)}`) : null;
+// What a step's slice holds now, on the ledger's own basis.
+function chargeOf(scope) {
+  const dir = join("/sys/fs/cgroup", scope.group);
+  return cgroupCharge(readFileSync(join(dir, "memory.current"), "utf8"), readFileSync(join(dir, "memory.stat"), "utf8"));
 }
+function sampleStep(r) {
+  try { r.peakCharge = Math.max(r.peakCharge ?? 0, chargeOf(r.scope)); }
+  catch { /* the slice went as it was read: nothing of it runs any more */ }
+}
+// Sampling, like the cost clock, never decides anything.
+const memoryClock = setInterval(() => { for (const r of running.values()) if (!r.draining) sampleStep(r); }, SAMPLE_MS);
+memoryClock.unref();
 
 const noteSize = () => { memoryRecord.peak_bytes = Math.max(memoryRecord.peak_bytes, reserved()); };
 
@@ -811,16 +868,23 @@ function lookAgain() {
   outrankedLook ??= setTimeout(() => { outrankedLook = null; schedule(); }, 1000);
 }
 
-/** The run's reservation, before anything of it starts: one block, at its priority. */
+/** The steps this run sizes without a measurement of their own in this target's history. */
+const unmeasured = () => plan.filter(name => MEMORY.get(name)?.basis !== "measured");
+
+/**
+ * The run's reservation, before anything of it starts: one block, at its
+ * priority, with each planned step's own sized from the history.
+ */
 async function reserveMemory() {
   ({ totalBytes } = machineMemory(env));
   capacity = totalBytes - SYSTEM_FLOOR_BYTES;
+  planMemory();
   // A run always holds its own: its size moves with its steps, which only its
   // holder can do. One handed down by its launcher stays the launcher's.
   const own = { ...env };
   delete own[RESERVATION_ENV];
   const asked = Date.now();
-  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group } },
+  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured() },
     { env: own, signal: startupAbort.signal, report: (line) => process.stdout.write(`  ${line}\n`) });
   memoryRecord.waited_s += (Date.now() - asked) / 1000;
   noteSize();
@@ -846,9 +910,11 @@ function adjustMemory() {
     return;
   }
   if (need <= 0 || yielding) return;
-  // Past what the machine could ever give, what waits fits only once running work ends.
+  // Past what the machine could ever give, what waits fits only once running
+  // work ends: a growth toward it would be slack the next pass gives back, and
+  // asking again would spin.
+  if (need > capacity - reserved()) return;
   const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
-  if (bytes <= 0) return;
   const controller = new AbortController(), asked = Date.now();
   growth = { bytes, controller, withdrawn: false };
   reservation.grow(bytes, { signal: controller.signal }).then(() => {
@@ -893,21 +959,11 @@ function schedule() {
         progressed = true;
         break;
       }
-      // A row the machine can never hold fails as an instrument, in the
-      // ledger's words, rather than waiting for memory that never comes.
-      const never = neverFitting(step);
-      if (never) {
-        finish(name, "INSTRUMENT", never, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: never } });
-        pending = pending.filter((n) => n !== name);
-        report(name);
-        progressed = true;
-        break;
-      }
       if (yielding) continue;
       const u = used();
       const granted = admit(step, u);
       if (granted.slots === 0) {
-        if (granted.short > 0 && !memoryWanted) memoryWanted = u.bytes + stepBytes(step);
+        if (granted.short > 0 && !memoryWanted) memoryWanted = u.bytes + granted.bytes;
         // The first step in order that waits for slots or memory has tokens
         // kept for it as elastic workers give them back, or elastic steps --
         // which ask again the moment a case ends -- would take each one as it
@@ -960,7 +1016,7 @@ function start(step, slots, rider = false) {
   closeSync(fd);
   const started = Date.now();
   const elastic = Boolean(step.elastic && tokenAddr);
-  const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false };
+  const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false, peakCharge: undefined };
   running.set(step.name, owned);
   // **Past its bound the step is stopped through its own scope** and held: its
   // log stays, and it is neither a pass nor a red verdict about the change.
@@ -983,6 +1039,9 @@ function start(step, slots, rider = false) {
     if (completed) return;
     completed = true;
     clearTimeout(boundTimer);
+    // A last sample, of whatever of the step still runs: a step shorter than
+    // the sampling interval is measured by it.
+    sampleStep(owned);
     owned.draining = true;
     let drained, cleanupError, entered, entryError;
     try { entered = scope.entry(); } catch (error) { entryError = `step scope entry was not proved: ${error.message}`; }
@@ -1008,10 +1067,16 @@ function start(step, slots, rider = false) {
     try { oracleCapture = captureCost(step.name, log); } catch (error) { captureProblem = error.message; }
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
     account();
-    // The step slice's own memory.peak, read once its last process had exited:
-    // what the step held at most, measured, for its row's `mem` to be set by.
+    // What the step held at most, sampled on the ledger's basis, against the
+    // most the run counted it for: its reservation, or one token's for each
+    // of the most tokens it held at once. `memory_peak_bytes`, the slice's own
+    // memory.peak read once its last process had exited, is the exact bound,
+    // page cache included.
+    const units = step.elastic ? Math.max(1, elastic ? tok.peak.get(step.name) ?? 0 : slots) : 1;
+    const sized = sizing(step), peak = owned.peakCharge ?? null, reservedBytes = sized.bytes * units;
+    const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: peak !== null && peak > reservedBytes, basis: sized.basis };
     const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
-      memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis };
+      memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis };
     if (oracleCapture) extra.oracle_capture = oracleCapture;
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;
@@ -1050,6 +1115,12 @@ function start(step, slots, rider = false) {
       else if(code===77)finish(step.name,"SKIPPED",lastLine(text)||"exited 77 without a reason",extra);
       else finish(step.name,"FAIL",heap?`${heap}; ${status}`:status,extra);
     }
+    // A step that ran to its own end, whatever its verdict, measured what it
+    // holds; one stopped at its bound or with the run measured only a part.
+    if (peak > 0 && !owned.overBound && !cleanupError && !spawnError && results.get(step.name).verdict !== "NOT RUN") {
+      observations.set(step.name, { unit: sized.unit, peak: Math.ceil(peak / units) });
+    }
+    if (memory.over) reservation?.noteOver(step.name).catch(error => process.stderr.write(`run.mjs: the memory ledger's entry does not say ${step.name} is over: ${error.message}\n`));
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
     if (results.get(step.name).verdict === "FAIL" && FAIL_FAST && !stopping) {
@@ -1154,6 +1225,7 @@ function done() {
   try { scopes?.close(); }
   catch (error) { scopeCleanup = { state: "error", reason: `cannot close run scopes: ${error.message}` }; }
   clearInterval(costClock);
+  clearInterval(memoryClock);
   if (!identities.nts) identify();
   identities.node = process.version;
   for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
@@ -1183,7 +1255,7 @@ function done() {
     : {path:env.TMPDIR,state:"kept: rows still running"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
   const wall = (Date.now() - startedAt) / 1000;
-  const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name), mem_gb: BY_NAME.get(name).mem }))) ?? { version: 1, status: "unavailable" };
+  const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" };
 
   const lines = [];
   lines.push("");
@@ -1197,8 +1269,7 @@ function done() {
     const how = r.verdict === "SKIPPED" ? (r.accepted ? "  [accepted: NTS_GATE_ACCEPT_SKIP]" : `  [red; NTS_GATE_ACCEPT_SKIP=${name} accepts it]`) : "";
     const why = r.verdict === "PASS" ? "" : `  ${r.reason}${host}${how}`;
     lines.push(`  ${tag} ${name.padEnd(24)}${t}${c}${why}`);
-    const warning = costsSummary.steps?.[name]?.aggregate_memory?.warning;
-    if (warning) lines.push(color(33, `  WARNING  ${name.padEnd(24)} ${warning}`));
+    if (r.memory?.over) lines.push(color(33, `  OVER     ${name.padEnd(24)} held ${gib(r.memory.peak_bytes)}, past its ${gib(r.memory.reserved_bytes)} reservation`));
   }
   for (const s of slow) {
     lines.push(color(31, `  SLOWER   ${s.name.padEnd(24)} ${s.kind} ${Math.round(s.now)}s, ${s.ratio.toFixed(1)}x its baseline of ${Math.round(s.was)}s (tooling/gate/times.tsv)`));
@@ -1232,7 +1303,10 @@ function done() {
     budget: { slots: SLOTS, frontends: FRONTENDS },
     // The run's reservation in the machine's memory ledger: its largest size,
     // and how long its requests waited in the ledger's queue, all told.
-    memory: { priority: PRIORITY, reservation: reservation?.id ?? null, capacity_bytes: capacity, ...memoryRecord },
+    // The steps it sized without a measurement of their own, and those that
+    // held more than they reserved (each step's row says by how much).
+    memory: { priority: PRIORITY, reservation: reservation?.id ?? null, capacity_bytes: capacity, ...memoryRecord,
+      history: HISTORY_FILE, unmeasured: unmeasured(), over: plan.filter(name => results.get(name)?.memory?.over) },
     requested: plan,
     accept_skip: [...ACCEPT_SKIP],
     steps: plan.map((name) => ({ name, ...results.get(name) })),
@@ -1257,7 +1331,10 @@ function done() {
   }
   if (RECORD_TIMES) recordTimes();
   if (normalized.report.canonical) {
-    const warning = writeStepCpuHistory(CPU_HISTORY_FILE, plan.map(name => ({ name, ...results.get(name) })), CPU_HISTORY);
+    const warning = writeCostHistory(HISTORY_FILE, { steps: plan.map(name => {
+      const r = results.get(name);
+      return { name, verdict: r.verdict, cpu: r.cpu, memory: observations.get(name) };
+    }) }, CPU_HISTORY);
     if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
   }
   process.exitCode = interrupted && interrupted.startsWith("signal") ? 130 : green ? 0 : 1;
@@ -1387,7 +1464,9 @@ preparing = false;
 process.stdout.write(
   `gate: ${plan.length} step(s), ${SLOTS} slots, memory from the ledger at ${PRIORITY} priority, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
     `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n` + settings() +
-    `  steps: ${plan.join(" ")}\n`,
+    `  steps: ${plan.join(" ")}\n` +
+    `  memory sized by ${HISTORY_FILE}` + (MEMORY.size && unmeasured().length
+      ? `; unmeasured there, sized by the largest of their kind or their share of the machine: ${unmeasured().join(" ")}\n` : "\n"),
 );
 if (stopping) {
   done();

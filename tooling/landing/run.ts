@@ -33,7 +33,6 @@ import { gateCommand } from "../gate/affinity.ts";
 import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-environment.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
-import { STEPS } from "../gate/step-table.mjs";
 import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "../gate/test-artifacts.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
@@ -71,8 +70,6 @@ export type RunOptions = {
   ceiling?: number;
 };
 
-// The build's memory: what the gate reserves for its own build of the workspace.
-const BUILD_BYTES = Math.floor((STEPS as { name: string; mem: number }[]).find(row => row.name === "build")!.mem * 2 ** 30);
 const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
 
 /**
@@ -156,12 +153,16 @@ export function runLanding(options: RunOptions): Ran {
 function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
-  const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(machineBudget(cpus().length).slots)];
+  const slots = machineBudget(cpus().length).slots;
+  const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(slots)];
   const timing = existsSync("/usr/bin/time");
   const timed = timing ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   // admit.ts becomes the build once the ledger admits it, so the reservation
-  // lasts exactly as long as the build, however the build ends.
-  const admitted = [ADMIT, "--bytes", String(BUILD_BYTES), "--priority", "landing", "--what", `landing build of ${options.commit.slice(0, 12)}`, "--", ...timed];
+  // lasts exactly as long as the build, however the build ends. It reserves
+  // what this tree's earlier landing builds held per cargo job, in its
+  // target's history, and adds this build's peak to it.
+  const admitted = [ADMIT, "--key", "landing-build", "--workers", String(slots), "--priority", "landing",
+    "--what", `landing build of ${options.commit.slice(0, 12)}`, "--", ...timed];
   const launch = gateCommand(node, admitted);
   const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
   writeFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);

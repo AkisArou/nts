@@ -10,7 +10,6 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reserveJob } from "./memory-ledger.ts";
-import { stepMemoryBytes } from "./step-table.mjs";
 import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibrationRecord, replaceCalibrationModules, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
@@ -77,9 +76,9 @@ const measuredEnvironment=measuredCompileEnvironment(process.env);
 const work_settings=compileWorkSettings(measuredEnvironment);
 const tasks = Array.from({ length: 5 }, (_, repeat) => modules.map(module => ({ module, repeat: repeat + 1 }))).flat();
 const rows: (CalibrationRun & { cpu_s: number; instructions: number })[] = [];
-// The compile-time step's work, or compile-time-rc's: that step's memory,
-// reserved once for every repetition.
-await reserveJob({ bytes: stepMemoryBytes(arm === "rc" ? "compile-time-rc" : "compile-time"), what: `compile counter calibration (${arm}, ${tasks.length} compiles)` },
+// The calibration's memory, reserved once for every repetition, by what its
+// earlier runs of this arm held per worker.
+await reserveJob({ key: `compile-counter-calibrate-${arm}`, units: jobs, what: `compile counter calibration (${arm}, ${tasks.length} compiles)` },
   { report: console.log });
 let next = 0;
 let failed = false;
