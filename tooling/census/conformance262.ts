@@ -132,6 +132,7 @@ import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
   serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, TYPESCRIPT_RECORD_VERSION } from "./typescript-record.ts";
+import { parseTest262Record, serializeTest262Record } from "./test262-record.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { selectTypescript, typescriptOracleIdentity } from "./suites/typescript.ts";
@@ -869,7 +870,6 @@ const exclusionReport = exclusions.map((entry) => {
 // ran-set is reported (it regressed into a refusal or worse); a case that
 // enters it is news.
 
-const recordedRow = (c) => `${c.record.path}\t${c.outcome}\t${c.outcome === "fail" ? c.detail : ""}`;
 const ranRows = cases.filter((c) => c.outcome === "pass" || c.outcome === "fail");
 if (recordFile && derivesEvidence) {
   writeFileSync(
@@ -889,31 +889,29 @@ if (recordFile && derivesEvidence) {
  * ran, so it cannot contain a new pass. Passes a later commit gains stay out
  * of the record until someone needs a full run for another reason: on
  * 2026-09-30, 72 had accumulated unseen. The header names the commit when the
- * compiler is a clean pin, so the gate can say how far behind the record is.
+ * compiler is a clean pin, so the gate can say how far behind the record is;
+ * this is that commit, or null when the compiler is not one.
  */
 function recordCommit() {
   const record = provenanceOf(NTS);
-  return record?.sha && record.clean && !record.applied ? `, commit ${record.sha}` : "";
+  return record?.sha && record.clean && !record.applied ? record.sha : null;
 }
 
 /**
- * The backend a record was written on. A record written before records named
- * one is C's: every record was, until the runner took `--backend`.
+ * The backend a record was written on. A test262 record written before
+ * records named one is C's: every record was, until the runner took `--backend`.
  */
 function recordedBackendOf(file) {
-  if (TYPESCRIPT) {
-    try { return parseTypeScriptRecord(readFileSync(file, "utf8")).metadata.backend; }
-    catch (error) { cannotMeasure(`${file}: ${error.message}`); }
-  }
-  const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
-  return /, backend ([a-z]+)/.exec(header ?? "")?.[1] ?? "c";
+  try {
+    const text = readFileSync(file, "utf8");
+    return TYPESCRIPT ? parseTypeScriptRecord(text).metadata.backend : parseTest262Record(text).header.backend;
+  } catch (error) { cannotMeasure(`${file}: ${error.message}`); }
 }
 
 /** The record's commit, from its header, or null for one written before records named it. */
 function recordedCommitOf(file) {
-  if (TYPESCRIPT) return parseTypeScriptRecord(readFileSync(file, "utf8")).metadata.commit;
-  const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
-  return /, commit ([0-9a-f]{40})/.exec(header ?? "")?.[1] ?? null;
+  const text = readFileSync(file, "utf8");
+  return TYPESCRIPT ? parseTypeScriptRecord(text).metadata.commit : parseTest262Record(text).header.commit;
 }
 
 let typeScriptObserved = null;
@@ -949,13 +947,10 @@ if (recordFile && TYPESCRIPT) {
     writeFileSync(recordFile, contents);
   } catch (error) { cannotMeasure(`${recordFile}: not recorded: ${error.message}`); }
 } else if (recordFile) {
-  writeFileSync(
-    recordFile,
-    `# Test262 ${under} cases that ran, and what each did. Written by\n` +
-      `# tooling/census/conformance262.ts --record; compared by --check.\n` +
-      `# compiler ${FINGERPRINT}${recordCommit()}, backend ${BACKEND}, harness ${HARNESS_HASH}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
-      ranRows.map(recordedRow).sort().join("\n") + "\n",
-  );
+  writeFileSync(recordFile, serializeTest262Record(
+    { under, compiler: FINGERPRINT, commit: recordCommit(), backend: BACKEND, harness: HARNESS_HASH, machine: describeMachine(machineAtStart), jobs },
+    ranRows.map((c) => ({ path: c.record.path, outcome: c.outcome, detail: c.detail })),
+  ));
 }
 let comparison = null;
 // What fails a comparison: REGRESSED, CHANGED and, for test262's partial
@@ -981,15 +976,7 @@ if (checkFile && TYPESCRIPT) {
       : `${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
   }
 } else if (checkFile) {
-  const before = new Map(
-    readFileSync(checkFile, "utf8")
-      .split("\n")
-      .filter((line) => line !== "" && !line.startsWith("#"))
-      .map((line) => {
-        const [path, outcome, detail] = line.split("\t");
-        return [path, { outcome, detail }];
-      }),
-  );
+  const before = new Map(parseTest262Record(readFileSync(checkFile, "utf8")).rows.map(({ path, outcome, detail }) => [path, { outcome, detail }]));
   const now = new Map(cases.map((c) => [c.record.path, c]));
   comparison = { REGRESSED: [], "NEW FAIL": [], CHANGED: [], FIXED: [], "NEW PASS": [], MISSING: [], "ACCEPTED, DIFFERENTLY": [] };
   // **An accepted negative's verdict is "accepted"; how it went on is not.** A

@@ -8,6 +8,9 @@ independently. The rendered `full.md` uses the newest complete run; partial runs
 remain records of their own. A row's own-best is per backend and requires matching
 machine, exact source/input inventory and timing contract, with its compiler and
 run record shown. Invalid and unverified cells never supply an own-best.
+`node tooling/records/summary.ts benchmarks` prints the same model as JSON, with
+each backend's ratios to the C++ and Java references beside it; its contract is
+that file's header.
 
 The standing engine columns are node, Bun JIT, Bun AOT and ScriptC. `comparators.json`
 declares their versions, commits and artifact checksums. Installed inputs are read

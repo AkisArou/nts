@@ -20,7 +20,10 @@ import { isDeepStrictEqual } from "node:util";
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
 export type Backend = (typeof BACKENDS)[number];
-export const COLUMNS = ["nts C", "nts LLVM", "nts JVM", "C++", "Java", ...COMPARATORS] as const;
+/** The references each backend comes as close to as it can: C++ for native code, Java for the JVM. */
+export const REFERENCES = ["C++", "Java"] as const;
+export type Reference = (typeof REFERENCES)[number];
+export const COLUMNS = [...BACKENDS, ...REFERENCES, ...COMPARATORS] as const;
 export const POLICY = { version: 1, authority: "docs/README.md#the-bar" } as const;
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Comparator = (typeof COMPARATORS)[number];
@@ -476,6 +479,99 @@ export function ownBest(
   found.sort((a, b) => a.nanoseconds - b.nanoseconds || a.run.localeCompare(b.run));
   return found[0] ?? null;
 }
+/** One backend on one row: its verdicts, its ratios to the references, and its own best. */
+export type BackendResult = {
+  versus: Record<Comparator, Verdict>;
+  /** This backend's time over the reference's, or null unless both ran. */
+  references: Record<Reference, number | null>;
+  ownBest: OwnBest | null;
+  /** Slower than its own best by more than max(1.05, either spread). */
+  slowerThanBest: boolean;
+};
+export type RowResult = {
+  row: Row;
+  backends: Record<Backend, BackendResult>;
+  /** LLVM's time over C's, with the larger of their spreads, and the backend that trails beyond it. */
+  llvmVersusC: { ratio: number; tolerance: number; trailing: "nts C" | "nts LLVM" | null } | null;
+};
+/** Verdict counts in the order the run's rows first show each kind; a kind no row has is absent. */
+export type VerdictCounts = Partial<Record<Verdict["kind"], number>>;
+/**
+ * What `full.md` and the benchmark summary (tooling/records/summary.ts) both
+ * render: the newest complete run, with every value either shows computed here
+ * once. Null when no complete run has been retained.
+ */
+export type Results = {
+  run: RunRecord;
+  counts: Record<Backend, Record<Comparator, VerdictCounts>>;
+  /** By case name. */
+  rows: RowResult[];
+};
+const ratio = (mine: Cell, other: Cell): number | null =>
+  mine.status === "OK" && other.status === "OK" ? mine.nanoseconds! / other.nanoseconds! : null;
+export function results(runs: RunRecord[]): Results | null {
+  const run = newestComplete(runs);
+  if (!run) return null;
+  const counts = Object.fromEntries(
+    BACKENDS.map((backend) => [
+      backend,
+      Object.fromEntries(
+        COMPARATORS.map((c) => {
+          const count: VerdictCounts = {};
+          for (const row of run.rows) {
+            const k = row.verdicts[backend][c].kind;
+            count[k] = (count[k] ?? 0) + 1;
+          }
+          return [c, count];
+        }),
+      ),
+    ]),
+  ) as Results["counts"];
+  const rows = [...run.rows]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((row) => {
+      const backends = Object.fromEntries(
+        BACKENDS.map((backend) => {
+          const current = row.cells[backend],
+            best = ownBest(run, row, backend, runs);
+          return [
+            backend,
+            {
+              versus: row.verdicts[backend],
+              references: Object.fromEntries(
+                REFERENCES.map((r) => [r, ratio(current, row.cells[r])]),
+              ),
+              ownBest: best,
+              slowerThanBest:
+                best !== null &&
+                current.status === "OK" &&
+                current.nanoseconds! >
+                  best.nanoseconds * Math.max(1.05, current.spread ?? 1, best.spread),
+            },
+          ];
+        }),
+      ) as RowResult["backends"];
+      const c = row.cells["nts C"],
+        llvm = row.cells["nts LLVM"];
+      const versusC = ratio(llvm, c);
+      const tolerance = Math.max(c.spread ?? 1, llvm.spread ?? 1);
+      const llvmVersusC =
+        versusC === null
+          ? null
+          : {
+              ratio: versusC,
+              tolerance,
+              trailing:
+                versusC > tolerance
+                  ? ("nts LLVM" as const)
+                  : versusC < 1 / tolerance
+                    ? ("nts C" as const)
+                    : null,
+            };
+      return { row, backends, llvmVersusC };
+    });
+  return { run, counts, rows };
+}
 const time = (ns: number) =>
   ns < 1000
     ? ns.toFixed(1) + " ns"
@@ -484,23 +580,18 @@ const time = (ns: number) =>
       : (ns / 1e6).toFixed(2) + " ms";
 const escape = (s: string) => s.replaceAll("|", "\\|").replaceAll("\n", " ");
 export function renderFull(runs: RunRecord[]): string {
-  const run = newestComplete(runs);
-  if (!run) return "# Benchmark results\n\nNo complete run has been retained.\n";
+  const model = results(runs);
+  if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
+  const { run } = model;
   const counts = BACKENDS.map((backend) => {
-    const columns = COMPARATORS.map((c) => {
-      const count: Record<string, number> = {};
-      for (const row of run.rows) {
-        const k = row.verdicts[backend][c].kind;
-        count[k] = (count[k] ?? 0) + 1;
-      }
-      return (
+    const columns = COMPARATORS.map(
+      (c) =>
         c +
         ": " +
-        Object.entries(count)
+        Object.entries(model.counts[backend][c])
           .map(([k, n]) => n + " " + k)
-          .join(", ")
-      );
-    });
+          .join(", "),
+    );
     return "- **" + backend + "**: " + columns.join("; ") + ".";
   });
   const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best values are per backend, using compatible machine, workload/input and harness contracts. Unknown historical identities and invalid cells are excluded. A slower-than-best flag is a cross-run observation with provenance, beside the current value. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
@@ -513,7 +604,7 @@ export function renderFull(runs: RunRecord[]): string {
     ...BACKENDS.map((b) => b + " own best"),
   ];
   const table = ["| " + columns.join(" | ") + " |", "|" + columns.map(() => "---").join("|") + "|"];
-  for (const row of [...run.rows].sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const { row, backends, llvmVersusC } of model.rows) {
     const cells = COLUMNS.map((c) => {
       const cell = row.cells[c];
       return cell.status === "OK"
@@ -522,41 +613,33 @@ export function renderFull(runs: RunRecord[]): string {
     });
     const vs = native.flatMap((b) =>
       COMPARATORS.map((c) => {
-        const v = row.verdicts[b][c];
+        const v = backends[b].versus[c];
         return (v.ratio === null ? "" : v.ratio.toFixed(3) + "× ") + v.kind;
       }),
     );
     const own = BACKENDS.map((b) => {
-      const best = ownBest(run, row, b, runs);
+      const { ownBest: best, slowerThanBest } = backends[b];
       if (!best) return "not established";
-      const current = row.cells[b],
-        slower =
-          current.status === "OK" &&
-          current.nanoseconds! >
-            best.nanoseconds * Math.max(1.05, current.spread ?? 1, best.spread);
       return (
         `${time(best.nanoseconds)}; ${best.compiler}; [${best.run}](runs/${best.run}.json)` +
-        (slower ? " **SLOWER THAN BEST**" : "")
+        (slowerThanBest ? " **SLOWER THAN BEST**" : "")
       );
     });
-    const c = row.cells["nts C"],
-      llvm = row.cells["nts LLVM"];
-    const ratio =
-      c.status === "OK" && llvm.status === "OK" ? llvm.nanoseconds! / c.nanoseconds! : null;
-    const tolerance = Math.max(c.spread ?? 1, llvm.spread ?? 1);
-    const trail = ratio !== null && ratio > tolerance;
-    const cTrail = ratio !== null && ratio < 1 / tolerance;
     table.push(
       "|" +
         [
           row.name,
           ...cells,
           ...vs,
-          ratio === null
+          llvmVersusC === null
             ? "unavailable"
-            : ratio.toFixed(3) +
+            : llvmVersusC.ratio.toFixed(3) +
               "×" +
-              (trail ? " **LLVM TRAILS C**" : cTrail ? " **C TRAILS LLVM**" : ""),
+              (llvmVersusC.trailing === "nts LLVM"
+                ? " **LLVM TRAILS C**"
+                : llvmVersusC.trailing === "nts C"
+                  ? " **C TRAILS LLVM**"
+                  : ""),
           ...own,
         ]
           .map(escape)

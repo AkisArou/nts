@@ -100,6 +100,9 @@ export function observed(work: string, targets: readonly string[]): Map<string, 
 
 /** The paths the record has rows for. */
 export const recordedTargets = (text: string): string[] => parseLineRecord(text, FORMAT).rows.map(row => row.path);
+/** Each row's target and outcome, for the conformance summary (tooling/records/summary.ts). */
+export const recordedOutcomes = (text: string): { path: string; outcome: DexOutcome }[] =>
+  parseLineRecord(text, FORMAT).rows.map(row => ({ path: row.path, outcome: row.value.outcome }));
 /** One row's outcome, checked as the record's reader checks it. */
 export const dexOutcome = (path: string, value: unknown): DexOutcome => FORMAT.row(path, value, { version: 1 }).outcome;
 
