@@ -35,6 +35,12 @@ one page that changes as work goes; the designs it builds are in
   wide steps' five `runtime/node` reds are reconciled, and the hourly count
   is green, with the full check sweeping the leftovers it may remove.
 - **In flight:**
+  - in this order: a landing creates the candidate's environment with the
+    candidate's own code (`gate/candidate-environment`); each tree derives
+    its oracle dependency producers from its own imports
+    (`node/oracle-producer-closure`); `tooling/lanes` becomes
+    `tooling/inputs` and `tooling/gate/train` becomes `tooling/gate/scopes`
+    (`fresh-start/inputs-move`);
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
