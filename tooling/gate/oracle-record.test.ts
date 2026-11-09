@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -59,6 +59,13 @@ test("checked-in fixture records promise complete measured identities", () => {
       assert.equal("complete" in row, false);
       assert.match(row.source_digest ?? "", /^[0-9a-f]{32}$/);
       assert.ok(typeof row.reason === "string" && row.reason.trim().length > 0);
+      continue;
+    }
+    if (row.kind === "budget") {
+      assert.equal(row.budget?.version, 1);
+      assert.ok(row.budget && row.budget.bound > 0);
+      assert.equal("count" in row, false);
+      assert.equal("complete" in row, false);
       continue;
     }
     assert.equal(row.kind, "measured"); assert.equal(row.complete, true);
@@ -145,9 +152,18 @@ test('an oracle compile timeout or memory cap records a budget failure without p
   t.mock.method(console,'log',()=>{});
   for(const outcome of ['timeout','memory-cap'] as const){
     const output=join(root,'counts.json'),original='{"version":1,"rows":[]}\n';writeFileSync(output,original);
-    writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[plan]}));
-    await assert.rejects(recordAll(root,output,async()=>{throw new OracleCompileBudgetError(outcome,'named compiler '+outcome);}),CaseBudgetError);
-    assert.equal(readFileSync(output,'utf8'),original,'a budget failure cannot fabricate a complete count');
+    const source='tests/programs/budget/main.ts';mkdirSync(join(root,'tests/programs/budget'),{recursive:true});writeFileSync(join(root,source),'export const x=1;');
+    const control='tests/programs/budget/control.ts';
+    writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[
+      {...plan,source,source_digest:'a'.repeat(32),repository_root:root,driver:'budget driver'},
+      {...plan,source:control,source_digest:'b'.repeat(32),repository_root:root,driver:'control driver'},
+    ]}));
+    await recordAll(root,output,async p=>{if(p.source===control)return {cpu:[0.1,0.2],count:2};throw new OracleCompileBudgetError(outcome,'named compiler '+outcome);});
+    const rows=JSON.parse(readFileSync(output,'utf8')).rows;
+    const row=rows.find((value:{source:string})=>value.source===source);
+    assert.equal(rows.find((value:{source:string})=>value.source===control)?.count,2,'a bounded case leaves measured populations recordable');
+    assert.equal(row.kind,'budget');assert.equal(row.budget.outcome,outcome);assert.equal(row.budget.phase,'prepare');
+    assert.equal(row.count,undefined,'a budget never invents a Node count');assert.equal(row.complete,undefined);
     const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
     assert.equal(summary.findings[0].outcome,outcome);
     assert.match(readFileSync(summary.findings[0].detail,'utf8'),new RegExp(outcome));
@@ -195,4 +211,19 @@ test("source-plan inventories are mandatory, unique and closed over their cases"
   assert.throws(() => validateSourcePlan({ ...plan, version: 2 }), /source export inventory/);
   assert.throws(() => validateSourcePlan({ ...plan, version: 2, source_exports: ["f", "f"] }), /source export inventory/);
   assert.throws(() => validateSourcePlan({ ...plan, version: 2, source_exports: ["g"] }), /undeclared export f/);
+});
+
+test('a budget cannot replace a measured promise, and a count improves a budget',async t=>{
+  const {addBudgetRecord}=await import('../differential/record-oracles.ts');
+  const root=testScratch(t,'oracle-budget-ratchet'),source='tests/programs/budget/main.ts';
+  mkdirSync(join(root,'tests/programs/budget'),{recursive:true});writeFileSync(join(root,source),'export const x=1;');
+  const subject={...plan,source,source_digest:'a'.repeat(32),repository_root:root};
+  const budget={phase:'execute' as const,outcome:'timeout' as const,bound:15,signal:'SIGKILL',reason:'oracle timed out'};
+  const limited=addBudgetRecord({version:1,rows:[]},subject,budget);
+  const otherBackend=addBudgetRecord(limited,{...subject,backend:'llvm',case_key:'llvm-key'},budget);
+  assert.deepEqual(otherBackend.rows[0].keys,{c:subject.case_key,llvm:'llvm-key'},'one bounded driver retains every backend population');
+  assert.deepEqual(otherBackend.rows[0].budget,limited.rows[0].budget,'adding a backend keeps the first observed stop');
+  const measured=addRecord(limited,subject,[0.1,0.2],2);
+  assert.equal(measured.rows[0]!.kind,'measured');assert.equal(measured.rows[0]!.budget,undefined);
+  assert.throws(()=>addBudgetRecord(measured,subject,budget),CaseBudgetError);
 });

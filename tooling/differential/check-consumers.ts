@@ -1,3 +1,4 @@
+import {CaseBudgetError} from '../gate/step-result.ts';
 // Batch owners count completed comparisons before publishing incomplete work.
 import {existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {availableParallelism, homedir} from "node:os";
@@ -68,7 +69,8 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
     console.log(`DIS  ${row.entry.name}: ${row.record.first}`);
     for (const answer of row.record.answers) console.log(answer);
   }
-  for (const row of incomplete) console.log(`NOT MEASURED ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
+  for(const row of completed.filter(row=>row.disposition===5))console.log(`ORACLE BUDGET ${row.entry.name}: ${row.record.first}`);
+  for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   if (mode === "compiled-web") {
     console.log(`  ${agreed} of ${completed.length} compiled Web-platform columns compared and agreed`);
   } else {
@@ -148,6 +150,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
     const path = row.entry.fixture!;
     // No oracle record yet: nothing compared, and nothing to record.
     if (row.disposition === 4) { console.log(`  ${pendingLine(path, recordPath(path))}`); continue; }
+    if (row.disposition === 5) { console.log(`ORACLE BUDGET ${path}: ${row.record.first}`); continue; }
     const now = benchmarkRun(row.record)!, before = plan.record?.rows.get(path);
     if (!before) { updates.set(path, now); console.log(`  ${pendingLine(path, record)}`); continue; }
     const change = compareBenchmarkRun(before, now);
@@ -157,7 +160,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
   }
   const waiting = plan.recordPending ? [] : all.filter(entry => plan.pending.has(entry.fixture!)).map(entry => entry.fixture!);
   for (const path of waiting) console.log(`  ${pendingLine(path, record)}`);
-  for (const row of incomplete) console.log(`NOT MEASURED ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
+  for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   console.log(`  ${completed.length} benchmark cases through the ${plan.backend} backend: ${reproduced} as recorded, ${accepted} accepted, ${changed} changed; ${waiting.length} not recorded yet`);
   if (incomplete.length) {
     const chosen = incomplete.find(row => checkFailurePolicy(row.error, changed).disposition !== "verdict") ?? incomplete[0]!;

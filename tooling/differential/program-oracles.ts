@@ -45,11 +45,15 @@ export function sweepOracleTask(directory:string):ProgramOracleTask{
   return {subject:'gate/jvm-sweep',project:join(project,'tsconfig.json'),entry,mode:'calls',program:false,observations:fs.captured()};
 }
 
+/** A recorded budget is work to retry, never an empty population. */
+export function hasOracleWork(row:{kind:string;count?:number}):boolean{
+  return row.kind==='budget'||row.kind==='measured'&&!!row.count;
+}
 export function programOracleTasks(directory:string):ProgramOracleTask[]{
   const tasks:ProgramOracleTask[]=[],seen=new Set<string>();
   for(const row of readRecords(REPOSITORY).rows){
     const benchmark=row.source.startsWith('benchmarks/cases/');
-    if(!benchmark&&(row.kind!=='measured'||!row.count||!row.source.startsWith('tests/programs/')))continue;
+    if(!benchmark&&(!hasOracleWork(row)||!row.source.startsWith('tests/programs/')))continue;
     const fixture=fixtureOf(row.source);if(seen.has(fixture))throw Error('program oracle has multiple source entries: '+fixture);seen.add(fixture);
     let project=join(REPOSITORY,fixture,'tsconfig.json');
     const fs=new OracleFilesystem();
@@ -90,20 +94,20 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
     if(!Number.isSafeInteger(jobs)||jobs<1)throw Error('invalid program oracle worker count');
     const paths=tasks.map(task=>{const file=join(inputs,resultHash(task.subject)+'.json');writeFileSync(file,JSON.stringify(task));return file;});
     const writer=createProgramOracleResults(results,oracleRecipeIdentity()),errors:string[]=[];
-    let done=0;
+    let done=0,budgets=0;
     const report=(message:string)=>process.stderr.write('  '+message+'\n');
     await runMemoryWorkers({paths,jobs:Math.min(jobs,paths.length),memory:memoryRun(),workerBytes:1536*1024**2,recycleAfterCases:16,
       admission:new Admission({report}),token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
       args:index=>[join(dirname(fileURLToPath(import.meta.url)),'program-oracle-worker.ts'),join(scratch,'w'+index),join(directory,'executables')],report,
       onRow:(row:{path:string;bucket:string;why?:string;answer?:ProgramAnswer;capture?:ProgramCapture})=>{
         if(row.bucket!=='oracle-reference'||!row.answer||!row.capture)errors.push(row.path+': '+(row.why??row.bucket));
-        else writer.add(row.answer,row.capture);
+        else {writer.add(row.answer,row.capture);if(row.answer.kind==='budget')budgets++;}
         if(++done%100===0)report(`${done}/${paths.length} program answers finalized`);
       }});
     if(errors.length)throw new ToolingInstrumentError('tooling-setup','program oracle references were not measured:\n'+errors.join('\n'));
     if(done!==paths.length)throw Error(`program oracle references incomplete: ${done}/${paths.length}`);
     cleanup();const root=writer.publish();
-    process.stdout.write(`  Program oracle references: ${root.count} measured once; SDK workers drained before native execution\n`);
+    process.stdout.write(`  Program oracle references: ${root.count-budgets} measured once, ${budgets} loud budget outcomes; SDK workers drained before native execution\n`);
   }finally{cleanup();}
 }
 

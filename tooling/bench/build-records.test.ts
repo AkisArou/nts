@@ -252,10 +252,22 @@ test("case identities cover imported sources, inherited configs and local data i
   const identity = () => benchmarkIdentities(root, [a, b], join(root, "scratch-a"));
   const original = await identity();
   assert.deepEqual(await benchmarkIdentities(root, [b, a], join(root, "scratch-b")), new Map([...original].reverse()));
+  // Oracle populations do not decide a compile result; ordinary local data still does.
+  const domain = join(root, b, "case.domains.json");
+  writeFileSync(domain, JSON.stringify({ version: 1, functions: { run: { n: { min: 0, max: 2 } } } }));
+  assert.deepEqual(await identity(), original, "adding an oracle-only domain preserves compile identities");
+  writeFileSync(domain, JSON.stringify({ version: 1, functions: { run: { n: { min: 0, max: 1 } } } }));
+  assert.deepEqual(await identity(), original, "editing an oracle-only domain preserves compile identities");
   writeFileSync(join(root, "benchmarks/common/input.ts"), "export const input = 2;");
   const changedImport = await identity(); assert.equal(changedImport.get(a), original.get(a)); assert.notEqual(changedImport.get(b), original.get(b));
   writeFileSync(join(root, b, "data.txt"), "data two");
   assert.notEqual((await identity()).get(b), changedImport.get(b));
   writeFileSync(join(root, "tsconfig.fixtures.json"), JSON.stringify({ compilerOptions: { target: "ES2022", noEmit: true } }));
   assert.notEqual((await identity()).get(a), original.get(a));
+  // An explicit compiler import changes the role: it is then source data.
+  writeFileSync(join(root, "tsconfig.fixtures.json"), JSON.stringify({compilerOptions:{target:"ESNext",module:"ESNext",moduleResolution:"bundler",resolveJsonModule:true,noEmit:true}}));
+  writeFileSync(join(root,b,"case.ts"), "import domain from './case.domains.json' with {type:'json'}; export function run(){return domain.version;}");
+  const importedDomain=(await identity()).get(b);
+  writeFileSync(domain, JSON.stringify({version:2}));
+  assert.notEqual((await identity()).get(b),importedDomain,"an actually imported sidecar stays in the compiler's checked input graph");
 });

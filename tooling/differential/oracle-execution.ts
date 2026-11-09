@@ -1,0 +1,69 @@
+// The recorder and the native differential execute the same population under
+// one CPU allowance and the census's resident-memory owner. Virtual address
+// reservations are not memory consumption, and a signal alone proves no cap.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {activeCommand,type ActiveResult} from '../gate/active-command.ts';
+import {CaseBudgetError,PressureError,ToolingInstrumentError} from '../gate/step-result.ts';
+import {memoryRun,memoryCause,memoryDisposition,closeMemoryRun} from '../census/worker-memory.ts';
+
+import {ORACLE_EXECUTION_POLICY as policy} from './oracle-execution-policy.ts';
+import type {OracleBudget} from './oracle-runtime.ts';
+export type {OracleBudget} from './oracle-runtime.ts';
+assert.equal(policy.version,1,'unknown oracle execution policy');
+for(const key of ['cpuSeconds','benchmarkCpuSeconds','residentBytes'] as const)assert.ok(Number.isSafeInteger(policy[key])&&policy[key]>0,'invalid oracle execution policy: '+key);
+export type OracleLimits={cpuSeconds:number;residentBytes:number};
+export function oracleExecutionLimits(source:string):OracleLimits{
+  const benchmark=source.replaceAll('\\','/').startsWith('benchmarks/cases/');
+  return {cpuSeconds:benchmark?policy.benchmarkCpuSeconds:policy.cpuSeconds,residentBytes:policy.residentBytes};
+}
+export class OracleBudgetError extends CaseBudgetError{
+  readonly budget:OracleBudget;
+  constructor(budget:OracleBudget){super(budget.reason);this.name='OracleBudgetError';this.budget=budget;}
+}
+export type OracleCommandResult={stdoutHex:string;stderrHex:string;run:Omit<ActiveResult,'error'|'stdoutRaw'|'stderrRaw'>&{error?:string};limits:OracleLimits;residentPeakBytes:number;budget?:OracleBudget};
+let ordinal=0;
+export async function runOracleCommand(command:string,args:string[],options:{source:string;cwd?:string;env:NodeJS.ProcessEnv;limits?:OracleLimits;idleMs?:number}):Promise<OracleCommandResult>{
+  const limits=options.limits??oracleExecutionLimits(options.source);
+  const memory=memoryRun(),resident=memory.worker('execution'+ordinal++,limits.residentBytes);
+  const scope=resident.scope('prlimit',['--core=0',command,...args],options.env);
+  const before=resident.counters(),aggregateBefore=memory.aggregateOoms();
+  try{
+    const {stdoutRaw,stderrRaw,...result}=await activeCommand('systemd-run',scope.argv,{cwd:options.cwd??process.cwd(),env:scope.env,
+      captureBytes:true,eachProcessCpuSeconds:limits.cpuSeconds,idleMs:options.idleMs??300_000,maxBuffer:64*2**20});
+    assert.ok(stdoutRaw&&stderrRaw,'oracle execution raw output was not captured');
+    if(!resident.ready(scope))throw new ToolingInstrumentError('tooling-setup','oracle execution scope failed before bounded entry: '+result.stderr);
+    resident.stop(scope);
+    const cause=memoryCause(before,resident.counters(),aggregateBefore,memory.aggregateOoms());
+    const disposition=memoryDisposition(cause,'exclusive');
+    if(disposition==='pressure'||disposition==='budget'&&resident.bytes<limits.residentBytes)throw new PressureError('oracle execution not measured: resident '+cause);
+    // systemd-run can return an encoded child exit. Do not invent a signal
+    // from that number: only the supervisor's observed signal is provenance.
+    const signal=result.signal;
+    const budget:OracleBudget|undefined=disposition==='budget'
+      ?{phase:'execute',outcome:'memory-cap',bound:limits.residentBytes,signal,reason:`oracle memory-cap: ${options.source} exceeded its ${limits.residentBytes} byte resident budget`}
+      :result.timeout?{phase:'execute',outcome:'timeout',bound:limits.cpuSeconds,signal,reason:'oracle timed out: '+result.timeout}:undefined;
+    return {stdoutHex:stdoutRaw.toString('hex'),stderrHex:stderrRaw.toString('hex'),run:{...result,error:result.error?.message},limits,residentPeakBytes:Number(readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')),...(budget?{budget}:{})};
+  }finally{resident.stop(scope);resident.close();}
+}
+
+if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+  try{
+    const mode=process.argv[2],request=JSON.parse(process.argv[3]!);
+    if(mode==='--prepare'){
+      const toolchain=process.env.NTS_ORACLE_TYPESCRIPT;
+      if(!toolchain)throw new ToolingInstrumentError('tooling-setup','oracle TypeScript capability NTS_ORACLE_TYPESCRIPT is missing');
+      const {prepareOracles,preparedOracle}=await import('./oracle-batch.ts');
+      const members=await prepareOracles([{key:request.entry,options:request}],{directory:resolve(request.directory,'preparation'),toolchain,workers:1,env:process.env,waitForAdmission:false,resolutionOwnerPid:process.ppid});
+      process.stdout.write(JSON.stringify({prepared:preparedOracle(members[request.entry],'native oracle preparation '+request.entry)})+'\n');
+    }else{
+      assert.equal(mode,'--run','oracle execution needs --run or --prepare');
+      const env={...process.env};for(const [name,value]of request.env as [string,string|null][])if(value===null)delete env[name];else env[name]=value;
+      const result=await runOracleCommand(request.command,request.args,{source:request.source,cwd:request.cwd,env});
+      process.stdout.write(JSON.stringify(result)+'\n');
+    }
+  }catch(error){if(error instanceof CaseBudgetError&&'budget' in error)process.stdout.write(JSON.stringify({budget:error.budget})+'\n');else process.stdout.write(JSON.stringify({instrument:{kind:error instanceof PressureError?'memory-pressure':'tooling-setup',reason:String(error)}})+'\n');}
+  finally{closeMemoryRun();}
+}

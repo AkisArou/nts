@@ -114,6 +114,7 @@ export function pending() { queueMicrotask(() => console.log("scheduled")); retu
     let coverage = oracle_coverage::Coverage {
         count: 2,
         key: "test".into(),
+        budget: None,
     };
     let result =
         oracle_coverage::measured_rows(lines(rows.as_bytes()), None, &finished.status, &coverage);

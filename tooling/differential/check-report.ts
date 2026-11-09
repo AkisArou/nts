@@ -10,6 +10,7 @@ import type { CheckCommandResult, CheckConsumer, CheckCounts, CheckFormat, Check
 import {normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput} from "../conformance/observation-text.ts";
 import {activeCommand, CommandNotMeasuredError, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
 import {CaseBudgetError, PressureError, ToolingInstrumentError, instrumentPolicy,
   publishHung, publishRunaway, publishToolingFailure, publishPressure, readStepInstrument} from "../gate/step-result.ts";
 
@@ -84,10 +85,10 @@ export function parseCheckStops(value: unknown) {
 /** Validate the full versioned shape and the independently derivable disposition. */
 export function parseJsonReport(input: string, exitStatus: number | null): CheckReport {
   const value = object(JSON.parse(input), 'check JSON must be an object');
-  assert.ok(value.version === 1 || value.version === 2, 'unsupported check report version');
+  assert.ok(value.version === 1 || value.version === 2 || value.version === 3, 'unsupported check report version');
   const version = value.version;
-  exactKeys(value, ['version', 'status', 'counts', 'oracle', 'refusals', 'disagreements', 'aborts', 'error', ...(version === 2 ? ['incomplete'] : [])], 'check report fields');
-  const incomplete = version === 2 ? parseCheckStops(value.incomplete) : [];
+  exactKeys(value, ['version', 'status', 'counts', 'oracle', 'refusals', 'disagreements', 'aborts', 'error', ...(version >= 2 ? ['incomplete'] : [])], 'check report fields');
+  const incomplete = version >= 2 ? parseCheckStops(value.incomplete) : [];
   const status = member(value.status, CHECK_STATUSES, 'unknown check status');
   const refusals = array(value.refusals, 'check refusals must be an array').map(raw => {
     const refusal = object(raw, 'invalid check refusal');
@@ -110,9 +111,19 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     assert.equal(aborts.length, 0, 'a stage error cannot carry runtime findings');
     assert.equal(incomplete.length, 0, 'a stage error cannot carry measured liveness findings');
     const error = object(value.error, 'missing structured check error');
-    exactKeys(error, ['kind', 'source', 'message'], 'check error fields');
-    return { version, ...(version === 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: {
-      kind: member(error.kind, FAILURE_KINDS, 'unknown check failure kind'),
+    exactKeys(error, ['kind', 'source', 'message',...(version===3?['budget']:[])], 'check error fields');
+    let budget:{recorded:boolean;value:OracleBudget}|undefined;
+    if(version===3){
+      assert.equal(error.kind,'oracle_budget','only a typed oracle budget uses check revision 3');
+      const envelope=object(error.budget,'missing oracle budget');exactKeys(envelope,['recorded','value'],'oracle budget envelope');
+      assert.equal(typeof envelope.recorded,'boolean');const value=object(envelope.value,'oracle budget');
+      exactKeys(value,['phase','outcome','bound','signal','reason'],'oracle budget fields');
+      assert.ok(typeof value.bound==='number'&&Number.isFinite(value.bound)&&value.bound>0,'invalid oracle bound');
+      assert.ok(value.signal===null||typeof value.signal==='string'&&/^SIG[A-Z0-9]+$/.test(value.signal),'invalid oracle signal');
+      budget={recorded:envelope.recorded as boolean,value:{phase:member(value.phase,['prepare','execute'] as const,'invalid budget phase'),outcome:member(value.outcome,['timeout','memory-cap'] as const,'invalid budget outcome'),bound:value.bound,signal:value.signal as string|null,reason:text(value.reason,'missing budget reason')}};
+    }else assert.notEqual(error.kind,'oracle_budget','an oracle budget needs check revision 3');
+    return { version, ...(version >= 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: {
+      kind: member(error.kind, FAILURE_KINDS, 'unknown check failure kind'),...(budget?{budget}:{}),
       source: error.source === null ? null : text(error.source, 'invalid check source identity'),
       message: text(error.message, 'missing check error message'),
     } };
@@ -124,7 +135,7 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     assert.equal(value.counts, null, 'a pending check cannot claim measured counts');
     assert.equal(value.oracle, null, 'a pending check cannot claim an oracle population');
     assert.equal(disagreements.length + aborts.length + incomplete.length, 0, 'a pending check cannot carry findings');
-    return { version, ...(version === 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: null };
+    return { version, ...(version >= 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: null };
   }
   const rawCounts = object(value.counts, 'missing check counts');
   exactKeys(rawCounts, COUNT_NAMES, 'check count fields');
@@ -162,7 +173,7 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
   if (counts.functions === 0) assert.equal(counts.expected, 0, 'an empty export inventory has cases');
   if (counts.functions > 0) assert.ok(counts.expected > 0, 'a declared export has an empty population');
   assert.equal(status, derived, 'check disposition contradicts its structured fields');
-  return { version, ...(version === 2 ? {incomplete} : {}), status, counts, oracle: { expected, received, complete }, refusals, disagreements, aborts, error: null };
+  return { version, ...(version >= 2 ? {incomplete} : {}), status, counts, oracle: { expected, received, complete }, refusals, disagreements, aborts, error: null };
 }
 
 /** A common record for agreement, gate and outcome consumers. */
@@ -182,9 +193,10 @@ export function decodeCheck(format: unknown, status: number | null, stdout: stri
     : error?.kind === 'typecheck' && !unresolved ? Outcome.NO_TYPECHECK
     : error?.kind === 'preparation' ? Outcome.INVALID_HIR
     : error?.kind === 'backend_declined' ? Outcome.BACKEND_DECLINED
+    : error?.kind === 'oracle_budget' ? Outcome.ORACLE_BUDGET
     : error?.kind === 'emitter' ? Outcome.ABORTED : Outcome.NOT_MEASURED;
   return {
-    format, outcome, status, checked: counts?.compared ?? 0, expected: counts?.expected ?? 0,
+    format, outcome, status,...(error?.budget?{budget:error.budget}:{}), checked: counts?.compared ?? 0, expected: counts?.expected ?? 0,
     unavailable: counts?.unavailable ?? 0,
     declined: (counts?.unavailable ?? 0) + (counts?.runtime_declined ?? 0),
     timeouts: counts?.timeouts ?? 0,
@@ -218,6 +230,7 @@ export function consumerExit(record: DecodedCheck, consumer: CheckConsumer): num
   if (consumer === 'refusal' && completedCompilationRefusal(record)) return 0;
   // A case past its bound is a defect it reported loudly, for every consumer.
   if (record.outcome === Outcome.TIMEOUT) return 1;
+  if(record.outcome===Outcome.ORACLE_BUDGET)return record.budget?.recorded?5:1;
   // Not measured at landing, and not a failure: the full check records it. A
   // refusal fixture still has to refuse.
   if (consumer !== 'refusal' && record.outcome === Outcome.PENDING) return 4;
@@ -400,6 +413,8 @@ export async function runCheck(binary: string, project: string, options: CheckRu
       }
       return {record, result, format, incomplete: chosen.kind === 'tooling-setup' ? new ToolingInstrumentError('tooling-setup', chosen.reason) : new CommandNotMeasuredError({...result, [chosen.kind]: chosen.reason})};
     }
+    if(record.report?.error?.kind==='oracle_pressure')throw new PressureError(record.report.error.message);
+    if(record.budget&&!record.budget.recorded)throw new OracleBudgetError(record.budget.value);
     const incomplete = record.outcome !== Outcome.NOT_MEASURED ? undefined
       : record.timeouts > 0 ? new CommandNotMeasuredError({...result, hung: `check NOT RUN (hung): ${project}; ${record.timeouts} calls did not complete`})
       : new ToolingInstrumentError('tooling-setup', `check not measured: ${project}: ${record.first}`);
@@ -515,6 +530,7 @@ export function projectCheck(record: DecodedCheck, projection: 'compiled-answers
 }
 
 export const Outcome = Object.freeze({
+  ORACLE_BUDGET: "oracle budget exceeded",
   PENDING: "pending",
   AGREES: "agrees",
   PARTIAL: "agrees on what it compared",

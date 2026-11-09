@@ -112,13 +112,13 @@ export class CommandActivitySampler {
 }
 const activitySampler=new CommandActivitySampler();
 
-export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
+export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
 // `ownCpuSeconds` bounds the command's own CPU, its threads and not its
 // children: a case's compile. `eachProcessCpuSeconds` applies the same kind of
 // bound independently to every process in a build session (a driver can wait
 // while its linker spends CPU). Past it the command is stopped and `timeout` says
 // so; nothing is published, because a timeout is the case's outcome, not a hold.
-type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;
+type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;captureBytes?:boolean;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -155,6 +155,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       try{stop();}catch(error){instrument=new ToolingInstrumentError("tooling-cleanup",`${instrument.message}; ${String(error)}`);publishToolingFailure(instrument,options.env);}
       child.stdout.destroy();child.stderr.destroy();
     };
+    const raw:{out:Buffer[];err:Buffer[]}|undefined=options.captureBytes?{out:[],err:[]}:undefined;
     let stdoutBytes=0,stderrBytes=0;
     const stdoutDecoder=new StringDecoder("utf8"),stderrDecoder=new StringDecoder("utf8");
     const output=(part:Buffer,standard:boolean)=>{
@@ -162,6 +163,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
         last=performance.now();
         const retained=standard?(stdoutBytes+=part.length):(stderrBytes+=part.length);
         if(options.maxBuffer!==undefined&&retained>options.maxBuffer)throw new Error(`command ${standard?"stdout":"stderr"} exceeded its ${options.maxBuffer} byte capture budget`);
+        if(raw)(standard?raw.out:raw.err).push(Buffer.from(part));
         const text=(standard?stdoutDecoder:stderrDecoder).write(part);
         if(standard)stdout+=text;else stderr+=text;
         out+=text;
@@ -186,7 +188,8 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       const stdoutTail=stdoutDecoder.end(),stderrTail=stderrDecoder.end();
       stdout+=stdoutTail;stderr+=stderrTail;out+=stdoutTail+stderrTail;
       if(instrument)reject(instrument);
-      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs:performance.now()-began});
+      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs:performance.now()-began,
+        ...(raw?{stdoutRaw:Buffer.concat(raw.out),stderrRaw:Buffer.concat(raw.err)}:{})});
     });
     if(!child.pid)return; // spawn's error/close events retain their ordinary meaning.
     try{

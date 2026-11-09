@@ -11,6 +11,8 @@ const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
+import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
+import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
@@ -102,7 +104,7 @@ export function validateSourcePlan(plan: Plan): void {
 export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: number): Table {
   validateSourcePlan(plan);
   if (table.version !== 1 || plan.cases.length !== plan.case_count || plan.seed !== null || delivered !== plan.case_count) throw new Error("invalid recording schema");
-  if (cpu.length !== 2 || cpu.some(n => !Number.isFinite(n) || n < 0 || n * 2 > 15)) throw new Error("CPU budget needs at least twice both measured runs");
+  if (cpu.length !== 2 || cpu.some(n => !Number.isFinite(n) || n < 0 || n * 2 > oracleExecutionLimits(plan.source).cpuSeconds)) throw new Error("CPU budget needs at least twice both measured runs");
   const previous = table.rows.filter(row => row.source === plan.source && row.keys[plan.backend]);
   const domain = plan.input_domain;
   if (domain !== undefined && (!/^[0-9a-f]{32}$/.test(domain.identity) || domain.declaration?.version !== 1 ||
@@ -134,6 +136,27 @@ export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: nu
     ...(domain === undefined ? {} : { input_domain: domain }) };
   return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(old => !(old.source === row.source && old.signature === row.signature)), row] };
 }
+/** No count is claimed when a case passed its own bound. A measured row
+ * cannot get worse through a recording pass. */
+let nodeRevision:string|undefined;
+export function oracleBudgetRevision(root:string,source:string){
+  const domain=join(root,fixtureOf(source),'case.domains.json');
+  return {entry:digest(JSON.stringify([readFileSync(join(root,source),'utf8'),existsSync(domain)?readFileSync(domain,'utf8'):null])),node:nodeRevision??=createHash('sha256').update(readFileSync(process.platform==='linux'?'/proc/self/exe':process.execPath)).digest('hex'),
+    producer:digest(JSON.stringify(oracleIdentity(oracleToolchainLocation()))+readFileSync(new URL('./oracle-execution.ts',import.meta.url),'utf8')+readFileSync(new URL('./oracle-batch.ts',import.meta.url),'utf8')),
+    policy:digest(readFileSync(new URL('./oracle-execution-policy.ts',import.meta.url),'utf8')+JSON.stringify({compileCpu:COMPILE_CPU_BOUND_SECONDS,compileResident:ORACLE_COMPILE_MEMORY_BYTES}))};
+}
+export function addBudgetRecord(table:Table,plan:Plan,budget:OracleBudget):Table{
+  validateSourcePlan(plan);
+  if(table.rows.some(row=>row.source===plan.source&&row.kind==='measured'&&row.keys[plan.backend]))throw new CaseBudgetError('REGRESSED oracle population: '+plan.source+' measured -> '+budget.outcome);
+  let row:Row={...identity(plan),kind:'budget',budget:{version:1,...budget},source_digest:plan.source_digest,revision:oracleBudgetRevision(plan.repository_root??process.cwd(),plan.source),
+    ...(plan.input_domain?{input_domain:plan.input_domain}:{})};
+  const previous=table.rows.find(one=>one.source===row.source&&one.signature===row.signature);
+  row.keys={...previous?.keys,...row.keys};
+  // An unchanged recorded defect keeps its original provenance.
+  if(previous?.kind==='budget'&&JSON.stringify(previous.revision)===JSON.stringify(row.revision))row={...previous,keys:row.keys};
+  return {version:1,generator_version:plan.generator_version,generator_digest:plan.generator_digest,seed:null,rows:[...table.rows.filter(one=>one.source!==row.source||one.signature!==row.signature),row]};
+}
+
 export function noOracleRecord(plan: Plan, reason: string): Row {
   validateSourcePlan(plan);
   if (plan.case_count !== 0 || plan.cases.length !== 0 || !plan.source_digest || !reason) throw new Error("no-oracle requires an explicit empty source identity and reason");
@@ -242,15 +265,18 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
     atomic(join(dir, `${arm}.oracle.json`), prepared);
     const env: NodeJS.ProcessEnv = { ...process.env, ...prepared.env, NTS_DIFF_RESULTS: results, NTS_CPU_EVENTS: timings, NO_COLOR: "1" };
     delete env.FORCE_COLOR; delete env.CLICOLOR_FORCE;
-    // timeout owns only its spawned child group. Recording never accepts a
-    // guard's exit code, even if the results file already contains done.
-    const run = spawnSync("taskset", ["-c", "4", "prlimit", "--as=2147483648", "--core=0", "--cpu=15:16", "timeout", "120", "node", ...prepared.args, script], { env, maxBuffer: 64 * 2 ** 20 });
-    writeFileSync(join(dir, `${arm}.stdout`), run.stdout ?? "");
-    writeFileSync(join(dir, `${arm}.stderr`), run.stderr ?? "");
+    // The resident owner and CPU supervisor prove a case's budget stop.
+    // An unproven signal never supplies a count, even after a done row.
+    const execution = await runOracleCommand("taskset", ["-c", "4", process.execPath, ...prepared.args, script], {source:plan.source,env});
+    const run=execution.run;
+    atomic(join(dir, `${arm}.execution.json`),execution);
+    writeFileSync(join(dir, `${arm}.stdout`), Buffer.from(execution.stdoutHex,"hex"));
+    writeFileSync(join(dir, `${arm}.stderr`), Buffer.from(execution.stderrHex,"hex"));
     finish();
     const loader=oracleLoaderReady(prepared);
     if(!loader.ready)throw new Error(`oracle not measured: ${plan.source}: ${loader.why}`);
-    if (run.status !== 0 || run.error) throw new Error(`oracle not measured: ${plan.source}: ${run.error ?? run.signal ?? run.status}`);
+    if(execution.budget)throw new OracleBudgetError(execution.budget);
+    if (run.status !== 0 || run.error || run.hung || run.runaway) throw new ToolingInstrumentError('tooling-setup',`oracle not measured: ${plan.source}: ${run.hung ?? run.runaway ?? run.error ?? run.signal ?? run.status}`);
     const text = readFileSync(results, "utf8");
     delivered = completeRows(text, plan.case_count).length;
     if (baseline !== undefined && baseline !== text) throw new Error(`unstable oracle: ${plan.source}`);
@@ -296,7 +322,10 @@ export async function recordAll(evidence: string, output: string, measure = meas
       const detail=join(evidence,identity,'failure.txt');
       if(!failed.has(identity)){mkdirSync(dirname(detail),{recursive:true});writeFileSync(detail,failure.message+'\n');}
       failed.set(identity, failure);
-      const outcome=failure instanceof OracleCompileBudgetError?failure.outcome:'not-measured';
+      const budget=failure instanceof OracleBudgetError?failure.budget:failure instanceof OracleCompileBudgetError
+        ?failure.budget:undefined;
+      const outcome=budget?.outcome??'not-measured';
+      if(budget)table=addBudgetRecord(table,plan,budget);
       findings.push({ source: plan.source, backend: plan.backend, driver_sha256: identity, outcome, error: message, detail });
       console.log(outcome==='not-measured'?'NOT MEASURED':outcome.toUpperCase(),plan.backend,plan.source,message,`(full error: ${detail})`);
     }
@@ -310,9 +339,7 @@ export async function recordAll(evidence: string, output: string, measure = meas
   atomic(summaryPath, summary);
   const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,...counts}=summary;
   console.log(JSON.stringify({...counts,failed_populations:findings.length,preparation_failures:manifest.failures.length,summary:summaryPath}));
-  if(findings.length&&!manifest.failures.length&&findings.every(finding=>finding.outcome!=='not-measured'))
-    throw new CaseBudgetError('oracle recording incomplete: compile case budgets exceeded; '+summaryPath);
-  if (findings.length || manifest.failures.length) throw new ToolingInstrumentError('tooling-setup',"recording incomplete; review every not-measured project before submitting; "+summaryPath);
+  if (findings.some(finding=>finding.outcome==='not-measured') || manifest.failures.length) throw new ToolingInstrumentError('tooling-setup',"recording incomplete; review every not-measured project before submitting; "+summaryPath);
   writeTable(output, table);
 }
 

@@ -164,6 +164,12 @@ in two ways:
 - **The full check writes them.** Nobody records by hand. When a case gets
   better (wrong answer to refusal, refusal to pass), the full check updates
   the record itself and lands that update.
+- **An oracle past its own CPU or resident bound has a budget row,** with
+  the phase, bound and observed stop, and no invented count. Checks retry it
+  and print it loudly. A completed count is an improvement; replacing a count
+  with a budget is red. The records pass refreshes a budget after a completed
+  check requests it, or its case, Node, producer or bound identity changes.
+  A refresh always measures afresh; it reuses no failed execution or count.
 - **Getting worse is red.** A case that passed and now fails, or a refusal
   that became a wrong answer, makes the full check red, and the culprit is
   reverted.
