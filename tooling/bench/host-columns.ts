@@ -9,6 +9,8 @@ import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
 import { COMPARATORS, type Cell, type Comparator, type Json } from "./run-record.ts";
+import { reserveJob } from "../gate/memory-ledger.ts";
+import { stepMemoryBytes } from "../gate/step-table.mjs";
 type Receipt = {
   command: string[];
   cwd: string;
@@ -60,13 +62,6 @@ function affinity(timed: boolean): string {
   assert.ok(selected.length, "no unreserved inherited CPUs");
   return selected.join(",");
 }
-async function admission(): Promise<void> {
-  while (
-    Number(/^MemAvailable:\s+(\d+)/m.exec(readFileSync("/proc/meminfo", "utf8"))?.[1]) * 1024 <
-    14 * 1024 ** 3
-  )
-    await new Promise((r) => setTimeout(r, 2000));
-}
 /** Untimed compiler and linker work uses the same per-process policy as native builds. */
 export async function buildCommand(program: string, args: string[], cwd: string,
   extra: Record<string,string> = {}, supervise = activeCommand): Promise<Receipt> {
@@ -93,10 +88,7 @@ async function execute(
   timed: boolean,
   extra: Record<string, string> = {},
 ): Promise<Receipt> {
-  if (!timed) {
-    await admission();
-    return buildCommand(program, args, cwd, extra);
-  }
+  if (!timed) return buildCommand(program, args, cwd, extra);
   const command = [
     "timeout",
     "--kill-after=10s",
@@ -230,6 +222,9 @@ export async function hostColumns(
   input: string[],
   out: string,
 ): Promise<Hosts> {
+  // Building and running a case's host columns is the benches step's work:
+  // its memory, reserved once for the case (inside a reservation, that one).
+  await reserveJob({ bytes: stepMemoryBytes("benches"), what: `benchmark host columns for ${name}` });
   const pins = pinnedComparators(root),
     directory = join(out, name + ".hosts");
   mkdirSync(directory, { recursive: true });

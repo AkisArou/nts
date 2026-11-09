@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test} from 'node:test';
 import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage} from './oracle-dependencies.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 test('dependency protection rejects external inodes before any chmod and private copies leave the origin unchanged',t=>{
@@ -132,8 +133,9 @@ test('a run dependency seal rejects a same-byte rewrite after the unchanged posi
   await assert.rejects(acquire(),error=>error instanceof Error&&'kind' in error&&error.kind==='tooling-setup'&&/oracle dependency seal changed/.test(error.message));
 });
 test('outside a canonical run dependency acquisition retains full live input validation',async t=>{
-  const f=installFixture(t),cap=f.cap('outside-run');
-  const acquire=()=>Reflect.apply(captureDependencies,undefined,[cap,undefined,{}]) as Promise<string>;
+  // Outside a canonical run, with only a memory reading and a ledger of its own.
+  const f=installFixture(t),cap=f.cap('outside-run'),memory=ownMemory(join(f.parent,'memory'));
+  const acquire=()=>Reflect.apply(captureDependencies,undefined,[cap,undefined,{...memory}]) as Promise<string>;
   const ready=await acquire();assert.equal(await acquire(),ready);
   f.write('packages/one/package.json','{"name":"owned-one","version":"1.0.1"}\n');
   await assert.rejects(acquire(),/input|captured clean tree/);

@@ -12,6 +12,7 @@ import {GateResource} from '../gate/gate-resource.ts';
 import {managerPin,withPackageManager} from '../inputs/package-manager.ts';
 import {activeCommand} from '../gate/active-command.ts';
 import {TemporaryAdmission,type TemporaryAdmissionContext} from '../gate/admission.ts';
+import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {moduleClosure} from '../gate/module-closure.ts';
@@ -158,7 +159,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
   checked(capability);
   const ledger=join(capability.admission.kind==='gate'?capability.admission.temporary.parent:capability.directory,'oracle-dependency-calls.jsonl');
   capability={...capability,directory:join(capability.directory,'node-'+process.versions.node)};
-  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES,report:message=>process.stderr.write(message+'\n')});
+  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES});
   mkdirSync(capability.directory,{recursive:true});
   const recordCall=(mode:'cold'|'hit'|'held')=>appendFileSync(ledger,JSON.stringify({version:1,step:capability.ownerStep,nodeVersion:process.versions.node,directory:capability.directory,mode,wallMs:performance.now()-callStart,...counts})+'\n');
   let lock:GateResource|null;
@@ -195,6 +196,11 @@ export async function captureDependencies(capability:DependencyCapability,signal
       const before=performance.now();
       const inputRecord=join(capability.directory,'install-inputs.json');publish(inputRecord,inputSet);
       const inputSha256=hash(readFileSync(inputRecord));
+      // The build's memory is its resident budget, reserved once in the
+      // machine's memory ledger; inside a gate step, the step's reservation.
+      let reservation:Awaited<ReturnType<typeof reserveJob>>;
+      try{reservation=await reserveJob({bytes:CAPTURE_BYTES,what:'oracle dependency capture'},{env,signal,report:message=>process.stderr.write(message+'\n')});}
+      catch(error){if(signal?.aborted)throw new ToolingInstrumentError('tooling-setup','oracle dependency capture canceled while it waited for memory');throw error;}
       const memory=new MemoryRun({budgetBytes:CAPTURE_BYTES,id:'oracledependency'+process.pid});
       let run:Awaited<ReturnType<typeof activeCommand>>,peakBytes:number,cpu:Record<string,number>;
       try{
@@ -205,7 +211,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
         const overBudget=worker.counters().oom>0||run.runaway||run.hung||cpu.usage_usec!>CAPTURE_CPU_SECONDS*1e6;
         writeFileSync(join(capability.directory,'command.json'),JSON.stringify({command:'systemd-run',args:scope.argv,scope:memory.group,peakBytes,residentBudgetBytes:CAPTURE_BYTES,cpuBudgetSeconds:CAPTURE_CPU_SECONDS,...run},null,2)+'\n');
         if(overBudget)throw new CaseBudgetError('oracle dependency capture exceeded its preparation budget: '+(run.runaway??run.hung??'resident memory'));
-      }finally{memory.close();}
+      }finally{try{memory.close();}finally{if(!reservation.inherited)reservation.release();}}
       writeFileSync(join(capability.directory,'stdout'),run.stdout);writeFileSync(join(capability.directory,'stderr'),run.stderr);
       if(signal?.aborted)throw Error('oracle dependency capture canceled before publication');
       if(run.status!==0||run.signal||run.error||run.hung||run.runaway)throw Error('oracle dependency capture not measured: '+run.out);

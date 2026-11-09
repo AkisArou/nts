@@ -229,13 +229,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preparation_pressure_holds_the_tests_step_instead_of_failing_a_library_test() {
+    fn preparation_inside_the_tests_step_asks_the_host_for_no_memory() {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
         let output = Command::new("node")
-            .arg(root.join("tooling/differential/oracle-pressure-fixture.ts"))
+            .arg(root.join("tooling/differential/oracle-reservation-fixture.ts"))
             .arg(std::env::current_exe().unwrap())
             .output()
             .unwrap();
@@ -245,7 +245,7 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("\"step\":\"INSTRUMENT\""));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("\"step\":\"PASS\""));
     }
 
     #[test]

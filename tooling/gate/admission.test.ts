@@ -1,6 +1,6 @@
-// Memory admission: the hysteresis itself, the token pool driven through a hold
-// with real token.sh clients, and the census feed, which gives way while its
-// job's reservation is outranked, with a real worker process on a pipe.
+// The token pool driven through a hold with real token.sh clients; the census
+// feed, which gives way while its job's reservation is outranked, with a real
+// worker process on a pipe; and a run temporary's disk admission.
 //
 //   node --test tooling/gate/admission.test.ts
 import { test } from "node:test";
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { Admission, createFeed, memAvailableGB, TemporaryAdmission } from "./admission.ts";
+import { createFeed, memAvailableGB, TemporaryAdmission } from "./admission.ts";
 import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./tokenpool.mjs";
 import { waitFor } from "./test-wait.ts";
@@ -26,48 +26,15 @@ function ranked(start = false) {
   return { state, outranked: () => state.outranked };
 }
 
-/** An admission reading `gb.value`, so a test moves memory by assignment. */
-function scripted(start: number) {
-  const gb = { value: start as number | null };
-  const notes: string[] = [];
-  return { gb, notes, admission: new Admission({ read: () => gb.value, report: (m) => notes.push(m) }) };
-}
-
-test("starts held, resumes at 14, holds again only below 12", () => {
-  const { gb, notes, admission } = scripted(13);
-  assert.equal(admission.open(), false, "13 at the start is below the starting threshold");
-  gb.value = 14;
-  assert.equal(admission.open(), true);
-  gb.value = 13;
-  assert.equal(admission.open(), true, "admitted at 14, it keeps going down to 12");
-  gb.value = 12;
-  assert.equal(admission.open(), true, "12 itself is not below 12");
-  gb.value = 11.9;
-  assert.equal(admission.open(), false);
-  gb.value = 13;
-  assert.equal(admission.open(), false, "held at 11.9, 13 is not enough to resume");
-  gb.value = 14;
-  assert.equal(admission.open(), true);
-  // Waiting at the start, admitted, held, admitted: one report per change, not per check.
-  assert.equal(notes.length, 4, notes.join(" | "));
-  assert.match(notes[0], /before the first case/);
-});
-
-test("a machine that reports no memory admits", () => {
-  const { gb, admission } = scripted(null as unknown as number);
-  gb.value = null;
-  assert.equal(admission.open(), true);
-});
-
 function temporaryFixture(t: { after(fn: () => void): void }) {
   const run = testScratch(t, "admission"), temporary = captureRunTemporary(run);
   return { run, temporary, path: join(temporary.path, "capture") };
 }
 
-test("both capture contexts reserve above the temporary floor while standalone retains its memory boundary", t => {
+test("both capture contexts reserve above the temporary floor, and memory is not theirs to admit", t => {
   const { temporary, path } = temporaryFixture(t);
-  let freeBytes = 60 * 2 ** 30, memory = 14;
-  const options = { path, reservedBytes: 2 ** 30, readMemory: () => memory, readFreeBytes: () => freeBytes };
+  let freeBytes = 60 * 2 ** 30;
+  const options = { path, reservedBytes: 2 ** 30, readFreeBytes: () => freeBytes };
   const gate = new TemporaryAdmission({ ...options, context: { kind: "gate", temporary } });
   const standalone = new TemporaryAdmission({ ...options, context: { kind: "standalone" } });
   assert.equal(gate.check().admitted, true);
@@ -82,21 +49,12 @@ test("both capture contexts reserve above the temporary floor while standalone r
   freeBytes = 41 * 2 ** 30;
   assert.equal(gate.check().admitted, true);
   assert.equal(standalone.check().admitted, true);
-  memory = 13;
-  assert.equal(gate.check().admitted, true, "the gate retains its ordinary memory hysteresis");
-  assert.equal(standalone.check().admitted, false, "an outside heavy phase still starts only at 14 GiB");
-  memory = 11.9;
-  assert.equal(gate.check().admitted, false);
-  memory = 13;
-  assert.equal(gate.check().admitted, false);
-  memory = 14;
-  assert.equal(gate.check().admitted, true);
-  assert.equal(standalone.check().admitted, true);
+  assert.equal("availableGiB" in gate.check(), false, "a capture's memory is its job's reservation in the ledger");
 });
 
 test("gate policy rejects a replaced registration and outside or escaping capture roots", t => {
   const { run, temporary, path } = temporaryFixture(t);
-  const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, readMemory: () => 14, readFreeBytes: () => 60 * 2 ** 30 };
+  const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, readFreeBytes: () => 60 * 2 ** 30 };
   assert.throws(() => new TemporaryAdmission({ ...options, path: join(run, "outside") }), /outside the registered/);
   mkdirSync(join(run, "outside"));
   symlinkSync(join(run, "outside"), join(temporary.path, "link"));
@@ -122,11 +80,12 @@ test("MemAvailable is read from the file in /proc/meminfo's format", () => {
   }
 });
 
-test("token pool: a running case finishes through a hold, and the next waits for 14 GB", async () => {
-  const { gb, admission } = scripted(20);
-  // run.mjs's `free`, with the slot arithmetic of a 4-slot run.
+test("token pool: a running case finishes through a hold, and the next waits until the hold ends", async () => {
+  // run.mjs's `free`, with the slot arithmetic of a 4-slot run, held as a run
+  // outranked in the memory ledger holds its tokens.
+  const hold = { on: false };
   const pool = createTokenPool({
-    free: () => (admission.open() ? 4 - pool.total : 0),
+    free: () => (hold.on ? 0 : 4 - pool.total),
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
     known: () => true,
   });
@@ -147,26 +106,23 @@ test("token pool: a running case finishes through a hold, and the next waits for
   let queued: ReturnType<typeof run> | undefined;
   try {
     await waitFor("the token holder's ready output", () => running.output() === "ready");
-    gb.value = 10; // below 12: no new case may start
+    hold.on = true; // no new case may start
     queued = run("printf resumed");
     await waitFor("the second token request", () => pool.waiting.length === 1);
     running.child.stdin.end("release\n");
     assert.equal(await running.done, 0, "the running case was not stopped by the hold");
     await waitFor("the running token's release", () => pool.total === 0);
     pool.grant();
-    assert.equal(pool.total, 0, "nothing was granted below 12 GB");
+    assert.equal(pool.total, 0, "nothing was granted while held");
     assert.equal(queued.output(), "");
-    gb.value = 13; // held: 13 is not enough
-    pool.grant();
-    assert.equal(pool.total, 0, "13 GB does not resume a held pool");
     assert.equal(pool.waiting.length, 1);
-    gb.value = 14;
+    hold.on = false;
     pool.grant();
     assert.equal(await queued.done, 0);
     assert.equal(queued.output(), "resumed");
   } finally {
     if (!running.child.stdin.writableEnded) running.child.stdin.end("release\n");
-    gb.value = 14; pool.grant();
+    hold.on = false; pool.grant();
     await running.done;
     if (queued) await queued.done;
     pool.close();

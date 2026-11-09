@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import {oracleTestMemory} from '../differential/oracle-test-fixture.ts';
+import {oracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 
 // Decision D2 (docs/foundations/unicode.md): nts's Unicode tables move
 // in lockstep with the pinned node's version. This test reads node's
@@ -61,7 +61,7 @@ export function probe(seed: number): number {
 async function agrees(t:TestContext,backend: string, dir = probeProject()): Promise<boolean> {
   try {
     const {record: observation} = await runCheck(bin, dir, {
-      env: { ...process.env, NTS_MEMINFO:oracleTestMemory(t), NTS_BACKEND: backend, NTS_CHECKERS: "1" },
+      env: { ...oracleTestEnvironment(t), NTS_BACKEND: backend, NTS_CHECKERS: "1" },
     });
     return observation.outcome === Outcome.AGREES && observation.checked > 0;
   } finally {

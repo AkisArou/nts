@@ -6,11 +6,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSy
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { setTimeout as poll } from "node:timers/promises";
 import { memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
-import { Admission } from "../gate/admission.ts";
+import { reserveJob } from "../gate/memory-ledger.ts";
 import { withToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
@@ -128,7 +127,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const shown = (file: string) => { const local = relative(ROOT, file); return local.startsWith("..") || isAbsolute(local) ? file : local; };
   const base = process.env.TMPDIR ?? join(homedir(), ".cache/nts/benchmark-records"); mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "compile-"));
-  let resident = false;
+  let resident = false, reservation: Awaited<ReturnType<typeof reserveJob>> | undefined;
   try {
     // A compile's memory is its step's reservation (NTS_GATE_STEP_MEMORY_BYTES).
     // Outside a step, as the records writer runs, it is the benches step's own,
@@ -152,7 +151,6 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       }
       actual.set(backend, []);
     }
-    const admission = new Admission({ report: message => console.error(message) });
     for (const path of paths) for (const backend of backends) {
       // A case with no row yet is not measured at landing: the full check records it.
       if (mode === "--check" && pending.get(backend)!.has(path)) continue;
@@ -166,9 +164,10 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
         console.log(`${backend} ${path}: timeout, as recorded; a check does not measure it again`);
         continue;
       }
-      // The standalone recorder has no resident worker keeping it alive.
-      // Keep this admission wait referenced, as the calibration recorder does.
-      while (!admission.open()) await poll(2000);
+      // The compiles' memory, reserved once as the first one to measure starts:
+      // the step's, inside one; alone, the benches step's, as above.
+      reservation ??= await reserveJob({ bytes: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES), what: `benchmark compile records (${mode})` },
+        { report: message => console.error(message) });
       resident = true;
       const outcome = await withToken(() => observeCompile({ backend, project: projectFor(ROOT, path, scratch), output: join(scratch, "output"), binary, root: ROOT, env: environment }), { project: path, backend });
       actual.get(backend)!.push({ path, scope: "compile", source: identities.get(path)!, driver, outcome });
@@ -205,7 +204,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     return changed ? 1 : 0;
   } finally {
     try { if (resident) memoryRun().close(); }
-    finally { rmSync(scratch, { recursive: true, force: true }); }
+    finally { reservation?.release(); rmSync(scratch, { recursive: true, force: true }); }
   }
 }
 

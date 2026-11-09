@@ -31,8 +31,9 @@ export function conditions(directory:string) {
     load:readFileSync('/proc/loadavg','utf8').trim(),landing};
 }
 
+/** The conditions a cell starts under, above the 40 GiB disk floor; its memory is its sitting's reservation in the memory ledger. */
 export async function admitted(directory:string) {
-  for(;;){const c=conditions(directory);if(c.diskGiB<40)throw Error('40 GiB disk floor');if(c.memGiB>=14)return c;await new Promise(r=>setTimeout(r,10000));}
+  const c=conditions(directory);if(c.diskGiB<40)throw Error('40 GiB disk floor');return c;
 }
 
 export function nativeAdapter(binaries:Map<string,Record<Arm,string>>,library:string,n:number,checksum:string,directory:string):Adapter {

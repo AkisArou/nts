@@ -56,7 +56,7 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
       const toolchain=process.env.NTS_ORACLE_TYPESCRIPT;
       if(!toolchain)throw new ToolingInstrumentError('tooling-setup','oracle TypeScript capability NTS_ORACLE_TYPESCRIPT is missing');
       const {prepareOracles,preparedOracle}=await import('./oracle-batch.ts');
-      const members=await prepareOracles([{key:request.entry,options:request}],{directory:resolve(request.directory,'preparation'),toolchain,workers:1,env:process.env,waitForAdmission:false,resolutionOwnerPid:process.ppid});
+      const members=await prepareOracles([{key:request.entry,options:request}],{directory:resolve(request.directory,'preparation'),toolchain,workers:1,env:process.env,resolutionOwnerPid:process.ppid});
       process.stdout.write(JSON.stringify({prepared:preparedOracle(members[request.entry],'native oracle preparation '+request.entry)})+'\n');
     }else{
       assert.equal(mode,'--run','oracle execution needs --run or --prepare');

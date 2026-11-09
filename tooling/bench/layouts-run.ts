@@ -3,7 +3,7 @@
 import {spawnSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
-import {linkLayouts} from './layouts-link.ts';
+import {linkLayouts, reserveLayoutJob} from './layouts-link.ts';
 import {experiment, linkPlan} from './layouts-plan.ts';
 
 const [mode, input, destination] = process.argv.slice(2);
@@ -15,6 +15,7 @@ if (mode === 'build' || mode === 'check') {
   if (mode === 'check') {
     console.log(`${plan.pairs.length} pairs × ${plan.seeds.length} layouts per arm; no workload executed`);
   } else {
+    await reserveLayoutJob(`layout build: ${plan.pairs.length} pair(s)`);
     mkdirSync(out);
     writeFileSync(join(out, 'experiment.json'), JSON.stringify(plan, null, 2));
     const pairs = [], counts: Record<string, object> = {};

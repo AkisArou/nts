@@ -7,12 +7,14 @@ import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/
 import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
 import { testScratch } from "./test-scratch.ts";
+import { ownMemory } from "./test-memory.ts";
 
 function fixture(t:{after(fn:()=>void):void}) {
   const directory=testScratch(t, "agree-new-project-case");
   const root=join(directory,"repo"),home=join(directory,"home");mkdirSync(root);mkdirSync(home);
   const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
-  Object.assign(env,{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
+  // agree.mjs reserves its workers' memory in a ledger of this fixture's own.
+  Object.assign(env,ownMemory(join(directory,"memory")),{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});
   const git=(...args:string[])=>{
     const result=spawnTest("git",args,{cwd:root,env,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();

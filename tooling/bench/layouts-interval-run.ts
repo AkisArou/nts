@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {experiment} from './layouts-plan.ts';
-import {linkLayouts} from './layouts-link.ts';
+import {linkLayouts,reserveLayoutJob} from './layouts-link.ts';
 import {random,inferLayouts} from './layouts-interval.ts';
 import {sampleLayouts,type Trial,type SittingOptions} from './layouts-sitting.ts';
 import {nativeAdapter} from './layouts-native.ts';
@@ -43,6 +43,7 @@ if(mode==='record'){
   const plan=sourcePlan(JSON.parse(readFileSync(input,'utf8')));
   if(mode==='check')console.log(`${plan.pairs.length} cases, ${plan.seeds.length} independent layouts per arm; no workload`);
   else {
+    await reserveLayoutJob(`interval layout build: ${plan.pairs.length} case(s)`);
     mkdirSync(out);writeFileSync(join(out,'plan.json'),JSON.stringify(plan,null,2));
     const pairs:any[]=[],state={state:'RUNNING',independentArms:true,heapLibrary:plan.heapLibrary,heapSha256:hash(readFileSync(plan.heapLibrary)),options:options(plan),pairs};
     for(const pair of plan.pairs){
@@ -59,6 +60,7 @@ if(mode==='record'){
     if(r.status!==0||r.signal||r.error)throw Error('interval sitting failed; raw state and admission sample retained');
   }else{
     if(process.env.NTS_BENCH_CPUS!=='4'||!/^Cpus_allowed_list:\s*0-3,6-31$/m.test(readFileSync('/proc/self/status','utf8')))throw Error('with-lock and off-core orchestration required');
+    await reserveLayoutJob(`interval layout sitting: ${build.pairs.length} case(s)`);
     mkdirSync(out);const summaries:any[]=[];
     writeFileSync(join(out,'checkpoint.json'),JSON.stringify({state:'RUNNING',current:null,pairs:0}));
     try {

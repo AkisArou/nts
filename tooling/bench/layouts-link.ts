@@ -7,20 +7,22 @@ import {pathToFileURL} from "node:url";
 import {body,orderingWarnings,symbolOrder,textSymbols,type Symbol} from "./layouts.ts";
 import {readOnlyConstants} from "./layouts-elf.ts";
 import {random} from "./layouts-interval.ts";
+import {reserveJob} from "../gate/memory-ledger.ts";
+import {stepMemoryBytes} from "../gate/step-table.mjs";
 import {createHash} from "node:crypto";
 
 export type LinkArm={name:string;command:string;args:string[];cwd:string;hot:string[]};
 export type LinkPlan={arms:LinkArm[];seeds:number[];independentArms?:boolean};
 
-async function admitted(out:string){
-  for(;;){
-    const mem=/^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync("/proc/meminfo","utf8"));
-    const disk=statfsSync(out);
-    if(!mem||disk.bavail*disk.bsize<40*1024**3)throw Error("layout admission unavailable");
-    if(Number(mem[1])>=14*1024**2)return;
-    await new Promise(r=>setTimeout(r,10000));
-  }
+// Each link starts above the 40 GiB disk floor. Its memory is its job's
+// reservation in the memory ledger, made once by the command that links.
+function diskFloor(out:string){
+  const disk=statfsSync(out);
+  if(disk.bavail*disk.bsize<40*1024**3)throw Error("layout link below the 40 GiB disk floor");
 }
+
+/** A layout job's memory: the benches step's, whose work building and running benchmark binaries is, reserved once. */
+export const reserveLayoutJob=(what:string)=>reserveJob({bytes:stepMemoryBytes("benches"),what});
 
 export async function linkLayouts(plan:LinkPlan,out:string){
   if(plan.arms.length!==2||new Set(plan.arms.map(a=>a.name)).size!==2||plan.seeds.length<5||new Set(plan.seeds).size!==plan.seeds.length)throw Error("two arms and five unique seeds required");
@@ -48,7 +50,7 @@ export async function linkLayouts(plan:LinkPlan,out:string){
     return{binary,symbols,bodies};
   };
   for(const arm of plan.arms){
-    await admitted(out);const stem=join(out,arm.name+"-reference"),binary=stem+".bin";
+    diskFloor(out);const stem=join(out,arm.name+"-reference"),binary=stem+".bin";
     run(arm.command,[...arm.args,"-o",binary],arm.cwd,stem+"-link");
     references.set(arm.name,inspect(binary,arm,stem));
   }
@@ -59,7 +61,7 @@ export async function linkLayouts(plan:LinkPlan,out:string){
     for(const [index,arm] of plan.arms.entries()){
       const orderSeed=plan.independentArms?independentSeeds[index]:seed;
       const order=symbolOrder(union,orderSeed);
-      await admitted(out);
+      diskFloor(out);
       const reference=references.get(arm.name)!;
       const names=new Set(reference.symbols.map(s=>s.name));
       const stem=join(out,arm.name+"-"+seed),ordering=stem+".order",binary=stem+".bin";
@@ -88,5 +90,6 @@ export async function linkLayouts(plan:LinkPlan,out:string){
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const [input,out]=process.argv.slice(2);
   if(!input||!out)throw Error("layouts-link.ts <link-plan.json> <fresh output directory>");
+  await reserveLayoutJob("layout links");
   await linkLayouts(JSON.parse(readFileSync(input,"utf8")),resolve(out));
 }

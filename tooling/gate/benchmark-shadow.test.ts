@@ -6,14 +6,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import {setupOracleTestEnvironment,oracleTestMemory} from '../differential/oracle-test-fixture.ts';
+import {setupOracleTestEnvironment,oracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 
 await setupOracleTestEnvironment();
 
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = resolve(HERE, "../..");
 
 test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", async t => {
-  const memory=oracleTestMemory(t);
+  const own=oracleTestEnvironment(t);
   const root = mkdtempSync(join(tmpdir(), "nts-benchmark-shadow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
@@ -28,7 +28,7 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
   const run = async (name: string) => {
     const directory = join(root, name), costs = join(directory, "costs"); mkdirSync(costs, { recursive: true });
     const {result, record: observation} = await runCheck(bin, config, { cwd: ROOT,
-      env: { ...process.env, NTS_MEMINFO:memory, NTS_BACKEND: "jvm", NTS_CHECKERS: "1", NTS_GATE_STEP: "bench-agree",
+      env: { ...own, NTS_BACKEND: "jvm", NTS_CHECKERS: "1", NTS_GATE_STEP: "bench-agree",
         NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_SHADOW_DIR: cache,
         NTS_GATE_SHADOW_HELPER: join(HERE, "artifact-shadow.ts") } });
     assert.equal(result.status, 0, result.stdout + result.stderr);

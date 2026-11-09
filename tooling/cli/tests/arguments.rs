@@ -238,8 +238,15 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
         std::env::temp_dir().join(format!("nts-cli-provider-capture-{}", std::process::id()));
     std::fs::create_dir(&directory).unwrap();
     let scope = CaptureScope(directory);
+    // The check's oracle preparation reserves in a ledger of this test's own,
+    // against an ample reading of its own, never the machine's.
     let memory = scope.0.join("meminfo");
-    std::fs::write(&memory, "MemAvailable: 64000000 kB\n").unwrap();
+    std::fs::write(
+        &memory,
+        "MemTotal:       64000000 kB\nMemAvailable:   64000000 kB\n",
+    )
+    .unwrap();
+    let ledger = scope.0.join("ledger");
     let parent_ledger = std::env::var("NTS_ORACLE_DEPENDENCIES")
         .ok()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
@@ -280,6 +287,9 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
             ])
             .env("NTS_BACKEND", "jvm")
             .env("NTS_MEMINFO", &memory)
+            .env("NTS_MEMORY_LEDGER", &ledger)
+            .env_remove("NTS_MEMORY_RESERVATION")
+            .env_remove("NTS_MEMORY_PRIORITY")
             .env("NTS_RC", "0");
         if let Some(raw) = &capability {
             command.env("NTS_ORACLE_DEPENDENCIES", raw);

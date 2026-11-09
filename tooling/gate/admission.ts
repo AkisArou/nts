@@ -1,28 +1,19 @@
-// The census feed, which gives a worker its next case only when it asks; a run
-// temporary's disk admission; and the host-memory admission the tools that do
-// not yet reserve in the memory ledger (memory-ledger.ts) still hold.
-//
-// **Below 12 GB nothing new starts; at 14 GB it starts again; what is running
-// is never stopped.** A case already running finishes on its own timeout. A
-// SIGSTOP of timed work fabricates timeouts (docs/contributing/lessons/measurement.md),
-// and a phase admitted below the line is what turned a neighbour's gate red
-// at its memory pre-check. The two thresholds differ so that admission does
-// not flap around one number: a run that dropped to 11.9 waits for 14, and
-// one admitted at 14 keeps going down to 12.
-//
-// Admission starts held, so the first case needs 14 GB as well -- the same
-// threshold AGENTS.md sets for starting a heavy phase.
+// The census feed, which gives a worker its next case only when it asks, and
+// none while its job's memory reservation is outranked; and a run temporary's
+// disk admission. Memory itself is the memory ledger's (memory-ledger.ts): a
+// job reserves it once, and no case reads the host's.
 import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 
-export const HOLD_BELOW_GB = 12;
+// The full check's own wait before a cycle still reads the host this way
+// (tooling/full-check/service.ts).
 export const RESUME_AT_GB = 14;
 
-// `NTS_MEMINFO` names another file in /proc/meminfo's format, for the tests
-// that drive a runner through a hold. Absent, it is the kernel's.
+// `NTS_MEMINFO` names another file in /proc/meminfo's format. Absent, it is
+// the kernel's.
 const MEMINFO = process.env.NTS_MEMINFO ?? "/proc/meminfo";
 
 /** MemAvailable in GiB, or `null` when the file cannot be read or names none. */
@@ -35,88 +26,26 @@ export function memAvailableGB(path: string = MEMINFO): number | null {
   }
 }
 
-export type AdmissionOptions = {
-  read?: () => number | null;
-  holdBelow?: number;
-  resumeAt?: number;
-  /** Told once each time admission closes and once when it opens again. */
-  report?: (message: string) => void;
-};
-
-export class Admission {
-  #held = true;
-  #checked = false;
-  #read: () => number | null;
-  #holdBelow: number;
-  #resumeAt: number;
-  #report: (message: string) => void;
-
-  constructor({ read = () => memAvailableGB(), holdBelow = HOLD_BELOW_GB, resumeAt = RESUME_AT_GB, report = () => {} }: AdmissionOptions = {}) {
-    this.#read = read;
-    this.#holdBelow = holdBelow;
-    this.#resumeAt = resumeAt;
-    this.#report = report;
-  }
-
-  /**
-   * Whether a new case may start now; each call reads memory once.
-   *
-   * **A machine that does not say how much memory it has admits**: there is
-   * nothing to wait for, and a run that waited for an answer that never comes
-   * would hang rather than fail. That is a machine without /proc/meminfo, not
-   * a low one, so it is not a way past the threshold here.
-   */
-  open(): boolean {
-    const gb = this.#read();
-    if (gb === null) return true;
-    const first = !this.#checked;
-    this.#checked = true;
-    if (first && gb < this.#resumeAt) {
-      // A run that waits before its first case says so, or it looks hung.
-      this.#report(`memory: ${gb.toFixed(1)} GB available, waiting for ${this.#resumeAt} GB before the first case`);
-    } else if (this.#held && gb >= this.#resumeAt) {
-      this.#held = false;
-      this.#report(`memory: ${gb.toFixed(1)} GB available, admitting new cases again (resume at ${this.#resumeAt})`);
-    } else if (!this.#held && gb < this.#holdBelow) {
-      this.#held = true;
-      this.#report(`memory: ${gb.toFixed(1)} GB available, holding new cases until ${this.#resumeAt} GB (running ones continue)`);
-    }
-    return !this.#held;
-  }
-
-  /** Resolves once a new case may start, checking every `everyMs`; `cancelled` stops the wait. */
-  async ready(everyMs = 2000, cancelled: () => boolean = () => false): Promise<boolean> {
-    while (!cancelled()) {
-      if (this.open()) return true;
-      await new Promise((resolve) => setTimeout(resolve, everyMs).unref());
-    }
-    return false;
-  }
-}
-
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
 export type TemporaryAdmissionSnapshot = {
-  context: TemporaryAdmissionContext["kind"]; availableGiB: number | null; freeBytes: number;
+  context: TemporaryAdmissionContext["kind"]; freeBytes: number;
   diskFloorBytes: number; reservedBytes: number; requiredFreeBytes: number; admitted: boolean;
 };
 type TemporaryAdmissionOptions = {
-  path: string; context: TemporaryAdmissionContext; reservedBytes: number;
-  readMemory?: () => number | null; readFreeBytes?: () => number; report?: (message: string) => void;
+  path: string; context: TemporaryAdmissionContext; reservedBytes: number; readFreeBytes?: () => number;
 };
 
-/** One policy for an allocation into a run's registered temporary space.
- * Every capture reserves its measured size above the temporary floor.
+/** One policy for an allocation into a run's registered temporary space:
+ * every capture reserves its measured size above the temporary disk floor.
+ * Its memory is its job's reservation in the memory ledger, never this.
  * Check before starting the allocation, outside its execution budget. */
 export class TemporaryAdmission {
-  #memory: Admission;
-  #available: number | null = null;
   #options: TemporaryAdmissionOptions;
   constructor(options: TemporaryAdmissionOptions) {
     this.#options = options;
     if (!Number.isSafeInteger(options.reservedBytes) || options.reservedBytes <= 0) throw new Error("invalid temporary space reservation");
     if (options.context?.kind !== "gate" && options.context?.kind !== "standalone") throw new Error("invalid temporary admission context");
-    this.#memory = new Admission({ read: () => this.#available, report: options.report });
     this.#validate();
   }
 
@@ -139,13 +68,11 @@ export class TemporaryAdmission {
   check(): TemporaryAdmissionSnapshot {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
-    this.#available = (this.#options.readMemory ?? memAvailableGB)();
     const freeBytes = (this.#options.readFreeBytes ?? (() => { const stat = statfsSync(path); return stat.bavail * stat.bsize; }))();
     if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
     const requiredFreeBytes = diskFloorBytes + reservedBytes;
-    const memoryReady = this.#memory.open() && (context.kind === "gate" || (this.#available ?? 0) >= RESUME_AT_GB);
-    return { context: context.kind, availableGiB: this.#available, freeBytes, diskFloorBytes, reservedBytes, requiredFreeBytes, admitted: memoryReady && freeBytes >= requiredFreeBytes };
+    return { context: context.kind, freeBytes, diskFloorBytes, reservedBytes, requiredFreeBytes, admitted: freeBytes >= requiredFreeBytes };
   }
 }
 

@@ -357,12 +357,12 @@ fi
   }
 });
 
-// Two waits come before a run's first step: its reservation in the memory
-// ledger, and its capture's own admission (which reads the same memory). No
-// room for the run's first block holds it in the ledger; room for that block
-// but not for the capture's 14 GB holds it in the capture.
+// Two waits come before a run's first step, both in the memory ledger: the
+// run's own reservation, and its startup capture's. No room for the run's
+// first block holds the run; room for that block but not for the capture's
+// 2 GiB beside it holds the capture.
 for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'waiting',/memory: gate run .* waits for 1\.0 GiB \(agent\)/],
-  ['for startup capture admission',4*2**20,'admitted',/waiting for 14 GB before the first case/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
+  ['for its startup capture\'s memory',4*2**20,'admitted',/memory: oracle dependency capture waits for 2\.0 GiB \(agent\)/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
   const {run,base}=fixture(t),root=join(run,'repo'),gate=join(root,'tooling/gate');
   mkdirSync(gate,{recursive:true});
   const source=new URL('./',import.meta.url).pathname;

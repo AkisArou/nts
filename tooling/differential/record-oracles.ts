@@ -10,6 +10,8 @@ import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
+import {reserveJob} from "../gate/memory-ledger.ts";
+import {stepMemoryBytes} from "../gate/step-table.mjs";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget} from "./oracle-execution.ts";
@@ -168,14 +170,6 @@ function addNoOracle(table: Table, plan: Plan, reason: string): Table {
   row.keys = { ...old?.keys, ...row.keys };
   return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(r => !(r.source === row.source && r.signature === row.signature)), row] };
 }
-function available() {
-  const value = /^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync("/proc/meminfo", "utf8"));
-  if (!value) throw new Error("cannot read MemAvailable");
-  return Number(value[1]) * 1024;
-}
-async function admission() {
-  while (available() < 14 * 2 ** 30) await new Promise(resolve => setTimeout(resolve, 1000));
-}
 async function planAll(binary: string, root: string, evidence: string, rc = false, only?: string, named?: string[]) {
   mkdirSync(evidence, { recursive: true });
   const configs = named ? named.map(name => fixtureConfig(root, evidence, name)) : readdirSync(join(root, "tests/programs"), { withFileTypes: true })
@@ -210,11 +204,10 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
   const ordered = configs.sort();
   for (let at = manifest.completed[mode]; at < ordered.length; at++) {
     const config = ordered[at]!;
-    // Two captures form one bounded phase. Each starts only above the same
-    // memory floor, and backend order in the manifest stays deterministic.
+    // Two captures form one bounded phase, inside the recording's
+    // reservation; backend order in the manifest stays deterministic.
     for (let first = 0; first < backends.length; first += 2) {
       const results = await Promise.all(backends.slice(first, first + 2).map(async backend => {
-        await admission();
         try {
           const result = await executeFile(binary, [config], { cwd: root, env: { ...process.env, NTS_BACKEND: backend, NTS_CHECKERS: "1", NTS_RC: rc ? "1" : "0" }, maxBuffer: 64 * 2 ** 20 });
           return { backend, plan: JSON.parse(result.stdout) as Plan };
@@ -253,7 +246,6 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
   writeFileSync(script, driver);
   let baseline: string | undefined;
   for (const arm of [0, 1]) {
-    await admission();
     const results = join(dir, `${arm}.results`), timings = join(dir, `${arm}.cpu.jsonl`);
     writeFileSync(results, "");
     const selected=preparation?.[arm];
@@ -373,7 +365,6 @@ async function recordNamed(names: string[]) {
   for (const name of names) fixtureConfig(root, evidence, name);
   let binary = process.env.NTS_ORACLE_PLAN_BIN;
   if (!binary) {
-    await admission();
     const build = spawnSync("sh", ["-c", "ulimit -c 0; exec nice -n 19 taskset -c 0-3,6-31 cargo build --profile nts-dev -p nts-differential --bin oracle-plan"], {
       cwd: root, stdio: "inherit", env: { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "4", TMPDIR: join(cache, "tmp") },
     });
@@ -414,7 +405,15 @@ async function recordNamed(names: string[]) {
 async function main() {
   const arguments_ = process.argv.slice(2);
   const [mode, first, second, third, fourth] = arguments_;
-  if (/^(tests\/programs|benchmarks\/cases)\//.test(mode ?? "")) await recordNamed(arguments_);
+  const named = /^(tests\/programs|benchmarks\/cases)\//.test(mode ?? "");
+  // Planning, preparing and measuring oracles is the program-oracles step's
+  // work: its memory, reserved once for the whole recording. The measuring
+  // child a named recording starts runs inside it.
+  if (named || ["plan", "plan-rc", "record"].includes(mode!)) {
+    await reserveJob({ bytes: stepMemoryBytes("program-oracles"), what: `record-oracles ${named ? `${arguments_.length} fixture(s)` : mode}` },
+      { report: line => console.error(line) });
+  }
+  if (named) await recordNamed(arguments_);
   else if (["plan", "plan-rc"].includes(mode!) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));
   else if (mode === "no-oracle" && first && second && third && fourth) {
     const manifest = json(join(resolve(first), "plans.json")) as Manifest;

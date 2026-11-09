@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
-import {chmodSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {spawnTest} from '../gate/test-wait.ts';
+import {spawnTest,waitFor} from '../gate/test-wait.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {removable} from '../gate/run-temporary.ts';
 import {gateEnvironment,hostEnvironment,oracleStepEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {readLedger,reserve} from '../gate/memory-ledger.ts';
+import {ownMemory,ownMemoryEnv,withoutHanded} from '../gate/test-memory.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 
 for(const mode of ['virtual','timeout','memory-cap','runaway','pressure'] as const){
@@ -15,7 +18,6 @@ for(const mode of ['virtual','timeout','memory-cap','runaway','pressure'] as con
     const active=new URL('../gate/active-command.ts',import.meta.url).href;
     const emit=new URL('./oracle-emit.ts',import.meta.url).href;
     const batch=new URL('./oracle-batch.ts',import.meta.url).href;
-    const memory=join(root,'meminfo');writeFileSync(memory,'MemAvailable: 64000000 kB\n');
     writeFileSync(script,`
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
@@ -92,30 +94,33 @@ assert.ok(!calls[0].args.some(arg=>String(arg).startsWith('--as=')),'virtual spa
 }
 `);
     const run=spawnTest(process.execPath,['--experimental-test-module-mocks',script],{
-      encoding:'utf8',env:{...process.env,...(mode==='pressure'?{NTS_GATE_STEP_MEMORY_BYTES:String(128*2**20)}:{}),NTS_MEMINFO:memory,NTS_GATE_TOKEN_HELD:undefined,NTS_GATE_STEP:'oracle-control',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:join(root,'result.json')},cwd:root,
+      encoding:'utf8',env:ownMemoryEnv(join(root,'memory'),{...process.env,...(mode==='pressure'?{NTS_GATE_STEP_MEMORY_BYTES:String(128*2**20)}:{}),NTS_GATE_TOKEN_HELD:undefined,NTS_GATE_STEP:'oracle-control',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:join(root,'result.json')}),cwd:root,
     },`oracle ${mode} compiler control`);
     assert.equal(run.status,0,run.stdout+run.stderr);
     if(mode==='virtual')assert.match(readFileSync(join(root,'preparation/request-0/project-0/stdout'),'utf8'),/reserved 8589934592/);
   });
 }
 
-test('an admitted step prepares under its resident reservation without a second host admission',async t=>{
+test('preparation inside a reservation asks for nothing whatever the host reads; alone, it waits its turn in the ledger and starts no compiler first',async t=>{
   const root=testScratch(t,'oracle-step-admission'),tree=join(root,'tree'),run=join(root,'run'),home=join(root,'home');
   try{
     mkdirSync(tree);mkdirSync(home);
     copyModuleClosure(['tooling/gate/canonical-environment.ts'],tree);
     oracleWorkspaceFixture(t,tree);
-    const ample=join(root,'ample'),low=join(root,'low');
-    writeFileSync(ample,'MemAvailable: 64000000 kB\n');writeFileSync(low,'MemAvailable: 0 kB\n');
-    const planned=await sealOracleRun(gateEnvironment({...hostEnvironment(process.env),HOME:home},{run,oracleRoot:tree,oracleAdmissionContext:'gate',
-      owned:{NTS_MEMINFO:ample}}));
-    const step=oracleStepEnvironment(planned.env,'tests');
-    const standalone=oracleStepEnvironment(gateEnvironment(planned.env,{run,oracleAdmissionContext:'standalone'}).env,'tests');
-    const script=join(root,'admitted.mjs'),emit=new URL('./oracle-emit.ts',import.meta.url).href;
+    // The job's own ledger and reading: room for the step's reservation, and
+    // then none of the machine's memory available at all.
+    const memoryDirectory=join(root,'memory'),ample={availableKiB:64_000_000,totalKiB:64_000_000},memory=ownMemory(memoryDirectory,ample);
+    const planned=await sealOracleRun(gateEnvironment({...hostEnvironment(process.env),HOME:home},{run,oracleRoot:tree,oracleAdmissionContext:'gate',owned:{...memory}}));
+    const step=withoutHanded(oracleStepEnvironment(planned.env,'tests'));
+    // A gate step's reservation, which counts this test's children.
+    const held=await reserve({bytes:8*2**30,what:'tests step'},{env:{...step}});
+    t.after(()=>held.release());
+    ownMemory(memoryDirectory,{...ample,availableKiB:0});
+    const script=join(root,'preparation.mjs'),emit=new URL('./oracle-emit.ts',import.meta.url).href;
     writeFileSync(script,`
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
-import {existsSync,mkdirSync,readFileSync} from 'node:fs';
+import {mkdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 const root=${JSON.stringify(root)},mode=process.argv[2];let commands=0;
 const real=await import(${JSON.stringify(emit)});
@@ -132,42 +137,36 @@ class OracleWorker{
 mock.module(${JSON.stringify(emit)},{namedExports:{...real,OracleWorker}});
 const {prepareOracles,ORACLE_COMPILE_MEMORY_BYTES}=await import(${JSON.stringify(new URL('./oracle-batch.ts',import.meta.url).href)});
 const {closeMemoryRun}=await import(${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)});
-const {PressureError,ToolingInstrumentError}=await import(${JSON.stringify(new URL('../gate/step-result.ts',import.meta.url).href)});
 try{
-  const preparation=()=>prepareOracles(['one','two'].map(key=>({key,options:{entry:join(root,key+'.ts'),directory:join(root,mode,key)}})),{
-    directory:join(root,mode,'preparation'),toolchain:root,workers:1,env:process.env,waitForAdmission:false});
-  if(mode==='admitted'||mode==='telemetry-step'){
-    const members=await preparation();assert.ok(members.one.prepared);assert.ok(members.two.prepared);assert.equal(commands,2);
-    for(const ordinal of [0,1]){
-      const path=join(root,mode,'preparation','request-'+ordinal,'project-0');
-      const command=JSON.parse(readFileSync(join(path,'command.json'),'utf8'));
-      assert.equal(command.residentLimitBytes,ORACLE_COMPILE_MEMORY_BYTES);
-      assert.ok(command.args.some(arg=>arg.startsWith('--slice=')),'preparation keeps its owned resident scope');
-      assert.match(readFileSync(join(path,'stdout'),'utf8'),/admitted compiler/);
-    }
-  }else{
-    await assert.rejects(preparation(),error=>{
-      if(mode==='standalone'||mode==='no-token')assert.ok(error instanceof PressureError,String(error));
-      else assert.match(String(error),mode==='changed-seal'||mode==='unowned-grant'?/oracle dependency seal changed/:/owned admission|resident reservation/);
-      return true;
-    });
-    assert.equal(commands,0,'a missing grant or changed seal starts no compiler');
-    assert.equal(existsSync(join(root,mode,'preparation/request-0')),false);
+  const members=await prepareOracles(['one','two'].map(key=>({key,options:{entry:join(root,key+'.ts'),directory:join(root,mode,key)}})),{
+    directory:join(root,mode,'preparation'),toolchain:root,workers:1,env:process.env});
+  assert.ok(members.one.prepared);assert.ok(members.two.prepared);assert.equal(commands,2);
+  for(const ordinal of [0,1]){
+    const path=join(root,mode,'preparation','request-'+ordinal,'project-0');
+    const command=JSON.parse(readFileSync(join(path,'command.json'),'utf8'));
+    assert.equal(command.residentLimitBytes,ORACLE_COMPILE_MEMORY_BYTES);
+    assert.ok(command.args.some(arg=>arg.startsWith('--slice=')),'preparation keeps its owned resident scope');
+    assert.match(readFileSync(join(path,'stdout'),'utf8'),/admitted compiler/);
   }
 }finally{closeMemoryRun();}
 `);
-    for(const mode of ['admitted','telemetry-step','standalone','no-token','unowned-grant','no-reservation','changed-seal']){
-      if(mode==='changed-seal'){
-        const {seal}=JSON.parse(step.NTS_ORACLE_DEPENDENCIES!);
-        chmodSync(seal.record,0o644);writeFileSync(seal.record,'changed seal\n');
-      }
-      const env:NodeJS.ProcessEnv={...(mode==='standalone'?standalone:step),NTS_MEMINFO:low,NTS_GATE_STEP:'tests',NTS_GATE_TOKEN_HELD:'1',NTS_GATE_STEP_MEMORY_BYTES:String(8*2**30)};
-      if(mode==='no-token')delete env.NTS_GATE_TOKEN_HELD;
-      if(mode==='telemetry-step')env.NTS_GATE_STEP='bench-agree';
-      if(mode==='unowned-grant')env.NTS_ORACLE_DEPENDENCIES=JSON.stringify({...JSON.parse(env.NTS_ORACLE_DEPENDENCIES!),ownerStep:'other'});
-      if(mode==='no-reservation')delete env.NTS_GATE_STEP_MEMORY_BYTES;
-      const result=spawnTest(process.execPath,['--experimental-test-module-mocks',script,mode],{cwd:tree,env,encoding:'utf8'},'oracle '+mode+' admission');
-      assert.equal(result.status,0,mode+': '+result.stdout+result.stderr);
-    }
+    const env:NodeJS.ProcessEnv={...step,NTS_GATE_STEP:'tests',NTS_GATE_STEP_MEMORY_BYTES:String(8*2**30)};
+    // Inside the step's reservation: nothing is asked, though nothing is available.
+    const inside=spawnTest(process.execPath,['--experimental-test-module-mocks',script,'inside'],{cwd:tree,env:{...env,...held.env},encoding:'utf8'},'oracle preparation inside a reservation');
+    assert.equal(inside.status,0,inside.stdout+inside.stderr);
+    assert.doesNotMatch(inside.stderr,/memory: /);
+    assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER).admitted.map(entry=>entry.id),[held.id],'the preparation ran in the step\'s reservation and made none');
+    // Alone: it reserves its workers' allowance, waiting for room before any compiler starts.
+    const alone=spawn(process.execPath,['--experimental-test-module-mocks',script,'alone'],{cwd:tree,env,stdio:['ignore','pipe','pipe']});
+    let output='';alone.stdout.on('data',bytes=>{output+=bytes;});alone.stderr.on('data',bytes=>{output+=bytes;});
+    const closed=new Promise<number|null>((resolve,reject)=>{alone.once('error',reject);alone.once('close',resolve);});
+    try{
+      await waitFor('the preparation to wait in the ledger',()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.some(entry=>entry.what==='oracle preparation of 2 program(s)'));
+      assert.equal(existsSync(join(root,'alone','preparation','request-0')),false,'no compiler starts before the reservation');
+      ownMemory(memoryDirectory,ample);
+      assert.equal(await closed,0,output);
+    }finally{if(alone.exitCode===null)alone.kill();}
+    assert.match(output,/memory: oracle preparation of 2 program\(s\) waits for 3\.0 GiB \(agent\)/);
+    assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER).admitted.map(entry=>entry.id),[held.id],'its own reservation ended with it');
   }finally{removable(root);}
 });

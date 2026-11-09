@@ -3,6 +3,7 @@ import type {CheckerImportRelation} from './oracle-filesystem.ts';
 type EmittedFile={path:string;text:string;sourceFileName?:string};
 import * as oracleOwner from './oracle-emit.ts';
 import {oracleToolchainLocation,gateEnvironment,hostEnvironment,sealOracleRun} from "../gate/canonical-environment.ts";
+import {ownMemory} from "../gate/test-memory.ts";
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {ownerEmissionCalls} from '../gate/owner-emission-calls.ts';
 import assert from "node:assert/strict";
@@ -559,7 +560,8 @@ test('an owner configuration change invalidates its cached output placement',asy
 test('gate and standalone seals share owner emissions until their own run ends',async t=>{
   for(const kind of ['gate','standalone'] as const)await t.test(kind,async()=>{
     const root=workspace(t,{'src/main.ts':'console.log(19);\n'}),outside=mkdtempSync(join(tmpdir(),'nts-owner-scope-'));
-    const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:outside,oracleAdmissionContext:kind}));
+    // The seal's capture reserves in a ledger of the run's own, never the machine's.
+    const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:outside,oracleAdmissionContext:kind,owned:ownMemory(join(outside,'memory'))}));
     const keys=['NTS_ORACLE_DEPENDENCIES','NTS_GATE_ENV_CONTEXT'] as const,previous=keys.map(key=>process.env[key]);
     const cap=JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!),contexts=[];let green=false;
     try{
@@ -2757,7 +2759,7 @@ async function ownerObservationInvalidation(t:TestContext,kind:'listing'|'failed
     writeFileSync(join(root,'src/main.ts'),`import type {Marker} from ${JSON.stringify(specifier)};const value:Marker=19;console.log(value);\n`);
     ordinaryProject(root,['src/main.ts']);
   }
-  const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(outside,'registered'),oracleAdmissionContext:'gate'}));
+  const planned=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(outside,'registered'),oracleAdmissionContext:'gate',owned:ownMemory(join(outside,'memory'))}));
   const keys=['NTS_ORACLE_DEPENDENCIES','NTS_GATE_ENV_CONTEXT'] as const,previous=keys.map(key=>process.env[key]);
   const cap=JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!),records:OwnerObservationRecord[]=[];let green=false;
   try{

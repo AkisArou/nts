@@ -85,7 +85,7 @@ import {
   copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
   utimesSync, writeFileSync,
 } from "node:fs";
-import { availableParallelism, freemem, homedir } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,7 @@ import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
 import { pendingContradiction, recordPath } from "./oracle-records.ts";
 import { pendingLine } from "../records/pending.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
+import { reserveJob } from "../gate/memory-ledger.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -398,6 +399,14 @@ if (examples.length === 0) {
   process.exit(2);
 }
 
+// Each worker is a lowering, a clang build and a node process -- about a gigabyte
+// at the top. Cores are rarely what this box runs out of; the job reserves
+// 1.5 GB a worker once in the machine's memory ledger, and the checks it starts
+// run inside that reservation (inside a gate step or an inner-loop phase, the
+// one it was started in).
+const JOBS = Number(process.env.NTS_AGREE_JOBS ?? Math.min(8, availableParallelism()));
+await reserveJob({ bytes: Math.ceil(JOBS * 1.5e9), what: `agree.mjs: ${examples.length} example(s), ${JOBS} at a time` });
+
 // Every temporary file under `~/.cache`, never `/tmp`: `/tmp` here is a tmpfs
 // that fills, and runs out of inodes before it runs out of bytes.
 mkdirSync(join(CACHE, "tmp"), { recursive: true });
@@ -410,11 +419,6 @@ process.on("exit", () => oracleRoot.dispose());
 if (oracleRoot.legacy) console.log("  legacy oracle view: comparison-private checkout; removed after this run");
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
-
-// Each worker is a lowering, a clang build and a node process -- about a gigabyte
-// at the top. Cores are rarely what this box runs out of.
-const JOBS = Number(process.env.NTS_AGREE_JOBS ??
-  Math.max(1, Math.min(8, availableParallelism(), Math.floor(freemem() / 1.5e9))));
 
 /** One `nts check`, classified. */
 const check = async (pinned, example) => {

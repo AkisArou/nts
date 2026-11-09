@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, statfsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import {compareLayouts} from './layouts.ts';
+import {reserveLayoutJob} from './layouts-link.ts';
 
 const [input,planFile,output]=process.argv.slice(2);
 if(!input||!planFile||!output)throw Error('layouts-measure.ts <layout artifacts.json> <matched plan.json> <fresh output>');
@@ -37,13 +38,12 @@ function conditions() {
   const disk = statfsSync(dir);
   return { utc: new Date().toISOString(), memGiB: Number(mem[1]) / 1024 ** 2, diskGiB: disk.bavail * disk.bsize / 1024 ** 3, load: readFileSync('/proc/loadavg', 'utf8').trim() };
 }
+// A cell starts above the 40 GiB disk floor; its memory is the sitting's
+// reservation in the memory ledger, made once as it starts.
 async function admit() {
-  for (;;) {
-    const c = conditions();
-    if (c.diskGiB < 40) throw new Error('40 GiB disk floor');
-    if (c.memGiB >= 14) return c;
-    await new Promise(resolve => setTimeout(resolve, 10000));
-  }
+  const c = conditions();
+  if (c.diskGiB < 40) throw new Error('40 GiB disk floor');
+  return c;
 }
 function command(name: string, arm: string, backend: string, n: number): string[] {
   const a = artifacts.find(a => a.name === name && a.arm === arm && a.backend === backend);
@@ -117,6 +117,7 @@ async function cell(name: string, arm: string, backend: string, n: number, warmu
 const mean=(values:number[])=>values.reduce((a,b)=>a+b,0)/values.length;
 async function main(){
  if(process.env.NTS_BENCH_CPUS!=='4'||!/^Cpus_allowed_list:\s*0-3,6-31$/m.test(readFileSync('/proc/self/status','utf8')))throw Error('with-lock and off-core orchestration required');
+ await reserveLayoutJob(`layout sitting: ${specs.length} case(s)`);
  mkdirSync(out);writeFileSync(join(out,'specifications.json'),JSON.stringify(specs,null,2));
  for(const spec of specs)for(const arm of ['base','contents']){
   const row=await cell(spec.key,arm,spec.backend,2,1,'equivalence',-1,false);

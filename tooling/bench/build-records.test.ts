@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { publishPin } from "../conformance/pin.ts";
 import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 import { testScratch } from "../gate/test-scratch.ts";
+import { ownMemory, withoutHanded } from "../gate/test-memory.ts";
 
 /** The record the compile checks name in their lines; the comparison itself never reads it. */
 const RECORD_FILE = "results/benchmarks/c/outcomes.tsv";
@@ -95,10 +96,12 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   fs.writeFileSync(path.join(output, mode === 'emit-c' ? 'program.c' : 'Program.class'), mode === 'emit-c' ? 'int control(void) { return 1; }' : 'class'); }
 `); chmodSync(binary, 0o755);
   const pinned = publishPin(binary, join(scratch, "pin"), { sha: git(["rev-parse", "HEAD"]), clean: true, applied: null });
-  const meminfo = join(scratch, "meminfo"); writeFileSync(meminfo, "MemAvailable: 33554432 kB\n");
+  // The recorder reserves in a ledger of its own, against a reading of its own.
+  const memoryDirectory = join(scratch, "memory"), ample = { availableKiB: 33554432, totalKiB: 64_000_000 };
+  const memory = ownMemory(memoryDirectory, ample);
   const first = join(scratch, "first"), second = join(scratch, "second");
   const environment = (env: NodeJS.ProcessEnv, bin = pinned): NodeJS.ProcessEnv => {
-    const selected = { ...process.env, NTS_BIN: bin, NTS_MEMINFO: meminfo, TMPDIR: scratch, BENCH_SHELL_ONLY: "must be dropped", NTS_RC_NAIVE: "1", ...env };
+    const selected = { ...withoutHanded(process.env), NTS_BIN: bin, ...memory, TMPDIR: scratch, BENCH_SHELL_ONLY: "must be dropped", NTS_RC_NAIVE: "1", ...env };
     delete selected.NTS_GATE_STEP_RESULT; // A planted stop belongs to this fixture, never the outer tooling step.
     delete selected[ENVIRONMENT_CONTEXT]; delete selected.NTS_GATE_RUN_DIR;
     return selected;
@@ -184,18 +187,18 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const crash = parseBenchmarkRecord(readFileSync(join(scratch, "aborted/c/outcomes.tsv"), "utf8")).rows[0]!.outcome;
   assert.equal(crash.kind, "build-failure");
   assert.ok(crash.kind === "build-failure"); assert.equal(crash.stage, "compiler-crash");
-  writeFileSync(meminfo, "MemAvailable: 0 kB\n");
+  ownMemory(memoryDirectory, { ...ample, availableKiB: 0 });
   const heldOutput = join(scratch, "held"), held = spawn(process.execPath, ["tooling/bench/build-records.ts", "--record", "--backend", "c", "--output", heldOutput],
     { cwd: root, env: environment({}), stdio: ["ignore", "pipe", "pipe"] });
   let observed = "", resumed = false;
   held.stdout.on("data", bytes => { observed += bytes; });
   held.stderr.on("data", bytes => {
     observed += bytes;
-    if (!resumed && observed.includes("waiting for")) { resumed = true; writeFileSync(meminfo, "MemAvailable: 33554432 kB\n"); }
+    if (!resumed && observed.includes("waits for")) { resumed = true; ownMemory(memoryDirectory, ample); }
   });
   const status = await new Promise<number | null>((resolve, reject) => { held.once("error", reject); held.once("close", resolve); });
   assert.ok(resumed, observed); assert.equal(status, 0, observed);
-  assert.ok(existsSync(join(heldOutput, "c/outcomes.tsv")), "a serial recorder stays alive through admission and then records normally");
+  assert.ok(existsSync(join(heldOutput, "c/outcomes.tsv")), "a serial recorder stays alive while it waits its turn in the ledger, and then records normally");
   const directories = readdirSync(scratch).filter(name => name.startsWith("compile-")); assert.deepEqual(directories, [], "every run removes its scratch tree");
 });
 

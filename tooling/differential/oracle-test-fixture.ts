@@ -1,7 +1,7 @@
 // A directly launched oracle test owns the same canonical services as tooling.
-import {rmSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {rmSync} from 'node:fs';
 import {newTestScratch,testScratch} from '../gate/test-scratch.ts';
+import {ownMemoryEnv} from '../gate/test-memory.ts';
 
 import {after} from 'node:test';
 import {ENVIRONMENT_CONTEXT, gateEnvironment, oracleToolchainLocation, sealOracleRun, type GateEnvironment} from '../gate/canonical-environment.ts';
@@ -13,10 +13,14 @@ let setup:Promise<void>|undefined,finish:(()=>void)|undefined;
 after(()=>finish?.());
 export function setupOracleTestEnvironment():Promise<void>{return setup??=ownOracleTestEnvironment();}
 
-/** A real oracle test owns its admission reading, independently of host load. */
-export function oracleTestMemory(t:{after(fn:()=>void):void}):string{
-  const file=join(testScratch(t,'oracle-test-memory'),'meminfo');
-  writeFileSync(file,'MemAvailable: 64000000 kB\n');return file;
+/**
+ * The environment a real oracle test's tools run in: this process's, with a
+ * memory reading and a ledger of the test's own in place of any reservation
+ * the test runs inside, so host load never decides it and no fake reading
+ * reaches the machine's ledger.
+ */
+export function oracleTestEnvironment(t:{after(fn:()=>void):void}):NodeJS.ProcessEnv{
+  return ownMemoryEnv(testScratch(t,'oracle-test-memory'));
 }
 
 async function ownOracleTestEnvironment():Promise<void>{

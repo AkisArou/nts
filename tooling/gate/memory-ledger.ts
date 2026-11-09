@@ -819,30 +819,35 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
 /**
  * The memory a job holds while it runs, reserved once at its start. Inside a
  * reservation already -- a gate step's, or one this process reserved before,
- * named by RESERVATION_ENV in this process's environment -- it is that one,
- * and nothing is asked: the job keeps sizing itself by its step's budget.
+ * named by RESERVATION_ENV in the job's environment -- it is that one, and
+ * nothing is asked: the job keeps sizing itself by its step's budget.
  * Otherwise it reserves `bytes` of its own, at the priority PRIORITY_ENV
- * names (an agent's by default), and names it in this process's environment,
- * so that the job's later calls and the processes it starts run inside it;
- * it ends when the handle is released or the process exits. A job that
- * starts a gate run holds none across it: the run reserves its own.
+ * names (an agent's by default), and names it in the job's environment, so
+ * that the job's later calls and the processes it starts run inside it; it
+ * ends when the handle is released or the process exits. A job that starts a
+ * gate run holds none across it: the run reserves its own.
+ *
+ * The job's environment is `options.env`, this process's by default: where
+ * the ledger, the reading and a reservation already held are found.
  */
-export async function reserveJob(request: { bytes: number; what: string }, options: { signal?: AbortSignal; report?: (line: string) => void } = {}): Promise<Reservation> {
-  const held = await reserve({ ...request, priority: priorityOf(process.env) },
-    { signal: options.signal, report: options.report ?? (line => process.stderr.write(`${line}\n`)) });
+export async function reserveJob(request: { bytes: number; what: string },
+  options: { env?: NodeJS.ProcessEnv; signal?: AbortSignal; report?: (line: string) => void } = {}): Promise<Reservation> {
+  const env = options.env ?? process.env;
+  const held = await reserve({ ...request, priority: priorityOf(env) },
+    { env, signal: options.signal, report: options.report ?? (line => process.stderr.write(`${line}\n`)) });
   if (held.inherited) return held;
   // What the environment named before, so that the release leaves it so: a
-  // ledger the process was already given stays its ledger.
-  const before = new Map(Object.keys(held.env).map(name => [name, process.env[name]]));
-  Object.assign(process.env, held.env);
+  // ledger the job was already given stays its ledger.
+  const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
+  Object.assign(env, held.env);
   const release = () => {
     process.off("exit", release);
     held.release();
     for (const [name, value] of Object.entries(held.env)) {
-      if (process.env[name] !== value) continue;
+      if (env[name] !== value) continue;
       const was = before.get(name);
-      if (was === undefined) delete process.env[name];
-      else process.env[name] = was;
+      if (was === undefined) delete env[name];
+      else env[name] = was;
     }
   };
   process.once("exit", release);
