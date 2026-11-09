@@ -9,6 +9,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
+import {QUIET_ASK_SECONDS} from "./bench.ts";
 import type { Recorder } from "./records.ts";
 import {cycle, followVerified, parseOptions, partSteps, RECORDER_LOG, recordPending, type Effects} from "./service.ts";
 import {readState} from "./state.ts";
@@ -16,7 +17,7 @@ import {Git} from "./git.ts";
 
 type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[] };
 
-function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; prunePool?: Effects["prunePool"] } = {}): Harness {
+function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; quiet?: Effects["quiet"]; prunePool?: Effects["prunePool"] } = {}): Harness {
   const lines: string[] = [];
   const queue = stubQueue();
   return {
@@ -28,6 +29,8 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     withdrawn: queue.withdrawn,
     recorder: options.recorder ?? (() => ({ status: 0, output: "" })),
     bench: options.bench ?? stubBench(),
+    quiet: options.quiet ?? (() => true),
+    benchWindowMs: 4 * 3_600_000,
     pins: join(repo.root, "pins"),
     count: () => ({ verdict: "PASS", red: [], notes: [], removable: [] }),
     sweep: () => [],
@@ -314,7 +317,7 @@ test("the wide steps run on verified at a slot, not on main", async t => {
   assert.equal(await cycle(later), "core", "the slot is answered; the core takes main");
 });
 
-test("the nightly slot runs the wide steps, then nts-bench on verified, and submits its results-only commit", async t => {
+test("the nightly slot runs the wide steps and makes nts-bench due; it runs on verified when nothing else is, and submits its results-only commit", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);
   const bench = stubBench({ slower: ["awfy-list", "richards"] });
@@ -324,6 +327,10 @@ test("the nightly slot runs the wide steps, then nts-bench on verified, and subm
   assert.equal(verified(repo), first);
   const night = harness(repo, gate, { now: new Date(2026, 10, 7, 3, 30), bench });
   assert.equal(await cycle(night), "wide");
+  assert.equal(bench.calls.length, 0, "the slot makes the benchmarks due; it does not run them");
+  assert.ok(readState(repo.layout.state).benchmarks_due);
+  assert.equal(await cycle(night), "benchmarks");
+  assert.equal(readState(repo.layout.state).benchmarks_due, undefined);
   const labels = gate.measured.map(m => `${m.label} ${m.steps.join(" ")}`);
   assert.deepEqual(labels.slice(-2), ["wide integrity", "bench-build build"], "nts-bench is built from the commit it measures");
   assert.equal(bench.calls.length, 1);
@@ -344,21 +351,46 @@ test("the nightly slot runs the wide steps, then nts-bench on verified, and subm
   assert.ok(next.lines.some(line => line.includes("already measured")));
 });
 
-test("a machine that is never quiet gives the night up, and the next nightly slot tries again", async t => {
+test("a busy machine is asked briefly each cycle and never waited for; the window closes the night, and the next nightly slot tries again", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);
-  const busy = stubBench({ quiet: false });
+  const bench = stubBench(), asked: number[] = [];
+  const busy = (seconds: number) => { asked.push(seconds); return false; };
   repo.commit({ "a.txt": "1\n" }, "verified one");
   await cycle(harness(repo, gate, { now: new Date(2026, 10, 6, 23, 0) }));
-  const night = harness(repo, gate, { now: new Date(2026, 10, 7, 3, 30), bench: busy });
-  await cycle(night);
-  assert.equal(readState(repo.layout.state).bench?.measured, false);
-  assert.equal(night.submitted.length, 0);
-  const quiet = stubBench();
-  const next = harness(repo, gate, { now: new Date(2026, 10, 8, 3, 30), bench: quiet });
+  const night = harness(repo, gate, { now: new Date(2026, 10, 7, 3, 30), bench, quiet: busy });
+  assert.equal(await cycle(night), "wide");
+  await cycle(night); // the first busy ask falls through to the hourly count
+  assert.equal(await cycle(night), "idle");
+  assert.deepEqual(asked, [QUIET_ASK_SECONDS, QUIET_ASK_SECONDS]);
+  assert.equal(bench.calls.length, 0);
+  assert.equal(gate.measured.some(m => m.label === "bench-build"), false, "nothing is built for a busy machine");
+  assert.ok(readState(repo.layout.state).benchmarks_due, "still due");
+  await cycle(harness(repo, gate, { now: new Date(2026, 10, 7, 7, 31), bench, quiet: busy }));
+  const closed = readState(repo.layout.state);
+  assert.equal(closed.benchmarks_due, undefined);
+  assert.equal(closed.bench?.measured, false);
+  assert.match(closed.bench!.result, /not quiet in time; the next nightly slot tries again/);
+  const next = harness(repo, gate, { now: new Date(2026, 10, 8, 3, 30), bench });
   assert.equal(await cycle(next), "benchmarks", "the wide steps ran last night on this commit; the benchmarks did not");
-  assert.equal(quiet.calls.length, 1);
+  assert.equal(bench.calls.length, 1);
   assert.equal(readState(repo.layout.state).bench?.measured, true);
+});
+
+test("the core goes first while the benchmarks are due, and they then measure the newest verified", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  const bench = stubBench();
+  repo.commit({ "a.txt": "1\n" }, "verified one");
+  await cycle(harness(repo, gate, { now: new Date(2026, 10, 6, 23, 0) }));
+  const night = harness(repo, gate, { now: new Date(2026, 10, 7, 3, 30), bench });
+  assert.equal(await cycle(night), "wide");
+  const second = repo.commit({ "a.txt": "2\n" }, "landed while the benchmarks wait");
+  assert.equal(await cycle(night), "core");
+  assert.equal(bench.calls.length, 0);
+  assert.equal(verified(repo), second);
+  assert.equal(await cycle(night), "benchmarks");
+  assert.equal(readState(repo.layout.state).bench?.commit, second);
 });
 
 test("the hourly count runs the pool's upkeep first, and a failed upkeep is a line, not a stopped cycle", async t => {

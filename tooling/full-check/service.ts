@@ -10,12 +10,15 @@
 //
 // Each cycle does the first of these that is due:
 //   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
-//      the schedule, if verified moved since their last run; at the nightly
-//      slot the benchmarks follow on the same commit (bench.ts), if nts-bench
-//      has not measured it yet;
+//      the schedule, if verified moved since their last run; the nightly slot
+//      also makes the benchmarks due (bench.ts), if nts-bench has not
+//      measured verified yet;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
-//   3. the count step (count.ts), once an hour, after the pool's upkeep
+//   3. due benchmarks on `verified`, when the machine is quiet: a busy machine
+//      is asked again on a later cycle, never waited for, until --bench-wait
+//      minutes after the slot;
+//   4. the count step (count.ts), once an hour, after the pool's upkeep
 //      (tooling/landing/pool.ts's prune: free trees idle past its limit go).
 //
 // What follows a run:
@@ -47,7 +50,7 @@ import { pinnedGate, type Gate } from "./measure.ts";
 import { landingQueue, submitTo, type LandingQueue } from "./queue.ts";
 import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
 import { makeRevert, taskLine, type Finding } from "./revert.ts";
-import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, resultsCommit, slowerRows, type Bench } from "./bench.ts";
+import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State } from "./state.ts";
 
@@ -67,6 +70,10 @@ export type Effects = {
   recorder: Recorder;
   /** nts-bench on the tree, through the measurement lock (bench.ts). */
   bench: Bench;
+  /** Whether the machine is quiet within a short wait (bench.ts). */
+  quiet: Quiet;
+  /** How long the nightly benchmarks stay due after their slot. */
+  benchWindowMs: number;
   /** Where pins live (pin.ts's PINS). */
   pins: string;
   count: () => CountResult;
@@ -96,7 +103,7 @@ export async function cycle(fx: Effects): Promise<Part | "benchmarks" | "count" 
   const slot = dueSlot(fx.schedule, state.wide.slot ? new Date(state.wide.slot) : undefined, now);
   if (slot) {
     state.wide.slot = now.toISOString();
-    let did: "wide" | "benchmarks" | null = null;
+    let did: "wide" | null = null;
     if (verified && verified !== state.wide.last_run?.commit) {
       fx.log(`wide steps due (${slot.nightly ? "the nightly run" : `the ${slot.at.toTimeString().slice(0, 5)} slot`}) on verified ${short(verified)}`);
       await runPart(fx, state, "wide", verified);
@@ -104,7 +111,12 @@ export async function cycle(fx: Effects): Promise<Part | "benchmarks" | "count" 
     } else fx.log(verified ? `wide steps due, but verified ${short(verified)} is where they last ran` : "wide steps due, but nothing is verified yet");
     if (slot.nightly && verified) {
       if (state.bench?.measured && state.bench.commit === verified) fx.log(`benchmarks: nts-bench already measured verified ${short(verified)}`);
-      else { await runBenchmarks(fx, state, verified); did ??= "benchmarks"; }
+      else {
+        // Due, not run here: the core goes first, and a busy machine is asked again later.
+        const until = new Date(now.getTime() + fx.benchWindowMs);
+        state.benchmarks_due = { since: now.toISOString(), until: until.toISOString() };
+        fx.log(`benchmarks due until ${until.toTimeString().slice(0, 5)}: nts-bench runs on verified once the machine is quiet, after any core run`);
+      }
     }
     writeState(fx.layout.state, state);
     if (did) return did;
@@ -123,6 +135,19 @@ export async function cycle(fx: Effects): Promise<Part | "benchmarks" | "count" 
       await findCulprit(fx, state, part, red);
       writeState(fx.layout.state, state);
       return part;
+    }
+  }
+  const due = state.benchmarks_due;
+  if (due && verified) {
+    if (now.getTime() >= Date.parse(due.until)) {
+      delete state.benchmarks_due;
+      state.bench = { commit: verified, at: now.toISOString(), run: "", result: "not run: the machine was not quiet in time; the next nightly slot tries again", submitted: null, measured: false };
+      fx.log(`benchmarks at ${short(verified)}: ${state.bench.result}`);
+      writeState(fx.layout.state, state);
+    } else if (await runBenchmarks(fx, state, verified) === "done") {
+      delete state.benchmarks_due;
+      writeState(fx.layout.state, state);
+      return "benchmarks";
     }
   }
   if (!state.count || now.getTime() - Date.parse(state.count.at) >= COUNT_EVERY_MS) {
@@ -377,9 +402,12 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
 /**
  * nts-bench on `verified`, built by pinned.sh in the full check's tree (its
  * `build` step: nts-bench links the compiler crates, so it is built from the
- * commit it measures), and its results-only commit submitted.
+ * commit it measures), and its results-only commit submitted. `busy` when the
+ * machine was not quiet within QUIET_ASK_SECONDS: nothing is built or kept,
+ * and the benchmarks stay due for a later cycle.
  */
-async function runBenchmarks(fx: Effects, state: State, verified: string): Promise<void> {
+async function runBenchmarks(fx: Effects, state: State, verified: string): Promise<"busy" | "done"> {
+  if (!fx.quiet(QUIET_ASK_SECONDS)) return "busy";
   const at = fx.now().toISOString();
   const attempt = (run: string, result: string, measured: boolean, submitted: string | null = null) => {
     state.bench = { commit: verified, at, run, result, submitted, measured };
@@ -388,24 +416,24 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
   };
   fx.admit();
   const built = fx.gate.run(verified, ["build"], "bench-build");
-  if (built.verdict !== "green") return attempt(built.run, `not run: the build at verified is ${built.verdict}`, false);
+  if (built.verdict !== "green") { attempt(built.run, `not run: the build at verified is ${built.verdict}`, false); return "done"; }
   const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`);
   mkdirSync(run, { recursive: true });
-  fx.log(`benchmarks: nts-bench on verified ${short(verified)}, once the machine is quiet; logs ${run}`);
+  fx.log(`benchmarks: nts-bench on verified ${short(verified)}; logs ${run}`);
   const measured = fx.bench(fx.layout.tree, run);
-  if (!measured.quiet) return attempt(run, "not run: the machine was not quiet in time; the next nightly slot tries again", false);
   const tree = new Git(fx.layout.tree, fx.git.env);
   const found = resultsCommit(tree, verified);
   if ("none" in found) {
     attempt(run, `nts-bench exited ${measured.status}: ${found.none}`, true);
     task(fx, state, `- The nightly benchmark run at ${short(verified)} kept no run record (nts-bench exited ${measured.status}: ${found.none}); see ${run}.`);
-    return;
+    return "done";
   }
   fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(verified)}`, found.commit]);
   const submitted = await submitTo(fx.queue, found.commit, { first: false });
   attempt(run, `run record ${short(found.commit)}${measured.status ? ` (nts-bench exited ${measured.status})` : ""}: ${submitted.line}`, true, submitted.submitted ? found.commit : null);
   const slower = slowerRows(tree.run(["show", `${found.commit}:${FULL_MD}`]));
   if (slower.length) task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
+  return "done";
 }
 
 function runCount(fx: Effects, state: State): void {
@@ -572,7 +600,9 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
     recorder: recordPending,
-    bench: benchWithLock(ROOT, layout.target, options.quietWait),
+    bench: benchWithLock(ROOT, layout.target),
+    quiet: quietWithin(ROOT),
+    benchWindowMs: options.quietWait * 60_000,
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     count: () => countMachine(gather(ROOT)),
     sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),

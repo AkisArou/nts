@@ -180,7 +180,10 @@ in two ways:
 
 Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
 (4 and 5), and produce the report with every row and its ratios. A
-regression becomes a task. Benchmarks never block a landing.
+regression becomes a task. Benchmarks never block a landing, and never hold
+the full check: the nightly slot makes them due, they run once the machine
+is quiet and the core has nothing to do, and a night whose machine never
+got quiet within four hours of its slot is given up to the next one.
 
 ## The machine
 

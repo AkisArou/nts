@@ -83,6 +83,8 @@ export type State = {
   records?: { commit: string; at: string; submitted: string | null; result: string };
   /** The last nightly benchmark attempt; `measured` when nts-bench ran on `commit`. */
   bench?: { commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean };
+  /** The nightly benchmarks still waiting for a quiet machine, from their slot until the window closes. */
+  benchmarks_due?: { since: string; until: string };
   /** The last commit `verified` was pushed at, and when a push last failed. */
   pushed?: string;
   push_failed_at?: string;

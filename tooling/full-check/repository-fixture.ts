@@ -97,15 +97,13 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
 /**
  * A stand-in nts-bench: like the real one it keeps one run record and the
  * rendered page as a results-only commit on the tree's HEAD. `slower` names
- * the rows the page marks slower than their own best; `quiet: false` is a
- * machine that never got quiet.
+ * the rows the page marks slower than their own best.
  */
-export function stubBench(options: { slower?: string[]; quiet?: boolean; stray?: boolean } = {}): Bench & { calls: string[] } {
+export function stubBench(options: { slower?: string[]; stray?: boolean } = {}): Bench & { calls: string[] } {
   const calls: string[] = [];
   const bench = (tree: string, run: string) => {
     calls.push(tree);
     writeFileSync(join(run, "bench.log"), "nts-bench\n");
-    if (options.quiet === false) return { status: 124, quiet: false };
     const git = new Git(tree, ENV);
     const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
     mkdirSync(join(tree, "results/benchmarks/runs"), { recursive: true });
@@ -116,7 +114,7 @@ export function stubBench(options: { slower?: string[]; quiet?: boolean; stray?:
     if (options.stray) { writeFileSync(join(tree, "stray.txt"), "x\n"); paths.push("stray.txt"); }
     git.run(["add", "--", ...paths]);
     git.run(["commit", "-q", "-m", `results: retain benchmark run ${id}`, "--", ...paths]);
-    return { status: 0, quiet: true };
+    return { status: 0 };
   };
   return Object.assign(bench, { calls });
 }
