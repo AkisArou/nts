@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {hostEnvironment,gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
 import {removable} from '../gate/run-temporary.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 
@@ -25,8 +26,9 @@ try{
   if(previousHelper)writeFileSync(join(tree,'tooling/differential/oracle-execution.ts'),readFileSync(previousHelper));
   oracleWorkspaceFixture({after:fn=>cleanup.push(fn)},tree);
   mkdirSync(home);writeFileSync(join(tree,'.tool-versions'),`nodejs ${process.versions.node}\n`);
-  const ample=join(own,'ample'),low=join(own,'pressure');
-  writeFileSync(ample,'MemAvailable: 64000000 kB\n');writeFileSync(low,'MemAvailable: 0 kB\n');
+  // The run reserves against an ample reading and a ledger of its own; its
+  // tests step reads a machine with nothing available.
+  const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0}).NTS_MEMINFO;
   const fake=join(own,'nts');writeFileSync(fake,'#!/bin/sh\nexit 0\n',{mode:0o755});
   const names=execFileSync('sh',[join(SOURCE,'tooling/gate/all.sh'),'--list'],{encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
@@ -46,7 +48,7 @@ else exit 1
 fi
 `);
   const base={...hostEnvironment(process.env),HOME:home};
-  const planned=await sealOracleRun(gateEnvironment(base,{run,standalone:true,oracleRoot:tree,owned:{NTS_GATE_RUN_DIR:run,NTS_GATE_STEPS:'tests',NTS_MEMINFO:ample,NTS_BIN:fake,NTS_SUITE_BIN:fake,NTS_CHECKERS:'1'}}));
+  const planned=await sealOracleRun(gateEnvironment(base,{run,standalone:true,oracleRoot:tree,owned:{NTS_GATE_RUN_DIR:run,NTS_GATE_STEPS:'tests',...memory,NTS_BIN:fake,NTS_SUITE_BIN:fake,NTS_CHECKERS:'1'}}));
   const result=spawnTest('systemd-run',['--user','--scope','--unit='+unit,'--collect','--quiet','prlimit','--core=0',process.execPath,join(tree,'tooling/gate/run.mjs')],{cwd:tree,env:planned.env,encoding:'utf8',maxBuffer:16*2**20},'tests step after oracle preparation pressure');
   assert.ok(existsSync(join(run,'summary.json')),result.stdout+result.stderr);
   const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));
