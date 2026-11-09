@@ -90,7 +90,7 @@ import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } f
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueNightly, dueSlot, nextNightly, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchOutcome, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RecordsRunOutcome, type RunRecord, type State } from "./state.ts";
 import { BENCH_UNIT, lowPriority, recordsUnitName } from "./unit.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
@@ -467,7 +467,7 @@ function writeRecords(fx: Effects, state: State, part: Part, commit: string, run
   }
   fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s) listed by the ${part} run at ${short(commit)}`);
   const at = fx.now().toISOString();
-  const records: RecordsRun & { run: string } = { commit, at, run, submitted: null, result: "starting its records unit" };
+  const records: RecordsRun & { run: string } = { commit, at, run, submitted: null, result: "starting its records unit", outcome: "recording" };
   state[part].records = records;
   try {
     doing(fx, state, "records", commit, () => {
@@ -477,6 +477,7 @@ function writeRecords(fx: Effects, state: State, part: Part, commit: string, run
   } catch (error) {
     records.settled = fx.now().toISOString();
     records.result = `failed: ${message(error)}`;
+    records.outcome = "failed";
     fx.log(`records: ${records.result}`);
   } finally {
     writeState(fx.layout.state, state);
@@ -518,6 +519,8 @@ function startRecords(fx: Effects, state: State, part: Part, records: RecordsRun
   else if (!spec) Object.assign(records.job, { starts: records.job.starts + 1, at: now.toISOString() });
   if (spec) error = again ? startAgain(fx.units, spec, records.job, now, save) : start(fx.units, spec, records.job, save);
   records.result = error ? `${records.job.unit} did not start: ${error}` : `recording in ${records.job.unit} since ${records.job.at}${again ? ", started again" : ""}`;
+  // A start that failed is still the controller's to start once more or give up.
+  records.outcome = "recording";
   fx.log(`records of the ${part} rows at ${short(records.commit)}: ${records.result}; logs ${records.run}`);
   save();
 }
@@ -545,6 +548,7 @@ async function followRecording(fx: Effects, state: State, part: Part, records: R
     }
     records.settled = fx.now().toISOString();
     records.result = `${seen.why}, started ${records.job.starts} time(s); see ${join(records.run, RECORDS_UNIT_LOG)}`;
+    records.outcome = "given-up";
     task(fx, state, `- The full check's ${part} records at ${short(records.commit)} did not finish: ${records.result}. Their rows stay pending for the next records run.`);
     writeState(fx.layout.state, state);
     return false;
@@ -567,6 +571,8 @@ async function recorded(fx: Effects, state: State, part: Part, records: RecordsR
     const delta = join(run, DELTA_FILE), rows = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")).rows.length : null;
     if (!rows) {
       records.result = rows === null && outcome.files.length ? `wrote ${outcome.files.length} record file(s) and no delta` : "recorded nothing";
+      // Records with no delta can never land, and a recorder that exited non-zero went wrong, whatever it kept.
+      records.outcome = (rows === null && outcome.files.length) || outcome.status !== 0 ? "failed" : "nothing";
       fx.log(`records: ${records.result}`);
       if (rows === null && outcome.files.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote records and no delta (${delta}), so none of them can land; see ${run}.`);
       else if (outcome.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} exited ${outcome.status}; see ${run}.`);
@@ -577,6 +583,7 @@ async function recorded(fx: Effects, state: State, part: Part, records: RecordsR
     return true;
   } catch (error) {
     records.result = `failed: ${message(error)}`;
+    records.outcome = "failed";
     fx.log(`records: ${records.result}`);
     return false;
   } finally {
@@ -616,20 +623,25 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
       output => recordsMessage({ commit: records.commit, part, run, pin: records.pin, main, attempt, output })));
     if (applied.refused.length) task(fx, state, `- record-pending.ts --apply on main ${short(main)} wrote outside the records (${applied.refused.join(", ")}); see ${log}.`);
     const counts = appliedIn(applied.output), said = counts ? countsText(counts) : `see ${log}`;
-    if (applied.kind === "failed") records.result = `record-pending.ts --apply exited ${applied.status} on main ${short(main)} (attempt ${attempt}); see ${log}`;
-    else if (applied.kind === "none") {
+    if (applied.kind === "failed") {
+      records.result = `record-pending.ts --apply exited ${applied.status} on main ${short(main)} (attempt ${attempt}); see ${log}`;
+      records.outcome = "failed";
+    } else if (applied.kind === "none") {
       records.settled = fx.now().toISOString();
       records.result = `nothing left to commit on main ${short(main)}: ${said}`;
+      records.outcome = "nothing";
     } else {
       // Reachable until it lands: the queue holds a commit, not a branch.
       fx.git.run(["update-ref", `refs/full-check/records/${short(records.commit)}`, applied.commit]);
       const submitted = await submitTo(fx.queue, applied.commit, { first: false });
       records.submitted = submitted.submitted ? applied.commit : null;
       records.result = `${said} on main ${short(main)} (attempt ${attempt}): ${submitted.line}`;
+      records.outcome = submitted.submitted ? "submitted" : "failed";
     }
     fx.log(`records of the ${part} rows at ${short(records.commit)}: ${records.result}`);
   } catch (error) {
-    records.result = `failed on main ${short(main)} (attempt ${attempt}): ${error instanceof Error ? error.message : String(error)}`;
+    records.result = `failed on main ${short(main)} (attempt ${attempt}): ${message(error)}`;
+    records.outcome = "failed";
     fx.log(`records: ${records.result}`);
   } finally {
     writeState(fx.layout.state, state);
@@ -637,7 +649,7 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
 }
 
 /** A commit the full check made on main and submitted -- a part's records, a night's benchmark run -- and what came of it. */
-type Landing = { submitted: string | null; result: string; attempts?: number; base?: string; answer?: LandingAnswer; settled?: string };
+type Landing = { submitted: string | null; result: string; attempts?: number; base?: string; answer?: LandingAnswer; settled?: string; outcome?: RecordsRunOutcome | BenchOutcome };
 
 /** How one kind of landing is followed: what names it in a line, what it is made again from, how, and the task once it is given up. */
 type Follow = {
@@ -670,6 +682,7 @@ async function followLanding(fx: Effects, state: State, landing: Landing, follow
   if (answer?.state === "landed" || answer?.state === "withdrawn") {
     landing.settled = fx.now().toISOString();
     landing.result = answer.state === "landed" ? `landed as ${short(answer.tip ?? landing.submitted!)}` : `withdrawn: ${answer.message}`;
+    landing.outcome = answer.state;
     fx.log(`${follow.named(landing.submitted)}: ${landing.result}`);
     writeState(fx.layout.state, state);
     return false;
@@ -680,10 +693,13 @@ async function followLanding(fx: Effects, state: State, landing: Landing, follow
     if (answer?.state === "held") fx.queue.withdraw(landing.submitted!);
     landing.settled = fx.now().toISOString();
     landing.result = `${why}; ${follow.not}: ${kept ? `${attempts} attempt(s) made` : follow.gone}`;
+    landing.outcome = "given-up";
     task(fx, state, follow.given(landing.result));
     writeState(fx.layout.state, state);
     return false;
   }
+  // Refused, held or lost, it is no longer in the queue: the attempt failed, and is made again.
+  if (landing.outcome !== "failed") { landing.outcome = "failed"; writeState(fx.layout.state, state); }
   const atOnce = answer?.state === "held" || (landing.submitted !== null && answer === null);
   if (!atOnce && main === landing.base) return false;
   if (answer?.state === "held") fx.queue.withdraw(landing.submitted!);
@@ -952,16 +968,20 @@ async function publishAndSubmit(fx: Effects, state: State, bench: BenchRun & { r
   try {
     const dir = fx.layout.bench, tree = new Git(dir, fx.git.env);
     const published = doing(fx, state, "benchmarks", bench.commit, () => publishAt(tree, main, commit => fx.checkout(dir, commit), at => fx.publisher(at, bench.record, log)));
-    if (published.kind === "failed") bench.result = `run-record.ts publish ${published.why} on main ${short(main)} (attempt ${attempt}); see ${log}`;
-    else if (published.kind === "none") {
+    if (published.kind === "failed") {
+      bench.result = `run-record.ts publish ${published.why} on main ${short(main)} (attempt ${attempt}); see ${log}`;
+      bench.outcome = "failed";
+    } else if (published.kind === "none") {
       bench.settled = fx.now().toISOString();
       bench.result = `nothing left to publish on main ${short(main)}: main has its record and page already`;
+      bench.outcome = "nothing";
     } else {
       // Reachable until it lands: the queue holds a commit, not a branch.
       fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(bench.commit)}`, published.commit]);
       const submitted = await submitTo(fx.queue, published.commit, { first: false });
       bench.submitted = submitted.submitted ? published.commit : null;
       bench.result = `run record ${basename(bench.record, ".json")} published on main ${short(main)} (attempt ${attempt}): ${submitted.line}`;
+      bench.outcome = submitted.submitted ? "submitted" : "failed";
       if (!bench.slower) {
         bench.slower = slowerRows(tree.run(["show", `${published.commit}:${FULL_MD}`]));
         if (bench.slower.length) task(fx, state, `- ${bench.slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(bench.commit)}: ${bench.slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
@@ -970,6 +990,7 @@ async function publishAndSubmit(fx: Effects, state: State, bench: BenchRun & { r
     fx.log(`benchmarks at ${short(bench.commit)}: ${bench.result}`);
   } catch (error) {
     bench.result = `failed on main ${short(main)} (attempt ${attempt}): ${message(error)}`;
+    bench.outcome = "failed";
     fx.log(`benchmarks: ${bench.result}`);
   } finally {
     writeState(fx.layout.state, state);
@@ -1273,7 +1294,9 @@ type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null; re
  * fields are only added; one removed, renamed or reshaped bumps `version`.
  * Version 2 moved the records into each part (`core.records`,
  * `wide.records`) and counts accepted changes, not only improvements; a
- * records run's `run` and `job` (its unit) were added to it since.
+ * records run's `run`, `job` (its unit) and typed `outcome` were added to it
+ * since, and a night's `outcome` goes on from `record` as its results commit
+ * stands, in the same words.
  */
 export type FullCheckStatus = {
   version: 2; kind: "full-check"; at: string;
@@ -1335,7 +1358,7 @@ const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 export function statusText(s: FullCheckStatus): string {
   const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
   const records = (r: PartStatus["records"]) => `${r.listed ? `${r.listed.pending} pending and ${r.listed.accepted} accepted listed` : "none listed"}`
-    + `; last ${r.last ? `${short(r.last.commit)} ${r.last.result}` : "none"}`;
+    + `; last ${r.last ? `${short(r.last.commit)} ${r.last.outcome ? `${r.last.outcome}: ` : ""}${r.last.result}` : "none"}`;
   const doing = s.now ? `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
   return [
     `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
@@ -1348,7 +1371,7 @@ export function statusText(s: FullCheckStatus): string {
     `culprits: ${s.culprits.map(c => `${short(c.commit)} (${c.steps.join(", ")}) revert ${c.revert ? short(c.revert) : "none"}${c.reason ? ` -- ${c.reason}` : ""}`).join("; ") || "none"}`,
     `records: core ${records(s.core.records)}`,
     `         wide ${records(s.wide.records)}`,
-    `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
+    `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.outcome ? `${s.benchmarks.last.outcome}: ` : ""}${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
       + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}${
         s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}${s.benchmarks.due.measuring.job ? ` in ${s.benchmarks.due.measuring.job.unit}` : ""}`
           : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,

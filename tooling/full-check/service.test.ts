@@ -15,7 +15,7 @@ import {test} from "node:test";
 import {applyEveryRow, assertMessage, checkoutIn, ENV, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
 import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, type CountEffects, type Effects} from "./service.ts";
-import {FULL_MD, measureJob, type Bench, type Publisher} from "./bench.ts";
+import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
 import {DELTA_FILE} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readCount, readState, type CountRecord, type Part} from "./state.ts";
@@ -334,8 +334,10 @@ test("a green run that listed pending cases records them, commits exactly the re
   assert.equal(await cycle(fx), "core");
   assert.ok(fx.units.running(recordsUnitName("core")), "the core's green run starts the core's records unit");
   assert.equal(readState(repo.layout.state).core.records?.submitted, null, "nothing lands before it ends");
+  assert.equal(readState(repo.layout.state).core.records?.outcome, "recording");
   await recordAndApply(fx);
   const state = readState(repo.layout.state);
+  assert.equal(state.core.records?.outcome, "submitted");
   assert.equal(state.core.last_green?.commit, commit);
   assert.deepEqual(state.core.last_green?.listed, { pending: 1, accepted: 0 }, "the green run keeps what its checks listed");
   assert.equal(state.core.records?.commit, commit);
@@ -367,7 +369,7 @@ test("a green run that listed pending cases records them, commits exactly the re
 
 const NEW_CASE = { "LOG/typescript-c": "  pending: tests/programs/new-case is not recorded in results/oracle-counts/tests/programs/new-case.json yet\n" };
 const newCase = () => recording({ "results/oracle-counts/tests/programs/new-case.json": "{\"cases\": 3}\n" });
-const answer = (state: "landed" | "refused" | "held", message: string, tip?: string) => ({ state, at: "2026-11-06T12:00:00.000Z", message, ...(tip ? { tip } : {}) });
+const answer = (state: "landed" | "refused" | "held" | "withdrawn", message: string, tip?: string) => ({ state, at: "2026-11-06T12:00:00.000Z", message, ...(tip ? { tip } : {}) });
 
 test("rows recorded at a commit land as a records commit on main as it is when they are applied", async t => {
   const repo = repository(t);
@@ -399,10 +401,11 @@ test("a records commit the landing check refused is applied again on the newest 
   fx.queue.answers.set(first, answer("refused", `${first.slice(0, 12)} conflicts with main in results/benchmarks/c/outcomes.tsv`));
   assert.equal(await cycle(fx), "idle", "on the main it was made on, the same rows would be refused the same way");
   assert.equal(fx.submitted.length, 1);
+  assert.equal(readState(repo.layout.state).core.records!.outcome, "failed", "refused, it is out of the queue, waiting to be applied again");
   const moved = repo.commit({ "elsewhere.txt": "x\n" }, "main moves on");
   assert.equal(await cycle(fx), "records", "applied again first, before the core takes the new main");
   const again = readState(repo.layout.state).core.records!;
-  assert.deepEqual([again.attempts, again.base, again.answer, again.settled], [2, moved, undefined, undefined]);
+  assert.deepEqual([again.attempts, again.base, again.answer, again.settled, again.outcome], [2, moved, undefined, undefined, "submitted"]);
   assert.equal(repo.git.run(["rev-parse", `${again.submitted}^`]), moved, "made on the newest main");
   assert.deepEqual(fx.submitted.map(one => one.commit), [first, again.submitted]);
   assert.equal(repo.git.commit(`refs/full-check/records/${commit.slice(0, 12)}`), again.submitted, "kept reachable until it lands");
@@ -414,7 +417,7 @@ test("a records commit the landing check refused is applied again on the newest 
   fx.queue.answers.set(again.submitted!, answer("landed", "LANDED", "f".repeat(40)));
   await cycle(fx);
   const landed = readState(repo.layout.state).core.records!;
-  assert.deepEqual([landed.result, landed.answer?.state, typeof landed.settled], ["landed as ffffffffffff", "landed", "string"]);
+  assert.deepEqual([landed.result, landed.answer?.state, typeof landed.settled, landed.outcome], ["landed as ffffffffffff", "landed", "string", "landed"]);
   // Settled, nothing more is followed; the next green run that lists cases records them.
   repo.commit({ "later.txt": "x\n" }, "later");
   assert.equal(await cycle(fx), "core");
@@ -442,7 +445,12 @@ test("a held records commit is withdrawn and replaced; past its attempts, a reco
   assert.equal(last.attempts, RECORDS_ATTEMPTS);
   fx.queue.answers.set(last.submitted!, answer("refused", "red: tooling FAIL"));
   repo.commit({ "moved-last.txt": "x\n" }, "main moves on again");
+  // What the records are as the core starts, before its green run records anew.
+  const run = fx.gate.run.bind(fx.gate);
+  let atCore: string | undefined;
+  fx.gate.run = (at, steps, label) => { atCore ??= readState(repo.layout.state).core.records?.outcome; return run(at, steps, label); };
   assert.equal(await cycle(fx), "core", "not applied again: the core takes the new main");
+  assert.equal(atCore, "given-up");
   const given = readState(repo.layout.state);
   assert.ok(given.tasks.some(one => one.line === `- The full check's core records of ${commit.slice(0, 12)} did not land: refused: red: tooling FAIL; `
     + `not applied again: ${RECORDS_ATTEMPTS} attempt(s) made. Their rows stay pending for the next records run; see ${dirname(last.delta!)}.`), JSON.stringify(given.tasks));
@@ -467,7 +475,7 @@ test("an attempt that failed waits for main to move, and a records commit the qu
   await recordAndApply(fx);
   let records = readState(repo.layout.state).core.records!;
   assert.match(records.result, /^record-pending\.ts --apply exited 1 on main [0-9a-f]{12} \(attempt 1\); see .*record-pending\.apply-1\.log$/);
-  assert.deepEqual([records.submitted, records.settled, fx.submitted.length], [null, undefined, 0]);
+  assert.deepEqual([records.submitted, records.settled, fx.submitted.length, records.outcome], [null, undefined, 0, "failed"]);
   fail = false;
   assert.equal(await cycle(fx), "idle", "the same main would fail the same way");
   repo.commit({ "elsewhere.txt": "x\n" }, "main moves on");
@@ -490,7 +498,7 @@ test("a recorder that leaves records and no delta lands nothing, and is a task",
   recordIn(fx);
   assert.equal(await cycle(fx), "idle", "nothing to apply: the cycle goes on");
   const state = readState(repo.layout.state);
-  assert.deepEqual([state.core.records?.result, state.core.records?.delta, fx.submitted.length], ["wrote 1 record file(s) and no delta", undefined, 0]);
+  assert.deepEqual([state.core.records?.result, state.core.records?.outcome, state.core.records?.delta, fx.submitted.length], ["wrote 1 record file(s) and no delta", "failed", undefined, 0]);
   assert.ok(state.tasks.some(one => one.line.includes("wrote records and no delta")), JSON.stringify(state.tasks));
 });
 
@@ -556,14 +564,14 @@ test("a records unit gone without an outcome is started once more in a tree set 
   assert.equal(fx.units.specs.length, 2, "started once more");
   assert.deepEqual([existsSync(join(run, DELTA_FILE)), existsSync(join(repo.layout.records.core, "results/half.tsv"))], [false, false], "what the stopped one wrote is gone");
   const again = readState(repo.layout.state).core.records!;
-  assert.equal(again.job!.starts, 2);
+  assert.deepEqual([again.job!.starts, again.outcome], [2, "recording"]);
   assert.match(again.result, /^recording in nts-full-check-records-core since \S+, started again$/);
   // Gone again: given up, its rows pending for the next records run.
   fx.units.stop(unit);
   assert.equal(await cycle(fx), "idle");
   assert.equal(fx.units.specs.length, 2, "never a third time");
   const given = readState(repo.layout.state);
-  assert.equal(typeof given.core.records!.settled, "string");
+  assert.deepEqual([typeof given.core.records!.settled, given.core.records!.outcome], ["string", "given-up"]);
   assert.ok(given.tasks.some(one => one.line === `- The full check's core records at ${commit.slice(0, 12)} did not finish: ${unit} is gone and wrote no outcome, `
     + `started 2 time(s); see ${join(run, RECORDS_UNIT_LOG)}. Their rows stay pending for the next records run.`), JSON.stringify(given.tasks));
   repo.commit({ "later.txt": "x\n" }, "later");
@@ -573,15 +581,45 @@ test("a records unit gone without an outcome is started once more in a tree set 
   assert.equal(fx.submitted.length, 1);
 });
 
+test("a records run that recorded nothing, or whose rows main has already, is nothing; one the landing check withdraws is withdrawn", async t => {
+  const repo = repository(t);
+  const nothing = harness(repo, fakeGate(repo), { recorder: recording({}) });
+  repo.commit(NEW_CASE, "a new case");
+  assert.equal(await cycle(nothing), "core");
+  recordIn(nothing);
+  assert.equal(await cycle(nothing), "idle");
+  assert.deepEqual([readState(repo.layout.state).core.records!.result, readState(repo.layout.state).core.records!.outcome], ["recorded nothing", "nothing"]);
+  // Rows main has already: applied there, they leave nothing to commit.
+  const there = harness(repo, fakeGate(repo), { recorder: newCase(), applier: (_tree, _delta, log) => { writeFileSync(log, "record-pending --apply: 0 row(s) applied, 1 already recorded, 0 skipped\n"); return { status: 0, output: "record-pending --apply: 0 row(s) applied, 1 already recorded, 0 skipped\n" }; } });
+  repo.commit({ "b.txt": "b\n" }, "two");
+  assert.equal(await cycle(there), "core");
+  await recordAndApply(there);
+  const already = readState(repo.layout.state).core.records!;
+  assert.deepEqual([already.outcome, typeof already.settled], ["nothing", "string"]);
+  assert.match(already.result, /^nothing left to commit on main/);
+  // Submitted, then withdrawn by the landing check.
+  const withdrawn = harness(repo, fakeGate(repo), { recorder: newCase() });
+  repo.commit({ "c.txt": "c\n" }, "three");
+  assert.equal(await cycle(withdrawn), "core");
+  await recordAndApply(withdrawn);
+  const submitted = readState(repo.layout.state).core.records!.submitted!;
+  withdrawn.queue.answers.set(submitted, answer("withdrawn", "withdrawn before it was checked"));
+  await cycle(withdrawn);
+  const ended = readState(repo.layout.state).core.records!;
+  assert.deepEqual([ended.outcome, ended.result, typeof ended.settled], ["withdrawn", "withdrawn: withdrawn before it was checked", "string"]);
+});
+
 test("a records unit that does not start is started once more, then given up", async t => {
   const repo = repository(t), units = stubUnits(), fx = harness(repo, fakeGate(repo), { recorder: newCase(), units });
   units.start = spec => { units.specs.push(spec); return "systemd-run exited 1: Failed to start transient service unit"; };
   repo.commit(NEW_CASE, "a new case");
   assert.equal(await cycle(fx), "core");
   assert.match(readState(repo.layout.state).core.records!.result, /^nts-full-check-records-core did not start: systemd-run exited 1/);
+  assert.equal(readState(repo.layout.state).core.records!.outcome, "recording", "still the controller's to start once more");
   assert.equal(await cycle(fx), "idle");
   assert.equal(await cycle(fx), "idle");
   assert.equal(units.specs.length, 2);
+  assert.equal(readState(repo.layout.state).core.records!.outcome, "given-up");
   assert.ok(readState(repo.layout.state).tasks.some(one => one.line.includes("did not finish: nts-full-check-records-core is gone and wrote no outcome, started 2 time(s)")));
 });
 
@@ -653,11 +691,11 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   assert.equal(state.benchmarks_due, undefined);
   assert.deepEqual([existsSync(join(measuring.run, "nts-bench")), existsSync(state.bench!.record!), existsSync(join(measuring.run, BENCH_OUTCOME))], [false, true, true],
     "its copy of nts-bench goes once the unit ended; its record and outcome stay with its logs");
-  assert.deepEqual([state.bench?.commit, state.bench?.measured, state.bench?.outcome, state.bench?.attempts, state.bench?.base], [first, true, "record", 1, moved]);
+  assert.deepEqual([state.bench?.commit, state.bench?.measured, state.bench?.outcome, state.bench?.attempts, state.bench?.base], [first, true, "submitted", 1, moved]);
   assert.deepEqual(night.submitted, [{ commit: results, first: false }]);
   assert.equal(repo.git.run(["rev-parse", `${results}^`]), moved, "published on the newest main, not on verified");
-  assert.deepEqual(repo.git.run(["diff", "--name-only", moved, results]).split("\n"), [FULL_MD, `results/benchmarks/runs/${basename(state.bench!.record!)}`]);
-  assert.equal(readFileSync(state.bench!.record!, "utf8"), repo.git.output(["show", `${results}:results/benchmarks/runs/${basename(state.bench!.record!)}`]), "the record as nts-bench kept it");
+  assert.deepEqual(repo.git.run(["diff", "--name-only", moved, results]).split("\n"), [FULL_MD, `${RUNS}/${basename(state.bench!.record!)}`]);
+  assert.equal(readFileSync(state.bench!.record!, "utf8"), repo.git.output(["show", `${results}:${RUNS}/${basename(state.bench!.record!)}`]), "the record as nts-bench kept it");
   assertMessage(repo.git, results, /^results: retain benchmark run /);
   assert.equal(repo.git.commit(`refs/full-check/benchmarks/${first.slice(0, 12)}`), results, "kept reachable until it lands");
   assert.ok(night.lines.some(line => line.includes("TASK") && line.includes("2 benchmark row(s) slower than their own best") && line.includes("awfy-list, richards")), night.lines.join("\n"));
@@ -666,7 +704,7 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   night.queue.answers.set(results, answer("landed", "LANDED", "f".repeat(40)));
   const next = at(NEXT_NIGHT);
   await cycle(next);
-  assert.equal(readState(repo.layout.state).bench?.result, "landed as ffffffffffff");
+  assert.deepEqual([readState(repo.layout.state).bench?.result, readState(repo.layout.state).bench?.outcome, readState(repo.layout.state).bench?.measured], ["landed as ffffffffffff", "landed", true]);
   assert.equal(bench.calls.length, 1);
   assert.ok(next.lines.some(line => line.includes("already measured")), next.lines.join("\n"));
 });
@@ -717,10 +755,11 @@ test("a refused results commit is published again on the newest main, a held one
   const published = readState(repo.layout.state).bench!.submitted!;
   night.queue.answers.set(published, answer("refused", `${published.slice(0, 12)} conflicts with main in ${FULL_MD}`));
   assert.equal(await cycle(night), "idle", "on the main it was published on, it would be refused the same way");
+  assert.equal(readState(repo.layout.state).bench!.outcome, "failed");
   const moved = repo.commit({ "elsewhere.txt": "x\n" }, "main moves on");
   assert.equal(await cycle(night), "benchmarks", "published again first, before the core takes the new main");
   const again = readState(repo.layout.state).bench!;
-  assert.deepEqual([again.attempts, again.base, again.answer, again.settled], [2, moved, undefined, undefined]);
+  assert.deepEqual([again.attempts, again.base, again.answer, again.settled, again.outcome], [2, moved, undefined, undefined, "submitted"]);
   assert.equal(repo.git.run(["rev-parse", `${again.submitted}^`]), moved, "on the newest main");
   assert.equal(repo.git.commit(`refs/full-check/benchmarks/${first.slice(0, 12)}`), again.submitted);
   assert.ok(night.lines.some(line => line.includes(`refused: ${published.slice(0, 12)} conflicts with main`) && line.includes(`its record is published again on main ${moved.slice(0, 12)}`)), night.lines.join("\n"));
@@ -733,10 +772,33 @@ test("a refused results commit is published again on the newest main, a held one
   repo.commit({ "later.txt": "x\n" }, "main moves on again");
   assert.equal(await cycle(night), "core", "not published again: the core takes the new main");
   const given = readState(repo.layout.state);
-  assert.equal(typeof given.bench?.settled, "string");
+  assert.deepEqual([typeof given.bench?.settled, given.bench?.outcome], ["string", "given-up"]);
   assert.ok(given.tasks.some(one => one.line === `- The nightly benchmark run at ${first.slice(0, 12)} did not land: refused: red: records FAIL; not published again: ${RECORDS_ATTEMPTS} attempt(s) made. `
     + `Its record ${third.record} is kept with its run's logs; publish it on main with tooling/bench/run-record.ts publish.`), JSON.stringify(given.tasks));
   assert.equal(night.submitted.length, RECORDS_ATTEMPTS);
+});
+
+test("a publication that fails is made again once main moves, and a record main has already leaves nothing to publish", async t => {
+  const repo = repository(t), gate = fakeGate(repo), units = stubUnits(), queue = stubQueue(), bench = stubBench();
+  let publisher: Publisher = (_tree, _record, log) => { writeFileSync(log, "schema: no such column\n"); return { status: 1, output: "schema: no such column\n" }; };
+  const at = (now: Date) => harness(repo, gate, { now, units, queue, bench, publisher: (tree, record, log) => publisher(tree, record, log) });
+  repo.commit({ "a.txt": "1\n" }, "verified one");
+  await cycle(at(BEFORE));
+  const night = at(NIGHT);
+  await cycle(night);
+  await cycle(night);
+  measureIn(night);
+  assert.equal(await cycle(night), "benchmarks");
+  const failed = readState(repo.layout.state).bench!;
+  assert.deepEqual([failed.outcome, failed.submitted, failed.attempts], ["failed", null, 1]);
+  assert.match(failed.result, /^run-record\.ts publish exited 1 on main [0-9a-f]{12} \(attempt 1\); see /);
+  // main moves; main already has the record and its page, as a hand publication would leave it.
+  publisher = (tree, record, log) => { writeFileSync(log, `${join(tree, RUNS, basename(record))}\n`); return { status: 0, output: "" }; };
+  repo.commit({ "b.txt": "2\n" }, "main moves on");
+  assert.equal(await cycle(night), "benchmarks");
+  const nothing = readState(repo.layout.state).bench!;
+  assert.deepEqual([nothing.outcome, typeof nothing.settled, nothing.attempts], ["nothing", "string", 2]);
+  assert.match(nothing.result, /^nothing left to publish on main/);
 });
 
 test("one night's run is in flight at a time: a night due while the last run waits to land measures once it lands", async t => {
@@ -837,7 +899,7 @@ test("an attempt the measurement lock does not admit keeps nothing and leaves th
   measureIn(next);
   assert.equal(await cycle(next), "benchmarks");
   const measured = readState(repo.layout.state);
-  assert.deepEqual([measured.bench?.outcome, measured.bench?.commit, measured.bench?.measured], ["record", first, true]);
+  assert.deepEqual([measured.bench?.outcome, measured.bench?.commit, measured.bench?.measured], ["submitted", first, true], "measured, and its record submitted");
 });
 
 test("a nightly slot the controller first reaches after a later wide slot still makes the benchmarks due", async t => {
@@ -1230,6 +1292,12 @@ test("the status model: what a live controller does, how far verified is behind 
   assert.deepEqual(s.now, { ...state.now, seconds: 3600 });
   assert.deepEqual(s.behind, { commits: 2, oldest_landed_at: "2026-11-09T10:30:00.000Z", delay_s: 1800 });
   assert.deepEqual(s.core.records, { listed: { pending: 3, accepted: 1 }, last: null });
+  const records = { ...state, core: { ...state.core, records: { commit: "r".repeat(40), at: "2026-11-09T09:30:00.000Z", submitted: "s".repeat(40), result: "landed as ssssssssssss", outcome: "landed" as const } },
+    bench: { commit: "v".repeat(40), at: "2026-11-09T03:40:00.000Z", run: "/runs/bench", result: "run record x published on main mmmmmmmmmmmm (attempt 1): queued", submitted: "q".repeat(40), measured: true, outcome: "submitted" as const } };
+  const typed = fullCheckStatus(records, inputs);
+  assert.deepEqual([typed.core.records.last?.outcome, typed.benchmarks.last?.outcome], ["landed", "submitted"], "the status JSON carries each typed outcome");
+  assert.match(statusText(typed), /^records: core 3 pending and 1 accepted listed; last rrrrrrrrrrrr landed: landed as ssssssssssss$/m);
+  assert.match(statusText(typed), /^benchmarks: vvvvvvvvvvvv at 2026-11-09T03:40:00\.000Z: submitted: run record x published/m);
   assert.deepEqual(s.wide.records, { listed: null, last: null });
   assert.deepEqual(s.verified, { commit: "v".repeat(40), pushed: "v".repeat(40) });
   assert.equal(fullCheckStatus(state, { ...inputs, controller: { pid: 42, alive: false } }).now, null, "a stopped controller is doing nothing");

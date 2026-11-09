@@ -102,6 +102,27 @@ export type ProbeRecord = {
 };
 
 /**
+ * Where a commit the full check made on main and submitted stands -- a
+ * part's records, a night's benchmark run (service.ts's followLanding):
+ * `submitted`, in the landing queue; `failed`, its last attempt was refused,
+ * held or lost, or could not be made, and it is made again on the newest main
+ * a few times at most; `landed`; `withdrawn`; `nothing`, nothing was left to
+ * land, main having it already; `given-up`, no longer followed, its attempts
+ * spent or what it is made from gone. The state stores it at each transition,
+ * beside the `result` that says the same in words.
+ */
+export type LandingOutcome = "submitted" | "failed" | "landed" | "nothing" | "given-up" | "withdrawn";
+
+/**
+ * Where a part's records run stands: `recording` while its unit records,
+ * started or started once more; then as its records commit stands
+ * (LandingOutcome). It is `nothing` too when the recorder recorded nothing,
+ * `failed` when the recorder or its start went wrong past saving, and
+ * `given-up` when its unit ended without an outcome as often as it is started.
+ */
+export type RecordsRunOutcome = "recording" | LandingOutcome;
+
+/**
  * A part's last records run, and what came of it. It records in the part's
  * records unit (`job`), beside the core; its rows are then in its `delta`,
  * which is applied on main and submitted as a records commit; the full check
@@ -132,6 +153,8 @@ export type RecordsRun = {
   answer?: LandingAnswer;
   /** When the full check stopped following it: landed, withdrawn, nothing to apply, or given up. */
   settled?: string;
+  /** Where it stands, typed; `result` says the same in words. */
+  outcome?: RecordsRunOutcome;
 };
 
 /**
@@ -139,9 +162,11 @@ export type RecordsRun = {
  * `no-record`, it ran and kept none; `interrupted`, its unit ended without an
  * outcome, stopped, killed or past its hang guard, as often as it is started;
  * `not-run`, the night ended before a run, its build red at verified or the
- * next nightly slot replacing it.
+ * next nightly slot replacing it. A night that kept a record goes on from
+ * `record` as its results commit stands (LandingOutcome); `measured` says it
+ * kept one, whatever it is now.
  */
-export type BenchOutcome = "record" | "no-record" | "interrupted" | "not-run";
+export type BenchOutcome = "record" | "no-record" | "interrupted" | "not-run" | LandingOutcome;
 
 /**
  * The last night's run, or the night that ended without one, and what came
