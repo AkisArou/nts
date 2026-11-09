@@ -80,6 +80,18 @@
 // sound only where the parent's measure counts the child's memory, so a
 // child outside the owner's process tree and cgroup is refused.
 //
+// **A reservation made inside another job's draws on it first.** A request
+// that holds a reservation of its own from inside another job's -- the one it
+// names (`drawsOn`: a gate run's, of the admit.ts job or the gate step it was
+// started in), else its nearest ancestor process's -- takes what that one
+// has unused first, and asks the queue only for the rest. One the other
+// covers whole asks the queue nothing and waits behind nobody, so a holder
+// whose child needs memory never waits for itself. While the child holds
+// it, what it drew is lent: the other promises that much less, and its
+// measure leaves out what the child measures itself, so nothing is counted
+// twice. A growth draws on the other as its reservation does; a shrink gives
+// back the child's own part first.
+//
 // **The files**, under LEDGER_DIR or NTS_MEMORY_LEDGER: `waiting/<id>.json`
 // and `admitted/<id>.json`, one entry per request, written whole and renamed
 // into place; `lock`, held for every decision, so decisions are made one at a
@@ -332,22 +344,25 @@ function readProcessCharge(pid: number): number {
   catch (error) { if (gone(error)) return 0; throw error; }
 }
 
+const NONE: ReadonlySet<number> = new Set();
+
 /**
  * What an admitted job uses now. `table` is read once per decision, when a
- * tree is measured. `exclude`, a process in the measure that is not the
- * job's (the watcher of its peak, in the job's cgroup), is not counted.
+ * tree is measured. `exclude`, processes in the measure that are not the
+ * job's to count -- the watcher of its peak, in the job's cgroup; what a
+ * reservation drawn on this one measures itself -- are not counted.
  */
-function measured(entry: LedgerEntry, table: () => Table, exclude?: number): number {
+function measured(entry: LedgerEntry, table: () => Table, exclude: ReadonlySet<number> = NONE): number {
   const { tree, cgroup } = entry.measure;
   let bytes = 0;
-  let inside: ReadonlySet<number> = new Set();
+  let inside: ReadonlySet<number> = NONE;
   if (cgroup !== null) {
     bytes += readCgroupCharge(cgroup);
-    const members = tree || exclude !== undefined ? cgroupMembers(cgroup.path) : [];
+    const members = tree || exclude.size ? cgroupMembers(cgroup.path) : [];
     if (tree) inside = new Set(members);
-    if (exclude !== undefined && members.includes(exclude)) bytes -= readProcessCharge(exclude);
+    for (const pid of members) if (exclude.has(pid)) bytes -= readProcessCharge(pid);
   }
-  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid) && pid !== exclude) bytes += readProcessCharge(pid);
+  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid) && !exclude.has(pid)) bytes += readProcessCharge(pid);
   return Math.max(0, bytes);
 }
 
@@ -411,6 +426,14 @@ export type LedgerEntry = {
   over?: string[];
   /** For a request of its own, the admitted reservation it takes over: admitting it ends that one. */
   replaces?: string;
+  /**
+   * The admitted reservation of an ancestor process this one draws on: it
+   * takes what that one has unused first, and asks the ledger only for the
+   * rest. A growth draws on it as its reservation does.
+   */
+  drawsOn?: string;
+  /** Of an admitted reservation that draws on another, the bytes of it that came from that one. */
+  drawn?: number;
 };
 type State = "waiting" | "admitted";
 
@@ -436,7 +459,9 @@ function parseEntry(text: string, file: string): LedgerEntry {
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
       || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))
       || !keyList(entry.unmeasured) || !keyList(entry.over)
-      || (entry.replaces !== undefined && (typeof entry.replaces !== "string" || !ID.test(entry.replaces)))) {
+      || (entry.replaces !== undefined && (typeof entry.replaces !== "string" || !ID.test(entry.replaces)))
+      || (entry.drawsOn !== undefined && (typeof entry.drawsOn !== "string" || !ID.test(entry.drawsOn)))
+      || (entry.drawn !== undefined && (!Number.isSafeInteger(entry.drawn) || entry.drawn < 0 || entry.drawn > entry.bytes))) {
     throw new Error(`${file} is not a memory ledger entry`);
   }
   return entry;
@@ -525,6 +550,14 @@ export type ReserveRequest = {
   unmeasured?: readonly string[];
   /** An admitted reservation this one takes over: the decision that admits it ends that one, under the same lock. */
   replaces?: string;
+  /**
+   * The reservation this one runs inside, though it holds one of its own (a
+   * gate run started inside an admit.ts job): it draws on that one's unused
+   * part first. Named, it must count this one's memory, as a parent's does
+   * (`inside`); unnamed, or not counting it, it is the nearest ancestor
+   * process's reservation, if one holds any.
+   */
+  drawsOn?: string;
 };
 
 /** One decision on one request: what it saw and what it decided. */
@@ -539,6 +572,8 @@ export type Decision = {
   ahead: number;
   /** Whether it could fit were every admitted job to end: one that could not holds nobody behind it. */
   fits: boolean;
+  /** What it draws on the unused part of the reservation it draws on (`drawsOn`): the queue is asked only for the rest. */
+  drawnBytes: number;
 };
 
 
@@ -640,6 +675,39 @@ function taking(dir: string, id: string, pid: number, what: string): void {
   }
 }
 
+/** `id` when it names a live admitted reservation, other than `except`, that counts `pid`'s memory. */
+function counting(dir: string, id: string, pid: number, except: string | undefined, what: string): string | undefined {
+  if (!ID.test(id)) throw new TypeError(`memory: ${what} would draw on ${JSON.stringify(id)}, which is not a reservation id`);
+  if (id === except) return undefined;
+  const file = entryPath(dir, "admitted", id);
+  let entry: LedgerEntry | null = null;
+  try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+  catch (error) { if (!gone(error)) throw error; }
+  return entry !== null && alive(entry.owner) && counts(entry, pid) ? id : undefined;
+}
+
+/**
+ * The admitted reservation of the nearest ancestor of `pid` that holds one --
+ * its parent's, else its grandparent's, and so on -- other than `except` (one
+ * it takes over): what a request for `pid` draws on first. Of an ancestor
+ * that holds more than one, the latest. Read without the lock: the decision
+ * draws on it only while it is still admitted.
+ */
+function ancestorReservation(dir: string, pid: number, except: string | undefined): string | undefined {
+  const held = new Map<number, LedgerEntry>();
+  for (const entry of readEntries(dir, "admitted")) {
+    if (entry.id === except || !alive(entry.owner)) continue;
+    const other = held.get(entry.owner.pid);
+    if (other === undefined || other.since < entry.since) held.set(entry.owner.pid, entry);
+  }
+  if (!held.size) return undefined;
+  for (let at = readStat(pid)?.ppid, hops = 0; at !== undefined && at > 1 && hops < 65536; at = readStat(at)?.ppid, hops++) {
+    const entry = held.get(at);
+    if (entry !== undefined) return entry.id;
+  }
+  return undefined;
+}
+
 /** The parent's reservation when `parent` names a live one that counts `pid`'s memory. */
 function inside(parent: string | undefined, dir: string, pid: number, what: string, bytes: number, report: (line: string) => void): Reservation | null {
   if (!parent) return null;
@@ -718,7 +786,7 @@ function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure
 type Context = {
   dir: string; meminfo: string; every: number;
   report: (line: string) => void; observe: (decision: Decision) => void;
-  used: (entry: LedgerEntry, table: () => Table) => number;
+  used: (entry: LedgerEntry, table: () => Table, exclude: ReadonlySet<number>) => number;
 };
 
 const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for ${gib(entry.bytes)}` : `request to grow by ${gib(entry.bytes)}`;
@@ -731,15 +799,52 @@ const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for $
  * `deciding` takes over, nothing (see the top of this file). With no request
  * deciding, each its whole promise.
  */
-function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority">; used: number }>,
+function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority">; used: number; lent: number }>,
   deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
   let pending = 0;
-  for (const { entry, used } of admitted) {
+  for (const { entry, used, lent } of admitted) {
     if (entry.id === deciding?.replaces) continue;
+    // What it has lent the reservations that draw on it is theirs to promise.
+    const own = Math.max(0, entry.bytes - lent);
     const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
-    pending += Math.max(0, (yields ? Math.min(entry.bytes, peakReservation([Math.max(1, used)])) : entry.bytes) - used);
+    pending += Math.max(0, (yields ? Math.min(own, peakReservation([Math.max(1, used)])) : own) - used);
   }
   return pending;
+}
+
+/** What an admitted reservation uses now, and what it has lent the reservations that draw on it. */
+type Account = { used: number; lent: number };
+
+/**
+ * Each admitted reservation's account. One that draws on another (`drawsOn`)
+ * counts what its own measure holds, and the other's measure leaves those
+ * processes out, so nothing is counted twice; what it drew (`drawn`) the
+ * other has lent it, and promises that much less while it holds it.
+ */
+function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: LedgerEntry, exclude: ReadonlySet<number>) => number,
+  table: () => Table): Map<string, Account> {
+  const drawers = new Map<string, LedgerEntry[]>();
+  for (const entry of admitted.values()) {
+    if (entry.drawsOn === undefined || !admitted.has(entry.drawsOn)) continue;
+    drawers.set(entry.drawsOn, [...drawers.get(entry.drawsOn) ?? [], entry]);
+  }
+  const accounts = new Map<string, Account>();
+  for (const entry of admitted.values()) {
+    const children = drawers.get(entry.id) ?? [];
+    const theirs = new Set<number>();
+    for (const child of children) {
+      if (child.measure.tree) for (const pid of processTree(child.owner.pid, table())) theirs.add(pid);
+      if (child.measure.cgroup !== null) for (const pid of cgroupMembers(child.measure.cgroup.path)) theirs.add(pid);
+    }
+    accounts.set(entry.id, { used: use(entry, theirs), lent: children.reduce((sum, child) => sum + (child.drawn ?? 0), 0) });
+  }
+  return accounts;
+}
+
+/** The live admitted reservation a request draws on: its own ancestor's, or for a growth, its reservation's. */
+function drawnOn(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>): string | undefined {
+  const on = entry.grows === null ? entry.drawsOn : admitted.get(entry.grows)?.drawsOn;
+  return on !== undefined && admitted.has(on) ? on : undefined;
 }
 
 /** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
@@ -780,26 +885,52 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   const { availableBytes } = readMeminfo(context.meminfo);
   let table: Table | undefined;
   const read = () => table ??= processTable();
-  const usedBy = new Map([...admitted.values()].map(entry => [entry.id, context.used(entry, read)]));
-  const usedBytes = [...usedBy.values()].reduce((sum, bytes) => sum + bytes, 0);
-  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry, used: usedBy.get(entry.id)! })), self);
+  const accounts = accountsOf(admitted, (entry, exclude) => context.used(entry, read, exclude), read);
+  const usedBytes = [...accounts.values()].reduce((sum, account) => sum + account.used, 0);
+  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry, ...accounts.get(entry.id)! })), self);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
   // What the queue could be given were every admitted job to end.
   const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
-  // What a request would hold, a growth with its reservation.
-  const whole = (entry: LedgerEntry) => entry.bytes + (entry.grows === null ? 0 : admitted.get(entry.grows)?.bytes ?? 0);
-  const fits = whole(self) <= freeBytes;
   const everyone = [...waiting, self].sort(queueOrder);
-  // A request that could not fit now holds nobody behind it.
-  const queue = everyone.filter(entry => whole(entry) <= freeBytes);
-  const go = fits && admissible(roomBytes, queue).has(self.id);
+  // What each request draws on the unused part of the reservation it draws
+  // on, in the queue's order: it asks the queue only for the rest.
+  const left = new Map<string, number>(), draws = new Map<string, number>();
+  for (const entry of everyone) {
+    const on = drawnOn(entry, admitted);
+    if (on === undefined) continue;
+    const account = accounts.get(on)!;
+    const unused = left.get(on) ?? Math.max(0, admitted.get(on)!.bytes - account.lent - account.used);
+    const take = Math.min(entry.bytes, unused);
+    left.set(on, unused - take);
+    draws.set(entry.id, take);
+  }
+  const ask = (entry: LedgerEntry) => entry.bytes - (draws.get(entry.id) ?? 0);
+  // What a request would hold beyond what it draws: a growth with its reservation's own part.
+  const whole = (entry: LedgerEntry) => {
+    const into = entry.grows === null ? undefined : admitted.get(entry.grows);
+    return ask(entry) + (into === undefined ? 0 : into.bytes - (into.drawn ?? 0));
+  };
+  const fits = whole(self) <= freeBytes;
+  // A request that could not fit now holds nobody behind it. One the
+  // reservation it draws on covers asks the queue nothing, so it waits behind
+  // nobody: a holder whose child needs memory never waits for itself.
+  const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
+  const drawnBytes = draws.get(self.id) ?? 0;
+  const go = fits && (ask(self) === 0 || admissible(roomBytes, queue).has(self.id));
   if (go && grown !== undefined) {
     // The growth joins its reservation: one entry, and one measure, per job.
-    writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes });
+    writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes, ...(drawnBytes ? { drawn: (grown.drawn ?? 0) + drawnBytes } : {}) });
     if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
-  } else if (go && listed) renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
-  else if (go) writeEntry(dir, "admitted", self);
-  else if (!listed) writeEntry(dir, "waiting", self);
+  } else if (go) {
+    // Admitted, it says what it drew on the reservation it draws on.
+    const on = drawnOn(self, admitted);
+    const entry: LedgerEntry = { ...self, drawsOn: on, ...(on === undefined ? {} : { drawn: drawnBytes }) };
+    if (listed) {
+      writeEntry(dir, "waiting", entry);
+      renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
+    } else writeEntry(dir, "admitted", entry);
+    if (on !== undefined && drawnBytes) report(`memory: ${self.what} drew ${gib(drawnBytes)} of its ${gib(self.bytes)} on ${admitted.get(on)!.what}'s unused reservation`);
+  } else if (!listed) writeEntry(dir, "waiting", self);
   // The reservation it takes over ends with the decision that admits it.
   const replaced = self.replaces === undefined ? undefined : admitted.get(self.replaces);
   if (go && replaced !== undefined) {
@@ -807,7 +938,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
     report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
   }
   return {
-    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits },
+    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits, drawnBytes },
     registered: !go,
   };
 }
@@ -850,6 +981,7 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
         context.report(`memory: ${self.what} ${waits()} (${self.priority}): ${gib(decision.availableBytes)} available, `
           + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
           + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : "")
+          + (decision.drawnBytes ? `; ${gib(decision.drawnBytes)} of it comes from the unused reservation it draws on` : "")
           + (decision.fits ? "" : "; it could not fit even were every admitted job to end, so it holds nobody behind it until memory nobody reserved frees"));
       }
       await pause(context.every, undefined, { signal });
@@ -867,8 +999,10 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   let bytes = self.bytes;
   let released = false;
   let growing: { id: string; withdraw: AbortController } | null = null;
-  // Writes the entry with what the handle holds now.
-  const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null : { ...entry, bytes }, context.every);
+  // Writes the entry with what the handle holds now. A shrink gives back its
+  // own part first, then what it drew on another reservation.
+  const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null
+    : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
     id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir),
     get bytes() { return bytes; },
@@ -882,7 +1016,8 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (waiter === null) throw new Error("this process has no identity in /proc");
       // A request of its own in the queue, owned as the reservation is: it
       // lasts no longer than the reservation's owner.
-      const request: LedgerEntry = { ...self, id: randomUUID(), seq: 0, bytes: more, waiter, since: new Date().toISOString(), grows: self.id, replaces: undefined };
+      const request: LedgerEntry = { ...self, id: randomUUID(), seq: 0, bytes: more, waiter, since: new Date().toISOString(), grows: self.id,
+        replaces: undefined, drawsOn: undefined, drawn: undefined };
       const withdraw = new AbortController();
       growing = { id: request.id, withdraw };
       let outcome: Awaited<ReturnType<typeof wait>>;
@@ -947,11 +1082,16 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const unmeasured = [...new Set(request.unmeasured ?? [])];
   if (!keyList(unmeasured)) throw new TypeError(`memory: ${what}'s unmeasured keys are not step or job keys: ${unmeasured.join(", ")}`);
   if (request.replaces !== undefined) taking(dir, request.replaces, owner.pid, what);
+  // Inside another job's reservation -- the one it names, else its nearest
+  // ancestor process's -- it draws on that one first.
+  const drawsOn = (request.drawsOn === undefined ? undefined : counting(dir, request.drawsOn, owner.pid, request.replaces, what))
+    ?? ancestorReservation(dir, owner.pid, request.replaces);
   const self: LedgerEntry = {
     version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
     measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(), grows: null,
     ...(unmeasured.length ? { unmeasured } : {}),
     ...(request.replaces !== undefined ? { replaces: request.replaces } : {}),
+    ...(drawsOn !== undefined ? { drawsOn } : {}),
   };
   const used = options.used;
   const context: Context = {
@@ -1133,9 +1273,13 @@ export function admittedEntry(dir: string, id: string): LedgerEntry | null {
   return alive(entry.owner) ? entry : null;
 }
 
-/** What an admitted entry's measure holds now, as a decision counts it; `exclude`, a process in it that is not the job's, is not counted. */
+/**
+ * What an admitted entry's measure holds now; `exclude`, a process in it that
+ * is not the job's, is not counted. A reservation drawn on this one counts
+ * here too: this is what the job held, as its history learns it.
+ */
 export function entryUsage(entry: LedgerEntry, options: { exclude?: number } = {}): number {
-  return measured(entry, processTable, options.exclude);
+  return measured(entry, processTable, options.exclude === undefined ? NONE : new Set([options.exclude]));
 }
 
 /** The ledger as a status reader prints it: kind "memory", in `check.ts status --json`'s envelope. */
@@ -1152,10 +1296,14 @@ export type LedgerStatus = {
   /**
    * `unmeasured`: the steps or jobs a reservation sized without a measurement
    * of their own in their history; `over`: those that held more than they
-   * reserved.
+   * reserved. `draws_on`: the reservation of an ancestor process this one
+   * draws on, of which `drawn_bytes` are its bytes; `lent_bytes`: what this
+   * one has lent those that draw on it, which it does not promise.
+   * `used_bytes` leaves out what a reservation that draws on this one
+   * measures itself.
    */
   admitted: { id: string; what: string; priority: Priority; bytes: number; used_bytes: number; owner_pid: number; since: string; live: boolean;
-    unmeasured: string[]; over: string[] }[];
+    unmeasured: string[]; over: string[]; draws_on: string | null; drawn_bytes: number; lent_bytes: number }[];
   /** In the queue's order. */
   waiting: { id: string; what: string; priority: Priority; bytes: number; grows: string | null; owner_pid: number; waiter_pid: number; since: string; waited_s: number; live: boolean }[];
 };
@@ -1169,14 +1317,21 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const now = Date.now();
-  const admitted = view.admitted.map(entry => ({
-    id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes,
-    used_bytes: entry.live ? measured(entry, read) : 0, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
-    unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
-  }));
-  // A dead entry is dropped by the next decision, so it promises nothing.
+  // A dead entry is dropped by the next decision, so it uses and promises nothing.
+  const live = new Map(view.admitted.filter(entry => entry.live).map(entry => [entry.id, entry]));
+  const accounts = accountsOf(live, (entry, exclude) => measured(entry, read, exclude), read);
+  const admitted = view.admitted.map(entry => {
+    const account = accounts.get(entry.id) ?? { used: 0, lent: 0 };
+    const on = entry.live ? drawnOn(entry, live) : undefined;
+    return {
+      id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes,
+      used_bytes: account.used, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
+      unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
+      draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : entry.drawn ?? 0, lent_bytes: account.lent,
+    };
+  });
   const head = view.waiting.find(entry => entry.live) ?? null;
-  const pending = pendingFor(admitted.filter(entry => entry.live).map(entry => ({ entry, used: entry.used_bytes })), head);
+  const pending = pendingFor(admitted.filter(entry => entry.live).map(entry => ({ entry, used: entry.used_bytes, lent: entry.lent_bytes })), head);
   return {
     version: 1, kind: "memory", at: new Date(now).toISOString(), ledger: dir,
     machine: { total_bytes: totalBytes, available_bytes: availableBytes, floor_bytes: SYSTEM_FLOOR_BYTES },

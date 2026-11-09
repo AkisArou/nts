@@ -73,6 +73,9 @@
 //                         admitted: the landing build's, given by the landing
 //                         check's code, so nothing is admitted between them.
 //                         The run consumes it: no step is handed it
+//   NTS_MEMORY_RESERVATION the reservation the run was started inside (an
+//                         admit.ts job's, an outer gate step's): the run holds
+//                         its own, and draws on that one's unused part first
 //
 // Set by this file for each step (a step reads them; nobody sets them by hand):
 //   NTS_GATE_JOBS         the workers it may run
@@ -130,6 +133,10 @@ const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 // Environment and budgets.
 // ---------------------------------------------------------------------------
 let env = process.env;
+// The reservation the run was started inside (an admit.ts job's -- which may
+// have become this very process -- or an outer gate step's), as it was
+// handed: the canonical environment below does not pass a launcher's on.
+const LAUNCHER_RESERVATION = process.env[RESERVATION_ENV] || undefined;
 const color = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
 
 // ---------------------------------------------------------------------------
@@ -193,6 +200,11 @@ const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
 let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate", oracleRoot: ROOT });
 env = normalized.env;
+// What the run's own process reserves before its steps -- the oracle
+// dependency capture -- runs inside the reservation the run was started
+// inside, which counts this process; the run's own reservation draws on it
+// (reserveMemory), and each step runs inside the run's.
+if (LAUNCHER_RESERVATION) env[RESERVATION_ENV] = LAUNCHER_RESERVATION;
 reportEnvironment(normalized.report);
 // `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:
 // with CARGO_TARGET_DIR elsewhere the old default gated whatever another session
@@ -893,11 +905,14 @@ async function reserveMemory() {
   const replaces = env.NTS_MEMORY_HANDOVER || undefined;
   delete env.NTS_MEMORY_HANDOVER;
   // A run always holds its own: its size moves with its steps, which only its
-  // holder can do. One handed down by its launcher stays the launcher's.
+  // holder can do. One handed down by its launcher stays the launcher's, and
+  // the run draws on what that one has unused first, so a launcher that
+  // waits for its run never holds the run's memory from it.
   const own = { ...env };
   delete own[RESERVATION_ENV];
   const asked = Date.now();
-  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured(), replaces },
+  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured(), replaces,
+    drawsOn: LAUNCHER_RESERVATION },
     { env: own, signal: startupAbort.signal, report: (line) => process.stdout.write(`  ${line}\n`) });
   memoryRecord.waited_s += (Date.now() - asked) / 1000;
   noteSize();

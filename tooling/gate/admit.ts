@@ -125,6 +125,31 @@ function locate(command: string): string {
   throw seen ? new Refusal(`${command}: not executable`, 126) : new Refusal(`${command}: command not found`, 127);
 }
 
+/**
+ * The admitted reservations, each one that draws on another beneath it,
+ * indented, with its share of that one.
+ */
+function admittedRows(admitted: LedgerStatus["admitted"], clock: (iso: string) => string): string[] {
+  const ids = new Set(admitted.map(entry => entry.id)), beneath = new Map<string, LedgerStatus["admitted"]>();
+  for (const entry of admitted) if (entry.draws_on !== null && ids.has(entry.draws_on)) beneath.set(entry.draws_on, [...beneath.get(entry.draws_on) ?? [], entry]);
+  const rows: string[] = [], shown = new Set<string>();
+  const show = (entry: LedgerStatus["admitted"][number], depth: number) => {
+    if (shown.has(entry.id)) return;
+    shown.add(entry.id);
+    const pad = "  ".repeat(depth);
+    rows.push(`    ${pad}${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
+      + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`
+      + (entry.drawn_bytes ? `\n      ${pad}drew ${gib(entry.drawn_bytes)} of it on the reservation above` : "")
+      + (entry.unmeasured.length ? `\n      ${pad}unmeasured (sized by the largest of its kind, or its share of the machine): ${entry.unmeasured.join(" ")}` : "")
+      + (entry.over.length ? `\n      ${pad}over (held more than it reserved): ${entry.over.join(" ")}` : ""));
+    for (const child of beneath.get(entry.id) ?? []) show(child, depth + 1);
+  };
+  for (const entry of admitted) if (entry.draws_on === null || !ids.has(entry.draws_on)) show(entry, 0);
+  // Anything left (a loop no ledger writes) is shown flat.
+  for (const entry of admitted) show(entry, 0);
+  return rows;
+}
+
 /** The ledger's state as a person reads it. */
 function describeStatus(status: LedgerStatus): string {
   const { machine } = status;
@@ -134,10 +159,7 @@ function describeStatus(status: LedgerStatus): string {
     `  machine: ${gib(machine.total_bytes)}, ${gib(machine.available_bytes)} available; ${gib(status.pending_bytes)} promised to running jobs, `
       + `${gib(machine.floor_bytes)} kept for the system; room for ${gib(Math.max(0, status.room_bytes))}`,
     `  admitted (${status.admitted.length})${status.admitted.length ? ":" : ": none"}`,
-    ...status.admitted.map(entry => `    ${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
-      + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`
-      + (entry.unmeasured.length ? `\n      unmeasured (sized by the largest of its kind, or its share of the machine): ${entry.unmeasured.join(" ")}` : "")
-      + (entry.over.length ? `\n      over (held more than it reserved): ${entry.over.join(" ")}` : "")),
+    ...admittedRows(status.admitted, clock),
     `  waiting (${status.waiting.length})${status.waiting.length ? ":" : ": none"}`,
     ...status.waiting.map((entry, at) => `    ${String(at + 1).padStart(2)}. ${entry.priority.padEnd(10)} ${entry.grows === null ? "" : "grows by "}${gib(entry.bytes)}  `
       + `waited ${Math.round(entry.waited_s)} s  pid ${entry.waiter_pid}${entry.live ? "" : "  (gone)"}  ${entry.what}`),

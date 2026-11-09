@@ -353,6 +353,11 @@ the first node task.
   its job uses and a margin, whatever holds it; a landing's build hands its
   reservation to its gate run, so nothing is admitted between them
   ([log](records/notebooks/decisions-log.md#reservations-yield-to-a-request-that-outranks-them-11-09)).
+- **A reservation made inside another job's draws on it first** (11-10): a
+  request from inside another job's reservation takes that one's unused part
+  first and asks the ledger only for the rest, so a holder whose child needs
+  memory never waits for itself
+  ([log](records/notebooks/decisions-log.md#a-reservation-made-inside-another-jobs-draws-on-it-first-11-10)).
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit

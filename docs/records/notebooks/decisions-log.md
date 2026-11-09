@@ -1805,3 +1805,30 @@ hand. The coordinator approved the design with three conditions. As built:
   1,985 on the JVM (about 9.5 and 8 minutes at 8 slots), so the three run in
   the wide part. On main they listed 34, 35 and 34 cases that pass now and 2,
   6 and 2 that fail now, and nothing regressed, changed or went missing.
+
+## A reservation made inside another job's draws on it first (11-10)
+
+The coordinator decided, on #621, that a request made from inside another
+job's reservation draws on that one's unused part first and asks the ledger
+only for the rest. #615's yield had ended the deadlock across priorities, but
+at one priority the same shape still waited for ever: an agent's admit.ts
+holder whose gate run (run.mjs holds a reservation of its own) needed more
+than the room left beside the holder, while the holder ended only when its
+run did.
+
+As built:
+- a request draws on the reservation it names (`drawsOn`: a gate run names
+  the one it was started inside, which may be its own process's, as when
+  admit.ts became its shell), else on its nearest ancestor process's, as when
+  a launcher's canonical environment dropped the name (inner.ts, check.ts
+  --here); one the other covers whole asks the queue nothing and waits behind
+  nobody;
+- while it holds what it drew, that is lent: the other promises that much
+  less, and its measure leaves out what the drawing reservation measures
+  itself; a growth draws as its reservation did, and a shrink gives back the
+  drawer's own part first;
+- what a gate run's own process reserves before its steps (the oracle
+  dependency capture) runs inside the reservation the run was started inside;
+- a takeover (`replaces`) never draws on what it takes over;
+- the ledger's status shows each drawing reservation beneath the one it draws
+  on, with its share of it.

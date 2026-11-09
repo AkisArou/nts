@@ -237,7 +237,9 @@ test("a reservation whose owner has exited is dropped by the next decision, so a
 
 test("a request whose owner exits while it waits fails, and leaves the queue", async t => {
   const f = fixture(t);
-  const holder = await f.ask({ bytes: 17 * GiB, what: "holder" });
+  // Owned by a process of its own: a request from this process's children
+  // would draw on a reservation this process held.
+  const holder = await f.ask({ bytes: 17 * GiB, what: "holder", owner: { pid: ownerProcess(t).pid } });
   const child = ownerProcess(t);
   const orphan = f.ask({ bytes: 4 * GiB, what: "orphan", owner: { pid: child.pid } });
   await waitFor("the orphan's request to wait", () => f.of("orphan").length >= 1, { stopped: f.stopped });
@@ -569,10 +571,11 @@ test("admit.ts becomes its command: the command's exit status, its signal, and i
 
 test("admit.ts waits its turn; a signal while it waits withdraws its request, and a waiter killed outright is dropped", async t => {
   const f = fixture(t);
-  // Measured for real, as admit.ts measures it: this process's own tree, far
-  // below 10 GiB, so admit.ts sees room for less than 10 (20 - 2 - what the
-  // holder has still to take).
-  const holder = await f.ask({ bytes: 10 * GiB, what: "holder" }, { used: undefined });
+  // Measured for real, as admit.ts measures it: its owner's tree, far below
+  // 10 GiB, so admit.ts sees room for less than 10 (20 - 2 - what the holder
+  // has still to take). Its owner is a process of its own, not an ancestor of
+  // admit.ts, which would otherwise draw on it.
+  const holder = await f.ask({ bytes: 10 * GiB, what: "holder", owner: { pid: ownerProcess(t).pid } }, { used: undefined });
   const start = (what: string) => {
     const child = spawn(process.execPath, [ADMIT, "--bytes", "10G", "--what", what, "--", "true"], { env: admitEnv(f), stdio: ["ignore", "ignore", "pipe"] });
     let err = "";
@@ -642,7 +645,9 @@ test("a job reserves once: alone, a reservation of its own that what it starts r
 
 test("admit.ts --status: the reservations admitted, with what each uses, and the queue in its order", async t => {
   const f = fixture(t); // 20 available
-  const held = await f.ask({ bytes: 12 * GiB, what: "held job", priority: "full-check" }); // room for 6 now, less what it uses
+  // Owned by a process of its own, so the agent's job, whose owner is another, draws nothing on it.
+  const heldBy = ownerProcess(t);
+  const held = await f.ask({ bytes: 12 * GiB, what: "held job", priority: "full-check", owner: { pid: heldBy.pid } }); // room for 6 now, less what it uses
   // It runs, using 11 of its 12: room for 6, for either request, since it
   // promises them only one more whether it yields or not.
   f.used.set("held job", 11 * GiB);
@@ -659,9 +664,10 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   assert.deepEqual(status.machine, { total_bytes: 64 * GiB, available_bytes: 9 * GiB, floor_bytes: 2 * GiB });
   const [entry, ...others] = status.admitted;
   assert.deepEqual(others, []);
-  assert.deepEqual([entry.what, entry.priority, entry.bytes, entry.owner_pid, entry.since, entry.live], ["held job", "full-check", 12 * GiB, process.pid, readLedger(f.dir).admitted[0]!.since, true]);
-  assert.ok(Number.isSafeInteger(entry.used_bytes) && entry.used_bytes > 0 && entry.used_bytes < 12 * GiB, "what this process uses, measured");
-  // Measured for real, it uses what this process does; and the queue's head,
+  assert.deepEqual([entry.what, entry.priority, entry.bytes, entry.owner_pid, entry.since, entry.live], ["held job", "full-check", 12 * GiB, heldBy.pid, readLedger(f.dir).admitted[0]!.since, true]);
+  assert.ok(Number.isSafeInteger(entry.used_bytes) && entry.used_bytes > 0 && entry.used_bytes < 12 * GiB, "what its owner uses, measured");
+  assert.deepEqual([entry.draws_on, entry.drawn_bytes, entry.lent_bytes], [null, 0, 0]);
+  // Measured for real, it uses what its owner does; and the queue's head,
   // the landing request, is promised only that and a margin.
   assert.equal(status.pending_bytes, Math.min(12 * GiB, peakReservation([entry.used_bytes])) - entry.used_bytes);
   assert.equal(status.room_bytes, 9 * GiB - status.pending_bytes - 2 * GiB);
@@ -911,4 +917,81 @@ test("a request takes over only a reservation that counts its memory; one that h
   const late = await f.ask({ bytes: GiB, what: "late", replaces: other.id });
   assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["late"]);
   late.release();
+});
+
+test("a request from inside another job's process tree draws on that job's unused reservation first, asks the queue only for the rest, and the status shows it beneath that job", async t => {
+  const f = fixture(t);
+  // This process's job holds 8 and uses 2 of them: 6 unused, and room for 10 beside it.
+  const holder = await f.ask({ bytes: 8 * GiB, what: "holder" });
+  f.used.set("holder", 2 * GiB);
+  f.memory(18);
+  // Its child's job asks 10: 6 drawn on the holder, 4 asked of the queue.
+  const child = ownerProcess(t);
+  const drawing = await f.ask({ bytes: 10 * GiB, what: "child job", owner: { pid: child.pid } });
+  const decided = f.of("child job").at(-1)!;
+  assert.deepEqual([decided.admitted, decided.drawnBytes, decided.pendingBytes, decided.roomBytes], [true, 6 * GiB, 6 * GiB, 10 * GiB]);
+  const entry = readLedger(f.dir).admitted.find(one => one.what === "child job")!;
+  assert.deepEqual([entry.drawsOn, entry.drawn, entry.bytes], [holder.id, 6 * GiB, 10 * GiB]);
+  assert.ok(f.lines.includes("memory: child job drew 6.0 GiB of its 10.0 GiB on holder's unused reservation"), f.lines.join("\n"));
+  // The holder lent it 6, which it promises no more: a neighbour is promised the child's 10, not 16.
+  const neighbour = f.ask({ bytes: 7 * GiB, what: "neighbour" });
+  await waitFor("the neighbour to wait", () => f.of("neighbour").length >= 1, { stopped: f.stopped });
+  assert.deepEqual([f.of("neighbour")[0]!.pendingBytes, f.of("neighbour")[0]!.roomBytes], [10 * GiB, 6 * GiB]);
+  // The status shows the child's share beneath the holder.
+  const json = admit(f, ["--status", "--json"]);
+  assert.equal(json.status, 0, json.stderr);
+  const rows = new Map((JSON.parse(json.stdout).admitted as { what: string; draws_on: string | null; drawn_bytes: number; lent_bytes: number }[]).map(row => [row.what, row]));
+  assert.deepEqual([rows.get("child job")?.draws_on, rows.get("child job")?.drawn_bytes, rows.get("holder")?.lent_bytes], [holder.id, 6 * GiB, 6 * GiB]);
+  const text = admit(f, ["--status"]);
+  assert.match(text.stdout, /\n    agent +8\.0 GiB, using .*  holder\n      agent +10\.0 GiB, using .*  child job\n        drew 6\.0 GiB of it on the reservation above\n/);
+  // The child's job ends: the holder's 6 are its own to promise again, and the neighbour's 7 fit beside them.
+  drawing.release();
+  (await neighbour).release();
+  holder.release();
+});
+
+test("a request the reservation it draws on covers whole asks the queue nothing, and goes ahead of a queue that does not fit: a holder whose child needs memory never waits for itself", async t => {
+  const f = fixture(t); // 20 available
+  const holder = await f.ask({ bytes: 16 * GiB, what: "holder" }); // room for 2 beside it
+  const big = f.ask({ bytes: 6 * GiB, what: "big" });
+  await waitFor("the big request to wait", () => f.of("big").length >= 1, { stopped: f.stopped });
+  // The holder's child asks 4 of its 16 unused: admitted at once, though the big request is ahead of it.
+  const child = ownerProcess(t);
+  const inside = await f.ask({ bytes: 4 * GiB, what: "child", owner: { pid: child.pid } });
+  assert.deepEqual([f.of("child").at(-1)!.drawnBytes, f.of("child").at(-1)!.ahead], [4 * GiB, 1]);
+  // A growth of it draws on the holder as it did: the 12 left.
+  await inside.grow(12 * GiB);
+  const drawnNow = () => readLedger(f.dir).admitted.find(entry => entry.what === "child")!;
+  assert.deepEqual([drawnNow().bytes, drawnNow().drawn], [16 * GiB, 16 * GiB]);
+  // One more is beyond the holder's: it asks the queue, behind the big request.
+  const more = inside.grow(GiB);
+  more.catch(() => {});
+  const growthOf = () => f.decisions.filter(decision => decision.grows === inside.id);
+  await waitFor("the growth beyond the holder's to wait", () => growthOf().some(decision => !decision.admitted), { stopped: f.stopped });
+  assert.ok(growthOf().filter(decision => !decision.admitted).every(decision => decision.drawnBytes === 0 && decision.ahead === 1));
+  // It gives back 8: its own part first, and it has none, so 8 of what it
+  // drew, which the holder has unused again -- and the growth draws its 1 there.
+  await inside.shrink(8 * GiB);
+  await more;
+  assert.deepEqual([drawnNow().bytes, drawnNow().drawn], [9 * GiB, 9 * GiB]);
+  assert.equal(f.of("big").at(-1)?.admitted, false, "the big request still waits for room beside the holder");
+  inside.release();
+  holder.release();
+  (await big).release();
+});
+
+test("a request can name the reservation it runs inside: one its own process holds, as a gate run that admit.ts became; one that does not count it is passed over", async t => {
+  const f = fixture(t); // 20 available
+  // admit.ts became this process, holding 12; the gate run it became then asks 4 of its own.
+  const holder = await f.ask({ bytes: 12 * GiB, what: "admit.ts job" });
+  const run = await f.ask({ bytes: 4 * GiB, what: "gate run", drawsOn: holder.id });
+  assert.equal(f.of("gate run").at(-1)?.drawnBytes, 4 * GiB);
+  assert.equal(readLedger(f.dir).admitted.find(entry => entry.what === "gate run")?.drawsOn, holder.id);
+  // A reservation of a process that is neither this one nor an ancestor does not count this one's memory: nothing is drawn on it.
+  const other = await f.ask({ bytes: 2 * GiB, what: "another job", owner: { pid: ownerProcess(t).pid } });
+  const alone = await f.ask({ bytes: GiB, what: "a job of its own", drawsOn: other.id });
+  assert.deepEqual([f.of("a job of its own").at(-1)?.drawnBytes, readLedger(f.dir).admitted.find(entry => entry.what === "a job of its own")?.drawsOn], [0, undefined]);
+  await assert.rejects(f.ask({ bytes: GiB, what: "garbled", drawsOn: "not-a-reservation" }), /garbled would draw on "not-a-reservation", which is not a reservation id/);
+  for (const reservation of [alone, other, run, holder]) reservation.release();
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });

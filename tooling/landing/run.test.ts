@@ -324,7 +324,9 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} admitted with ${asked} after \\d+ s`));
   // Nothing was admitted between the build and its gate run: the run's first
   // request took the build's reservation over as it was admitted.
-  assert.match(readFileSync(join(f.run, "gate.log"), "utf8"), new RegExp(`memory: gate run \\S+ took over landing build of [0-9a-f]{12}'s reservation of ${asked}\n`));
+  const gate = readFileSync(join(f.run, "gate.log"), "utf8");
+  assert.match(gate, new RegExp(`memory: gate run \\S+ took over landing build of [0-9a-f]{12}'s reservation of ${asked}\n`));
+  assert.doesNotMatch(gate, /memory: .* drew /, "what it takes over it does not also draw on");
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
 });
