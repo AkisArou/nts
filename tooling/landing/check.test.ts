@@ -81,3 +81,27 @@ test("the command refuses before it acts: usage, policy variables, a tree not at
   assert.equal(serve.status, 2);
   assert.match(serve.out, /the service runs from the shared checkout/);
 });
+
+test("status --json is the same state, versioned, with numbers as numbers and each answer's task and issue", t => {
+  const c = cli(t);
+  const sha = c.s.git(["rev-parse", "HEAD"]);
+  const landed = c.queue.submit(sha, { branch: "42-a-task" });
+  c.queue.answer(c.queue.take()!, { state: "landed", message: "LANDED", base: sha, tip: sha, wall_s: 125, estimate_s: 100, landing: ["build", "tests"], deferred: ["integrity"], pending: ["one"] });
+  c.queue.submit(sha, { branch: "fix/b", note: "after it" });
+  const out = c.run(["status", "--json"]);
+  assert.equal(out.status, 0, out.out);
+  const s = JSON.parse(out.out);
+  assert.equal(s.version, 1);
+  assert.equal(s.kind, "landing");
+  assert.deepEqual(s.service, { running: false, pid: null, unit: "nts-landing-check", state: "idle", since: s.service.since, message: null });
+  assert.equal(s.checking, null);
+  assert.deepEqual(s.waiting.map((w: { branch: string; issue: number | null; note: string }) => [w.branch, w.issue, w.note]), [["fix/b", null, "after it"]]);
+  const [r] = s.recent;
+  assert.equal(r.id, landed.id);
+  assert.deepEqual([r.state, r.branch, r.issue, r.wall_s, r.estimate_s, r.pending], ["landed", "42-a-task", 42, 125, 100, 1], "numbers as numbers, and the task's issue");
+  assert.deepEqual(r.landing, ["build", "tests"]);
+  assert.deepEqual(s.day, { landed: 1, refused: 0, held: 0, withdrawn: 0, median_wall_s: 125, max_wall_s: 125 });
+  assert.equal(s.main.commit, sha);
+  assert.deepEqual(s.pool.trees, []);
+  assert.match(c.run(["status"]).out, /^last day: 1 landed \(median 2\.1 min, longest 2\.1 min\), 0 refused, 0 held, 0 withdrawn$/m, "the text is rendered from the same model");
+});

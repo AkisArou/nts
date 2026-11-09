@@ -22,6 +22,15 @@ export function landingQueue(where: { root?: string; home?: string } = {}): Land
   };
 }
 
+/** When the landing check landed each commit it landed: its answer's time, for every commit of the change. */
+export function landedTimes(home = LANDING_HOME): Map<string, string> {
+  const times = new Map<string, string>();
+  for (const result of new Queue(home).results()) {
+    if (result.state === "landed") for (const commit of result.commits ?? (result.tip ? [result.tip] : [])) times.set(commit, result.at);
+  }
+  return times;
+}
+
 /** Submit, and say what happened in one line; a failure is reported, not thrown. */
 export async function submitTo(queue: LandingQueue, commit: string, options: SubmitOptions): Promise<{ submitted: boolean; line: string }> {
   try {

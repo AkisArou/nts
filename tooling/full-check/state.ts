@@ -46,7 +46,12 @@ export type RunRecord = {
   reason?: string;
   /** What the culprit search made of a red run, and when; "held" is searched again. */
   search?: { result: string; at: string };
+  /** A green run's pending and improved cases, as its checks listed them (records.ts's listedRecords). */
+  listed?: { pending: number; improved: number };
 };
+
+/** What the controller is doing now, written before it starts and removed when it ends. */
+export type Doing = { doing: Part | "probe" | "records" | "benchmarks"; commit: string; since: string };
 
 /** A commit the culprit search found, and what the service did about it. */
 export type Culprit = {
@@ -81,8 +86,11 @@ export type State = {
   probes: ProbeRecord[];
   /** The last verified commit whose pending and improved records were written and submitted. */
   records?: { commit: string; at: string; submitted: string | null; result: string };
-  /** The last nightly benchmark attempt; `measured` when nts-bench ran on `commit`. */
-  bench?: { commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean };
+  /**
+   * The last nightly benchmark attempt; `measured` when nts-bench ran on
+   * `commit`, and `slower` its rows slower than their own best (bench.ts).
+   */
+  bench?: { commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[] };
   /** The nightly benchmarks still waiting for a quiet machine, from their slot until the window closes. */
   benchmarks_due?: { since: string; until: string };
   /** The last commit `verified` was pushed at, and when a push last failed. */
@@ -91,6 +99,7 @@ export type State = {
   count?: { at: string; verdict: string; lines: string[] };
   /** Task lines printed for the coordinator, newest last. */
   tasks: { at: string; line: string }[];
+  now?: Doing;
 };
 
 export function emptyState(): State {

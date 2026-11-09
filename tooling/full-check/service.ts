@@ -4,7 +4,7 @@
 //
 //   node tooling/full-check/service.ts                     the loop the unit runs
 //   node tooling/full-check/service.ts --once              one cycle, then exit
-//   node tooling/full-check/service.ts --status            what it last did, and the task lines
+//   node tooling/full-check/service.ts --status [--json]   what it is doing, what it last did, and the task lines
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00   (local time; schedule.ts)
 //            --bench-wait=240   minutes the nightly benchmarks wait for a quiet machine
 //
@@ -48,13 +48,13 @@ import { count as countMachine, countLines, gather, sweep as sweepLeftovers, typ
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
-import { landingQueue, submitTo, type LandingQueue } from "./queue.ts";
+import { landedTimes, landingQueue, submitTo, type LandingQueue } from "./queue.ts";
 import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RunRecord, type State } from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -182,9 +182,11 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     held(fx, state, part, { commit, run: "", verdict: "held", at, failed: [], reason: `${commit.slice(0, 12)} lists no ${part} steps` });
     return;
   }
-  fx.admit();
-  fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
-  const m = fx.gate.run(commit, steps, part);
+  const m = doing(fx, state, part, commit, () => {
+    fx.admit();
+    fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
+    return fx.gate.run(commit, steps, part);
+  }, at);
   const failed = steps.filter(step => m.steps[step] === "FAIL");
   const record: RunRecord = { commit, run: m.run, verdict: m.verdict, at, failed };
   if (m.verdict === "held") {
@@ -195,12 +197,15 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   state[part].last_run = record;
   writeState(fx.layout.state, state);
   if (m.verdict === "green") {
+    // Read once: the status counts them, and the records are written from them.
+    const listed = listedRecords(m.run);
+    record.listed = { pending: listed.pending.length, improved: listed.improved.length };
     state[part].last_green = record;
     fx.log(`${part} green at ${short(commit)}; logs ${m.run}`);
     clearCulprits(fx, state, part, commit);
     if (part === "core") moveVerified(fx, state, commit);
     writeState(fx.layout.state, state);
-    await writeRecords(fx, state, part, commit, m.run);
+    await writeRecords(fx, state, part, commit, m.run, listed);
     return;
   }
   fx.log(`${part} RED at ${short(commit)}: ${failed.join(", ")}; logs ${m.run}`);
@@ -235,6 +240,21 @@ function pushVerified(fx: Effects, state: State): void {
   fx.log(pushed.line);
   if (pushed.ok) { state.pushed = verified; delete state.push_failed_at; }
   else state.push_failed_at = fx.now().toISOString();
+}
+
+/**
+ * `work`, with the state saying what the controller is doing while it runs,
+ * so `--status` can tell. `since` names when the piece of work began, when
+ * it began before this call.
+ */
+function doing<T>(fx: Effects, state: State, what: Doing["doing"], commit: string, work: () => T, since = fx.now().toISOString()): T {
+  state.now = { doing: what, commit, since };
+  writeState(fx.layout.state, state);
+  try { return work(); }
+  finally {
+    delete state.now;
+    writeState(fx.layout.state, state);
+  }
 }
 
 function task(fx: Effects, state: State, line: string): void {
@@ -356,8 +376,7 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     // found at the commit that added it.
     const present = steps.filter(step => all.includes(step));
     if (!present.length) return result("green", "", []);
-    fx.admit();
-    const m = fx.gate.run(commit, present, `${part}-probe`);
+    const m = doing(fx, state, "probe", commit, () => { fx.admit(); return fx.gate.run(commit, present, `${part}-probe`); });
     const at = fx.now().toISOString();
     for (const step of present) {
       const verdict = m.steps[step] === "PASS" ? "green" : m.steps[step] === "FAIL" ? "red" : null;
@@ -384,17 +403,18 @@ function landedReverts(git: Git, tip: string, state: State): Set<string> {
   return landed;
 }
 
-async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string): Promise<void> {
+async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: ReturnType<typeof listedRecords>): Promise<void> {
   if (state.records?.commit === commit) return;
-  const listed = listedRecords(run);
   if (!listed.pending.length && !listed.improved.length) return;
   fx.log(`records: ${listed.pending.length} pending and ${listed.improved.length} improved case(s) listed at ${short(commit)}`);
   const at = fx.now().toISOString();
   try {
-    fx.admit();
-    const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
-    const tree = new Git(fx.layout.tree, fx.git.env);
-    const recorded = recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run), recordsMessage(commit, part, run, pin, listed));
+    const recorded = doing(fx, state, "records", commit, () => {
+      fx.admit();
+      const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
+      const tree = new Git(fx.layout.tree, fx.git.env);
+      return recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run), recordsMessage(commit, part, run, pin, listed));
+    }, at);
     if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, RECORDER_LOG)}`);
     if (recorded.kind !== "committed") {
       state.records = { commit, at, submitted: null, result: recorded.kind === "refused" ? `wrote only outside the records: ${recorded.refused.join(", ")}` : "recorded nothing" };
@@ -430,13 +450,12 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
     fx.log(`benchmarks at ${short(verified)}: ${result}`);
     writeState(fx.layout.state, state);
   };
-  fx.admit();
-  const built = fx.gate.run(verified, ["build"], "bench-build");
+  const built = doing(fx, state, "benchmarks", verified, () => { fx.admit(); return fx.gate.run(verified, ["build"], "bench-build"); }, at);
   if (built.verdict !== "green") { attempt(built.run, `not run: the build at verified is ${built.verdict}`, false); return "done"; }
   const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`);
   mkdirSync(run, { recursive: true });
   fx.log(`benchmarks: nts-bench on verified ${short(verified)}; logs ${run}`);
-  const measured = fx.bench(fx.layout.tree, run);
+  const measured = doing(fx, state, "benchmarks", verified, () => fx.bench(fx.layout.tree, run), at);
   const tree = new Git(fx.layout.tree, fx.git.env);
   const found = resultsCommit(tree, verified);
   if ("none" in found) {
@@ -448,6 +467,8 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
   const submitted = await submitTo(fx.queue, found.commit, { first: false });
   attempt(run, `run record ${short(found.commit)}${measured.status ? ` (nts-bench exited ${measured.status})` : ""}: ${submitted.line}`, true, submitted.submitted ? found.commit : null);
   const slower = slowerRows(tree.run(["show", `${found.commit}:${FULL_MD}`]));
+  state.bench!.slower = slower;
+  writeState(fx.layout.state, state);
   if (slower.length) task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
   return "done";
 }
@@ -636,6 +657,16 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
   };
 }
 
+/** The process the service's lock names, and whether it still runs; null when the lock names none. */
+export function lockHolder(lock: string): { pid: number; alive: boolean } | null {
+  let pid = 0;
+  try { pid = Number(readFileSync(join(lock, "pid"), "utf8")); } catch { return null; }
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+  // Signal 0 is never delivered: it only asks whether the process exists.
+  try { process.kill(pid, 0); return { pid, alive: true }; }
+  catch (error) { return { pid, alive: (error as NodeJS.ErrnoException).code === "EPERM" }; }
+}
+
 /** One service at a time: a lock directory naming its holder, taken over from a dead one. */
 function takeLock(lock: string): void {
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -646,11 +677,8 @@ function takeLock(lock: string): void {
       return;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let holder = 0;
-      try { holder = Number(readFileSync(join(lock, "pid"), "utf8")); } catch {}
-      let alive = false;
-      try { if (holder) { process.kill(holder, 0); alive = true; } } catch (e) { alive = (e as NodeJS.ErrnoException).code === "EPERM"; }
-      if (alive) throw new Error(`the full check is already running (pid ${holder}, ${lock})`);
+      const holder = lockHolder(lock);
+      if (holder?.alive) throw new Error(`the full check is already running (pid ${holder.pid}, ${lock})`);
       rmSync(lock, { recursive: true, force: true });
     }
   }
@@ -687,47 +715,137 @@ export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: I
   return true;
 }
 
-function statusLines(state: State): string[] {
-  const run = (r?: RunRecord) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
-  return [
-    `core: last ${run(state.core.last_run)}`, `      green ${run(state.core.last_green)}`,
-    `wide: last ${run(state.wide.last_run)}`, `      green ${run(state.wide.last_green)}`,
-    `verified pushed: ${state.pushed ? short(state.pushed) : "never"}`,
-    `culprits: ${state.culprits.map(c => `${short(c.commit)} (${c.steps.join(", ")}) revert ${c.revert ? short(c.revert) : "none"}${c.reason ? ` -- ${c.reason}` : ""}`).join("; ") || "none"}`,
-    `records: ${state.records ? `${short(state.records.commit)} ${state.records.result}` : "none"}`,
-    `benchmarks: ${state.bench ? `${short(state.bench.commit)} at ${state.bench.at}: ${state.bench.result}; ${state.bench.run}` : "none"}`,
-    `count: ${state.count ? `${state.count.verdict} at ${state.count.at}, ${state.count.lines.length} line(s)` : "never"}`,
-    ...state.count?.lines.map(line => `  ${line}`) ?? [],
-    "tasks for an issue:", ...state.tasks.map(t => `  ${t.at} ${t.line}`),
-  ];
+/** A part's runs as the status gives them. */
+type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null };
+
+/**
+ * The full check as `--status --json` prints it, version 1: whether its
+ * controller runs and what it is doing, main and verified and how far
+ * verified is behind, each part's runs, the culprits, the cases each green
+ * run listed for the records, the benchmarks, the hourly count and the task
+ * lines. Times are ISO strings; durations are seconds, as numbers. The text
+ * `--status` prints is rendered from this.
+ */
+export type FullCheckStatus = {
+  version: 1; kind: "full-check"; at: string;
+  controller: { pid: number | null; running: boolean };
+  now: (Doing & { seconds: number }) | null;
+  main: string | null;
+  verified: { commit: string | null; pushed: string | null };
+  /** The commits on main that verified has not reached, and how long the oldest has waited since it landed; null with nothing verified. */
+  behind: { commits: number; oldest_landed_at: string | null; delay_s: number | null } | null;
+  core: PartStatus;
+  wide: PartStatus & { slot: string | null };
+  culprits: Culprit[];
+  /** The cases each part's last green run listed, and the last records commit. */
+  records: { core: RunRecord["listed"] | null; wide: RunRecord["listed"] | null; last: State["records"] | null };
+  benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null };
+  count: State["count"] | null;
+  tasks: State["tasks"];
+};
+
+export type StatusInputs = {
+  main: string | null; verified: string | null;
+  /** main's commits that verified does not have, oldest first; null with nothing verified. */
+  unverified: readonly string[] | null;
+  /** When a commit landed, as an ISO time. */
+  landedAt: (commit: string) => string;
+  controller: { pid: number; alive: boolean } | null;
+  now: Date;
+};
+
+export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckStatus {
+  const now = inputs.now.getTime(), running = inputs.controller?.alive === true;
+  const part = (p: PartState): PartStatus => ({ last_run: p.last_run ?? null, last_green: p.last_green ?? null });
+  const oldest = inputs.unverified?.length ? inputs.unverified.map(inputs.landedAt).sort()[0]! : null;
+  return {
+    version: 1, kind: "full-check", at: inputs.now.toISOString(),
+    controller: { pid: inputs.controller?.pid ?? null, running },
+    // What a controller that stopped was doing is not being done.
+    now: running && state.now ? { ...state.now, seconds: Math.round((now - Date.parse(state.now.since)) / 1000) } : null,
+    main: inputs.main,
+    verified: { commit: inputs.verified, pushed: state.pushed ?? null },
+    behind: inputs.unverified === null ? null
+      : { commits: inputs.unverified.length, oldest_landed_at: oldest, delay_s: oldest === null ? null : Math.round((now - Date.parse(oldest)) / 1000) },
+    core: part(state.core),
+    wide: { ...part(state.wide), slot: state.wide.slot ?? null },
+    culprits: state.culprits,
+    records: { core: state.core.last_green?.listed ?? null, wide: state.wide.last_green?.listed ?? null, last: state.records ?? null },
+    benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null },
+    count: state.count ?? null,
+    tasks: state.tasks,
+  };
 }
 
-export function parseOptions(argv: readonly string[]): { once: boolean; status: boolean; schedule: Schedule; quietWait: number } {
+const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
+
+/** The status as `--status` prints it, from the same model `--json` prints. */
+export function statusText(s: FullCheckStatus): string {
+  const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
+  const listed = (l: RunRecord["listed"] | null) => l ? `${l.pending} pending and ${l.improved} improved` : "none";
+  const doing = s.now ? `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
+  return [
+    `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
+    `core: last ${run(s.core.last_run)}`, `      green ${run(s.core.last_green)}`,
+    `wide: last ${run(s.wide.last_run)}`, `      green ${run(s.wide.last_green)}`,
+    s.verified.commit && s.behind
+      ? `verified ${short(s.verified.commit)}: ${s.behind.commits} commit(s) behind main${s.behind.delay_s === null ? "" : `, the oldest landed ${minutes(s.behind.delay_s)} ago`}`
+      : "verified: none yet",
+    `verified pushed: ${s.verified.pushed ? short(s.verified.pushed) : "never"}`,
+    `culprits: ${s.culprits.map(c => `${short(c.commit)} (${c.steps.join(", ")}) revert ${c.revert ? short(c.revert) : "none"}${c.reason ? ` -- ${c.reason}` : ""}`).join("; ") || "none"}`,
+    `records: listed core ${listed(s.records.core)}, wide ${listed(s.records.wide)}; last ${s.records.last ? `${short(s.records.last.commit)} ${s.records.last.result}` : "none"}`,
+    `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
+      + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}` : ""}`,
+    `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,
+    ...s.count?.lines.map(line => `  ${line}`) ?? [],
+    "tasks for an issue:", ...s.tasks.map(t => `  ${t.at} ${t.line}`),
+  ].join("\n");
+}
+
+/** The status on this machine: the full check's state, its lock, the repository and the landing check's answers. */
+export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus {
+  const git = new Git(ROOT);
+  const main = git.commit("refs/heads/main"), verified = git.commit("refs/heads/verified");
+  const landed = landedTimes();
+  // A commit the landing check has no answer for counts from when it was committed.
+  const landedAt = (commit: string) => landed.get(commit) ?? new Date(git.run(["log", "-1", "--format=%cI", commit])).toISOString();
+  return fullCheckStatus(readState(layout.state), {
+    main, verified, unverified: main && verified ? firstParents(git, verified, main) : null, landedAt, controller: lockHolder(layout.lock), now,
+  });
+}
+
+export function parseOptions(argv: readonly string[]): { once: boolean; status: boolean; json: boolean; schedule: Schedule; quietWait: number } {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let once = false, status = false, quietWait = DEFAULT_QUIET_WAIT_MINUTES;
+  let once = false, status = false, json = false, quietWait = DEFAULT_QUIET_WAIT_MINUTES;
   for (const arg of argv) {
     if (arg === "--once") once = true;
     else if (arg === "--status") status = true;
+    else if (arg === "--json") json = true;
     else if (/^--bench-wait=\d+$/.test(arg)) quietWait = Number(arg.slice(13));
     else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
     else if (arg.startsWith("--nightly-at=")) {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--bench-wait=<minutes>]`);
+    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json]] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--bench-wait=<minutes>]`);
   }
-  return { once, status, schedule, quietWait };
+  if (json && !status) throw new Error("--json is for --status");
+  return { once, status, json, schedule, quietWait };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
   const layout = defaultLayout();
   if (options.status) {
-    console.log(statusLines(readState(layout.state)).join("\n"));
+    const status = machineStatus(layout);
+    console.log(options.json ? JSON.stringify(status, null, 2) : statusText(status));
     return 0;
   }
   mkdirSync(layout.home, { recursive: true });
   takeLock(layout.lock);
+  // Nothing runs before the first cycle: what a stopped controller was doing is not being done.
+  const left = readState(layout.state);
+  if (left.now) { delete left.now; writeState(layout.state, left); }
   const fx = production(options);
   stamp(`full check: core on main, wide steps at ${options.schedule.wide.join(", ")} and ${options.schedule.nightly} nightly with the benchmarks (waiting up to ${options.quietWait} min for quiet); tree ${layout.tree}`);
   const nap = new Int32Array(new SharedArrayBuffer(4));

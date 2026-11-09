@@ -37,6 +37,8 @@ export type Checking = Entry & { started_at: string; base?: string; tip?: string
 export type State = "landed" | "refused" | "withdrawn" | "held";
 export type Result = {
   version: 1; id: string; sha: string; state: State; message: string; at: string;
+  /** The task's branch the change came from (Entry.branch); absent in answers from before it was kept. */
+  task?: string | null;
   /** main before and after; `commits` are base..tip, the change as it landed. */
   base?: string; tip?: string; commits?: string[]; run?: string;
   landing?: string[]; deferred?: string[]; estimate_s?: number; wall_s?: number;
@@ -106,8 +108,8 @@ export class Queue {
   }
 
   /** Answer `entry`: its result is durable before it leaves `checking.json`. */
-  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at">): Result {
-    const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), ...result };
+  answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task">): Result {
+    const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result };
     durableRecord(this.path("results", `${entry.id}.json`), full);
     if (result.state === "held") durableRecord(this.path("held", `${entry.id}.json`), entry);
     if (this.checking()?.id === entry.id) rmSync(this.path("checking.json"), { force: true });

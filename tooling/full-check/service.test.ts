@@ -11,7 +11,7 @@ import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import {QUIET_ASK_SECONDS} from "./bench.ts";
 import type { Recorder } from "./records.ts";
-import {cycle, followVerified, parseOptions, partSteps, RECORDER_LOG, recordPending, type Effects} from "./service.ts";
+import {cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordPending, statusText, type Effects} from "./service.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
@@ -281,6 +281,7 @@ test("a green run that listed pending cases records them, commits exactly the re
   await cycle(fx);
   const state = readState(repo.layout.state);
   assert.equal(state.core.last_green?.commit, commit);
+  assert.deepEqual(state.core.last_green?.listed, { pending: 1, improved: 0 }, "the green run keeps what its checks listed");
   assert.equal(state.records?.commit, commit);
   const records = state.records!.submitted!;
   assert.ok(records, state.records?.result);
@@ -346,6 +347,7 @@ test("the nightly slot runs the wide steps and makes nts-bench due; it runs on v
   assert.equal(repo.git.run(["rev-parse", `${results}^`]), first);
   assert.equal(repo.git.commit(`refs/full-check/benchmarks/${first.slice(0, 12)}`), results);
   assert.ok(night.lines.some(line => line.includes("TASK") && line.includes("2 benchmark row(s) slower than their own best") && line.includes("awfy-list, richards")), night.lines.join("\n"));
+  assert.deepEqual(readState(repo.layout.state).bench?.slower, ["awfy-list", "richards"], "the slower rows are kept for the status");
 
   // The next night, verified unchanged: no second run of the same commit.
   const next = harness(repo, gate, { now: new Date(2026, 10, 8, 3, 30), bench });
@@ -599,4 +601,44 @@ test("an issue is told before it is reopened, and a failure of either is said", 
   assert.deepEqual(reopenIssue(gh("comment"), 42, "x"), { ok: false, line: "issue #42 was not told: comment refused" });
   assert.equal(calls.length, 1, "an issue that was not told is not reopened");
   assert.deepEqual(reopenIssue(gh("reopen"), 42, "x"), { ok: false, line: "issue #42 was told, but not reopened: reopen refused" });
+});
+
+test("the state says what the controller is doing while a part runs, and nothing once it ends", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  const seen: unknown[] = [];
+  const run = gate.run.bind(gate);
+  gate.run = (commit, steps, label) => { seen.push(readState(repo.layout.state).now); return run(commit, steps, label); };
+  const fx = harness(repo, gate);
+  const commit = repo.commit({ "a.txt": "1\n" }, "first");
+  assert.equal(await cycle(fx), "core");
+  assert.deepEqual(seen, [{ doing: "core", commit, since: fx.now().toISOString() }]);
+  assert.equal(readState(repo.layout.state).now, undefined);
+});
+
+test("the status model: what a live controller does, how far verified is behind and since when, numbers as numbers", () => {
+  const state = { ...readState("/nonexistent"), now: { doing: "records" as const, commit: "c".repeat(40), since: "2026-11-09T10:00:00.000Z" }, pushed: "v".repeat(40) };
+  state.core.last_green = { commit: "v".repeat(40), run: "/runs/core", verdict: "green", at: "2026-11-09T09:00:00.000Z", failed: [], listed: { pending: 3, improved: 1 } };
+  const inputs = {
+    main: "m".repeat(40), verified: "v".repeat(40), unverified: ["a".repeat(40), "m".repeat(40)],
+    landedAt: (commit: string) => commit.startsWith("a") ? "2026-11-09T10:30:00.000Z" : "2026-11-09T10:50:00.000Z",
+    controller: { pid: 42, alive: true }, now: new Date("2026-11-09T11:00:00.000Z"),
+  };
+  const s = fullCheckStatus(state, inputs);
+  assert.equal(s.version, 1);
+  assert.equal(s.kind, "full-check");
+  assert.deepEqual(s.now, { ...state.now, seconds: 3600 });
+  assert.deepEqual(s.behind, { commits: 2, oldest_landed_at: "2026-11-09T10:30:00.000Z", delay_s: 1800 });
+  assert.deepEqual(s.records.core, { pending: 3, improved: 1 });
+  assert.equal(s.records.wide, null);
+  assert.deepEqual(s.verified, { commit: "v".repeat(40), pushed: "v".repeat(40) });
+  assert.equal(fullCheckStatus(state, { ...inputs, controller: { pid: 42, alive: false } }).now, null, "a stopped controller is doing nothing");
+  assert.equal(fullCheckStatus(state, { ...inputs, verified: null, unverified: null }).behind, null);
+  assert.deepEqual(fullCheckStatus(state, { ...inputs, unverified: [] }).behind, { commits: 0, oldest_landed_at: null, delay_s: null });
+  const text = statusText(s);
+  assert.match(text, /^controller: running \(pid 42\); records at cccccccccccc for 60 min$/m);
+  assert.match(text, /^verified vvvvvvvvvvvv: 2 commit\(s\) behind main, the oldest landed 30 min ago$/m);
+  assert.match(text, /^records: listed core 3 pending and 1 improved, wide none; last none$/m);
+  assert.deepEqual(parseOptions(["--status", "--json"]).json, true);
+  assert.throws(() => parseOptions(["--json"]), /--json is for --status/);
 });

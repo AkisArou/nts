@@ -99,7 +99,9 @@ logs. Memory pressure retries by itself; any other unfinished run holds the
 change (`check.ts retry <id>`), as does a step stopped at its time bound. A
 single case past its own bound (a compile past ten CPU minutes, a compiled
 call past its allowance) is a recorded `timeout`, a loud defect. Withdraw with `check.ts withdraw <id|commit>`,
-never by stopping a unit. `check.ts status` lists the queue. Documentation
+never by stopping a unit. `check.ts status` lists the queue, and
+`node tooling/full-check/service.ts --status` says what the full check is
+doing; with `--json`, each prints the same as JSON. Documentation
 and fixtures land the same way, in seconds. A new gate step needs a
 `LANDING` row in `owed.mjs`, and a new tooling directory a rule, so that a
 change owes only what it reaches.
