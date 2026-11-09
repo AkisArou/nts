@@ -77,9 +77,14 @@ follows; this page is the why and the whole picture.
   no evidence packets. The landing check is the evidence.
 - **Which agents** (Codex or Claude sessions, started by hand or by
   signalbox) is decided separately; this page does not depend on it.
-- **The coordinator** keeps the task list, writes and slices tasks, agrees
-  designs, reads the diffs of risky changes (the compiler's core, the gate
-  itself), watches the full check, and follows reverts up.
+- **The coordinator** keeps the issues: it makes and slices them with
+  `tooling/tasks/new.ts`, and makes an issue of each task line the full
+  check leaves. It agrees designs, reads the diffs of risky changes (the
+  compiler's core, the gate, the landing and full-check tools) before they
+  are queued, starts an agent for each task in the plan's order, and sees
+  that an issue a revert reopened is taken again. It works in sittings: each
+  starts from the repository, the issues and the two checks' status, and
+  leaves nothing that only its transcript holds.
 
 ## Landing: the landing check
 
