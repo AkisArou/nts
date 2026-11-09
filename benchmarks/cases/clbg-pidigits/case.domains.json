@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 1000,
+        "allowNaN": true,
+        "reason": "Bound the spigot's digit count, whose cost grows faster than quadratically, within the Node oracle's CPU budget, while covering benchmark seed 500 and published input 30."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 1000,
+        "allowNaN": true,
+        "reason": "Bound the spigot's digit count, whose cost grows faster than quadratically, within the Node oracle's CPU budget, while covering benchmark seed 500 and published input 30."
+      }
+    }
+  }
+}

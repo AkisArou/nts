@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound the generated FASTA input within the Node oracle's heap budget, which a pool size of 2147483647 exhausts, while covering benchmark seed 4000 and published input 1000."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound the generated FASTA input within the Node oracle's heap budget, which a pool size of 2147483647 exhausts, while covering benchmark seed 4000 and published input 1000."
+      }
+    }
+  }
+}
