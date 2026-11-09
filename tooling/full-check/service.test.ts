@@ -47,7 +47,6 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
       return { ok: r.status === 0, line: r.status === 0 ? `pushed ${commit}` : r.stderr };
     },
     issue: (n, comment) => { told.push({ n, comment }); return options.issue?.(n, comment) ?? { ok: true, line: `issue #${n} is open again` }; },
-    admit: () => {},
     now: () => options.now ?? new Date(2026, 10, 6, 12, 0),
     log: line => lines.push(line),
     schedule: options.schedule ?? { wide: ["10:00"], nightly: "03:00" },

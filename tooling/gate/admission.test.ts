@@ -7,12 +7,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, renameSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { createFeed, memAvailableGB, TemporaryAdmission } from "./admission.ts";
+import { createFeed, TemporaryAdmission } from "./admission.ts";
 import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./tokenpool.mjs";
 import { waitFor } from "./test-wait.ts";
@@ -64,20 +63,6 @@ test("gate policy rejects a replaced registration and outside or escaping captur
   renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
   assert.throws(() => admitted.check(), /temporary directory was replaced/);
   assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
-});
-
-test("MemAvailable is read from the file in /proc/meminfo's format", () => {
-  const dir = mkdtempSync(join(tmpdir(), "nts-admission-"));
-  try {
-    const file = join(dir, "meminfo");
-    writeFileSync(file, "MemTotal:       32000000 kB\nMemFree:          100000 kB\nMemAvailable:   15728640 kB\n");
-    assert.equal(memAvailableGB(file), 15);
-    writeFileSync(file, "MemTotal:       32000000 kB\n");
-    assert.equal(memAvailableGB(file), null, "a file naming no MemAvailable is no answer, not zero");
-    assert.equal(memAvailableGB(join(dir, "missing")), null);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test("token pool: a running case finishes through a hold, and the next waits until the hold ends", async () => {

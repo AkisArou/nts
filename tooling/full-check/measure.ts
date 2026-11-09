@@ -95,6 +95,10 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       ...fullOwned({ candidate: false, commit, label: 'MAIN', run, tree: layout.tree, target: layout.target }, steps),
       NTS_GATE_LOCK_FD: '8', CARGO_TARGET_DIR: layout.target,
       NTS_BIN: join(layout.target, 'release/nts'), NTS_SUITE_BIN: join(layout.target, 'release/nts-suite'),
+      // The run reserves its memory in the machine's ledger at the full
+      // check's priority: it waits its turn there, and yields to a landing
+      // check's or an agent's work, so nothing here waits for the host's.
+      NTS_MEMORY_PRIORITY: 'full-check',
     };
     let out: number | undefined;
     try {

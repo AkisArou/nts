@@ -2,29 +2,11 @@
 // none while its job's memory reservation is outranked; and a run temporary's
 // disk admission. Memory itself is the memory ledger's (memory-ledger.ts): a
 // job reserves it once, and no case reads the host's.
-import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
+import { existsSync, realpathSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
-
-// The full check's own wait before a cycle still reads the host this way
-// (tooling/full-check/service.ts).
-export const RESUME_AT_GB = 14;
-
-// `NTS_MEMINFO` names another file in /proc/meminfo's format. Absent, it is
-// the kernel's.
-const MEMINFO = process.env.NTS_MEMINFO ?? "/proc/meminfo";
-
-/** MemAvailable in GiB, or `null` when the file cannot be read or names none. */
-export function memAvailableGB(path: string = MEMINFO): number | null {
-  try {
-    const kb = /^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync(path, "utf8"))?.[1];
-    return kb === undefined ? null : Number(kb) / 2 ** 20;
-  } catch {
-    return null;
-  }
-}
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };

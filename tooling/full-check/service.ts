@@ -43,7 +43,6 @@ import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync,
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
 import {candidateCommand} from '../landing/candidate-environment.ts';
 import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
@@ -99,8 +98,6 @@ export type Effects = {
   push: (commit: string) => { ok: boolean; line: string };
   /** Comment on GitHub issue `n` and reopen it (revert.ts's reopenIssue). */
   issue: (n: number, comment: string) => { ok: boolean; line: string };
-  /** Return once a heavy phase may start (AGENTS.md: 14 GB available). */
-  admit: () => void;
   now: () => Date;
   log: (line: string) => void;
   schedule: Schedule;
@@ -185,7 +182,6 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     return;
   }
   const m = doing(fx, state, part, commit, () => {
-    fx.admit();
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
     return fx.gate.run(commit, steps, part);
   }, at);
@@ -378,7 +374,7 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     // found at the commit that added it.
     const present = steps.filter(step => all.includes(step));
     if (!present.length) return result("green", "", []);
-    const m = doing(fx, state, "probe", commit, () => { fx.admit(); return fx.gate.run(commit, present, `${part}-probe`); });
+    const m = doing(fx, state, "probe", commit, () => fx.gate.run(commit, present, `${part}-probe`));
     const at = fx.now().toISOString();
     for (const step of present) {
       const verdict = m.steps[step] === "PASS" ? "green" : m.steps[step] === "FAIL" ? "red" : null;
@@ -428,7 +424,6 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
   state[part].records = records;
   try {
     const recorded = doing(fx, state, "records", commit, () => {
-      fx.admit();
       const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
       const tree = new Git(fx.layout.tree, fx.git.env);
       return { pin, ...recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run, part)) };
@@ -627,7 +622,7 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
     writeState(fx.layout.state, state);
     return "waiting";
   };
-  const built = doing(fx, state, "benchmarks", verified, () => { fx.admit(); return fx.gate.run(verified, ["build"], "bench-build"); }, at);
+  const built = doing(fx, state, "benchmarks", verified, () => fx.gate.run(verified, ["build"], "bench-build"), at);
   if (built.verdict === "held") return wait(`the build at verified was held (${built.reasons.build ?? "no reason given"}); see ${built.run}`);
   if (built.verdict !== "green") return endNight(fx, state, { commit: verified, at, run: built.run, result: `not run: the build at verified is ${built.verdict}`, outcome: "not-run" });
   const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`);
@@ -798,26 +793,14 @@ export function recordPending(tree: string, pin: string, run: string, part: Part
   let r: ReturnType<typeof spawnSync>;
   try {
     r = candidateCommand(selected.node, {
-      tree, run: join(run, 'records'), owned: { NTS_BIN: pin, NTS_CHECKERS: '1' },
+      // Its jobs reserve their memory in the machine's ledger at the full
+      // check's priority, below a landing check's and an agent's.
+      tree, run: join(run, 'records'), owned: { NTS_BIN: pin, NTS_CHECKERS: '1', NTS_MEMORY_PRIORITY: 'full-check' },
       command: [selected.node, script, "--after", part, run], discardTemporary: true,
     }, selected.env, { output: out });
   } finally { closeSync(out); }
   if (r.error) appendFileSync(log, `\n${r.error.message}\n`);
   return { status: r.status ?? 1, output: tail(log) };
-}
-
-/** Wait, without spinning, until MemAvailable reaches the threshold AGENTS.md sets. */
-export function admitWhenMemory(log: (line: string) => void, read = memAvailableGB): () => void {
-  return () => {
-    let said = false;
-    const nap = new Int32Array(new SharedArrayBuffer(4));
-    for (;;) {
-      const gb = read();
-      if (gb === null || gb >= RESUME_AT_GB) return;
-      if (!said) { log(`waiting for memory: ${gb.toFixed(1)} GB available, ${RESUME_AT_GB} needed to start`); said = true; }
-      Atomics.wait(nap, 0, 0, 30_000);
-    }
-  };
 }
 
 function production(options: { schedule: Schedule }): Effects {
@@ -842,7 +825,6 @@ function production(options: { schedule: Schedule }): Effects {
       return r.status === 0 ? { ok: true, line: `pushed verified ${short(commit)} to origin` } : { ok: false, line: `could not push verified ${short(commit)}: ${r.stderr.trim()}; trying again next cycle` };
     },
     issue: (n, comment) => reopenIssue(ghIn(ROOT), n, comment),
-    admit: admitWhenMemory(stamp),
     now: () => new Date(),
     log: stamp,
     schedule: options.schedule,
