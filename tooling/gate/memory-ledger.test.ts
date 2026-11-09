@@ -8,12 +8,13 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, lockLedger, ownedBy, parseBytes, parseMeminfo, processCharge, processTree, readLedger, reserve,
+  admissible, cgroupCharge, lockLedger, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
@@ -450,6 +451,54 @@ test("decisions are made one at a time: the lock excludes every other process, a
   const after = lockLedger(dir);
   assert.ok(after, "a holder killed outright leaves no lock behind");
   after.release();
+});
+
+test("a reservation is outranked while a live request of higher priority waits, and a job inside it is outranked with it", async t => {
+  const f = fixture(t); // 20 available
+  const full = await f.ask({ bytes: 10 * GiB, what: "full", priority: "full-check" }); // room for 8 now
+  assert.equal(full.outranked(), false);
+  // A landing request whose waiter has exited outranks nobody, though its
+  // entry stays until the next decision drops it.
+  const dead = { ...processIdentity(process.pid)!, start: "0" };
+  const ghost = { version: 2, id: randomUUID(), seq: 1, bytes: GiB, what: "ghost", priority: "landing", owner: dead, waiter: dead,
+    measure: { tree: true, cgroup: null }, since: new Date().toISOString(), grows: null };
+  mkdirSync(join(f.dir, "waiting"), { recursive: true });
+  writeFileSync(join(f.dir, "waiting", `${ghost.id}.json`), JSON.stringify(ghost));
+  assert.equal(full.outranked(), false, "only live requests count");
+  const peer = f.ask({ bytes: 9 * GiB, what: "peer", priority: "full-check" });
+  await waitFor("the peer to wait", () => f.of("peer").length >= 1, { stopped: f.stopped });
+  assert.equal(full.outranked(), false, "a request of its own priority waits its turn");
+  const agent = f.ask({ bytes: 9 * GiB, what: "agent" });
+  await waitFor("the agent's request to wait", () => f.of("agent").length >= 1, { stopped: f.stopped });
+  assert.equal(full.outranked(), true, "an agent's request outranks the full check");
+  const inner = await f.ask({ bytes: GiB, what: "inner" }, { env: { ...f.env, ...full.env } });
+  assert.deepEqual([inner.inherited, inner.outranked()], [true, true], "a job inside the reservation is outranked with it");
+  f.used.set("full", 5 * GiB); // room for 13: the agent's 9 goes ahead of the peer's
+  const admitted = await agent;
+  assert.equal(full.outranked(), false, "only a request of its own priority still waits");
+  admitted.release();
+  (await peer).release();
+  full.release();
+  assert.equal(full.outranked(), false);
+});
+
+test("an entry an older admit.ts wrote, version 1 without a growth, counts as a reservation of its own", async t => {
+  const f = fixture(t); // 20 available
+  const owner = ownerProcess(t);
+  const who = processIdentity(owner.pid)!;
+  const old = { version: 1, id: randomUUID(), seq: 0, bytes: 10 * GiB, what: "older admit.ts", priority: "agent", owner: who, waiter: who,
+    measure: { tree: true, cgroup: null }, since: new Date().toISOString() };
+  mkdirSync(join(f.dir, "admitted"), { recursive: true });
+  writeFileSync(join(f.dir, "admitted", `${old.id}.json`), JSON.stringify(old));
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => [e.what, e.version, e.grows, e.live]), [["older admit.ts", 2, null, true]]);
+  const next = f.ask({ bytes: 9 * GiB, what: "next" });
+  await waitFor("the next request to wait behind it", () => f.of("next").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("next").every(d => !d.admitted && d.pendingBytes === 10 * GiB), "its 10 GiB are promised to it");
+  const exited = once(owner, "exit");
+  owner.kill("SIGKILL");
+  await exited;
+  (await next).release();
+  assert.ok(f.lines.includes(`memory: dropped older admit.ts's reservation of 10.0 GiB: its owner, pid ${owner.pid}, has exited`), f.lines.join("\n"));
 });
 
 test("a shrink writes its entry under the lock: it gives back at once, and the ledger sees it once the lock is free", async t => {

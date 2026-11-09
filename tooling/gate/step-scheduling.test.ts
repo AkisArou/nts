@@ -154,6 +154,8 @@ type MemoryFixture = {
   /** A shell script every step runs, given the step's name and the fixture's directory. */
   payload: string;
   availableKiB: number;
+  /** The run's place in the ledger's queue, as its launcher's code gives it. */
+  priority?: "landing" | "agent" | "full-check";
   /** Runs before the runner starts, with the fixture's directory and memory. */
   before?: (own: string, memory: OwnMemory) => void;
 };
@@ -164,7 +166,7 @@ type MemoryFixture = {
  * 32 GiB machine with `availableKiB` of it available, read from a file the
  * test writes, and a memory ledger of the run's own.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, before }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, priority, before }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   t.after(() => { removable(own); rmSync(own, { recursive: true, force: true }); });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
@@ -200,7 +202,7 @@ fi
   const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB: 32 * 2 ** 20 });
   before?.(own, memory);
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, CARGO_TARGET_DIR: target,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, CARGO_TARGET_DIR: target, ...(priority ? { NTS_MEMORY_PRIORITY: priority } : {}),
   } });
   const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
@@ -315,7 +317,82 @@ esac
   });
   assert.equal(result.status, 0, output);
   assert.equal(summary.verdict, "green");
-  assert.match(output, /memory: gate run .* waits to grow by 6\.0 GiB to 8\.0 GiB \(agent\): .*; 1 ahead of it in the queue/);
+  // Behind the neighbour's request, or after it if the neighbour's next look
+  // came first: either way the neighbour had memory the run no longer used.
+  assert.match(output, /memory: gate run .* waits to grow by 6\.0 GiB to 8\.0 GiB \(agent\)/);
   assert.ok(summary.memory.shrinks >= 1, JSON.stringify(summary.memory));
   assert.deepEqual(await once(neighbour!, "exit"), [0, null], "the neighbour had its memory and gave it back");
+});
+
+// The landing check's request in the run's ledger: once the run's reservation
+// has grown to 4 GiB, it asks for 2 at landing priority, says when it is
+// admitted, and gives them back.
+const LANDING = `import { mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const [ledger, meminfo, own, module] = process.argv.slice(1);
+const { reserve } = await import(module);
+const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
+const admitted = join(ledger, "admitted");
+mkdirSync(admitted, { recursive: true });
+const full = () => readdirSync(admitted).some(name => {
+  try { const entry = JSON.parse(readFileSync(join(admitted, name), "utf8")); return entry.what.startsWith("gate run ") && entry.bytes >= 4 * 2 ** 30; } catch { return false; }
+});
+await until(admitted, full);
+const lines = [];
+const held = await reserve({ bytes: 2 * 2 ** 30, what: "landing", priority: "landing" },
+  { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50, report: line => lines.push(line) });
+writeFileSync(join(own, "landing-admitted"), lines.join("\\n") + "\\n");
+held.release();
+`;
+
+test("a run outranked by a request of higher priority starts nothing new and gives back what it does not use, then goes on", async t => {
+  // A full-check run whose eight integrity workers take a 1 GiB token the
+  // moment one comes back fills its reservation: 4 GiB, all the reading's
+  // 6.5 allow beside the 2 kept for the system. The landing check's 2 GiB do
+  // not fit beside them. Outranked, the run grants no token as its cases end
+  // and gives their memory back, so the landing check is admitted once a few
+  // cases have ended; then integrity goes on, each worker taking one more
+  // token before it ends.
+  let landing: ReturnType<typeof spawn> | undefined, fixture = "";
+  t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
+  const { result, summary, output } = memoryRun(t, {
+    steps: "integrity", availableKiB: 6.5 * 2 ** 20, priority: "full-check",
+    rows: { integrity: { elastic: true, slots: 8, min: 1, mem: 8, bound: 60 } },
+    times: "integrity\t100\t800\t8\n",
+    payload: `
+own=$2 gate=$(dirname "$0")
+case $1 in
+  integrity)
+    work() {
+      until [ -e "$own/landing-admitted" ]; do
+        bash "$gate/token.sh" node -e 0 || exit 1
+      done
+      bash "$gate/token.sh" node -e 0
+    }
+    pids=
+    for worker in 1 2 3 4 5 6 7 8; do work & pids="$pids $!"; done
+    for pid in $pids; do wait "$pid" || exit 1; done ;;
+esac
+`,
+    before: (own, memory) => {
+      fixture = own;
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      delete env.NTS_MEMORY_RESERVATION;
+      landing = spawn(process.execPath, ["--input-type=module", "-e", LANDING, memory.NTS_MEMORY_LEDGER, memory.NTS_MEMINFO, own,
+        pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });
+    },
+  });
+  assert.equal(result.status, 0, output);
+  assert.equal(summary.verdict, "green");
+  assert.deepEqual(await once(landing!, "exit"), [0, null], "the landing check had its memory and gave it back");
+  // The wait the ledger reports to the landing check: the run's look at the
+  // queue, once a second, and a few cases' time.
+  const told = readFileSync(join(fixture, "landing-admitted"), "utf8");
+  assert.match(told, /^memory: landing waits for 2\.0 GiB \(landing\): /m);
+  const waited = Number(/^memory: landing admitted with 2\.0 GiB after (\d+) s$/m.exec(told)?.[1]);
+  assert.ok(waited <= 5, `admitted after ${waited} s:\n${told}`);
+  assert.match(output, /memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use/);
+  assert.match(output, /memory: no request of higher priority waits any more: the run goes on after \d+ s/);
+  assert.ok(summary.memory.outranked >= 1 && summary.memory.shrinks >= 1, JSON.stringify(summary.memory));
+  assert.equal(summary.memory.priority, "full-check");
 });

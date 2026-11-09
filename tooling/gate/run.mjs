@@ -651,6 +651,7 @@ const tok = createTokenPool({
   // reservation, beside what a waiting fixed step has withheld; when it does
   // not fit, the run may ask the ledger for more.
   eligible: (step) => {
+    if (outranked()) return false;
     const row = BY_NAME.get(step);
     if (!row) return true;
     const u = used();
@@ -714,6 +715,16 @@ let pending = [];
 // which ask again the moment a case ends, cannot take each byte as it comes
 // back. A step the reservation cannot hold yet claims nothing: its memory
 // comes from the growth, and tokens keep the reservation busy meanwhile.
+//
+// **It yields to a request that outranks it.** While a request of higher
+// priority than the run's waits in the ledger (`outranked`, read on every
+// scheduling and grant decision, at most once a second), the run starts no
+// step, grants no token, grows by nothing, and gives back at once everything
+// beyond what runs: the request ahead of it waits only for the cases running
+// now to end, never for the rest of the run. Nothing running is stopped.
+// Once no such request waits, the run goes on as before. Without it, a
+// landing check could wait behind a full check's whole reservation until
+// the full check had finished.
 // ---------------------------------------------------------------------------
 const GiB = 2 ** 30;
 // One gibibyte: the rows reserve 0.1 to 8 of them, so a run grows from one
@@ -732,7 +743,9 @@ let growth = null; // { bytes, controller, withdrawn } while a growth waits
 let memoryWanted = 0;
 let withholdBytes = 0;
 let memoryCheck = null;
-const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shrinks: 0 };
+const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shrinks: 0, outranked: 0, outranked_s: 0 };
+// The ledger's last answer to `outranked`, when it was read, and since when it has been yes.
+let outrankedNow = false, outrankedRead = 0, outrankedSince = 0, outrankedLook = null;
 const reserved = () => reservation?.bytes ?? 0;
 
 // What a waiting token's share lacks in the reservation, beside what runs and
@@ -771,6 +784,33 @@ function neverFitting(step) {
 
 const noteSize = () => { memoryRecord.peak_bytes = Math.max(memoryRecord.peak_bytes, reserved()); };
 
+// Whether a request of higher priority than the run's waits in the ledger (see "Memory").
+function outranked() {
+  if (!reservation) return false;
+  const now = Date.now();
+  if (now - outrankedRead < 1000) return outrankedNow;
+  outrankedRead = now;
+  let answer = false;
+  try { answer = reservation.outranked(); }
+  catch (error) { process.stderr.write(`run.mjs: cannot read the memory ledger's queue: ${error.message}\n`); }
+  if (answer && !outrankedNow) {
+    outrankedSince = now;
+    memoryRecord.outranked++;
+    process.stdout.write("  memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use\n");
+  } else if (!answer && outrankedNow) {
+    memoryRecord.outranked_s += (now - outrankedSince) / 1000;
+    process.stdout.write(`  memory: no request of higher priority waits any more: the run goes on after ${Math.round((now - outrankedSince) / 1000)} s\n`);
+  }
+  outrankedNow = answer;
+  return answer;
+}
+
+// Outranked, the run may have nothing left that would schedule it again, so
+// it looks at the ledger again every second until it goes on.
+function lookAgain() {
+  outrankedLook ??= setTimeout(() => { outrankedLook = null; schedule(); }, 1000);
+}
+
 /** The run's reservation, before anything of it starts: one block, at its priority. */
 async function reserveMemory() {
   ({ totalBytes } = machineMemory(env));
@@ -787,24 +827,25 @@ async function reserveMemory() {
 }
 
 // After every scheduling pass: grow by what waits, withdraw a growth nothing
-// needs any more, give back slack beyond two blocks.
+// needs any more, give back slack beyond two blocks -- or, outranked, give
+// back everything beyond what runs and grow by nothing.
 function adjustMemory() {
   if (stopping || summaryWritten || !reservation) return;
-  const u = used();
-  const slack = reserved() - u.bytes - withholdBytes;
-  if (slack > 2 * BLOCK) {
-    const back = Math.floor((slack - 2 * BLOCK) / BLOCK) * BLOCK;
-    if (back > 0) {
-      memoryRecord.shrinks++;
-      reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
-    }
+  const u = used(), yielding = outranked();
+  const back = yielding ? reserved() - Math.max(1, u.bytes)
+    : Math.floor((reserved() - u.bytes - withholdBytes - 2 * BLOCK) / BLOCK) * BLOCK;
+  if (back > 0) {
+    memoryRecord.shrinks++;
+    reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
   }
   const need = Math.max(memoryWanted - reserved(), tokenShort(u));
+  // A growth that waits stays queued while the run yields: the request that
+  // outranks the run is ahead of it, so it cannot be admitted before that one.
   if (growth) {
     if (need <= 0 && !growth.withdrawn) { growth.withdrawn = true; growth.controller.abort(); }
     return;
   }
-  if (need <= 0) return;
+  if (need <= 0 || yielding) return;
   // Past what the machine could ever give, what waits fits only once running work ends.
   const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
   if (bytes <= 0) return;
@@ -826,6 +867,7 @@ function adjustMemory() {
 
 function schedule() {
   if (stopping) return;
+  const yielding = outranked();
   let progressed = true;
   while (progressed) {
     progressed = false;
@@ -861,6 +903,7 @@ function schedule() {
         progressed = true;
         break;
       }
+      if (yielding) continue;
       const u = used();
       const granted = admit(step, u);
       if (granted.slots === 0) {
@@ -889,6 +932,7 @@ function schedule() {
   grant();
   adjustMemory();
   if (pending.length === 0 && running.size === 0) done();
+  else if (outrankedNow && !summaryWritten) lookAgain();
 }
 
 function start(step, slots, rider = false) {
@@ -1105,6 +1149,8 @@ function done() {
   // Every step has drained, so the run's memory goes back to the ledger now.
   growth?.controller.abort();
   reservation?.release();
+  clearTimeout(outrankedLook);
+  if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
   try { scopes?.close(); }
   catch (error) { scopeCleanup = { state: "error", reason: `cannot close run scopes: ${error.message}` }; }
   clearInterval(costClock);

@@ -367,7 +367,11 @@ function identity(value: unknown): value is ProcessIdentity {
 }
 
 function parseEntry(text: string, file: string): LedgerEntry {
-  const entry = JSON.parse(text) as LedgerEntry;
+  const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2; grows?: string | null };
+  // Version 1 has the same fields and no growth: an admit.ts from before
+  // reservations could grow may still write one, so it reads as a request of
+  // its own rather than one that stops every decision.
+  const entry = (parsed?.version === 1 && !("grows" in parsed) ? { ...parsed, version: 2, grows: null } : parsed) as LedgerEntry;
   const measure = entry?.measure, cgroup = measure?.cgroup;
   if (entry?.version !== 2 || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
       || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
@@ -512,6 +516,14 @@ export type Reservation = {
    * at least one byte; `release` ends it.
    */
   shrink(bytes: number): Promise<void>;
+  /**
+   * Whether a live request of higher priority than this reservation's waits
+   * now; inside a parent's reservation, than the parent's. Its holder should
+   * then start nothing new and give back what it does not use, so that the
+   * request ahead of it waits only for work already running to end: nothing
+   * running is ever stopped for it. Read without the lock.
+   */
+  outranked(): boolean;
   /** Ends the reservation, withdrawing a growth that waits; a second call does nothing. */
   release(): void;
 };
@@ -527,6 +539,11 @@ function amount(bytes: number, what: string, verb: string): void {
 }
 
 const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
+
+/** Whether a request of higher priority than `priority` waits in `dir`, among those whose waiter and owner are alive. */
+function outrankedIn(dir: string, priority: Priority): boolean {
+  return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && alive(entry.waiter) && alive(entry.owner));
+}
 
 /** The parent's reservation when `parent` names a live one that counts `pid`'s memory. */
 function inside(parent: string | undefined, dir: string, pid: number, what: string, bytes: number, report: (line: string) => void): Reservation | null {
@@ -547,6 +564,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
   // The parent sized its reservation for what runs inside it, so a growth
   // asks for nothing more than the request did.
   let held = bytes;
+  const { priority } = entry;
   return {
     id: entry.id, inherited: true, env: reservationEnv(entry.id, dir),
     get bytes() { return held; },
@@ -556,6 +574,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
       if (less >= held) throw new RangeError(`memory: ${what} holds ${gib(held)}, so it cannot give back ${gib(less)}; release it instead`);
       held -= less;
     },
+    outranked: () => outrankedIn(dir, priority),
     release: () => {},
   };
 }
@@ -731,6 +750,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       context.observe(outcome.decision);
       if (outcome.waitedMs !== null) context.report(`memory: ${self.what} grew by ${gib(more)} to ${gib(bytes)} after ${Math.round(outcome.waitedMs / 1000)} s`);
     },
+    outranked: () => !released && outrankedIn(dir, self.priority),
     async shrink(less) {
       amount(less, self.what, "gives back");
       if (released) return;
