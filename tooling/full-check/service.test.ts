@@ -14,9 +14,9 @@ import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
 import {applyEveryRow, assertMessage, checkoutIn, ENV, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
-import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, type CountEffects, type Effects} from "./service.ts";
+import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
-import {DELTA_FILE} from "../records/delta.ts";
+import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readCount, readState, type CountRecord, type Part} from "./state.ts";
 import {BENCH_UNIT, recordsUnitName} from "./unit.ts";
@@ -317,6 +317,32 @@ test("a culprit whose revert does not apply stays in where it cannot be taken ou
   assert.deepEqual(state.culprits.map(c => c.commit), [first, second]);
   assert.ok(fx.lines.some(line => line.startsWith("measuring ") && line.includes(`with ${first.slice(0, 12)} in: the revert of ${first.slice(0, 12)} does not apply`)), fx.lines.join("\n"));
   assert.ok(!fx.lines.some(line => line.startsWith("culprit search held")), fx.lines.join("\n"));
+});
+
+test("a records run that adds test262 fail rows names them in a task line, with their full list beside the run", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  const record = "results/test262/c/language.tsv", fail = "test/language/expressions/class/a.js", pass = "test/language/statements/for/b.js";
+  const recorder: Recorder = (tree, _pin, run) => {
+    const rows = [
+      { kind: "test262", record, case: fail, key: fail, before: null, after: `${fail}\tfail\tuncaught Test262Error: #1`, sources: "0".repeat(64) },
+      { kind: "test262", record, case: pass, key: pass, before: null, after: `${pass}\tpass\t`, sources: "0".repeat(64) },
+    ];
+    mkdirSync(join(tree, dirname(record)), { recursive: true });
+    writeFileSync(join(tree, record), `# a test262 record\n${rows.map(row => row.after).join("\n")}\n`);
+    writeFileSync(join(run, DELTA_FILE), serializeDelta({ version: 1, commit: null, headers: {}, rows }));
+    return { status: 0, output: "" };
+  };
+  const fx = harness(repo, gate, { recorder });
+  const commit = repo.commit({ "LOG/typescript-c": `  pending: ${fail} is not recorded in ${record} yet: fail: uncaught Test262Error: #1\n` }, "a case runs now");
+  assert.equal(await cycle(fx), "core");
+  await recordAndApply(fx);
+  const state = readState(repo.layout.state), list = join(state.core.last_green!.run, TEST262_NEW_FAILS);
+  const line = `- test262 records at ${commit.slice(0, 12)} added 1 fail row(s), cases that run now and fail, any of which may be a refusal turned wrong: `
+    + `${record}: test/language/expressions 1. The full list is ${list}.`;
+  assert.ok(fx.lines.includes(`TASK for an issue: ${line}`), fx.lines.join("\n"));
+  assert.ok(state.tasks.some(task => task.line === line), "the task line is kept in the full check's status");
+  assert.equal(readFileSync(list, "utf8"), `${record}\t${fail}\tuncaught Test262Error: #1\n`, "the full list names the one fail row, not the new pass");
 });
 
 test("a green run that listed pending cases records them, commits exactly the records on main and submits the commit", async t => {

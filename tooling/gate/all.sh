@@ -1813,21 +1813,28 @@ test262() {
 # parses every file's metadata and classifies feature *names*; nothing is
 # compiled and nothing is run, so "34 features supported" was a claim about
 # tokens. This step is the measured half: `tooling/census/conformance262.ts`
-# over the cases recorded in `results/test262/c/language.tsv` --
-# every case that compiled, linked and ran on the last full run, with what it
-# did. A pass must still pass; a wrong answer must still be *that* wrong answer,
-# so a fail recorded as `uncaught Test262Error: #1` fails here if it starts
-# passing (re-record: it is news) or starts failing differently.
+# over the cases recorded in `results/test262/c/language.tsv` -- every case
+# that compiled, linked and ran, with what it did. A pass must still pass; a
+# wrong answer must still be *that* wrong answer, so a fail recorded as
+# `uncaught Test262Error: #1` that starts passing is listed as improved, and
+# one that starts failing differently fails here.
 #
-# **The floor is the pass count, and it may not go down.** A change that clears
-# refusals turns up as passes only on a full run, which is too slow for every
-# gate (a quarter hour at twelve workers, and killed twice mid-run on this box):
+# **The record is the ratchet, so there is no floor.** A recorded pass that
+# does anything else is REGRESSED, a recorded fail that fails differently
+# CHANGED, and a recorded case no longer selected MISSING; any of them fails
+# the step. So the record's pass rows are the floor, and it rises as the full
+# check records gains. This population cannot contain a new pass -- it is the
+# cases that already ran -- so the wide part's census (test262_census below)
+# runs each directory whole and lists every case that runs now, which the full
+# check then records (tooling/records/record-pending.ts's test262 kind).
 #
-#   node tooling/census/conformance262.ts --resume --rows ~/.cache/nts/t262.rows \
-#     --record results/test262/c/language.tsv
-#
-# then raise TEST262_LANGUAGE_PASS_FLOOR to the new pass-count. Lower it only
-# with the REGRESSED lines in the commit message.
+# **Negatives accepted are counted apart.** A program the specification says
+# must not parse, compiled, is a fail whose detail starts `accepted:`, and
+# `negatives-accepted:` counts them, because the pass count cannot show them:
+# until 2026-09-29 about 1,600 counted as passes, rejected by TypeScript type
+# errors that happened to fire on them. Each is a recorded row, so one that
+# comes to be rejected is improved; one that newly runs and is accepted is a
+# new fail row, which the full check names in a task line.
 #
 # **Not measured is a failure.** The runner exits 2 when a self-check fails
 # (a control that does not pass, a sabotage that does not throw, a refusal that
@@ -1835,63 +1842,13 @@ test262() {
 # changed; a missing `pass-count:` line is a run that said nothing, and fails
 # rather than reading as zero.
 #
-# **A re-baseline, not a regression: 5,463 -> 4,632 on 2026-09-29.** The census
-# compiled test262 -- which is JavaScript -- as TypeScript until then, and
-# about 1,600 negative-parse tests counted as passes because a TypeScript
-# *type* error (TS2364, TS2300, TS7006, ...) happened to fire on them, not
-# because nts raises the early error the specification names. Compiled as
-# JavaScript, nts accepts them: they are recorded fails now, the verdict
-# they always had. Positive passes rose (+257) in the same change.
-#
-# **The negatives accepted are a ratchet of their own: a ceiling, and it may
-# not rise.** A program the specification says must not parse, compiled, is
-# counted apart from the pass count -- `negatives-accepted:` -- because the
-# pass count cannot show it: those 1,600 were passes. Lower the ceiling when
-# early errors land; raise it only with the cases named in the commit.
-# **2026-09-30: 5046 -> 5108, and none of the 62 is the commit that raised it.**
-# The record was last written at compiler `e0fbe7f8302684d9`. Re-recording the two
-# rows a `delete` refusal moved needed a full run, and a full run is the only
-# thing that finds new passes -- `--recorded`'s population is the cases that
-# already ran, which by construction cannot contain one. So these had accumulated
-# unrecorded since then. The control binary (`c2e47028a`) run against the new
-# record gives **pass-count 5108 as well**, with 0 REGRESSED, 0 NEW FAIL, 0 FIXED,
-# 0 NEW PASS and exactly 2 CHANGED -- the `delete this.#x` rows. Two binaries over
-# one corpus, which is this file's own remedy, and it says the whole difference
-# between them is those two rows.
-#
-# The gap worth knowing: a stale record hides passes indefinitely and nothing goes
-# red while it does, so this floor moves when somebody needs a full run for an
-# unrelated reason rather than when the work lands.
-#
-# **2026-10-10, 6,119 -> 6,627**, which is that gap closing: a full run from a pin of
-# 998f2e534 found 515 passes and 21 failures that ran and were in no record. It
-# also lost seven passes, and they were not passes: `function ([,]) {}` called
-# with a generator unerased the generator as an array, which the body never read.
-# That unerase is checked now and stops by name, so the seven and six failures of
-# the same shape are no-verdicts.
-# 2026-10-11: frame-member initialization keeps 6,627 passes and drops two fails
-# from the ran-set: S10.2.2_A1_T3 and function-local-closure-get-before-initialization
-# now stop by name instead of reading stack garbage. Record 0352 names both gaps.
-# 2026-10-11: captured lexical TDZ reads now throw catchable ReferenceError.
-# A full pinned run adds the captured-const test back as a pass (record 0353);
-# forward var still stops by name and remains outside the ran-set.
-# Checked bigint division/remainder by zero and negative exponents now throw
-# catchable RangeErrors: three recorded fails pass on clean pin 39ccd0eec4fe.
-# 6631 -> 6935, 2026-10-21: measured by the landing gate at 586a40d24f4e.
-TEST262_LANGUAGE_PASS_FLOOR=6935
-TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
-# One recorded test262 directory, re-run and held to its record, its floor and
-# its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
-# <ceiling> <ceiling variable name>`. Shared by test262-cases and
-# test262-builtins-cases, so the two steps cannot come to disagree about what
-# "measured" means.
+# One recorded test262 directory, re-run and held to its record:
+# `test262_recorded <dir> <record>`. Shared by test262-cases,
+# test262-builtins-cases and test262-rest-cases, so the three cannot come to
+# disagree about what "measured" means.
 test262_recorded() {
   under=$1
   record=$2
-  floor=$3
-  floor_name=$4
-  ceiling=$5
-  ceiling_name=$6
   if [ ! -d third_party/test262/.git ]; then
     echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
     return 77
@@ -1906,97 +1863,37 @@ test262_recorded() {
   status=$?
   printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|negatives-accepted|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
   [ "$status" -eq 0 ] || return 1
-  passed=$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')
-  if [ -z "$passed" ]; then
+  if [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
     echo "  no pass-count line: the run measured nothing, which is not zero"
     return 1
   fi
-  if [ "$passed" -lt "$floor" ]; then
-    echo "  $passed pass, below the floor of $floor -- see REGRESSED above"
-    return 1
-  fi
-  if [ "$passed" -gt "$floor" ]; then
-    echo "  $passed pass, above the floor of $floor: raise $floor_name in tooling/gate/all.sh"
-  fi
-  accepted=$(printf '%s\n' "$out" | awk '/^  negatives-accepted: [0-9]+$/ { print $2 }')
-  if [ -z "$accepted" ]; then
+  if [ -z "$(printf '%s\n' "$out" | awk '/^  negatives-accepted: [0-9]+$/ { print $2 }')" ]; then
     echo "  no negatives-accepted line: the run counted nothing, which is not zero"
     return 1
   fi
-  if [ "$accepted" -gt "$ceiling" ]; then
-    echo "  $accepted negative-parse test(s) accepted, above the ceiling of $ceiling -- a program that must not parse, compiled"
-    return 1
-  fi
-  if [ "$accepted" -lt "$ceiling" ]; then
-    echo "  $accepted negative-parse test(s) accepted, below the ceiling of $ceiling: lower $ceiling_name in tooling/gate/all.sh"
-  fi
 }
 test262_cases() {
-  test262_recorded test/language results/test262/c/language.tsv \
-    "$TEST262_LANGUAGE_PASS_FLOOR" TEST262_LANGUAGE_PASS_FLOOR \
-    "$TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING" TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING
+  test262_recorded test/language results/test262/c/language.tsv
 }
 
-# Test262 `test/built-ins`, the same way, with its own record and floor --
-# kept apart from the language floor so that library surface (RegExp, BigInt,
-# Temporal, typed arrays) neither swamps nor hides the language's signal.
-#
-# **The floor exists because the record passed a threshold, stated here so a
-# low floor reads as a judgement rather than an oversight:** a floor is added
-# once the recorded set guards at least 500 passing cases from a run that was
-# not DEGRADED. The first full census (7c81431a, 38.7 pages/s) had 865 of
-# 23,812 -- 3.91% of the 22,101 in scope, with Temporal's 4,603 kept in the
-# denominator because nothing in docs/ makes it a non-goal. About 35 s.
-# Re-baselined with the language floor on 2026-09-29 (875 -> 681), for the
-# same reason: negative-parse tests passing on a type error, and `any`
-# containers (`new Set()` is `Set<any>` in JavaScript) refused.
-# 2026-09-30: 698 -> 708, the same re-record and the same attribution. The
-# control binary reconciles against the new record at **708**, 0 of everything --
-# so all ten accumulated since `9968f2c9bd045c64` and none is the commit that
-# raised the floor. The two `Object/{entries,values}/getter-removing-future-key`
-# rows that change left the record, as a case that refuses does.
-# 776 -> 823, 2026-10-16: the clean 8cd02e1137db full builtins run
-# measured 823 passes. Two runs returned the same 23,329 verdict/detail rows;
-# the repeated 1,034-case old/new population on base 64fe6c9fc5ec attributes
-# thirteen gains to this range and thirty-four to earlier main changes.
-# Evidence: numeric-args-constant-full-{c,d} and -attribution.json under
-# ~/.cache/nts-handover/compiler-helper/. The official builtins step on the
-# clean rebased fb49b733d7c5 pin confirms 823 passes and 185 accepted negatives
-# (numeric-args-rebased-test262-builtins-cases.log there). Ceiling unchanged.
-# 823 -> 824, 2026-10-21: measured by the landing gate at 586a40d24f4e.
-TEST262_BUILTINS_PASS_FLOOR=824
-TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
+# Test262 `test/built-ins`, the same way, with its own record -- kept apart
+# from the language's so that library surface (RegExp, BigInt, Temporal, typed
+# arrays) neither swamps nor hides the language's signal.
 test262_builtins_cases() {
-  test262_recorded test/built-ins results/test262/c/builtins.tsv \
-    "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR \
-    "$TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING" TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING
+  test262_recorded test/built-ins results/test262/c/builtins.tsv
 }
 
 # The rest of the ECMA-262 strict lane: `test/annexB`, `test/staging` and
 # `test/harness` -- 2,685 files the census had never measured until
 # 2026-09-29, when "done" was defined as every strict-lane file ending as a
-# pass or a named boundary. One step, three records, each held to its own
-# floor and ceiling by `test262_recorded`. annexB is mostly sloppy-mode and so
-# mostly scope-excluded; staging is where proposals wait; harness tests the
+# pass or a named boundary. One step, three records, each held to itself by
+# `test262_recorded`. annexB is mostly sloppy-mode and so mostly
+# scope-excluded; staging is where proposals wait; harness tests the
 # stand-in's own entries. A few seconds.
-TEST262_ANNEXB_PASS_FLOOR=9
-TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
-# 47 -> 53, 2026-10-21: measured by the landing gate at 586a40d24f4e.
-TEST262_STAGING_PASS_FLOOR=53
-TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=3
-# 12 -> 17, 2026-10-21: measured by the landing gate at 586a40d24f4e.
-TEST262_HARNESS_PASS_FLOOR=17
-TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
-  test262_recorded test/annexB results/test262/c/annexb.tsv \
-    "$TEST262_ANNEXB_PASS_FLOOR" TEST262_ANNEXB_PASS_FLOOR \
-    "$TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING" TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING || return $?
-  test262_recorded test/staging results/test262/c/staging.tsv \
-    "$TEST262_STAGING_PASS_FLOOR" TEST262_STAGING_PASS_FLOOR \
-    "$TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING" TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING || return $?
-  test262_recorded test/harness results/test262/c/harness.tsv \
-    "$TEST262_HARNESS_PASS_FLOOR" TEST262_HARNESS_PASS_FLOOR \
-    "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
+  test262_recorded test/annexB results/test262/c/annexb.tsv || return $?
+  test262_recorded test/staging results/test262/c/staging.tsv || return $?
+  test262_recorded test/harness results/test262/c/harness.tsv
 }
 
 # The recorded test262 slices on another backend: each of the five records
@@ -2007,10 +1904,10 @@ test262_rest_cases() {
 #
 # **The record is the ratchet, so there is no floor.** A recorded pass that
 # does anything else is REGRESSED, a changed failure CHANGED, a row that did
-# not run MISSING, and any of them is the runner's non-zero exit. A FIXED or
-# NEW PASS row prints "re-record" and passes, as on C. Parse and resolution
-# negatives are judged by the frontend before any backend runs, so off C they
-# are not in the record and there is no negatives ceiling to hold.
+# not run MISSING, and any of them is the runner's non-zero exit. A FIXED row
+# is listed as improved and passes, as on C, and the wide part's census lists
+# the cases that run now. Parse and resolution negatives are judged by the
+# frontend before any backend runs, so off C they are not in the record.
 #
 # About two minutes for the five on either backend at the gate's eight
 # workers (285 s and 245 s at two, 2026-10-16).
@@ -2065,6 +1962,59 @@ test262_jvm() {
 # broke only its rows reached main unseen.
 test262_llvm() {
   test262_backend llvm
+}
+
+# Each test262 directory run whole on one backend and held to its record: the
+# census, which is what finds a case that runs now -- the recorded steps'
+# population is the cases that already ran, which by construction holds none.
+# A recorded case that regressed, changed or went missing fails it, as on the
+# recorded steps. A case that runs now and has no row is listed as pending
+# (`pending: <case> is not recorded in <record> yet: <pass | fail: what it
+# threw>`), and a recorded fail that passes as improved, each naming its
+# record, and both pass. The full check's records run then measures exactly
+# the listed cases three more times from scratch on the run's pin, and records
+# only the ones every repeat agrees on, from a machine that was not degraded
+# (tooling/records/record-pending.ts's test262 kind): a flaky pass raises no
+# record. A fail row it adds is named in a task line, because a case that went
+# from refused to failing may be a soundness loss.
+test262_census() {
+  backend=$1
+  if [ ! -d third_party/test262/.git ]; then
+    echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 77
+  fi
+  # The same cap as test262_recorded's, for the same reason: memory.
+  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
+  failed=""
+  for pair in test/language:language test/built-ins:builtins test/annexB:annexb test/staging:staging test/harness:harness; do
+    under=${pair%%:*}
+    record=results/test262/$backend/${pair##*:}.tsv
+    echo "  $under on $backend, whole, against $record:"
+    out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
+      --backend "$backend" --under "$under" --check "$record" --jobs "$cap" 2>&1)
+    status=$?
+    if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+      # Not measured: keep its complete cause, which may precede any report.
+      printf '%s\n' "$out"
+      failed="$failed $under"
+      continue
+    fi
+    printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|headline|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|UNSTABLE|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+    [ "$status" -eq 0 ] || failed="$failed $under"
+  done
+  if [ -n "$failed" ]; then
+    echo "  not held to their records on $backend:$failed"
+    return 1
+  fi
+}
+test262_census_c() {
+  test262_census c
+}
+test262_census_llvm() {
+  test262_census llvm
+}
+test262_census_jvm() {
+  test262_census jvm
 }
 
 # The TypeScript conformance suite (`tests/typescript/`, run by the test262
@@ -2570,6 +2520,9 @@ step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "test262-jvm" test262_jvm
 step "test262-llvm" test262_llvm
+step "test262-census-c" test262_census_c
+step "test262-census-llvm" test262_census_llvm
+step "test262-census-jvm" test262_census_jvm
 step "typescript-oracles" typescript_oracles
 step "typescript-c" typescript_c
 step "typescript-llvm" typescript_llvm

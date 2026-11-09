@@ -86,6 +86,7 @@ import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQu
 import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
 import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.ts";
 import { listedIn, type Listed } from "../records/pending.ts";
+import { newTest262Fails, newTest262FailsTask, writeNewFails } from "../records/test262-fails.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
@@ -431,6 +432,8 @@ function landedReverts(git: Git, tip: string, state: State): Set<string> {
 export const RECORDS_ATTEMPTS = 3;
 /** The records unit's outcome, in the run's folder beside the recorder's log (recordJob). */
 export const RECORDS_OUTCOME = "record-pending.outcome.json";
+/** Beside a records run: every test262 fail row it added, record, case and what it threw. */
+export const TEST262_NEW_FAILS = "test262-new-fails.tsv";
 /** The records unit's own output, in the run's folder: what its command said, a crash's stack included. */
 export const RECORDS_UNIT_LOG = "record-pending.unit.log";
 
@@ -568,7 +571,15 @@ async function recorded(fx: Effects, state: State, part: Part, records: RecordsR
     if (outcome.status !== 0) fx.log(`record-pending exited ${outcome.status}; see ${join(run, RECORDER_LOG)}`);
     if (outcome.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} wrote outside the records (${outcome.refused.join(", ")}); see ${run}.`);
     // What the recorder recorded is its delta; the record files it left in the tree go when the tree is set up at main.
-    const delta = join(run, DELTA_FILE), rows = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")).rows.length : null;
+    const delta = join(run, DELTA_FILE), parsed = existsSync(delta) ? parseDelta(readFileSync(delta, "utf8")) : null, rows = parsed ? parsed.rows.length : null;
+    // A test262 case that runs now and fails is recorded, and never silently:
+    // its rows are named, with their full list beside the run, for issues.
+    const fails = parsed ? newTest262Fails(parsed) : [];
+    if (fails.length) {
+      const list = join(run, TEST262_NEW_FAILS);
+      writeNewFails(fails, list);
+      task(fx, state, newTest262FailsTask(fails, commit, list)!);
+    }
     if (!rows) {
       records.result = rows === null && outcome.files.length ? `wrote ${outcome.files.length} record file(s) and no delta` : "recorded nothing";
       // Records with no delta can never land, and a recorder that exited non-zero went wrong, whatever it kept.

@@ -10,14 +10,15 @@
 //   NTS_BIN=<verified's pin> node tooling/records/record-pending.ts --after core|wide <run> [--delta <file>] [kind ...]
 //   node tooling/records/record-pending.ts --apply <delta>
 //
-// The kinds are oracle-counts, typescript, benchmarks, benchmark-runs,
-// outcomes, dex and compile-times, all seven when none is named, in that
-// order: a benchmark's run is recorded once its oracle count is. Each is
-// recorded by its own recorder, in its pending mode, with the compiler NTS_BIN
-// names:
+// The kinds are oracle-counts, typescript, test262, benchmarks,
+// benchmark-runs, outcomes, dex and compile-times, all eight when none is
+// named, in that order: a benchmark's run is recorded once its oracle count
+// is. Each is recorded by its own recorder, in its pending mode, with the
+// compiler NTS_BIN names:
 //
 //   oracle-counts   tooling/differential/record-oracles.ts <pending fixture>, per fixture
 //   typescript      tooling/census/conformance262.ts --record-pending, per backend
+//   test262         tooling/census/conformance262.ts --record-pending <tsv> --case <listed> --repeats 3, per record
 //   benchmarks      tooling/bench/build-records.ts --record-pending
 //   benchmark-runs  tooling/differential/check-consumers.ts benchmarks --record-pending (bench-agree's JVM record)
 //   outcomes        tooling/conformance/outcomes-check.ts --record-pending
@@ -27,6 +28,11 @@
 // A module's compile time is two records of its arm: its line in the table the
 // tripwire reads, and its entry in the five-repeat evidence that line is
 // proved from. Both are rows of its case, recorded, audited and applied together.
+//
+// test262's record holds only the cases that ran, so a case with no row is
+// usually refused, not new: its pending cases are the ones its census listed
+// as running now (a pending line naming the record), recorded only where three
+// fresh repeats agree. Every other kind's pending cases come from the tree.
 //
 // The pending cases come from the tree alone. A kind's recorders run only
 // when it has something to record: a pending case, a recorded budget to
@@ -84,11 +90,12 @@ import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, mergeRunRecord, parseBenchma
 import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets, written } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import { WIDE } from "../gate/owed.mjs";
+import { mergeTest262Record, parseTest262Row } from "../census/test262-record.ts";
 import { ARMS, COMPILE_ARMS, calibrationEntries, compileTimeModules, readCounterTable, tableLines, withCalibrationEntries, withTableLines, type CompileArm } from "../gate/compile-counter.ts";
 import { appliedLine, DELTA_FILE, MalformedDelta, parseDelta, serializeDelta, type ApplyCounts, type Delta, type DeltaRow } from "./delta.ts";
 import { inventory, listedIn, pendingLine } from "./pending.ts";
 
-export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times"] as const;
+export const KINDS = ["oracle-counts", "typescript", "test262", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 
@@ -100,6 +107,7 @@ const BACKENDS = ["c", "llvm", "jvm"] as const;
 export const KIND_STEPS: Readonly<Record<Kind, readonly string[]>> = {
   "oracle-counts": [],
   typescript: ["typescript-c", "typescript-llvm", "typescript-jvm"],
+  test262: ["test262-census-c", "test262-census-llvm", "test262-census-jvm"],
   benchmarks: ["benches"],
   "benchmark-runs": ["bench-agree"],
   outcomes: ["outcomes"],
@@ -114,6 +122,16 @@ export const partOf = (kind: Kind): Part => KIND_STEPS[kind].some(step => WIDE.h
 export interface Pending { kind: Kind; name: string; record: string }
 
 const typescriptRecord = (backend: string) => `results/typescript/${backend}/cases.tsv`;
+/** The test262 directories a record each, and the record of one on a backend. */
+export const TEST262_SLICES = { language: "test/language", builtins: "test/built-ins", annexb: "test/annexB", staging: "test/staging", harness: "test/harness" } as const;
+const test262Record = (backend: string, slice: string) => `results/test262/${backend}/${slice}.tsv`;
+const TEST262_RECORDS = BACKENDS.flatMap(backend => Object.keys(TEST262_SLICES).map(slice => test262Record(backend, slice)));
+/** The backend and directory a test262 record holds, or null for any other file. */
+function test262Slice(record: string): { backend: string; under: string } | null {
+  const found = /^results\/test262\/([a-z]+)\/([a-z]+)\.tsv$/.exec(record);
+  const under = found ? (TEST262_SLICES as Record<string, string>)[found[2]!] : undefined;
+  return found && under && (BACKENDS as readonly string[]).includes(found[1]!) ? { backend: found[1]!, under } : null;
+}
 const benchmarkRecord = (backend: string) => `results/benchmarks/${backend}/outcomes.tsv`;
 const outcomesRecord = (name: string) => `tests/outcomes/${name}/${RECORD}`;
 const read = (root: string, file: string) => readFileSync(join(root, file), "utf8");
@@ -133,6 +151,10 @@ export function findPending(root: string, kind: Kind): Pending[] {
   switch (kind) {
     case "oracle-counts":
       return pendingFixtures(root).map(name => ({ kind, name, record: recordPath(name) }));
+    case "test262":
+      // Its record holds the cases that ran, so the tree cannot say which are
+      // new: they are what its census listed (acceptedIn's listed pending).
+      return [];
     case "typescript": {
       const sources = selectTypescript(root, "tests/typescript").map(row => row.path);
       return BACKENDS.flatMap(backend => pendingCases(parseTypeScriptRecord(read(root, typescriptRecord(backend))), sources)
@@ -167,20 +189,30 @@ export function findPending(root: string, kind: Kind): Pending[] {
   }
 }
 
+/** The kinds whose pending cases are the ones their checks listed, not ones the tree can find. */
+const LISTS_PENDING: ReadonlySet<Kind> = new Set<Kind>(["test262"]);
+
 /**
  * The accepted changes a run's checks listed, by the kind whose record each
- * names; `unowned` are the records no kind writes, which are said and skipped.
+ * names, and the pending cases listed for the kinds whose pending cases only a
+ * check can find (test262's); `unowned` are the records no kind writes,
+ * which are said and skipped.
  */
-export function acceptedIn(root: string, run: string): { byKind: Map<Kind, Pending[]>; unowned: string[] } {
+export function acceptedIn(root: string, run: string): { byKind: Map<Kind, Pending[]>; pendingByKind: Map<Kind, Pending[]>; unowned: string[] } {
   const owner = new Map<string, Kind>();
   for (const kind of KINDS) for (const file of recordFiles(root, kind)) owner.set(file, kind);
-  const byKind = new Map<Kind, Pending[]>(), unowned = new Set<string>();
-  for (const change of listedIn(run).accepted) {
+  const byKind = new Map<Kind, Pending[]>(), pendingByKind = new Map<Kind, Pending[]>(), unowned = new Set<string>();
+  const listed = listedIn(run);
+  for (const change of listed.accepted) {
     const kind = owner.get(change.record);
     if (kind === undefined) { unowned.add(change.record); continue; }
     byKind.set(kind, [...byKind.get(kind) ?? [], { kind, name: change.name, record: change.record }]);
   }
-  return { byKind, unowned: [...unowned].sort() };
+  for (const one of listed.pending) {
+    const kind = owner.get(one.record);
+    if (kind !== undefined && LISTS_PENDING.has(kind)) pendingByKind.set(kind, [...pendingByKind.get(kind) ?? [], { kind, name: one.name, record: one.record }]);
+  }
+  return { byKind, pendingByKind, unowned: [...unowned].sort() };
 }
 
 /** These are refresh requests, not pending cases and not reused answers. */
@@ -207,6 +239,16 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       // Each backend's census takes most of an hour: only one with a row to write runs.
       return BACKENDS.filter(backend => pending.some(one => one.record === typescriptRecord(backend)))
         .map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
+    case "test262":
+      // One writer per record, over exactly the cases listed in it, believed
+      // only where three fresh repeats agree.
+      return [...Map.groupBy(pending, one => one.record)].sort(([a], [b]) => a.localeCompare(b)).flatMap(([record, listed]) => {
+        const where = test262Slice(record);
+        if (!where) return [];
+        const cases = [...new Set(listed.map(one => one.name))].sort();
+        return [["tooling/census/conformance262.ts", "--suite", "test262", "--backend", where.backend, "--under", where.under,
+          "--record-pending", record, "--repeats", "3", ...cases.flatMap(name => ["--case", name])]];
+      });
     case "benchmarks":
       return [["tooling/bench/build-records.ts", "--record-pending"]];
     case "benchmark-runs":
@@ -237,6 +279,7 @@ function recordFiles(root: string, kind: Kind): string[] {
   switch (kind) {
     case "oracle-counts": return under(RECORDS);
     case "typescript": return BACKENDS.map(typescriptRecord);
+    case "test262": return TEST262_RECORDS;
     case "benchmarks": return BACKENDS.map(benchmarkRecord);
     case "benchmark-runs": return BENCH_AGREE_BACKENDS.map(runsRecord);
     case "outcomes": return outcomeFixtures(join(root, "tests/outcomes")).map(outcomesRecord);
@@ -251,8 +294,8 @@ function snapshot(root: string, kind: Kind, pending: readonly Pending[]): Map<st
 }
 
 /** One row of a line record: its key, its case, and its exact line. */
-type LineKind = "typescript" | "benchmarks" | "benchmark-runs" | "dex";
-const isLine = (kind: Kind): kind is LineKind => kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex";
+type LineKind = "typescript" | "test262" | "benchmarks" | "benchmark-runs" | "dex";
+const isLine = (kind: Kind): kind is LineKind => kind === "typescript" || kind === "test262" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex";
 /** The case a file-per-case record holds: an oracle-count shard's fixture, or an outcome.json's fixture. */
 const caseOfRecord = (kind: "oracle-counts" | "outcomes", file: string): string =>
   kind === "oracle-counts" ? file.slice(`${RECORDS}/`.length, -".json".length) : file.slice(0, -`/${RECORD}`.length);
@@ -272,6 +315,8 @@ const label = (transition: OutcomeTransition) => improves(transition) ? "improve
 
 /** A rewritten row the ratchet accepts, described, or null when it does not accept it. */
 function acceptedRow(kind: LineKind, before: string, after: string): string | null {
+  // A test262 row is rewritten only when a recorded fail passes.
+  if (kind === "test262") return parseTest262Row(before).outcome === "fail" && parseTest262Row(after).outcome === "pass" ? "fail -> pass (improved)" : null;
   const value = (line: string) => JSON.parse(line.split("\t")[1]!);
   if (kind === "benchmark-runs") {
     const was = parseBenchmarkRun(value(before)), now = parseBenchmarkRun(value(after)), change = compareBenchmarkRun(was, now);
@@ -301,7 +346,12 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
   if (before === after) return [];
   assert.ok(after !== null, `${file} was removed`);
   if (kind === "compile-times") return auditCompileTimes(file, before, after, pending);
-  if (kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex") {
+  if (kind === "typescript" || kind === "test262" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex") {
+    // A test262 record's header names the run that wrote it, on all three of its lines.
+    if (kind === "test262" && before !== null) {
+      const header = (text: string) => text.split("\n").filter(line => line.startsWith("#"));
+      assert.deepEqual(header(after), header(before), `${file}: the header changed`);
+    }
     // bench-agree's and dex's records start from their pending rows: with no
     // file, every benchmark (every dex target) is pending.
     if (before === null && (kind === "benchmark-runs" || kind === "dex")) {
@@ -469,14 +519,19 @@ const sha256 = (bytes: string | Uint8Array) => createHash("sha256").update(bytes
  * its whole source graph's digest, which --apply holds to the tree's too.
  */
 export function sourceDigests(root: string, cases: readonly { kind: Kind; name: string }[]): Map<string, string | null> {
-  const wanted = new Map(cases.map(one => [`${one.kind}\0${one.name}`, sourcesOf(one.kind, one.name)]));
+  // A test262 case is a file of the test262 checkout, which nts's git does not track: its digest is its own bytes.
+  const digests = new Map<string, string | null>();
+  for (const one of cases.filter(one => one.kind === "test262")) {
+    const file = join(root, "third_party/test262", one.name);
+    digests.set(`test262\0${one.name}`, existsSync(file) ? sha256(JSON.stringify([[one.name, sha256(readFileSync(file))]])) : null);
+  }
+  const wanted = new Map(cases.filter(one => one.kind !== "test262").map(one => [`${one.kind}\0${one.name}`, sourcesOf(one.kind, one.name)]));
   const files = filesUnder(root, [...new Set([...wanted.values()].flatMap(one => one.paths))]);
   const content = new Map<string, string>();
   const digestOf = (file: string) => {
     if (!content.has(file)) content.set(file, sha256(readFileSync(join(root, file))));
     return content.get(file)!;
   };
-  const digests = new Map<string, string | null>();
   for (const [id, { paths, except }] of wanted) {
     const present = [...new Set(paths.flatMap(path => files.get(path) ?? []))].filter(file => file !== except && existsSync(join(root, file))).sort();
     digests.set(id, present.length ? sha256(JSON.stringify(present.map(file => [file, digestOf(file)]))) : null);
@@ -542,17 +597,18 @@ const runNode: Runner = (args, root) => {
 
 /**
  * Record every pending row of the named kinds, and every change the ratchet
- * accepts. A kind runs only with something to record: a pending case, a
- * budget to refresh, or an accepted change a check listed (`accepted`, by
- * kind). With `delta`, what passed the audit is written there too, after each
- * kind. Returns the exit status.
+ * accepts. A kind runs only with something to record: a pending case (found in
+ * the tree, or for test262 listed by a check: `listed`, by kind), a budget to
+ * refresh, or an accepted change a check listed (`accepted`, by kind). With
+ * `delta`, what passed the audit is written there too, after each kind.
+ * Returns the exit status.
  */
-export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line), accepted: ReadonlyMap<Kind, readonly Pending[]> = new Map(), delta?: string): number {
+export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line), accepted: ReadonlyMap<Kind, readonly Pending[]> = new Map(), delta?: string, listed: ReadonlyMap<Kind, readonly Pending[]> = new Map()): number {
   let failed = 0, recorded = 0;
   const out: Delta = { version: 1, commit: headCommit(root), headers: {}, rows: [] };
   if (delta) keepDelta(delta, out);
   for (const kind of kinds) {
-    const missing = findPending(root, kind);
+    const missing = [...findPending(root, kind), ...listed.get(kind) ?? []];
     const refreshes = kind === 'oracle-counts' ? oracleRefreshes(root) : [];
     const pending = [...missing, ...refreshes], changes = accepted.get(kind) ?? [];
     if (!pending.length && !changes.length) { say(`${kind}: nothing pending and no accepted change listed; not run`); continue; }
@@ -630,7 +686,7 @@ function checkDelta(delta: Delta): void {
   for (const row of delta.rows) {
     if (!(KINDS as readonly string[]).includes(row.kind)) bad(row, `no recorder is of kind ${row.kind}`);
     const kind = row.kind as Kind;
-    const records = kind === "typescript" ? BACKENDS.map(typescriptRecord) : kind === "benchmarks" ? BACKENDS.map(benchmarkRecord)
+    const records = kind === "typescript" ? BACKENDS.map(typescriptRecord) : kind === "test262" ? TEST262_RECORDS : kind === "benchmarks" ? BACKENDS.map(benchmarkRecord)
       : kind === "benchmark-runs" ? BENCH_AGREE_BACKENDS.map(runsRecord) : kind === "dex" ? [DEX_RECORD]
       : kind === "outcomes" ? (/^tests\/outcomes\/[^/]+$/.test(row.case) ? [outcomesRecord(row.case.slice("tests/outcomes/".length))] : [])
       : kind === "compile-times" ? COMPILE_TIME_RECORDS
@@ -671,6 +727,10 @@ function merged(kind: Kind, text: string | null, these: readonly DeltaRow[], hea
     assert.ok(text !== null, "there is no such record; a compile-time record is written whole by a full --record");
     const rows = new Map(these.map(row => [row.key, row.after]));
     return isCompileTable(these[0]!.record) ? withTableLines(text, rows) : withCalibrationEntries(text, rows);
+  }
+  if (kind === "test262") {
+    assert.ok(text !== null, "there is no such record; a test262 record is written whole by a full --record");
+    return mergeTest262Record(text, new Map(these.map(row => { const one = parseTest262Row(row.after); return [one.path, { outcome: one.outcome, detail: one.detail }]; })));
   }
   if (!isLine(kind)) { assert.equal(these.length, 1, "a file-per-case record has one row"); return these[0]!.after; }
   if (text === null) {
@@ -743,7 +803,9 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
       skip(row, here === null ? `its row is gone${since}` : row.before === null ? `a row of another measurement was recorded for it${since}` : `its row changed${since}`);
       continue;
     }
-    if (row.before === null) {
+    // A test262 case with no row here may take one: what makes it pending is
+    // that it runs now, which the recorder measured; the tree cannot list it.
+    if (row.before === null && row.kind !== "test262") {
       const pending = pendingAt(row.kind as Kind);
       if (pending instanceof Error) { skip(row, `the pending ${row.kind} cases cannot be listed here: ${pending.message}`); continue; }
       if (!pending.has(`${row.record}\0${row.case}`)) { skip(row, "it is not a pending case here"); continue; }
@@ -788,7 +850,10 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
   // or the rule refuses keeps no other from its record: each is then taken alone.
   for (const [record, group] of Map.groupBy(ready, row => row.record)) {
     const kind = group[0]!.kind as Kind, was = textOf(record), pending = pendingAt(kind);
-    const names = new Set(pending instanceof Error ? [] : [...pending].filter(id => id.startsWith(`${record}\0`)).map(id => id.slice(record.length + 1)));
+    // A test262 case is pending here when the delta adds it, it has no row here
+    // and its file is the one measured, all of which the rows above passed.
+    const names = new Set(kind === "test262" ? group.filter(row => row.before === null).map(row => row.case)
+      : pending instanceof Error ? [] : [...pending].filter(id => id.startsWith(`${record}\0`)).map(id => id.slice(record.length + 1)));
     const merge = (text: string | null, these: readonly DeltaRow[]) => {
       const next = merged(kind, text, these, delta.headers[record]);
       auditRecord(kind, record, text, next, names);
@@ -845,9 +910,9 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       process.exitCode = 2;
     } else {
       const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
-      const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), unowned: [] };
+      const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), pendingByKind: new Map<Kind, Pending[]>(), unowned: [] };
       for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);
-      process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind, delta && resolve(delta));
+      process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind, delta && resolve(delta), accepted.pendingByKind);
     }
   }
 }

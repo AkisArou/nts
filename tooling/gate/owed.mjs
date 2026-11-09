@@ -141,6 +141,12 @@ const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full
  * Counted C/LLVM execution and allocation counts stay core: reference
  * counting is the shipping native mode, including placement/escape changes.
  */
+/** The census each recorded test262 step implies: the whole run over the same backend's records. */
+const CENSUS_OF = {
+  "test262-cases": "test262-census-c", "test262-builtins-cases": "test262-census-c", "test262-rest-cases": "test262-census-c",
+  "test262-llvm": "test262-census-llvm", "test262-jvm": "test262-census-jvm",
+};
+
 export const WIDE = new Set([
   "integrity",
   "integrity-runtime",
@@ -156,6 +162,9 @@ export const WIDE = new Set([
   "divergence",
   "sweep",
   "bench-agree",
+  "test262-census-c",
+  "test262-census-llvm",
+  "test262-census-jvm",
 ]);
 
 /**
@@ -219,6 +228,9 @@ export const LANDING = {
   "test262-rest-cases": { form: "sample", sample: "test262-sample" },
   "test262-jvm": { form: "sample", sample: "test262-sample" },
   "test262-llvm": { form: "sample", sample: "test262-sample" },
+  "test262-census-c": { form: "after" },
+  "test262-census-llvm": { form: "after" },
+  "test262-census-jvm": { form: "after" },
   integrity: { form: "after" },
   "integrity-runtime": { form: "after" },
   definitions: { form: "after" },
@@ -301,6 +313,9 @@ export const ASKS = {
   "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
   "test262-jvm": ["answers", "does every recorded test262 row on the JVM still do what it did"],
   "test262-llvm": ["answers", "the same on LLVM"],
+  "test262-census-c": ["answers", "run whole on C, does every test262 directory hold its records, and which cases run now that no record has"],
+  "test262-census-llvm": ["answers", "the same on LLVM"],
+  "test262-census-jvm": ["answers", "the same on the JVM"],
   "program-oracles": ["answers", "one authenticated Node answer for each example and outcome program"],
   "typescript-oracles": ["answers", "one authenticated Node reference for every TypeScript case the backend steps check"],
   "typescript-c": ["answers", "does every recorded TypeScript conformance case still do what it did, on C"],
@@ -1534,7 +1549,9 @@ export function owed(changes) {
     if (!r.paths.includes(path)) r.paths.push(path);
     // Both preparation arms have exactly the same subjects. Centralising the
     // implication keeps future compile-time rules from silently missing RC.
-    for (const st of steps.flatMap(st => st === "compile-time" ? [st, "compile-time-rc"] : [st])) {
+    // A backend's recorded test262 steps and its census hold the same
+    // records, so a change that owes the one owes the other.
+    for (const st of steps.flatMap(st => st === "compile-time" ? [st, "compile-time-rc"] : CENSUS_OF[st] ? [st, CENSUS_OF[st]] : [st])) {
       if (!r.steps.includes(st)) r.steps.push(st);
     }
     if (steps.includes("interop")) {

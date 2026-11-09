@@ -1773,3 +1773,35 @@ As built:
   hands it to its gate run (NTS_MEMORY_HANDOVER), which takes it over with its
   first request and hands it to nothing it starts;
 - the ledger's status counts as the decision on the queue's head does.
+
+## The full check writes the test262 records (11-09)
+
+test262's records were written at 7e18d0845b23 (the built-ins slice at
+35be2d8d04f5) and had fallen 173 compiler or runtime commits behind (#599).
+Their population is the cases that already ran, so nothing but a full run by
+hand found a new pass, and the floors in tooling/gate/all.sh were raised by
+hand. The coordinator approved the design with three conditions. As built:
+- census steps (test262-census-c, -llvm and -jvm, in the wide part) run each
+  directory whole against its record and list each case that runs now (a
+  pending line naming the record: pass, or fail with what it threw) and each
+  recorded fail that passes (an improved line); a regressed, changed or
+  missing recorded case still fails them;
+- record-pending.ts's test262 kind records after the wide part, and its
+  pending cases are the ones the census listed; the writer measures exactly
+  those cases three more times from scratch on the run's pin, writes a row
+  only where every repeat agrees, and writes nothing from a degraded machine;
+- a new fail row is pending and recorded, never silently: the full check
+  names every one in a task line, by record and directory, with the full list
+  beside the run (test262-new-fails.tsv), because a case gone from refused to
+  failing may be a soundness loss;
+- the floors left all.sh because every record was at least as strong at
+  8ff9de50edee: language 6,982 passes against a floor of 6,935, built-ins 887
+  against 824, annexB 9, staging 53 and harness 17 against floors of the same;
+  accepted negatives 1,315 against a ceiling of 1,353, and 185, 1, 3 and 0
+  against ceilings of the same. No test262 floor had been lowered for a pinned
+  gap: 11-08's baselines were the definitions, zlib and the profile;
+- placed by measured cost, on a pin of bcfa40808012: the five directories run
+  whole cost 2,827 CPU s on C (8 min 55 s at 8 workers), 2,482 on LLVM and
+  1,985 on the JVM (about 9.5 and 8 minutes at 8 slots), so the three run in
+  the wide part. On main they listed 34, 35 and 34 cases that pass now and 2,
+  6 and 2 that fail now, and nothing regressed, changed or went missing.

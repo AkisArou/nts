@@ -199,6 +199,8 @@ export class MemoryRun {
     if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > this.budgetBytes) throw new Error("resident cap: aggregate ceiling changed outside its reservation");
     return bytes;
   }
+  /** Whether its round has ended: a closed run holds no slice and starts no worker. */
+  get closed() { return this.#closed; }
   close() {
     if (this.#closed) return;
     this.#closed = true;
@@ -274,6 +276,10 @@ let direct: { run: MemoryRun; workers: Map<number, MemoryWorker> } | undefined;
 /** Drain an existing serial/controller owner without creating another run. */
 export function closeMemoryRun(): void { direct?.run.close(); }
 export function memoryRun(): MemoryRun {
+  // A round closes its run as it ends; a later round of the same process (a
+  // writer's repeat) gets one of its own. The handlers below close whichever
+  // run is current.
+  if (direct?.run.closed) direct = { run: new MemoryRun(), workers: new Map() };
   if (!direct) {
     direct = { run: new MemoryRun(), workers: new Map() };
     process.on("exit", () => direct?.run.close());

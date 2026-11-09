@@ -9,7 +9,8 @@ import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome }
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
 import { acceptedIn, applyCommand, applyDelta, auditRecord, findPending, KIND_STEPS, KINDS, oracleRefreshes, partOf, recordPending, sourceDigests, type BenchmarkDigests, type Kind, type Runner } from "./record-pending.ts";
 import { appliedIn, DELTA_FILE, parseDelta, serializeDelta, type Delta } from "./delta.ts";
-import { improvedLine, refusesDifferentlyLine } from "./pending.ts";
+import { improvedLine, pendingLine, refusesDifferentlyLine } from "./pending.ts";
+import { mergeTest262Record } from "../census/test262-record.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
@@ -252,7 +253,7 @@ test("accepted changes go to the kind whose record they name, a refusal for othe
 });
 
 test("each kind is recorded after the part that runs its checks, and names only steps the gate has", () => {
-  assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["benchmark-runs", "dex", "compile-times"]);
+  assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["test262", "benchmark-runs", "dex", "compile-times"]);
   const steps = new Set(STEPS.map(step => step.name));
   for (const kind of KINDS) for (const step of KIND_STEPS[kind]) assert.ok(steps.has(step), `${kind}: ${step} is a gate step`);
 });
@@ -544,4 +545,96 @@ test("--apply refuses a delta it cannot read, or one that names a record no reco
   const empty = file("empty.json", serializeDelta({ version: 1, commit: null, headers: {}, rows: [] }));
   assert.equal(await applyCommand(root, [empty], line => said.push(line)), 0);
   assert.deepEqual(appliedIn(said.join("\n")), { applied: 0, already: 0, skipped: 0 });
+});
+
+// test262: its record holds the cases that ran, so its census lists the cases
+// that run now, and the writer records exactly those.
+
+const T262 = "results/test262/c/harness.tsv";
+const T262_HEADER = "# Test262 test/harness cases that ran, and what each did. Written by\n# tooling/census/conformance262.ts --record; compared by --check.\n"
+  + `# compiler ${"a".repeat(16)}, commit ${"a".repeat(40)}, backend c, harness ${"b".repeat(16)}; machine at start: 30 GB available; 2 worker(s)\n`;
+/** A tree with one test262 record (a recorded fail, a recorded pass) and its census's cases in the test262 checkout. */
+function test262Tree(t: { after(fn: () => void): void }): string {
+  const root = tree(t);
+  write(root, T262, `${T262_HEADER}test/harness/fails.js\tfail\tuncaught Test262Error: #1\ntest/harness/passes.js\tpass\t\n`);
+  for (const name of ["fails", "passes", "new-fail", "new-pass", "other"]) write(root, `third_party/test262/test/harness/${name}.js`, `// ${name}\n`);
+  return root;
+}
+/** The census step's log: two cases that run now, and a recorded fail that passes. */
+function censusLog(t: { after(fn: () => void): void }): string {
+  const logs = testScratch(t, "record-pending-census");
+  writeFileSync(join(logs, "test262-census-c.log"), [
+    `              ${pendingLine("test/harness/new-pass.js", T262)}: pass`,
+    `              ${pendingLine("test/harness/new-fail.js", T262)}: fail: uncaught Test262Error: #2`,
+    `              ${improvedLine("test/harness/fails.js", T262, "fail", "pass")}`,
+  ].join("\n") + "\n");
+  return logs;
+}
+type T262Row = [string, "pass" | "fail", string];
+/** The writer's stand-in: the rows its repeats agreed on, merged as the real one merges them. */
+const writes = (root: string, rows: T262Row[]) => () =>
+  rewrite(root, T262, text => mergeTest262Record(text, new Map(rows.map(([path, outcome, detail]) => [path, { outcome, detail }]))));
+const AGREED: T262Row[] = [["test/harness/new-pass.js", "pass", ""], ["test/harness/new-fail.js", "fail", "uncaught Test262Error: #2"], ["test/harness/fails.js", "pass", ""]];
+
+test("test262's pending cases are the ones its census listed, and one writer per record measures exactly them", t => {
+  const root = test262Tree(t), before = files(root), lines: string[] = [];
+  assert.deepEqual(findPending(root, "test262"), [], "a case with no row is usually refused, so the tree lists none");
+  const listed = acceptedIn(root, censusLog(t));
+  assert.deepEqual(listed.pendingByKind.get("test262")?.map(one => [one.name, one.record]), [["test/harness/new-fail.js", T262], ["test/harness/new-pass.js", T262]]);
+  assert.deepEqual(listed.byKind.get("test262")?.map(one => one.name), ["test/harness/fails.js"]);
+  const { run, ran } = recorders(root, { "tooling/census/conformance262.ts": writes(root, AGREED) });
+  assert.equal(recordPending(root, ["test262"], run, line => lines.push(line), listed.byKind, undefined, listed.pendingByKind), 0, lines.join("\n"));
+  assert.deepEqual(ran, [["tooling/census/conformance262.ts", "--suite", "test262", "--backend", "c", "--under", "test/harness", "--record-pending", T262, "--repeats", "3",
+    "--case", "test/harness/fails.js", "--case", "test/harness/new-fail.js", "--case", "test/harness/new-pass.js"]]);
+  assert.deepEqual(lines.filter(line => line.startsWith("  recorded ")), [
+    `  recorded ${T262}: test/harness/fails.js fail -> pass (improved)`,
+    `  recorded ${T262}: test/harness/new-fail.js fail (pending)`,
+    `  recorded ${T262}: test/harness/new-pass.js pass (pending)`,
+  ]);
+  const after = files(root);
+  for (const [path, text] of before) if (path !== T262) assert.equal(after.get(path), text, `${path} is untouched`);
+  // With nothing listed, the census's writer does not run.
+  const idle = recorders(root);
+  assert.equal(recordPending(root, ["test262"], idle.run, () => {}), 0);
+  assert.deepEqual(idle.ran, []);
+});
+
+test("a test262 row is added only for a listed case and rewritten only from fail to pass, under its own header", t => {
+  const cases: [string, (text: string) => string, RegExp][] = [
+    ["unlisted", text => mergeTest262Record(text, new Map([["test/harness/other.js", { outcome: "pass", detail: "" }]])), /a row was added for test\/harness\/other\.js, which was not pending/],
+    ["worse", text => mergeTest262Record(text, new Map([["test/harness/passes.js", { outcome: "fail", detail: "uncaught Test262Error: #3" }]])), /the row of test\/harness\/passes\.js was rewritten, and the ratchet does not accept it/],
+    ["header", text => text.replace("2 worker(s)", "8 worker(s)"), /the header changed/],
+  ];
+  for (const [name, change, refusal] of cases) {
+    const root = test262Tree(t), was = readFileSync(join(root, T262), "utf8"), lines: string[] = [];
+    const listed = acceptedIn(root, censusLog(t));
+    const { run } = recorders(root, { "tooling/census/conformance262.ts": () => rewrite(root, T262, change) });
+    assert.equal(recordPending(root, ["test262"], run, line => lines.push(line), listed.byKind, undefined, listed.pendingByKind), 1, `${name}: ${lines.join("\n")}`);
+    assert.ok(lines.some(line => line.startsWith("  REFUSED ") && refusal.test(line)), `${name}: ${lines.join("\n")}`);
+    assert.equal(readFileSync(join(root, T262), "utf8"), was, `${name}: the record is put back`);
+  }
+});
+
+test("a test262 delta applies where main has no row for its case, and a case main recorded meanwhile is skipped", async t => {
+  const root = test262Tree(t), main = testScratch(t, "record-pending-main"), file = join(testScratch(t, "record-pending-run"), DELTA_FILE), lines: string[] = [];
+  cpSync(root, main, { recursive: true });
+  const listed = acceptedIn(root, censusLog(t));
+  const { run } = recorders(root, { "tooling/census/conformance262.ts": writes(root, AGREED) });
+  assert.equal(recordPending(root, ["test262"], run, line => lines.push(line), listed.byKind, file, listed.pendingByKind), 0, lines.join("\n"));
+  const delta = parseDelta(readFileSync(file, "utf8"));
+  assert.deepEqual(delta.rows.map(row => [row.case, row.before === null]), [["test/harness/fails.js", false], ["test/harness/new-fail.js", true], ["test/harness/new-pass.js", true]]);
+  const clean = await applied(main, delta);
+  assert.deepEqual(clean.counts, { applied: 3, already: 0, skipped: 0 }, clean.lines.join("\n"));
+  assert.equal(readFileSync(join(main, T262), "utf8"), readFileSync(join(root, T262), "utf8"), "main holds what the writer wrote");
+  // A main that recorded one of the cases itself keeps its row; the other two apply.
+  const moved = test262Tree(t);
+  rewrite(moved, T262, text => mergeTest262Record(text, new Map([["test/harness/new-fail.js", { outcome: "fail", detail: "uncaught Test262Error: another" }]])));
+  const partial = await applied(moved, delta);
+  assert.deepEqual(partial.counts, { applied: 2, already: 0, skipped: 1 }, partial.lines.join("\n"));
+  assert.ok(partial.lines.includes(`  skipped ${T262}: test/harness/new-fail.js: a row of another measurement was recorded for it; the next records run takes it up`), partial.lines.join("\n"));
+  // A case whose file a later test262 pin changed is another case: skipped.
+  const repinned = test262Tree(t);
+  write(repinned, "third_party/test262/test/harness/new-pass.js", "// new-pass, as a later test262 pin wrote it\n");
+  const later = await applied(repinned, delta);
+  assert.ok(later.lines.includes(`  skipped ${T262}: test/harness/new-pass.js: its sources changed; the next records run takes it up`), later.lines.join("\n"));
 });

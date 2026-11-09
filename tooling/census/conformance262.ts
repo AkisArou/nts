@@ -5,7 +5,7 @@
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
 //        [--backend c|llvm|jvm] [--paths-from <tsv> ...] [--fresh]
-//        [--suite test262|typescript] [--record-pending <tsv>]
+//        [--suite test262|typescript] [--record-pending <tsv>] [--case <path> ...] [--repeats N]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
 // die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
@@ -38,11 +38,23 @@
 // pending, listed and not run, and a row whose case is gone fails. An
 // improvement passes and is listed. Rankings remain a display projection.
 //
-// `--record-pending <tsv>` is the full check's TypeScript writer, after
-// landing (tooling/records/record-pending.ts): from a clean pin it runs the
-// whole selection, holds every recorded case to its row, and on a clean
-// comparison writes the rows of the pending and the improved cases, every
-// other line byte for byte.
+// `--record-pending <tsv>` is the full check's writer, after landing
+// (tooling/records/record-pending.ts), from a clean pin. On the TypeScript
+// suite it runs the whole selection, holds every recorded case to its row, and
+// on a clean comparison writes the rows of the pending and the improved cases,
+// every other line byte for byte. On test262 it measures exactly the cases a
+// census listed (`--case <path>`, repeated), `--repeats` times from scratch,
+// and writes a row only for a case every repeat agrees on: a case that runs
+// now (pass, or fail with what it threw) or a recorded fail that passes. A
+// case the repeats disagree on is unstable: said, and not written. A run on a
+// degraded machine writes nothing.
+//
+// **A test262 check lists, and does not record.** Its record holds the cases
+// that ran, so a whole run held to it (`--check`, the census steps) prints a
+// pending line for each case that runs now and has no row, and an improved
+// line for each recorded fail that passes, each naming the record; a recorded
+// case that regressed, changed or went missing fails it. The full check
+// records what it listed (tooling/records/record-pending.ts's test262 kind).
 //
 // # Why this exists beside `run262.ts`
 //
@@ -132,9 +144,9 @@ import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
   serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, TYPESCRIPT_RECORD_VERSION } from "./typescript-record.ts";
-import { parseTest262Record, serializeTest262Record } from "./test262-record.ts";
+import { mergeTest262Record, parseTest262Record, serializeTest262Record } from "./test262-record.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
-import { acceptedLine, pendingLine } from "../records/pending.ts";
+import { acceptedLine, improvedLine, pendingLine } from "../records/pending.ts";
 import { selectTypescript, typescriptOracleIdentity } from "./suites/typescript.ts";
 import { ownCensusScratch } from "./census-scratch.ts";
 import { provenanceOf } from "../conformance/pin.ts";
@@ -191,6 +203,10 @@ const checkFile = flag("--check", recordedFile ?? recordPendingFile);
 // passes and C refuses, so a re-record names its own previous record too.
 const pathsFrom = flagAll("--paths-from");
 const pathsFromFile = pathsFrom.length === 0 ? null : pathsFrom.join(" + ");
+// The cases a census listed, named one by one: test262's writer's population.
+const casesNamed = flagAll("--case");
+// How many times test262's writer measures them: it writes a row only where every repeat agrees.
+const repeats = Number(flag("--repeats", "1"));
 
 function cannotMeasure(why) {
   console.log(`  INSTRUMENT FAILURE: ${why}`);
@@ -215,10 +231,17 @@ for (const [writer, file] of [["--record", recordFile], ["--record-pending", rec
       "pin a commit of main (node tooling/conformance/pin.ts <rev>) and pass NTS_BIN=<that pin>",
   );
 }
-// The pending writer measures the whole selection: a sample or another
-// record's paths would leave cases unmeasured, and it writes no full record.
-if (recordPendingFile && (!TYPESCRIPT || sample > 0 || pathsFrom.length > 0 || recordFile || recordedFile || flag("--check", null))) {
-  cannotMeasure("--record-pending runs the whole TypeScript selection against its own record, with no other selection or record flag");
+// The TypeScript writer measures the whole selection, and test262's the cases
+// its census listed: either way against its own record, with no other
+// selection, and writing no full record.
+if (recordPendingFile && (sample > 0 || pathsFrom.length > 0 || recordFile || recordedFile || flag("--check", null) || (TYPESCRIPT ? casesNamed.length > 0 : casesNamed.length === 0))) {
+  cannotMeasure(TYPESCRIPT
+    ? "--record-pending runs the whole TypeScript selection against its own record, with no other selection or record flag"
+    : "test262's --record-pending measures exactly the cases a census listed (--case <path>, repeated) against its own record, with no other selection or record flag");
+}
+if (casesNamed.length > 0 && !(recordPendingFile && !TYPESCRIPT)) cannotMeasure("--case names the cases test262's --record-pending measures, and nothing else");
+if (!Number.isInteger(repeats) || repeats < 1 || (repeats > 1 && !(recordPendingFile && !TYPESCRIPT))) {
+  cannotMeasure("--repeats takes a whole number of at least 1, and only test262's --record-pending repeats");
 }
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
@@ -354,7 +377,9 @@ const chosen = populationOf(records, {
       ? { file: recordedFile, text: readFileSync(recordedFile, "utf8") }
       : pathsFromFile !== null
         ? { file: pathsFromFile, text: pathsFrom.map((file) => readFileSync(file, "utf8")).join("\n") }
-        : null,
+        : casesNamed.length > 0
+          ? { file: "--case", text: casesNamed.join("\n") }
+          : null,
 });
 if ("refused" in chosen) cannotMeasure(chosen.refused);
 const population = chosen.population;
@@ -363,7 +388,7 @@ if(sample>0){
   pendingPaths=pendingPaths.filter(path=>selected.has(path));
 }
 const unmeasuredPending=new Set(TYPESCRIPT&&!recordFile&&!recordPendingFile?pendingPaths:[]);
-const partial = sample > 0 || recordedFile !== null;
+const partial = sample > 0 || recordedFile !== null || casesNamed.length > 0;
 
 // --- exclusions ------------------------------------------------------------
 
@@ -732,6 +757,10 @@ const cases = population.map((record) => {
 });
 const toAttempt = cases.filter((c) => c.gap === null).map((c) => c.record.path);
 const rows = await runAll(toAttempt);
+// test262's writer measures its listed cases again, from scratch, before it
+// believes any of them: `repeats` runs in all.
+const repeatRows = [];
+for (let repeat = 1; repeat < repeats; repeat++) repeatRows.push(await runAll(toAttempt));
 
 // **Derived from `test/language` only.** A built-ins run has its own positives,
 // but the set means "what valid JavaScript draws from the *checker*", and the
@@ -745,7 +774,11 @@ const rows = await runAll(toAttempt);
 // "whole" is not the whole: the JVM lane's first record run rewrote the set as
 // `"validJsCodes": {}` with its own machine facts, which would have moved how
 // C's negatives are judged at the gate as a side effect of recording the JVM.
-const derivesEvidence = !partial && under === "test/language" && BACKEND === "c" && pathsFromFile === null;
+//
+// **And only when it writes the record.** A whole run held to a record (the
+// census) judges negatives by the set that record was judged by, so its
+// verdicts and the record's agree; a set derived mid-check would move them.
+const derivesEvidence = recordFile !== null && !partial && under === "test/language" && BACKEND === "c" && pathsFromFile === null;
 let evidenceNote;
 if (derivesEvidence) {
   validJsCodes = deriveValidJsCodes(rows);
@@ -794,6 +827,23 @@ for (const c of cases) {
   }
   Object.assign(c, c.record.negative ? judgeNegative(row, c.record.negative) : classify(row));
   if (row.diagnostics) c.named = [...new Set(row.diagnostics.flatMap((d) => d.named))];
+}
+// **A gain is believed only when it reproduces.** A case whose repeats do not
+// all come out as the first did is unstable: it is held to nothing and
+// written nowhere, so a flaky pass never raises a record. Judging again must
+// not count the evidence overrides again.
+if (repeatRows.length > 0) {
+  const counted = passedByOverride;
+  const said = (judged) => `${judged.outcome}${judged.outcome === "fail" ? `: ${judged.detail}` : ""}`;
+  for (const c of cases) {
+    if (c.gap !== null) continue;
+    const again = repeatRows.map((more) => {
+      const row = more.get(c.record.path);
+      return row ? said(c.record.negative ? judgeNegative(row, c.record.negative) : classify(row)) : "no-verdict";
+    });
+    if (again.some((verdict) => verdict !== said(c))) c.unstable = [said(c), ...again];
+  }
+  passedByOverride = counted;
 }
 
 cleanupScratch();
@@ -948,10 +998,16 @@ if (recordFile && TYPESCRIPT) {
 }
 let comparison = null;
 // What fails a comparison: REGRESSED, CHANGED and, for test262's partial
-// records, a recorded case missing or newly failing. A TypeScript case with no
-// row is pending; FIXED, REFUSES NOW and LOUD NOW are improvements, and REFUSES
-// DIFFERENTLY a refusal for other reasons: all pass, and are rewritten.
-const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED", "NEW FAIL"];
+// records, a recorded case missing. A TypeScript case with no row is pending;
+// FIXED, REFUSES NOW and LOUD NOW are improvements, and REFUSES DIFFERENTLY a
+// refusal for other reasons: all pass, and are rewritten. A test262 case that
+// runs now and has no row is pending, pass (NEW PASS) or fail (NEW FAIL), and
+// a recorded fail that passes is FIXED: all pass, and the full check records
+// them. An UNSTABLE case, whose repeats disagreed, is held to nothing.
+const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED"];
+// test262's lines for the records, every one of them printed: the full check
+// records exactly the cases they name.
+const LISTED_WHOLE = TYPESCRIPT ? new Set() : new Set(["NEW PASS", "NEW FAIL", "FIXED"]);
 // The rows --record-pending writes: the pending cases' and the accepted changes'.
 const recordUpdates = new Map();
 if (checkFile && TYPESCRIPT) {
@@ -972,7 +1028,8 @@ if (checkFile && TYPESCRIPT) {
 } else if (checkFile) {
   const before = new Map(parseTest262Record(readFileSync(checkFile, "utf8")).rows.map(({ path, outcome, detail }) => [path, { outcome, detail }]));
   const now = new Map(cases.map((c) => [c.record.path, c]));
-  comparison = { REGRESSED: [], "NEW FAIL": [], CHANGED: [], FIXED: [], "NEW PASS": [], MISSING: [], "ACCEPTED, DIFFERENTLY": [] };
+  comparison = { REGRESSED: [], CHANGED: [], MISSING: [], FIXED: [], "NEW PASS": [], "NEW FAIL": [], "ACCEPTED, DIFFERENTLY": [], UNSTABLE: [] };
+  const said = (c) => `${c.outcome}${c.outcome === "fail" ? `: ${c.detail}` : ""}`;
   // **An accepted negative's verdict is "accepted"; how it went on is not.** A
   // program that must not parse and compiled is wrong whatever it did next --
   // ran, threw, or was refused by a later stage -- and that next step moves with
@@ -989,10 +1046,14 @@ if (checkFile && TYPESCRIPT) {
       if (sample === 0 && (!partial || recordedFile)) comparison.MISSING.push(`${path}: recorded, not in the selection`);
       continue;
     }
+    if (c.unstable) { comparison.UNSTABLE.push(`${path}: ${c.unstable.join(" / ")}`); continue; }
     if (was.outcome === "pass" && c.outcome !== "pass") {
       comparison.REGRESSED.push(`${path}: pass -> ${c.outcome} (${c.cause ?? ""})`);
     }
-    if (was.outcome === "fail" && c.outcome === "pass") comparison.FIXED.push(`${path}: fail -> pass`);
+    if (was.outcome === "fail" && c.outcome === "pass") {
+      comparison.FIXED.push(improvedLine(path, checkFile, "fail", "pass"));
+      recordUpdates.set(path, { outcome: "pass", detail: "" });
+    }
     if (was.outcome === "fail" && c.outcome === "fail" && c.detail !== was.detail) {
       const kind = acceptedAsNegative(was.detail) && acceptedAsNegative(c.detail) ? "ACCEPTED, DIFFERENTLY" : "CHANGED";
       comparison[kind].push(`${path}: ${was.detail} -> ${c.detail}`);
@@ -1003,8 +1064,9 @@ if (checkFile && TYPESCRIPT) {
   }
   for (const c of ranRows) {
     if (before.has(c.record.path)) continue;
-    if (c.outcome === "pass") comparison["NEW PASS"].push(c.record.path);
-    else comparison["NEW FAIL"].push(`${c.record.path}: ${c.detail}`);
+    if (c.unstable) { comparison.UNSTABLE.push(`${c.record.path}: ${c.unstable.join(" / ")}`); continue; }
+    comparison[c.outcome === "pass" ? "NEW PASS" : "NEW FAIL"].push(`${pendingLine(c.record.path, checkFile)}: ${said(c)}`);
+    recordUpdates.set(c.record.path, { outcome: c.outcome, detail: c.outcome === "fail" ? c.detail : "" });
   }
 }
 
@@ -1039,7 +1101,8 @@ const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
 const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
 say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB`);
 say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);
-if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4) {
+const degraded = pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4;
+if (degraded) {
   say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");
   say("  do not move a floor or re-derive the evidence set from this run, unless a second run's --rows agree");
   say("  with its rows case for case: node tooling/census/rows.ts --diff <first> <second> -- 0 moved");
@@ -1145,8 +1208,9 @@ if (comparison) {
   say(`  against ${checkFile}:`);
   for (const [kind, list] of Object.entries(comparison)) {
     say(`    ${String(list.length).padStart(6)}  ${kind}`);
-    for (const line of list.slice(0, 20)) say(`              ${line}`);
-    if (list.length > 20) say(`              ... ${list.length - 20} more`);
+    const shown = LISTED_WHOLE.has(kind) ? list.length : 20;
+    for (const line of list.slice(0, shown)) say(`              ${line}`);
+    if (list.length > shown) say(`              ... ${list.length - shown} more`);
   }
 }
 
@@ -1165,9 +1229,13 @@ say(problems.length === 0 ? "  reconciled" : problems.map((p) => `  NOT RECONCIL
 // The full check's writer: only from a reconciled run, so an improvement a
 // red commit caused is never recorded ahead of that commit's revert.
 if (recordPendingFile && problems.length > 0) say(`  not recorded: ${recordPendingFile} is written only from a reconciled run`);
+else if (recordPendingFile && !TYPESCRIPT && degraded) say(`  not recorded: ${recordPendingFile} is written only from a run on a machine that was not degraded`);
 else if (recordPendingFile && recordUpdates.size > 0) {
-  try { writeFileSync(recordPendingFile, mergeTypeScriptRecord(readFileSync(recordPendingFile, "utf8"), recordUpdates)); }
-  catch (error) { cannotMeasure(`${recordPendingFile}: not recorded: ${error.message}`); }
+  try {
+    const text = readFileSync(recordPendingFile, "utf8");
+    writeFileSync(recordPendingFile, TYPESCRIPT ? mergeTypeScriptRecord(text, recordUpdates) : mergeTest262Record(text, recordUpdates));
+  } catch (error) { cannotMeasure(`${recordPendingFile}: not recorded: ${error.message}`); }
+  if (!TYPESCRIPT) for (const [path, row] of recordUpdates) say(`  recorded ${recordPendingFile}: ${path} ${row.outcome}${row.outcome === "fail" ? `: ${row.detail}` : ""}`);
   say(`  recorded ${recordUpdates.size} pending or improved row(s) into ${recordPendingFile}`);
 }
 console.log(out.join("\n"));

@@ -198,32 +198,49 @@ where they are read. The header names the compiler's fingerprint, the commit
   (`tooling/conformance/pin.ts`).
 - `--recorded` re-runs exactly the cases a record names, on the backend that
   wrote it, and compares. A recorded pass that does anything else is
-  `REGRESSED`, a fail with a different line `CHANGED`, a case that did not
-  run `MISSING`, and an unrecorded failure `NEW FAIL`; any of these fails the
-  run. `FIXED` and `NEW PASS` print a note to re-record. The run also prints
-  how many commits to `compiler/` or `runtime/` the record is behind.
-- A record cannot see a new pass, since its population is what already ran.
-  Only a full run, re-recorded from a pin, adds one.
+  `REGRESSED`, a fail with a different line `CHANGED`, and a case that did not
+  run `MISSING`; any of these fails the run. A recorded fail that passes is
+  `FIXED`, listed in an improved line that names the record. The run also
+  prints how many commits to `compiler/` or `runtime/` the record is behind.
+- `--check` runs a whole directory and holds it to its record the same way.
+  A case that runs now and has no row is `NEW PASS` or `NEW FAIL`, listed in a
+  pending line that names the record, and passes. This is the only way a new
+  pass is found: a record's own population is what already ran.
+- `--record-pending` is the full check's writer. From a pin, it measures
+  exactly the cases a census listed (`--case`), `--repeats` times from
+  scratch, and writes a row only for a case every repeat agrees on, and
+  nothing from a machine its run flags as degraded. A case the repeats
+  disagree on is `UNSTABLE`: said, and not written, so a flaky pass never
+  raises a record.
 - Another backend's record covers C's cases: it is written with `--paths-from`
   naming C's record, and its own previous record as well, so that cases it
   passes and C refuses are kept.
 
 ## What the gate holds
 
-All of these are core steps, which every landing runs.
+The first five rows are core steps. The census steps run in the full check's
+wide part.
 
 | step | what it holds |
 |---|---|
 | `test262` | the pin is reachable, every standalone file's metadata parses, and `features.json` passes `audit.ts` over `test/language` |
-| `test262-cases` | C, `test/language`: its record, a floor on its pass count and a ceiling on its accepted negatives |
-| `test262-builtins-cases` | C, `test/built-ins`: the same, with its own floor and ceiling |
-| `test262-rest-cases` | C, `test/annexB`, `test/staging` and `test/harness`: each with its own record, floor and ceiling |
-| `test262-llvm`, `test262-jvm` | that backend's five records, each held to itself; the record is the ratchet, so there is no floor |
+| `test262-cases` | C, `test/language`: every recorded row reproduces |
+| `test262-builtins-cases` | C, `test/built-ins`: the same |
+| `test262-rest-cases` | C, `test/annexB`, `test/staging` and `test/harness`: the same, each against its own record |
+| `test262-llvm`, `test262-jvm` | that backend's five records, each held to itself |
+| `test262-census-c`, `-llvm`, `-jvm` | every directory run whole on that backend and held to its records; each case that runs now, and each recorded fail that passes, is listed |
 
-The floors and ceilings are variables in `tooling/gate/all.sh`. A pass count
-above its floor, or accepted negatives below their ceiling, prints a note to
-move it. A lowering change runs the five C records against a pin before it
-goes to the gate.
+The record is the ratchet on every backend, so there is no floor: every
+recorded pass must still pass, so the record's pass rows are the floor.
+After the wide part is green, the full check records what the census listed
+(`tooling/records/record-pending.ts`, kind `test262`), so the floor rises with
+each gain. A fail row it adds, for a case that runs now and fails, is named in
+a task line by record and directory, with the full list beside the run: a
+case that went from refused to failing may be a soundness loss, the compiler
+now accepting code it gets wrong. `negatives-accepted:` counts the accepted
+negatives apart, since each is a fail row the pass count cannot show. A
+lowering change runs the five C records against a pin before it goes to the
+gate.
 
 ## Running it
 
@@ -245,6 +262,15 @@ node tooling/census/conformance262.ts --backend jvm --under test/built-ins \
 # A full run of one directory, keeping each case's row; --resume continues it
 node tooling/census/conformance262.ts --under test/built-ins \
   --rows <rows.jsonl> --json <report.json>
+
+# A directory whole, held to its record and listing what runs now: the census
+node tooling/census/conformance262.ts --under test/built-ins \
+  --check results/test262/c/builtins.tsv
+
+# The full check's writer: listed cases, three fresh repeats, from a pin
+NTS_BIN=$(node tooling/conformance/pin.ts <rev> | tail -1) \
+  node tooling/census/conformance262.ts --under test/harness \
+  --record-pending results/test262/c/harness.tsv --case <path> --repeats 3
 
 # Re-record, from a pin of a commit
 NTS_BIN=$(node tooling/conformance/pin.ts <rev> | tail -1) \
@@ -297,3 +323,10 @@ or variant.
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).
 - The permanent boundaries are those [boundaries](../language/boundaries.md)
   states.
+- The full check writes the test262 records (11-09). The census steps list
+  each case that runs now and each recorded fail that passes. The records run
+  writes a row only where three fresh repeats agree, and nothing from a
+  degraded machine. A new fail row is recorded and named in a task line. The
+  floors left `all.sh`, because every record was at least as strong as the
+  floor it replaced
+  ([log](../records/notebooks/decisions-log.md#the-full-check-writes-the-test262-records-11-09)).

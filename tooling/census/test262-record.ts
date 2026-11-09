@@ -48,6 +48,21 @@ export function serializeTest262Record(writer: Test262Writer, rows: readonly Tes
     rows.map(row => `${row.path}\t${row.outcome}\t${row.outcome === "fail" ? row.detail : ""}`).sort().join("\n") + "\n";
 }
 
+/** One row's line, as a record holds it: a fail keeps what it threw. */
+export const test262Line = (row: Test262Row): string => `${row.path}\t${row.outcome}\t${row.outcome === "fail" ? row.detail : ""}`;
+
+/**
+ * The record with these rows in, each in its place: every header line and
+ * every other row byte for byte. How the full check's writer and --apply add
+ * a case that runs now, or rewrite a recorded fail that passes now.
+ */
+export function mergeTest262Record(contents: string, updates: ReadonlyMap<string, { outcome: Test262Outcome; detail: string }>): string {
+  const record = parseTest262Record(contents);
+  const lines = new Map(record.rows.map(row => [row.path, test262Line(row)]));
+  for (const [path, { outcome, detail }] of updates) lines.set(path, test262Line({ path, outcome, detail }));
+  return [...contents.split("\n").filter(line => line.startsWith("#")), ...[...lines.values()].sort(), ""].join("\n");
+}
+
 export function parseTest262Record(contents: string): Test262Record {
   const lines = contents.split("\n");
   const written = lines.find(line => line.startsWith("# compiler ")) ?? "";
@@ -61,14 +76,19 @@ export function parseTest262Record(contents: string): Test262Record {
   const rows: Test262Row[] = [], seen = new Set<string>();
   for (const line of lines) {
     if (line === "" || line.startsWith("#")) continue;
-    // What a fail threw is the rest of the line, whatever it holds.
-    const first = line.indexOf("\t"), second = line.indexOf("\t", first + 1);
-    assert.ok(first > 0 && second > first, `malformed test262 record row: ${line}`);
-    const path = line.slice(0, first), outcome = line.slice(first + 1, second);
-    assert.ok(outcome === "pass" || outcome === "fail", `unknown test262 outcome ${outcome}: ${path}`);
-    assert.ok(!seen.has(path), `duplicate recorded case: ${path}`);
-    seen.add(path);
-    rows.push({ path, outcome, detail: line.slice(second + 1) });
+    const row = parseTest262Row(line);
+    assert.ok(!seen.has(row.path), `duplicate recorded case: ${row.path}`);
+    seen.add(row.path);
+    rows.push(row);
   }
   return { header, rows };
+}
+
+/** One row of a record. What a fail threw is the rest of the line, whatever it holds. */
+export function parseTest262Row(line: string): Test262Row {
+  const first = line.indexOf("\t"), second = line.indexOf("\t", first + 1);
+  assert.ok(first > 0 && second > first, `malformed test262 record row: ${line}`);
+  const path = line.slice(0, first), outcome = line.slice(first + 1, second);
+  assert.ok(outcome === "pass" || outcome === "fail", `unknown test262 outcome ${outcome}: ${path}`);
+  return { path, outcome, detail: line.slice(second + 1) };
 }
