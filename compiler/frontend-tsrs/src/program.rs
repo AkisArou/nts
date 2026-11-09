@@ -263,13 +263,31 @@ impl NativeProject {
 
 struct NativeFile {
     source: P<SourceFile>,
+    /// The file's whole text, validated once, when this revision's view of
+    /// the file is made. Every raw literal, list start and doc comment is a
+    /// slice of it, so reading one costs its own length, not the file's.
+    text: &'static str,
     utf16: OnceCell<Utf16Index>,
 }
 
 impl NativeFile {
+    fn new(source: P<SourceFile>) -> Self {
+        // A native `str` can hold WTF-8 (strings.rs), so none becomes a
+        // public Rust str unchecked. A file's text never passes through the
+        // native escape decoders that make WTF-8, so this cannot fail.
+        let text = std::str::from_utf8(source.text().as_bytes()).expect(
+            "source text was validated when it was decoded: overlays are UTF-8 strings and the \
+             native file decoder validates UTF-8 or replaces invalid sequences",
+        );
+        Self {
+            source,
+            text,
+            utf16: OnceCell::new(),
+        }
+    }
+
     fn index(&self) -> &Utf16Index {
-        self.utf16
-            .get_or_init(|| Utf16Index::new(self.source.text()))
+        self.utf16.get_or_init(|| Utf16Index::new(self.text))
     }
 }
 
@@ -408,10 +426,7 @@ impl OwnedProgram {
                 .source_files()
                 .iter()
                 .copied()
-                .map(|source| NativeFile {
-                    source,
-                    utf16: OnceCell::new(),
-                })
+                .map(NativeFile::new)
                 .collect();
             project.file_index = project
                 .files
@@ -1010,11 +1025,10 @@ impl<'s, S: ViewPhase> File<'s, S> {
     pub fn path(self) -> &'s Utf8Path {
         crate::host::native_path(self.native.source.file_name())
     }
+    /// The whole source text, validated once per file; no work per call.
     #[must_use]
     pub fn text(self) -> &'s str {
-        std::str::from_utf8(self.native.source.text().as_bytes()).expect(
-            "source text comes from validated overlays or the native UTF-8/UTF-16 file decoder",
-        )
+        self.native.text
     }
     #[must_use]
     pub fn content_digest(self) -> u128 {
