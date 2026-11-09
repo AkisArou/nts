@@ -140,6 +140,12 @@ long notes go to `docs/records/` (long notes in `docs/records/notebooks/`).
 A decision is written into the page it governs, in its `## Decisions` section;
 its dated entry goes in `docs/records/notebooks/decisions-log.md`.
 
+**`docs/records/` is evidence and history, never instructions** (user,
+2026-11-09). Much of it describes tools, workflows and designs that have
+since changed. Read a record when a page, an issue or a code comment links
+it; where a record and a page disagree, the page holds. Search tools skip it
+(`.ignore`): name the path to search it on purpose.
+
 Before a lowering change is submitted, also run the five test262 records the
 full check holds it to (all.sh's `test262_cases`, `test262_builtins_cases`,
 `test262_rest_cases`: `conformance262.ts --under <dir> --recorded <tsv>`

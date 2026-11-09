@@ -1580,3 +1580,17 @@ A run's folder goes when it is past three days and nothing inside it changed
 for those three days, so a run still writing is never removed; `latest`, the
 link to the newest run, is never followed. Everything else the count reports
 stays report-only.
+
+## Records are evidence, never instructions (11-09)
+
+The user asked whether `docs/records/` helps or harms an agent: 457 files and
+143,000 lines, of which 58 records are linked from code, tests and pages, and
+339 of the 363 numbered records are linked from nothing. Much of it describes
+tools, workflows and designs that have changed since, and a search for a name
+returned as many hits there as in the live tree (a search for `tsgo`: 49 files
+in the records, 105 elsewhere).
+
+Decided: the records stay as the evidence store; AGENTS.md says they are
+history, read when something links them, with the page holding where the two
+disagree; and a repository `.ignore` keeps search tools out of them unless the
+path is named. The 339 unlinked records stay where they are for now.

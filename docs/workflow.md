@@ -251,6 +251,10 @@ the first node task.
   past three days; every other red line stays report-only
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08),
   [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09)).
+- **Records are evidence, never instructions** (11-09): `docs/records/` is read
+  when a page, an issue or a code comment links it, a page holds where the two
+  disagree, and search tools skip it through `.ignore`
+  ([log](records/notebooks/decisions-log.md#records-are-evidence-never-instructions-11-09)).
 - **The landing check is its own tool** (11-07): `tooling/landing/` checks one
   change at a time against the newest `main`, and reuses the step runner, the
   path rules and the canonical environment; which platforms may stay unrun is

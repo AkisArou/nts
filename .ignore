@@ -1,0 +1,6 @@
+# Search tools that read this file (ripgrep, and the agents' searches built on
+# it) skip these paths unless one is named on the command line.
+#
+# docs/records/ is evidence and history, never instructions (AGENTS.md): it is
+# read when a page, an issue or a code comment links it.
+docs/records/
