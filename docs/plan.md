@@ -37,6 +37,8 @@ one page that changes as work goes; the designs it builds are in
 - **In flight:**
   - full-check runs create their own candidate environment and own their
     oracle resolution sessions (`full-check/run-environment`);
+  - then the records runs record only what their checks listed, each part
+    its own kinds (`records/listed-kinds`);
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
