@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { renameSync, writeFileSync } from "node:fs";
+import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -238,6 +238,121 @@ test("a request larger than the machine is refused, not queued", async t => {
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
+test("a reservation grows when the queue admits its growth and shrinks at once, and stays one entry", async t => {
+  const f = fixture(t); // 20 available
+  const job = await f.ask({ bytes: 4 * GiB, what: "job" });
+  await job.grow(6 * GiB); // room for 14: admitted at once
+  assert.equal(job.bytes, 10 * GiB);
+  const [entry, ...others] = readLedger(f.dir).admitted;
+  assert.deepEqual(others, [], "the growth joined the reservation's own entry");
+  assert.deepEqual([entry?.id, entry?.bytes, entry?.grows], [job.id, 10 * GiB, null]);
+  assert.deepEqual(readLedger(f.dir).waiting, []);
+  assert.deepEqual(f.of("job").map(d => [d.admitted, d.grows, d.roomBytes]), [[true, null, 18 * GiB], [true, job.id, 14 * GiB]]);
+  assert.deepEqual(f.lines, [], "nothing waited");
+
+  // What it grew by is promised to it: room for 8, so 9 waits until it shrinks.
+  const big = f.ask({ bytes: 9 * GiB, what: "big" });
+  await waitFor("the big request to wait", () => f.of("big").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("big").every(d => !d.admitted && d.roomBytes === 8 * GiB));
+  const shrunk = job.shrink(3 * GiB);
+  assert.equal(job.bytes, 7 * GiB, "the holder counts what it gave back at once");
+  await shrunk;
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => [e.what, e.bytes]), [["job", 7 * GiB]]);
+  const held = await big;
+  assert.equal(f.of("big").at(-1)?.roomBytes, 11 * GiB);
+
+  await assert.rejects(job.grow(0), RangeError);
+  await assert.rejects(job.shrink(7 * GiB), /job holds 7\.0 GiB, so it cannot give back 7\.0 GiB; release it instead/);
+  await assert.rejects(job.grow(56 * GiB), /job asks to grow by 56\.0 GiB to 63\.0 GiB, which can never fit/);
+  assert.equal(job.bytes, 7 * GiB);
+  held.release();
+  job.release();
+  await job.shrink(GiB); // nothing is held any more, so nothing is given back
+  await assert.rejects(job.grow(GiB), /job's reservation has been released, so it cannot grow/);
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+});
+
+test("a growth waits its turn as a new request would: behind those before it, ahead of those after, and behind the landing check", async t => {
+  const f = fixture(t); // 20 available
+  const job = await f.ask({ bytes: 10 * GiB, what: "job" }); // room for 8 now
+  const early = f.ask({ bytes: 9 * GiB, what: "early" });
+  await waitFor("the early request to wait", () => f.of("early").length >= 1, { stopped: f.stopped });
+  const growth = job.grow(2 * GiB);
+  growth.catch(() => {});
+  const growthOf = () => f.decisions.filter(d => d.grows === job.id);
+  await waitFor("the growth to wait three times", () => growthOf().length >= 3, { stopped: f.stopped });
+  assert.ok(growthOf().every(d => !d.admitted && d.ahead === 1 && d.roomBytes === 8 * GiB), "2 GiB fit in 8, yet the growth waits behind the 9 that do not");
+  assert.match(f.lines.find(line => line.includes("waits to grow")) ?? "",
+    /^memory: job waits to grow by 2\.0 GiB to 12\.0 GiB \(agent\): 20\.0 GiB available, 10\.0 GiB of it promised to running jobs, 2\.0 GiB kept for the system; 1 ahead of it in the queue$/);
+  assert.deepEqual(readLedger(f.dir).waiting.map(e => [e.what, e.grows]), [["early", null], ["job", job.id]]);
+  const late = f.ask({ bytes: GiB, what: "late" });
+  await waitFor("the late request to wait", () => f.of("late").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("late").every(d => !d.admitted && d.ahead === 2), "behind the growth, which arrived first");
+  const landing = await f.ask({ bytes: GiB, what: "landing", priority: "landing" });
+  assert.equal(f.of("landing").at(-1)?.ahead, 0, "the landing check goes ahead of the growth");
+
+  // The job has used 3 of its 10: room for 10, which the early 9 takes.
+  f.used.set("job", 3 * GiB);
+  const earlyHeld = await early;
+  const seen = growthOf().length;
+  await waitFor("the growth to look again", () => growthOf().length > seen, { stopped: f.stopped });
+  assert.ok(growthOf().slice(seen).every(d => !d.admitted), "1 left after the early request's 9");
+  earlyHeld.release(); // room for 10: the growth's 2, then the late 1
+  const [, lateHeld] = await Promise.all([growth, late]);
+  assert.equal(job.bytes, 12 * GiB);
+  assert.ok(f.lines.some(line => /^memory: job grew by 2\.0 GiB to 12\.0 GiB after \d+ s$/.test(line)), f.lines.join("\n"));
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => [e.what, e.bytes]).sort(), [["job", 12 * GiB], ["landing", GiB], ["late", GiB]]);
+  for (const reservation of [job, landing, lateHeld]) reservation.release();
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+});
+
+test("a growth whose owner exits while it waits fails and leaves the queue, and the reservation it would have grown is dropped", async t => {
+  const f = fixture(t);
+  const child = ownerProcess(t);
+  const job = await f.ask({ bytes: 10 * GiB, what: "job", owner: { pid: child.pid } });
+  const growth = job.grow(9 * GiB); // room for 8
+  growth.catch(() => {});
+  await waitFor("the growth to wait", () => f.decisions.some(d => d.grows === job.id), { stopped: f.stopped });
+  const next = f.ask({ bytes: 12 * GiB, what: "next" });
+  await waitFor("the next request to wait behind it", () => f.of("next").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("next").every(d => !d.admitted && d.ahead === 1));
+  const exited = once(child, "exit");
+  child.kill("SIGKILL");
+  await exited;
+  await assert.rejects(growth, /job's owner, pid \d+, exited while it waited/);
+  const admitted = await next;
+  assert.ok(f.lines.includes(`memory: dropped job's reservation of 10.0 GiB: its owner, pid ${child.pid}, has exited`), f.lines.join("\n"));
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => e.what), ["next"]);
+  assert.deepEqual(readLedger(f.dir).waiting, []);
+  admitted.release();
+});
+
+test("releasing a reservation withdraws its growth, and a growth whose reservation has ended is dropped", async t => {
+  const f = fixture(t);
+  const job = await f.ask({ bytes: 10 * GiB, what: "job" });
+  const growth = job.grow(9 * GiB);
+  growth.catch(() => {});
+  await waitFor("the growth to wait", () => readLedger(f.dir).waiting.length === 1, { stopped: f.stopped });
+  job.release();
+  await assert.rejects(growth, /job's reservation was released while it waited to grow/);
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+
+  // Its entry gone from under it, as when its owner has exited: the next
+  // decision drops the growth. This one waits a minute between its own
+  // decisions, so another request's decision is the one that finds it.
+  const slow = await f.ask({ bytes: 10 * GiB, what: "slow" }, { everyMs: 60_000 });
+  const stop = new AbortController();
+  const stranded = slow.grow(9 * GiB, { signal: stop.signal });
+  stranded.catch(() => {});
+  await waitFor("the growth to wait", () => readLedger(f.dir).waiting.length === 1, { stopped: f.stopped });
+  rmSync(join(f.dir, "admitted", `${slow.id}.json`));
+  (await f.ask({ bytes: GiB, what: "other" })).release();
+  assert.ok(f.lines.includes("memory: dropped slow's request to grow by 9.0 GiB: its reservation has ended"), f.lines.join("\n"));
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+  stop.abort();
+  await assert.rejects(stranded, { name: "AbortError" });
+});
+
 /** admit.ts under the fixture's ledger and memory reading, and nothing inherited from this process's. */
 function admitEnv(f: Fixture, extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...f.env };
@@ -255,6 +370,11 @@ test("a child started inside a reservation runs in it at once and asks for nothi
   const child = await f.ask({ bytes: 2 * GiB, what: "child" }, { env: { ...f.env, ...parent.env } });
   assert.deepEqual([child.inherited, child.id, child.env], [true, parent.id, parent.env]);
   assert.equal(f.decisions.length, before, "no decision was made: nothing was asked");
+  await child.grow(3 * GiB);
+  await child.shrink(GiB);
+  assert.equal(child.bytes, 4 * GiB);
+  assert.equal(f.decisions.length, before, "nor for its growth: the parent sized its reservation for what runs inside it");
+  assert.deepEqual(readLedger(f.dir).admitted.map(e => [e.id, e.bytes]), [[parent.id, 4 * GiB]], "the parent's reservation is as it was");
   child.release();
   assert.deepEqual(readLedger(f.dir).admitted.map(e => e.id), [parent.id], "the child's release leaves its parent's reservation");
 
@@ -330,6 +450,20 @@ test("decisions are made one at a time: the lock excludes every other process, a
   const after = lockLedger(dir);
   assert.ok(after, "a holder killed outright leaves no lock behind");
   after.release();
+});
+
+test("a shrink writes its entry under the lock: it gives back at once, and the ledger sees it once the lock is free", async t => {
+  const f = fixture(t);
+  const job = await f.ask({ bytes: 8 * GiB, what: "job" });
+  const other = holder(t, f.dir);
+  await other.holds();
+  const shrunk = job.shrink(4 * GiB);
+  assert.equal(job.bytes, 4 * GiB);
+  assert.equal(readLedger(f.dir).admitted[0]?.bytes, 8 * GiB, "not written while another process holds the lock");
+  other.child.stdin!.end();
+  await shrunk;
+  assert.equal(readLedger(f.dir).admitted[0]?.bytes, 4 * GiB);
+  job.release();
 });
 
 test("admit.ts becomes its command: the command's exit status, its signal, and its reservation in the environment", async t => {

@@ -1,16 +1,17 @@
-// An inner gate run admits against the memory reading its test gives it, never
-// the host's. The runner starts no new case below the floor until 14 GB is
-// available (admission.ts), and inside a full gate the host can sit below it:
-// an inner run reading the host then waits, silently, until the tooling
-// runner's watchdog calls the file hung (canonical-environment.test.ts, in the
-// landing run of 11-07, under a runner that admits before its first step). Every test
-// that starts a real runner gives it its own reading through gateEnvironment's
-// owned values, as this one does.
+// An inner gate run is admitted by the memory reading and the memory ledger its
+// test gives it, never the host's memory or the machine's queue. A run waits in
+// the ledger (memory-ledger.ts) until its first block of memory fits, and
+// inside a full gate the host can sit low: an inner run reading the host, or
+// queueing behind the machine's own jobs, then waits, silently, until the
+// tooling runner's watchdog calls the file hung (canonical-environment.test.ts,
+// in the landing run of 11-07, under a runner that admits before its first
+// step). Every test that starts a real runner gives it its own reading and
+// ledger through gateEnvironment's owned values, as this one does.
 //
 //   node --test tooling/gate/inner-gate-memory.test.ts
 //
 // The fixture's one step is elastic, and its case takes a gate token as every
-// case does (token.sh), so the run's case admission decides whether it starts.
+// case does (token.sh), so the run's memory decides whether it starts.
 // **The run that is meant to wait runs in a systemd unit of its own,** and the
 // test stops that unit by name: whatever the run started dies with its
 // cgroup, so no waiting runner can outlive the test.
@@ -29,9 +30,11 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
+import {ownMemory} from "./test-memory.ts";
+import {readLedger} from "./memory-ledger.ts";
 
 const GATE = fileURLToPath(new URL("./", import.meta.url));
-const WAITING = /waiting for 14 GB before the first case/;
+const WAITING = /memory: gate run .* waits for 1\.0 GiB \(agent\)/;
 
 function fixture(t: TestContext) {
   const own = newTestScratch("inner-gate-memory-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
@@ -63,17 +66,16 @@ else
 fi
 `);
   const compiler = join(own, "nts"); writeFileSync(compiler, "controlled compiler identity\n");
-  const reading = (name: string, kb: number) => { const file = join(own, name); writeFileSync(file, `MemTotal: 32000000 kB\nMemAvailable: ${kb} kB\n`); return file; };
-  const planned = (name: string, meminfo: string) => {
-    const run = join(own, "home/.cache", name);
-    return { run, env: gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") },
-      { run, oracleRoot:root, owned: { NTS_GATE_STEPS: "examples", NTS_BIN: compiler, CARGO_TARGET_DIR: join(own, "target"), NTS_MEMINFO: meminfo } }).env };
+  const planned = (name: string, availableKiB: number) => {
+    const run = join(own, "home/.cache", name), memory = ownMemory(join(own, name), { availableKiB, totalKiB: 32_000_000 });
+    return { run, memory, env: gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") },
+      { run, oracleRoot:root, owned: { NTS_GATE_STEPS: "examples", NTS_BIN: compiler, CARGO_TARGET_DIR: join(own, "target"), ...memory } }).env };
   };
-  return { root, gate, started, reading, planned };
+  return { root, gate, started, planned };
 }
 
 test("an inner gate run admits a case against its own ample reading", t => {
-  const f = fixture(t), { run, env } = f.planned("ample", f.reading("ample", 64_000_000));
+  const f = fixture(t), { run, env } = f.planned("ample", 30_000_000);
   const ran = spawnTest(process.execPath, [join(f.gate, "run.mjs")], { cwd: f.root, env, encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
   assert.equal(JSON.parse(readFileSync(join(run, "summary.json"), "utf8")).verdict, "green");
@@ -81,8 +83,9 @@ test("an inner gate run admits a case against its own ample reading", t => {
   assert.doesNotMatch(ran.stdout, WAITING);
 });
 
-test("an inner gate run whose reading is below the floor holds its case, whatever the host has, and is stopped by its unit", async t => {
-  const f = fixture(t), { env } = f.planned("low", f.reading("low", 4_000_000));
+test("an inner gate run whose reading has no room for it waits in its own ledger, whatever the host has, and is stopped by its unit", async t => {
+  // 2.5 GiB available, 2 of them kept for the system: not one block.
+  const f = fixture(t), { env, memory } = f.planned("low", 2.5 * 2 ** 20);
   const unit = `nts-test-inner-gate-memory-${randomUUID().slice(0, 8)}`;
   t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { stdio: "ignore" }); });
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
@@ -99,6 +102,7 @@ test("an inner gate run whose reading is below the floor holds its case, whateve
   });
   assert.ok(waiting, "the run waits for memory its reading does not show");
   assert.equal(existsSync(f.started), false, "no case started while it waits");
+  assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).waiting.length, 1, "it waits in its own ledger, not the machine's");
   const stopped = spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { encoding: "utf8" });
   assert.equal(stopped.status, 0, stopped.stderr);
   if (child.exitCode === null) await new Promise(resolve => child.on("close", resolve));

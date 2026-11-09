@@ -46,6 +46,14 @@ function populated(group: string): 0 | 1 {
   return value === "0" ? 0 : 1;
 }
 
+/** The most the cgroup and everything under it has held, or null where the kernel does not say. */
+function memoryPeak(group: string): number | null {
+  try {
+    const text = readFileSync(`${CGROUP}${group}/memory.peak`, "utf8").trim();
+    return /^\d+$/.test(text) ? Number(text) : null;
+  } catch { return null; }
+}
+
 function reapPreviousRoot(previous: RunOwner): void {
   const group = control("show", previous.slice, "--property=ControlGroup", "--value");
   if (!group) return;
@@ -90,6 +98,7 @@ export class StepScope {
   private launched = false;
   private readonly nonce = randomUUID();
   private readonly entryPath: string;
+  private peak: number | null = null;
   constructor(root: GateScopes) {
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = `${this.slice.slice(0, -6)}-step.scope`;
@@ -113,6 +122,8 @@ export class StepScope {
   }
   entry(): StepEntry { return readStepEntry(this.entryPath, { nonce: this.nonce, unit: this.unit, group: `${this.group}/${this.unit}` }); }
   kill(): void { if (!this.closed) control("kill", "--kill-whom=all", "--signal=SIGKILL", this.slice); }
+  /** The step's measured peak: the slice's memory.peak, which `drain` reads once its last process has exited; null before, or unread. */
+  get memoryPeakBytes(): number | null { return this.peak; }
   async drain(): Promise<ScopeDrain> {
     if (this.closed) throw new Error("step scope drained twice");
     if (populated(this.group)) this.kill();
@@ -121,6 +132,8 @@ export class StepScope {
     if (identity.dev !== this.device || identity.ino !== this.inode) throw new Error("step cgroup identity changed before drain");
     const proof: ScopeDrain = { version: 1, slice: this.slice, unit: this.unit, group: this.group,
       device: String(this.device), inode: String(this.inode), populated: 0, observed_at: new Date().toISOString() };
+    // Nothing of the step runs any more, and stopping the slice removes its cgroup.
+    this.peak = memoryPeak(this.group);
     control("stop", this.slice);
     this.closed = true;
     return proof;

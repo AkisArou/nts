@@ -7,24 +7,29 @@
 // build in the same profile (NTS_TEST_PROFILE), so their crates are the ones
 // the compiler was built from. Then every other landing step runs in one
 // `sh tooling/gate/all.sh` under the canonical environment
-// (canonical-environment.ts), with the run's slots, memory admission and
+// (canonical-environment.ts), with the run's slots, memory reservation and
 // summary.json the runner keeps.
 //
+// **Memory is the machine's memory ledger's to give** (tooling/gate/
+// memory-ledger.ts), at the landing check's priority, ahead of agents' work
+// and the full check. The build waits its turn through admit.ts, for what the
+// gate reserves for a build; the runner holds a reservation of its own for
+// the steps (NTS_MEMORY_PRIORITY).
+//
 // **Memory pressure is a wait, never a verdict.** A step the runner reports as
-// an instrument failure of kind memory-pressure runs again once memory allows,
-// alone, keeping every result that completed. Any other unfinished
-// measurement holds the change for a person; only a step that ran and failed
-// refuses it.
+// an instrument failure of kind memory-pressure runs again, alone, in a run
+// whose reservation waits until memory allows, keeping every result that
+// completed. Any other unfinished measurement holds the change for a person;
+// only a step that ran and failed refuses it.
 //
 // Lines a check prints for a case its record has no row for yet, or for a
 // recorded case that got better (tooling/records/pending.ts), are listed as
 // information: the full check writes those rows.
 import { removable } from "../gate/run-temporary.ts";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gateCommand } from "../gate/affinity.ts";
-import { RESUME_AT_GB, memAvailableGB } from "../gate/admission.ts";
 import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-environment.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
@@ -52,9 +57,8 @@ export type RunOptions = {
   interop?: string | null; doctests?: string | null;
   /** The launcher's environment: only its host capabilities reach a step. */
   env?: NodeJS.ProcessEnv;
-  /** Told while the run waits for memory. */
+  /** Told when memory pressure sends steps back to run again. */
   hold?: (reason: string) => void;
-  memory?: () => number | null; pause?: () => void;
   /** The command that builds the compiler; cargo in `nts-dev` by default. */
   build?: readonly string[];
   /** Variables the caller's code owns beyond the run's (a test's controls). */
@@ -67,8 +71,9 @@ export type RunOptions = {
   ceiling?: number;
 };
 
-const ROWS = new Map((STEPS as { name: string; treeOnly?: boolean }[]).map(row => [row.name, row]));
-const sleep = () => { spawnSync("sleep", ["10"]); };
+// The build's memory: what the gate reserves for its own build of the workspace.
+const BUILD_BYTES = Math.floor((STEPS as { name: string; mem: number }[]).find(row => row.name === "build")!.mem * 2 ** 30);
+const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
 
 /**
  * The environment a landing run starts from: the launcher's host
@@ -102,6 +107,7 @@ export function runLanding(options: RunOptions): Ran {
     NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
     NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
     CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, ...STANDING_GATE_POLICY,
+    NTS_MEMORY_PRIORITY: "landing",
     // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
     ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
     ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),
@@ -114,21 +120,9 @@ export function runLanding(options: RunOptions): Ran {
   try { environment = rest.length ? gateEnvironmentError(tree, rest, options.interop ?? null, launcher) : null; }
   catch (error) { return finish("held", `the tree's gate could not say what its steps need: ${(error as Error).message}`); }
   if (environment) return finish("held", `environment: ${environment}`);
-  const heavy = options.steps.some(step => !ROWS.get(step)?.treeOnly);
-  const admit = (what: string) => {
-    if (!heavy) return;
-    const read = options.memory ?? memAvailableGB;
-    for (let said = false; ;) {
-      const gb = read();
-      if (gb === null || gb >= RESUME_AT_GB) return;
-      if (!said) { options.hold?.(`memory: ${gb.toFixed(1)} GB available, waiting for ${RESUME_AT_GB} GB before ${what}`); said = true; }
-      (options.pause ?? sleep)();
-    }
-  };
 
   if (options.steps.includes("build")) {
     for (let attempt = 1; ; attempt++) {
-      admit("the build");
       const built = buildCompiler(options, selected.node, launcher, owned, attempt);
       if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
       results.push(built);
@@ -142,7 +136,6 @@ export function runLanding(options: RunOptions): Ran {
   const rows = new Map<string, StepResult>();
   let pending = [...rest];
   for (let attempt = 1; pending.length; attempt++) {
-    admit(attempt === 1 ? "the steps" : `${pending.join(" ")} again`);
     const dir = attempt === 1 ? run : join(run, `attempt-${attempt}`);
     const measured = runSteps(options, selected.node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" ") }, dir, pending);
     if ("held" in measured) { for (const step of pending) rows.set(step, { name: step, verdict: "NOT RUN", reason: measured.held }); results.push(...rest.map(step => rows.get(step)!)); return finish("held", measured.held); }
@@ -164,8 +157,12 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(machineBudget(cpus().length).slots)];
-  const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
-  const launch = gateCommand(timed[0]!, timed.slice(1));
+  const timing = existsSync("/usr/bin/time");
+  const timed = timing ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
+  // admit.ts becomes the build once the ledger admits it, so the reservation
+  // lasts exactly as long as the build, however the build ends.
+  const admitted = [ADMIT, "--bytes", String(BUILD_BYTES), "--priority", "landing", "--what", `landing build of ${options.commit.slice(0, 12)}`, "--", ...timed];
+  const launch = gateCommand(node, admitted);
   const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
   writeFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
@@ -176,6 +173,12 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
   const measured = { ...(cpu !== undefined ? { cpu } : {}), ...(wall !== undefined ? { wall } : {}), log };
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
   if (r.error || r.signal) return { name: "build", verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
+  // admit.ts's own failures never started the build: 125 for the ledger or a
+  // size the machine cannot hold, 126 and 127 for a command it cannot run
+  // (when time wraps the build, those two are time's, the build's own).
+  if (r.status === 125 || (!timing && (r.status === 126 || r.status === 127))) {
+    return { name: "build", verdict: "INSTRUMENT", reason: `the build was not started: admit.ts exited ${r.status}; see ${log}`, ...measured };
+  }
   return r.status === 0 ? { name: "build", verdict: "PASS", ...measured } : { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
 }
 

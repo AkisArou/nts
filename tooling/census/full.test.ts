@@ -11,6 +11,7 @@ import {join, dirname} from "node:path";
 import {test} from "node:test";
 import {fullPlan, fullEnvironment} from "./full-plan.ts";
 import {testScratch, newTestScratch} from "../gate/test-scratch.ts";
+import {ownMemory} from "../gate/test-memory.ts";
 
 
 test("missing full-run environment refuses before setup", t => {
@@ -90,9 +91,9 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
     assert.equal(env.NTS_GATE_ACCEPT_SKIP,STANDING_GATE_POLICY.NTS_GATE_ACCEPT_SKIP);
     assert.equal(env.NTS_GATE_ACCEPT_SKIP,"on-device");
     assert.equal(JSON.parse(env[ENVIRONMENT_CONTEXT]!).report.canonical,true);
-    // The inner run admits against an ample reading, never the host's memory, which a full gate can hold below the floor.
-    const meminfo=join(f.directory,"meminfo");writeFileSync(meminfo,"MemAvailable: 64000000 kB\n");
-    const admitted=gateEnvironment(env,{run:plan.run,owned:{NTS_MEMINFO:meminfo}}).env;
+    // The inner run decides by a reading and a ledger of its own, never the
+    // host's memory, which a full gate can hold low, or the machine's queue.
+    const admitted=gateEnvironment(env,{run:plan.run,owned:ownMemory(join(f.directory,"memory"))}).env;
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:f.root,env:admitted,encoding:"utf8"});
     const accepted=step==="on-device";
     assert.equal(actual.status,accepted?0:1,actual.stdout+actual.stderr);

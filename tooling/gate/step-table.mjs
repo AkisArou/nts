@@ -13,7 +13,8 @@
 //   elastic  its workers take a token per process (token.sh, tokens.mjs), so
 //          it holds a share of the budget that moves with the work instead of
 //          a grant fixed when it starts (see "Tokens")
-//   mem    GB it may hold at peak
+//   mem    GiB it may hold at peak: what the run's memory reservation counts
+//          for it while it runs (an elastic step's, `mem / slots` per token)
 //   fe     true when its workers start frontends (counted against FRONTENDS)
 //   nts    true when it drives the compiler: needs the binary and the frontend
 //   needs  steps that must PASS first (only when they are requested too)
@@ -22,8 +23,7 @@
 //   host   what the machine must have, named when the step SKIPs
 //   favoured  runs at the runner's own priority; every other step at nice +5
 //   treeOnly  true when it reads only the tree, builds and runs nothing, and
-//          takes seconds: a landing check of only these waits for no memory,
-//          and one never measured is costed at seconds
+//          takes seconds: one never measured is costed at seconds
 //   capabilities  environment requirements, read before a landing/full run takes the lock
 //   bound  seconds the step may run before it is stopped and held, for a step
 //          whose recorded cost cannot derive one (step-bound.ts): no committed

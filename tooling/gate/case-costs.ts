@@ -3,9 +3,15 @@ import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { memoryWarning } from "./memory-calibration.ts";
 
+/** The run's memory as run.mjs counts it: its reservation, what its running steps are counted for, and what waits. */
+export type MemoryState = {
+  reserved_bytes: number; used_bytes: number; withheld_bytes: number; wanted_bytes: number;
+  /** What a waiting token's share lacks in the reservation; above zero, tokens wait for memory. */
+  token_short_bytes: number; growing_bytes: number;
+};
 export type Observation = {
   event: string; epoch: number; step?: string; request?: number; pid?: number; context?: string;
-  memory_allowed?: boolean | null; used?: { slots: number; fe: number };
+  memory?: MemoryState; used?: { slots: number; fe: number };
   slots?: number; frontends?: number; withhold?: number; compiler_sha?: string;
   [key: string]: unknown;
 };
@@ -80,7 +86,7 @@ export function distribution(values: number[]) {
 }
 
 export function waitCause(state: Partial<Observation>) {
-  if (state.memory_allowed === false) return "memory_admission";
+  if ((state.memory?.token_short_bytes ?? 0) > 0) return "memory_admission";
   if ((state.used?.fe ?? 0) >= (state.frontends ?? Infinity)) return "frontend_cap";
   if ((state.used?.slots ?? 0) >= (state.slots ?? Infinity)) return "slot_tokens";
   if ((state.used?.slots ?? 0) + (state.withhold ?? 0) >= (state.slots ?? Infinity)) return "reserved_slots";

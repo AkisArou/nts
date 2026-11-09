@@ -38,8 +38,15 @@ export const UNSET_AMBIENT = [
   "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
 ] as const;
 
-// Step scope handoff, not capabilities forwarded to programs under test.
-const PARENT = new Set(["NTS_TOOLING_SLICE"]);
+// A step's handoff from its run, not capabilities forwarded to programs under
+// test: the slice it runs in, and the memory reservation it runs inside
+// (memory-ledger.ts), which a tool in the step joins instead of asking again.
+const PARENT = new Set(["NTS_TOOLING_SLICE", "NTS_MEMORY_RESERVATION"]);
+// Owned values a launcher's code supplies, never copied from the launcher:
+// the run's place in the machine's memory queue (landing, agent, full-check),
+// which a shell's own value would otherwise let it jump. A shell's is
+// discarded, and named as discarded.
+const CODE_OWNED = new Set(["NTS_MEMORY_PRIORITY"]);
 const HOST = new Set<string>(HOST_CAPABILITIES);
 const EXTRA_POLICY = new Set([
   "RAYON_NUM_THREADS",
@@ -52,7 +59,7 @@ const INFRASTRUCTURE = new Set([
   "NTS_GATE_LOCK_FD", "NTS_GATE_SCOPE_EXPECTED",
 ]);
 const EXPERIMENTS = new Set([
-  ...EXTRA_POLICY, "NTS_GATE_STEPS", "NTS_GATE_SLOTS", "NTS_GATE_JOBS", "NTS_JOBS", "NTS_GATE_MEM_GB",
+  ...EXTRA_POLICY, "NTS_GATE_STEPS", "NTS_GATE_SLOTS", "NTS_GATE_JOBS", "NTS_JOBS",
   "NTS_GATE_FRONTENDS", "NTS_GATE_FAIL_FAST", "NTS_GATE_ACCEPT_SKIP", "NTS_GATE_TIME_STRICT", "NTS_GATE_RECORD_TIMES",
   // The landing check's ceiling on step bounds (step-bound.ts), owned by it.
   "NTS_GATE_STEP_CEILING_S",
@@ -60,9 +67,11 @@ const EXPERIMENTS = new Set([
   "NTS_RC_NAIVE", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
   "NTS_KEEP_TEMP", "NTS_TRACE_LOWERING", "NTS_ARRIVALS", "NTS_DIFF_OBJECT_CACHE", "NTS_DIFF_NO_OBJECT_CACHE",
   "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_MIN_AVAILABLE_GB", "NTS_CENSUS_RUN_MAX_BYTES",
-  // The memory reading admission uses (admission.ts). A test gives its inner
-  // runs an owned one; set by a launcher, it makes the run an experiment.
-  "NTS_MEMINFO",
+  // The memory reading admission decides by, and the memory ledger a run
+  // queues in (memory-ledger.ts). A test gives its inner runs owned ones, so
+  // the host's memory and the machine's queue never decide it; set by a
+  // launcher, either makes the run an experiment.
+  "NTS_MEMINFO", "NTS_MEMORY_LEDGER",
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
@@ -90,7 +99,7 @@ export function ownedCacheEnvironment(launcher:NodeJS.ProcessEnv,options:{tempor
 }
 
 export function launcherPolicyNames(env: NodeJS.ProcessEnv): string[] {
-  return Object.keys(env).filter(name => env[name] !== undefined && !HOST.has(name) && !PARENT.has(name) && (
+  return Object.keys(env).filter(name => env[name] !== undefined && !HOST.has(name) && !PARENT.has(name) && !CODE_OWNED.has(name) && (
     name.startsWith("NTS_") || name.startsWith("CARGO_PROFILE_") || name.startsWith("CARGO_TARGET_") || EXTRA_POLICY.has(name)
   )).sort();
 }
@@ -223,6 +232,7 @@ export function gateEnvironment(
     ambient[name] = legacy ? launcher[name] ?? null : FIXED_AMBIENT[name] ?? null;
   }
   const env: NodeJS.ProcessEnv = legacy ? { ...launcher } : { ...host };
+  for (const name of CODE_OWNED) delete env[name];
   for (const [name, value] of Object.entries(ambient)) {
     if (value === null) delete env[name]; else env[name] = value;
   }

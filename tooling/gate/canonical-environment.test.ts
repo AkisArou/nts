@@ -17,6 +17,8 @@ import {
   FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,
 } from "./canonical-environment.ts";
 import {newTestScratch} from "./test-scratch.ts";
+import {ownMemory} from "./test-memory.ts";
+import {readLedger} from "./memory-ledger.ts";
 
 
 type CacheAuthority={NODE_COMPILE_CACHE_ROOT?:string;ownedCacheEnvironment?:(launcher:NodeJS.ProcessEnv,options:{temporary:string})=>{TMPDIR:string;NODE_COMPILE_CACHE:string}};
@@ -121,11 +123,6 @@ test("upstream Rayon limits belong only to the measured compile environment",t=>
   assert.equal(ordinary.env.RAYON_NUM_THREADS,undefined);
   assert.throws(()=>assertLandingEnvironment({RAYON_NUM_THREADS:"1"}),/RAYON_NUM_THREADS/);
 });
-/** An inner run admits against this reading, never the host's memory: inside a
- * full gate the host can sit below the floor, and admission would wait. */
-function ampleMemory(run:string):string {
-  const meminfo=join(run,"meminfo");writeFileSync(meminfo,"MemAvailable: 64000000 kB\n");return meminfo;
-}
 
 // A gate environment prunes its HOME's registry of closed run temporaries, an
 // evictable cache: these fixtures own theirs, so the account's is never touched.
@@ -198,6 +195,30 @@ test("named standalone experiments remain non-canonical through children",t=>{
   assert.throws(()=>gateEnvironment({...base,NTS_MISSPELLED_POLICY:"1"},{run,standalone:true}),/unknown standalone policy override: NTS_MISSPELLED_POLICY/);
 });
 
+test("a run's memory: a step's reservation is a parent handoff, a shell's priority is discarded, a launcher's ledger is an experiment",t=>{
+  const {run,base}=fixture(t),reservation="0b8d6a2c-3f4e-4a5b-9c6d-7e8f9a0b1c2d";
+  // Neither is verdict policy a landing refuses: the one is a run's handoff to
+  // the tools in its steps, the other a launcher's code gives.
+  assert.doesNotThrow(()=>assertLandingEnvironment({NTS_MEMORY_RESERVATION:reservation,NTS_MEMORY_PRIORITY:"landing"}));
+  const shell=gateEnvironment({...base,NTS_MEMORY_PRIORITY:"landing",NTS_MEMORY_RESERVATION:reservation},{run,standalone:true});
+  assert.deepEqual([shell.env.NTS_MEMORY_PRIORITY,shell.env.NTS_MEMORY_RESERVATION],[undefined,undefined],"a shell's own never reaches the run");
+  assert.ok(shell.report.dropped.includes("NTS_MEMORY_PRIORITY"),"and its priority is named as discarded");
+  assert.equal(shell.report.canonical,true);
+  const old=gateEnvironment({...base,[ENVIRONMENT_EXPERIMENT]:"today",NTS_MEMORY_PRIORITY:"landing"},{run,standalone:true});
+  assert.equal(old.env.NTS_MEMORY_PRIORITY,undefined,"not even in the old environment, which keeps everything else");
+  // The launcher's code gives it, and the run's children keep it.
+  const landing=gateEnvironment(base,{run,owned:{NTS_MEMORY_PRIORITY:"landing"}});
+  assert.equal(landing.report.canonical,true);
+  const step=gateEnvironment(landing.env,{run,owned:{NTS_MEMORY_RESERVATION:reservation}});
+  assert.deepEqual([step.env.NTS_MEMORY_PRIORITY,step.env.NTS_MEMORY_RESERVATION],["landing",reservation]);
+  assert.equal(step.report.canonical,true);
+  // Another ledger, from a launcher, is an experiment; from a test's code it is not.
+  const ledger=gateEnvironment({...base,NTS_MEMORY_LEDGER:join(run,"ledger")},{run,standalone:true});
+  assert.equal(ledger.report.canonical,false);
+  assert.deepEqual(ledger.report.experiments.map(e=>e.name),["NTS_MEMORY_LEDGER"]);
+  assert.equal(gateEnvironment(base,{run,owned:{NTS_MEMORY_LEDGER:join(run,"ledger")}}).report.canonical,true);
+});
+
 test("the explicit old-environment comparison is never landing evidence",t=>{
   const {run,base}=fixture(t);
   const launcher={...base,[ENVIRONMENT_EXPERIMENT]:"today",LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",UNRELATED_SECRET:"not for the report"};
@@ -232,7 +253,9 @@ test("a failed Node heap reports its specific diagnostic",()=>{
 
 
 test("the real runner records the environment and distinguishes verdict failures from instruments",t=>{
-  const {run,base}=fixture(t),meminfo=ampleMemory(run),root=join(run,"repo"),gate=join(root,"tooling/gate");
+  // An inner run decides by a reading and a ledger of its own, never the
+  // host's memory or the machine's queue.
+  const {run,base}=fixture(t),memory=ownMemory(join(run,"memory")),root=join(run,"repo"),gate=join(root,"tooling/gate");
   const nodeCommand="'"+process.execPath.replaceAll("'","'\\''")+"'";
   mkdirSync(gate,{recursive:true});
   const source=new URL("./",import.meta.url).pathname;
@@ -257,7 +280,7 @@ fi
 `);
   for (const code of [0,7,86,87,88,89,90,91,92,93]) {
     writeFileSync(join(root,"result-code"),String(code));
-    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:code===0?"rustfmt records":"rustfmt",CARGO_TARGET_DIR:join(run,"target"),NTS_MEMINFO:meminfo}});
+    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:code===0?"rustfmt records":"rustfmt",CARGO_TARGET_DIR:join(run,"target"),...memory}});
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:root,env:planned.env,encoding:"utf8"});
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));
@@ -302,7 +325,7 @@ test("a nested pinned entry cannot take ownership of its parent step's scratch",
 });
 
 test('the real runner preserves typed parent capture failures before launching any step',t=>{
-  const {run,base}=fixture(t),meminfo=ampleMemory(run),source=new URL('./',import.meta.url).pathname;
+  const {run,base}=fixture(t),memory=ownMemory(join(run,'memory')),source=new URL('./',import.meta.url).pathname;
   for(const kind of ['tooling-setup','case-budget']){
     const root=join(run,kind),gate=join(root,'tooling/gate');mkdirSync(gate,{recursive:true});
     for(const file of moduleClosure(["tooling/gate/run.mjs"])){
@@ -326,7 +349,7 @@ echo launched > step-launched
 exit 0
 fi
 `);
-    const directory=join(run,'home/.cache',kind),planned=gateEnvironment({...base,HOME:join(run,'home')},{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',NTS_MEMINFO:meminfo,CARGO_TARGET_DIR:join(run,'target')}});
+    const directory=join(run,'home/.cache',kind),planned=gateEnvironment({...base,HOME:join(run,'home')},{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
     const actual=spawnTest(process.execPath,[join(gate,'run.mjs')],{cwd:root,env:planned.env,encoding:'utf8'});assert.equal(actual.status,1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8')),row=summary.steps[0];
     assert.equal(existsSync(join(root,'step-launched')),false,'parent failure must precede step launch');
@@ -334,7 +357,12 @@ fi
   }
 });
 
-test('SIGTERM releases a runner waiting for startup capture admission',async t=>{
+// Two waits come before a run's first step: its reservation in the memory
+// ledger, and its capture's own admission (which reads the same memory). No
+// room for the run's first block holds it in the ledger; room for that block
+// but not for the capture's 14 GB holds it in the capture.
+for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'waiting',/memory: gate run .* waits for 1\.0 GiB \(agent\)/],
+  ['for startup capture admission',4*2**20,'admitted',/waiting for 14 GB before the first case/]] as const) test(`SIGTERM releases a runner waiting ${where}`,async t=>{
   const {run,base}=fixture(t),root=join(run,'repo'),gate=join(root,'tooling/gate');
   mkdirSync(gate,{recursive:true});
   const source=new URL('./',import.meta.url).pathname;
@@ -357,9 +385,9 @@ else
 echo launched > step-launched
 fi
 `);
-  const memory=join(run,'meminfo');writeFileSync(memory,'MemAvailable: 0 kB\n');
-  const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',NTS_MEMINFO:memory,CARGO_TARGET_DIR:join(run,'target')}});
-  const unit='nts-startup-capture-'+run.split('/').pop()!;
+  const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
+  const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
+  const unit='nts-startup-wait-'+run.split('/').pop()!;
   const child=spawn('systemd-run',['--user','--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{stdio:['ignore','pipe','pipe']});
@@ -367,15 +395,17 @@ fi
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('exit',(code,signal)=>{terminal={code,signal};});
-  await waitFor('startup capture admission',()=>output.includes('waiting for 14 GB before the first case'),{stopped:()=>terminal?output:undefined});
+  await waitFor(`the run to wait ${where}`,()=>waiting.test(output),{stopped:()=>terminal?output:undefined});
   assert.equal(existsSync(join(directory,'summary.json')),false,'the runner is still preparing, not dispatching');
+  assert.equal(readLedger(memory.NTS_MEMORY_LEDGER)[state].length,1,`the run's reservation is ${state} in the test's own ledger`);
   const signaled=spawnTest('systemctl',['--user','kill','--signal=SIGTERM',unit],{encoding:'utf8'});
   assert.equal(signaled.status,0,signaled.stderr);
-  await waitFor('SIGTERM startup capture exit',()=>!!terminal,{timeoutMs:5000});
+  await waitFor('the run to end on SIGTERM',()=>!!terminal,{timeoutMs:5000});
   assert.equal(terminal!.code,130,output);
   assert.equal(terminal!.signal,null,output);
   const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8'));
   assert.equal(summary.interrupted,'signal SIGTERM');
   assert.equal(summary.steps[0].verdict,'NOT RUN');
   assert.equal(existsSync(join(root,'step-launched')),false);
+  assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn, or its reservation released');
 });

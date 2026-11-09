@@ -19,6 +19,7 @@ import { spawnTest } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
 import { moduleClosure } from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
+import { ownMemory } from "./test-memory.ts";
 
 const baseline = () => readBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
 
@@ -117,10 +118,9 @@ else
   exec ${JSON.stringify(process.execPath)} "$(dirname "$0")/payload.mjs"
 fi
 `);
-  // An ample memory reading of its own, as every test that starts a real runner gives it.
-  const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
+  // An ample memory reading and a ledger of its own, as every test that starts a real runner gives it.
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20", NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, ...owned,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, ...owned,
   } });
   const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string;

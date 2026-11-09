@@ -1,5 +1,6 @@
 // Running a landing's steps: the build first, the rest through the gate's own
-// runner, memory pressure retried, pending lines collected.
+// runner, both admitted by the memory ledger, memory pressure retried, pending
+// lines collected.
 //
 //   node --test tooling/landing/run.test.ts
 //
@@ -7,10 +8,13 @@
 // table beside a stand-in all.sh: each step does what a file in the fixture's
 // controls says (pass, fail, pressure once, pending lines). The gate's
 // environment drops a launcher's variables, so the controls are files. The
-// fixture has its own HOME, so the runner's binary pins stay in it.
+// fixture has its own HOME, so the runner's binary pins stay in it, and its
+// own memory reading and ledger, so neither the host's memory nor the
+// machine's queue decides a landing here.
 import {test, type TestContext} from "node:test";
 import assert from "node:assert/strict";
-import {execFileSync,spawnSync} from "node:child_process";
+import {execFileSync,spawn,spawnSync} from "node:child_process";
+import {once} from "node:events";
 import {chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {join, dirname, resolve} from "node:path";
@@ -21,6 +25,9 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {moduleClosure} from "../gate/module-closure-fixture.ts";
 import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
+import {ownMemory} from "../gate/test-memory.ts";
+import {readLedger} from "../gate/memory-ledger.ts";
+import {waitFor} from "../gate/test-wait.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
 import {candidateCommand} from "./candidate-environment.ts";
@@ -76,16 +83,16 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   chmodSync(join(gate, "all.sh"), 0o755);
   const git = (...args: string[]) => execFileSync("git", args, { cwd: tree, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
   const commit = git("rev-parse", "HEAD");
-  const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
+  const memory = ownMemory(join(own, "memory"));
   const build = join(own, "build.sh");
   writeFileSync(build, `#!/bin/sh\n[ "$(cat ${JSON.stringify(join(controls, "build"))} 2>/dev/null)" = fail ] && { echo "error[E0308]: mismatched types"; exit 101; }\nmkdir -p "$CARGO_TARGET_DIR/${PROFILE}" && echo "nts $CARGO_INCREMENTAL" > "$CARGO_TARGET_DIR/${PROFILE}/nts" && chmod +x "$CARGO_TARGET_DIR/${PROFILE}/nts"\necho "   Compiling nts-core"\n`);
   chmodSync(build, 0o755);
   const control = (step: string, what: string) => writeFileSync(join(controls, step), what);
   const options = (steps: string[], extra: Partial<RunOptions> = {}): RunOptions => ({
-    tree, target, run, commit, steps, build: [build], env: { ...process.env, HOME: home }, memory: () => 64, pause: () => {},
-    owned: { NTS_GATE_SLOTS: "4", NTS_GATE_MEM_GB: "8", NTS_MEMINFO: meminfo }, ...extra,
+    tree, target, run, commit, steps, build: [build], env: { ...process.env, HOME: home },
+    owned: { NTS_GATE_SLOTS: "4", ...memory }, ...extra,
   });
-  return { own, tree, target, run, controls, control, options, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
+  return { own, tree, target, run, controls, control, options, memory, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
 }
 
 test("a landing launches the candidate's pinned Node and forwards it to the build and child commands",t=>{
@@ -133,7 +140,7 @@ test("the candidate creates its build and gate environment with its own changed 
   // The full check's controller-root grant is foreign. The measured runner
   // already captures with its own producer after pinned.sh changes trees.
   const full=join(f.own,'home/.cache/full'),env=fullEnvironment({candidate:false,commit:options.commit,label:'MAIN',run:full,tree:f.tree,target:f.target},['rustfmt'],hostEnvironment(options.env!));
-  const fullOwned=gateEnvironment(env,{run:full,owned:{NTS_MEMINFO:options.owned!.NTS_MEMINFO!}}).env;
+  const fullOwned=gateEnvironment(env,{run:full,owned:f.memory}).env;
   const measured=spawnSync(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:fullOwned,encoding:'utf8'});
   assert.equal(measured.status,0,measured.stdout+measured.stderr);
   const observed=JSON.parse(readFileSync(join(full,'summary.json'),'utf8'));
@@ -224,6 +231,7 @@ test("the compiler builds first in nts-dev, and the steps drive it through the g
   const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
   assert.deepEqual([...summary.requested].sort(), ["examples", "outcomes", "program-oracles", "rustfmt"], "the runner ran the landing steps and their required producer");
   assert.equal(summary.environment.canonical, true);
+  assert.equal(summary.memory.priority, "landing", "the runner's reservation waits at the landing check's priority");
   assert.ok(existsSync(join(f.run, "landing.json")));
 });
 
@@ -266,36 +274,46 @@ test("a landing run started inside another gate is a run of its own, not that ga
   assert.deepEqual(launcherEnvironment({ A: "1", [ENVIRONMENT_CONTEXT]: "{}", [ENVIRONMENT_EXPERIMENT]: "today" }), { A: "1" });
 });
 
-test("a step memory pressure kept from measuring runs again once memory allows, alone", t => {
+test("a step memory pressure kept from measuring runs again, alone", t => {
   const f = fixture(t);
   f.control("examples", "pressure");
   const holds: string[] = [];
-  let memory = 64, reads = 0;
-  const ran = runLanding(f.options(["build", "examples", "outcomes"], {
-    hold: reason => holds.push(reason),
-    memory: () => { reads++; return memory; },
-    pause: () => { memory = 64; },
-  }));
+  const ran = runLanding(f.options(["build", "examples", "outcomes"], { hold: reason => holds.push(reason) }));
   assert.equal(ran.state, "green", ran.message);
   assert.equal(ran.steps.find(s => s.name === "examples")?.attempt, 2);
   assert.ok(holds.some(h => /memory pressure kept examples from measuring/.test(h)), holds.join("\n"));
   assert.ok(existsSync(join(f.run, "attempt-2/summary.json")));
   const attempt = JSON.parse(readFileSync(join(f.run, "attempt-2/summary.json"), "utf8"));
   assert.deepEqual(attempt.requested, ["program-oracles", "examples"], "only the unmeasured native step and its run-owned producer run again");
-  assert.ok(reads >= 2);
+  assert.equal(attempt.memory.priority, "landing");
 });
 
-test("memory the run waits for is a hold, never a verdict", t => {
+// A job that holds the ledger's room until a request waits behind it.
+const HOLDER = `import { mkdirSync, readdirSync, watch } from "node:fs";
+const waiting = process.argv[1] + "/waiting";
+mkdirSync(waiting, { recursive: true });
+const asked = () => readdirSync(waiting).some(name => name.endsWith(".json"));
+await new Promise(resolve => { const watcher = watch(waiting, () => { if (asked()) { watcher.close(); resolve(); } }); if (asked()) { watcher.close(); resolve(); } });`;
+
+test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority", async t => {
   const f = fixture(t);
-  const holds: string[] = [];
-  let memory = 9;
-  const ran = runLanding(f.options(["build", "outcomes"], { hold: reason => holds.push(reason), memory: () => memory, pause: () => { memory = 20; } }));
-  assert.equal(ran.state, "green");
-  assert.match(holds[0] ?? "", /memory: 9\.0 GB available, waiting for 14 GB before the build/);
-  // A docs-only landing runs only tree checks and waits for nothing.
-  const light = fixture(t);
-  const tree = runLanding(light.options(["rustfmt", "records"], { build: undefined, memory: () => 1, pause: () => { throw new Error("waited"); } }));
-  assert.equal(tree.state, "green", tree.message);
+  // 61 GiB available, 2 kept for the system: a 56 GiB job leaves too little
+  // for the build's 8, until the build asks and the job ends.
+  const env: NodeJS.ProcessEnv = { ...process.env, ...f.memory };
+  delete env.NTS_MEMORY_RESERVATION;
+  const holder = spawn(process.execPath, [fileURLToPath(new URL("../gate/admit.ts", import.meta.url)), "--bytes", "56G", "--what", "holder", "--",
+    process.execPath, "--input-type=module", "-e", HOLDER, f.memory.NTS_MEMORY_LEDGER], { env, stdio: "ignore" });
+  const ended = once(holder, "exit");
+  t.after(async () => { if (holder.exitCode === null && holder.signalCode === null) { holder.kill("SIGKILL"); await ended; } });
+  const exited = () => holder.exitCode !== null || holder.signalCode !== null ? `the holder exited ${holder.exitCode ?? holder.signalCode}` : undefined;
+  await waitFor("the holder to be admitted", () => readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.some(entry => entry.what === "holder"), { stopped: exited });
+  const ran = runLanding(f.options(["build", "outcomes"]));
+  assert.equal(ran.state, "green", ran.message);
+  const build = readFileSync(join(f.run, "build.log"), "utf8");
+  assert.match(build, /memory: landing build of [0-9a-f]{12} waits for 8\.0 GiB \(landing\): /);
+  assert.match(build, /memory: landing build of [0-9a-f]{12} admitted with 8\.0 GiB after \d+ s/);
+  assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
+  assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
 });
 
 test("pressure that never clears, and a hung step, hold the change for a person", t => {

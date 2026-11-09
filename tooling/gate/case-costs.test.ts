@@ -7,7 +7,9 @@ import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBr
 
 const epoch = 1_700_000_000;
 const step = { name: "examples", started_at: new Date(epoch * 1000).toISOString(), wall: 10 };
-const state = (memory = true, slots = 0, fe = 0) => ({ memory_allowed: memory, used: { slots, fe }, slots: 24, frontends: 20, withhold: 0 });
+// A token waits for memory while its share does not fit in the run's reservation.
+const memory = (fits: boolean) => ({ reserved_bytes: 2 ** 33, used_bytes: 2 ** 33, withheld_bytes: 0, wanted_bytes: 0, token_short_bytes: fits ? 0 : 2 ** 30, growing_bytes: 0 });
+const state = (fits = true, slots = 0, fe = 0) => ({ memory: memory(fits), used: { slots, fe }, slots: 24, frontends: 20, withhold: 0 });
 const event = (at: number, kind: string, id?: number, extra = {}): Observation => ({
   epoch: epoch + at, event: kind, step: "examples", request: id, pid: id,
   context: "path:tests/programs/a/tsconfig.json", compiler_sha: "new", ...state(), ...extra,

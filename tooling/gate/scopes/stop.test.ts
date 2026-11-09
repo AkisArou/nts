@@ -12,6 +12,7 @@ import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";
 import {processActivity} from "../active-command.ts";
 import {newTestScratch} from "../test-scratch.ts";
+import {ownMemory} from "../test-memory.ts";
 
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
@@ -169,7 +170,6 @@ else
   exec node "$(dirname "$0")/payload.mjs"
 fi
 `);
-  const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
   // The mutation must never reach a capability inherited from the outer test run.
   const launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...process.env };
   launcher.HOME = home;
@@ -192,8 +192,8 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
     commit = spawnTest("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
   }
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
-    NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20",
-    NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
+    NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",
+    ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
   } });
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);

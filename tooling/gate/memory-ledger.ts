@@ -30,6 +30,14 @@
 // ahead of an earlier one only from the room left once that one has its own,
 // and a request that does not fit holds everything behind it.
 //
+// **A reservation can grow and shrink**, for a job whose need moves while it
+// runs (a gate run, as its steps start and end). `grow` asks for more exactly
+// as a new request would: at the reservation's priority, behind every request
+// that arrived before it. Once admitted, the bytes join the reservation's own
+// entry, so a job is one entry and one measure however its size moves.
+// `shrink` gives bytes back at once. A growth whose reservation has ended is
+// dropped by the next decision.
+//
 // **Owners.** A reservation lasts as long as its owner, a process named by
 // boot, pid and start time; a waiting request also lasts only as long as the
 // process waiting for it. When either is gone, the next decision drops its
@@ -46,6 +54,8 @@
 // and `admitted/<id>.json`, one entry per request, written whole and renamed
 // into place; `lock`, held for every decision, so decisions are made one at a
 // time and two waiters never both admit themselves on the same free memory.
+// Every write holds the lock too: a growth joining its reservation and a
+// shrink rewrite an entry, and only the reservation's own holder ever does.
 // Releasing a reservation or withdrawing a request removes its own file
 // without the lock: a decision that read the file before then counted memory
 // that was being freed, which is the safe direction.
@@ -71,9 +81,19 @@ export const LEDGER_DIR = join(homedir(), ".cache/nts-gate/admission");
 export const RESERVATION_ENV = "NTS_MEMORY_RESERVATION";
 /** Another ledger directory, for tests; `Reservation.env` passes it on. */
 export const LEDGER_ENV = "NTS_MEMORY_LEDGER";
+/** The priority a launcher's code gives the job it starts (`priorityOf`). */
+export const PRIORITY_ENV = "NTS_MEMORY_PRIORITY";
 /** Highest first. */
 export const PRIORITIES = ["landing", "agent", "full-check"] as const;
 export type Priority = (typeof PRIORITIES)[number];
+
+/** The priority `env` names (PRIORITY_ENV), else an agent's. */
+export function priorityOf(env: NodeJS.ProcessEnv = process.env): Priority {
+  const named = env[PRIORITY_ENV];
+  if (named === undefined || named === "") return "agent";
+  if (!(PRIORITIES as readonly string[]).includes(named)) throw new RangeError(`${PRIORITY_ENV}=${named} is not a priority; one of ${PRIORITIES.join(", ")}`);
+  return named as Priority;
+}
 
 const CGROUP_ROOT = "/sys/fs/cgroup";
 const POLL_MS = 1000;
@@ -90,6 +110,9 @@ export function parseBytes(text: string): number {
   if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`not a size: ${JSON.stringify(text)} (say 8G, 512M or 1048576)`);
   return bytes;
 }
+
+/** A size as the ledger reports one: 8.0 GiB, 512.0 MiB. */
+export const gib = (bytes: number) => bytes >= 2 ** 30 || bytes <= -(2 ** 30) ? `${(bytes / 2 ** 30).toFixed(1)} GiB` : `${(bytes / 2 ** 20).toFixed(1)} MiB`;
 
 // ---------------------------------------------------------------------------
 // What the host says, parsed.
@@ -108,6 +131,23 @@ function readMeminfo(path: string): Meminfo {
   const meminfo = parseMeminfo(readFileSync(path, "utf8"));
   if (meminfo === null) throw new Error(`${path} names no MemAvailable and MemTotal`);
   return meminfo;
+}
+
+const meminfoPath = (env: NodeJS.ProcessEnv) => env.NTS_MEMINFO ?? "/proc/meminfo";
+
+/** The reading decisions are made by: the file NTS_MEMINFO names in `env`, else the kernel's. */
+export function machineMemory(env: NodeJS.ProcessEnv = process.env): Meminfo {
+  return readMeminfo(meminfoPath(env));
+}
+
+/**
+ * Why a reservation of `bytes` can never be admitted on a machine of
+ * `totalBytes`, in the words a refused request gets; null when it can.
+ * `asks` names the request: "<what> asks 8.0 GiB".
+ */
+export function neverFits(bytes: number, totalBytes: number, asks: string): string | null {
+  if (bytes + SYSTEM_FLOOR_BYTES <= totalBytes) return null;
+  return `memory: ${asks}, which can never fit: the machine has ${gib(totalBytes)}, and ${gib(SYSTEM_FLOOR_BYTES)} of it is kept for the system`;
 }
 
 /** What a process maps that no other job can have: its anonymous and shared memory, from /proc/<pid>/status. */
@@ -312,8 +352,10 @@ export type CgroupRef = { path: string; inode: string };
 /** What counts as the job's memory: its owner's process tree, a cgroup, or both (the cgroup, and the tree's processes outside it). */
 export type Measure = { tree: boolean; cgroup: CgroupRef | null };
 export type LedgerEntry = {
-  version: 1; id: string; seq: number; bytes: number; what: string; priority: Priority;
+  version: 2; id: string; seq: number; bytes: number; what: string; priority: Priority;
   owner: ProcessIdentity; waiter: ProcessIdentity; measure: Measure; since: string;
+  /** For a waiting request to grow an admitted reservation, that reservation's id; null for one of its own. */
+  grows: string | null;
 };
 type State = "waiting" | "admitted";
 
@@ -327,10 +369,11 @@ function identity(value: unknown): value is ProcessIdentity {
 function parseEntry(text: string, file: string): LedgerEntry {
   const entry = JSON.parse(text) as LedgerEntry;
   const measure = entry?.measure, cgroup = measure?.cgroup;
-  if (entry?.version !== 1 || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
+  if (entry?.version !== 2 || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
       || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
       || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
-      || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))) {
+      || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
+      || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))) {
     throw new Error(`${file} is not a memory ledger entry`);
   }
   return entry;
@@ -406,9 +449,9 @@ export type OwnerSpec = {
   pid?: number;
   /**
    * Given, the cgroup (a path under /sys/fs/cgroup) that holds the job and
-   * nothing else, read alone: a gate step's scope, reserved for by its runner
-   * before the step starts. Absent, the owner's process tree, read through
-   * its own cgroup when it has one (see the top of this file).
+   * nothing else, read alone: a gate run's slice, which holds the slice of
+   * every step it starts. Absent, the owner's process tree, read through its
+   * own cgroup when it has one (see the top of this file).
    */
   cgroup?: string;
 };
@@ -418,6 +461,8 @@ export type ReserveRequest = { bytes: number; what: string; priority?: Priority;
 /** One decision on one request: what it saw and what it decided. */
 export type Decision = {
   id: string; what: string; admitted: boolean;
+  /** For a growth, the reservation it would grow; null for a request of its own. */
+  grows: string | null;
   availableBytes: number; pendingBytes: number;
   /** Free beyond pending and the floor, for the queue. */
   roomBytes: number;
@@ -430,9 +475,13 @@ export type ReserveOptions = {
   env?: NodeJS.ProcessEnv;
   /** The ledger's directory; else LEDGER_ENV, else LEDGER_DIR. */
   dir?: string;
-  /** Told one line when the request starts waiting, one when it is admitted after a wait, and one for each entry a decision drops. */
+  /**
+   * Told one line when the request, or a growth of its reservation, starts
+   * waiting, one when it is admitted after a wait, and one for each entry a
+   * decision drops.
+   */
   report?: (line: string) => void;
-  /** Told every decision made on this request. */
+  /** Told every decision made on this request and on its reservation's growths. */
   observe?: (decision: Decision) => void;
   /** Withdraws the request while it waits. */
   signal?: AbortSignal;
@@ -447,11 +496,25 @@ export type Reservation = {
   inherited: boolean;
   /** What a child process needs to run inside this reservation. */
   env: Readonly<Record<string, string>>;
-  /** Ends the reservation; a second call does nothing. */
+  /** What it holds: the bytes reserved, with every growth admitted and every shrink given back. */
+  readonly bytes: number;
+  /**
+   * Waits until `bytes` more may start, exactly as a new request of `bytes`
+   * at this reservation's priority would, then holds them in this
+   * reservation's own entry. One growth at a time; `signal` withdraws it while
+   * it waits, and so does `release`. Inside a parent's reservation it asks
+   * for nothing, as `reserve` does there.
+   */
+  grow(bytes: number, options?: { signal?: AbortSignal }): Promise<void>;
+  /**
+   * Gives `bytes` back without waiting in the queue: `bytes` drops when it is
+   * called, and the entry once the ledger's lock is free. A reservation keeps
+   * at least one byte; `release` ends it.
+   */
+  shrink(bytes: number): Promise<void>;
+  /** Ends the reservation, withdrawing a growth that waits; a second call does nothing. */
   release(): void;
 };
-
-const gib = (bytes: number) => bytes >= 2 ** 30 || bytes <= -(2 ** 30) ? `${(bytes / 2 ** 30).toFixed(1)} GiB` : `${(bytes / 2 ** 20).toFixed(1)} MiB`;
 
 function label(what: string): string {
   const text = String(what ?? "").replace(/\s+/g, " ").trim();
@@ -459,15 +522,14 @@ function label(what: string): string {
   return text.length > 160 ? `${text.slice(0, 159)}…` : text;
 }
 
-const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
-
-function held(id: string, dir: string): Reservation {
-  let released = false;
-  return { id, inherited: false, env: reservationEnv(id, dir), release: () => { if (!released) { released = true; removeQuietly(entryPath(dir, "admitted", id)); } } };
+function amount(bytes: number, what: string, verb: string): void {
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`memory: ${what} ${verb} a positive whole number of bytes, not ${bytes}`);
 }
 
+const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
+
 /** The parent's reservation when `parent` names a live one that counts `pid`'s memory. */
-function inside(parent: string | undefined, dir: string, pid: number, what: string, report: (line: string) => void): Reservation | null {
+function inside(parent: string | undefined, dir: string, pid: number, what: string, bytes: number, report: (line: string) => void): Reservation | null {
   if (!parent) return null;
   if (!ID.test(parent)) throw new Error(`${RESERVATION_ENV}=${parent} is not a reservation id`);
   const file = entryPath(dir, "admitted", parent);
@@ -482,7 +544,20 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
     throw new Error(`memory: ${what} (pid ${pid}) was started inside ${entry.what}'s reservation, which does not count its memory: `
       + `it is outside that reservation's process tree${entry.measure.cgroup ? " and cgroup" : ""}`);
   }
-  return { id: entry.id, inherited: true, env: reservationEnv(entry.id, dir), release: () => {} };
+  // The parent sized its reservation for what runs inside it, so a growth
+  // asks for nothing more than the request did.
+  let held = bytes;
+  return {
+    id: entry.id, inherited: true, env: reservationEnv(entry.id, dir),
+    get bytes() { return held; },
+    grow: async more => { amount(more, what, "grows by"); held += more; },
+    shrink: async less => {
+      amount(less, what, "gives back");
+      if (less >= held) throw new RangeError(`memory: ${what} holds ${gib(held)}, so it cannot give back ${gib(less)}; release it instead`);
+      held -= less;
+    },
+    release: () => {},
+  };
 }
 
 function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure {
@@ -494,7 +569,13 @@ function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure
   return { tree: false, cgroup: { path: cgroup, inode: inodeOf(CGROUP_ROOT + cgroup) } };
 }
 
-type Context = { dir: string; meminfo: string; report: (line: string) => void; used: (entry: LedgerEntry, table: () => Table) => number };
+type Context = {
+  dir: string; meminfo: string; every: number;
+  report: (line: string) => void; observe: (decision: Decision) => void;
+  used: (entry: LedgerEntry, table: () => Table) => number;
+};
+
+const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for ${gib(entry.bytes)}` : `request to grow by ${gib(entry.bytes)}`;
 
 /** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
 function decide(context: Context, self: LedgerEntry, registered: boolean): { decision: Decision; registered: boolean } {
@@ -502,9 +583,9 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   for (const state of ["waiting", "admitted"] as const) mkdirSync(join(dir, state), { recursive: true });
   // What a writer left between its write and its rename: none writes without the lock.
   for (const name of readdirSync(dir)) if (name.startsWith(".tmp-")) removeQuietly(join(dir, name));
-  const admitted: LedgerEntry[] = [];
+  const admitted = new Map<string, LedgerEntry>();
   for (const entry of readEntries(dir, "admitted")) {
-    if (alive(entry.owner)) { admitted.push(entry); continue; }
+    if (alive(entry.owner)) { admitted.set(entry.id, entry); continue; }
     removeQuietly(entryPath(dir, "admitted", entry.id));
     report(`memory: dropped ${entry.what}'s reservation of ${gib(entry.bytes)}: its owner, pid ${entry.owner.pid}, has exited`);
   }
@@ -513,28 +594,161 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   for (const entry of readEntries(dir, "waiting")) {
     if (entry.id === self.id) { listed = true; continue; }
     const lost = !alive(entry.waiter) ? entry.waiter : !alive(entry.owner) ? entry.owner : null;
-    if (lost === null) { waiting.push(entry); continue; }
-    removeQuietly(entryPath(dir, "waiting", entry.id));
-    report(`memory: dropped ${entry.what}'s request for ${gib(entry.bytes)}: pid ${lost.pid}, which ${lost === entry.waiter ? "waited for it" : "owns it"}, has exited`);
+    if (lost !== null) {
+      removeQuietly(entryPath(dir, "waiting", entry.id));
+      report(`memory: dropped ${entry.what}'s ${requestFor(entry)}: pid ${lost.pid}, which ${lost === entry.waiter ? "waited for it" : "owns it"}, has exited`);
+    } else if (entry.grows !== null && !admitted.has(entry.grows)) {
+      removeQuietly(entryPath(dir, "waiting", entry.id));
+      report(`memory: dropped ${entry.what}'s ${requestFor(entry)}: its reservation has ended`);
+    } else waiting.push(entry);
   }
-  if (!alive(self.owner)) {
+  const refuse: (message: string) => never = message => {
     if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
-    throw new Error(`memory: ${self.what}'s owner, pid ${self.owner.pid}, exited while it waited`);
-  }
-  if (registered && !listed) report(`memory: ${self.what}'s request left the ledger while it waited; it asks again, at the back of the queue`);
+    throw new Error(message);
+  };
+  if (!alive(self.owner)) refuse(`memory: ${self.what}'s owner, pid ${self.owner.pid}, exited while it waited`);
+  const grown = self.grows === null ? undefined : admitted.get(self.grows);
+  if (self.grows !== null && grown === undefined) refuse(`memory: ${self.what}'s reservation has ended, so its ${requestFor(self)} is dropped`);
+  if (registered && !listed) report(`memory: ${self.what}'s ${requestFor(self)} left the ledger while it waited; it asks again, at the back of the queue`);
   if (!listed) self.seq = 1 + Math.max(0, ...waiting.map(entry => entry.seq));
 
   const { availableBytes } = readMeminfo(context.meminfo);
   let table: Table | undefined;
   const read = () => table ??= processTable();
-  const pendingBytes = admitted.reduce((sum, entry) => sum + Math.max(0, entry.bytes - context.used(entry, read)), 0);
+  const pendingBytes = [...admitted.values()].reduce((sum, entry) => sum + Math.max(0, entry.bytes - context.used(entry, read)), 0);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
   const queue = [...waiting, self].sort(queueOrder);
   const go = admissible(roomBytes, queue).has(self.id);
-  if (go && listed) renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
+  if (go && grown !== undefined) {
+    // The growth joins its reservation: one entry, and one measure, per job.
+    writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes });
+    if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
+  } else if (go && listed) renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
   else if (go) writeEntry(dir, "admitted", self);
   else if (!listed) writeEntry(dir, "waiting", self);
-  return { decision: { id: self.id, what: self.what, admitted: go, availableBytes, pendingBytes, roomBytes, ahead: queue.indexOf(self) }, registered: !go };
+  return {
+    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: queue.indexOf(self) },
+    registered: !go,
+  };
+}
+
+/**
+ * Decides on `self` now, and again every `every` while it does not fit,
+ * until it is admitted or withdrawn (by `signal`, or by its owner's exit).
+ * `admitted` runs with the decision that admits it, before this process runs
+ * anything else. Returns that decision, and how long the request waited
+ * (null when it did not).
+ */
+async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | undefined, waits: () => string, admitted: () => void = () => {}): Promise<{ decision: Decision; waitedMs: number | null }> {
+  let registered = false;
+  let waitedFrom: number | undefined;
+  // A decision holds the lock for milliseconds, so a busy lock is tried again
+  // soon; while it stays busy, the tries back off to one every `every`.
+  let retry = LOCK_RETRY_MS;
+  try {
+    for (;;) {
+      signal?.throwIfAborted();
+      const lock = lockLedger(context.dir);
+      if (lock === null) {
+        await pause(retry, undefined, { signal });
+        retry = Math.min(2 * retry, Math.max(context.every, LOCK_RETRY_MS));
+        continue;
+      }
+      retry = LOCK_RETRY_MS;
+      let outcome: ReturnType<typeof decide>;
+      try { outcome = decide(context, self, registered); }
+      finally { lock.release(); }
+      registered = outcome.registered;
+      const { decision } = outcome;
+      if (decision.admitted) {
+        admitted();
+        return { decision, waitedMs: waitedFrom === undefined ? null : Date.now() - waitedFrom };
+      }
+      context.observe(decision);
+      if (waitedFrom === undefined) {
+        waitedFrom = Date.now();
+        context.report(`memory: ${self.what} ${waits()} (${self.priority}): ${gib(decision.availableBytes)} available, `
+          + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
+          + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : ""));
+      }
+      await pause(context.every, undefined, { signal });
+    }
+  } catch (error) {
+    // Nobody waits for it any more.
+    if (registered) removeQuietly(entryPath(context.dir, "waiting", self.id));
+    throw error;
+  }
+}
+
+/** An admitted reservation's handle: what it holds, and its growth, shrink and release through `context`'s ledger. */
+function holding(self: LedgerEntry, context: Context): Reservation {
+  const { dir } = context;
+  let bytes = self.bytes;
+  let released = false;
+  let growing: { id: string; withdraw: AbortController } | null = null;
+  // Writes the entry with what the handle holds now, under the lock. An entry
+  // that is gone (released, or dropped once its owner exited) stays gone.
+  const rewrite = async (): Promise<void> => {
+    for (let retry = LOCK_RETRY_MS; ; retry = Math.min(2 * retry, Math.max(context.every, LOCK_RETRY_MS))) {
+      const lock = lockLedger(dir);
+      if (lock === null) { await pause(retry); continue; }
+      try {
+        const file = entryPath(dir, "admitted", self.id);
+        let entry: LedgerEntry;
+        try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+        catch (error) { if (gone(error)) return; throw error; }
+        if (!released) writeEntry(dir, "admitted", { ...entry, bytes });
+        return;
+      } finally { lock.release(); }
+    }
+  };
+  return {
+    id: self.id, inherited: false, env: reservationEnv(self.id, dir),
+    get bytes() { return bytes; },
+    async grow(more, { signal } = {}) {
+      amount(more, self.what, "grows by");
+      if (released) throw new Error(`memory: ${self.what}'s reservation has been released, so it cannot grow`);
+      if (growing !== null) throw new Error(`memory: ${self.what} already waits to grow; it grows by one request at a time`);
+      const never = neverFits(bytes + more, readMeminfo(context.meminfo).totalBytes, `${self.what} asks to grow by ${gib(more)} to ${gib(bytes + more)}`);
+      if (never !== null) throw new RangeError(never);
+      const waiter = processIdentity(process.pid);
+      if (waiter === null) throw new Error("this process has no identity in /proc");
+      // A request of its own in the queue, owned as the reservation is: it
+      // lasts no longer than the reservation's owner.
+      const request: LedgerEntry = { ...self, id: randomUUID(), seq: 0, bytes: more, waiter, since: new Date().toISOString(), grows: self.id };
+      const withdraw = new AbortController();
+      growing = { id: request.id, withdraw };
+      let outcome: Awaited<ReturnType<typeof wait>>;
+      try {
+        outcome = await wait(context, request, signal ? AbortSignal.any([signal, withdraw.signal]) : withdraw.signal,
+          () => `waits to grow by ${gib(more)} to ${gib(bytes + more)}`,
+          // With the entry's own write, so no shrink in between can write the
+          // entry without these bytes.
+          () => { bytes += more; });
+      } catch (error) {
+        throw withdraw.signal.aborted ? withdraw.signal.reason : error;
+      } finally { growing = null; }
+      context.observe(outcome.decision);
+      if (outcome.waitedMs !== null) context.report(`memory: ${self.what} grew by ${gib(more)} to ${gib(bytes)} after ${Math.round(outcome.waitedMs / 1000)} s`);
+    },
+    async shrink(less) {
+      amount(less, self.what, "gives back");
+      if (released) return;
+      if (less >= bytes) throw new RangeError(`memory: ${self.what} holds ${gib(bytes)}, so it cannot give back ${gib(less)}; release it instead`);
+      bytes -= less;
+      try { await rewrite(); }
+      catch (error) { bytes += less; throw error; }
+    },
+    release() {
+      if (released) return;
+      released = true;
+      if (growing !== null) {
+        growing.withdraw.abort(new Error(`memory: ${self.what}'s reservation was released while it waited to grow`));
+        removeQuietly(entryPath(dir, "waiting", growing.id));
+      }
+      removeQuietly(entryPath(dir, "admitted", self.id));
+    },
+  };
 }
 
 /**
@@ -548,9 +762,9 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const report = options.report ?? (() => {});
   const what = label(request.what);
   const { bytes, priority = "agent" } = request;
-  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`memory: ${what} reserves a positive whole number of bytes, not ${bytes}`);
+  amount(bytes, what, "reserves");
   if (!PRIORITIES.includes(priority)) throw new RangeError(`memory: no priority ${String(priority)}; one of ${PRIORITIES.join(", ")}`);
-  const nested = inside(env[RESERVATION_ENV], dir, request.owner?.pid ?? process.pid, what, report);
+  const nested = inside(env[RESERVATION_ENV], dir, request.owner?.pid ?? process.pid, what, bytes, report);
   if (nested !== null) return nested;
 
   const waiter = processIdentity(process.pid);
@@ -558,58 +772,22 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const pid = request.owner?.pid ?? process.pid;
   const owner = pid === process.pid ? waiter : processIdentity(pid);
   if (owner === null) throw new Error(`memory: ${what}'s owner, pid ${pid}, is not running`);
-  const meminfo = env.NTS_MEMINFO ?? "/proc/meminfo";
-  const { totalBytes } = readMeminfo(meminfo);
-  if (bytes + SYSTEM_FLOOR_BYTES > totalBytes) {
-    throw new RangeError(`memory: ${what} asks ${gib(bytes)}, which can never fit: the machine has ${gib(totalBytes)}, and ${gib(SYSTEM_FLOOR_BYTES)} of it is kept for the system`);
-  }
+  const meminfo = meminfoPath(env);
+  const never = neverFits(bytes, readMeminfo(meminfo).totalBytes, `${what} asks ${gib(bytes)}`);
+  if (never !== null) throw new RangeError(never);
   const self: LedgerEntry = {
-    version: 1, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
-    measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(),
+    version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
+    measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(), grows: null,
   };
   const used = options.used;
-  const context: Context = { dir, meminfo, report, used: used ? entry => used(entry) : measured };
-  const { signal, observe } = options;
-  const every = options.everyMs ?? POLL_MS;
-  let registered = false;
-  let waitedFrom: number | undefined;
-  // A decision holds the lock for milliseconds, so a busy lock is tried again
-  // soon; while it stays busy, the tries back off to one every `every`.
-  let retry = LOCK_RETRY_MS;
-  try {
-    for (;;) {
-      signal?.throwIfAborted();
-      const lock = lockLedger(dir);
-      if (lock === null) {
-        await pause(retry, undefined, { signal });
-        retry = Math.min(2 * retry, Math.max(every, LOCK_RETRY_MS));
-        continue;
-      }
-      retry = LOCK_RETRY_MS;
-      let outcome: ReturnType<typeof decide>;
-      try { outcome = decide(context, self, registered); }
-      finally { lock.release(); }
-      registered = outcome.registered;
-      const { decision } = outcome;
-      if (decision.admitted) {
-        const reservation = held(self.id, dir);
-        try { observe?.(decision); }
-        catch (error) { reservation.release(); throw error; }
-        if (waitedFrom !== undefined) report(`memory: ${what} admitted with ${gib(bytes)} after ${Math.round((Date.now() - waitedFrom) / 1000)} s`);
-        return reservation;
-      }
-      observe?.(decision);
-      if (waitedFrom === undefined) {
-        waitedFrom = Date.now();
-        report(`memory: ${what} waits for ${gib(bytes)} (${priority}): ${gib(decision.availableBytes)} available, `
-          + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
-          + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : ""));
-      }
-      await pause(every, undefined, { signal });
-    }
-  } catch (error) {
-    // Nobody waits for it any more.
-    if (registered) removeQuietly(entryPath(dir, "waiting", self.id));
-    throw error;
-  }
+  const context: Context = {
+    dir, meminfo, report, every: options.everyMs ?? POLL_MS, observe: options.observe ?? (() => {}),
+    used: used ? entry => used(entry) : measured,
+  };
+  const { decision, waitedMs } = await wait(context, self, options.signal, () => `waits for ${gib(bytes)}`);
+  const reservation = holding(self, context);
+  try { context.observe(decision); }
+  catch (error) { reservation.release(); throw error; }
+  if (waitedMs !== null) report(`memory: ${what} admitted with ${gib(bytes)} after ${Math.round(waitedMs / 1000)} s`);
+  return reservation;
 }
