@@ -1,0 +1,615 @@
+// The machine's memory ledger: one admission for every heavy job, whoever runs
+// it -- the landing check, an agent's build, the full check -- so that no two
+// jobs count on the same free memory. `reserve` waits until a job may start;
+// `node tooling/gate/admit.ts` runs any command through it.
+//
+// **A job reserves what it will hold at its peak, and starts when that fits.**
+// MemAvailable already counts what running jobs hold now. What it cannot see
+// is what they will still take, so an admitted job counts as pending by what
+// it has not used yet:
+//
+//   pending = the sum, over live reservations, of max(0, reserved - used)
+//   admitted when MemAvailable - pending >= its bytes + SYSTEM_FLOOR_BYTES
+//
+// **"Used" is counted in MemAvailable's own currency**: what the job holds
+// that nobody else can have. MemAvailable already counts a job's file cache
+// and reclaimable slab as available; counting them as used as well would
+// count that memory twice, and admit over it. So:
+//
+//   - a job alone in its cgroup (everything in it is the owner or under it)
+//     is that cgroup's memory.current less its file pages and reclaimable
+//     slab, which also counts its kernel memory, its tmpfs pages and any
+//     orphaned descendants;
+//   - its processes outside that cgroup (a gate's steps run in scopes of their
+//     own), and every process of a job whose cgroup it shares with others,
+//     count the anonymous and shared memory they map (RssAnon + RssShmem).
+//
+// **The queue.** Requests wait in arrival order within a priority: the
+// landing check first, then agents' work, then the full check. The longest
+// prefix of the queue that fits together is admitted. So a request goes
+// ahead of an earlier one only from the room left once that one has its own,
+// and a request that does not fit holds everything behind it.
+//
+// **Owners.** A reservation lasts as long as its owner, a process named by
+// boot, pid and start time; a waiting request also lasts only as long as the
+// process waiting for it. When either is gone, the next decision drops its
+// entry, so a crashed holder or waiter never blocks anyone. Nothing here ever
+// sends a signal to any process.
+//
+// **Nesting.** A reservation's `env` names it to child processes. A child
+// that calls `reserve` with that environment (a gate step's oracle preparation
+// inside the step's reservation) runs inside it and asks for nothing. That is
+// sound only where the parent's measure counts the child's memory, so a
+// child outside the owner's process tree and cgroup is refused.
+//
+// **The files**, under LEDGER_DIR or NTS_MEMORY_LEDGER: `waiting/<id>.json`
+// and `admitted/<id>.json`, one entry per request, written whole and renamed
+// into place; `lock`, held for every decision, so decisions are made one at a
+// time and two waiters never both admit themselves on the same free memory.
+// Releasing a reservation or withdrawing a request removes its own file
+// without the lock: a decision that read the file before then counted memory
+// that was being freed, which is the safe direction.
+//
+// **The lock is flock(2) on `lock`,** taken by flock(1) on a descriptor this
+// process holds open (as `ownerLock` in tooling/differential/oracle-emit.ts
+// does). The kernel releases it when that descriptor closes, however the
+// process ends. A lock directory or an O_EXCL file stays behind when its
+// holder crashes, and could only be taken back by checking that its writer is
+// dead and then removing it. Two waiters can both make that check, and the
+// second then removes the lock the first has just taken again.
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
+
+/** Kept free beyond every reservation, for the rest of the system. */
+export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
+export const LEDGER_DIR = join(homedir(), ".cache/nts-gate/admission");
+/** The reservation a child process runs inside; `Reservation.env` sets it. */
+export const RESERVATION_ENV = "NTS_MEMORY_RESERVATION";
+/** Another ledger directory, for tests; `Reservation.env` passes it on. */
+export const LEDGER_ENV = "NTS_MEMORY_LEDGER";
+/** Highest first. */
+export const PRIORITIES = ["landing", "agent", "full-check"] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
+const CGROUP_ROOT = "/sys/fs/cgroup";
+const POLL_MS = 1000;
+const LOCK_RETRY_MS = 20;
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const KIB = 1024;
+
+const UNITS: Readonly<Record<string, number>> = { "": 1, k: 2 ** 10, m: 2 ** 20, g: 2 ** 30, t: 2 ** 40 };
+
+/** A size as people write one: a count of bytes, or 512M, 8G, 1.5GiB. The units are binary. */
+export function parseBytes(text: string): number {
+  const match = /^(\d+(?:\.\d+)?)(?:([kmgt])(?:i?b)?|b)?$/i.exec(text.trim());
+  const bytes = match ? Math.round(Number(match[1]) * UNITS[(match[2] ?? "").toLowerCase()]!) : NaN;
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`not a size: ${JSON.stringify(text)} (say 8G, 512M or 1048576)`);
+  return bytes;
+}
+
+// ---------------------------------------------------------------------------
+// What the host says, parsed.
+// ---------------------------------------------------------------------------
+
+export type Meminfo = { availableBytes: number; totalBytes: number };
+
+/** MemAvailable and MemTotal from /proc/meminfo's format, or null without both. */
+export function parseMeminfo(text: string): Meminfo | null {
+  const kib = (name: string) => new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(text)?.[1];
+  const available = kib("MemAvailable"), total = kib("MemTotal");
+  return available === undefined || total === undefined ? null : { availableBytes: Number(available) * KIB, totalBytes: Number(total) * KIB };
+}
+
+function readMeminfo(path: string): Meminfo {
+  const meminfo = parseMeminfo(readFileSync(path, "utf8"));
+  if (meminfo === null) throw new Error(`${path} names no MemAvailable and MemTotal`);
+  return meminfo;
+}
+
+/** What a process maps that no other job can have: its anonymous and shared memory, from /proc/<pid>/status. */
+export function processCharge(status: string): number {
+  const kib = (name: string) => Number(new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(status)?.[1] ?? 0);
+  return (kib("RssAnon") + kib("RssShmem")) * KIB;
+}
+
+/** What a cgroup holds that no other job can have: memory.current less the file pages and reclaimable slab MemAvailable counts as available. */
+export function cgroupCharge(current: string, stat: string): number {
+  const field = (name: string) => {
+    const value = new RegExp(`^${name} (\\d+)$`, "m").exec(stat)?.[1];
+    if (value === undefined) throw new Error(`memory.stat has no ${name}`);
+    return Number(value);
+  };
+  return Math.max(0, Number(current.trim()) - field("active_file") - field("inactive_file") - field("slab_reclaimable"));
+}
+
+type Stat = { state: string; ppid: number; start: string };
+
+/** /proc/<pid>/stat: the fields after the command name, which may itself hold spaces and parentheses. */
+function parseStat(text: string): Stat {
+  const fields = text.slice(text.lastIndexOf(")") + 2).split(" ");
+  const state = fields[0], ppid = fields[1], start = fields[19];
+  if (!state || ppid === undefined || !/^\d+$/.test(ppid) || start === undefined || !/^\d+$/.test(start)) throw new Error(`unreadable process stat: ${text.slice(0, 80)}`);
+  return { state, ppid: Number(ppid), start };
+}
+
+const gone = (error: unknown) => ["ENOENT", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "");
+
+function readStat(pid: number): Stat | null {
+  try { return parseStat(readFileSync(`/proc/${pid}/stat`, "utf8")); }
+  catch (error) { if (gone(error)) return null; throw error; }
+}
+
+// ---------------------------------------------------------------------------
+// Processes and cgroups.
+// ---------------------------------------------------------------------------
+
+/** A process, by the boot it runs in, its pid and its start time: a pid the kernel reuses names another process. */
+export type ProcessIdentity = { boot: string; pid: number; start: string };
+
+let boot: string | undefined;
+const bootId = () => boot ??= readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+
+/** A running process's identity; null once it has exited, which a zombie has. */
+export function processIdentity(pid: number): ProcessIdentity | null {
+  const stat = readStat(pid);
+  return stat === null || stat.state === "Z" || stat.state === "X" ? null : { boot: bootId(), pid, start: stat.start };
+}
+
+const alive = (who: ProcessIdentity) => who.boot === bootId() && processIdentity(who.pid)?.start === who.start;
+
+type Table = ReadonlyMap<number, { ppid: number }>;
+
+function processTable(): Map<number, Stat> {
+  const table = new Map<number, Stat>();
+  for (const name of readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    const stat = readStat(Number(name));
+    if (stat !== null && stat.state !== "Z" && stat.state !== "X") table.set(Number(name), stat);
+  }
+  return table;
+}
+
+/** `root` and every process under it, by the parent each one names now. */
+export function processTree(root: number, table: Table): Set<number> {
+  const children = new Map<number, number[]>();
+  for (const [pid, { ppid }] of table) {
+    const siblings = children.get(ppid);
+    if (siblings) siblings.push(pid);
+    else children.set(ppid, [pid]);
+  }
+  const tree = new Set<number>();
+  const next = table.has(root) ? [root] : [];
+  for (let pid = next.pop(); pid !== undefined; pid = next.pop()) {
+    if (tree.has(pid)) continue;
+    tree.add(pid);
+    next.push(...(children.get(pid) ?? []));
+  }
+  return tree;
+}
+
+/**
+ * Whether a cgroup listing `members` holds only `owner` and processes under
+ * it, so that its charge is the owner's job. A member gone since the listing
+ * is passed over: it holds no process memory now.
+ */
+export function ownedBy(owner: number, members: readonly number[], table: Table): boolean {
+  const tree = processTree(owner, table);
+  return members.every(pid => !table.has(pid) || tree.has(pid));
+}
+
+function cgroupOf(pid: number): string | null {
+  try { return readFileSync(`/proc/${pid}/cgroup`, "utf8").split("\n").find(line => line.startsWith("0::"))?.slice(3) ?? null; }
+  catch (error) { if (gone(error)) return null; throw error; }
+}
+
+/** Every process in the cgroup at `path` and in the cgroups under it. */
+function cgroupMembers(path: string): number[] {
+  const members: number[] = [];
+  const walk = (dir: string) => {
+    let procs: string;
+    try { procs = readFileSync(join(dir, "cgroup.procs"), "utf8"); }
+    catch (error) { if (gone(error)) return; throw error; }
+    for (const line of procs.split("\n")) if (line) members.push(Number(line));
+    for (const entry of readdirSync(dir, { withFileTypes: true })) if (entry.isDirectory()) walk(join(dir, entry.name));
+  };
+  walk(CGROUP_ROOT + path);
+  return members;
+}
+
+const inodeOf = (path: string) => String(statSync(path, { bigint: true }).ino);
+const accounted = (path: string) => existsSync(join(CGROUP_ROOT + path, "memory.current"));
+const within = (path: string, group: string) => path === group || path.startsWith(`${group}/`);
+
+/** The owner's cgroup when it is the owner's own and has memory accounting. */
+function ownCgroup(pid: number): CgroupRef | null {
+  const path = cgroupOf(pid);
+  if (path === null || path === "/" || !accounted(path)) return null;
+  // Listed before the table, so a process started in between is one the
+  // members started: a process enters a cgroup by being forked in it.
+  const members = cgroupMembers(path);
+  return ownedBy(pid, members, processTable()) ? { path, inode: inodeOf(CGROUP_ROOT + path) } : null;
+}
+
+function readCgroupCharge(ref: CgroupRef): number {
+  const dir = CGROUP_ROOT + ref.path;
+  try {
+    // Another cgroup by the same name: the job's own has gone, and what is
+    // gone is charged nothing, which leaves its whole reservation pending.
+    if (inodeOf(dir) !== ref.inode) return 0;
+    return cgroupCharge(readFileSync(join(dir, "memory.current"), "utf8"), readFileSync(join(dir, "memory.stat"), "utf8"));
+  } catch (error) { if (gone(error)) return 0; throw error; }
+}
+
+function readProcessCharge(pid: number): number {
+  try { return processCharge(readFileSync(`/proc/${pid}/status`, "utf8")); }
+  catch (error) { if (gone(error)) return 0; throw error; }
+}
+
+/** What an admitted job uses now. `table` is read once per decision, when a tree is measured. */
+function measured(entry: LedgerEntry, table: () => Table): number {
+  const { tree, cgroup } = entry.measure;
+  let bytes = 0;
+  let inside: ReadonlySet<number> = new Set();
+  if (cgroup !== null) {
+    bytes += readCgroupCharge(cgroup);
+    if (tree) inside = new Set(cgroupMembers(cgroup.path));
+  }
+  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid)) bytes += readProcessCharge(pid);
+  return bytes;
+}
+
+/** Whether `pid`'s memory is in what `entry` measures: its owner's tree, or its cgroup. */
+function counts(entry: LedgerEntry, pid: number): boolean {
+  if (entry.measure.tree) {
+    for (let at: number | undefined = pid, hops = 0; at !== undefined && at > 0 && hops < 65536; hops++) {
+      if (at === entry.owner.pid) return true;
+      at = readStat(at)?.ppid;
+    }
+  }
+  const group = entry.measure.cgroup, own = group === null ? null : cgroupOf(pid);
+  return group !== null && own !== null && within(own, group.path);
+}
+
+// ---------------------------------------------------------------------------
+// The queue.
+// ---------------------------------------------------------------------------
+
+export type Queued = { id: string; bytes: number; priority: Priority; seq: number };
+
+const rank = (priority: Priority) => PRIORITIES.indexOf(priority);
+
+/** Priority first, then arrival. */
+export function queueOrder(a: Queued, b: Queued): number {
+  return rank(a.priority) - rank(b.priority) || a.seq - b.seq;
+}
+
+/**
+ * The requests that may start now, with `room` bytes free beyond what is
+ * pending and the floor: the longest prefix of the queue whose requests fit
+ * together. A request behind one that does not fit waits, even when it would
+ * fit alone, so a big request is never delayed by small ones.
+ */
+export function admissible(room: number, queue: readonly Queued[]): Set<string> {
+  const admitted = new Set<string>();
+  let left = room;
+  for (const request of [...queue].sort(queueOrder)) {
+    if (request.bytes > left) break;
+    left -= request.bytes;
+    admitted.add(request.id);
+  }
+  return admitted;
+}
+
+// ---------------------------------------------------------------------------
+// The files.
+// ---------------------------------------------------------------------------
+
+export type CgroupRef = { path: string; inode: string };
+/** What counts as the job's memory: its owner's process tree, a cgroup, or both (the cgroup, and the tree's processes outside it). */
+export type Measure = { tree: boolean; cgroup: CgroupRef | null };
+export type LedgerEntry = {
+  version: 1; id: string; seq: number; bytes: number; what: string; priority: Priority;
+  owner: ProcessIdentity; waiter: ProcessIdentity; measure: Measure; since: string;
+};
+type State = "waiting" | "admitted";
+
+const entryPath = (dir: string, state: State, id: string) => join(dir, state, `${id}.json`);
+
+function identity(value: unknown): value is ProcessIdentity {
+  const who = value as ProcessIdentity;
+  return typeof who === "object" && who !== null && typeof who.boot === "string" && Number.isSafeInteger(who.pid) && who.pid > 0 && typeof who.start === "string";
+}
+
+function parseEntry(text: string, file: string): LedgerEntry {
+  const entry = JSON.parse(text) as LedgerEntry;
+  const measure = entry?.measure, cgroup = measure?.cgroup;
+  if (entry?.version !== 1 || typeof entry.id !== "string" || !ID.test(entry.id) || !Number.isSafeInteger(entry.seq)
+      || !Number.isSafeInteger(entry.bytes) || entry.bytes <= 0 || typeof entry.what !== "string" || !PRIORITIES.includes(entry.priority)
+      || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
+      || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))) {
+    throw new Error(`${file} is not a memory ledger entry`);
+  }
+  return entry;
+}
+
+function readEntries(dir: string, state: State): LedgerEntry[] {
+  let names: string[];
+  try { names = readdirSync(join(dir, state)); }
+  catch (error) { if (gone(error)) return []; throw error; }
+  const entries: LedgerEntry[] = [];
+  for (const name of names.filter(name => name.endsWith(".json"))) {
+    const file = join(dir, state, name);
+    let text: string;
+    try { text = readFileSync(file, "utf8"); }
+    catch (error) { if (gone(error)) continue; throw error; } // released since the listing
+    entries.push(parseEntry(text, file));
+  }
+  return entries;
+}
+
+function writeEntry(dir: string, state: State, entry: LedgerEntry): void {
+  const temporary = join(dir, `.tmp-${entry.id}`);
+  writeFileSync(temporary, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+  renameSync(temporary, entryPath(dir, state, entry.id));
+}
+
+function removeQuietly(path: string): void {
+  try { unlinkSync(path); }
+  catch (error) { if (!gone(error)) throw error; }
+}
+
+export type LedgerView = { waiting: (LedgerEntry & { live: boolean })[]; admitted: (LedgerEntry & { live: boolean })[] };
+
+/** The ledger as its files stand, each entry with whether the processes it lasts for are alive. */
+export function readLedger(dir: string = process.env[LEDGER_ENV] ?? LEDGER_DIR): LedgerView {
+  return {
+    waiting: readEntries(dir, "waiting").sort(queueOrder).map(entry => ({ ...entry, live: alive(entry.waiter) && alive(entry.owner) })),
+    admitted: readEntries(dir, "admitted").sort((a, b) => a.since.localeCompare(b.since) || a.id.localeCompare(b.id)).map(entry => ({ ...entry, live: alive(entry.owner) })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The lock.
+// ---------------------------------------------------------------------------
+
+export type LedgerLock = { release(): void };
+
+/** The ledger's lock, held until `release`; null while another holder has it. */
+export function lockLedger(dir: string): LedgerLock | null {
+  mkdirSync(dir, { recursive: true });
+  const fd = openSync(join(dir, "lock"), "a", 0o600);
+  let locked: SpawnSyncReturns<string>;
+  try {
+    // flock(1) locks the open file description it is handed as fd 8, which
+    // this process shares; the lock outlives flock and ends when `fd` closes.
+    locked = spawnSync("flock", ["-n", "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
+  } catch (error) { closeSync(fd); throw error; }
+  if (locked.status === 0) {
+    let held = true;
+    return { release: () => { if (held) { held = false; closeSync(fd); } } };
+  }
+  closeSync(fd);
+  if (locked.status === 75) return null;
+  throw new Error(`cannot lock the memory ledger in ${dir}: ${locked.error?.message ?? (locked.stderr.trim() || `flock ended ${locked.status ?? locked.signal}`)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Reserving.
+// ---------------------------------------------------------------------------
+
+export type OwnerSpec = {
+  /** The process the reservation lasts as long as; this one unless given. */
+  pid?: number;
+  /**
+   * Given, the cgroup (a path under /sys/fs/cgroup) that holds the job and
+   * nothing else, read alone: a gate step's scope, reserved for by its runner
+   * before the step starts. Absent, the owner's process tree, read through
+   * its own cgroup when it has one (see the top of this file).
+   */
+  cgroup?: string;
+};
+
+export type ReserveRequest = { bytes: number; what: string; priority?: Priority; owner?: OwnerSpec };
+
+/** One decision on one request: what it saw and what it decided. */
+export type Decision = {
+  id: string; what: string; admitted: boolean;
+  availableBytes: number; pendingBytes: number;
+  /** Free beyond pending and the floor, for the queue. */
+  roomBytes: number;
+  /** Requests ahead of this one in the queue. */
+  ahead: number;
+};
+
+export type ReserveOptions = {
+  /** Read for RESERVATION_ENV, LEDGER_ENV and NTS_MEMINFO; process.env unless given. */
+  env?: NodeJS.ProcessEnv;
+  /** The ledger's directory; else LEDGER_ENV, else LEDGER_DIR. */
+  dir?: string;
+  /** Told one line when the request starts waiting, one when it is admitted after a wait, and one for each entry a decision drops. */
+  report?: (line: string) => void;
+  /** Told every decision made on this request. */
+  observe?: (decision: Decision) => void;
+  /** Withdraws the request while it waits. */
+  signal?: AbortSignal;
+  everyMs?: number;
+  /** What an admitted job uses now, in place of reading the host: for tests. */
+  used?: (entry: LedgerEntry) => number;
+};
+
+export type Reservation = {
+  id: string;
+  /** Inside a parent's reservation: nothing was asked, and `release` leaves the parent's. */
+  inherited: boolean;
+  /** What a child process needs to run inside this reservation. */
+  env: Readonly<Record<string, string>>;
+  /** Ends the reservation; a second call does nothing. */
+  release(): void;
+};
+
+const gib = (bytes: number) => bytes >= 2 ** 30 || bytes <= -(2 ** 30) ? `${(bytes / 2 ** 30).toFixed(1)} GiB` : `${(bytes / 2 ** 20).toFixed(1)} MiB`;
+
+function label(what: string): string {
+  const text = String(what ?? "").replace(/\s+/g, " ").trim();
+  if (!text) throw new TypeError("a reservation names what it is for");
+  return text.length > 160 ? `${text.slice(0, 159)}…` : text;
+}
+
+const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
+
+function held(id: string, dir: string): Reservation {
+  let released = false;
+  return { id, inherited: false, env: reservationEnv(id, dir), release: () => { if (!released) { released = true; removeQuietly(entryPath(dir, "admitted", id)); } } };
+}
+
+/** The parent's reservation when `parent` names a live one that counts `pid`'s memory. */
+function inside(parent: string | undefined, dir: string, pid: number, what: string, report: (line: string) => void): Reservation | null {
+  if (!parent) return null;
+  if (!ID.test(parent)) throw new Error(`${RESERVATION_ENV}=${parent} is not a reservation id`);
+  const file = entryPath(dir, "admitted", parent);
+  let entry: LedgerEntry | null = null;
+  try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+  catch (error) { if (!gone(error)) throw error; }
+  if (entry === null || !alive(entry.owner)) {
+    report(`memory: ${what} was started inside reservation ${parent}, which has ended; it asks for its own`);
+    return null;
+  }
+  if (!counts(entry, pid)) {
+    throw new Error(`memory: ${what} (pid ${pid}) was started inside ${entry.what}'s reservation, which does not count its memory: `
+      + `it is outside that reservation's process tree${entry.measure.cgroup ? " and cgroup" : ""}`);
+  }
+  return { id: entry.id, inherited: true, env: reservationEnv(entry.id, dir), release: () => {} };
+}
+
+function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure {
+  if (cgroup === undefined) return { tree: true, cgroup: ownCgroup(owner.pid) };
+  if (!cgroup.startsWith("/") || cgroup === "/" || cgroup.endsWith("/") || cgroup.split("/").some(part => part === "." || part === "..")) {
+    throw new Error(`not a cgroup path: ${cgroup}`);
+  }
+  if (!accounted(cgroup)) throw new Error(`cgroup ${cgroup} does not exist or has no memory accounting`);
+  return { tree: false, cgroup: { path: cgroup, inode: inodeOf(CGROUP_ROOT + cgroup) } };
+}
+
+type Context = { dir: string; meminfo: string; report: (line: string) => void; used: (entry: LedgerEntry, table: () => Table) => number };
+
+/** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
+function decide(context: Context, self: LedgerEntry, registered: boolean): { decision: Decision; registered: boolean } {
+  const { dir, report } = context;
+  for (const state of ["waiting", "admitted"] as const) mkdirSync(join(dir, state), { recursive: true });
+  // What a writer left between its write and its rename: none writes without the lock.
+  for (const name of readdirSync(dir)) if (name.startsWith(".tmp-")) removeQuietly(join(dir, name));
+  const admitted: LedgerEntry[] = [];
+  for (const entry of readEntries(dir, "admitted")) {
+    if (alive(entry.owner)) { admitted.push(entry); continue; }
+    removeQuietly(entryPath(dir, "admitted", entry.id));
+    report(`memory: dropped ${entry.what}'s reservation of ${gib(entry.bytes)}: its owner, pid ${entry.owner.pid}, has exited`);
+  }
+  const waiting: LedgerEntry[] = [];
+  let listed = false;
+  for (const entry of readEntries(dir, "waiting")) {
+    if (entry.id === self.id) { listed = true; continue; }
+    const lost = !alive(entry.waiter) ? entry.waiter : !alive(entry.owner) ? entry.owner : null;
+    if (lost === null) { waiting.push(entry); continue; }
+    removeQuietly(entryPath(dir, "waiting", entry.id));
+    report(`memory: dropped ${entry.what}'s request for ${gib(entry.bytes)}: pid ${lost.pid}, which ${lost === entry.waiter ? "waited for it" : "owns it"}, has exited`);
+  }
+  if (!alive(self.owner)) {
+    if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
+    throw new Error(`memory: ${self.what}'s owner, pid ${self.owner.pid}, exited while it waited`);
+  }
+  if (registered && !listed) report(`memory: ${self.what}'s request left the ledger while it waited; it asks again, at the back of the queue`);
+  if (!listed) self.seq = 1 + Math.max(0, ...waiting.map(entry => entry.seq));
+
+  const { availableBytes } = readMeminfo(context.meminfo);
+  let table: Table | undefined;
+  const read = () => table ??= processTable();
+  const pendingBytes = admitted.reduce((sum, entry) => sum + Math.max(0, entry.bytes - context.used(entry, read)), 0);
+  const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
+  const queue = [...waiting, self].sort(queueOrder);
+  const go = admissible(roomBytes, queue).has(self.id);
+  if (go && listed) renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
+  else if (go) writeEntry(dir, "admitted", self);
+  else if (!listed) writeEntry(dir, "waiting", self);
+  return { decision: { id: self.id, what: self.what, admitted: go, availableBytes, pendingBytes, roomBytes, ahead: queue.indexOf(self) }, registered: !go };
+}
+
+/**
+ * Waits until `request.bytes` may start, then holds them until the returned
+ * reservation is released or its owner exits. Inside a parent's reservation
+ * (RESERVATION_ENV) it returns at once and asks for nothing.
+ */
+export async function reserve(request: ReserveRequest, options: ReserveOptions = {}): Promise<Reservation> {
+  const env = options.env ?? process.env;
+  const dir = resolve(options.dir ?? env[LEDGER_ENV] ?? LEDGER_DIR);
+  const report = options.report ?? (() => {});
+  const what = label(request.what);
+  const { bytes, priority = "agent" } = request;
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`memory: ${what} reserves a positive whole number of bytes, not ${bytes}`);
+  if (!PRIORITIES.includes(priority)) throw new RangeError(`memory: no priority ${String(priority)}; one of ${PRIORITIES.join(", ")}`);
+  const nested = inside(env[RESERVATION_ENV], dir, request.owner?.pid ?? process.pid, what, report);
+  if (nested !== null) return nested;
+
+  const waiter = processIdentity(process.pid);
+  if (waiter === null) throw new Error("this process has no identity in /proc");
+  const pid = request.owner?.pid ?? process.pid;
+  const owner = pid === process.pid ? waiter : processIdentity(pid);
+  if (owner === null) throw new Error(`memory: ${what}'s owner, pid ${pid}, is not running`);
+  const meminfo = env.NTS_MEMINFO ?? "/proc/meminfo";
+  const { totalBytes } = readMeminfo(meminfo);
+  if (bytes + SYSTEM_FLOOR_BYTES > totalBytes) {
+    throw new RangeError(`memory: ${what} asks ${gib(bytes)}, which can never fit: the machine has ${gib(totalBytes)}, and ${gib(SYSTEM_FLOOR_BYTES)} of it is kept for the system`);
+  }
+  const self: LedgerEntry = {
+    version: 1, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
+    measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(),
+  };
+  const used = options.used;
+  const context: Context = { dir, meminfo, report, used: used ? entry => used(entry) : measured };
+  const { signal, observe } = options;
+  const every = options.everyMs ?? POLL_MS;
+  let registered = false;
+  let waitedFrom: number | undefined;
+  // A decision holds the lock for milliseconds, so a busy lock is tried again
+  // soon; while it stays busy, the tries back off to one every `every`.
+  let retry = LOCK_RETRY_MS;
+  try {
+    for (;;) {
+      signal?.throwIfAborted();
+      const lock = lockLedger(dir);
+      if (lock === null) {
+        await pause(retry, undefined, { signal });
+        retry = Math.min(2 * retry, Math.max(every, LOCK_RETRY_MS));
+        continue;
+      }
+      retry = LOCK_RETRY_MS;
+      let outcome: ReturnType<typeof decide>;
+      try { outcome = decide(context, self, registered); }
+      finally { lock.release(); }
+      registered = outcome.registered;
+      const { decision } = outcome;
+      if (decision.admitted) {
+        const reservation = held(self.id, dir);
+        try { observe?.(decision); }
+        catch (error) { reservation.release(); throw error; }
+        if (waitedFrom !== undefined) report(`memory: ${what} admitted with ${gib(bytes)} after ${Math.round((Date.now() - waitedFrom) / 1000)} s`);
+        return reservation;
+      }
+      observe?.(decision);
+      if (waitedFrom === undefined) {
+        waitedFrom = Date.now();
+        report(`memory: ${what} waits for ${gib(bytes)} (${priority}): ${gib(decision.availableBytes)} available, `
+          + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
+          + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : ""));
+      }
+      await pause(every, undefined, { signal });
+    }
+  } catch (error) {
+    // Nobody waits for it any more.
+    if (registered) removeQuietly(entryPath(dir, "waiting", self.id));
+    throw error;
+  }
+}

@@ -55,7 +55,8 @@
     "tree": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's tree, at the commit it runs" },
     "target": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's build of that tree" },
     "closed-temporaries": { "kind": "kept", "writer": "tooling/gate/run-temporary.ts", "why": "the registry of closed run temporaries" },
-    "artifact-shadow": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the artifact shadow's results" }
+    "artifact-shadow": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the artifact shadow's results" },
+    "admission": { "kind": "kept", "writer": "tooling/gate/memory-ledger.ts", "why": "the machine's memory ledger: the reservations heavy jobs hold and the requests waiting for one" }
   } },
   "nts-tools": { "kind": "kept", "writer": "tooling/gate/comment-changes.ts", "why": "the comment lexer's build" },
 
