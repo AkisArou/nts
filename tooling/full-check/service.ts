@@ -723,15 +723,20 @@ export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: I
 type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null; records: { listed: RunRecord["listed"] | null; last: RecordsRun | null } };
 
 /**
- * The full check as `--status --json` prints it, version 1: whether its
+ * The full check as `--status --json` prints it, version 2: whether its
  * controller runs and what it is doing, main and verified and how far
  * verified is behind, each part's runs and records, the culprits, the
  * benchmarks, the hourly count and the task lines. Times are ISO strings;
- * durations are seconds, as numbers. The text
- * `--status` prints is rendered from this.
+ * durations are seconds, as numbers. The text `--status` prints is rendered
+ * from this.
+ *
+ * Other tools read it (signalbox's Full check tab), so within a version
+ * fields are only added; one removed, renamed or reshaped bumps `version`.
+ * Version 2 moved the records into each part (`core.records`,
+ * `wide.records`) and counts accepted changes, not only improvements.
  */
 export type FullCheckStatus = {
-  version: 1; kind: "full-check"; at: string;
+  version: 2; kind: "full-check"; at: string;
   controller: { pid: number | null; running: boolean };
   now: (Doing & { seconds: number }) | null;
   main: string | null;
@@ -763,7 +768,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
   });
   const oldest = inputs.unverified?.length ? inputs.unverified.map(inputs.landedAt).sort()[0]! : null;
   return {
-    version: 1, kind: "full-check", at: inputs.now.toISOString(),
+    version: 2, kind: "full-check", at: inputs.now.toISOString(),
     controller: { pid: inputs.controller?.pid ?? null, running },
     // What a controller that stopped was doing is not being done.
     now: running && state.now ? { ...state.now, seconds: Math.round((now - Date.parse(state.now.since)) / 1000) } : null,

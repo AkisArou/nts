@@ -92,6 +92,9 @@ export type Answer = {
  * change being checked, the queue, the last day's answers and the recent
  * ones, main and the pool. Times are ISO strings; durations are seconds, as
  * numbers. The text `status` prints is rendered from this.
+ *
+ * Other tools read it (signalbox's Landing tab), so within a version fields
+ * are only added; one removed, renamed or reshaped bumps `version`.
  */
 export type LandingStatus = {
   version: 1; kind: "landing"; at: string;

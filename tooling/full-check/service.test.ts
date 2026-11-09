@@ -673,7 +673,7 @@ test("the status model: what a live controller does, how far verified is behind 
     controller: { pid: 42, alive: true }, now: new Date("2026-11-09T11:00:00.000Z"),
   };
   const s = fullCheckStatus(state, inputs);
-  assert.equal(s.version, 1);
+  assert.equal(s.version, 2);
   assert.equal(s.kind, "full-check");
   assert.deepEqual(s.now, { ...state.now, seconds: 3600 });
   assert.deepEqual(s.behind, { commits: 2, oldest_landed_at: "2026-11-09T10:30:00.000Z", delay_s: 1800 });
