@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "rules": {
+    "area": "exactly one",
+    "kind": "exactly one",
+    "state": "at most one"
+  },
+  "labels": [
+    { "name": "task", "color": "0e8a16", "description": "An agent can take it: one change that lands within a day" },
+
+    { "name": "area:compiler", "color": "1d76db", "description": "compiler/ and runtime/c/, the compiler's core" },
+    { "name": "area:runtime", "color": "1d76db", "description": "runtime/ outside runtime/c/, runtime/node/ and runtime/chromium/" },
+    { "name": "area:node", "color": "1d76db", "description": "runtime/node/ and Node's own tests" },
+    { "name": "area:chromium", "color": "1d76db", "description": "runtime/chromium/ and tooling/chromium/" },
+    { "name": "area:benchmarks", "color": "1d76db", "description": "benchmarks/ and the tools that run and record them" },
+    { "name": "area:jvm", "color": "1d76db", "description": "The JVM backend and its runtime" },
+    { "name": "area:wasm", "color": "1d76db", "description": "The Wasm backend and its runtime" },
+    { "name": "area:tooling", "color": "1d76db", "description": "tooling/: the gate, the landing and full checks, the records" },
+    { "name": "area:docs", "color": "1d76db", "description": "docs/ and the rules agents follow" },
+
+    { "name": "kind:wrong-answer", "color": "b60205", "description": "A program gives a different result from node" },
+    { "name": "kind:abort", "color": "d93f0b", "description": "A crash, a hang or a failed build" },
+    { "name": "kind:refusal", "color": "fbca04", "description": "A construct nts refuses that it should compile" },
+    { "name": "kind:foundation", "color": "5319e7", "description": "A foundation or the tooling it stands on" },
+    { "name": "kind:performance", "color": "5319e7", "description": "A benchmark row below the bar" },
+    { "name": "kind:compile-time", "color": "5319e7", "description": "Compile time over its budget" },
+    { "name": "kind:conformance", "color": "c5def5", "description": "A test262 or TypeScript conformance family" },
+    { "name": "kind:backlog", "color": "c5def5", "description": "Noted, not scheduled" },
+    { "name": "kind:question", "color": "c5def5", "description": "A question to answer before work is written" },
+    { "name": "kind:parent", "color": "000000", "description": "A stream: its tasks are its sub-issues" },
+
+    { "name": "state:held", "color": "e4e669", "description": "Waits on something the issue names" },
+    { "name": "state:parked", "color": "e4e669", "description": "Waits on a decision, a licence or the user's word" },
+    { "name": "state:needs-user", "color": "e99695", "description": "Waits on the user" }
+  ]
+}

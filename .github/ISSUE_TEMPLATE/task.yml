@@ -1,0 +1,33 @@
+name: Task
+description: One change that lands within a day, with its card (docs/workflow.md, Tasks)
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agents and the coordinator make issues with `node tooling/tasks/new.ts`, which checks the card and
+        the labels. Here, give the card; add one `area:` and one `kind:` label from `.github/labels.json`.
+  - type: textarea
+    id: goal
+    attributes: { label: Goal, description: "One sentence: what is true when it lands." }
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes: { label: Why, description: "The evidence: fixtures, records, rows, links as repository paths." }
+    validations: { required: true }
+  - type: textarea
+    id: paths
+    attributes: { label: Paths, description: "What it may touch, or \"to scope when taken\"." }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes: { label: Done when }
+    validations: { required: true }
+  - type: textarea
+    id: tests
+    attributes: { label: Tests and rows, description: "The fixtures, controls and benchmark rows it adds or moves." }
+    validations: { required: true }
+  - type: input
+    id: parent
+    attributes: { label: Parent, description: "The stream's parent issue, as #N." }
+    validations: { required: true }

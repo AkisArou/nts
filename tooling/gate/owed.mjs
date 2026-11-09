@@ -991,6 +991,16 @@ export const RULES = [
     ],
   },
   {
+    // The task spec and the tools that make issues and labels by it. No step
+    // or program reads them; their tests, in tooling, read the label file.
+    name: "the task issues' spec and tools",
+    when: (p) => p.startsWith("tooling/tasks/") || p.startsWith(".github/"),
+    steps: ["tooling"],
+    arms: [
+      { kind: "answers", asks: "does every draft or new issue still keep the spec", run: "node tooling/tasks/new.ts --from <drafts.json> --dry-run" },
+    ],
+  },
+  {
     // Every gate tree's inputs are linked through these, the full run's too,
     // so they owe every step, as the runner does.
     name: "the gate trees' inputs",
