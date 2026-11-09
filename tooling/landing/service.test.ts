@@ -34,7 +34,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
     home: join(s.dir, "landing"), root: s.root, remote: "origin", tree: join(s.dir, "landing-tree"), target: join(s.dir, "target"), pool, env: s.env,
     select: () => ({ selection: selection(["build", "tests", "rustfmt"]), kind: "other", interop: null, doctests: null }),
     prepare: tip => prepareTree(s.root, join(s.dir, "landing-tree"), tip, s.env),
-    runSteps: (options: RunOptions): Ran => {
+    runSteps: async (options: RunOptions): Promise<Ran> => {
       checked.push(options.commit);
       const red = existsSync(join(options.tree, "RED"));
       return { state: red ? "red" : "green", message: red ? `tests FAIL; logs ${options.run}` : "green", run: options.run, wall_s: 2, pending: [],
@@ -54,12 +54,12 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
   return { s, pool, config, queue, logs, checked, task, submit, main: () => s.git(["rev-parse", "main"]), origin: () => s.git(["ls-remote", "origin", "refs/heads/main"]).split("\t")[0] };
 }
 
-test("queued changes land one at a time, each rebased onto the newest main, pushed, its branch deleted and its tree freed", t => {
+test("queued changes land one at a time, each rebased onto the newest main, pushed, its branch deleted and its tree freed", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const b = f.task("fix/b", { "src/b.txt": "b\n" });
   const ea = f.submit("fix/a", a.sha), eb = f.submit("fix/b", b.sha);
-  const drained = drain(f.config);
+  const drained = await drain(f.config);
   assert.equal(drained.state, "drained");
   assert.deepEqual(drained.answered.map(r => r.state), ["landed", "landed"]);
   const ra = f.queue.result(ea.id)!, rb = f.queue.result(eb.id)!;
@@ -83,38 +83,38 @@ test("queued changes land one at a time, each rebased onto the newest main, push
   assert.equal(f.queue.status().state, "idle");
 });
 
-test("a revert from the full check is checked before the changes waiting", t => {
+test("a revert from the full check is checked before the changes waiting", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" }, { push: false });
   f.submit("fix/a", a.sha);
   f.s.git(["switch", "-q", "--detach", "main"], f.s.dir.concat("/pool/2"));
   const revert = f.s.commit({ "docs/workflow.md": "reverted\n" }, "Revert of something", f.s.dir.concat("/pool/2"));
   const er = f.queue.submit(revert, { first: true, by: "full-check" });
-  const drained = drain(f.config);
+  const drained = await drain(f.config);
   assert.equal(drained.answered[0]!.id, er.id);
   assert.deepEqual(drained.answered.map(r => r.state), ["landed", "landed"]);
 });
 
-test("a change that conflicts with main is refused, naming the files, and the queue goes on", t => {
+test("a change that conflicts with main is refused, naming the files, and the queue goes on", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "docs/workflow.md": "the task's words\n" });
   const b = f.task("fix/b", { "src/b.txt": "b\n" });
   f.s.commit({ "docs/workflow.md": "main's words\n" }, "main moved");
   const ea = f.submit("fix/a", a.sha);
   f.submit("fix/b", b.sha);
-  const drained = drain(f.config);
+  const drained = await drain(f.config);
   assert.deepEqual(drained.answered.map(r => r.state), ["refused", "landed"]);
   assert.match(f.queue.result(ea.id)!.message, /conflicts with main [0-9a-f]{12} in docs\/workflow\.md \(at [0-9a-f]{12}\): rebase it onto main/);
   assert.notEqual(f.s.git(["branch", "--list", "fix/a"]), "", "a refused change keeps its branch");
   assert.equal(f.pool.trees().find(t => t.branch === "fix/a")?.state, "held", "and its tree");
 });
 
-test("a red check refuses the change with its failing steps and run, and main does not move", t => {
+test("a red check refuses the change with its failing steps and run, and main does not move", async t => {
   const f = service(t);
   const before = f.main();
   const a = f.task("fix/a", { "RED": "tests fail\n" });
   const ea = f.submit("fix/a", a.sha);
-  drain(f.config);
+  await drain(f.config);
   const r = f.queue.result(ea.id)!;
   assert.equal(r.state, "refused");
   assert.match(r.message, /^red: tests FAIL; logs .*\/runs\/[0-9a-f]{12}-\d+$/);
@@ -122,33 +122,33 @@ test("a red check refuses the change with its failing steps and run, and main do
   assert.notEqual(f.s.git(["ls-remote", "--heads", "origin", "fix/a"]), "", "its branch stays on origin");
 });
 
-test("a held check waits aside, and lands once retried", t => {
+test("a held check waits aside, and lands once retried", async t => {
   let held = true;
   const f = service(t);
   const green = f.config.runSteps;
-  f.config.runSteps = options => held ? { state: "held", message: "examples INSTRUMENT: memory pressure three times", run: options.run, steps: [], pending: [], wall_s: 1 } : green(options);
+  f.config.runSteps = async options => held ? { state: "held", message: "examples INSTRUMENT: memory pressure three times", run: options.run, steps: [], pending: [], wall_s: 1 } : green(options);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
-  drain(f.config);
+  await drain(f.config);
   assert.equal(f.queue.result(ea.id)!.state, "held");
   assert.deepEqual(f.queue.held().map(e => e.id), [ea.id]);
   held = false;
   f.queue.retry(ea.id);
-  drain(f.config);
+  await drain(f.config);
   assert.equal(f.queue.result(ea.id)!.state, "landed");
 });
 
-test("main moved during a check: the change is checked again on the new main", t => {
+test("main moved during a check: the change is checked again on the new main", async t => {
   let moved = false;
   const f = service(t);
   const green = f.config.runSteps;
-  f.config.runSteps = options => {
+  f.config.runSteps = async options => {
     if (!moved) { moved = true; f.s.commit({ "docs/elsewhere.md": "someone wrote main\n" }, "direct"); }
     return green(options);
   };
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
-  drain(f.config);
+  await drain(f.config);
   const r = f.queue.result(ea.id)!;
   assert.equal(r.state, "landed");
   assert.equal(f.checked.length, 2, "checked twice");
@@ -156,24 +156,24 @@ test("main moved during a check: the change is checked again on the new main", t
   assert.ok(existsSync(join(f.s.root, "docs/elsewhere.md")) && existsSync(join(f.s.root, "src/a.txt")));
 });
 
-test("a withdrawal asked during the check is answered, and the change does not land", t => {
+test("a withdrawal asked during the check is answered, and the change does not land", async t => {
   const f = service(t);
   const green = f.config.runSteps;
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
   const before = f.main();
-  f.config.runSteps = options => { f.queue.withdraw(ea.id); return green(options); };
-  drain(f.config);
+  f.config.runSteps = async options => { f.queue.withdraw(ea.id); return green(options); };
+  await drain(f.config);
   assert.equal(f.queue.result(ea.id)!.state, "withdrawn");
   assert.equal(f.main(), before);
 });
 
-test("a change already on main lands as nothing, and its branch and tree are still cleaned up", t => {
+test("a change already on main lands as nothing, and its branch and tree are still cleaned up", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   f.s.git(["merge", "-q", "--ff-only", a.sha]);
   const ea = f.submit("fix/a", a.sha);
-  drain(f.config);
+  await drain(f.config);
   const r = f.queue.result(ea.id)!;
   assert.equal(r.state, "landed");
   assert.match(r.message, /is on main already/);
@@ -181,7 +181,7 @@ test("a change already on main lands as nothing, and its branch and tree are sti
   assert.equal(f.s.git(["branch", "--list", "fix/a"]), "");
 });
 
-test("a service that stopped after moving main finishes the landing; one that stopped mid-check checks again", t => {
+test("a service that stopped after moving main finishes the landing; one that stopped mid-check checks again", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
@@ -189,7 +189,7 @@ test("a service that stopped after moving main finishes the landing; one that st
   const base = f.main();
   f.queue.update({ base, tip: a.sha, phase: "landing" });
   f.s.git(["merge", "-q", "--ff-only", a.sha]); // the fast-forward happened, then the service died
-  const drained = drain(f.config);
+  const drained = await drain(f.config);
   assert.equal(drained.answered[0]?.id, taken.id);
   assert.equal(f.queue.result(ea.id)!.state, "landed");
   assert.equal(f.s.git(["branch", "--list", "fix/a"]), "");
@@ -197,46 +197,46 @@ test("a service that stopped after moving main finishes the landing; one that st
   const eb = f.submit("fix/b", b.sha);
   f.queue.take();
   f.queue.update({ phase: "checking" });
-  drain(f.config);
+  await drain(f.config);
   assert.equal(f.queue.result(eb.id)!.state, "landed");
   assert.ok(f.logs.some(line => /was being checked when the service stopped/.test(line)));
 });
 
-test("a landing of the landing check's own code stops the service so the new code runs", t => {
+test("a landing of the landing check's own code stops the service so the new code runs", async t => {
   const f = service(t, { restartAfter: paths => paths.some(p => p.startsWith("tooling/landing/")) });
   const a = f.task("fix/a", { "tooling/landing/check.ts": "// new\n" });
   const b = f.task("fix/b", { "src/b.txt": "b\n" });
   f.submit("fix/a", a.sha); f.submit("fix/b", b.sha);
-  const first = drain(f.config);
+  const first = await drain(f.config);
   assert.equal(first.state, "restart");
   assert.equal(first.answered.length, 1);
-  assert.equal(drain(f.config).answered[0]?.state, "landed");
+  assert.equal((await drain(f.config)).answered[0]?.state, "landed");
 });
 
-test("a push origin refuses is reported, and the next landing pushes main", t => {
+test("a push origin refuses is reported, and the next landing pushes main", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" }, { push: false });
   const ea = f.submit("fix/a", a.sha);
   f.s.git(["remote", "set-url", "origin", join(f.s.dir, "nowhere.git")]);
-  drain(f.config);
+  await drain(f.config);
   const r = f.queue.result(ea.id)!;
   assert.equal(r.state, "landed");
   assert.equal(r.pushed, false);
   assert.match(r.message, /NOT pushed: .*the next landing pushes it/);
   f.s.git(["remote", "set-url", "origin", f.s.origin]);
-  drain(f.config);
+  await drain(f.config);
   assert.equal(f.origin(), f.main());
   assert.ok(f.logs.includes("pushed main to origin"));
 });
 
-test("a check that throws holds its change for a person, and the queue goes on", t => {
+test("a check that throws holds its change for a person, and the queue goes on", async t => {
   const f = service(t);
   const green = f.config.runSteps;
   let first = true;
-  f.config.runSteps = options => { if (first) { first = false; throw new Error("cannot read gate capabilities: run.mjs exited 1"); } return green(options); };
+  f.config.runSteps = async options => { if (first) { first = false; throw new Error("cannot read gate capabilities: run.mjs exited 1"); } return green(options); };
   const a = f.task("fix/a", { "src/a.txt": "a\n" }), b = f.task("fix/b", { "src/b.txt": "b\n" });
   const ea = f.submit("fix/a", a.sha), eb = f.submit("fix/b", b.sha);
-  const drained = drain(f.config);
+  const drained = await drain(f.config);
   assert.equal(drained.state, "drained");
   assert.equal(f.queue.result(ea.id)!.state, "held");
   assert.match(f.queue.result(ea.id)!.message, /the check could not finish: cannot read gate capabilities/);
@@ -244,26 +244,26 @@ test("a check that throws holds its change for a person, and the queue goes on",
   assert.equal(f.queue.checking(), null);
 });
 
-test("tidying up after main moved never un-lands a change", t => {
+test("tidying up after main moved never un-lands a change", async t => {
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   const ea = f.submit("fix/a", a.sha);
   f.config.pool = { release: () => { throw new Error("pool lock held by process 1"); } } as unknown as Config["pool"];
-  drain(f.config);
+  await drain(f.config);
   const r = f.queue.result(ea.id)!;
   assert.equal(r.state, "landed");
   assert.equal(f.main(), a.sha);
   assert.match(r.message, /the pool tree was not released: pool lock held by process 1/);
 });
 
-test("a second service finds the first draining and leaves", t => {
+test("a second service finds the first draining and leaves", async t => {
   const f = service(t);
   let inner: string | undefined;
   const green = f.config.runSteps;
-  f.config.runSteps = options => { inner = drain(f.config).state; return green(options); };
+  f.config.runSteps = async options => { inner = (await drain(f.config)).state; return green(options); };
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   f.submit("fix/a", a.sha);
-  drain(f.config);
+  await drain(f.config);
   assert.equal(inner, "busy");
 });
 
@@ -288,12 +288,12 @@ test("the costs of passing steps are kept by kind of change, and old runs are pr
   assert.equal(existsSync(old), false);
 });
 
-test("a change from an issue's branch lands saying Fixes #N, and one from a branch named for no issue lands as it is", t => {
+test("a change from an issue's branch lands saying Fixes #N, and one from a branch named for no issue lands as it is", async t => {
   const f = service(t);
   const issue = f.task("42-a-task", { "src/a.txt": "a\n" });
   const other = f.task("fix/b", { "src/b.txt": "b\n" });
   const ei = f.submit("42-a-task", issue.sha), eo = f.submit("fix/b", other.sha);
-  assert.deepEqual(drain(f.config).answered.map(r => r.state), ["landed", "landed"]);
+  assert.deepEqual((await drain(f.config)).answered.map(r => r.state), ["landed", "landed"]);
   const ri = f.queue.result(ei.id)!, ro = f.queue.result(eo.id)!;
   assert.notEqual(ri.tip, issue.sha, "a was on main's line, and lands with its issue named");
   assert.equal(f.s.git(["log", "-1", "--format=%B", ri.tip!]), "task 42-a-task\n\nFixes #42");

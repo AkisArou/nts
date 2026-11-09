@@ -348,6 +348,11 @@ the first node task.
   number; a step's census runs under twice its reservation, never below one
   worker's own cap, so a verdict never depends on the history
   ([log](records/notebooks/decisions-log.md#reservations-are-measured-peaks-11-09)).
+- **Reservations yield to a request that outranks them** (11-09): for a
+  waiting request's decision, a reservation of lower priority counts as what
+  its job uses and a margin, whatever holds it; a landing's build hands its
+  reservation to its gate run, so nothing is admitted between them
+  ([log](records/notebooks/decisions-log.md#reservations-yield-to-a-request-that-outranks-them-11-09)).
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit

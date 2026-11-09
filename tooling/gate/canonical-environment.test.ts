@@ -196,6 +196,30 @@ test("named standalone experiments remain non-canonical through children",t=>{
   assert.throws(()=>gateEnvironment({...base,NTS_MISSPELLED_POLICY:"1"},{run,standalone:true}),/unknown standalone policy override: NTS_MISSPELLED_POLICY/);
 });
 
+test("a reservation handed to a run: the launcher's code gives it, a shell's is discarded, and once the run consumes it no re-entry revives it",t=>{
+  const {run,base}=fixture(t),build="5f0c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",step="0b8d6a2c-3f4e-4a5b-9c6d-7e8f9a0b1c2d";
+  // Not verdict policy a landing refuses: a shell's own is discarded, as its priority is.
+  assert.doesNotThrow(()=>assertLandingEnvironment({NTS_MEMORY_HANDOVER:build}));
+  const shell=gateEnvironment({...base,NTS_MEMORY_HANDOVER:build},{run,standalone:true});
+  assert.equal(shell.env.NTS_MEMORY_HANDOVER,undefined,"a shell's own never reaches the run, which would end that reservation");
+  assert.ok(shell.report.dropped.includes("NTS_MEMORY_HANDOVER"),"and it is named as discarded");
+  assert.equal(shell.report.canonical,true);
+  // The landing's code hands it to the run, whose own re-entry keeps it.
+  const landing=gateEnvironment(base,{run,owned:{NTS_MEMORY_HANDOVER:build}});
+  const runner=gateEnvironment(landing.env,{run});
+  assert.deepEqual([landing.env.NTS_MEMORY_HANDOVER,runner.env.NTS_MEMORY_HANDOVER],[build,build]);
+  assert.equal(runner.report.canonical,true);
+  // The runner consumes it (run.mjs's reserveMemory): a step's environment,
+  // made from the runner's without it, does not revive it from the context
+  // the runner inherited, nor hands it on.
+  const consumed={...runner.env};delete consumed.NTS_MEMORY_HANDOVER;
+  const inStep=gateEnvironment(consumed,{run,owned:{NTS_MEMORY_RESERVATION:step}});
+  assert.equal(inStep.env.NTS_MEMORY_HANDOVER,undefined);
+  assert.equal(JSON.parse(inStep.env[ENVIRONMENT_CONTEXT]!).owned.NTS_MEMORY_HANDOVER,undefined);
+  assert.equal(gateEnvironment(inStep.env,{run}).env.NTS_MEMORY_HANDOVER,undefined,"nor a gate started inside the step");
+  assert.equal(inStep.env.NTS_MEMORY_RESERVATION,step);
+});
+
 test("a run's memory: a step's reservation is a parent handoff, a shell's priority is discarded, a launcher's ledger is an experiment",t=>{
   const {run,base}=fixture(t),reservation="0b8d6a2c-3f4e-4a5b-9c6d-7e8f9a0b1c2d";
   // Neither is verdict policy a landing refuses: the one is a run's handoff to

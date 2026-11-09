@@ -12,9 +12,9 @@
 //
 // **Memory is the machine's memory ledger's to give** (tooling/gate/
 // memory-ledger.ts), at the landing check's priority, ahead of agents' work
-// and the full check. The build waits its turn through admit.ts, for what the
-// gate reserves for a build; the runner holds a reservation of its own for
-// the steps (NTS_MEMORY_PRIORITY).
+// and the full check (NTS_MEMORY_PRIORITY). The build waits its turn for what
+// this tree's landing builds held, in a reservation this process holds; the
+// runner's first request takes it over, and the runner holds the steps'.
 //
 // **Memory pressure is a wait, never a verdict.** A step the runner reports as
 // an instrument failure of kind memory-pressure runs again, alone, in a run
@@ -26,9 +26,8 @@
 // recorded case that got better (tooling/records/pending.ts), are listed as
 // information: the full check writes those rows.
 import { removable } from "../gate/run-temporary.ts";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { gateCommand } from "../gate/affinity.ts";
 import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-environment.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
@@ -42,6 +41,7 @@ import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommand } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
+import { reserveJob, type Reservation } from "../gate/memory-ledger.ts";
 
 export const PROFILE = "nts-dev";
 export type StepResult = {
@@ -71,7 +71,6 @@ export type RunOptions = {
   ceiling?: number;
 };
 
-const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
 /** The workers a landing build is sized by: the gate's build step's, its row's slots. */
 const BUILD_WIDTH = STEPS.find(row => row.name === "build")!.slots;
 
@@ -89,7 +88,7 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
   return own;
 }
 
-export function runLanding(options: RunOptions): Ran {
+export async function runLanding(options: RunOptions): Promise<Ran> {
   const started = Date.now();
   const { tree, target, run } = options;
   mkdirSync(run, { recursive: true });
@@ -121,23 +120,55 @@ export function runLanding(options: RunOptions): Ran {
   catch (error) { return finish("held", `the tree's gate could not say what its steps need: ${(error as Error).message}`); }
   if (environment) return finish("held", `environment: ${environment}`);
 
-  if (options.steps.includes("build")) {
-    for (let attempt = 1; ; attempt++) {
-      const built = buildCompiler(options, selected.node, launcher, owned, attempt);
-      if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
-      results.push(built);
-      if (built.verdict === "PASS") break;
-      for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
-      return built.verdict === "FAIL" ? finish("red", `build FAIL; log ${built.log}`) : finish("held", `build: ${built.reason}`);
+  // **The landing holds one reservation from its build to its gate run's
+  // admission.** It reserves landing-build in this process, so the build runs
+  // inside it, and hands it to the gate run (NTS_MEMORY_HANDOVER): the
+  // decision that admits the run's first request ends it, under the ledger's
+  // lock, so nothing is admitted between the two. A job admitted in the
+  // seconds between a build and its gate run held that run's growth for the
+  // rest of the run (#615).
+  let hold: Reservation | undefined;
+  try {
+    if (options.steps.includes("build")) {
+      const log = join(run, "build.log");
+      try {
+        hold = await reserveJob({ key: "landing-build", units: BUILD_WIDTH, what: `landing build of ${options.commit.slice(0, 12)}` },
+          { env: { ...launcher, ...owned }, report: line => appendFileSync(log, `${line}\n`) });
+      } catch (error) {
+        appendFileSync(log, `${String(error)}\n`);
+        const reason = `its memory was not reserved: ${(error as Error).message}`;
+        results.push({ name: "build", verdict: "INSTRUMENT", reason, log });
+        for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: "needs build, which is INSTRUMENT" });
+        return finish("held", `build: ${reason}`);
+      }
+      for (let attempt = 1; ; attempt++) {
+        const built = buildCompiler(options, selected.node, launcher, { ...owned, ...hold.env }, attempt);
+        if (built.verdict === "INSTRUMENT" && attempt < (options.attempts ?? 3)) continue;
+        results.push(built);
+        if (built.verdict === "PASS") break;
+        for (const step of rest) results.push({ name: step, verdict: "NOT RUN", reason: `needs build, which is ${built.verdict}` });
+        return built.verdict === "FAIL" ? finish("red", `build FAIL; log ${built.log}`) : finish("held", `build: ${built.reason}`);
+      }
     }
-  }
-  if (!rest.length) return finish("green", "green");
+    if (!rest.length) return finish("green", "green");
+    return finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold);
+  } finally { hold?.release(); }
+}
 
+/**
+ * The steps after the build, run again, alone, while memory pressure kept
+ * some from measuring. The first run takes over `hold`, the build's
+ * reservation; a run that did not take it over never needs it again.
+ */
+function finishSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, rest: readonly string[],
+  results: StepResult[], finish: (state: Ran["state"], message: string) => Ran, hold: Reservation | undefined): Ran {
   const rows = new Map<string, StepResult>();
   let pending = [...rest];
   for (let attempt = 1; pending.length; attempt++) {
-    const dir = attempt === 1 ? run : join(run, `attempt-${attempt}`);
-    const measured = runSteps(options, selected.node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" ") }, dir, pending);
+    const dir = attempt === 1 ? options.run : join(options.run, `attempt-${attempt}`);
+    const handover: Record<string, string> = attempt === 1 && hold && !hold.inherited ? { NTS_MEMORY_HANDOVER: hold.id } : {};
+    const measured = runSteps(options, node, launcher, { ...owned, NTS_GATE_RUN_DIR: dir, NTS_GATE_STEPS: pending.join(" "), ...handover }, dir, pending);
+    if (attempt === 1) hold?.release();
     if ("held" in measured) { for (const step of pending) rows.set(step, { name: step, verdict: "NOT RUN", reason: measured.held }); results.push(...rest.map(step => rows.get(step)!)); return finish("held", measured.held); }
     for (const row of measured.rows) rows.set(row.name, { ...row, ...(attempt > 1 ? { attempt } : {}) });
     const retry = measured.rows.filter(row => row.verdict === "INSTRUMENT" && instrumentPolicy(row.instrument?.kind, row.instrument?.completedFailures)?.disposition === "retry");
@@ -147,30 +178,30 @@ export function runLanding(options: RunOptions): Ran {
   }
   results.push(...rest.map(step => rows.get(step) ?? { name: step, verdict: "NOT RUN" as const, reason: "the runner did not report it" }));
   const failed = results.filter(r => r.verdict === "FAIL" || (r.verdict === "SKIPPED" && !r.accepted));
-  if (failed.length) return finish("red", `${failed.map(r => `${r.name} ${r.verdict}`).join(", ")}; logs ${run}`);
+  if (failed.length) return finish("red", `${failed.map(r => `${r.name} ${r.verdict}`).join(", ")}; logs ${options.run}`);
   const unfinished = results.filter(r => r.verdict !== "PASS" && !(r.verdict === "SKIPPED" && r.accepted));
   if (unfinished.length) return finish("held", unfinished.map(r => `${r.name} ${r.verdict}: ${r.reason ?? "did not finish"}`).join("; "));
   return finish("green", "green");
 }
 
+/**
+ * One build of the compiler, inside the landing's reservation, which `owned`
+ * names. That reservation is what this tree's earlier landing builds held, in
+ * its target's history, and the build's peak joins them as it is released.
+ * Never measured, it sizes as the gate's build step does, at the build row's
+ * width: not one share per cargo job, which for 24 jobs would be the whole
+ * machine. The first build's log follows what the reservation said while it
+ * waited.
+ */
 function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
   const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(slots)];
-  const timing = existsSync("/usr/bin/time");
-  const timed = timing ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
-  // admit.ts becomes the build once the ledger admits it, so the reservation
-  // lasts exactly as long as the build, however the build ends. It reserves
-  // what this tree's earlier landing builds held, in its target's history,
-  // and adds this build's peak to it. Never measured, it sizes as the gate's
-  // build step does, at the build row's width: not one share per cargo job,
-  // which for 24 jobs would be the whole machine.
-  const admitted = [ADMIT, "--key", "landing-build", "--workers", String(BUILD_WIDTH), "--priority", "landing",
-    "--what", `landing build of ${options.commit.slice(0, 12)}`, "--", ...timed];
-  const launch = gateCommand(node, admitted);
+  const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
+  const launch = gateCommand(timed[0]!, timed.slice(1));
   const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);
-  writeFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
+  appendFileSync(log, `${r.stdout ?? ""}${r.stderr ?? ""}`);
   let cpu: number | undefined, wall: number | undefined;
   try {
     const [e, u, s] = readFileSync(time, "utf8").trim().split("\n").pop()!.split(" ").map(Number);
@@ -179,12 +210,6 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
   const measured = { ...(cpu !== undefined ? { cpu } : {}), ...(wall !== undefined ? { wall } : {}), log };
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
   if (r.error || r.signal) return { name: "build", verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
-  // admit.ts's own failures never started the build: 125 for the ledger or a
-  // size the machine cannot hold, 126 and 127 for a command it cannot run
-  // (when time wraps the build, those two are time's, the build's own).
-  if (r.status === 125 || (!timing && (r.status === 126 || r.status === 127))) {
-    return { name: "build", verdict: "INSTRUMENT", reason: `the build was not started: admit.ts exited ${r.status}; see ${log}`, ...measured };
-  }
   return r.status === 0 ? { name: "build", verdict: "PASS", ...measured } : { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
 }
 

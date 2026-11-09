@@ -42,7 +42,7 @@ export type Config = {
   env?: NodeJS.ProcessEnv;
   select: (base: string, tip: string, paths: string[]) => Selected;
   prepare: (tip: string) => void;
-  runSteps: (options: RunOptions) => Ran;
+  runSteps: (options: RunOptions) => Promise<Ran>;
   log: (line: string) => void;
   /** Whether the service should stop after this landing, to run its own new code. */
   restartAfter?: (paths: string[]) => boolean;
@@ -53,7 +53,7 @@ const short = (sha: string) => sha.slice(0, 12);
 export const ownCode = (paths: readonly string[]) => paths.some(path => /^tooling\/(landing|gate)\//.test(path));
 
 export type Drained = { state: "drained" | "busy" | "restart"; answered: Result[] };
-export function drain(config: Config): Drained {
+export async function drain(config: Config): Promise<Drained> {
   mkdirSync(config.home, { recursive: true });
   const lock = acquire(join(config.home, "serve.lock"));
   if (!lock) return { state: "busy", answered: [] };
@@ -65,7 +65,7 @@ export function drain(config: Config): Drained {
     pushIfBehind(config);
     for (let entry = queue.take(); entry; entry = queue.take()) {
       let result: Result;
-      try { result = landOne(config, queue, entry); }
+      try { result = await landOne(config, queue, entry); }
       catch (error) { result = unfinished(config, queue, error); }
       answered.push(result);
       config.log(`${result.state.toUpperCase()} ${short(entry.sha)}: ${result.message}`);
@@ -118,7 +118,7 @@ function pushIfBehind(config: Config): void {
   config.log(pushed.ok ? `pushed main to ${config.remote}` : `main is not on ${config.remote}: ${pushed.reason}`);
 }
 
-export function landOne(config: Config, queue: Queue, entry: Checking): Result {
+export async function landOne(config: Config, queue: Queue, entry: Checking): Promise<Result> {
   const g = git(config);
   if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", message: "withdrawn before its check started" });
   if (!hasCommit(g, entry.sha)) return queue.answer(entry, { state: "refused", message: `${short(entry.sha)} is not a commit in ${config.root}` });
@@ -157,7 +157,7 @@ export function landOne(config: Config, queue: Queue, entry: Checking): Result {
     else {
       try { config.prepare(tip); }
       catch (error) { return queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }); }
-      ran = config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
+      ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
         ceiling: landingCeiling(selected.selection.estimate.seconds),
         env: config.env, hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
       // What the steps cost is for the next estimate; it never decides this one.

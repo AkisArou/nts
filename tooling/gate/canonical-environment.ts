@@ -44,9 +44,16 @@ export const UNSET_AMBIENT = [
 const PARENT = new Set(["NTS_TOOLING_SLICE", "NTS_MEMORY_RESERVATION"]);
 // Owned values a launcher's code supplies, never copied from the launcher:
 // the run's place in the machine's memory queue (landing, agent, full-check),
-// which a shell's own value would otherwise let it jump. A shell's is
-// discarded, and named as discarded.
-const CODE_OWNED = new Set(["NTS_MEMORY_PRIORITY"]);
+// which a shell's own value would otherwise let it jump, and a reservation
+// the run takes over (the landing build's, memory-ledger.ts's `replaces`),
+// which a shell's would let it end. A shell's is discarded, and named as
+// discarded.
+const CODE_OWNED = new Set(["NTS_MEMORY_PRIORITY", "NTS_MEMORY_HANDOVER"]);
+// Handoffs one process consumes, not policy: a live descriptor, a shell
+// re-entry, a reservation to take over. pinned.sh consumes the lock marker,
+// the runner the reservation; a later re-entry, whose launcher no longer
+// carries one, must not revive it from the context it inherits.
+const CONSUMED = ["NTS_GATE_LOCK_FD", "NTS_GATE_SCOPE_EXPECTED", "NTS_GATE_SETUP_ONLY", "NTS_MEMORY_HANDOVER"] as const;
 const HOST = new Set<string>(HOST_CAPABILITIES);
 const EXTRA_POLICY = new Set([
   "RAYON_NUM_THREADS",
@@ -188,12 +195,8 @@ export function gateEnvironment(
     if (prior.report?.version !== 1 || !prior.owned || typeof prior.report.canonical !== "boolean") throw new Error("invalid gate environment handoff");
   }
   const owned: Record<string,string> = { ...prior?.owned, ...strings(options.owned ?? {}), NTS_GATE_RUN_DIR: resolve(options.run) };
-  // These markers describe a live descriptor or shell re-entry, not policy.
-  // pinned.sh consumes the lock marker; a later re-entry must not revive it.
-  for (const name of INFRASTRUCTURE) {
-    if (name === "NTS_GATE_LOCK_FD" || name === "NTS_GATE_SCOPE_EXPECTED" || name === "NTS_GATE_SETUP_ONLY") {
-      if (launcher[name] === undefined && options.owned?.[name] === undefined) delete owned[name];
-    }
+  for (const name of CONSUMED) {
+    if (launcher[name] === undefined && options.owned?.[name] === undefined) delete owned[name];
   }
   const selected = options.experiment ?? (!prior && options.standalone ? launcher[ENVIRONMENT_EXPERIMENT] : undefined);
   if (selected && selected !== "today") throw new Error(`unknown environment experiment: ${selected}`);

@@ -96,11 +96,11 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   return { own, tree, target, run, controls, control, options, memory, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
 }
 
-test("a landing launches the candidate's pinned Node and forwards it to the build and child commands",t=>{
+test("a landing launches the candidate's pinned Node and forwards it to the build and child commands",async t=>{
   const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed"),log=join(f.own,"node-launches.jsonl");
   const node=nodeInstallation(installations,pin,log);
   writeFileSync(join(f.tree,".tool-versions"),`nodejs ${pin}\n`);
-  const ran=runLanding(f.options(["build","rustfmt"],{nodeInstallations:installations,
+  const ran=await runLanding(f.options(["build","rustfmt"],{nodeInstallations:installations,
     build:["sh","-c",`node --version > "$CARGO_TARGET_DIR/build-node"; mkdir -p "$CARGO_TARGET_DIR/${PROFILE}"; printf '#!/bin/sh\\n' > "$NTS_BIN"; chmod +x "$NTS_BIN"`]}));
   assert.equal(ran.state,"green",ran.message);
   assert.equal(readFileSync(join(f.target,"build-node"),"utf8"),"v"+pin+"\n");
@@ -111,17 +111,17 @@ test("a landing launches the candidate's pinned Node and forwards it to the buil
 });
 
 test("missing and wrong-version candidate Node installations hold without a launcher fallback",async t=>{
-  for(const present of [false,true])await t.test(present?"wrong version":"not installed",()=>{
+  for(const present of [false,true])await t.test(present?"wrong version":"not installed",async()=>{
     const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed");
     writeFileSync(join(f.tree,".tool-versions"),`nodejs ${pin}\n`);
     if(present)nodeInstallation(installations,pin,join(f.own,"node-launches.jsonl"),"98.0.0");
-    const ran=runLanding(f.options(["rustfmt"],{nodeInstallations:installations}));
+    const ran=await runLanding(f.options(["rustfmt"],{nodeInstallations:installations}));
     assert.equal(ran.state,"held");assert.match(ran.message,/pinned Node 99\.1\.0/);
     assert.match(ran.message,/asdf install nodejs 99\.1\.0/);assert.deepEqual(f.calls(),[]);
   });
 });
 
-test("the candidate creates its build and gate environment with its own changed producer",t=>{
+test("the candidate creates its build and gate environment with its own changed producer",async t=>{
   const f=fixture(t),canonical=join(f.tree,'tooling/gate/canonical-environment.ts'),producer=join(f.tree,'tooling/differential/oracle-dependencies.ts');
   for(const file of [canonical,producer]){const bytes=readFileSync(file);unlinkSync(file);writeFileSync(file,bytes);}
   copyFileSync(join(GATE,'../differential/oracle-toolchain.json'),join(f.tree,'tooling/differential/oracle-toolchain.json'));
@@ -133,7 +133,7 @@ test("the candidate creates its build and gate environment with its own changed 
   const before=spawnSync(process.execPath,[join(f.tree,'tooling/gate/run.mjs')],{cwd:f.tree,env:{...wrong.env,NTS_GATE_STEPS:'rustfmt'},encoding:'utf8'});
   assert.notEqual(before.status,0);assert.match(before.stdout+before.stderr,/oracle dependency provisioner source mismatch/);
   assert.equal(JSON.parse(readFileSync(join(f.run,'summary.json'),'utf8')).steps[0].verdict,'INSTRUMENT');
-  const ran=runLanding(options);assert.equal(ran.state,'green',ran.message);
+  const ran=await runLanding(options);assert.equal(ran.state,'green',ran.message);
   assert.equal(JSON.parse(readFileSync(join(f.controls,'build-capture'),'utf8')).helperSha256,expected);
   const summary=JSON.parse(readFileSync(join(f.run,'summary.json'),'utf8'));
   assert.equal(JSON.parse(summary.environment.host.NTS_ORACLE_DEPENDENCIES).helperSha256,expected);
@@ -149,17 +149,17 @@ test("the candidate creates its build and gate environment with its own changed 
   assert.equal(observed.environment.canonical,true);
 });
 
-test("a candidate missing the gateEnvironment contract is refused by name without executing its build",t=>{
+test("a candidate missing the gateEnvironment contract is refused by name without executing its build",async t=>{
   const f=fixture(t),file=join(f.tree,'tooling/gate/canonical-environment.ts');unlinkSync(file);writeFileSync(file,'export const legacy=true;\n');
-  const ran=runLanding(f.options(['build'],{build:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'built'))}`]}));
+  const ran=await runLanding(f.options(['build'],{build:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'built'))}`]}));
   assert.equal(ran.state,'red');assert.equal(existsSync(join(f.controls,'built')),false);
   assert.match(readFileSync(ran.steps[0]!.log!,'utf8'),/candidate environment contract: .*canonical-environment.ts must export gateEnvironment/);
 });
 
-test('an exception creating the candidate environment holds the landing instead of failing its build',t=>{
+test('an exception creating the candidate environment holds the landing instead of failing its build',async t=>{
   const f=fixture(t),file=join(f.tree,'tooling/gate/canonical-environment.ts');unlinkSync(file);
   writeFileSync(file,"export function gateEnvironment(){throw Error('candidate environment setup control');}\n");
-  const ran=runLanding(f.options(['build'],{build:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'built'))}`],attempts:1}));
+  const ran=await runLanding(f.options(['build'],{build:['sh','-c',`echo forbidden > ${JSON.stringify(join(f.controls,'built'))}`],attempts:1}));
   assert.equal(ran.state,'held');assert.equal(ran.steps[0]!.verdict,'INSTRUMENT');
   assert.match(ran.steps[0]!.reason!,/candidate environment setup control/);
   assert.equal(existsSync(join(f.controls,'built')),false);
@@ -213,9 +213,9 @@ test('the candidate launcher refuses a malformed inherited oracle grant before e
   assert.equal(existsSync(join(f.controls,'launched')),false);
 });
 
-test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", t => {
+test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
-  const ran = runLanding(f.options(["build", "examples", "outcomes", "rustfmt"]));
+  const ran = await runLanding(f.options(["build", "examples", "outcomes", "rustfmt"]));
   assert.equal(ran.state, "green", ran.message);
   assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "examples PASS", "outcomes PASS", "rustfmt PASS"]);
   assert.ok(ran.steps[0]!.wall !== undefined, "the build is timed");
@@ -236,17 +236,17 @@ test("the compiler builds first in nts-dev, and the steps drive it through the g
   assert.ok(existsSync(join(f.run, "landing.json")));
 });
 
-test("a step the rules narrowed runs narrowed: the touched crates' doc tests", t => {
+test("a step the rules narrowed runs narrowed: the touched crates' doc tests", async t => {
   const f = fixture(t);
-  const ran = runLanding(f.options(["build", "doctests"], { doctests: "nts-core nts-cli" }));
+  const ran = await runLanding(f.options(["build", "doctests"], { doctests: "nts-core nts-cli" }));
   assert.equal(ran.state, "green", ran.message);
   assert.equal(readFileSync(join(f.controls, "doctest-crates"), "utf8"), "nts-core nts-cli\n");
 });
 
-test("a failing build refuses the change, and nothing after it runs", t => {
+test("a failing build refuses the change, and nothing after it runs", async t => {
   const f = fixture(t);
   f.control("build", "fail");
-  const ran = runLanding(f.options(["build", "examples"]));
+  const ran = await runLanding(f.options(["build", "examples"]));
   assert.equal(ran.state, "red");
   assert.match(ran.message, /^build FAIL; log .*build\.log$/);
   assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build FAIL", "examples NOT RUN"]);
@@ -254,32 +254,32 @@ test("a failing build refuses the change, and nothing after it runs", t => {
   assert.deepEqual(f.calls(), []);
 });
 
-test("a failing step refuses the change and names itself", t => {
+test("a failing step refuses the change and names itself", async t => {
   const f = fixture(t);
   f.control("outcomes", "fail");
-  const ran = runLanding(f.options(["build", "examples", "outcomes"]));
+  const ran = await runLanding(f.options(["build", "examples", "outcomes"]));
   assert.equal(ran.state, "red");
   assert.match(ran.message, /^outcomes FAIL; logs /);
   assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS");
 });
 
-test("a landing run started inside another gate is a run of its own, not that gate's", t => {
+test("a landing run started inside another gate is a run of its own, not that gate's", async t => {
   // The tooling step of an outer gate: its context owns that gate's fail-fast.
   const f = fixture(t), home = f.options([]).env!.HOME!;
   const outer = gateEnvironment({ ...process.env, HOME: home }, { run: join(home, ".cache/outer-gate"), owned: { NTS_GATE_FAIL_FAST: "1", NTS_GATE_STEPS: "tooling" } }).env;
   assert.ok(outer[ENVIRONMENT_CONTEXT]);
   f.control("outcomes", "fail");
-  const ran = runLanding(f.options(["build", "examples", "outcomes"], { env: { ...outer, HOME: home } }));
+  const ran = await runLanding(f.options(["build", "examples", "outcomes"], { env: { ...outer, HOME: home } }));
   assert.equal(ran.state, "red");
   assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS", "the outer gate's fail-fast did not reach this run");
   assert.deepEqual(launcherEnvironment({ A: "1", [ENVIRONMENT_CONTEXT]: "{}", [ENVIRONMENT_EXPERIMENT]: "today" }), { A: "1" });
 });
 
-test("a step memory pressure kept from measuring runs again, alone", t => {
+test("a step memory pressure kept from measuring runs again, alone", async t => {
   const f = fixture(t);
   f.control("examples", "pressure");
   const holds: string[] = [];
-  const ran = runLanding(f.options(["build", "examples", "outcomes"], { hold: reason => holds.push(reason) }));
+  const ran = await runLanding(f.options(["build", "examples", "outcomes"], { hold: reason => holds.push(reason) }));
   assert.equal(ran.state, "green", ran.message);
   assert.equal(ran.steps.find(s => s.name === "examples")?.attempt, 2);
   assert.ok(holds.some(h => /memory pressure kept examples from measuring/.test(h)), holds.join("\n"));
@@ -296,12 +296,13 @@ mkdirSync(waiting, { recursive: true });
 const asked = () => readdirSync(waiting).some(name => name.endsWith(".json"));
 await new Promise(resolve => { const watcher = watch(waiting, () => { if (asked()) { watcher.close(); resolve(); } }); if (asked()) { watcher.close(); resolve(); } });`;
 
-test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority", async t => {
+test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority, and its gate run takes its reservation over", async t => {
   const f = fixture(t);
   // The build reserves what this tree's earlier landing builds held, 8 GiB in
   // all, per worker of the build step's row. 61 GiB available, 2 kept for the
   // system: a 56 GiB job leaves too little for them, until the build asks and
-  // the job ends.
+  // the job ends. The job is another landing's: one of lower priority would
+  // promise the build only what it uses (memory-ledger.ts).
   const workers = STEPS.find(row => row.name === "build")!.slots, history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
   writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(8 * 2 ** 30 / workers / 1.25)] } } }) + "\n");
@@ -310,53 +311,56 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   const asked = gib(sized.bytes).replace(".", "\\.");
   const env: NodeJS.ProcessEnv = { ...process.env, ...f.memory };
   delete env.NTS_MEMORY_RESERVATION;
-  const holder = spawn(process.execPath, [fileURLToPath(new URL("../gate/admit.ts", import.meta.url)), "--bytes", "56G", "--what", "holder", "--",
+  const holder = spawn(process.execPath, [fileURLToPath(new URL("../gate/admit.ts", import.meta.url)), "--bytes", "56G", "--priority", "landing", "--what", "holder", "--",
     process.execPath, "--input-type=module", "-e", HOLDER, f.memory.NTS_MEMORY_LEDGER], { env, stdio: "ignore" });
   const ended = once(holder, "exit");
   t.after(async () => { if (holder.exitCode === null && holder.signalCode === null) { holder.kill("SIGKILL"); await ended; } });
   const exited = () => holder.exitCode !== null || holder.signalCode !== null ? `the holder exited ${holder.exitCode ?? holder.signalCode}` : undefined;
   await waitFor("the holder to be admitted", () => readLedger(f.memory.NTS_MEMORY_LEDGER).admitted.some(entry => entry.what === "holder"), { stopped: exited });
-  const ran = runLanding(f.options(["build", "outcomes"]));
+  const ran = await runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "green", ran.message);
   const build = readFileSync(join(f.run, "build.log"), "utf8");
   assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} waits for ${asked} \\(landing\\): `));
   assert.match(build, new RegExp(`memory: landing build of [0-9a-f]{12} admitted with ${asked} after \\d+ s`));
+  // Nothing was admitted between the build and its gate run: the run's first
+  // request took the build's reservation over as it was admitted.
+  assert.match(readFileSync(join(f.run, "gate.log"), "utf8"), new RegExp(`memory: gate run \\S+ took over landing build of [0-9a-f]{12}'s reservation of ${asked}\n`));
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
 });
 
-test("a tree with no history sizes its landing build as the build step, at its row's width, not one share per cargo job", t => {
+test("a tree with no history sizes its landing build as the build step, at its row's width, not one share per cargo job", async t => {
   const f = fixture(t);
   const workers = STEPS.find(row => row.name === "build")!.slots;
   const sized = jobSizing({ key: "landing-build", units: workers }, f.memory), cargo = jobSizing({ key: "landing-build", units: 24 }, f.memory);
   assert.equal(sized.basis, "share");
   assert.ok(sized.bytes < cargo.bytes, "less than cargo's 24 jobs' shares would be");
-  // The build copies its own entry in the ledger, which admit.ts names in its environment.
+  // The build copies its own entry in the ledger, which the landing names in its environment.
   const entry = join(f.own, "build-entry.json");
-  const ran = runLanding(f.options(["build", "rustfmt"], { build: ["sh", "-c",
+  const ran = await runLanding(f.options(["build", "rustfmt"], { build: ["sh", "-c",
     `cat "$NTS_MEMORY_LEDGER/admitted/$NTS_MEMORY_RESERVATION.json" > ${JSON.stringify(entry)}; mkdir -p "$CARGO_TARGET_DIR/${PROFILE}"; printf '#!/bin/sh\\n' > "$NTS_BIN"; chmod +x "$NTS_BIN"`] }));
   assert.equal(ran.state, "green", ran.message);
   const held = JSON.parse(readFileSync(entry, "utf8")) as { bytes: number; unmeasured?: string[] };
   assert.deepEqual([held.bytes, held.unmeasured], [sized.bytes, ["landing-build"]]);
 });
 
-test("pressure that never clears, and a hung step, hold the change for a person", t => {
+test("pressure that never clears, and a hung step, hold the change for a person", async t => {
   const f = fixture(t);
   f.control("examples", "always-pressure");
-  const pressed = runLanding(f.options(["build", "examples"], { attempts: 2 }));
+  const pressed = await runLanding(f.options(["build", "examples"], { attempts: 2 }));
   assert.equal(pressed.state, "held");
   assert.match(pressed.message, /examples INSTRUMENT/);
   const g = fixture(t);
   g.control("outcomes", "hung");
-  const hung = runLanding(g.options(["build", "outcomes"]));
+  const hung = await runLanding(g.options(["build", "outcomes"]));
   assert.equal(hung.state, "held");
   assert.match(hung.message, /outcomes NOT RUN: no progress for 600 s/);
 });
 
-test("the landing check's ceiling reaches the runner: a stuck step is stopped there and holds the change", t => {
+test("the landing check's ceiling reaches the runner: a stuck step is stopped there and holds the change", async t => {
   const f = fixture(t);
   f.control("outcomes", "stuck");
-  const ran = runLanding(f.options(["build", "outcomes"], { ceiling: 2 }));
+  const ran = await runLanding(f.options(["build", "outcomes"], { ceiling: 2 }));
   assert.equal(ran.state, "held", ran.message);
   assert.match(ran.message, /outcomes INSTRUMENT: step exceeded its bound of 2 s/);
   assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "outcomes INSTRUMENT"]);
@@ -364,25 +368,25 @@ test("the landing check's ceiling reaches the runner: a stuck step is stopped th
   // leaves completed work intact, without requiring a real scope to enter and
   // exit inside the stuck control's deliberately tiny two-second allowance.
   const control = fixture(t);
-  const completed = runLanding(control.options(["build", "rustfmt"], { ceiling: 60 }));
+  const completed = await runLanding(control.options(["build", "rustfmt"], { ceiling: 60 }));
   assert.equal(completed.state, "green", completed.message);
   assert.deepEqual(completed.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "rustfmt PASS"]);
   const row = JSON.parse(readFileSync(join(control.run, "summary.json"), "utf8")).steps[0];
   assert.equal(row.bound_s, 60);assert.equal(row.bound_basis, "ceiling");
 });
 
-test("a tree whose gate cannot say what its steps need holds the change", t => {
+test("a tree whose gate cannot say what its steps need holds the change", async t => {
   const f = fixture(t);
   writeFileSync(join(f.tree, "tooling/gate/run.mjs"), "throw new Error('a runner this change broke');\n");
-  const ran = runLanding(f.options(["build", "outcomes"]));
+  const ran = await runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "held");
   assert.match(ran.message, /could not say what its steps need: cannot read gate capabilities/);
 });
 
-test("pending and improved lines are listed as information, and pass", t => {
+test("pending and improved lines are listed as information, and pass", async t => {
   const f = fixture(t);
   f.control("outcomes", "pending");
-  const ran = runLanding(f.options(["build", "outcomes"]));
+  const ran = await runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "green", ran.message);
   assert.deepEqual(ran.pending, ["pending: tests/x/a.ts is not recorded in results/x.tsv yet", "improved, record pending: tests/x/b.ts refused -> pass"]);
   assert.deepEqual(pendingLines(join(f.run, "nowhere")), []);

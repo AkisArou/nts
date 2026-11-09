@@ -60,7 +60,7 @@ function dryRun(root: string, sha: string, argv: string[]): number {
   return 0;
 }
 
-function here(root: string, sha: string): number {
+async function here(root: string, sha: string): Promise<number> {
   const tree = toplevel();
   if (spawnSync("git", ["rev-parse", "HEAD"], { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: tree, encoding: "utf8" }).stdout.trim();
@@ -71,7 +71,7 @@ function here(root: string, sha: string): number {
   prune(join(LANDING_HOME, "runs"), KEEP_DAYS);
   const run = join(LANDING_HOME, "runs", `here-${short(sha)}-${Date.now()}`);
   say(`${note}: ${steps.join(" ")} in ${tree}, estimate ~${Math.round(selected.selection.estimate.seconds)} s; logs ${run}`);
-  const ran = runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
+  const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
   for (const line of ran.pending) console.log(`  ${line}`);
@@ -190,7 +190,7 @@ async function wait(root: string, id: string): Promise<number> {
   }
 }
 
-function serve(root: string): number {
+async function serve(root: string): Promise<number> {
   if (resolve(process.cwd()) !== resolve(root)) { say(`the service runs from the shared checkout ${root}, so it runs main's code`); return 2; }
   const logDir = join(LANDING_HOME, "runs");
   mkdirSync(logDir, { recursive: true });
@@ -199,7 +199,7 @@ function serve(root: string): number {
     console.log(stamped);
     try { appendFileSync(join(logDir, `service-${stamped.slice(0, 10)}.log`), `${stamped}\n`); } catch { /* the journal has it */ }
   };
-  const drained = drain(machineConfig(root, ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET), log));
+  const drained = await drain(machineConfig(root, ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET), log));
   if (drained.state === "busy") { log("another service is draining the queue"); return 0; }
   // The code that just landed runs from here on: a fresh process loads it.
   if (drained.state === "restart") return spawnSync(process.execPath, [process.argv[1]!, "serve"], { cwd: root, stdio: "inherit" }).status ?? 1;

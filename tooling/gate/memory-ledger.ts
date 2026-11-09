@@ -38,6 +38,28 @@
 // delays a job rather than failing it. Only a request larger than the
 // machine could ever give, MemTotal less the floor, is refused (`neverFits`).
 //
+// **A reservation yields to a request that outranks it.** For a waiting
+// request's decision, each admitted reservation of lower priority counts as
+// promising only what its job uses and a margin -- what a measured unit
+// would reserve for that use (step-scheduling.ts's `peakReservation`) --
+// never its whole size. So a lower-priority job that reserved more than it
+// uses (a fixed `admit.ts --bytes` job, a census pool that has stopped
+// starting cases, a gate run) never holds a request that outranks it for the
+// rest of its run, whatever code it runs: nothing is rewritten, nothing is
+// stopped, and its whole promise counts again once nothing outranks it. The
+// ledger stays accounting only: such a job can still grow back to its whole
+// reservation after the request was admitted on its smaller figure, which
+// only a kernel cap equal to its grant could bound.
+//
+// **A request can take over a reservation** (`replaces`): admitting it ends
+// that one under the same lock, so nothing is admitted between the two, and
+// its decision counts nothing promised to the one it takes over. Only a
+// reservation that counts the request's memory can be taken over -- its
+// owner's, as a child's is counted inside its parent's -- so the memory moves
+// between two reservations of one job and never leaves another job
+// unreserved. The landing check holds its build's reservation until its gate
+// run's first request takes it over.
+//
 // **A reservation can grow and shrink**, for a job whose need moves while it
 // runs (a gate run, as its steps start and end). `grow` asks for more exactly
 // as a new request would: at the reservation's priority, behind every request
@@ -93,7 +115,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { defaultSlots } from "./budget.ts";
-import { historyFile, KEY, machineShare, readCostHistory, unitReservation, unmeasuredLimit, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
+import { historyFile, KEY, machineShare, peakReservation, readCostHistory, unitReservation, unmeasuredLimit, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
 export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
@@ -387,6 +409,8 @@ export type LedgerEntry = {
   unmeasured?: string[];
   /** The steps or jobs of this reservation that held more than they reserved. */
   over?: string[];
+  /** For a request of its own, the admitted reservation it takes over: admitting it ends that one. */
+  replaces?: string;
 };
 type State = "waiting" | "admitted";
 
@@ -411,7 +435,8 @@ function parseEntry(text: string, file: string): LedgerEntry {
       || !identity(entry.owner) || !identity(entry.waiter) || typeof entry.since !== "string" || typeof measure?.tree !== "boolean"
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
       || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))
-      || !keyList(entry.unmeasured) || !keyList(entry.over)) {
+      || !keyList(entry.unmeasured) || !keyList(entry.over)
+      || (entry.replaces !== undefined && (typeof entry.replaces !== "string" || !ID.test(entry.replaces)))) {
     throw new Error(`${file} is not a memory ledger entry`);
   }
   return entry;
@@ -498,6 +523,8 @@ export type ReserveRequest = {
   bytes: number; what: string; priority?: Priority; owner?: OwnerSpec;
   /** The steps or jobs these bytes were sized for without a measurement of their own: the entry says so. */
   unmeasured?: readonly string[];
+  /** An admitted reservation this one takes over: the decision that admits it ends that one, under the same lock. */
+  replaces?: string;
 };
 
 /** One decision on one request: what it saw and what it decided. */
@@ -594,6 +621,25 @@ function outrankedIn(dir: string, priority: Priority): boolean {
   return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && alive(entry.waiter) && alive(entry.owner));
 }
 
+/**
+ * Checks that the request of `what`, owned by `pid`, may take over reservation
+ * `id`: one whose measure counts `pid`'s memory, as a child's is counted
+ * inside its parent's (`inside`), so the memory moves between two
+ * reservations of one job and never leaves another job unreserved. One that
+ * has ended leaves nothing to take over.
+ */
+function taking(dir: string, id: string, pid: number, what: string): void {
+  if (!ID.test(id)) throw new TypeError(`memory: ${what} would take over ${JSON.stringify(id)}, which is not a reservation id`);
+  const file = entryPath(dir, "admitted", id);
+  let entry: LedgerEntry | null = null;
+  try { entry = parseEntry(readFileSync(file, "utf8"), file); }
+  catch (error) { if (!gone(error)) throw error; }
+  if (entry !== null && alive(entry.owner) && !counts(entry, pid)) {
+    throw new Error(`memory: ${what} (pid ${pid}) would take over ${entry.what}'s reservation, which does not count its memory: `
+      + `it is outside that reservation's process tree${entry.measure.cgroup ? " and cgroup" : ""}`);
+  }
+}
+
 /** The parent's reservation when `parent` names a live one that counts `pid`'s memory. */
 function inside(parent: string | undefined, dir: string, pid: number, what: string, bytes: number, report: (line: string) => void): Reservation | null {
   if (!parent) return null;
@@ -677,6 +723,25 @@ type Context = {
 
 const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for ${gib(entry.bytes)}` : `request to grow by ${gib(entry.bytes)}`;
 
+/**
+ * What admitted jobs may still take, as the decision on request `deciding`
+ * counts them: each what it reserved and has not used yet; one of lower
+ * priority than `deciding`, only its use and a margin, what a measured unit
+ * reserves for that use (step-scheduling.ts's `peakReservation`); the one
+ * `deciding` takes over, nothing (see the top of this file). With no request
+ * deciding, each its whole promise.
+ */
+function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority">; used: number }>,
+  deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
+  let pending = 0;
+  for (const { entry, used } of admitted) {
+    if (entry.id === deciding?.replaces) continue;
+    const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
+    pending += Math.max(0, (yields ? Math.min(entry.bytes, peakReservation([Math.max(1, used)])) : entry.bytes) - used);
+  }
+  return pending;
+}
+
 /** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
 function decide(context: Context, self: LedgerEntry, registered: boolean): { decision: Decision; registered: boolean } {
   const { dir, report } = context;
@@ -717,7 +782,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   const read = () => table ??= processTable();
   const usedBy = new Map([...admitted.values()].map(entry => [entry.id, context.used(entry, read)]));
   const usedBytes = [...usedBy.values()].reduce((sum, bytes) => sum + bytes, 0);
-  const pendingBytes = [...admitted.values()].reduce((sum, entry) => sum + Math.max(0, entry.bytes - usedBy.get(entry.id)!), 0);
+  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry, used: usedBy.get(entry.id)! })), self);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
   // What the queue could be given were every admitted job to end.
   const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
@@ -735,6 +800,12 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   } else if (go && listed) renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
   else if (go) writeEntry(dir, "admitted", self);
   else if (!listed) writeEntry(dir, "waiting", self);
+  // The reservation it takes over ends with the decision that admits it.
+  const replaced = self.replaces === undefined ? undefined : admitted.get(self.replaces);
+  if (go && replaced !== undefined) {
+    removeQuietly(entryPath(dir, "admitted", replaced.id));
+    report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
+  }
   return {
     decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits },
     registered: !go,
@@ -811,7 +882,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (waiter === null) throw new Error("this process has no identity in /proc");
       // A request of its own in the queue, owned as the reservation is: it
       // lasts no longer than the reservation's owner.
-      const request: LedgerEntry = { ...self, id: randomUUID(), seq: 0, bytes: more, waiter, since: new Date().toISOString(), grows: self.id };
+      const request: LedgerEntry = { ...self, id: randomUUID(), seq: 0, bytes: more, waiter, since: new Date().toISOString(), grows: self.id, replaces: undefined };
       const withdraw = new AbortController();
       growing = { id: request.id, withdraw };
       let outcome: Awaited<ReturnType<typeof wait>>;
@@ -875,10 +946,12 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   if (never !== null) throw new RangeError(never);
   const unmeasured = [...new Set(request.unmeasured ?? [])];
   if (!keyList(unmeasured)) throw new TypeError(`memory: ${what}'s unmeasured keys are not step or job keys: ${unmeasured.join(", ")}`);
+  if (request.replaces !== undefined) taking(dir, request.replaces, owner.pid, what);
   const self: LedgerEntry = {
     version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
     measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(), grows: null,
     ...(unmeasured.length ? { unmeasured } : {}),
+    ...(request.replaces !== undefined ? { replaces: request.replaces } : {}),
   };
   const used = options.used;
   const context: Context = {
@@ -1021,7 +1094,11 @@ export async function reserveJob(request: JobRequest,
   // ledger the job was already given stays its ledger.
   const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
   Object.assign(env, held.env);
+  let released = false;
   const release = () => {
+    // A second call does nothing: the peak goes to the history once.
+    if (released) return;
+    released = true;
     process.off("exit", release);
     const peak = sampler.stop();
     held.release();
@@ -1065,7 +1142,12 @@ export function entryUsage(entry: LedgerEntry, options: { exclude?: number } = {
 export type LedgerStatus = {
   version: 1; kind: "memory"; at: string; ledger: string;
   machine: { total_bytes: number; available_bytes: number; floor_bytes: number };
-  /** What the live admitted jobs have still to take, and the room that leaves the queue: as the next decision counts them. */
+  /**
+   * What the live admitted jobs have still to take, and the room that leaves
+   * the queue, as the decision on its head counts them: a reservation of
+   * lower priority than the head promises it only its use and a margin.
+   * With nothing waiting, each promises all it has not used.
+   */
   pending_bytes: number; room_bytes: number;
   /**
    * `unmeasured`: the steps or jobs a reservation sized without a measurement
@@ -1093,7 +1175,8 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
     unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
   }));
   // A dead entry is dropped by the next decision, so it promises nothing.
-  const pending = admitted.reduce((sum, entry) => sum + (entry.live ? Math.max(0, entry.bytes - entry.used_bytes) : 0), 0);
+  const head = view.waiting.find(entry => entry.live) ?? null;
+  const pending = pendingFor(admitted.filter(entry => entry.live).map(entry => ({ entry, used: entry.used_bytes })), head);
   return {
     version: 1, kind: "memory", at: new Date(now).toISOString(), ledger: dir,
     machine: { total_bytes: totalBytes, available_bytes: availableBytes, floor_bytes: SYSTEM_FLOOR_BYTES },

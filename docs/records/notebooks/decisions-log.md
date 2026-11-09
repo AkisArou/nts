@@ -1748,3 +1748,28 @@ As built:
 - the nightly benchmark reserves its session at the full check's priority
   before the measurement lock admits it, so a wait in the ledger never holds
   the lock.
+
+## Reservations yield to a request that outranks them (11-09)
+
+The coordinator decided, on #615, that a reservation of lower priority yields
+to a waiting request that outranks it whatever code holds it, and that a
+landing's build hands its reservation to its gate run. In the landing of
+#590's slice 3a on 11-09 the build waited 394 s behind agents' fixed
+`admit.ts --bytes 12G` jobs, which only gate runs' code had made yield, and
+the gate run's growth 413 s behind one admitted in the four seconds between
+the build's reservation ending and the run's first request.
+
+As built:
+- the decision on a request counts each admitted reservation of lower
+  priority as its use and a margin (what a measured unit reserves for that
+  use, never more than it reserved), not all it has not used; nothing is
+  rewritten or stopped, and its whole promise counts again once nothing
+  outranks it. The ledger stays accounting only: such a job can grow back to
+  its whole reservation after the request was admitted on the smaller
+  figure, which a kernel cap equal to its grant bounds (#609);
+- a request can take over a reservation whose measure counts its memory
+  (`replaces`): the decision that admits it ends that one under the ledger's
+  lock. The landing check reserves its build's memory in its own process and
+  hands it to its gate run (NTS_MEMORY_HANDOVER), which takes it over with its
+  first request and hands it to nothing it starts;
+- the ledger's status counts as the decision on the queue's head does.

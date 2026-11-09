@@ -28,14 +28,16 @@ import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
 import {moduleClosure} from "./module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {removable} from "./run-temporary.ts";
-import {spawnTest} from "./test-wait.ts";
+import {spawnTest, waitFor} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {ownMemory} from "./test-memory.ts";
-import {readLedger} from "./memory-ledger.ts";
+import {readLedger, reserve} from "./memory-ledger.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 
 const GATE = fileURLToPath(new URL("./", import.meta.url));
+const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
 const WAITING = /memory: gate run .* waits for 1\.0 GiB \(agent\)/;
+const GiB = 2 ** 30;
 
 function fixture(t: TestContext) {
   const own = newTestScratch("inner-gate-memory-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
@@ -112,4 +114,52 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   const state = spawnSync("systemctl", ["--user", "is-active", `${unit}.service`], { encoding: "utf8" }).stdout.trim();
   assert.notEqual(state, "active", "nothing of the run outlives its unit");
   assert.equal(existsSync(f.started), false, "the held case never ran");
+});
+
+// The deadlock a fixed reservation could make with a gate run beneath it: the
+// run always reserves its own (run.mjs), so it waits in the queue behind a
+// landing's request, which waited for the holder's idle reservation, which
+// lasts until the run ends.
+test("a holder that starts a gate run beneath it makes progress while a landing waits: its idle reservation does not hold the landing", async t => {
+  // 28 GiB available of 30.5; the holder reserves 12 at an agent's priority.
+  const f = fixture(t), { env, memory } = f.planned("holder", 28 * 2 ** 20), ledger = memory.NTS_MEMORY_LEDGER;
+  const unit = `nts-test-inner-gate-holder-${randomUUID().slice(0, 8)}`;
+  const ending = new AbortController();
+  t.after(() => { ending.abort(); spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { stdio: "ignore" }); });
+  const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
+  // The holder's command waits for a line on its input, then runs the gate beneath it, as a child.
+  const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
+    `--working-directory=${f.root}`, ...setenv, process.execPath, ADMIT, "--bytes", "12G", "--what", "holder", "--",
+    "sh", "-c", 'read go && "$0" "$1"', process.execPath, join(f.gate, "run.mjs")], { stdio: ["pipe", "pipe", "pipe"] });
+  const closed = new Promise<number | null>(resolve => child.on("close", resolve));
+  let output = "";
+  let sawWaiting: () => void = () => {};
+  const runWaits = new Promise<void>(resolve => { sawWaiting = resolve; });
+  const seen = (line: string) => { output += `${line}\n`; if (WAITING.test(line)) sawWaiting(); };
+  createInterface({ input: child.stdout! }).on("line", seen);
+  createInterface({ input: child.stderr! }).on("line", seen);
+  const ended = () => child.exitCode !== null ? `the holder's unit ended ${child.exitCode}: ${output}` : undefined;
+  await waitFor("the holder to be admitted", () => readLedger(ledger).admitted.some(entry => entry.what === "holder"), { stopped: ended });
+  // Another landing's job holds 12 that the landing does not take ahead of,
+  // so the landing's 16 waits, ahead of everything an agent asks.
+  const other = await reserve({ bytes: 12 * GiB, what: "another landing's job", priority: "landing" }, { env: memory, signal: ending.signal });
+  const landing = reserve({ bytes: 16 * GiB, what: "landing", priority: "landing" }, { env: memory, signal: ending.signal });
+  landing.catch(() => {});
+  await waitFor("the landing to wait", () => readLedger(ledger).waiting.some(entry => entry.what === "landing"), { stopped: ended });
+  // The holder starts its gate run, whose own request waits behind the landing's.
+  child.stdin!.write("go\n");
+  await Promise.race([runWaits, closed.then(() => { throw new Error(`the holder ended before its gate run waited: ${output}`); })]);
+  assert.deepEqual(readLedger(ledger).waiting.map(entry => entry.what.startsWith("gate run ") ? "gate run" : entry.what), ["landing", "gate run"], "the run waits behind the landing");
+  // The other job ends. The holder, idle, promises the landing only what it
+  // uses and a margin, so the landing starts while the holder still holds its
+  // 12; it ends, and then the run starts, runs its case and ends the holder.
+  other.release();
+  const admitted = await landing;
+  assert.ok(readLedger(ledger).admitted.some(entry => entry.what === "holder"), "admitted while the holder held its reservation");
+  admitted.release();
+  assert.equal(await closed, 0, output);
+  assert.ok(existsSync(f.started), "the run beneath the holder ran its case");
+  const left = readLedger(ledger);
+  assert.deepEqual([left.waiting, left.admitted.map(entry => [entry.what, entry.live])], [[], [["holder", false]]],
+    "the run released its own, and the holder's ended with its command, for the next decision to drop");
 });

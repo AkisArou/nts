@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, jobSizing, ledgerStatus, lockLedger, noteOver, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory } from "./step-scheduling.ts";
@@ -188,19 +188,31 @@ test("a small request never waits behind a big one when both fit, and never dela
   // The holder has used 6 of its 10: room for 14, so both start.
   f.used.set("holder", 6 * GiB);
   const [bigHeld, smallHeld] = await Promise.all([big, small]);
-  // Pending is now 4 + 12 + 1, leaving room for 1. A landing request that
-  // arrives after an agent's goes ahead of it.
+  // Both run, the big job using 11 of its 12 and the small one all of its 1:
+  // 8 available, and pending 4 + 1, leaving room for 1. A landing request
+  // that arrives after an agent's goes ahead of it.
+  f.used.set("big", 11 * GiB);
+  f.used.set("small", GiB);
+  f.memory(8);
   const agent = f.ask({ bytes: 2 * GiB, what: "agent" });
   await waitFor("the agent's request to wait", () => f.of("agent").length >= 1, { stopped: f.stopped });
-  const landing = f.ask({ bytes: 2 * GiB, what: "landing", priority: "landing" });
+  assert.equal(f.of("agent").at(-1)?.roomBytes, GiB);
+  // The jobs it outranks promise it only what they use and a margin: the
+  // holder 1.5 of its 4, the big job 1, the small one nothing. Room for 3.5,
+  // so its 4 waits.
+  const landing = f.ask({ bytes: 4 * GiB, what: "landing", priority: "landing" });
   await waitFor("the landing request to wait", () => f.of("landing").length >= 1, { stopped: f.stopped });
-  assert.equal(f.of("landing").at(-1)?.ahead, 0, "first in the queue, though it came second");
-  smallHeld.release(); // room for 2: the landing request's, not both
+  assert.deepEqual([f.of("landing").at(-1)?.ahead, f.of("landing").at(-1)?.roomBytes], [0, 3.5 * GiB], "first in the queue, though it came second");
+  // The small job ends: room for 4.5, the landing request's 4, not the agent's 2 as well.
+  smallHeld.release();
+  f.memory(9);
   const landingHeld = await landing;
   const seen = f.of("agent").length;
   await waitFor("the agent's request to look again", () => f.of("agent").length > seen, { stopped: f.stopped });
-  assert.deepEqual([...new Set(f.of("agent").slice(seen).map(d => JSON.stringify([d.admitted, d.ahead, d.roomBytes])))], [JSON.stringify([false, 0, 0])]);
+  assert.deepEqual([...new Set(f.of("agent").slice(seen).map(d => JSON.stringify([d.admitted, d.ahead, d.roomBytes])))], [JSON.stringify([false, 0, -2 * GiB])],
+    "9 available, less 4 + 1 + 4 pending and the floor");
   bigHeld.release();
+  f.memory(20);
   (await agent).release();
   for (const reservation of [holder, landingHeld]) reservation.release();
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
@@ -465,6 +477,10 @@ test("a reservation is outranked while a live request of higher priority waits, 
   const f = fixture(t); // 20 available
   const full = await f.ask({ bytes: 10 * GiB, what: "full", priority: "full-check" }); // room for 8 now
   assert.equal(full.outranked(), false);
+  // It runs, using 9 of its 10: room for 8 still, for a request of its own
+  // priority and for one it yields to, which it promises only 1 more.
+  f.used.set("full", 9 * GiB);
+  f.memory(11);
   // A landing request whose waiter has exited outranks nobody, though its
   // entry stays until the next decision drops it.
   const dead = { ...processIdentity(process.pid)!, start: "0" };
@@ -481,12 +497,15 @@ test("a reservation is outranked while a live request of higher priority waits, 
   assert.equal(full.outranked(), true, "an agent's request outranks the full check");
   const inner = await f.ask({ bytes: GiB, what: "inner" }, { env: { ...f.env, ...full.env } });
   assert.deepEqual([inner.inherited, inner.outranked()], [true, true], "a job inside the reservation is outranked with it");
-  f.used.set("full", 5 * GiB); // room for 13: the agent's 9 goes ahead of the peer's
+  // Using 5, it promises the agent's request 1.25: room for 11.75, and the
+  // agent's 9 goes ahead of the peer's.
+  f.used.set("full", 5 * GiB);
+  f.memory(15);
   const admitted = await agent;
   assert.equal(full.outranked(), false, "only a request of its own priority still waits");
   admitted.release();
-  (await peer).release();
   full.release();
+  (await peer).release();
   assert.equal(full.outranked(), false);
 });
 
@@ -624,6 +643,10 @@ test("a job reserves once: alone, a reservation of its own that what it starts r
 test("admit.ts --status: the reservations admitted, with what each uses, and the queue in its order", async t => {
   const f = fixture(t); // 20 available
   const held = await f.ask({ bytes: 12 * GiB, what: "held job", priority: "full-check" }); // room for 6 now, less what it uses
+  // It runs, using 11 of its 12: room for 6, for either request, since it
+  // promises them only one more whether it yields or not.
+  f.used.set("held job", 11 * GiB);
+  f.memory(9);
   const owner = ownerProcess(t);
   const agent = f.ask({ bytes: 7 * GiB, what: "agent job", owner: { pid: owner.pid } });
   await waitFor("the agent's request to wait", () => f.of("agent job").length >= 1, { stopped: f.stopped });
@@ -633,22 +656,26 @@ test("admit.ts --status: the reservations admitted, with what each uses, and the
   assert.equal(json.status, 0, json.stderr);
   const status = JSON.parse(json.stdout);
   assert.deepEqual([status.version, status.kind, typeof status.at, status.ledger], [1, "memory", "string", f.dir]);
-  assert.deepEqual(status.machine, { total_bytes: 64 * GiB, available_bytes: 20 * GiB, floor_bytes: 2 * GiB });
+  assert.deepEqual(status.machine, { total_bytes: 64 * GiB, available_bytes: 9 * GiB, floor_bytes: 2 * GiB });
   const [entry, ...others] = status.admitted;
   assert.deepEqual(others, []);
   assert.deepEqual([entry.what, entry.priority, entry.bytes, entry.owner_pid, entry.since, entry.live], ["held job", "full-check", 12 * GiB, process.pid, readLedger(f.dir).admitted[0]!.since, true]);
   assert.ok(Number.isSafeInteger(entry.used_bytes) && entry.used_bytes > 0 && entry.used_bytes < 12 * GiB, "what this process uses, measured");
-  assert.equal(status.pending_bytes, 12 * GiB - entry.used_bytes);
-  assert.equal(status.room_bytes, 20 * GiB - status.pending_bytes - 2 * GiB);
+  // Measured for real, it uses what this process does; and the queue's head,
+  // the landing request, is promised only that and a margin.
+  assert.equal(status.pending_bytes, Math.min(12 * GiB, peakReservation([entry.used_bytes])) - entry.used_bytes);
+  assert.equal(status.room_bytes, 9 * GiB - status.pending_bytes - 2 * GiB);
   assert.deepEqual(status.waiting.map((w: { what: string; priority: string; bytes: number; owner_pid: number; grows: null }) => [w.what, w.priority, w.bytes, w.owner_pid, w.grows]),
     [["landing job", "landing", 7 * GiB, process.pid, null], ["agent job", "agent", 7 * GiB, owner.pid, null]], "in the queue's order");
   assert.ok(status.waiting.every((w: { waited_s: number }) => typeof w.waited_s === "number" && w.waited_s >= 0));
   const text = admit(f, ["--status"]);
   assert.equal(text.status, 0, text.stderr);
-  assert.match(text.stdout, /^memory ledger .* at \S+\n  machine: 64\.0 GiB, 20\.0 GiB available; /);
+  assert.match(text.stdout, /^memory ledger .* at \S+\n  machine: 64\.0 GiB, 9\.0 GiB available; /);
   assert.match(text.stdout, /\n  admitted \(1\):\n    full-check +12\.0 GiB, using .*  pid \d+  since \d\d:\d\d:\d\d  held job\n/);
   assert.match(text.stdout, /\n  waiting \(2\):\n     1\. landing +7\.0 GiB  waited \d+ s  pid \d+  landing job\n     2\. agent +7\.0 GiB  waited \d+ s  pid \d+  agent job\n$/);
+  // It ends, and what it used is available again: room for both.
   held.release();
+  f.memory(20);
   for (const request of [await agent, await landing]) request.release();
 });
 
@@ -668,6 +695,7 @@ const job = await reserveJob({ key: "held-job", units: 2, what: "measured job" }
 const held = Buffer.alloc(96 * 2 ** 20, 1);
 const entry = readLedger().admitted.find(e => e.id === job.id);
 job.release();
+job.release();
 process.stdout.write(JSON.stringify({ bytes: entry.bytes, unmeasured: entry.unmeasured ?? [], held: held.length }));`;
 
 test("a job reserves what its earlier runs held per worker, and the peak it held goes to its history as it releases", t => {
@@ -678,7 +706,7 @@ test("a job reserves what its earlier runs held per worker, and the peak it held
   assert.deepEqual(JSON.parse(run.stdout), { bytes: 2 * GiB, unmeasured: [], held: 96 * MiB }, "1 GiB a worker, as its history says");
   const kept = readCostHistory(f.history).jobs.get("held-job")!;
   assert.equal(kept.unit, "worker");
-  assert.equal(kept.peaks.length, 2, "the seeded peak, and this run's");
+  assert.equal(kept.peaks.length, 2, "the seeded peak, and this run's, once however often it was released");
   assert.ok(kept.peaks[1]! >= 48 * MiB, `half of what the job held, per worker: ${kept.peaks[1]}`);
   assert.equal(peakReservation(kept.peaks), GiB, "a smaller run does not shrink the reservation");
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
@@ -762,4 +790,125 @@ test("a request that cannot fit now holds nobody behind it, then holds the queue
   assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["big"], "admitted once memory freed, ahead of the later small one");
   admitted.release();
   (await later).release();
+});
+
+// A job that holds what reserveJob reserved for it, idle, until its standard
+// input ends: a build between its phases, or a census pool that has stopped
+// starting cases.
+const IDLE_JOB = `const [ledger] = process.argv.slice(1);
+const { reserveJob } = await import(ledger);
+const job = await reserveJob({ key: "idle-job", what: "idle reserveJob job" }, { report: () => {} });
+process.stdin.on("data", () => {}).on("end", () => job.release());`;
+
+/** A process of its own that holds a reservation until the test ends its input. */
+function idleHolder(t: TestContext, f: Fixture, args: string[], what: string) {
+  const child = spawn(process.execPath, args, { env: admitEnv(f), stdio: ["pipe", "ignore", "pipe"] });
+  let err = "";
+  child.stderr!.setEncoding("utf8").on("data", (data: string) => { err += data; });
+  const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  t.after(async () => { if (child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); await closed; } });
+  const ended = () => child.exitCode !== null || child.signalCode !== null ? `${what} exited ${child.exitCode ?? child.signalCode}: ${err}` : undefined;
+  return {
+    held: () => waitFor(`${what} to be admitted`, () => readLedger(f.dir).admitted.some(entry => entry.what === what), { stopped: ended }),
+    end: async () => { child.stdin!.end(); return closed; },
+  };
+}
+
+test("an idle job of lower priority never holds a request that outranks it, as admit.ts or reserveJob holds it; one of its own priority still waits for all it reserved", async t => {
+  const f = fixture(t);
+  f.memory(40); // of 64
+  seedJobs(f, { "idle-job": 12 * GiB });
+  // Each reserves 12 and uses what a process waiting on its input does.
+  const fixed = idleHolder(t, f, [ADMIT, "--bytes", "12G", "--what", "idle admit.ts job", "--", "cat"], "idle admit.ts job");
+  await fixed.held();
+  const sized = idleHolder(t, f, ["--input-type=module", "-e", IDLE_JOB, LEDGER], "idle reserveJob job");
+  await sized.held();
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => [entry.what, entry.bytes, entry.priority]).sort(),
+    [["idle admit.ts job", 12 * GiB, "agent"], ["idle reserveJob job", 12 * GiB, "agent"]]);
+  // Decided by what the jobs use, measured.
+  const measured = { used: undefined };
+  // An agent's request is promised all 24 they have not used: room for at most 14, so its 15 waits.
+  const peer = f.ask({ bytes: 15 * GiB, what: "peer" }, measured);
+  await waitFor("the peer to wait", () => f.of("peer").length >= 2, { stopped: f.stopped });
+  assert.ok(f.of("peer").every(d => !d.admitted && d.pendingBytes > 23 * GiB), "all they reserved and do not use");
+  // A landing request is promised only what they use and a margin: its 30 starts at once.
+  const landing = await f.ask({ bytes: 30 * GiB, what: "landing", priority: "landing" }, measured);
+  assert.ok(f.of("landing").at(-1)!.pendingBytes < GiB, `far less than the 24 they reserved: ${gib(f.of("landing").at(-1)!.pendingBytes)}`);
+  assert.deepEqual(f.lines.filter(line => line.startsWith("memory: landing")), [], "it never waited");
+  // Nothing outranks them once it ends: their whole promise counts again, and the peer still waits.
+  landing.release();
+  const seen = f.of("peer").length;
+  await waitFor("the peer to look again", () => f.of("peer").length >= seen + 2, { stopped: f.stopped });
+  assert.ok(f.of("peer").slice(seen).every(d => !d.admitted && d.pendingBytes > 23 * GiB));
+  assert.deepEqual(await fixed.end(), [0, null]);
+  assert.deepEqual(await sized.end(), [0, null]);
+  (await peer).release();
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+});
+
+test("a landing's growth is not held by an idle reservation of lower priority: a census pool that stopped starting cases inside admit.ts --bytes 12G (#599)", async t => {
+  const f = fixture(t); // 20 available
+  const outer = await f.ask({ bytes: 12 * GiB, what: "census under admit.ts" });
+  // The pool runs inside it, is outranked once a landing's growth waits, and
+  // starts no new case: its cases end, and it holds 1 of the 12.
+  const pool = await f.ask({ bytes: 12 * GiB, what: "census pool" }, { env: { ...f.env, ...outer.env } });
+  assert.equal(pool.inherited, true);
+  f.used.set("census under admit.ts", GiB);
+  f.memory(19);
+  const landing = await f.ask({ bytes: 4 * GiB, what: "landing run", priority: "landing" });
+  // The growth is promised all but what the pool uses and a margin, 0.25:
+  // room for 12.75, so its 10 is admitted at once, where all 11 the pool
+  // had not used once left it 2.
+  await landing.grow(10 * GiB);
+  const grown = f.decisions.filter(d => d.grows === landing.id);
+  assert.deepEqual(grown.map(d => [d.admitted, d.pendingBytes, d.roomBytes]), [[true, 4.25 * GiB, 12.75 * GiB]]);
+  assert.deepEqual(f.lines.filter(line => line.includes("waits to grow")), [], "it never waited");
+  // An agent's request, of the outer reservation's own priority, still counts all 11.
+  const agent = f.ask({ bytes: 2 * GiB, what: "agent" });
+  await waitFor("the agent's request to wait", () => f.of("agent").length >= 1, { stopped: f.stopped });
+  assert.equal(f.of("agent").at(-1)?.pendingBytes, 11 * GiB + 14 * GiB);
+  for (const reservation of [landing, pool, outer]) reservation.release();
+  f.memory(20);
+  (await agent).release();
+});
+
+test("a request that takes over a reservation ends it as it is admitted, under the same lock, so nothing is admitted between the two", async t => {
+  const f = fixture(t); // 20 available
+  // A landing's build holds 12: room for 6.
+  const build = await f.ask({ bytes: 12 * GiB, what: "build", priority: "landing" });
+  // The build is done; an agent's job asks before the gate run does, and waits.
+  const agent = f.ask({ bytes: 8 * GiB, what: "agent" });
+  await waitFor("the agent's request to wait", () => f.of("agent").length >= 2, { stopped: f.stopped });
+  // The gate run's request is promised nothing for the build's reservation, which it takes over: its 14 starts at once.
+  const run = await f.ask({ bytes: 14 * GiB, what: "gate run", priority: "landing", replaces: build.id });
+  assert.deepEqual([f.of("gate run").at(-1)?.pendingBytes, f.of("gate run").at(-1)?.roomBytes], [0, 18 * GiB]);
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["gate run"], "the build's reservation ended as the run was admitted");
+  assert.ok(f.lines.includes("memory: gate run took over build's reservation of 12.0 GiB"), f.lines.join("\n"));
+  // The agent's request never had room: 6 while the build held its 12, 4 now.
+  const seen = f.of("agent").length;
+  await waitFor("the agent's request to look again", () => f.of("agent").length > seen, { stopped: f.stopped });
+  assert.ok(f.of("agent").every(d => !d.admitted));
+  assert.equal(f.of("agent").at(-1)?.roomBytes, 4 * GiB);
+  build.release(); // taken over already: its release does nothing more
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["gate run"]);
+  // A growth takes nothing over.
+  await run.grow(GiB);
+  assert.equal(readLedger(f.dir).admitted[0]?.bytes, 15 * GiB);
+  run.release();
+  (await agent).release();
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+});
+
+test("a request takes over only a reservation that counts its memory; one that has ended leaves nothing to take over", async t => {
+  const f = fixture(t);
+  const child = ownerProcess(t);
+  const other = await f.ask({ bytes: GiB, what: "another job", owner: { pid: child.pid } });
+  await assert.rejects(f.ask({ bytes: GiB, what: "thief", replaces: other.id }),
+    /^Error: memory: thief \(pid \d+\) would take over another job's reservation, which does not count its memory: it is outside that reservation's process tree$/);
+  await assert.rejects(f.ask({ bytes: GiB, what: "garbled", replaces: "not-a-reservation" }), /garbled would take over "not-a-reservation", which is not a reservation id/);
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["another job"], "neither ended it, nor reached the queue");
+  other.release();
+  const late = await f.ask({ bytes: GiB, what: "late", replaces: other.id });
+  assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["late"]);
+  late.release();
 });

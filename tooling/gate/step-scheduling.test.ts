@@ -395,9 +395,10 @@ esac
   assert.deepEqual(await once(neighbour!, "exit"), [0, null], "the neighbour had its memory and gave it back");
 });
 
-// The landing check's request in the run's ledger: once the run's reservation
-// has grown to 4 GiB, it asks for 2 at landing priority, says when it is
-// admitted, and gives them back.
+// The landing check in the run's ledger: once the run's reservation has grown
+// to 4 GiB, another landing job reserves 3.5 beside it, and the landing check
+// asks for 2 at landing priority; once the run has given memory back, the
+// other job ends. It says how its request went, and gives the memory back.
 const LANDING = `import { mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const [ledger, meminfo, own, module] = process.argv.slice(1);
@@ -405,13 +406,17 @@ const { reserve } = await import(module);
 const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
 const admitted = join(ledger, "admitted");
 mkdirSync(admitted, { recursive: true });
-const full = () => readdirSync(admitted).some(name => {
-  try { const entry = JSON.parse(readFileSync(join(admitted, name), "utf8")); return entry.what.startsWith("gate run ") && entry.bytes >= 4 * 2 ** 30; } catch { return false; }
+const run = test => () => readdirSync(admitted).some(name => {
+  try { const entry = JSON.parse(readFileSync(join(admitted, name), "utf8")); return entry.what.startsWith("gate run ") && test(entry.bytes); } catch { return false; }
 });
-await until(admitted, full);
+const options = { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 };
+await until(admitted, run(bytes => bytes >= 4 * 2 ** 30));
+const other = await reserve({ bytes: 3.5 * 2 ** 30, what: "another landing job", priority: "landing" }, options);
 const lines = [];
-const held = await reserve({ bytes: 2 * 2 ** 30, what: "landing", priority: "landing" },
-  { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50, report: line => lines.push(line) });
+const asked = reserve({ bytes: 2 * 2 ** 30, what: "landing", priority: "landing" }, { ...options, report: line => lines.push(line) });
+await until(admitted, run(bytes => bytes < 4 * 2 ** 30));
+other.release();
+const held = await asked;
 writeFileSync(join(own, "landing-admitted"), lines.join("\\n") + "\\n");
 held.release();
 `;
@@ -419,11 +424,13 @@ held.release();
 test("a run outranked by a request of higher priority starts nothing new and gives back what it does not use, then goes on", async t => {
   // A full-check run whose eight integrity workers take a 1 GiB token the
   // moment one comes back fills its reservation: 4 GiB, all the reading's
-  // 6.5 allow beside the 2 kept for the system. The landing check's 2 GiB do
-  // not fit beside them. Outranked, the run grants no token as its cases end
-  // and gives their memory back, so the landing check is admitted once a few
-  // cases have ended; then integrity goes on, each worker taking one more
-  // token before it ends.
+  // 6.5 allow beside the 2 kept for the system. Another landing job's 3.5 are
+  // admitted beside them all the same, since the run promises a request that
+  // outranks it only what it uses and a margin (memory-ledger.ts); the
+  // landing check's 2 do not fit beside that job, and wait. Outranked, the
+  // run grants no token as its cases end and gives their memory back; once
+  // it has, the other job ends, the landing check is admitted, and integrity
+  // goes on, each worker taking one more token before it ends.
   let landing: ReturnType<typeof spawn> | undefined, fixture = "";
   t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
@@ -457,7 +464,7 @@ esac
   assert.equal(summary.verdict, "green");
   assert.deepEqual(await once(landing!, "exit"), [0, null], "the landing check had its memory and gave it back");
   // The wait the ledger reports to the landing check: the run's look at the
-  // queue, once a second, and a few cases' time.
+  // queue, once a second, and its give-back.
   const told = readFileSync(join(fixture, "landing-admitted"), "utf8");
   assert.match(told, /^memory: landing waits for 2\.0 GiB \(landing\): /m);
   const waited = Number(/^memory: landing admitted with 2\.0 GiB after (\d+) s$/m.exec(told)?.[1]);

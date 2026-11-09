@@ -69,6 +69,10 @@
 //   NTS_MEMORY_PRIORITY   the run's place in the machine's memory queue
 //                         (landing, agent, full-check; default agent), given
 //                         by the launcher's code: a shell's is discarded
+//   NTS_MEMORY_HANDOVER   a reservation the run takes over as its own is
+//                         admitted: the landing build's, given by the landing
+//                         check's code, so nothing is admitted between them.
+//                         The run consumes it: no step is handed it
 //
 // Set by this file for each step (a step reads them; nobody sets them by hand):
 //   NTS_GATE_JOBS         the workers it may run
@@ -882,12 +886,18 @@ async function reserveMemory() {
   ({ totalBytes } = machineMemory(env));
   capacity = totalBytes - SYSTEM_FLOOR_BYTES;
   planMemory();
+  // The reservation the launcher hands over (the landing build's) ends as
+  // this one is admitted. It is the run's to take once: nothing the run
+  // starts carries it, and no re-entry of the gate's environment revives it
+  // (canonical-environment.ts).
+  const replaces = env.NTS_MEMORY_HANDOVER || undefined;
+  delete env.NTS_MEMORY_HANDOVER;
   // A run always holds its own: its size moves with its steps, which only its
   // holder can do. One handed down by its launcher stays the launcher's.
   const own = { ...env };
   delete own[RESERVATION_ENV];
   const asked = Date.now();
-  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured() },
+  reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured(), replaces },
     { env: own, signal: startupAbort.signal, report: (line) => process.stdout.write(`  ${line}\n`) });
   memoryRecord.waited_s += (Date.now() - asked) / 1000;
   noteSize();
