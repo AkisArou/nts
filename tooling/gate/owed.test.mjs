@@ -515,11 +515,10 @@ test("what a step runs owes that step", () => {
   // default directory), so stepInputs owes those too: broad, never short.
   owes("tests/typescript/enums/numeric-members.ts", ["typescript-c", "typescript-llvm", "typescript-jvm"], { not: ["examples"] });
   owes("tests/typescript-pending/decorators/README.md", ["typescript-c", "typescript-llvm", "typescript-jvm"], { not: ["examples", "test262-cases"] });
-  owes("tooling/gate/compile-times.tsv", ["compile-time"]);
+  owes("results/compile-times.tsv", ["compile-time", "compile-time-rc"], { not: ["examples"] });
 });
 
 test("a data file a step's tool reads beside itself owes that step", () => {
-  owes("tooling/gate/compile-times.tsv", ["compile-time"], { not: ["examples"] });
   owes("tooling/conformance/integrity.known", ["integrity", "integrity-runtime"]);
   assert.ok(stepsFor("tooling/gate/times.tsv").length < landing().length);
 });
@@ -534,7 +533,7 @@ test("a private timing fixture does not make committed step estimates a verdict 
   try {
     assert.ok(inputs.get(path).has("tooling"), "the alias inference is present");
     for (const added of [false, true]) assert.deepEqual([...changeOwes([{ path, added }])].sort(), expected);
-    owes("tooling/gate/compile-times.tsv", ["compile-time"], { not: ["examples"] });
+    owes("tooling/conformance/integrity.known", ["integrity", "integrity-runtime"]);
   } finally {
     if (previous === undefined) inputs.delete(path); else inputs.set(path, previous);
   }
@@ -867,10 +866,11 @@ test("the retired backend has no runnable or selected gate step", () => {
 
 test("every compile-time subject owes the independent RC arm, while docs do not", () => {
   for (const path of ["compiler/core/src/hir/lower.rs", "runtime/node/path/index.ts", "tooling/conformance/integrity.ts",
-    "tooling/gate/compile-times.tsv", "tooling/gate/compile-times-rc.tsv", "results/compile-counter-rc-calibration.json"]) {
+    "results/compile-times.tsv", "results/compile-times-rc.tsv", "results/compile-counter-rc-calibration.json", "tests/compile-time/literal-text-scaling/src/main.ts"]) {
     const steps = stepsFor(path);
     assert.equal(steps.includes("compile-time"), steps.includes("compile-time-rc"), path);
   }
-  owes("tooling/gate/compile-times-rc.tsv", ["compile-time", "compile-time-rc"], { not: ["examples"] });
+  owes("results/compile-times-rc.tsv", ["compile-time", "compile-time-rc"], { not: ["examples"] });
+  owes("tests/compile-time/scalar-replacement-scaling/tsconfig.json", ["compile-time", "compile-time-rc"], { not: ["examples"] });
   owes("docs/architecture.md", [], { not: ["compile-time", "compile-time-rc"] });
 });

@@ -890,7 +890,16 @@ export const RULES = [
   {
     name: "the compile-time baselines",
     wide: true,
-    when: (p) => /^tooling\/gate\/compile-times(?:-rc)?\.tsv$/.test(p) || /^results\/compile-counter(?:-rc)?-calibration\.json$/.test(p),
+    when: (p) => /^results\/compile-times(?:-rc)?\.tsv$/.test(p) || /^results\/compile-counter(?:-rc)?-calibration\.json$/.test(p),
+    steps: ["compile-time"],
+    arms: [],
+  },
+  {
+    // Each configured directory here is a module the tripwire measures
+    // (compile-counter.ts's compileTimeModules), with its rows in the baselines.
+    name: "the compile-time fixtures",
+    wide: true,
+    when: (p) => p.startsWith("tests/compile-time/"),
     steps: ["compile-time"],
     arms: [],
   },

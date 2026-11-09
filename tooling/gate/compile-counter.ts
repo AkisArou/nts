@@ -23,10 +23,16 @@ export function compileWorkProblem(row:{work_profile?:unknown;work_settings?:unk
 }
 
 export type CompileArm = "nogc" | "rc";
+/**
+ * Each arm's record, from the root: the table the tripwire reads, and the
+ * five-repeat evidence every row of it is proved from. Both live under
+ * results/, where the full check's records commits may write.
+ */
 export const COMPILE_ARMS = {
-  nogc: { table: "compile-times.tsv", calibration: "compile-counter-calibration.json" },
-  rc: { table: "compile-times-rc.tsv", calibration: "compile-counter-rc-calibration.json" },
+  nogc: { table: "results/compile-times.tsv", calibration: "results/compile-counter-calibration.json" },
+  rc: { table: "results/compile-times-rc.tsv", calibration: "results/compile-counter-rc-calibration.json" },
 } as const;
+export const ARMS = Object.keys(COMPILE_ARMS) as CompileArm[];
 
 export function compileArm(args: readonly string[]): CompileArm {
   const at = args.indexOf("--arm");
@@ -57,6 +63,18 @@ export function discoverCompileTimeFixtures(root: string): string[] {
     }
   }
   return fixtures.sort();
+}
+
+/** Every module the tripwire measures in the tree at `root`: each runtime module with a config, and each compile-time fixture. */
+export function compileTimeModules(root: string): string[] {
+  const node = join(root, "runtime/node");
+  return [
+    ...(existsSync(node) ? readdirSync(node, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && existsSync(join(node, entry.name, "tsconfig.json")))
+      .map(entry => `runtime/node/${entry.name}`) : []),
+    ...(existsSync(join(root, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
+    ...discoverCompileTimeFixtures(root),
+  ].sort();
 }
 
 export interface CounterRow {
@@ -169,7 +187,7 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
   const policy = { ratio, observed_max_spread: maxSpread, spread_multiplier: 4, relative_floor: 0.10 };
   const text = [`# counter-scope: ${COUNTER_SCOPE}`, `# work-profile: ${COMPILE_WORK_PROFILE}`, `# arm: ${arm}`, `# compiler-sha256: ${summary.nts_sha256}`,
     `# regression-ratio: ${ratio.toFixed(2)}`,
-    `# Five-repeat medians; policy/evidence: results/${COMPILE_ARMS[arm].calibration}`,
+    `# Five-repeat medians; policy/evidence: ${COMPILE_ARMS[arm].calibration}`,
     `# Rerecord with node tooling/gate/compile-time.mjs --record --arm ${arm}; explain why.`,
     "# module\tG user instructions (all threads/descendants from exec)\tCPU s", ...rows, ""].join("\n");
   return { text, policy };
@@ -223,24 +241,59 @@ export function calibrationRecord(summary: Calibration, expected: string[]) {
   return { ...published, record };
 }
 
-/** Refresh selected rows without accepting drift or relabelling other rows.
- * Legacy single-compiler records acquire explicit per-module provenance.
- * Only new raw files are needed: older rows are already published records,
- * and their five-run proof must still reproduce their exact table row.
+const byModule = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+
+/** A table's rows by module, each its exact line; the header lines are not rows. */
+export function tableLines(text: string): Map<string, string> {
+  return new Map(text.split("\n").filter(line => line && !line.startsWith("#")).map(line => [line.split("\t")[0]!, line]));
+}
+
+/** The table with these rows in: its header lines, then every row in its module's place, each other row as it was. */
+export function withTableLines(text: string, rows: ReadonlyMap<string, string>): string {
+  const merged = new Map([...tableLines(text), ...rows]);
+  return [...text.split("\n").filter(line => line.startsWith("#")), ...[...merged.keys()].sort(byModule).map(module => merged.get(module)!), ""].join("\n");
+}
+
+/** A calibration record's module entries by module, each as one line of JSON. */
+export function calibrationEntries(text: string): Map<string, string> {
+  const record = JSON.parse(text) as { modules?: { module: string }[] };
+  if (!Array.isArray(record.modules)) throw new Error("a calibration record lists no modules");
+  return new Map(record.modules.map(entry => [entry.module, JSON.stringify(entry)]));
+}
+
+/** The record with these entries in, in module order, its policy's observed spread taken over every entry; the rest as it was. */
+export function withCalibrationEntries(text: string, entries: ReadonlyMap<string, string>): string {
+  const record = JSON.parse(text) as RecordedCalibration;
+  const merged = new Map<string, RecordedModule>([...record.modules.map(entry => [entry.module, entry] as const),
+    ...[...entries].map(([module, line]) => [module, JSON.parse(line) as RecordedModule] as const)]);
+  const modules = [...merged.keys()].sort(byModule).map(module => merged.get(module)!);
+  const tripwire_policy = { ...record.tripwire_policy, observed_max_spread: Math.max(...modules.map(module => module.spread)) };
+  return `${JSON.stringify({ ...record, modules, tripwire_policy }, null, 2)}\n`;
+}
+
+/**
+ * One module's calibration, published into its arm's record: its row
+ * refreshed when the table has one, or added in its module's place when the
+ * module is pending. Every other row and entry stays byte for byte, with its
+ * own provenance, other pending modules stay pending, and the table's ratio
+ * stays: repeats that would need a wider one are refused. Older rows are
+ * already published, and each one's five-run proof must still reproduce its
+ * exact row. A legacy single-compiler record acquires per-module provenance.
  */
-export function replaceCalibrationModules(table: string, previous: Calibration | RecordedCalibration,
-  summary: Calibration, expected: string[], selected: string) {
+export function withCalibratedModule(table: string, previous: Calibration | RecordedCalibration,
+  summary: Calibration, expected: readonly string[], selected: string) {
   const arm = summary.arm ?? "nogc";
   const baseline = readCounterTable(table, arm);
-  const population = [...baseline.rows.keys()].sort();
-  if (JSON.stringify(population) !== JSON.stringify([...expected].sort())
-    || JSON.stringify(previous.modules.map(module => module.module).sort()) !== JSON.stringify(population)) {
-    throw new Error("baseline provenance population differs from the current modules");
+  const recorded = [...baseline.rows.keys()].sort(byModule);
+  const stale = recorded.filter(module => !expected.includes(module));
+  if (stale.length) throw new Error(`the table has rows for modules the tree does not have: ${stale.join(", ")}`);
+  if (JSON.stringify(previous.modules.map(module => module.module).sort(byModule)) !== JSON.stringify(recorded)) {
+    throw new Error("baseline provenance population differs from the table");
   }
   if ((previous.arm ?? "nogc") !== arm || previous.tripwire_policy?.ratio !== baseline.ratio) {
     throw new Error("baseline provenance policy or arm differs from the table");
   }
-  if (!baseline.rows.has(selected)) throw new Error(`module is not in the baseline table: ${selected}`);
+  if (!expected.includes(selected)) throw new Error(`unknown compile-time module: ${selected}`);
   const fresh = calibrationRecord(summary, [selected]);
   if (fresh.policy.ratio > baseline.ratio) {
     throw new Error(`selected repeats require policy ${fresh.policy.ratio.toFixed(2)}, above existing ${baseline.ratio.toFixed(2)}; not published`);
@@ -257,15 +310,13 @@ export function replaceCalibrationModules(table: string, previous: Calibration |
     if (proof.policy.ratio > baseline.ratio) throw new Error(`published proof exceeds its policy: ${module.module}`);
     return recordedModule(module, source);
   });
-  const replacements = new Map(fresh.record.modules.map(module => [module.module, module]));
-  const modules = old.map(module => replacements.get(module.module) ?? module);
+  const modules = [...old.filter(module => module.module !== selected), fresh.record.modules[0]!]
+    .sort((a, b) => byModule(a.module, b.module));
   const policy = { ...fresh.policy, ratio: baseline.ratio,
     observed_max_spread: Math.max(...modules.map(module => module.spread)) };
   const record: RecordedCalibration = { ...fresh.record, modules, tripwire_policy: policy };
-  const rows = new Map(fresh.text.split("\n").filter(line => line && !line.startsWith("#"))
-    .map(line => [line.split("\t")[0]!, line]));
-  const text = table.split("\n").map(line => line.startsWith("# compiler-sha256:")
-    ? `# compiler-provenance: per-module in results/${COMPILE_ARMS[arm].calibration}`
-    : rows.get(line.split("\t")[0]!) ?? line).join("\n");
+  const row = fresh.text.split("\n").find(line => line.startsWith(`${selected}\t`))!;
+  const text = withTableLines(table, new Map([[selected, row]])).split("\n").map(line => line.startsWith("# compiler-sha256:")
+    ? `# compiler-provenance: per-module in ${COMPILE_ARMS[arm].calibration}` : line).join("\n");
   return { text, record, policy };
 }

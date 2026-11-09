@@ -11,9 +11,10 @@
 //   node tooling/records/record-pending.ts --apply <delta>
 //
 // The kinds are oracle-counts, typescript, benchmarks, benchmark-runs,
-// outcomes and dex, all six when none is named, in that order: a benchmark's
-// run is recorded once its oracle count is. Each is recorded by its own
-// recorder, in its pending mode, with the compiler NTS_BIN names:
+// outcomes, dex and compile-times, all seven when none is named, in that
+// order: a benchmark's run is recorded once its oracle count is. Each is
+// recorded by its own recorder, in its pending mode, with the compiler NTS_BIN
+// names:
 //
 //   oracle-counts   tooling/differential/record-oracles.ts <pending fixture>, per fixture
 //   typescript      tooling/census/conformance262.ts --record-pending, per backend
@@ -21,6 +22,11 @@
 //   benchmark-runs  tooling/differential/check-consumers.ts benchmarks --record-pending (bench-agree's JVM record)
 //   outcomes        tooling/conformance/outcomes-check.ts --record-pending
 //   dex             tooling/android/dex-record.ts record-pending (d8 over what can change a row)
+//   compile-times   tooling/gate/compile-counter-calibrate.ts --module <module> --record, per module and arm
+//
+// A module's compile time is two records of its arm: its line in the table the
+// tripwire reads, and its entry in the five-repeat evidence that line is
+// proved from. Both are rows of its case, recorded, audited and applied together.
 //
 // The pending cases come from the tree alone. A kind's recorders run only
 // when it has something to record: a pending case, a recorded budget to
@@ -78,10 +84,11 @@ import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, mergeRunRecord, parseBenchma
 import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets, written } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import { WIDE } from "../gate/owed.mjs";
+import { ARMS, COMPILE_ARMS, calibrationEntries, compileTimeModules, readCounterTable, tableLines, withCalibrationEntries, withTableLines, type CompileArm } from "../gate/compile-counter.ts";
 import { appliedLine, DELTA_FILE, MalformedDelta, parseDelta, serializeDelta, type ApplyCounts, type Delta, type DeltaRow } from "./delta.ts";
 import { inventory, listedIn, pendingLine } from "./pending.ts";
 
-export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex"] as const;
+export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 
@@ -97,6 +104,7 @@ export const KIND_STEPS: Readonly<Record<Kind, readonly string[]>> = {
   "benchmark-runs": ["bench-agree"],
   outcomes: ["outcomes"],
   dex: ["dex"],
+  "compile-times": ["compile-time", "compile-time-rc"],
 };
 export type Part = "core" | "wide";
 /** The part of the full check that runs a kind's checks: a kind is recorded after that part is green. */
@@ -109,6 +117,16 @@ const typescriptRecord = (backend: string) => `results/typescript/${backend}/cas
 const benchmarkRecord = (backend: string) => `results/benchmarks/${backend}/outcomes.tsv`;
 const outcomesRecord = (name: string) => `tests/outcomes/${name}/${RECORD}`;
 const read = (root: string, file: string) => readFileSync(join(root, file), "utf8");
+
+/** The arm whose table or calibration evidence `record` is, or null for any other file. */
+function compileTimeArm(record: string): CompileArm | null {
+  return ARMS.find(arm => COMPILE_ARMS[arm].table === record || COMPILE_ARMS[arm].calibration === record) ?? null;
+}
+const isCompileTable = (record: string) => ARMS.some(arm => COMPILE_ARMS[arm].table === record);
+/** Every compile-time record: each arm's table and its evidence. */
+const COMPILE_TIME_RECORDS = ARMS.flatMap(arm => [COMPILE_ARMS[arm].table, COMPILE_ARMS[arm].calibration]);
+/** A compile-time record's rows by module: a table's lines, or the evidence's entries, each one line. */
+const compileRows = (record: string, text: string) => isCompileTable(record) ? tableLines(text) : calibrationEntries(text);
 
 /** Every pending case of one kind on the tree at `root`, from its sources and records alone. */
 export function findPending(root: string, kind: Kind): Pending[] {
@@ -139,6 +157,13 @@ export function findPending(root: string, kind: Kind): Pending[] {
       const recorded = existsSync(join(root, DEX_RECORD)) ? recordedTargets(read(root, DEX_RECORD)) : [];
       return inventory(recorded, dexTargets(root)).pending.map(name => ({ kind, name, record: DEX_RECORD }));
     }
+    case "compile-times":
+      // A module with no row in an arm's table lacks both of that arm's records.
+      return ARMS.flatMap(arm => {
+        const { table, calibration } = COMPILE_ARMS[arm], recorded = readCounterTable(read(root, table), arm).rows;
+        return compileTimeModules(root).filter(name => !recorded.has(name))
+          .flatMap(name => [{ kind, name, record: table }, { kind, name, record: calibration }]);
+      });
   }
 }
 
@@ -191,6 +216,15 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
     case "dex":
       return [["tooling/android/dex-record.ts", "record-pending"]];
+    case "compile-times": {
+      // One calibration per module and arm, which writes both of its records.
+      const runs = new Map<string, string[]>();
+      for (const one of pending) {
+        const arm = compileTimeArm(one.record);
+        if (arm) runs.set(`${arm}\0${one.name}`, ["tooling/gate/compile-counter-calibrate.ts", "--arm", arm, "--module", one.name, "--record"]);
+      }
+      return [...runs.keys()].sort().map(key => runs.get(key)!);
+    }
   }
 }
 
@@ -207,6 +241,7 @@ function recordFiles(root: string, kind: Kind): string[] {
     case "benchmark-runs": return BENCH_AGREE_BACKENDS.map(runsRecord);
     case "outcomes": return outcomeFixtures(join(root, "tests/outcomes")).map(outcomesRecord);
     case "dex": return [DEX_RECORD];
+    case "compile-times": return COMPILE_TIME_RECORDS;
   }
 }
 
@@ -265,6 +300,7 @@ function acceptedRow(kind: LineKind, before: string, after: string): string | nu
 export function auditRecord(kind: Kind, file: string, before: string | null, after: string | null, pending: ReadonlySet<string>): string[] {
   if (before === after) return [];
   assert.ok(after !== null, `${file} was removed`);
+  if (kind === "compile-times") return auditCompileTimes(file, before, after, pending);
   if (kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex") {
     // bench-agree's and dex's records start from their pending rows: with no
     // file, every benchmark (every dex target) is pending.
@@ -322,11 +358,55 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
 }
 
 /**
+ * One compile-time record's change: rows added only for pending modules, a row
+ * rewritten only when its count fell (an improvement), none removed, and the
+ * table's header lines and the evidence's policy and provenance as they were.
+ * Only the evidence's observed spread follows its entries.
+ */
+function auditCompileTimes(file: string, before: string | null, after: string, pending: ReadonlySet<string>): string[] {
+  assert.ok(before !== null, `${file} was created; a compile-time record is written whole by a full --record`);
+  const table = isCompileTable(file);
+  if (table) {
+    // A legacy single-compiler table names its compiler; the first row published names each row's instead.
+    const provenance = `# compiler-provenance: per-module in ${COMPILE_ARMS[compileTimeArm(file)!].calibration}`;
+    const header = (text: string) => text.split("\n").filter(line => line.startsWith("#")).map(line => line.startsWith("# compiler-sha256:") ? provenance : line);
+    assert.deepEqual(header(after), header(before), `${file}: the header changed`);
+  } else {
+    const rest = (text: string) => {
+      const { modules: _, tripwire_policy: { observed_max_spread: __, ...policy }, ...record } = JSON.parse(text);
+      return { ...record, policy };
+    };
+    assert.deepEqual(rest(after), rest(before), `${file}: its policy or work profile changed`);
+  }
+  // A table line's count is its second column; an entry's, its median.
+  const count = (line: string) => table ? Number(line.split("\t")[1]) : (JSON.parse(line) as { median_instructions: number }).median_instructions / 1e9;
+  const was = compileRows(file, before), now = compileRows(file, after), recorded: string[] = [];
+  for (const [module, line] of was) {
+    const next = now.get(module);
+    assert.ok(next !== undefined, `${file}: the row of ${module} was removed`);
+    if (next === line) continue;
+    assert.ok(count(next) < count(line), `${file}: the row of ${module} was rewritten, and the ratchet does not accept it`);
+    recorded.push(`${module} ${count(line).toFixed(3)} G -> ${count(next).toFixed(3)} G (improved)`);
+  }
+  for (const [module, line] of now) {
+    if (was.has(module)) continue;
+    assert.ok(pending.has(module), `${file}: a row was added for ${module}, which was not pending`);
+    recorded.push(`${module} ${count(line).toFixed(3)} G (pending)`);
+  }
+  return recorded;
+}
+
+/**
  * The cases one audited change of a record file records, row by row: a line
  * record's changed lines, or a file-per-case record's whole file. What the
  * delta holds, before each case's sources are digested.
  */
 function changedRows(kind: Kind, file: string, before: string | null, after: string): Omit<DeltaRow, "sources">[] {
+  if (kind === "compile-times") {
+    const was = before === null ? new Map<string, string>() : compileRows(file, before);
+    return [...compileRows(file, after)].filter(([module, line]) => was.get(module) !== line)
+      .map(([module, line]) => ({ kind, record: file, case: module, key: module, before: was.get(module) ?? null, after: line }));
+  }
   if (isLine(kind)) {
     const was = before === null ? new Map<string, { name: string; line: string }>() : rows(before, kind).rows;
     return [...rows(after, kind).rows].filter(([key, row]) => was.get(key)?.line !== row.line)
@@ -419,6 +499,31 @@ function keepDelta(file: string, delta: Delta): void {
   renameSync(partial, file);
 }
 
+/**
+ * An arm whose table and evidence no longer list the same modules after its
+ * recorders ran (one written and not the other) has both put back as they
+ * were: a row is kept only with its proof. Returns how many arms were.
+ */
+function unpairedCompileTimes(root: string, before: ReadonlyMap<string, string | null>, say: (line: string) => void): number {
+  let unpaired = 0;
+  for (const arm of ARMS) {
+    const files = [COMPILE_ARMS[arm].table, COMPILE_ARMS[arm].calibration];
+    const modules = (file: string) => {
+      try { return existsSync(join(root, file)) ? JSON.stringify([...compileRows(file, read(root, file)).keys()].sort()) : null; }
+      catch { return null; }
+    };
+    const [listed, proved] = files.map(modules);
+    if (listed !== null && listed === proved) continue;
+    say(`  REFUSED ${files.join(" and ")} do not list the same modules; both put back as they were`);
+    for (const file of files) {
+      const was = before.get(file);
+      if (was === null || was === undefined) rmSync(join(root, file), { force: true }); else writeFileSync(join(root, file), was);
+    }
+    unpaired += 1;
+  }
+  return unpaired;
+}
+
 export type Runner = (args: string[], root: string) => number;
 // **Each recorder runs under the shared supervisor** (tooling/gate/case-bound.ts):
 // its cases are bounded one by one inside it, and these bound the recorder
@@ -463,6 +568,7 @@ export function recordPending(root: string, kinds: readonly Kind[], run: Runner 
       if (status !== 0) { say(`  ${kind}: the recorder exited ${status}`); failed += 1; }
       else if(kind==='oracle-counts')for(const name of args.slice(1))rmSync(oracleImprovementPath(name),{force:true});
     }
+    if (kind === "compile-times") failed += unpairedCompileTimes(root, before, say);
     const changed: Omit<DeltaRow, "sources">[] = [];
     for (const [file, was] of before) {
       const now = existsSync(join(root, file)) ? read(root, file) : null;
@@ -527,8 +633,19 @@ function checkDelta(delta: Delta): void {
     const records = kind === "typescript" ? BACKENDS.map(typescriptRecord) : kind === "benchmarks" ? BACKENDS.map(benchmarkRecord)
       : kind === "benchmark-runs" ? BENCH_AGREE_BACKENDS.map(runsRecord) : kind === "dex" ? [DEX_RECORD]
       : kind === "outcomes" ? (/^tests\/outcomes\/[^/]+$/.test(row.case) ? [outcomesRecord(row.case.slice("tests/outcomes/".length))] : [])
+      : kind === "compile-times" ? COMPILE_TIME_RECORDS
       : (() => { try { return [recordPath(row.case)]; } catch { return []; } })();
     if (!records.includes(row.record)) bad(row, `no ${kind} recorder writes that record`);
+    if (kind === "compile-times") {
+      if (row.key !== row.case) bad(row, "its key is not its case");
+      for (const line of [row.before, row.after]) {
+        if (line === null) continue;
+        let found = new Map<string, string>();
+        try { found = compileRows(row.record, isCompileTable(row.record) ? `${line}\n` : `{"modules":[${line}]}`); } catch { /* not a row */ }
+        if (line.includes("\n") || found.size !== 1 || found.get(row.case) !== line) bad(row, "it is not one row of its case");
+      }
+      continue;
+    }
     if (!isLine(kind)) { if (row.key !== row.case) bad(row, "its key is not its case"); continue; }
     for (const line of [row.before, row.after]) {
       if (line === null) continue;
@@ -540,10 +657,21 @@ function checkDelta(delta: Delta): void {
   for (const [record, header] of Object.entries(delta.headers)) {
     if (header.includes("\n")) throw new MalformedDelta(`malformed records delta: the header of ${record} is not one line`);
   }
+  // A module's compile time is its table line and its evidence entry: a delta carries both or neither.
+  const compiled = delta.rows.filter(row => row.kind === "compile-times");
+  for (const row of compiled) {
+    const arm = compileTimeArm(row.record)!, other = isCompileTable(row.record) ? COMPILE_ARMS[arm].calibration : COMPILE_ARMS[arm].table;
+    if (!compiled.some(one => one.record === other && one.case === row.case)) bad(row, `it comes without its row in ${other}`);
+  }
 }
 
 /** `text` with these rows in: a line record's own merge (started from the delta's header where there is no record yet), or a case's whole file. */
 function merged(kind: Kind, text: string | null, these: readonly DeltaRow[], header: string | undefined): string {
+  if (kind === "compile-times") {
+    assert.ok(text !== null, "there is no such record; a compile-time record is written whole by a full --record");
+    const rows = new Map(these.map(row => [row.key, row.after]));
+    return isCompileTable(these[0]!.record) ? withTableLines(text, rows) : withCalibrationEntries(text, rows);
+  }
   if (!isLine(kind)) { assert.equal(these.length, 1, "a file-per-case record has one row"); return these[0]!.after; }
   if (text === null) {
     assert.ok(header !== undefined, "there is no such record, and the delta has no header for one");
@@ -574,7 +702,8 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
   const since = delta.commit ? ` since ${delta.commit.slice(0, 12)}` : "";
   const head = headCommit(root);
   say(`record-pending --apply: ${delta.rows.length} row(s) recorded${delta.commit ? ` at ${delta.commit.slice(0, 12)}` : ""}, into ${root}${head ? ` at ${head.slice(0, 12)}` : ""}`);
-  const skip = (row: DeltaRow, why: string) => { say(`  skipped ${row.record}: ${row.case}: ${why}; the next records run takes it up`); counts.skipped += 1; };
+  const skipped = new Set<DeltaRow>();
+  const skip = (row: DeltaRow, why: string) => { skipped.add(row); say(`  skipped ${row.record}: ${row.case}: ${why}; the next records run takes it up`); counts.skipped += 1; };
 
   // The tree's own records: each one's text, and a line record's rows by key.
   const texts = new Map<string, string | null>(), lines = new Map<string, Map<string, string>>();
@@ -584,6 +713,12 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
   };
   const rowOf = (row: DeltaRow): string | null => {
     const kind = row.kind as Kind, text = textOf(row.record);
+    if (kind === "compile-times") {
+      // A record this tree cannot read holds no row of the case.
+      if (text === null) return null;
+      if (!lines.has(row.record)) { try { lines.set(row.record, compileRows(row.record, text)); } catch { lines.set(row.record, new Map()); } }
+      return lines.get(row.record)!.get(row.key) ?? null;
+    }
     if (!isLine(kind) || text === null) return text;
     if (!lines.has(row.record)) lines.set(row.record, new Map([...rows(text, kind).rows].map(([key, one]) => [key, one.line])));
     return lines.get(row.record)!.get(row.key) ?? null;
@@ -639,6 +774,14 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
     }
     ready = ready.filter(row => !refused.has(row));
   }
+
+  // A module's table line and its evidence entry apply together: one whose
+  // partner does not apply is not applied either, so no row lands without its proof.
+  for (const row of ready.filter(one => one.kind === "compile-times")) {
+    const partner = delta.rows.find(one => one !== row && one.kind === "compile-times" && one.case === row.case && compileTimeArm(one.record) === compileTimeArm(row.record));
+    if (partner && skipped.has(partner)) skip(row, `its row in ${partner.record} does not apply here`);
+  }
+  ready = ready.filter(row => !skipped.has(row));
 
   // Each record takes its rows by its own merge, and what that makes is
   // audited by the rule the recorders' writes are held to. One row the format

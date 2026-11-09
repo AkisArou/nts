@@ -15,6 +15,7 @@ import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts"
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import {requestOracleImprovement,recordPath,oracleImprovementPath} from "../differential/oracle-records.ts";
 import { testScratch } from "../gate/test-scratch.ts";
+import { calibrationRecord, compileTimeModules, COMPILE_ARMS, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, COUNTER_SCOPE, withCalibratedModule, type CompileArm } from "../gate/compile-counter.ts";
 
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const refused: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }] };
@@ -40,7 +41,32 @@ function tree(t: { after(fn: () => void): void }): string {
   }
   put("results/oracle-counts/_generator.json", JSON.stringify({ version: 1, generator_version: 1, generator_digest: "a".repeat(32), seed: null }) + "\n");
   for (const fixture of ["tests/programs/recorded", "benchmarks/cases/recorded"]) put(`results/oracle-counts/${fixture}.json`, `{"fixture":"${fixture}"}\n`);
+  // The compile-time tripwire's modules: one recorded in both arms, one pending.
+  put("runtime/node/recorded/tsconfig.json", "{}\n");
+  put("tests/compile-time/new/tsconfig.json", "{}\n");
+  put("tests/compile-time/new/src/main.ts", "export const value = 1;\n");
+  for (const arm of ["nogc", "rc"] as const) {
+    const published = calibrationRecord(compileSummary("runtime/node/recorded", 100, arm), ["runtime/node/recorded"]);
+    put(COMPILE_ARMS[arm].table, published.text.replace(/^# compiler-sha256:.*$/m, `# compiler-provenance: per-module in ${COMPILE_ARMS[arm].calibration}`));
+    put(COMPILE_ARMS[arm].calibration, `${JSON.stringify(published.record, null, 2)}\n`);
+  }
   return root;
+}
+/** One module's five-repeat calibration on one arm, counting `base` G instructions, by the compiler `source` names. */
+function compileSummary(module: string, base: number, arm: CompileArm, source = "a") {
+  return { arm, work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, complete: true,
+    nts_sha256: source.repeat(64), commit: source.repeat(40), raw_directory: `/raw/${source}`,
+    modules: [{ module, runs: [1, 2, 3, 4, 5].map(repeat => ({ module, repeat, arm, work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS,
+      counter_scope: COUNTER_SCOPE, status: 0, instructions: (base + repeat / 100) * 1e9, cpu_s: 10, listing_functions: 1, listing_definitions: 1,
+      counter_file: `/raw/${source}/${repeat}.perf` })) }] };
+}
+/** The calibration tool's publication of one module's row and entry, as `--module <m> --record` writes them. */
+function calibrate(root: string, arm: CompileArm, module: string, base: number) {
+  const { table, calibration } = COMPILE_ARMS[arm];
+  const published = withCalibratedModule(readFileSync(join(root, table), "utf8"), JSON.parse(readFileSync(join(root, calibration), "utf8")),
+    compileSummary(module, base, arm, "b"), compileTimeModules(root), module);
+  writeFileSync(join(root, calibration), `${JSON.stringify(published.record, null, 2)}\n`);
+  writeFileSync(join(root, table), published.text);
 }
 function cell(name: string, outcome: BenchmarkOutcome) {
   return { path: `benchmarks/cases/${name}`, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome };
@@ -69,6 +95,10 @@ function recorders(root: string, overrides: Partial<Record<string, () => void>> 
         ["tests/typescript/family/new.ts", { kind: "pass" }], ["tests/typescript/family/recorded.ts", { kind: "pass" }]])));
     } else if (script === "tooling/bench/build-records.ts") {
       for (const backend of BACKENDS) edit(`results/benchmarks/${backend}/outcomes.tsv`, text => mergeBenchmarkRecord(text, [cell("new", { kind: "pass" }), cell("recorded", { kind: "pass" })]));
+    } else if (script === "tooling/gate/compile-counter-calibrate.ts") {
+      // A pending module counts 50 G; a re-recorded one, 80 G where it counted 100.
+      const arm = args[args.indexOf("--arm") + 1] as CompileArm, module = args[args.indexOf("--module") + 1]!;
+      calibrate(root, arm, module, module === "runtime/node/recorded" ? 80 : 50);
     } else if (script === "tooling/conformance/outcomes-check.ts") {
       writeFileSync(join(root, "tests/outcomes/new/outcome.json"), stored("agrees", node));
       writeFileSync(join(root, "tests/outcomes/recorded/outcome.json"), stored("agrees", node));
@@ -222,9 +252,68 @@ test("accepted changes go to the kind whose record they name, a refusal for othe
 });
 
 test("each kind is recorded after the part that runs its checks, and names only steps the gate has", () => {
-  assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["benchmark-runs", "dex"]);
+  assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["benchmark-runs", "dex", "compile-times"]);
   const steps = new Set(STEPS.map(step => step.name));
   for (const kind of KINDS) for (const step of KIND_STEPS[kind]) assert.ok(steps.has(step), `${kind}: ${step} is a gate step`);
+});
+
+const ARM_RECORDS = (arm: CompileArm) => [COMPILE_ARMS[arm].table, COMPILE_ARMS[arm].calibration];
+
+test("a compile-time module with no row is pending in both records of each arm, and one calibration per arm records both", t => {
+  const root = tree(t), before = files(root), lines: string[] = [];
+  assert.deepEqual(findPending(root, "compile-times").map(one => [one.name, one.record]),
+    (["nogc", "rc"] as const).flatMap(arm => ARM_RECORDS(arm).map(record => ["tests/compile-time/new", record])));
+  const { run, ran } = recorders(root);
+  assert.equal(recordPending(root, ["compile-times"], run, line => lines.push(line)), 0, lines.join("\n"));
+  assert.deepEqual(ran.map(args => args.join(" ")), (["nogc", "rc"] as const).map(arm => `tooling/gate/compile-counter-calibrate.ts --arm ${arm} --module tests/compile-time/new --record`));
+  assert.deepEqual(lines.filter(line => line.startsWith("  recorded ")),
+    (["nogc", "rc"] as const).flatMap(arm => ARM_RECORDS(arm).map(record => `  recorded ${record}: tests/compile-time/new 50.030 G (pending)`)));
+  const after = files(root), touched = new Set((["nogc", "rc"] as const).flatMap(ARM_RECORDS));
+  for (const [path, text] of before) if (!touched.has(path)) assert.equal(after.get(path), text, `${path} is untouched`);
+  assert.match(after.get(COMPILE_ARMS.nogc.table)!, /\nruntime\/node\/recorded\t100\.030\t10\.000\ntests\/compile-time\/new\t50\.030\t10\.000\n$/,
+    "the recorded row as it was, the new row in its place");
+  assert.deepEqual(findPending(root, "compile-times"), [], "nothing pending");
+  // Nothing pending and nothing listed: no calibration runs, and nothing moves.
+  const quiet: string[] = [], idle = recorders(root);
+  assert.equal(recordPending(root, ["compile-times"], idle.run, line => quiet.push(line)), 0);
+  assert.deepEqual(idle.ran, []);
+  assert.ok(quiet.includes("compile-times: nothing pending and no accepted change listed; not run"), quiet.join("\n"));
+  assert.deepEqual(files(root), after);
+});
+
+test("an improved compile-time module the tripwire listed is re-recorded in its arm alone", t => {
+  const root = tree(t), logs = testScratch(t, "record-pending-compile-logs"), lines: string[] = [];
+  rmSync(join(root, "tests/compile-time/new"), { recursive: true });
+  writeFileSync(join(logs, "compile-time.log"), `  ${improvedLine("runtime/node/recorded", COMPILE_ARMS.nogc.table, "100.030 G", "80.030 G")}\n`);
+  const accepted = acceptedIn(root, logs).byKind;
+  assert.deepEqual(accepted.get("compile-times"), [{ kind: "compile-times", name: "runtime/node/recorded", record: COMPILE_ARMS.nogc.table }]);
+  const { run, ran } = recorders(root);
+  assert.equal(recordPending(root, ["compile-times"], run, line => lines.push(line), accepted), 0, lines.join("\n"));
+  assert.deepEqual(ran, [["tooling/gate/compile-counter-calibrate.ts", "--arm", "nogc", "--module", "runtime/node/recorded", "--record"]]);
+  assert.deepEqual(lines.filter(line => line.startsWith("  recorded ")),
+    ARM_RECORDS("nogc").map(record => `  recorded ${record}: runtime/node/recorded 100.030 G -> 80.030 G (improved)`));
+  assert.match(readFileSync(join(root, COMPILE_ARMS.rc.table), "utf8"), /^runtime\/node\/recorded\t100\.030\t/m, "the arm nothing listed keeps its row");
+});
+
+test("a compile-time rewrite that is not lower, a row nobody lacked, or an arm whose two records disagree is refused and put back", t => {
+  const cases: [string, (root: string) => void, RegExp][] = [
+    ["higher", root => calibrate(root, "nogc", "runtime/node/recorded", 120), /the row of runtime\/node\/recorded was rewritten, and the ratchet does not accept it/],
+    ["unpaired", root => rewrite(root, COMPILE_ARMS.nogc.table, text => `${text}tests/compile-time/new\t50.000\t10.000\n`), /do not list the same modules; both put back as they were/],
+  ];
+  for (const [name, write, refusal] of cases) {
+    const root = tree(t), logs = testScratch(t, `record-pending-compile-${name}`), lines: string[] = [];
+    writeFileSync(join(logs, "compile-time.log"), `  ${improvedLine("runtime/node/recorded", COMPILE_ARMS.nogc.table, "100.030 G", "90.000 G")}\n`);
+    const before = files(root);
+    const { run } = recorders(root, { "tooling/gate/compile-counter-calibrate.ts": () => write(root) });
+    assert.equal(recordPending(root, ["compile-times"], run, line => lines.push(line), acceptedIn(root, logs).byKind), 1, `${name}: ${lines.join("\n")}`);
+    assert.ok(lines.some(line => line.startsWith("  REFUSED ") && refusal.test(line)), `${name}: ${lines.join("\n")}`);
+    for (const file of ARM_RECORDS("nogc")) assert.equal(readFileSync(join(root, file), "utf8"), before.get(file), `${name}: ${file} is put back`);
+  }
+  // A row may be added only where a module was pending, and the header and policy never move.
+  const table = readFileSync(join(tree(t), COMPILE_ARMS.nogc.table), "utf8");
+  assert.throws(() => auditRecord("compile-times", COMPILE_ARMS.nogc.table, table, `${table}runtime/node/ghost\t1.000\t1.000\n`, new Set(["tests/compile-time/new"])),
+    /a row was added for runtime\/node\/ghost, which was not pending/);
+  assert.throws(() => auditRecord("compile-times", COMPILE_ARMS.nogc.table, table, table.replace("# regression-ratio: 1.10", "# regression-ratio: 1.50"), new Set()), /the header changed/);
 });
 
 // The delta, and --apply: the rows a records run wrote, merged by case into a
@@ -400,6 +489,38 @@ test("a line record main does not have yet starts from the header its recorder w
   assert.ok(missing.lines.includes("  skipped results/typescript/c/cases.tsv: tests/typescript/family/new.ts: the pending typescript cases cannot be listed here: "
     + `ENOENT: no such file or directory, open '${join(fresh.main, "results/typescript/c/cases.tsv")}'; the next records run takes it up`), missing.lines.join("\n"));
   assert.equal(existsSync(join(fresh.main, "results/typescript/c/cases.tsv")), false);
+});
+
+test("a compile-time delta carries each module's table line and evidence entry, and --apply takes both or neither", async t => {
+  const { root, main, delta } = recordedBeside(t, ["compile-times"]);
+  assert.deepEqual(delta.rows.map(row => [row.record, row.case, row.before]).sort(),
+    (["nogc", "rc"] as const).flatMap(arm => ARM_RECORDS(arm).map(record => [record, "tests/compile-time/new", null])).sort());
+  assert.deepEqual(Object.keys(delta.headers), [], "a compile-time record is never started from a delta");
+  const { counts, lines } = await applied(main, delta);
+  assert.deepEqual(counts, { applied: 4, already: 0, skipped: 0 }, lines.join("\n"));
+  for (const file of (["nogc", "rc"] as const).flatMap(ARM_RECORDS)) {
+    assert.equal(readFileSync(join(main, file), "utf8"), readFileSync(join(root, file), "utf8"), `${file} holds what the recorder wrote`);
+  }
+  assert.deepEqual(findPending(main, "compile-times"), []);
+  // A main whose evidence took another entry for the module in one arm applies neither of that arm's rows.
+  const moved = recordedBeside(t, ["compile-times"]);
+  rewrite(moved.main, COMPILE_ARMS.nogc.calibration, text => {
+    const record = JSON.parse(text), entry = { ...structuredClone(record.modules[0]), module: "tests/compile-time/new" };
+    return `${JSON.stringify({ ...record, modules: [...record.modules, entry] }, null, 2)}\n`;
+  });
+  const partial = await applied(moved.main, moved.delta);
+  assert.deepEqual(partial.counts, { applied: 2, already: 0, skipped: 2 }, partial.lines.join("\n"));
+  assert.ok(partial.lines.includes(`  skipped ${COMPILE_ARMS.nogc.table}: tests/compile-time/new: its row in ${COMPILE_ARMS.nogc.calibration} does not apply here; the next records run takes it up`),
+    partial.lines.join("\n"));
+  assert.doesNotMatch(readFileSync(join(moved.main, COMPILE_ARMS.nogc.table), "utf8"), /tests\/compile-time\/new/, "no table row lands without its proof");
+  assert.match(readFileSync(join(moved.main, COMPILE_ARMS.rc.table), "utf8"), /^tests\/compile-time\/new\t50\.030\t/m);
+  // A delta with one of the two rows cannot be applied at all.
+  const half = join(testScratch(t, "record-pending-half"), "delta.json");
+  writeFileSync(half, serializeDelta({ ...delta, rows: delta.rows.filter(row => row.record === COMPILE_ARMS.nogc.table) }));
+  const errors: string[] = [], original = console.error;
+  console.error = (line: string) => { errors.push(line); };
+  try { assert.equal(await applyCommand(main, [half], () => {}), 1); } finally { console.error = original; }
+  assert.ok(errors.some(line => line.includes(`it comes without its row in ${COMPILE_ARMS.nogc.calibration}`)), errors.join("\n"));
 });
 
 test("--apply refuses a delta it cannot read, or one that names a record no recorder writes, before writing anything", async t => {

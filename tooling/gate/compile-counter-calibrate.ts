@@ -2,15 +2,16 @@ import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environme
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
 // node tooling/gate/compile-counter-calibrate.ts --run-dir <evidence directory>
 // --record measures then publishes; --publish <summary.json> uses retained raw evidence.
-// --module <module> refreshes one existing row, retaining the other rows and policy.
+// --module <module> calibrates one module: it refreshes the module's row, or adds it
+// when the module is pending, retaining every other row, its provenance and the policy.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reserveJob } from "./memory-ledger.ts";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibrationRecord, replaceCalibrationModules, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, compileTimeModules, counterProblem, calibrationRecord, withCalibratedModule, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -28,19 +29,16 @@ for (const input of ["node_modules"]) {
   if (!existsSync(join(root, input))) throw new Error(`missing workspace input ${input}; run node tooling/inputs/linker.ts work <shared checkout> <tree> before calibration`);
 }
 const digest = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const population = [
-  ...readdirSync(join(root, "runtime/node"), { withFileTypes: true })
-    .filter(e => e.isDirectory() && existsSync(join(root, "runtime/node", e.name, "tsconfig.json")))
-    .map(e => `runtime/node/${e.name}`), "runtime/web-platform", ...discoverCompileTimeFixtures(root),
-].sort();
+const population = compileTimeModules(root);
 const selected = option("--module");
 if (process.argv.includes("--module") && (!selected || selected.startsWith("--"))) throw new Error("--module requires a module");
 if (process.argv.filter(arg => arg === "--module").length > 1) throw new Error("--module may be specified once");
-const table = join(root, "tooling/gate", COMPILE_ARMS[arm].table);
-const recordFile = join(root, "results", COMPILE_ARMS[arm].calibration);
-const previousTable = selected ? readFileSync(table, "utf8") : undefined;
-if (selected && !readCounterTable(previousTable!, arm).rows.has(selected)) throw new Error(`module is not in the baseline table: ${selected}`);
+const table = join(root, COMPILE_ARMS[arm].table);
+const recordFile = join(root, COMPILE_ARMS[arm].calibration);
 if (selected && !population.includes(selected)) throw new Error(`unknown compile-time module: ${selected}`);
+const previousTable = selected ? readFileSync(table, "utf8") : undefined;
+// A pending module has no row yet: its calibration adds one.
+const refreshed = selected ? readCounterTable(previousTable!, arm).rows.has(selected) : false;
 const modules = selected ? [selected] : population;
 const cannot = instructionsWork();
 if (cannot) throw new Error(`not measured: ${cannot}`);
@@ -62,12 +60,12 @@ const publish = (summary: Calibration) => {
   }
   if (selected && summary.commit !== commit) throw new Error("selected calibration source commit differs from this tree");
   const { text, policy, record } = selected
-    ? replaceCalibrationModules(previousTable!, JSON.parse(readFileSync(recordFile, "utf8")), summary, population, selected)
+    ? withCalibratedModule(previousTable!, JSON.parse(readFileSync(recordFile, "utf8")), summary, population, selected)
     : calibrationRecord(summary, population);
   // No writes occur until every row and its retained raw evidence is valid.
-  writeFileSync(join(root, "results", COMPILE_ARMS[arm].calibration), JSON.stringify(record, null, 2) + "\n");
-  writeFileSync(join(root, "tooling/gate", COMPILE_ARMS[arm].table), text);
-  console.log(`published ${arm}: ${modules.length} five-repeat medians, relative-only ratio ${policy.ratio.toFixed(2)}`);
+  writeFileSync(recordFile, JSON.stringify(record, null, 2) + "\n");
+  writeFileSync(table, text);
+  console.log(`published ${arm}: ${selected ? `${selected}'s row ${refreshed ? "refreshed" : "added"}` : `${modules.length} five-repeat medians`}, relative-only ratio ${policy.ratio.toFixed(2)}`);
 };
 const retained = option("--publish");
 if (retained) { publish(JSON.parse(readFileSync(retained, "utf8"))); process.exit(0); }

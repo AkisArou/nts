@@ -1,8 +1,8 @@
 import { measuredCompileEnvironment } from "./canonical-environment.ts";
 // Did lowering a runtime module regress beyond its calibrated instruction budget?
 //
-//   node tooling/gate/compile-time.mjs            check against compile-times.tsv
-//   node tooling/gate/compile-time.mjs --record   rewrite compile-times.tsv
+//   node tooling/gate/compile-time.mjs [--arm rc]           check against results/compile-times.tsv
+//   node tooling/gate/compile-time.mjs --record [--arm rc]  rewrite the whole table (compile-counter-calibrate.ts)
 //
 // # Why
 //
@@ -14,7 +14,7 @@ import { measuredCompileEnvironment } from "./canonical-environment.ts";
 // regression in one module is a few percent of any step that lowers it.
 //
 // Compare launch-time user-space instructions for `nts hir --prepared` with
-// compile-times.tsv. Inheritance includes every compiler thread from exec and
+// the arm's table. Inheritance includes every compiler thread from exec and
 // any descendants; these compiler inputs spawn no child processes. See cputime.mjs.
 // CPU seconds come from perf's waited-command rusage and validate the count;
 // missing or implausible readings fail closed, including for small modules.
@@ -29,6 +29,17 @@ import { measuredCompileEnvironment } from "./canonical-environment.ts";
 // module, or this is NOT MEASURED (exit 2). Run on its own, it lowers the
 // modules itself, each holding one of the gate's tokens.
 //
+// # The table is a record (docs/workflow.md, Records)
+//
+// A module with no row yet is pending: it is measured, listed in
+// tooling/records/pending.ts's words, and passes; the full check's records run
+// then calibrates its row (record-pending.ts's compile-times kind). A module
+// below its row by more than the band (under 1/ratio of it) has improved: it
+// is listed the same way and passes, and the records run re-records it, so a
+// regression back up to the old count fails. Inside the band nothing moves,
+// so no drift up is ever absorbed. A row whose module is gone is red: the
+// change that deletes a module deletes its rows.
+//
 // # When it fails
 //
 // A slower module after a compiler change is the finding: profile it
@@ -36,18 +47,19 @@ import { measuredCompileEnvironment } from "./canonical-environment.ts";
 // else. If the work is meant to be slower (a new analysis), rerun with
 // --record and say why in the commit.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, discoverCompileTimeFixtures, readCounterTable } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, compileTimeModules, readCounterTable } from "./compile-counter.ts";
+import { improvedLine, pendingLine } from "../records/pending.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const ARM = compileArm(process.argv.slice(2));
-const TABLE = join(HERE, COMPILE_ARMS[ARM].table);
+const TABLE = join(ROOT, COMPILE_ARMS[ARM].table);
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JOBS = Number(process.env.NTS_GATE_JOBS ?? 4);
 const RECORD = process.argv.includes("--record");
@@ -62,13 +74,7 @@ mkdirSync(cache, { recursive: true });
 const COUNTERS = join(process.env.NTS_GATE_RUN_DIR ?? mkdtempSync(join(cache, "run-")), "compile-time-counters", ARM);
 console.log(`  preparation arm: ${ARM}; baseline ${COMPILE_ARMS[ARM].table}`);
 
-const modules = [
-  ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
-    .map((e) => `runtime/node/${e.name}`),
-  ...(existsSync(join(ROOT, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
-  ...discoverCompileTimeFixtures(ROOT),
-].sort();
+const modules = compileTimeModules(ROOT);
 
 // Config evaluation would add Node/JIT work to a compiler-only tripwire.
 const configured = modules.filter(module => existsSync(join(ROOT, module, "nts.config.ts")));
@@ -162,17 +168,19 @@ await Promise.all(Array.from({ length: FROM ? 1 : Math.min(JOBS, modules.length)
 }));
 
 
-let failures = 0;
+let failures = 0, stale = 0, pending = 0;
 let sumNow = 0, sumWas = 0;
-const lines = [];
+const lines = [], listed = [];
+const record = COMPILE_ARMS[ARM].table;
 for (const module of modules) {
   const t = times.get(module);
   const was = base.get(module);
   if (t === undefined) continue;
-  // A module with no row is not checked against anything: red until recorded,
-  // whatever it measured.
+  // No row yet: measured and listed for the records, and its row is the full
+  // check's to write. Nothing is checked against it until then.
   if (was === undefined) {
-    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in ${COMPILE_ARMS[ARM].table} -- record it with --record --arm ${ARM}`);
+    pending += 1;
+    listed.push(`  ${pendingLine(module, record)}: ${t.g.toFixed(3)} G instructions here`);
     continue;
   }
   sumNow += t.g;
@@ -181,19 +189,25 @@ for (const module of modules) {
   if (ratio >= RATIO) {
     failures += 1;
     lines.push(`  SLOWER        ${module}: ${was.toFixed(1)} -> ${t.g.toFixed(1)} G instructions, ${ratio.toFixed(2)}x (${t.cpu?.toFixed(1) ?? "?"} s of CPU) -- profile it before anything else`);
+  } else if (ratio < 1 / RATIO) {
+    // Faster by more than the band: re-recorded, so a return to the old count fails.
+    listed.push(`  ${improvedLine(module, record, `${was.toFixed(3)} G`, `${t.g.toFixed(3)} G`)}`);
   }
 }
 for (const module of base.keys()) {
-  if (!modules.includes(module)) lines.push(`  gone          ${module}: in the table, not in the tree -- remove its row`);
+  if (modules.includes(module)) continue;
+  stale += 1;
+  lines.push(`  STALE         ${module}: a row in ${record} for a module the tree does not have -- the change that deletes a module deletes its rows`);
 }
 const moved = [...times].filter(([m]) => base.has(m))
   .map(([m, t]) => [m, t.g / base.get(m)]).sort((a, b) => b[1] - a[1]).slice(0, 3);
 console.log(`  compiler ${NTS} (${mine.slice(0, 12)})`);
-console.log(`  ${times.size} of ${modules.length} module(s) counted; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x of the fresh median`);
+console.log(`  ${times.size} of ${modules.length} module(s) counted${pending ? `, ${pending} of them pending` : ""}; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x of the fresh median`);
 if (moved.length) console.log(`  most moved: ${moved.map(([m, r]) => `${m.replace("runtime/", "")} ${r.toFixed(2)}x`).join(", ")}`);
+for (const l of listed) console.log(l);
 for (const l of lines) console.log(l);
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
-if (failures || unmeasured.length) {
-  console.log(`  ${failures} module(s) at least ${RATIO}x slower, ${unmeasured.length} not measured`);
+if (failures || stale || unmeasured.length) {
+  console.log(`  ${failures} module(s) at least ${RATIO}x slower, ${stale} stale row(s), ${unmeasured.length} not measured`);
   process.exit(1);
 }
