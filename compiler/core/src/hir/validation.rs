@@ -163,13 +163,6 @@ pub enum Check {
 }
 
 impl Check {
-    #[must_use]
-    pub fn operands(&self) -> Vec<ValueId> {
-        let mut operands = Vec::new();
-        self.visit_values(|value| operands.push(value));
-        operands
-    }
-
     pub fn visit_values(&self, mut visit: impl FnMut(ValueId)) {
         match self {
             Self::Scalar {

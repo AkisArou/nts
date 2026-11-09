@@ -2720,19 +2720,117 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
     }
 }
 
+/// The values an operation reads, in a new list allocated once at its length.
 pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
+    reads(kind).to_vec()
+}
+
+/// The values one operation reads, as their shape: none, one, two or three
+/// of its fields, a list it carries, or a validation's check. Nothing is
+/// allocated, so a pass that asks it of every op -- or of every op for each
+/// array it is asked about, as `allocated_length_is_exact` does -- pays no
+/// list per question. [`operands`] is this in a new list.
+///
+/// A list allocated per question was about four fifths of what two programs
+/// took to compile: jetstream-flight-planner, through scalar replacement's
+/// search over its module initializer's objects, and
+/// jetstream-stanford-crypto-aes, through the length fold's over its arrays.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Reads<'a> {
+    None,
+    One(ValueId),
+    Two(ValueId, ValueId),
+    Three(ValueId, ValueId, ValueId),
+    /// A call's arguments.
+    List(&'a [ValueId]),
+    /// An `await`'s promise, then every argument its rejection edge owes its
+    /// handler.
+    Then(ValueId, &'a [ValueId]),
+    /// A validation's check, which lists its own values.
+    Check(&'a super::validation::Check),
+}
+
+impl Reads<'_> {
+    /// Each value, in order.
+    pub(crate) fn each(self, mut visit: impl FnMut(ValueId)) {
+        match self {
+            Self::None => {}
+            Self::One(a) => visit(a),
+            Self::Two(a, b) => {
+                visit(a);
+                visit(b);
+            }
+            Self::Three(a, b, c) => {
+                visit(a);
+                visit(b);
+                visit(c);
+            }
+            Self::List(list) => list.iter().copied().for_each(visit),
+            Self::Then(first, list) => {
+                visit(first);
+                list.iter().copied().for_each(visit);
+            }
+            Self::Check(check) => check.visit_values(visit),
+        }
+    }
+
+    /// Whether `value` is one of them.
+    pub(crate) fn contains(self, value: ValueId) -> bool {
+        match self {
+            Self::None => false,
+            Self::One(a) => a == value,
+            Self::Two(a, b) => a == value || b == value,
+            Self::Three(a, b, c) => a == value || b == value || c == value,
+            Self::List(list) => list.contains(&value),
+            Self::Then(first, list) => first == value || list.contains(&value),
+            Self::Check(check) => {
+                let mut found = false;
+                check.visit_values(|read| found |= read == value);
+                found
+            }
+        }
+    }
+
+    /// In a new list, allocated once at its length.
+    pub(crate) fn to_vec(self) -> Vec<ValueId> {
+        match self {
+            Self::None => Vec::new(),
+            Self::One(a) => vec![a],
+            Self::Two(a, b) => vec![a, b],
+            Self::Three(a, b, c) => vec![a, b, c],
+            Self::List(list) => list.to_vec(),
+            Self::Then(first, list) => {
+                let mut read = Vec::with_capacity(1 + list.len());
+                read.push(first);
+                read.extend_from_slice(list);
+                read
+            }
+            Self::Check(check) => {
+                let mut read = Vec::new();
+                check.visit_values(|value| read.push(value));
+                read
+            }
+        }
+    }
+}
+
+/// The values an operation reads: the one definition of them, which
+/// [`operands`] and every pass asking of an op's operands read.
+pub(crate) fn reads(kind: &OpKind) -> Reads<'_> {
     match kind {
-        OpKind::Validation(witness) => witness.check.operands(),
-        OpKind::Optional { defined, payload } => vec![*defined, *payload],
+        OpKind::Validation(witness) => Reads::Check(&witness.check),
+        OpKind::Optional { defined, payload } => Reads::Two(*defined, *payload),
         OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value, .. }
         | OpKind::InstanceOf { value, .. }
         | OpKind::ViewOfClass { view: value, .. }
         | OpKind::SharedFieldGet { value, .. }
-        | OpKind::OpenFieldGet { object: value, .. } => {
-            vec![*value]
-        }
+        | OpKind::OpenFieldGet { object: value, .. }
+        | OpKind::OptionalDefined(value)
+        | OpKind::OptionalPayload(value)
+        | OpKind::Yield { value }
+        | OpKind::GlobalSet { value, .. } => Reads::One(*value),
         // A receiver and a stored value, or a copy's two ends: two operands and
         // nothing else, whatever the fields are called.
         OpKind::OpenFieldSet {
@@ -2743,26 +2841,25 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::NativeCopy {
             destination: first,
             source: second,
-        } => vec![*first, *second],
+        } => Reads::Two(*first, *second),
+        // Every argument the rejection edge owes its handler is read here,
+        // which is what keeps them live to this point. Without it the values
+        // were dead at the `await` and `rc` released them before the handler
+        // could be given them.
         OpKind::Await {
             promise,
             rejects_to,
-        } => {
-            let mut read = vec![*promise];
-            // Every argument the rejection edge owes its handler is read here,
-            // which is what keeps them live to this point. Without it the
-            // values were dead at the `await` and `rc` released them before
-            // the handler could be given them.
-            if let Some(rejection) = rejects_to {
-                read.extend(rejection.args.iter().copied());
-            }
-            read
-        }
-        OpKind::CellReady { cell, .. } => vec![*cell],
-        OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
+        } => Reads::Then(
+            *promise,
+            rejects_to
+                .as_ref()
+                .map_or(&[][..], |rejection| rejection.args.as_slice()),
+        ),
+        OpKind::CellReady { cell, .. } => Reads::One(*cell),
+        OpKind::Suspend { promise, frame, .. } => Reads::Two(*promise, *frame),
         OpKind::PromiseSubscribe {
             promise, reaction, ..
-        } => vec![*promise, *reaction],
+        } => Reads::Two(*promise, *reaction),
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -2777,58 +2874,54 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
-        | OpKind::GlobalGet(_) => Vec::new(),
-        OpKind::OptionalDefined(value)
-        | OpKind::OptionalPayload(value)
-        | OpKind::Yield { value }
-        | OpKind::GlobalSet { value, .. } => vec![*value],
-        OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
-        OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
+        | OpKind::GlobalGet(_)
+        | OpKind::NativeLocal { .. }
+        | OpKind::NativeSizeOf(_)
+        | OpKind::ObjcClass { .. }
+        | OpKind::ObjcSelector { .. }
+        | OpKind::DelegateInvoke { .. } => Reads::None,
+        OpKind::StringUnitAt { string, index, .. } => Reads::Two(*string, *index),
+        OpKind::Binary { lhs, rhs, .. } => Reads::Two(*lhs, *rhs),
         // A view's string is an operand like a converted value's, and for the
         // same reason it matters: the view holds no count, so it leans on what
         // it reads (`rc`'s `Leaning`), and the string outlives its last read.
         OpKind::Unary { operand, .. }
         | OpKind::Convert(operand)
         | OpKind::NativeStringView { string: operand }
-        | OpKind::FieldView { value: operand, .. } => vec![*operand],
-        OpKind::Call { args, .. } => args.clone(),
-        OpKind::ArrayNew { length, .. } => vec![*length],
+        | OpKind::FieldView { value: operand, .. } => Reads::One(*operand),
+        OpKind::Call { args, .. } => Reads::List(args),
+        OpKind::ArrayNew { length, .. } => Reads::One(*length),
         OpKind::Length(array) | OpKind::Retain(array) | OpKind::Release(array) => {
-            vec![*array]
+            Reads::One(*array)
         }
-        OpKind::FieldGet { object, .. } => vec![*object],
-        OpKind::FieldSet { object, value, .. } => vec![*object, *value],
-        OpKind::NativeLocal { .. }
-        | OpKind::NativeSizeOf(_)
-        | OpKind::ObjcClass { .. }
-        | OpKind::ObjcSelector { .. }
-        | OpKind::DelegateInvoke { .. } => vec![],
-        OpKind::NativeBridge { closure, .. } => vec![*closure],
+        OpKind::FieldGet { object, .. } => Reads::One(*object),
+        OpKind::FieldSet { object, value, .. } => Reads::Two(*object, *value),
+        OpKind::NativeBridge { closure, .. } => Reads::One(*closure),
         OpKind::NativeBlock {
             invoke, context, ..
-        } => vec![*invoke, *context],
-        OpKind::NativeMalloc { bytes } => vec![*bytes],
+        } => Reads::Two(*invoke, *context),
+        OpKind::NativeMalloc { bytes } => Reads::One(*bytes),
         OpKind::NativeFieldAddress { pointer, .. }
         | OpKind::NativeBitLoad { pointer, .. }
         | OpKind::NativeFree { pointer }
-        | OpKind::NativePointerBits { pointer } => vec![*pointer],
+        | OpKind::NativePointerBits { pointer } => Reads::One(*pointer),
         OpKind::NativeIndexAddress { pointer, index } | OpKind::NativeLoad { pointer, index } => {
-            vec![*pointer, *index]
+            Reads::Two(*pointer, *index)
         }
         OpKind::NativeStore {
             pointer,
             index,
             value,
-        } => vec![*pointer, *index, *value],
-        OpKind::NativeBitStore { pointer, value, .. } => vec![*pointer, *value],
-        OpKind::ArrayGet { array, index, .. } => vec![*array, *index],
+        } => Reads::Three(*pointer, *index, *value),
+        OpKind::NativeBitStore { pointer, value, .. } => Reads::Two(*pointer, *value),
+        OpKind::ArrayGet { array, index, .. } => Reads::Two(*array, *index),
         OpKind::ArraySet {
             array,
             index,
             value,
             ..
-        } => vec![*array, *index, *value],
-        OpKind::Return(value) => value.iter().copied().collect(),
+        } => Reads::Three(*array, *index, *value),
+        OpKind::Return(value) => value.map_or(Reads::None, Reads::One),
     }
 }
 
@@ -2965,6 +3058,42 @@ mod tests {
                 ),
             ],
         )
+    }
+
+    /// A pass reads an op's operands one of three ways -- each in turn,
+    /// whether one value is among them, or as a list -- and the three must
+    /// agree, in order.
+    #[test]
+    fn the_three_readings_of_an_ops_operands_agree() {
+        let kinds = [
+            OpKind::ConstNull,
+            OpKind::Return(Some(ValueId(4))),
+            OpKind::FieldSet {
+                object: ValueId(1),
+                field: 0,
+                value: ValueId(2),
+            },
+            OpKind::NativeStore {
+                pointer: ValueId(1),
+                index: ValueId(2),
+                value: ValueId(3),
+            },
+            OpKind::Call {
+                callee: Callee::External("f".to_owned()),
+                args: vec![ValueId(3), ValueId(1), ValueId(2)],
+                frame: None,
+            },
+        ];
+        for kind in &kinds {
+            let mut each = Vec::new();
+            reads(kind).each(|value| each.push(value));
+            assert_eq!(reads(kind).to_vec(), each);
+            assert_eq!(operands(kind), each);
+            for value in (0..6u32).map(ValueId) {
+                assert_eq!(reads(kind).contains(value), each.contains(&value));
+            }
+        }
+        assert_eq!(operands(&kinds[4]), [ValueId(3), ValueId(1), ValueId(2)]);
     }
 
     #[test]

@@ -4547,15 +4547,29 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
 /// shorten an array, say -- out of sight of a test that reads only `value`'s
 /// own uses. See [`allocated_length_is_exact`].
 pub(super) fn carried_by_an_edge(func: &Func, value: ValueId) -> bool {
-    func.blocks.iter().any(|block| match &block.terminator {
-        Terminator::Jump { args, .. } => args.contains(&value),
+    func.blocks.iter().any(|block| {
+        edge_arguments(&block.terminator)
+            .iter()
+            .any(|args| args.contains(&value))
+    })
+}
+
+/// What a jump or branch passes to block parameters, edge by edge: a jump's
+/// arguments, or a branch's then-arguments and else-arguments.
+///
+/// What [`carried_by_an_edge`] asks of one value, for a pass that asks it of
+/// every value at once: `scalarize::candidates` reads each terminator once
+/// rather than every terminator for each object.
+pub(super) fn edge_arguments(terminator: &Terminator) -> [&[ValueId]; 2] {
+    match terminator {
+        Terminator::Jump { args, .. } => [args, &[]],
         Terminator::Branch {
             then_args,
             else_args,
             ..
-        } => then_args.contains(&value) || else_args.contains(&value),
-        _ => false,
-    })
+        } => [then_args, else_args],
+        _ => [&[], &[]],
+    }
 }
 
 /// Whether one operation's use of an array leaves its allocated length exact.
@@ -4608,7 +4622,7 @@ fn use_keeps_the_allocated_length(func: &Func, array: ValueId, kind: &OpKind) ->
 /// So: this answers "did the reference leave", both callers require it, and the
 /// growing-store question is asked only by the caller it is a hazard for.
 fn use_keeps_the_array_here(array: ValueId, kind: &OpKind) -> bool {
-    if !operands_of(kind).contains(&array) {
+    if !verify::reads(kind).contains(array) {
         return true;
     }
     match kind {

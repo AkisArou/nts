@@ -263,67 +263,105 @@ fn takeable(ty: &HirType) -> bool {
     )
 }
 
-/// The objects in `func` this replaces, with their layouts.
+/// An object [`candidates`] may take apart, and whether every use of it seen
+/// so far allows that.
+struct Candidate {
+    object: ValueId,
+    layout: usize,
+    taken: bool,
+}
+
+/// The objects in `func` this replaces, with their layouts, in the order its
+/// blocks make them.
+///
+/// **Each object is judged by its own uses.** Every op is read once, and each
+/// operand that is one of the objects is judged as a use of it. The first form
+/// asked every object about every op of the function, with a list of operands
+/// allocated per pair: jetstream-flight-planner's module initializer makes 84k
+/// entry objects, and that pair loop was about nine tenths of the 568 s its
+/// `emit-c` took. An op that does not read an object never had a say in it.
 fn candidates(
     func: &Func,
     program: &Program,
     layouts: &LayoutIndex,
     constructors: &FxHashMap<String, Vec<(u32, Stored)>>,
 ) -> Vec<(ValueId, usize)> {
-    let live: Vec<ValueId> = func
-        .blocks
-        .iter()
-        .flat_map(|block| block.ops.iter().copied())
-        .collect();
-    let reachable = super::verify::reachable_blocks(func);
-    // Uses in a block nothing reaches are not walked, so an object one of
-    // them names is left alone rather than left half replaced.
-    let unreached: Vec<ValueId> = func
-        .blocks
+    let mut found: Vec<Candidate> = Vec::new();
+    for block in &func.blocks {
+        for &object in &block.ops {
+            let op = &func.values[object.0 as usize];
+            if !matches!(op.kind, OpKind::ObjectNew { .. }) {
+                continue;
+            }
+            let Some(layout) = layouts.of(&op.ty) else {
+                continue;
+            };
+            if program.layouts[layout]
+                .fields
+                .iter()
+                .all(|field| takeable(&field.ty))
+            {
+                found.push(Candidate {
+                    object,
+                    layout,
+                    taken: true,
+                });
+            }
+        }
+    }
+    if found.is_empty() {
+        return Vec::new();
+    }
+    let slot: FxHashMap<ValueId, usize> = found
         .iter()
         .enumerate()
-        .filter(|(at, _)| !reachable.contains(&BlockId(u32::try_from(*at).unwrap_or(0))))
-        .flat_map(|(_, block)| block.ops.iter().copied())
+        .map(|(at, candidate)| (candidate.object, at))
         .collect();
-    let mut found = Vec::new();
-    for &object in &live {
-        let op = &func.values[object.0 as usize];
-        if !matches!(op.kind, OpKind::ObjectNew { .. }) {
-            continue;
-        }
-        let Some(layout) = layouts.of(&op.ty) else {
-            continue;
-        };
-        if !program.layouts[layout]
-            .fields
-            .iter()
-            .all(|field| takeable(&field.ty))
-        {
-            continue;
-        }
-        let returned = func
-            .blocks
-            .iter()
-            .any(|block| block.terminator == Terminator::Return(Some(object)));
-        if returned || super::carried_by_an_edge(func, object) {
-            continue;
-        }
-        if unreached
-            .iter()
-            .any(|op| super::operands_of(&func.values[op.0 as usize].kind).contains(&object))
-        {
-            continue;
-        }
-        let fields = &program.layouts[layout].fields;
-        if live.iter().all(|op| {
+    let reachable = super::verify::reachable_blocks(func);
+    for (at, block) in func.blocks.iter().enumerate() {
+        // Uses in a block nothing reaches are not walked, so an object one of
+        // them names is left alone rather than left half replaced.
+        let reached = reachable.contains(&BlockId(u32::try_from(at).unwrap_or(0)));
+        for &op in &block.ops {
             let kind = &func.values[op.0 as usize].kind;
-            only_its_fields(object, kind, constructors)
-                && arguments_fit(func, object, kind, fields, constructors)
-        }) {
-            found.push((object, layout));
+            super::verify::reads(kind).each(|object| {
+                let Some(&index) = slot.get(&object) else {
+                    return;
+                };
+                let candidate = &mut found[index];
+                candidate.taken = candidate.taken
+                    && reached
+                    && only_its_fields(object, kind, constructors)
+                    && arguments_fit(
+                        func,
+                        object,
+                        kind,
+                        &program.layouts[candidate.layout].fields,
+                        constructors,
+                    );
+            });
+        }
+        // A `return` of it, or a block argument, keeps it an object.
+        let returned = match block.terminator {
+            Terminator::Return(Some(value)) => Some(value),
+            _ => None,
+        };
+        for value in returned.into_iter().chain(
+            super::edge_arguments(&block.terminator)
+                .into_iter()
+                .flatten()
+                .copied(),
+        ) {
+            if let Some(&index) = slot.get(&value) {
+                found[index].taken = false;
+            }
         }
     }
     found
+        .into_iter()
+        .filter(|candidate| candidate.taken)
+        .map(|candidate| (candidate.object, candidate.layout))
+        .collect()
 }
 
 /// Whether a constructor call's stored arguments can become its fields.
@@ -367,16 +405,13 @@ fn arguments_fit(
     })
 }
 
-/// Whether one operation uses `object` only as the object whose fields it
-/// reads or writes.
+/// Whether an operation that reads `object` uses it only as the object whose
+/// fields it reads or writes.
 fn only_its_fields(
     object: ValueId,
     kind: &OpKind,
     constructors: &FxHashMap<String, Vec<(u32, Stored)>>,
 ) -> bool {
-    if !super::operands_of(kind).contains(&object) {
-        return true;
-    }
     match kind {
         OpKind::FieldGet { object: of, .. } => *of == object,
         OpKind::FieldSet {
