@@ -31,6 +31,7 @@
     "arm64-sysroot": { "kind": "kept", "writer": "tooling/android/arm-barrier.sh", "why": "the arm64 sysroot" },
     "case-roots": { "kind": "kept", "writer": "tooling/census/project.ts", "why": "the census's case roots, which it expires itself" },
     "c-objects": { "kind": "kept", "writer": "tooling/census/conformance262.ts", "why": "compiled runtime objects, by content" },
+    "conformance262": { "kind": "scratch", "writer": "tooling/census/census-scratch.ts" },
     "differential-objects": { "kind": "kept", "writer": "tooling/differential/src/objects.rs", "why": "the differential's objects, by content" },
     "expect-ir": { "kind": "scratch", "writer": "tooling/conformance/expect-ir.ts" },
     "gate-scope-entries": { "kind": "scratch", "writer": "tooling/gate/train/step-scope.ts" },
@@ -48,10 +49,11 @@
     "worker-memory": { "kind": "scratch", "writer": "tooling/census/worker-memory.ts" }
   } },
   "nts-agree": { "kind": "kept", "writer": "tooling/differential/agree.mjs", "why": "the differential's binaries and objects, by content" },
-  "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and the logs of gates run by hand", "folders": {
+  "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and target, and the logs of gates run by hand", "folders": {
     "bin": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the binaries a run executes, by content" },
     "runs": { "kind": "logs", "who": "gates run by hand (all.sh, pinned.sh)", "writer": "tooling/gate/run.mjs", "why": "their logs" },
     "tree": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's tree, at the commit it runs" },
+    "target": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's build of that tree" },
     "closed-temporaries": { "kind": "kept", "writer": "tooling/gate/run-temporary.ts", "why": "the registry of closed run temporaries" },
     "artifact-shadow": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the artifact shadow's results" }
   } },
