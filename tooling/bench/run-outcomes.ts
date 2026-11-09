@@ -99,7 +99,7 @@ export function benchmarkRun(record: DecodedCheck): BenchmarkRun | null {
   const diagnostic = (one: { code: string; message: string } | undefined, otherwise: string) =>
     normalizeGeneratedNumbers(stableCheckText(one ? `${one.code} ${one.message}` : otherwise));
   switch (record.outcome) {
-    case "pending": case "oracle budget exceeded": return null;
+    case "pending": return null;
     case "agrees": case "agrees on what it compared": return { kind: "agrees" };
     case "nothing to check": return { kind: "no-scalar-exports" };
     case "timed out": return { kind: "timeout", stage: record.timeout!.stage };

@@ -3,8 +3,6 @@ import {writeFileSync,mkdirSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {createInterface} from 'node:readline';
 import {OracleWorker,REPOSITORY,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot,type OraclePrepared} from './oracle-emit.ts';
-import {requestOracleImprovement} from './oracle-records.ts';
-import type {OracleBudget} from './oracle-execution.ts';
 import {resultHash,type ProgramAnswer} from './oracle-results.ts';
 import {OracleFilesystem} from './oracle-filesystem.ts';
 import type {ProgramOracleTask} from './program-oracles.ts';
@@ -44,11 +42,10 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
       const planText=command([task.project]),plan=JSON.parse(planText) as {driver:string;case_count:number};
       const file=join(scratch,'plan.json');writeFileSync(file,planText);
       const result=JSON.parse(command(['--execute',file,resultHash(planText),owner.manifest,scratch])) as
-        {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[];budget?:OracleBudget};
+        {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[]};
       if(result.version!==1||result.provisional!==true)throw Error('program oracle supervisor returned no provisional answer');
-      answer=result.budget?{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'budget',driverSha256:resultHash(plan.driver),budget:result.budget}
-        :{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'calls',driverSha256:resultHash(plan.driver),count:plan.case_count,
-          rows:result.rows,stdout:result.stdout,stderr:result.stderr,replay:owner};
+      answer={version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'calls',driverSha256:resultHash(plan.driver),count:plan.case_count,
+        rows:result.rows,stdout:result.stdout,stderr:result.stderr,replay:owner};
     }else{
       const observation=observeOutcomeNode(owner,task.entry,dirname(task.project));
       if(!observation.complete)throw Error('outcome oracle did not complete: '+observation.result);
@@ -57,8 +54,6 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
     const final=finishOracleSnapshot(owner);if(!final.ready)throw Error(final.why);
     if(!oracleSnapshotReady(owner).ready)throw Error('program oracle finalizer did not complete');
     const capture=captureProgramOracle(owner);
-    if(answer.kind==='calls')requestOracleImprovement(REPOSITORY,task.entry);
-    if(answer.kind==='budget')console.error('ORACLE BUDGET: '+task.subject+': '+JSON.stringify(answer.budget));
     // Only executable data needed by rare selected-window replays survives.
     // The warm SDK and its captured package bytes are never retained here.
     keep=answer.kind==='calls';

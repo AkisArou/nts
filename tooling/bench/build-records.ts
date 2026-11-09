@@ -69,10 +69,7 @@ export async function benchmarkIdentities(root: string, paths: string[], scratch
         const program = project.program;
         const sources = program.getSourceFileNames();
         assert.ok(sources.includes(join(root, path, "case.ts") as typeof sources[number]), `benchmark identity has no checked entry: ${path}`);
-        // The oracle's call population is not a compile input. An actual
-        // source import still enters through the checked graph above.
-        const data = regularFiles(join(root, path)).filter(file => file !== join(root, path, "case.domains.json"));
-        const inputs = new Set([...sources, ...program.getConfigFileNames(), ...data]);
+        const inputs = new Set([...sources, ...program.getConfigFileNames(), ...regularFiles(join(root, path))]);
         const entries: [string, string][] = [];
         for (const file of inputs) {
           if (file === config && config.startsWith(scratch + "/")) {

@@ -164,13 +164,3 @@ test("manual instruments use the explicit legacy decoder for old compiler fields
   assert.throws(() => decodeCheck("json-v1", 1, wrong));
   assert.throws(() => decodeCheck("json-v1", 1, refused));
 });
-
-test('version 3 oracle budgets are loud typed case outcomes with no invented count',()=>{
-  const budget={phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'};
-  const value={version:3,status:'error',counts:null,oracle:null,refusals:[],disagreements:[],aborts:[],incomplete:[],error:{kind:'oracle_budget',source:'benchmarks/cases/private/case.ts',message:'ORACLE BUDGET: timeout at 60 CPU-s',budget:{recorded:true,value:budget}}};
-  const decoded=decodeCheck('json-v1',1,JSON.stringify(value),'');
-  assert.equal(decoded.outcome,Outcome.ORACLE_BUDGET);assert.equal(decoded.checked,0);assert.equal(decoded.report!.counts,null);
-  assert.equal(consumerExit(decoded,'benchmark'),5,'known budget is neither agreement nor pending');
-  assert.equal(consumerExit({...decoded,budget:{recorded:false,value:decoded.budget!.value}},'benchmark'),1,'a budget replacing a count is red');
-  assert.throws(()=>parseJsonReport(JSON.stringify({...value,version:2}),1),/fields|revision/);
-});

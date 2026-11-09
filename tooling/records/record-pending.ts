@@ -42,10 +42,9 @@ import { compareTypeScriptObservation, parseObservation, parseTypeScriptRecord, 
 import { acceptedChange, improves, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
-import { pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures } from "../differential/oracle-records.ts";
+import { pendingFixtures, recordPath, RECORDS } from "../differential/oracle-records.ts";
 import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
 import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets } from "../android/dex-record.ts";
-import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import { inventory, pendingLine } from "./pending.ts";
 
 export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex"] as const;
@@ -90,18 +89,6 @@ export function findPending(root: string, kind: Kind): Pending[] {
       return inventory(recorded, dexTargets(root)).pending.map(name => ({ kind, name, record: DEX_RECORD }));
     }
   }
-}
-
-/** These are refresh requests, not pending cases and not reused answers. */
-export function oracleRefreshes(root:string):Pending[]{
-  const names=new Set(hintedOracleImprovements(root));
-  for(const name of oracleBudgetFixtures(root)){
-    const file=join(root,recordPath(name));if(!existsSync(file))continue;
-    const raw=JSON.parse(read(root,recordPath(name)));
-    if(!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))continue;
-    for(const row of parseShard(raw,name).rows)if(row.kind==='budget'&&JSON.stringify(row.revision)!==JSON.stringify(oracleBudgetRevision(root,row.source)))names.add(name);
-  }
-  return [...names].sort().map(name=>({kind:'oracle-counts',name,record:recordPath(name)}));
 }
 
 /** The recorder runs one kind needs, as node arguments from the root. */
@@ -221,21 +208,8 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
     return recorded;
   }
   if (kind === "oracle-counts") {
+    assert.equal(before, null, `${file}: a recorded population was rewritten; a count has no improvement`);
     const fixture = file.slice(`${RECORDS}/`.length, -".json".length);
-    if(before!==null){
-      const old=JSON.parse(before),next=JSON.parse(after);
-      assert.ok(old.rows?.some((row:{kind?:string})=>row.kind==='budget'),`${file}: a recorded population was rewritten; a count has no improvement`);
-      const was=parseShard(old,fixture),now=parseShard(next,fixture);const improved:string[]=[];
-      assert.equal(was.rows.length,now.rows.length,'oracle refresh changed its population inventory');
-      for(const row of was.rows){
-        const replacement=now.rows.find(one=>one.source===row.source&&one.signature===row.signature);
-        assert.ok(replacement,'oracle refresh removed a population');
-        if(JSON.stringify(row)===JSON.stringify(replacement))continue;
-        assert.ok(row.kind==='budget'&&(replacement.kind==='measured'||replacement.kind==='budget'&&JSON.stringify(row.revision)!==JSON.stringify(replacement.revision)),'only a budget -> measured improvement or changed budget identity may replace a recorded row');
-        improved.push(row.source+' budget -> '+replacement.kind);
-      }
-      assert.ok(improved.length,'a recorded population was rewritten without an improvement');return improved;
-    }
     assert.ok(pending.has(fixture), `${file} was written for ${fixture}, which was not pending`);
     return [`${fixture} (pending)`];
   }
@@ -269,18 +243,14 @@ const runNode: Runner = (args, root) => {
 export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line)): number {
   let failed = 0, recorded = 0;
   for (const kind of kinds) {
-    const missing = findPending(root, kind);
-    const refreshes = kind === 'oracle-counts' ? oracleRefreshes(root) : [];
-    const pending = [...missing, ...refreshes];
-    say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded budget refresh(es)` : ''}`);
-    for (const one of missing) say(`  ${pendingLine(one.name, one.record)}`);
-    for (const one of refreshes) say(`  ORACLE BUDGET refresh ${one.name} (${one.record})`);
+    const pending = findPending(root, kind);
+    say(`${kind}: ${pending.length} pending`);
+    for (const one of pending) say(`  ${pendingLine(one.name, one.record)}`);
     const before = snapshot(root, kind, pending);
     for (const args of recorderRuns(kind, pending)) {
       say(`  running: node ${args.join(" ")}`);
       const status = run(args, root);
       if (status !== 0) { say(`  ${kind}: the recorder exited ${status}`); failed += 1; }
-      else if(kind==='oracle-counts')for(const name of args.slice(1))rmSync(oracleImprovementPath(name),{force:true});
     }
     for (const [file, was] of before) {
       const now = existsSync(join(root, file)) ? read(root, file) : null;

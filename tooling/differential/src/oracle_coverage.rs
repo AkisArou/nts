@@ -17,12 +17,12 @@ use serde_json::Value;
 
 use super::check_report::Pending;
 
+pub(super) const CPU_SECONDS: u64 = 15;
 pub(super) const IDLE_MILLIS: u64 = 300_000;
 
 pub(super) struct Coverage {
     pub(super) count: usize,
     pub(super) key: String,
-    pub(super) budget: Option<Value>,
 }
 
 /// What the checked-in records promise for one source on one backend.
@@ -80,72 +80,7 @@ pub(super) fn resolve(
             }));
         }
     }
-    let budget = recorded_budget(entry, backend.name(), &key)?;
-    if let Some(budget) = &budget {
-        eprintln!("ORACLE BUDGET (recorded, retrying): {entry}: {budget}");
-    }
-    Ok(Resolution::Recorded(Coverage { count, key, budget }))
-}
-
-#[derive(Debug)]
-pub(crate) struct BudgetExceeded {
-    pub(crate) budget: Value,
-    pub(crate) recorded: bool,
-}
-impl std::fmt::Display for BudgetExceeded {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ORACLE BUDGET: {}", self.budget)
-    }
-}
-impl std::error::Error for BudgetExceeded {}
-
-pub(super) fn recorded_budget(entry: &Utf8Path, backend: &str, key: &str) -> Result<Option<Value>> {
-    let Some((root, source)) = root_and_source(entry) else {
-        return Ok(None);
-    };
-    let Some(table) = super::oracle_records::read(&root, &source)? else {
-        return Ok(None);
-    };
-    Ok(table["rows"]
-        .as_array()
-        .context("oracle rows missing")?
-        .iter()
-        .find(|row| {
-            row["source"] == source && row["keys"][backend] == key && row["kind"] == "budget"
-        })
-        .map(|row| row["budget"].clone()))
-}
-
-/// A hint schedules fresh recording. It never supplies a count or a verdict.
-pub(super) fn improvement(entry: &Utf8Path, coverage: &Coverage) -> Result<()> {
-    if coverage.budget.is_none() {
-        return Ok(());
-    }
-    let Some((root, source)) = root_and_source(entry) else {
-        return Ok(());
-    };
-    let fixture = source.split('/').take(3).collect::<Vec<_>>().join("/");
-    let record = root.join(super::oracle_records::record_path(&source)?);
-    let home = std::env::var("HOME").context("oracle improvement has no HOME")?;
-    let directory = Utf8Path::new(&home).join(".cache/nts-oracle-record/improvements");
-    std::fs::create_dir_all(&directory)?;
-    let file = directory.join(format!(
-        "{}.json",
-        super::oracle_emit::digest(fixture.as_bytes())
-    ));
-    let temporary = file.with_extension(format!("{}.partial", std::process::id()));
-    std::fs::write(
-        &temporary,
-        serde_json::to_vec(
-            &serde_json::json!({"fixture":fixture,"recordSha256":super::oracle_emit::digest(&std::fs::read(record)?)}),
-        )?,
-    )?;
-    std::fs::rename(temporary, file)?;
-    eprintln!(
-        "ORACLE IMPROVED: {source}: budget -> measured {}; fresh recording requested",
-        coverage.count
-    );
-    Ok(())
+    Ok(Resolution::Recorded(Coverage { count, key }))
 }
 
 /// Whether the source is recorded, holding a recorded one to its row. `false`
@@ -214,15 +149,6 @@ fn validate(
                     .as_str()
                     .is_some_and(|reason| !reason.is_empty()),
             "oracle not measured: no-oracle identity changed for {source} ({backend}); re-record it explicitly"
-        );
-        return Ok(());
-    }
-    if row["kind"] == "budget" {
-        ensure!(
-            row.get("count").is_none()
-                && row.get("complete").is_none()
-                && row["budget"]["version"] == 1,
-            "invalid versioned oracle budget row: {source}"
         );
         return Ok(());
     }
@@ -331,7 +257,6 @@ mod tests {
         let coverage = Coverage {
             count: 2,
             key: "key".into(),
-            budget: None,
         };
         let status = json!({"version":2,"exit_code":0,"signal":null,"stop":null});
         assert!(measured_rows(vec!["one".into()], None, &status, &coverage).is_err());

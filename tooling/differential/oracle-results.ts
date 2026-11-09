@@ -6,21 +6,19 @@ import {dirname,isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {stripTypeScriptTypes} from 'node:module';
 import {readOracleSnapshotIndex,writeOracleSnapshotIndex,validateHostObservations,type HostObservation,type OracleSnapshotReference} from './oracle-filesystem.ts';
-import {ORACLE_EXECUTION_FILES,oracleRecipeIdentity,checkNodeResolutionSession,type NodeResolutionSession} from './oracle-runtime.ts';
-import type {OracleBudget} from './oracle-runtime.ts';
+import {oracleRecipeIdentity,checkNodeResolutionSession,type NodeResolutionSession} from './oracle-runtime.ts';
 import type {OracleIdentity,OraclePrepared} from './oracle-emit.ts';
 
 export const resultHash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 export type ProgramAnswer={version:1;subject:string;project:string;entry:string}&(
   {kind:'calls';driverSha256:string;count:number;rows:string[];stdout:number[];stderr:number[];replay?:OraclePrepared}
-  |{kind:'budget';driverSha256:string;budget:OracleBudget}
   |{kind:'observation';observation:{result:string;printed:{stdout:string;stderr:string};complete:true}});
 export type ProgramCapture={observations:HostObservation[];dependencyObservations?:HostObservation[];session:NodeResolutionSession};
 export type ProgramOracleHandoff={file:string;sha256:string};
 type ReaderRuntime={version:1;directory:string;bootstrapSha256:string;assets:Record<string,string>};
 type Root={runtime:ReaderRuntime;version:1;directory:string;identity:OracleIdentity;readerSha256:string;index:OracleSnapshotReference;count:number};
 const READER_MODULES=['oracle-results','oracle-filesystem','oracle-runtime'] as const;
-const RECIPE_SOURCES=[...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-assets.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-toolchain.json','oracle-results.ts','oracle-result-bootstrap.ts'];
+const RECIPE_SOURCES=['oracle-emit.ts','oracle-loader.ts','oracle-assets.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-toolchain.json','oracle-results.ts','oracle-result-bootstrap.ts'];
 const readerSourceHash=()=>resultHash(readFileSync(new URL('./oracle-results.ts',import.meta.url)));
 function publishReaderRuntime(directory:string):ReaderRuntime{
   const here=dirname(fileURLToPath(import.meta.url)),runtime=join(directory,'reader');mkdirSync(runtime,{recursive:true});
@@ -52,9 +50,6 @@ function measured(value:ProgramAnswer):void{
   if(value.kind==='calls'){
     if(!digest(value.driverSha256)||!Number.isSafeInteger(value.count)||value.count<0||!Array.isArray(value.rows)||value.rows.length!==value.count||value.rows.some(row=>typeof row!=='string')||
       [value.stdout,value.stderr].some(bytes=>!Array.isArray(bytes)||bytes.some(byte=>!Number.isInteger(byte)||byte<0||byte>255)))invalid('has an incomplete call result: '+value.subject);
-  }else if(value.kind==='budget'){
-    if(!digest(value.driverSha256)||!['prepare','execute'].includes(value.budget?.phase)||!['timeout','memory-cap'].includes(value.budget?.outcome)||!Number.isFinite(value.budget.bound)||value.budget.bound<=0||typeof value.budget.reason!=='string'||!value.budget.reason)invalid('has an invalid case budget: '+value.subject);
-    if('rows' in value||'count' in value||'complete' in value)invalid('budget cannot claim Node coverage');
   }else if(value.kind==='observation'){
     if(value.observation?.complete!==true||typeof value.observation.result!=='string'||typeof value.observation.printed?.stdout!=='string'||typeof value.observation.printed.stderr!=='string')invalid('cannot store an unmeasured observation: '+value.subject);
   }else invalid('has an unknown answer kind');
@@ -134,9 +129,9 @@ export function openProgramOracleResults(handoff:ProgramOracleHandoff,expected:O
       validateHostObservations(observations);
       return record.value;
     },
-    calls(project:string,entry:string,driverSha256:string):Extract<ProgramAnswer,{kind:'calls'|'budget'}>{
+    calls(project:string,entry:string,driverSha256:string):Extract<ProgramAnswer,{kind:'calls'}>{
       const value=this.forProject(project);
-      if((value.kind!=='calls'&&value.kind!=='budget')||value.project!==project||value.entry!==entry||value.driverSha256!==driverSha256)invalid('call population changed: '+project);
+      if(value.kind!=='calls'||value.project!==project||value.entry!==entry||value.driverSha256!==driverSha256)invalid('call population changed: '+project);
       return value;
     },
   };

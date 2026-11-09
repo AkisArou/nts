@@ -100,12 +100,3 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
   const runtime=join(f.directory,'reader/oracle-runtime.mjs');chmodSync(runtime,0o644);writeFileSync(runtime,readFileSync(runtime,'utf8')+'\n// changed reader code\n');
   const changed=run();assert.notEqual(changed.status,0);assert.match(changed.stderr,/program oracle reader bytes changed/);
 });
-
-test('a finalized budget answer is authenticated without inventing call rows',t=>{
-  const f=fixture(t),writer=createProgramOracleResults(f.directory,f.identity);
-  const value:ProgramAnswer={version:1,subject:f.value.subject,project:f.project,entry:f.entry,kind:'budget',driverSha256:'d'.repeat(64),budget:{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'}};
-  writer.add(value,{observations:f.fs.captured(),session:f.session});writer.publish();
-  const reader=openProgramOracleResults(programOracleHandoff(f.directory),f.identity);
-  assert.deepEqual(reader.calls(f.project,f.entry,'d'.repeat(64)),value);
-  writeFileSync(f.entry,'changed');assert.throws(()=>reader.calls(f.project,f.entry,'d'.repeat(64)),/changed/);
-});

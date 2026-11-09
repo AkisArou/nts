@@ -135,7 +135,7 @@ pub(crate) fn oracle(
         files,
         absent,
         vec!["node".into(), "prlimit".into()],
-        json!({"execution_policy":include_str!("../oracle-execution-policy.ts"),"idle_limit_ms":super::oracle_coverage::IDLE_MILLIS,"memory_mb":super::MEMORY_MB,"flags":emitted.args,"oracle_emit":emitted.identity,"oracle_owner":include_str!("oracle_emit.rs"),"supervisor":include_str!("oracle_run.rs")}),
+        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"idle_limit_ms":super::oracle_coverage::IDLE_MILLIS,"memory_mb":super::MEMORY_MB,"flags":emitted.args,"oracle_emit":emitted.identity,"oracle_owner":include_str!("oracle_emit.rs"),"supervisor":include_str!("oracle_run.rs")}),
     )
 }
 

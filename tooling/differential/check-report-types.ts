@@ -1,19 +1,18 @@
-import type {OracleBudget} from "./oracle-execution.ts";
 import type { activeCommand, ActiveResult } from "../gate/active-command.ts";
 
 export const CHECK_STATUSES = ["pending", "nothing", "agrees", "partial", "all_unavailable", "all_declined",
   "disagrees", "aborted", "not_measured", "error"] as const;
 export type CheckStatus = typeof CHECK_STATUSES[number];
 export const FAILURE_KINDS = ["capture", "typecheck", "source_plan", "preparation", "backend_declined",
-  "emitter", "native_build", "execution", "oracle_coverage", "oracle_execution", "oracle_budget", "oracle_pressure", "internal"] as const;
+  "emitter", "native_build", "execution", "oracle_coverage", "oracle_execution", "internal"] as const;
 export type FailureKind = typeof FAILURE_KINDS[number];
 export const COUNT_NAMES = ["functions", "expected", "compared", "unavailable", "runtime_declined",
   "timeouts", "approximated", "disagreements", "aborts"] as const;
 export type CheckCounts = Record<typeof COUNT_NAMES[number], number>;
 export interface CheckRefusal { stage: "lowering" | "backend" | "typecheck"; code: string; message: string; }
-export interface CheckFailure { kind: FailureKind; source: string | null; message: string; budget?:{recorded:boolean;value:OracleBudget}; }
+export interface CheckFailure { kind: FailureKind; source: string | null; message: string; }
 export interface CheckReport {
-  version: 1 | 2 | 3;
+  version: 1 | 2;
   status: CheckStatus;
   counts: CheckCounts | null;
   oracle: { expected: number; received: number; complete: boolean } | null;
@@ -58,7 +57,6 @@ export interface DecodedCheck {
   first: string;
   report?: CheckReport;
   timeout?: CaseTimeout;
-  budget?:{recorded:boolean;value:OracleBudget};
 }
 export type LegacyIdentity =
   | { kind: "preparation"; message: string }

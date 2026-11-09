@@ -71,10 +71,6 @@ if (name === 'invalid') {
   }
 } else if (process.env.CHECK_MUTATION === 'pending' && name === 'control') {
   report.status='pending'; report.counts=null; report.oracle=null;
-} else if (process.env.CHECK_MUTATION === 'oracle-budget') {
-  report.version=3; report.status='error'; report.counts=null; report.oracle=null; report.incomplete=[]; status=1;
-  report.error={kind:'oracle_budget',source:'benchmarks/cases/control/case.ts',message:'ORACLE BUDGET: timeout at 60 CPU-s',
-    budget:{recorded:true,value:{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'}}};
 } else if (process.env.CHECK_MUTATION === 'unavailable') {
   report.status='all_unavailable'; report.counts.compared=0; report.counts.unavailable=2;
 } else if (process.env.CHECK_MUTATION === 'contradiction') {
@@ -181,13 +177,6 @@ test("bench-agree.sh holds each benchmark to its run record: what reproduces pas
   assert.match(pending.stdout, /pending: benchmarks\/cases\/control is not recorded in results\/benchmarks\/jvm\/runs\.tsv yet/);
   record({ kind: "agrees" });
   const holds = run(); assert.equal(holds.status, 0, holds.stdout + holds.stderr); assert.match(holds.stdout, /1 as recorded/);
-  const originalBudgetRecord = readFileSync(file, 'utf8');
-  const budget = run('oracle-budget');
-  assert.equal(budget.status, 0, budget.stdout + budget.stderr);
-  assert.match(budget.stdout, /^ORACLE BUDGET benchmarks\/cases\/control: ORACLE BUDGET: timeout at 60 CPU-s$/m);
-  assert.match(budget.stdout, /0 as recorded, 0 accepted, 0 changed/);
-  assert.doesNotMatch(budget.stdout, /pending:/);
-  assert.equal(readFileSync(file, 'utf8'), originalBudgetRecord, 'no native run is invented for an oracle budget');
   for (const mutation of ["legacy-text", "contradiction"]) assert.notEqual(run(mutation).status, 0, mutation);
   const worse = run("runtime-decline");
   assert.equal(worse.status, 1, worse.stdout + worse.stderr);

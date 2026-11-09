@@ -34,7 +34,6 @@ test("a check's outcome is the row: agreement, a refusal, a loud defect or a wro
   assert.deepEqual(benchmarkRun(check("agrees on what it compared")), { kind: "agrees" });
   assert.deepEqual(benchmarkRun(check("nothing to check")), { kind: "no-scalar-exports" });
   assert.equal(benchmarkRun(check("pending")), null, "no oracle record yet: nothing to record");
-  assert.equal(benchmarkRun(check("oracle budget exceeded")), null, "an oracle budget describes no native result");
   // DecodedCheck's field of that name says which bound the case passed.
   assert.deepEqual(benchmarkRun(check("timed out", {}, { [STOP]: { stage: "run", reason: "x" } })), { kind: "timeout", stage: "run" });
   assert.deepEqual(benchmarkRun(check("disagrees", { disagreements: [{ compiled: "f 1 2", node: "f 1 3" }] })), { kind: "wrong", node: "f 1 3", compiled: "f 1 2" });

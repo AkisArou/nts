@@ -147,10 +147,6 @@ pub enum FailureKind {
     OracleCoverage,
     /// Node did not deliver its complete promised population.
     OracleExecution,
-    /// Node passed a proven per-case CPU or resident bound, never an instrument hold.
-    OracleBudget,
-    /// The host or aggregate could not admit/retain this measurement.
-    OraclePressure,
     /// An unexpected error has no more specific stage annotation.
     Internal,
 }
@@ -183,19 +179,6 @@ pub(crate) fn annotate(error: anyhow::Error, kind: FailureKind) -> anyhow::Error
     if error.downcast_ref::<Failure>().is_some() {
         error
     } else {
-        let kind = if error
-            .downcast_ref::<super::oracle_run::ResidentPressure>()
-            .is_some()
-        {
-            FailureKind::OraclePressure
-        } else if error
-            .downcast_ref::<super::oracle_coverage::BudgetExceeded>()
-            .is_some()
-        {
-            FailureKind::OracleBudget
-        } else {
-            kind
-        };
         with_failure(error, kind, Vec::new(), None)
     }
 }
@@ -309,9 +292,8 @@ impl Report {
 #[must_use]
 pub fn error_json(error: &anyhow::Error) -> serde_json::Value {
     let failure = error.downcast_ref::<Failure>();
-    let budget = error.downcast_ref::<super::oracle_coverage::BudgetExceeded>();
-    let mut value = serde_json::json!({
-        "version": if budget.is_some(){3}else{VERSION},
+    serde_json::json!({
+        "version": VERSION,
         "status": Status::Error,
         "counts": null,
         "oracle": null,
@@ -324,12 +306,7 @@ pub fn error_json(error: &anyhow::Error) -> serde_json::Value {
             "source": failure.and_then(|failure| failure.source.as_deref()),
             "message": failure.map_or_else(|| format!("{error:#}"), |failure| failure.message.clone()),
         },
-    });
-    if let Some(budget) = budget {
-        value["error"]["budget"] =
-            serde_json::json!({"recorded":budget.recorded,"value":budget.budget});
-    }
-    value
+    })
 }
 
 #[cfg(test)]

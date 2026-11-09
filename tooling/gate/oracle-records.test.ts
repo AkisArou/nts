@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { GENERATOR, fixtureOf, parseShard, parseLegacyTable, pendingFixtures, readRecords, readRecordsAt, recordPath, writeRecords, type OracleRow, type OracleTable } from "../differential/oracle-records.ts";
+import { GENERATOR, fixtureOf, parseLegacyTable, pendingFixtures, readRecords, readRecordsAt, recordPath, writeRecords, type OracleRow, type OracleTable } from "../differential/oracle-records.ts";
 import { newTestScratch } from "./test-scratch.ts";
 
 const header = { version: 1, generator_version: 1, generator_digest: "a".repeat(32), seed: null } as const;
@@ -113,13 +113,3 @@ test("a partial committed directory never falls back to a leftover flat table", 
   git("commit", "--quiet", "-m", "missing generator");
   assert.throws(() => readRecordsAt(root, "HEAD"), /no generator header/);
 }));
-
-test('budget records require revision 2 and can claim neither count nor completion',()=>{
-  const budget={...row('first'),kind:'budget',source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'memory-cap',bound:2*2**30,signal:null,reason:'own resident hit'},revision:{entry:'a'.repeat(64),node:'b'.repeat(64),producer:'c'.repeat(64),policy:'d'.repeat(64)}};
-  delete (budget as Partial<OracleRow>).count;delete (budget as Partial<OracleRow>).complete;
-  const shard={version:2,fixture:'tests/programs/first',rows:[budget]};
-  assert.equal(parseShard(shard,shard.fixture).rows[0]!.kind,'budget');
-  assert.throws(()=>parseShard({...shard,version:1},shard.fixture),/budget.*version 2/);
-  for(const field of ['count','complete'])assert.throws(()=>parseShard({...shard,rows:[{...budget,[field]:field==='count'?0:true}]},shard.fixture),/budget row cannot claim/);
-  assert.throws(()=>parseShard({...shard,version:99},shard.fixture),/invalid or misnamed/);
-});

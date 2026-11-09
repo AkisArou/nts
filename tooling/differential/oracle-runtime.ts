@@ -7,13 +7,11 @@ import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
 
 // Recipe identity is shared with result-only consumers. It reads pinned source
 // bytes and records, never the preparation graph or a compiler API.
-export const ORACLE_EXECUTION_FILES=['oracle-execution.ts','oracle-execution-policy.ts','oracle-batch.ts'] as const;
-export type OracleBudget={phase:'prepare'|'execute';outcome:'timeout'|'memory-cap';bound:number;signal:string|null;reason:string};
 let recipeIdentity:OracleIdentity|undefined;
 export function oracleIdentityFor(typescript:OracleIdentity['typescript']):OracleIdentity{
   const here=dirname(fileURLToPath(import.meta.url)),hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
   const dependency=process.env.NTS_ORACLE_DEPENDENCIES?JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES):undefined;
-  return recipeIdentity??={version:1,typescript,executionSha256:hash(JSON.stringify(ORACLE_EXECUTION_FILES.map(file=>hash(readFileSync(join(here,file)))))),
+  return recipeIdentity??={version:1,typescript,
     ...(dependency?{dependencyRecipeSha256:hash(JSON.stringify([dependency.lockfileSha256,dependency.producerSha256]))}:{}),
     emitterSha256:hash(readFileSync(join(here,'oracle-emit.ts'))),
     loaderSha256:hash(readFileSync(join(here,'oracle-loader.ts'))),
