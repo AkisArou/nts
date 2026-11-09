@@ -27,8 +27,9 @@
 //     run, and the service submits `git revert` of it to the landing queue,
 //     first, and reopens the culprit's issue with a comment (revert.ts); a
 //     culprit that names no issue gets a task line for an issue instead;
-//   - green, with pending or improved cases listed: records.ts writes them on
-//     that commit's pin and submits the records commit;
+//   - green, with pending cases or accepted changes listed: records.ts writes
+//     them on that commit's pin, the part's own kinds only, and submits the
+//     records commit;
 //   - a benchmark run: nts-bench's results-only commit is submitted the same
 //     way, and the rows full.md marks slower than their own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
@@ -51,12 +52,13 @@ import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
 import { landedTimes, landingQueue, submitTo, type LandingQueue } from "./queue.ts";
-import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
+import { recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
+import { listedIn, type Listed } from "../records/pending.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -200,8 +202,8 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   writeState(fx.layout.state, state);
   if (m.verdict === "green") {
     // Read once: the status counts them, and the records are written from them.
-    const listed = listedRecords(m.run);
-    record.listed = { pending: listed.pending.length, improved: listed.improved.length };
+    const listed = listedIn(m.run);
+    record.listed = { pending: listed.pending.length, accepted: listed.accepted.length };
     state[part].last_green = record;
     fx.log(`${part} green at ${short(commit)}; logs ${m.run}`);
     clearCulprits(fx, state, part, commit);
@@ -405,22 +407,22 @@ function landedReverts(git: Git, tip: string, state: State): Set<string> {
   return landed;
 }
 
-async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: ReturnType<typeof listedRecords>): Promise<void> {
-  if (state.records?.commit === commit) return;
-  if (!listed.pending.length && !listed.improved.length) return;
-  fx.log(`records: ${listed.pending.length} pending and ${listed.improved.length} improved case(s) listed at ${short(commit)}`);
+async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): Promise<void> {
+  if (state[part].records?.commit === commit) return;
+  if (!listed.pending.length && !listed.accepted.length) return;
+  fx.log(`records: ${listed.pending.length} pending case(s) and ${listed.accepted.length} accepted change(s) listed by the ${part} run at ${short(commit)}`);
   const at = fx.now().toISOString();
   try {
     const recorded = doing(fx, state, "records", commit, () => {
       fx.admit();
       const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
       const tree = new Git(fx.layout.tree, fx.git.env);
-      return recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run), recordsMessage(commit, part, run, pin, listed));
+      return recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run, part), recordsMessage(commit, part, run, pin, listed));
     }, at);
     if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, RECORDER_LOG)}`);
     if (recorded.kind !== "committed") {
-      state.records = { commit, at, submitted: null, result: recorded.kind === "refused" ? `wrote only outside the records: ${recorded.refused.join(", ")}` : "recorded nothing" };
-      fx.log(`records: ${state.records.result}`);
+      state[part].records = { commit, at, submitted: null, result: recorded.kind === "refused" ? `wrote only outside the records: ${recorded.refused.join(", ")}` : "recorded nothing" };
+      fx.log(`records: ${state[part].records!.result}`);
       if (recorded.kind === "refused" || recorded.status !== 0) task(fx, state, `- record-pending.ts at ${short(commit)} ${recorded.kind === "refused" ? `wrote outside the records (${recorded.refused.join(", ")})` : `exited ${recorded.status}`}; see ${run}.`);
       return;
     }
@@ -428,10 +430,10 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
     const submitted = await submitTo(fx.queue, recorded.commit, { first: false });
     fx.log(`records ${short(recorded.commit)} (${recorded.files.length} file(s)): ${submitted.line}`);
     if (recorded.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} also wrote outside the records (${recorded.refused.join(", ")}); see ${run}.`);
-    state.records = { commit, at, submitted: submitted.submitted ? recorded.commit : null, result: submitted.line };
+    state[part].records = { commit, at, submitted: submitted.submitted ? recorded.commit : null, result: submitted.line };
   } catch (error) {
-    state.records = { commit, at, submitted: null, result: `failed: ${error instanceof Error ? error.message : String(error)}` };
-    fx.log(`records: ${state.records.result}`);
+    state[part].records = { commit, at, submitted: null, result: `failed: ${error instanceof Error ? error.message : String(error)}` };
+    fx.log(`records: ${state[part].records!.result}`);
   } finally {
     writeState(fx.layout.state, state);
   }
@@ -599,7 +601,7 @@ export const RECORDER_LOG = "record-pending.log";
  * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
  * before its later kinds ran. The result's output is the log's tail.
  */
-export function recordPending(tree: string, pin: string, run: string, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv } = {}) {
+export function recordPending(tree: string, pin: string, run: string, part: Part, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv } = {}) {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
   const log = join(run, RECORDER_LOG);
@@ -609,7 +611,7 @@ export function recordPending(tree: string, pin: string, run: string, options: {
   try {
     r = candidateCommand(selected.node, {
       tree, run: join(run, 'records'), owned: { NTS_BIN: pin, NTS_CHECKERS: '1' },
-      command: [selected.node, script], discardTemporary: true,
+      command: [selected.node, script, "--after", part, run], discardTemporary: true,
     }, selected.env, { output: out });
   } finally { closeSync(out); }
   if (r.error) appendFileSync(log, `\n${r.error.message}\n`);
@@ -717,15 +719,15 @@ export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: I
   return true;
 }
 
-/** A part's runs as the status gives them. */
-type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null };
+/** A part's runs as the status gives them, and its records: what its last green run listed, and the last records commit. */
+type PartStatus = { last_run: RunRecord | null; last_green: RunRecord | null; records: { listed: RunRecord["listed"] | null; last: RecordsRun | null } };
 
 /**
  * The full check as `--status --json` prints it, version 1: whether its
  * controller runs and what it is doing, main and verified and how far
- * verified is behind, each part's runs, the culprits, the cases each green
- * run listed for the records, the benchmarks, the hourly count and the task
- * lines. Times are ISO strings; durations are seconds, as numbers. The text
+ * verified is behind, each part's runs and records, the culprits, the
+ * benchmarks, the hourly count and the task lines. Times are ISO strings;
+ * durations are seconds, as numbers. The text
  * `--status` prints is rendered from this.
  */
 export type FullCheckStatus = {
@@ -739,8 +741,6 @@ export type FullCheckStatus = {
   core: PartStatus;
   wide: PartStatus & { slot: string | null };
   culprits: Culprit[];
-  /** The cases each part's last green run listed, and the last records commit. */
-  records: { core: RunRecord["listed"] | null; wide: RunRecord["listed"] | null; last: State["records"] | null };
   benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null };
   count: State["count"] | null;
   tasks: State["tasks"];
@@ -758,7 +758,9 @@ export type StatusInputs = {
 
 export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckStatus {
   const now = inputs.now.getTime(), running = inputs.controller?.alive === true;
-  const part = (p: PartState): PartStatus => ({ last_run: p.last_run ?? null, last_green: p.last_green ?? null });
+  const part = (p: PartState): PartStatus => ({
+    last_run: p.last_run ?? null, last_green: p.last_green ?? null, records: { listed: p.last_green?.listed ?? null, last: p.records ?? null },
+  });
   const oldest = inputs.unverified?.length ? inputs.unverified.map(inputs.landedAt).sort()[0]! : null;
   return {
     version: 1, kind: "full-check", at: inputs.now.toISOString(),
@@ -772,7 +774,6 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     core: part(state.core),
     wide: { ...part(state.wide), slot: state.wide.slot ?? null },
     culprits: state.culprits,
-    records: { core: state.core.last_green?.listed ?? null, wide: state.wide.last_green?.listed ?? null, last: state.records ?? null },
     benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null },
     count: state.count ?? null,
     tasks: state.tasks,
@@ -784,7 +785,8 @@ const minutes = (seconds: number) => `${Math.round(seconds / 60)} min`;
 /** The status as `--status` prints it, from the same model `--json` prints. */
 export function statusText(s: FullCheckStatus): string {
   const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
-  const listed = (l: RunRecord["listed"] | null) => l ? `${l.pending} pending and ${l.improved} improved` : "none";
+  const records = (r: PartStatus["records"]) => `${r.listed ? `${r.listed.pending} pending and ${r.listed.accepted} accepted listed` : "none listed"}`
+    + `; last ${r.last ? `${short(r.last.commit)} ${r.last.result}` : "none"}`;
   const doing = s.now ? `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
   return [
     `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
@@ -795,7 +797,8 @@ export function statusText(s: FullCheckStatus): string {
       : "verified: none yet",
     `verified pushed: ${s.verified.pushed ? short(s.verified.pushed) : "never"}`,
     `culprits: ${s.culprits.map(c => `${short(c.commit)} (${c.steps.join(", ")}) revert ${c.revert ? short(c.revert) : "none"}${c.reason ? ` -- ${c.reason}` : ""}`).join("; ") || "none"}`,
-    `records: listed core ${listed(s.records.core)}, wide ${listed(s.records.wide)}; last ${s.records.last ? `${short(s.records.last.commit)} ${s.records.last.result}` : "none"}`,
+    `records: core ${records(s.core.records)}`,
+    `         wide ${records(s.wide.records)}`,
     `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
       + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}` : ""}`,
     `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,

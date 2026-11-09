@@ -28,8 +28,8 @@ const hash = (value: string | Uint8Array) => createHash("sha256").update(value).
 /** Measured compile cells against their rows: what the ratchet does not accept fails; what it accepts is listed. */
 export interface CompileComparison { changed: string[]; accepted: { row: BenchmarkRow; line: string }[] }
 
-/** Hold measured cells to their recorded rows. A cell with no row yet is pending: not compared here. */
-export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow[]): CompileComparison {
+/** Hold measured cells to their recorded rows, in `file`. A cell with no row yet is pending: not compared here. */
+export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow[], file: string): CompileComparison {
   requireBenchmarkScopes(record, ["compile"]);
   const expected = record.rows.filter(row => row.scope === "compile");
   const pending = new Set(benchmarkInventory({ ...record, rows: expected }, actual).map(benchmarkKey));
@@ -39,7 +39,7 @@ export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow
     if (pending.has(benchmarkKey(row))) continue;
     const before = byKey.get(benchmarkKey(row))!.outcome, change = compareBenchmarkOutcome(before, row.outcome);
     if (!change.ok) result.changed.push(`${change.word} ${row.path}: ${JSON.stringify(before)} -> ${JSON.stringify(row.outcome)}; re-record this outcome`);
-    else if (acceptedChange(change)) result.accepted.push({ row, line: acceptedLine(change, row.path, JSON.stringify(before), JSON.stringify(row.outcome)) });
+    else if (acceptedChange(change)) result.accepted.push({ row, line: acceptedLine(change, row.path, file, JSON.stringify(before), JSON.stringify(row.outcome)) });
   }
   return result;
 }
@@ -187,7 +187,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
         continue;
       }
       const record = records.get(backend)!, unrecorded = pending.get(backend)!;
-      const comparison = checkCompileRecord({ ...record, rows: record.rows.filter(row => paths.includes(row.path)) }, rows.filter(row => !unrecorded.has(row.path)));
+      const comparison = checkCompileRecord({ ...record, rows: record.rows.filter(row => paths.includes(row.path)) }, rows.filter(row => !unrecorded.has(row.path)), shown(recordFile(backend)));
       for (const message of comparison.changed) console.log(`${backend} ${message}`);
       for (const { line } of comparison.accepted) console.log(`${backend} ${line}`);
       const waits = paths.filter(path => unrecorded.has(path));

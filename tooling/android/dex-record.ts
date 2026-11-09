@@ -127,7 +127,7 @@ export function judge(record: string | null, seen: ReadonlyMap<string, DexOutcom
       continue;
     }
     if (acceptedChange(transition)) {
-      result.lines.push(acceptedLine(transition, target, JSON.stringify(was), JSON.stringify(now)));
+      result.lines.push(acceptedLine(transition, target, DEX_RECORD, JSON.stringify(was), JSON.stringify(now)));
       result.updates.push({ path: target, value: { outcome: now } });
       continue;
     }

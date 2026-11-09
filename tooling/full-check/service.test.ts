@@ -6,7 +6,7 @@
 // revert first, and records after a green run that listed pending cases.
 import assert from "node:assert/strict";
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
-import {join} from "node:path";
+import {dirname, join} from "node:path";
 import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import {QUIET_ASK_SECONDS} from "./bench.ts";
@@ -271,7 +271,8 @@ test("a culprit whose revert does not apply stays in where it cannot be taken ou
 test("a green run that listed pending cases records them, commits exactly the records and submits the commit", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);
-  const recorder: Recorder = (tree, pin, run) => {
+  const recorder: Recorder = (tree, pin, run, part) => {
+    assert.equal(part, "core", "the core's green run records the core's kinds");
     assert.ok(existsSync(pin), "the recorder runs with the run's pin");
     mkdirSync(join(tree, "results/oracle-counts/tests/programs"), { recursive: true });
     writeFileSync(join(tree, "results/oracle-counts/tests/programs/new-case.json"), "{\"cases\": 3}\n");
@@ -284,14 +285,15 @@ test("a green run that listed pending cases records them, commits exactly the re
   await cycle(fx);
   const state = readState(repo.layout.state);
   assert.equal(state.core.last_green?.commit, commit);
-  assert.deepEqual(state.core.last_green?.listed, { pending: 1, improved: 0 }, "the green run keeps what its checks listed");
-  assert.equal(state.records?.commit, commit);
-  const records = state.records!.submitted!;
-  assert.ok(records, state.records?.result);
+  assert.deepEqual(state.core.last_green?.listed, { pending: 1, accepted: 0 }, "the green run keeps what its checks listed");
+  assert.equal(state.core.records?.commit, commit);
+  assert.equal(state.wide.records, undefined, "the wide part records only after its own green run");
+  const records = state.core.records!.submitted!;
+  assert.ok(records, state.core.records?.result);
   assert.deepEqual(fx.submitted, [{ commit: records, first: false }]);
   assert.equal(repo.git.run(["rev-parse", `${records}^`]), commit);
   assert.deepEqual(repo.git.run(["diff", "--name-only", commit, records]).split("\n"), ["results/oracle-counts/tests/programs/new-case.json"], "only what the recorder wrote under the records");
-  assertMessage(repo.git, records, /^records: the pending and improved rows at /, /1 pending/);
+  assertMessage(repo.git, records, /^records: the pending and accepted rows at /, /1 pending/);
   assert.ok(fx.lines.some(line => line.includes("TASK") && line.includes("scratch-output.txt")), "what it wrote elsewhere is named");
   const pin = join(repo.root, "pins", commit.slice(0, 12));
   assert.equal(JSON.parse(readFileSync(join(pin, "provenance.json"), "utf8")).sha, commit);
@@ -519,11 +521,12 @@ test("the recorder runs in the gate's canonical environment, in a temporary fold
   candidateEnvironmentFixture(tree);
   // The fake recorder reports what the oracles it would run are given.
   writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync} from "node:fs";
-console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), bin: process.env.NTS_BIN }));
+console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), bin: process.env.NTS_BIN, argv: process.argv.slice(2) }));
 `);
-  const result = recordPending(tree, "pin", run, {env:{...hostEnvironment(process.env),HOME:repo.root}});
+  const result = recordPending(tree, "pin", run, "core", {env:{...hostEnvironment(process.env),HOME:repo.root}});
   assert.equal(result.status, 0, result.output);
-  assert.deepEqual(JSON.parse(readFileSync(join(run, RECORDER_LOG), "utf8")), { canonical: true, tmp: join(run, "records", "tmp"), there: true, bin: "pin" });
+  assert.deepEqual(JSON.parse(readFileSync(join(run, RECORDER_LOG), "utf8")), { canonical: true, tmp: join(run, "records", "tmp"), there: true, bin: "pin", argv: ["--after", "core", run] },
+    "it records the kinds of the part that went green, from that run's logs");
   assert.equal(existsSync(join(run, "records", "tmp")), false, "its temporary folder goes after it");
 });
 
@@ -541,7 +544,7 @@ const seen = existsSync(${JSON.stringify(log)}) && readFileSync(${JSON.stringify
 process.stdout.write(seen ? "streamed\\n" : "buffered\\n");
 process.exit(seen ? 3 : 4);
 `);
-  const result = recordPending(tree, "pin", run, {env:{...hostEnvironment(process.env),HOME:repo.root}});
+  const result = recordPending(tree, "pin", run, "core", {env:{...hostEnvironment(process.env),HOME:repo.root}});
   assert.equal(result.status, 3, readFileSync(log, "utf8"));
   assert.equal(readFileSync(log, "utf8"), "first line\nstreamed\n");
   assert.equal(result.output, "first line\nstreamed\n", "the result carries the log's tail");
@@ -556,7 +559,7 @@ test('each records run uses its candidate Node and environment and closes its re
     const observed=join(run,'observed.json'),session=join(run,'retained-session');
     writeFileSync(join(tree,'tooling/records/record-pending.ts'),resolutionSubject(observed,session,status));
     const log=join(repo.root,'nodes.jsonl');nodeInstallation(installations,process.versions.node,log);
-    const result=recordPending(tree,'private-pin',run,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
+    const result=recordPending(tree,'private-pin',run,'core',{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
     assert.equal(result.status,status,result.output);
     const value=JSON.parse(readFileSync(observed,'utf8'));assert.equal(value.version,'recorder');assert.equal(value.canonical,true);
     assert.equal(value.node,process.versions.node);assert.equal(value.bin,'private-pin');assert.equal(value.there,true);
@@ -574,16 +577,16 @@ test('records use the newly verified environment before the controller can resta
   const script=resolutionSubject(observed,session,0)+`import {mkdirSync} from 'node:fs';mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');\n`;
   const commit=repo.commit({'tooling/records/record-pending.ts':script,'LOG/tests':'pending: private-case is not recorded in results/fresh.tsv yet\n'},'new verified environment');
   let calls=0;
-  const fx=harness(repo,fakeGate(repo),{recorder:(tree,pin,run)=>{
+  const fx=harness(repo,fakeGate(repo),{recorder:(tree,pin,run,part)=>{
     calls++;
     assert.equal(repo.git.commit('verified'),commit,'verified moves before recording');
     assert.equal(new Git(tree,ENV).commit('HEAD'),commit,'recordAt uses that exact tree');
-    return recordPending(tree,pin,run,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
+    return recordPending(tree,pin,run,part,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
   }});
   await cycle(fx);
   assert.equal(calls,1);
   assert.equal(JSON.parse(readFileSync(observed,'utf8')).version,'new-verified','the still-running controller imports the verified tree environment');
-  assert.equal(readState(repo.layout.state).records?.commit,commit);
+  assert.equal(readState(repo.layout.state).core.records?.commit,commit);
   assert.equal(fx.submitted.length,1,'the resulting records are submitted');
   await assertSessionClosed(observed);
 });
@@ -663,7 +666,7 @@ test("the state says what the controller is doing while a part runs, and nothing
 
 test("the status model: what a live controller does, how far verified is behind and since when, numbers as numbers", () => {
   const state = { ...readState("/nonexistent"), now: { doing: "records" as const, commit: "c".repeat(40), since: "2026-11-09T10:00:00.000Z" }, pushed: "v".repeat(40) };
-  state.core.last_green = { commit: "v".repeat(40), run: "/runs/core", verdict: "green", at: "2026-11-09T09:00:00.000Z", failed: [], listed: { pending: 3, improved: 1 } };
+  state.core.last_green = { commit: "v".repeat(40), run: "/runs/core", verdict: "green", at: "2026-11-09T09:00:00.000Z", failed: [], listed: { pending: 3, accepted: 1 } };
   const inputs = {
     main: "m".repeat(40), verified: "v".repeat(40), unverified: ["a".repeat(40), "m".repeat(40)],
     landedAt: (commit: string) => commit.startsWith("a") ? "2026-11-09T10:30:00.000Z" : "2026-11-09T10:50:00.000Z",
@@ -674,8 +677,8 @@ test("the status model: what a live controller does, how far verified is behind 
   assert.equal(s.kind, "full-check");
   assert.deepEqual(s.now, { ...state.now, seconds: 3600 });
   assert.deepEqual(s.behind, { commits: 2, oldest_landed_at: "2026-11-09T10:30:00.000Z", delay_s: 1800 });
-  assert.deepEqual(s.records.core, { pending: 3, improved: 1 });
-  assert.equal(s.records.wide, null);
+  assert.deepEqual(s.core.records, { listed: { pending: 3, accepted: 1 }, last: null });
+  assert.deepEqual(s.wide.records, { listed: null, last: null });
   assert.deepEqual(s.verified, { commit: "v".repeat(40), pushed: "v".repeat(40) });
   assert.equal(fullCheckStatus(state, { ...inputs, controller: { pid: 42, alive: false } }).now, null, "a stopped controller is doing nothing");
   assert.equal(fullCheckStatus(state, { ...inputs, verified: null, unverified: null }).behind, null);
@@ -683,7 +686,47 @@ test("the status model: what a live controller does, how far verified is behind 
   const text = statusText(s);
   assert.match(text, /^controller: running \(pid 42\); records at cccccccccccc for 60 min$/m);
   assert.match(text, /^verified vvvvvvvvvvvv: 2 commit\(s\) behind main, the oldest landed 30 min ago$/m);
-  assert.match(text, /^records: listed core 3 pending and 1 improved, wide none; last none$/m);
+  assert.match(text, /^records: core 3 pending and 1 accepted listed; last none\n {9}wide none listed; last none$/m);
   assert.deepEqual(parseOptions(["--status", "--json"]).json, true);
   assert.throws(() => parseOptions(["--json"]), /--json is for --status/);
+});
+
+test("each part records after its own green run: the wide kinds after the wide run, at the commit the core recorded too", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  const parts: string[] = [];
+  const recorder: Recorder = (tree, _pin, run, part) => {
+    parts.push(part);
+    mkdirSync(join(tree, "results/records"), { recursive: true });
+    writeFileSync(join(tree, `results/records/${part}.tsv`), "row\n");
+    writeFileSync(join(run, RECORDER_LOG), "recorded\n");
+    return { status: 0, output: "" };
+  };
+  const schedule = { wide: ["10:00"], nightly: "03:00" };
+  const morning = harness(repo, gate, { now: new Date(2026, 10, 6, 9, 0), schedule, recorder });
+  const first = repo.commit({
+    "LOG/typescript-c": "  pending: tests/typescript/a.ts is not recorded in results/typescript/c/cases.tsv yet\n",
+    "LOG/integrity": "  pending: tests/programs/b is not recorded in results/dex/outcomes.tsv yet\n",
+  }, "each part lists a case of its own");
+  assert.equal(await cycle(morning), "core");
+  assert.deepEqual(parts, ["core"]);
+  const later = harness(repo, gate, { now: new Date(2026, 10, 6, 10, 30), schedule, recorder });
+  assert.equal(await cycle(later), "wide");
+  assert.deepEqual(parts, ["core", "wide"], "the wide run is not skipped because the core already recorded this commit");
+  const state = readState(repo.layout.state);
+  assert.equal(state.core.records?.commit, first);
+  assert.equal(state.wide.records?.commit, first);
+  assert.deepEqual(state.wide.last_green?.listed, { pending: 1, accepted: 0 });
+  assert.equal(morning.submitted.length + later.submitted.length, 2, "one records commit for each part");
+});
+
+test("a state written before each part kept its records reads them as the core's", t => {
+  const repo = repository(t);
+  mkdirSync(dirname(repo.layout.state), { recursive: true });
+  writeFileSync(repo.layout.state, JSON.stringify({ version: 1, core: {}, wide: {}, culprits: [], probes: [], tasks: [],
+    records: { commit: "c".repeat(40), at: "2026-11-09T11:38:29.560Z", submitted: null, result: "recorded nothing" } }));
+  const state = readState(repo.layout.state);
+  assert.equal(state.core.records?.commit, "c".repeat(40));
+  assert.equal((state as { records?: unknown }).records, undefined);
+  assert.equal(state.wide.records, undefined);
 });

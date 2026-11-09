@@ -7,6 +7,7 @@
 // recorded, and it does not commit.
 //
 //   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [kind ...]
+//   NTS_BIN=<verified's pin> node tooling/records/record-pending.ts --after core|wide <run> [kind ...]
 //
 // The kinds are oracle-counts, typescript, benchmarks, benchmark-runs,
 // outcomes and dex, all six when none is named, in that order: a benchmark's
@@ -20,11 +21,18 @@
 //   outcomes        tooling/conformance/outcomes-check.ts --record-pending
 //   dex             tooling/android/dex-record.ts record-pending (d8 over what can change a row)
 //
-// The pending cases come from the tree alone. Accepted changes need a
-// measurement, so the last three recorders run whether or not anything is
-// pending. Each writes only from a comparison with nothing worse, so run this on
-// `verified` main: a change that a red commit caused is then never recorded
-// ahead of that commit's revert.
+// The pending cases come from the tree alone. A kind's recorders run only
+// when it has something to record: a pending case, a recorded budget to
+// refresh, or an accepted change (an improvement, or a refusal for other
+// reasons) that a check listed, in a line naming the record that holds its
+// row (tooling/records/pending.ts). `--after <part> <run>` is the full check's
+// call once that part is green: it records only the kinds whose checks the
+// part runs (KIND_STEPS), with the accepted changes the run's logs list. A
+// run by hand has no logs, so it records pending cases and refreshes alone.
+// The TypeScript census runs only for the backends whose record has
+// something to write. Each writes only from a comparison with nothing worse,
+// so run this on `verified` main: a change that a red commit caused is then
+// never recorded ahead of that commit's revert.
 //
 // What the recorders wrote is then audited against the rule: a removed row, a
 // row added for a case that was not pending, or a rewritten row whose change
@@ -46,11 +54,29 @@ import { pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseSh
 import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
 import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
-import { inventory, pendingLine } from "./pending.ts";
+import { WIDE } from "../gate/owed.mjs";
+import { inventory, listedIn, pendingLine } from "./pending.ts";
 
 export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
+
+/**
+ * The gate steps whose checks hold each kind's records: a kind is recorded
+ * after the part that runs them is green. The oracle counts are checked
+ * beside the programs, in the core.
+ */
+export const KIND_STEPS: Readonly<Record<Kind, readonly string[]>> = {
+  "oracle-counts": [],
+  typescript: ["typescript-c", "typescript-llvm", "typescript-jvm"],
+  benchmarks: ["benches"],
+  "benchmark-runs": ["bench-agree"],
+  outcomes: ["outcomes"],
+  dex: ["dex"],
+};
+export type Part = "core" | "wide";
+/** The part of the full check that runs a kind's checks: a kind is recorded after that part is green. */
+export const partOf = (kind: Kind): Part => KIND_STEPS[kind].some(step => WIDE.has(step)) ? "wide" : "core";
 
 /** A case with no row yet, and the record it lacks, relative to the root. */
 export interface Pending { kind: Kind; name: string; record: string }
@@ -92,6 +118,22 @@ export function findPending(root: string, kind: Kind): Pending[] {
   }
 }
 
+/**
+ * The accepted changes a run's checks listed, by the kind whose record each
+ * names; `unowned` are the records no kind writes, which are said and skipped.
+ */
+export function acceptedIn(root: string, run: string): { byKind: Map<Kind, Pending[]>; unowned: string[] } {
+  const owner = new Map<string, Kind>();
+  for (const kind of KINDS) for (const file of recordFiles(root, kind)) owner.set(file, kind);
+  const byKind = new Map<Kind, Pending[]>(), unowned = new Set<string>();
+  for (const change of listedIn(run).accepted) {
+    const kind = owner.get(change.record);
+    if (kind === undefined) { unowned.add(change.record); continue; }
+    byKind.set(kind, [...byKind.get(kind) ?? [], { kind, name: change.name, record: change.record }]);
+  }
+  return { byKind, unowned: [...unowned].sort() };
+}
+
 /** These are refresh requests, not pending cases and not reused answers. */
 export function oracleRefreshes(root:string):Pending[]{
   const names=new Set(hintedOracleImprovements(root));
@@ -104,7 +146,7 @@ export function oracleRefreshes(root:string):Pending[]{
   return [...names].sort().map(name=>({kind:'oracle-counts',name,record:recordPath(name)}));
 }
 
-/** The recorder runs one kind needs, as node arguments from the root. */
+/** The recorder runs one kind needs for its pending cases and accepted changes, as node arguments from the root. */
 export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][] {
   switch (kind) {
     case "oracle-counts":
@@ -113,7 +155,9 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       // other pending one unrecorded.
       return [...new Set(pending.map(one => one.name))].map(name => ["tooling/differential/record-oracles.ts", name]);
     case "typescript":
-      return BACKENDS.map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
+      // Each backend's census takes most of an hour: only one with a row to write runs.
+      return BACKENDS.filter(backend => pending.some(one => one.record === typescriptRecord(backend)))
+        .map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
     case "benchmarks":
       return [["tooling/bench/build-records.ts", "--record-pending"]];
     case "benchmark-runs":
@@ -265,18 +309,26 @@ const runNode: Runner = (args, root) => {
   return spawnSync(command, argv, { cwd: root, stdio: "inherit", env: process.env }).status ?? 1;
 };
 
-/** Record every pending row of the named kinds, and every change the ratchet accepts. Returns the exit status. */
-export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line)): number {
+/**
+ * Record every pending row of the named kinds, and every change the ratchet
+ * accepts. A kind runs only with something to record: a pending case, a
+ * budget to refresh, or an accepted change a check listed (`accepted`, by
+ * kind). Returns the exit status.
+ */
+export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line), accepted: ReadonlyMap<Kind, readonly Pending[]> = new Map()): number {
   let failed = 0, recorded = 0;
   for (const kind of kinds) {
     const missing = findPending(root, kind);
     const refreshes = kind === 'oracle-counts' ? oracleRefreshes(root) : [];
-    const pending = [...missing, ...refreshes];
-    say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded budget refresh(es)` : ''}`);
+    const pending = [...missing, ...refreshes], changes = accepted.get(kind) ?? [];
+    if (!pending.length && !changes.length) { say(`${kind}: nothing pending and no accepted change listed; not run`); continue; }
+    say(`${kind}: ${missing.length} pending${refreshes.length ? `, ${refreshes.length} recorded budget refresh(es)` : ''}${changes.length ? `, ${changes.length} accepted change(s) listed` : ''}`);
     for (const one of missing) say(`  ${pendingLine(one.name, one.record)}`);
     for (const one of refreshes) say(`  ORACLE BUDGET refresh ${one.name} (${one.record})`);
+    for (const one of changes) say(`  accepted: ${one.name} in ${one.record}`);
+    // New rows only for pending cases; accepted changes rewrite rows the ratchet allows (auditRecord).
     const before = snapshot(root, kind, pending);
-    for (const args of recorderRuns(kind, pending)) {
+    for (const args of recorderRuns(kind, [...pending, ...changes])) {
       say(`  running: node ${args.join(" ")}`);
       const status = run(args, root);
       if (status !== 0) { say(`  ${kind}: the recorder exited ${status}`); failed += 1; }
@@ -306,13 +358,19 @@ export function recordPending(root: string, kinds: readonly Kind[], run: Runner 
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const named = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const after = argv[0] === "--after" ? { part: argv[1], run: argv[2] } : null;
+  const named = after ? argv.slice(3) : argv;
   const unknown = named.filter(kind => !(KINDS as readonly string[]).includes(kind));
-  if (unknown.length || !process.env.NTS_BIN) {
-    console.error(`usage: NTS_BIN=<main's pin> node tooling/records/record-pending.ts [${KINDS.join("|")} ...]${unknown.length ? `; unknown: ${unknown.join(" ")}` : ""}`);
+  const badAfter = after && ((after.part !== "core" && after.part !== "wide") || !after.run || !existsSync(after.run));
+  if (unknown.length || badAfter || !process.env.NTS_BIN) {
+    console.error(`usage: NTS_BIN=<main's pin> node tooling/records/record-pending.ts [--after core|wide <run>] [${KINDS.join("|")} ...]${unknown.length ? `; unknown: ${unknown.join(" ")}` : ""}${badAfter ? `; --after needs core or wide and an existing run folder` : ""}`);
     process.exitCode = 2;
   } else {
     const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-    process.exitCode = recordPending(root, named.length ? named as Kind[] : KINDS);
+    const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
+    const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), unowned: [] };
+    for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);
+    process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind);
   }
 }

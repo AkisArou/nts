@@ -7,7 +7,9 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
-import { auditRecord, findPending, oracleRefreshes, recordPending, type Runner } from "./record-pending.ts";
+import { acceptedIn, auditRecord, findPending, KIND_STEPS, KINDS, oracleRefreshes, partOf, recordPending, type Runner } from "./record-pending.ts";
+import { improvedLine, refusesDifferentlyLine } from "./pending.ts";
+import { STEPS } from "../gate/step-table.mjs";
 import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts";
 import {oracleBudgetRevision} from "../differential/record-oracles.ts";
 import {requestOracleImprovement,recordPath,oracleImprovementPath} from "../differential/oracle-records.ts";
@@ -112,7 +114,8 @@ test("it records the pending and improved rows, every other byte as it was, and 
   const quiet: string[] = [], idle = recorders(root, Object.fromEntries(["tooling/census/conformance262.ts", "tooling/bench/build-records.ts",
     "tooling/conformance/outcomes-check.ts"].map(script => [script, () => {}])));
   assert.equal(recordPending(root, ["oracle-counts", "typescript", "benchmarks", "outcomes"], idle.run, line => quiet.push(line)), 0, quiet.join("\n"));
-  assert.equal(idle.ran.some(args => args[0] === "tooling/differential/record-oracles.ts"), false, "no oracle fixture to record, so no recorder");
+  assert.deepEqual(idle.ran, [], "nothing pending and no accepted change listed: no recorder runs");
+  assert.ok(quiet.includes("typescript: nothing pending and no accepted change listed; not run"), quiet.join("\n"));
   assert.deepEqual(files(root), after);
   assert.match(quiet.at(-1)!, /^record-pending: 0 row\(s\) recorded; nothing is committed$/);
 });
@@ -192,4 +195,33 @@ test('budget refreshes need an improvement hint or changed identity, and only a 
   writeFileSync(join(root,file),after);assert.deepEqual(oracleRefreshes(root),[],'the stale hint cannot request an already measured population');
   writeFileSync(join(root,file),before);writeFileSync(join(root,source),'export function run(){return 2;}');
   assert.deepEqual(oracleRefreshes(root).map(one=>one.name),[fixture],'a changed case independently requests fresh measurement');
+});
+
+test("a kind with nothing pending runs only for an accepted change a check listed, and the census only on that backend", t => {
+  const root = tree(t), logs = testScratch(t, "record-pending-run");
+  assert.equal(recordPending(root, ["oracle-counts", "typescript", "benchmarks", "outcomes"], recorders(root).run, () => {}), 0);
+  writeFileSync(join(logs, "typescript-c.log"), `  ${improvedLine("tests/typescript/family/recorded.ts", "results/typescript/llvm/cases.tsv", "refused", "pass")}\n`);
+  const lines: string[] = [], { run, ran } = recorders(root, Object.fromEntries(["tooling/census/conformance262.ts", "tooling/conformance/outcomes-check.ts"].map(script => [script, () => {}])));
+  assert.equal(recordPending(root, ["typescript", "outcomes"], run, line => lines.push(line), acceptedIn(root, logs).byKind), 0, lines.join("\n"));
+  assert.deepEqual(ran, [["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "llvm", "--record-pending", "results/typescript/llvm/cases.tsv"]],
+    "the TypeScript census runs on the one backend whose record has a change listed; outcomes is not run");
+  assert.ok(lines.includes("outcomes: nothing pending and no accepted change listed; not run"), lines.join("\n"));
+});
+
+test("accepted changes go to the kind whose record they name, a refusal for other reasons among them", t => {
+  const root = tree(t), logs = testScratch(t, "record-pending-logs");
+  writeFileSync(join(logs, "outcomes.log"), `${refusesDifferentlyLine("tests/outcomes/recorded", "tests/outcomes/recorded/outcome.json", "refused", "refused")}\n`);
+  writeFileSync(join(logs, "bench-agree.log"), `  ${improvedLine("benchmarks/cases/recorded", "results/benchmarks/jvm/runs.tsv", "aborted", "agrees")}\n`);
+  writeFileSync(join(logs, "examples.log"), `${improvedLine("tests/programs/c", "results/elsewhere.tsv", "refused", "pass")}\n`);
+  writeFileSync(join(logs, "typescript-llvm.log"), "pending: tests/typescript/x.ts is not recorded in results/typescript/llvm/cases.tsv yet\n");
+  const accepted = acceptedIn(root, logs);
+  assert.deepEqual([...accepted.byKind.keys()].sort(), ["benchmark-runs", "outcomes"]);
+  assert.deepEqual(accepted.byKind.get("outcomes"), [{ kind: "outcomes", name: "tests/outcomes/recorded", record: "tests/outcomes/recorded/outcome.json" }]);
+  assert.deepEqual(accepted.unowned, ["results/elsewhere.tsv"], "a record no kind writes is said, not guessed at");
+});
+
+test("each kind is recorded after the part that runs its checks, and names only steps the gate has", () => {
+  assert.deepEqual(KINDS.filter(kind => partOf(kind) === "wide"), ["benchmark-runs", "dex"]);
+  const steps = new Set(STEPS.map(step => step.name));
+  for (const kind of KINDS) for (const step of KIND_STEPS[kind]) assert.ok(steps.has(step), `${kind}: ${step} is a gate step`);
 });

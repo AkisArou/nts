@@ -163,7 +163,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
     if (!before) { updates.set(path, now); console.log(`  ${pendingLine(path, record)}`); continue; }
     const change = compareBenchmarkRun(before, now);
     if (!change.ok) { changed += 1; console.log(`${change.word}  ${path}: ${JSON.stringify(before)} -> ${JSON.stringify(now)}`); }
-    else if (acceptedChange(change)) { accepted += 1; updates.set(path, now); console.log(`  ${acceptedLine(change, path, JSON.stringify(before), JSON.stringify(now))}`); }
+    else if (acceptedChange(change)) { accepted += 1; updates.set(path, now); console.log(`  ${acceptedLine(change, path, record, JSON.stringify(before), JSON.stringify(now))}`); }
     else reproduced += 1;
   }
   const waiting = plan.recordPending ? [] : all.filter(entry => plan.pending.has(entry.fixture!)).map(entry => entry.fixture!);

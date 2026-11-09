@@ -9,9 +9,13 @@
 //
 // A recorded case whose change the shared ratchet accepts (an improvement, or a
 // refusal for other reasons) passes too and is listed; record-pending.ts
-// rewrites its row. A recorded case that got worse stays red. This module only
-// names the lines every check prints.
+// rewrites its row. A recorded case that got worse stays red. This module
+// names the lines every check prints, each with the record its row is in, and
+// reads them back from a run's logs: the full check decides from them whether
+// to record, and record-pending.ts which kinds to record.
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { OutcomeTransition } from "../conformance/outcome-transition.ts";
 
 /** Cases of a corpus against its record, by key: what has no row, and what has no case. */
@@ -31,17 +35,45 @@ export function pendingLine(name: string, record: string): string {
   return `pending: ${name} is not recorded in ${record} yet`;
 }
 
-/** The line a check prints for a recorded case that got better. */
-export function improvedLine(name: string, before: string, after: string): string {
-  return `improved, record pending: ${name} ${before} -> ${after}`;
+/** The line a check prints for a recorded case that got better, in the record that holds its row. */
+export function improvedLine(name: string, record: string, before: string, after: string): string {
+  return `improved, record pending: ${name} in ${record}: ${before} -> ${after}`;
 }
 
 /** The line a check prints for a recorded case refused as before, for other reasons: accepted, not an improvement. */
-export function refusesDifferentlyLine(name: string, before: string, after: string): string {
-  return `refuses differently, record pending: ${name} ${before} -> ${after}`;
+export function refusesDifferentlyLine(name: string, record: string, before: string, after: string): string {
+  return `refuses differently, record pending: ${name} in ${record}: ${before} -> ${after}`;
 }
 
 /** The line for a change the ratchet accepts (acceptedChange), by what it is. */
-export function acceptedLine(transition: OutcomeTransition, name: string, before: string, after: string): string {
-  return (transition.word === "REFUSES DIFFERENTLY" ? refusesDifferentlyLine : improvedLine)(name, before, after);
+export function acceptedLine(transition: OutcomeTransition, name: string, record: string, before: string, after: string): string {
+  return (transition.word === "REFUSES DIFFERENTLY" ? refusesDifferentlyLine : improvedLine)(name, record, before, after);
+}
+
+// The lines above read back, wherever a log puts them.
+const PENDING = /\bpending: (\S.*?) is not recorded in (\S+) yet\b/;
+const ACCEPTED = /\b(improved|refuses differently), record pending: (\S.*?) in (\S+): (.*)$/;
+
+/** Whether `line` is one a check prints for the records, by its words alone: what a landing reports, not what is recorded. */
+export const isListedLine = (line: string): boolean => PENDING.test(line) || /\b(?:improved|refuses differently), record pending: \S/.test(line);
+
+/** A case a check listed for the records, and the record that holds (or will hold) its row. */
+export interface ListedCase { name: string; record: string }
+/** What a run's checks listed: the cases with no row yet, and the changes the ratchet accepted. */
+export interface Listed { pending: ListedCase[]; accepted: (ListedCase & { change: string })[] }
+
+/** The lines every step log (`<step>.log`) of a run prints for the records, each case once. */
+export function listedIn(run: string): Listed {
+  const pending = new Map<string, ListedCase>(), accepted = new Map<string, ListedCase & { change: string }>();
+  if (!existsSync(run)) return { pending: [], accepted: [] };
+  for (const name of readdirSync(run).filter(name => name.endsWith(".log")).sort()) {
+    for (const line of readFileSync(join(run, name), "utf8").split("\n")) {
+      const p = PENDING.exec(line);
+      if (p) pending.set(`${p[1]}\0${p[2]}`, { name: p[1]!, record: p[2]! });
+      const a = ACCEPTED.exec(line);
+      if (a) accepted.set(`${a[2]}\0${a[3]}`, { name: a[2]!, record: a[3]!, change: `${a[1]} ${a[4]!.trim()}` });
+    }
+  }
+  const order = (x: ListedCase, y: ListedCase) => x.record.localeCompare(y.record) || x.name.localeCompare(y.name);
+  return { pending: [...pending.values()].sort(order), accepted: [...accepted.values()].sort(order) };
 }

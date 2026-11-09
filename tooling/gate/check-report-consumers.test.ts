@@ -215,7 +215,7 @@ test("bench-agree.sh holds each benchmark to its run record: what reproduces pas
   const loud = run("runtime-decline"); assert.equal(loud.status, 0, loud.stdout + loud.stderr); assert.match(loud.stdout, /1 as recorded/);
   const silent = run("wrong"); assert.equal(silent.status, 1, "an abort that became a wrong answer got worse");
   const better = run(); assert.equal(better.status, 0, better.stdout + better.stderr);
-  assert.match(better.stdout, /improved, record pending: benchmarks\/cases\/control \{"kind":"aborted"/);
+  assert.match(better.stdout, /improved, record pending: benchmarks\/cases\/control in \S+: \{"kind":"aborted"/);
   // The full check's writer: from a clean pin of main, it writes the accepted change, every other line byte for byte.
   writeFileSync(join(root, "provenance.json"), JSON.stringify({ sha: "c".repeat(40), clean: true, applied: null,
     binary_sha256: createHash("sha256").update(readFileSync(compiler)).digest("hex") }));

@@ -1,29 +1,10 @@
 // node --test tooling/full-check/records.test.ts
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { listedRecords, recordAt } from "./records.ts";
+import { recordAt } from "./records.ts";
 import { repository } from "./repository-fixture.ts";
-
-test("the pending and improved lines of a run's step logs are what it lists", t => {
-  const run = mkdtempSync(join(tmpdir(), "full-check-run-"));
-  t.after(() => rmSync(run, { recursive: true, force: true }));
-  // The exact lines of tooling/records/pending.ts's pendingLine and improvedLine.
-  writeFileSync(join(run, "typescript-c.log"), [
-    "  pending: tests/typescript/a/b.ts is not recorded in results/typescript/c/cases.tsv yet",
-    "improved, record pending: tests/typescript/a/c.ts refused -> pass",
-    "a line that says pending: but is no record line",
-  ].join("\n"));
-  writeFileSync(join(run, "outcomes.log"), "pending: tests/outcomes/x is not recorded in tests/outcomes/x/outcome.json yet\n");
-  writeFileSync(join(run, "summary.json"), "pending: tests/outcomes/x is not recorded in nowhere yet\n");
-  assert.deepEqual(listedRecords(run), {
-    pending: ["tests/outcomes/x (tests/outcomes/x/outcome.json)", "tests/typescript/a/b.ts (results/typescript/c/cases.tsv)"],
-    improved: ["tests/typescript/a/c.ts refused -> pass"],
-  });
-  assert.deepEqual(listedRecords(join(run, "missing")), { pending: [], improved: [] });
-});
 
 test("a recorder that rewrites a tracked record commits it whole, whatever git lists first", t => {
   // git status gives " M <path>" for an unstaged change: the first column is a

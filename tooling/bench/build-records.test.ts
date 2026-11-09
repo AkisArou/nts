@@ -8,6 +8,9 @@ import { publishPin } from "../conformance/pin.ts";
 import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 
+/** The record the compile checks name in their lines; the comparison itself never reads it. */
+const RECORD_FILE = "results/benchmarks/c/outcomes.tsv";
+
 test("compile children use the canonical ambient environment and retain its owned handoff", async t => {
   const { compileEnvironment } = await import("./compile-producer.ts");
   const root = testScratch(t, "benchmark-record-environment");
@@ -121,7 +124,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   }
   const fixedPin = changedCompiler("fixed");
   const moved = invoke("--check", first, {}, fixedPin); assert.equal(moved.status, 0, moved.stdout + moved.stderr);
-  assert.match(moved.stdout, /^c improved, record pending: benchmarks\/cases\/subject \{"kind":"refused".*\} -> \{"kind":"pass"\}$/m, "an improvement passes and is listed");
+  assert.match(moved.stdout, /^c improved, record pending: benchmarks\/cases\/subject in \S+: \{"kind":"refused".*\} -> \{"kind":"pass"\}$/m, "an improvement passes and is listed");
   const fixedRecord = join(scratch, "fixed-record");
   assert.equal(invoke("--record", fixedRecord, {}, fixedPin).status, 0);
   const regressed = invoke("--check", fixedRecord); assert.equal(regressed.status, 1, regressed.stdout + regressed.stderr);
@@ -218,18 +221,18 @@ test("recorded compile cells execute every backend and expose outcome movement",
     if (backend === "llvm") assert.equal(readFileSync(join(out, "program.ll"), "utf8"), "; IR");
     const row = { path, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome: { kind: "pass" as const } };
     const record = parseBenchmarkRecord(serializeBenchmarkRecord({ metadata: { version: 1, backend, commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] }, rows: [row] }));
-    assert.deepEqual(checkCompileRecord(record, [row]), { changed: [], accepted: [] });
+    assert.deepEqual(checkCompileRecord(record, [row], RECORD_FILE), { changed: [], accepted: [] });
     refused = true;
     const outcome = await observeCompile({ backend, project, output: out, binary: "nts", root, env: {}, command });
     assert.equal(outcome.kind, "refused");
-    assert.equal(checkCompileRecord(record, [{ ...row, outcome }]).changed.length, 1, "a pass that refuses now is a regression");
+    assert.equal(checkCompileRecord(record, [{ ...row, outcome }], RECORD_FILE).changed.length, 1, "a pass that refuses now is a regression");
     const held = parseBenchmarkRecord(serializeBenchmarkRecord({ ...record, rows: [{ ...row, outcome }] }));
-    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }]), { changed: [], accepted: [] });
-    const fixed = checkCompileRecord(held, [row]);
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }], RECORD_FILE), { changed: [], accepted: [] });
+    const fixed = checkCompileRecord(held, [row], RECORD_FILE);
     assert.equal(fixed.changed.length, 0, "a fix passes");
     assert.deepEqual(fixed.accepted.map(({ row }) => row), [row], "and is listed for the full check to record");
     const unrecorded = { ...row, path: "benchmarks/cases/new" };
-    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }, unrecorded]), { changed: [], accepted: [] }, "a case with no row is pending");
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }, unrecorded], RECORD_FILE), { changed: [], accepted: [] }, "a case with no row is pending");
     refused = false;
   }
   assert.ok(calls.some(row => row[1] === "emit-c" && row.includes("--rc")));

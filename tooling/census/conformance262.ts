@@ -977,7 +977,7 @@ if (checkFile && TYPESCRIPT) {
     if (verdict.word === "holds" || verdict.word === "reproduces") continue;
     if (acceptedChange(verdict)) recordUpdates.set(path, now);
     comparison[verdict.word].push(acceptedChange(verdict)
-      ? acceptedLine(verdict, path, JSON.stringify(was), JSON.stringify(now))
+      ? acceptedLine(verdict, path, checkFile, JSON.stringify(was), JSON.stringify(now))
       : `${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
   }
 } else if (checkFile) {

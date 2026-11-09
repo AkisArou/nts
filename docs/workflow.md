@@ -183,7 +183,10 @@ in two ways:
 
 - **The full check writes them.** Nobody records by hand. When a case gets
   better (wrong answer to refusal, refusal to pass), the full check updates
-  the record itself and lands that update.
+  the record itself and lands that update. It records after the green run
+  of the part whose checks hold that record, the core or the wide steps, and
+  only what those checks listed: each pending case and accepted change, by
+  the record its line names.
 - **An oracle past its own CPU or resident bound has a budget row,** with
   the phase, bound and observed stop, and no invented count. Checks retry it
   and print it loudly. A completed count is an improvement; replacing a count

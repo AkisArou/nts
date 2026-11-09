@@ -658,7 +658,7 @@ for (const name of chosen) {
   if (verdict.loud) loud += 1;
   if (acceptedChange(verdict)) {
     if (recordingPending) toRecord.set(name, now);
-    console.log(`  ${acceptedLine(verdict, fixturePath(name), `${was.category} (${was.nts})`, `${now.category} (${now.nts})`)}`);
+    console.log(`  ${acceptedLine(verdict, fixturePath(name), `${fixturePath(name)}/${RECORD}`, `${was.category} (${was.nts})`, `${now.category} (${now.nts})`)}`);
   } else console.log(`  ${verdict.word.padEnd(14)}${name}: ${verdict.why}`);
 }
 

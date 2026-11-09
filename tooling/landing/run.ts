@@ -36,6 +36,7 @@ import { machineBudget } from "./selection.ts";
 import { nodePin } from "../bootstrap/node.ts";
 import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommand } from "./candidate-environment.ts";
+import { isListedLine } from "../records/pending.ts";
 
 export const PROFILE = "nts-dev";
 export type StepResult = {
@@ -197,20 +198,18 @@ function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv
 }
 
 /**
- * The pending and improved lines the run's step logs print. Their shapes are
- * tooling/records/pending.ts's: `pending: <case> is not recorded in <record>
- * yet` and `improved, record pending: <case> <before> -> <after>`.
+ * The lines the run's step logs print for the records: each pending case and
+ * accepted change, as tooling/records/pending.ts names them.
  */
 export function pendingLines(run: string): string[] {
   const out = new Set<string>();
-  const shape = /^\s*((?:pending: .+ is not recorded in .+ yet)|(?:improved, record pending: .+))\s*$/;
   const visit = (dir: string, depth: number) => {
     let names: string[] = [];
     try { names = readdirSync(dir); } catch { return; }
     for (const name of names.sort()) {
       if (depth < 1 && /^attempt-\d+$/.test(name)) visit(join(dir, name), depth + 1);
       else if (name.endsWith(".log")) {
-        try { for (const line of readFileSync(join(dir, name), "utf8").split("\n")) { const m = shape.exec(line); if (m) out.add(m[1]!); } } catch { /* unreadable log */ }
+        try { for (const line of readFileSync(join(dir, name), "utf8").split("\n")) if (isListedLine(line)) out.add(line.trim()); } catch { /* unreadable log */ }
       }
     }
   };

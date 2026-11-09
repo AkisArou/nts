@@ -46,8 +46,8 @@ export type RunRecord = {
   reason?: string;
   /** What the culprit search made of a red run, and when; "held" is searched again. */
   search?: { result: string; at: string };
-  /** A green run's pending and improved cases, as its checks listed them (records.ts's listedRecords). */
-  listed?: { pending: number; improved: number };
+  /** A green run's pending cases and accepted changes, as its checks listed them (tooling/records/pending.ts's listedIn). */
+  listed?: { pending: number; accepted: number };
 };
 
 /** What the controller is doing now, written before it starts and removed when it ends. */
@@ -75,8 +75,15 @@ export type ProbeRecord = {
   at: string;
 };
 
-/** A part's runs; `slot` is when the wide steps last answered their schedule. */
-export type PartState = { last_run?: RunRecord; last_green?: RunRecord; slot?: string };
+/** The last records commit a part's green run wrote and submitted, or what came of trying. */
+export type RecordsRun = { commit: string; at: string; submitted: string | null; result: string };
+
+/**
+ * A part's runs, and its records: each part records the kinds its own checks
+ * hold, after its own green run. `slot` is when the wide steps last answered
+ * their schedule.
+ */
+export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; slot?: string };
 
 export type State = {
   version: 1;
@@ -84,8 +91,6 @@ export type State = {
   wide: PartState;
   culprits: Culprit[];
   probes: ProbeRecord[];
-  /** The last verified commit whose pending and improved records were written and submitted. */
-  records?: { commit: string; at: string; submitted: string | null; result: string };
   /**
    * The last nightly benchmark attempt; `measured` when nts-bench ran on
    * `commit`, and `slower` its rows slower than their own best (bench.ts).
@@ -108,9 +113,12 @@ export function emptyState(): State {
 
 export function readState(file: string): State {
   if (!existsSync(file)) return emptyState();
-  const value = JSON.parse(readFileSync(file, "utf8")) as State;
+  const value = JSON.parse(readFileSync(file, "utf8")) as State & { records?: RecordsRun };
   if (value.version !== 1) throw new Error(`${file}: unknown state version ${String(value.version)}`);
-  return { ...emptyState(), ...value };
+  // One records run for both parts, from before each part kept its own: it was the core's.
+  const { records, ...rest } = value;
+  if (records && !rest.core?.records) rest.core = { ...rest.core, records };
+  return { ...emptyState(), ...rest };
 }
 
 export function writeState(file: string, state: State): void {
