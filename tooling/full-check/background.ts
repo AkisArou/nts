@@ -2,7 +2,7 @@
 // landing: the full check"): each piece runs in a systemd user unit of its own,
 // named for its kind of work, so it outlives the controller that started it
 // and the controller goes on with the core while it runs. A part's records run
-// is one (service.ts); the nightly benchmark run is meant to be the next.
+// is one (service.ts), the nightly benchmark run another (bench.ts).
 //
 // The controller writes the job -- its unit's name and the file its outcome
 // goes to -- into its state before the unit exists, and reads the outcome once
@@ -18,7 +18,9 @@
 // so an outcome is always all of one run's and never half of one. It runs the
 // code of a tree that only it uses while it runs, never the controller's: the
 // controller's tree moves to `verified` under it (service.ts's followVerified),
-// and a process that reads a tree while it moves reads two versions of it.
+// and a process that reads a tree while it moves reads two versions of it. A
+// unit past its hang guard (its RuntimeMaxSec) is stopped, and ends as any
+// stopped unit does: gone, with no outcome, not measured.
 //
 // systemdUnits() starts each one with `systemd-run --user --unit=<name>
 // --collect`: --collect unloads a unit when it ends, failed or not, so its
@@ -38,6 +40,8 @@ export type UnitSpec = {
   command: readonly string[];
   /** Its standard output and error, appended. */
   log: string;
+  /** Its own properties, beside those every unit has (a hang guard, RuntimeMaxSec=, say). */
+  properties?: readonly string[];
 };
 
 export type Units = {
@@ -144,7 +148,7 @@ export function systemdUnits(properties: readonly string[], env: NodeJS.ProcessE
     start(spec) {
       const r = spawnSync("systemd-run", [
         "--user", `--unit=${spec.name}`, "--collect", "--quiet", ...toolingSliceArgs(env),
-        "--property=Type=exec", ...properties.map(property => `--property=${property}`),
+        "--property=Type=exec", ...[...properties, ...spec.properties ?? []].map(property => `--property=${property}`),
         `--property=StandardOutput=append:${spec.log}`, `--property=StandardError=append:${spec.log}`,
         `--working-directory=${spec.cwd}`, ...systemdEnvironment(env), "--", ...spec.command,
       ], { encoding: "utf8" });

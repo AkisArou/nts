@@ -1,8 +1,8 @@
 // The full check's systemd user units: the controller, one long-running
 // service at low priority from a controller worktree of its own at `verified`;
 // the hourly count, a service its own timer starts; and each part's records
-// unit, which the controller starts itself (service.ts, background.ts) and so
-// is not installed.
+// unit and the nightly benchmarks' unit, which the controller starts itself
+// (service.ts, background.ts) and so are not installed.
 //
 //   node tooling/full-check/unit.ts                  print the controller's unit, and the count's service and timer
 //   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the three, reload systemd
@@ -12,8 +12,8 @@
 // `systemctl --user enable --now nts-full-check-count.timer` the count, and
 // `journalctl --user -u nts-full-check -f` follows the controller.
 // `systemctl --user stop nts-full-check` stops it and every process it
-// started (the unit's cgroup), except the records units, which run on and are
-// adopted by name when it starts again: `systemctl --user stop
+// started (the unit's cgroup), except the records and benchmarks units, which
+// run on and are adopted by name when it starts again: `systemctl --user stop
 // nts-full-check-records-core` stops one. The schedule lives on the
 // controller's ExecStart line: edit it with `--install` and new options, or
 // `systemctl --user edit --full nts-full-check`.
@@ -33,6 +33,8 @@ export const UNIT = "nts-full-check";
 export const COUNT_UNIT = `${UNIT}-count`;
 /** A part's records unit (service.ts): one name for each part, so a second cannot start while one runs. */
 export const recordsUnitName = (part: Part) => `${UNIT}-records-${part}`;
+/** The nightly benchmarks' unit (service.ts, bench.ts): one at a time. */
+export const BENCH_UNIT = `${UNIT}-bench`;
 
 /**
  * How every unit of the full check runs: landing checks and agents come first,

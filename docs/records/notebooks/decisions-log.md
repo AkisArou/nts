@@ -1666,6 +1666,36 @@ As built:
   that tree, and the controller moves the tree to `verified` only while
   nobody holds it.
 
+## The nightly benchmarks run in a unit and land on the newest main (11-09)
+
+The user asked (#604) that the nightly measurement survive a controller
+restart and that its results land: on 11-08 and 11-09 the nightly attempts
+kept nothing, a hang and then a restart of the controller, which ran nts-bench
+as its own child for the two to three hours a run of 165 cases takes; and a
+results commit built on `verified` was refused once main's `full.md` renderer
+or results had moved, with nobody reading the answer.
+
+As built:
+- the run measures in `nts-full-check-bench` (background.ts), in a bench tree
+  of its own at `verified`, on that tree's own code, so `with-lock.sh`, a
+  shell script read as it runs, is never the controller's, whose tree moves
+  to `verified` under a running unit; the session's memory is reserved first
+  (`admit.ts --key bench-session`, at full-check priority, by the gate
+  target's scheduling history, where earlier sessions' peaks are), then the
+  measurement lock admits it;
+- nts-bench is built by the gate's build step at `verified`, as before, and
+  copied into the run's folder, since the next core run builds over the
+  gate's target while it measures;
+- a restarted controller adopts the unit by name; a unit gone without an
+  outcome is started once more, then the night is a task; an eight-hour hang
+  guard stops a unit that never finishes, which is then not measured;
+- the run's record is published on the newest main by main's own
+  `run-record.ts publish`, in the bench tree, and that results-only commit is
+  followed by the loop that follows records (`followLanding`): published
+  again after a refusal, a held one at once, three attempts in all, then a
+  task; one night's run is in flight at a time, and a nightly slot that comes
+  while a run measures waits for it.
+
 ## One memory ledger for the machine (11-09)
 
 The user asked for one memory admission pool for the machine ("fix it", #590),

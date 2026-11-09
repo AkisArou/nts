@@ -2,8 +2,8 @@
 // check"): one service, run by the systemd user unit nts-full-check (unit.ts),
 // at low priority in its own tree and target under ~/.cache/nts-full-check.
 // What takes hours beside it runs in units of its own (background.ts): each
-// part's records run, which the controller starts and adopts by name, and the
-// hourly count, which its own timer starts.
+// part's records run and the nightly benchmarks, which the controller starts
+// and adopts by name, and the hourly count, which its own timer starts.
 //
 //   node tooling/full-check/service.ts                     the loop the unit runs
 //   node tooling/full-check/service.ts --once              one cycle, then exit
@@ -11,24 +11,30 @@
 //   node tooling/full-check/service.ts --count             the hourly count once, written to its own file (the timer's command)
 //   node tooling/full-check/service.ts --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>
 //                                                          a records unit's work, in the records tree it runs from (recordsUnit)
+//   node tooling/full-check/service.ts --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>
+//                                                          the benchmarks unit's work, in the bench tree it runs from (benchmarksUnit)
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00   (local time; schedule.ts)
 //
 // Each cycle does the first of these that is due:
 //   0. a part's records unit that ended, what it recorded applied on the
 //      newest main and submitted; or a records commit the landing check
 //      refused or held, its delta applied again on the newest main and
-//      submitted (seconds; followRecords). A records unit still running holds
-//      nothing: the cycle goes on;
+//      submitted (seconds; followRecords); then the same for the benchmarks
+//      unit and the run record it kept (followBenchmarks). A unit still
+//      running holds nothing: the cycle goes on;
 //   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
 //      the schedule, if verified moved since their last run; the nightly slot
 //      also makes the benchmarks due (bench.ts), whatever wide slot came after
 //      it, if nts-bench has not measured verified yet;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
-//   3. due benchmarks on the newest `verified`, admitted by the measurement
-//      lock once CPU 4 and its sibling 5 are quiet: an attempt the lock does
-//      not admit keeps them due, asked again ten minutes later, until they run
-//      or the next nightly slot replaces them.
+//   3. due benchmarks on the newest `verified`: nts-bench built there, then
+//      measured in the benchmarks unit, beside the core, once the measurement
+//      lock admits it with CPU 4 and its sibling 5 quiet: an attempt the lock
+//      does not admit keeps them due, asked again ten minutes later, until
+//      they run or the next nightly slot replaces them. One night's run is in
+//      flight at a time: a night measures once the last run landed or was
+//      given up.
 //
 // What follows a run:
 //   - green core: refs/heads/verified moves to that commit and is pushed;
@@ -43,18 +49,21 @@
 //     commit submitted; each cycle then follows it until the landing check
 //     lands it, applying the delta again on the newest main after a refusal,
 //     a few times at most;
-//   - a benchmark run: nts-bench's results-only commit is submitted the same
-//     way, and the rows full.md marks slower than their own best are a task;
+//   - a benchmark run that kept a record: main's own run-record.ts publishes
+//     it on the newest main, its results-only commit is submitted and
+//     followed as records are, and the rows full.md marks slower than their
+//     own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
 //     main moves, or after half an hour.
 //
-// The records unit's command line (--record and its values) and its outcome
-// (RecordsOutcome) are a cross-version contract: the unit runs its records
-// tree's code, the run's commit, while the controller that starts it runs
-// `verified`'s, which is the same or older, and a controller restarted on
-// newer code may start it once more or read what it wrote.
+// A unit's command line (--record, --benchmarks and their values) and its
+// outcome (RecordsOutcome, MeasureOutcome) are a cross-version contract: the
+// unit runs its tree's code, the commit it works at, while the controller
+// that starts it runs `verified`'s, which is the same or older, and a
+// controller restarted on newer code may start it once more or read what it
+// wrote.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -73,16 +82,16 @@ import { count as countMachine, countLines, gather, sweep as sweepLeftovers, typ
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
-import { landedTimes, landingQueue, submitTo, type LandingQueue } from "./queue.ts";
+import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage, runPin, type Applier, type Recorder } from "./records.ts";
 import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.ts";
 import { listedIn, type Listed } from "../records/pending.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
-import { benchWithLock, FULL_MD, resultsCommit, slowerRows, type Bench, type BenchAttempt } from "./bench.ts";
+import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueNightly, dueSlot, nextNightly, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
-import { lowPriority, recordsUnitName } from "./unit.ts";
+import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { BENCH_UNIT, lowPriority, recordsUnitName } from "./unit.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -104,8 +113,8 @@ export type Effects = {
   checkout: (tree: string, commit: string) => void;
   /** main's own record-pending.ts --apply in a part's records tree at main (records.ts). */
   applier: Applier;
-  /** nts-bench on the tree, through the measurement lock (bench.ts). */
-  bench: Bench;
+  /** main's own run-record.ts publish of a night's run record, in the bench tree at main (bench.ts). */
+  publisher: Publisher;
   /** Where pins live (pin.ts's PINS). */
   pins: string;
   /** Push a commit to the remote's `verified`. */
@@ -124,16 +133,17 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "idle"> {
   const state = readState(fx.layout.state);
   housekeeping(fx, state);
-  interruptedBenchmarks(fx, state);
   if (await followRecords(fx, state)) return "records";
+  if (await followBenchmarks(fx, state)) return "benchmarks";
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
   // Answered on its own: a cycle that first gets to the night after a later
   // wide slot still makes it due. A state that never answered one starts
   // here, and its first night is the next slot.
   if (!state.nightly) { state.nightly = now.toISOString(); writeState(fx.layout.state, state); }
+  // A slot that comes while a night's run measures is answered once it ends.
   const night = dueNightly(fx.schedule, new Date(state.nightly), now);
-  if (night) answerNightly(fx, state, night, verified);
+  if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, verified);
   const slot = dueSlot(fx.schedule, state.wide.slot ? new Date(state.wide.slot) : undefined, now);
   if (slot) {
     state.wide.slot = now.toISOString();
@@ -165,9 +175,15 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
       return part;
     }
   }
+  // One night's run in flight at a time, as one delta of a part's rows is: a
+  // night measures once the last run has landed or been given up.
   const due = state.benchmarks_due;
-  if (due && verified && !(due.asked && now.getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS)
-    && await runBenchmarks(fx, state, verified) === "done") return "benchmarks";
+  if (due && !due.measuring && verified && !(due.asked && now.getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS)) {
+    if (publishing(state.bench)) {
+      const waiting = `the run at ${short(state.bench.commit)} still waits to land (${state.bench.result})`;
+      if (due.waiting !== waiting) { due.waiting = waiting; writeState(fx.layout.state, state); }
+    } else if (startBenchmarks(fx, state, verified) !== "waiting") return "benchmarks";
+  }
   return "idle";
 }
 
@@ -620,16 +636,66 @@ async function applyAndSubmit(fx: Effects, state: State, part: Part, records: Re
   }
 }
 
+/** A commit the full check made on main and submitted -- a part's records, a night's benchmark run -- and what came of it. */
+type Landing = { submitted: string | null; result: string; attempts?: number; base?: string; answer?: LandingAnswer; settled?: string };
+
+/** How one kind of landing is followed: what names it in a line, what it is made again from, how, and the task once it is given up. */
+type Follow = {
+  named: (submitted: string | null) => string;
+  /** The file it is made again from, kept in its run's folder. */
+  source: string;
+  /** What making it again on `main` does, as a line says it. */
+  again: (main: string) => string;
+  /** What a result says it is not, once given up ("not applied again"), and what it says when its source is gone. */
+  not: string;
+  gone: string;
+  given: (result: string) => string;
+  remake: (main: string) => Promise<void>;
+};
+
+/**
+ * A submitted commit as the landing check answers it. Landed or withdrawn
+ * settles it. Refused, held, unknown to the queue, or never submitted, it is
+ * made again on the newest main and submitted, RECORDS_ATTEMPTS times in all,
+ * and then it is a task. A refusal, or an attempt that failed, waits for main
+ * to move first: the same commit on the same main comes to the same end. A
+ * held one, which could not be checked, and one the queue lost are taken up at
+ * once; a held one is withdrawn before it is replaced, so it never lands
+ * behind its replacement. Returns whether it made it again.
+ */
+async function followLanding(fx: Effects, state: State, landing: Landing, follow: Follow): Promise<boolean> {
+  const answer = landing.submitted ? fx.queue.answer(landing.submitted) : null;
+  if (answer === "waiting") return false;
+  if (answer) landing.answer = answer;
+  if (answer?.state === "landed" || answer?.state === "withdrawn") {
+    landing.settled = fx.now().toISOString();
+    landing.result = answer.state === "landed" ? `landed as ${short(answer.tip ?? landing.submitted!)}` : `withdrawn: ${answer.message}`;
+    fx.log(`${follow.named(landing.submitted)}: ${landing.result}`);
+    writeState(fx.layout.state, state);
+    return false;
+  }
+  const why = !landing.submitted ? `nothing was submitted (${landing.result})` : answer ? `${answer.state}: ${answer.message}` : "the landing queue has no record of it";
+  const attempts = landing.attempts ?? 1, kept = existsSync(follow.source), main = fx.git.commit("refs/heads/main")!;
+  if (attempts >= RECORDS_ATTEMPTS || !kept) {
+    if (answer?.state === "held") fx.queue.withdraw(landing.submitted!);
+    landing.settled = fx.now().toISOString();
+    landing.result = `${why}; ${follow.not}: ${kept ? `${attempts} attempt(s) made` : follow.gone}`;
+    task(fx, state, follow.given(landing.result));
+    writeState(fx.layout.state, state);
+    return false;
+  }
+  const atOnce = answer?.state === "held" || (landing.submitted !== null && answer === null);
+  if (!atOnce && main === landing.base) return false;
+  if (answer?.state === "held") fx.queue.withdraw(landing.submitted!);
+  fx.log(`${follow.named(landing.submitted)}: ${why}; ${follow.again(main)}`);
+  await follow.remake(main);
+  return true;
+}
+
 /**
  * Each part's records unit while it records (followRecording), and each
- * part's records commit as the landing check answers it. Landed or
- * withdrawn settles it. Refused, held, unknown to the queue, or never
- * submitted, its delta is applied again on the newest main and submitted,
- * RECORDS_ATTEMPTS times in all, and then it is a task. A refusal, or an
- * attempt that failed, waits for main to move first: the same rows on the
- * same main come to the same end. A held one, which could not be checked, and
- * one the queue lost are taken up at once; a held one is withdrawn before it
- * is replaced, so it never lands behind its replacement. Returns whether it
+ * part's records commit as the landing check answers it (followLanding): its
+ * delta applied again on the newest main after a refusal. Returns whether it
  * applied a delta.
  */
 async function followRecords(fx: Effects, state: State): Promise<boolean> {
@@ -641,32 +707,15 @@ async function followRecords(fx: Effects, state: State): Promise<boolean> {
       continue;
     }
     if (!following(records)) continue;
-    const answer = records.submitted ? fx.queue.answer(records.submitted) : null;
-    if (answer === "waiting") continue;
-    if (answer) records.answer = answer;
-    if (answer?.state === "landed" || answer?.state === "withdrawn") {
-      records.settled = fx.now().toISOString();
-      records.result = answer.state === "landed" ? `landed as ${short(answer.tip ?? records.submitted!)}` : `withdrawn: ${answer.message}`;
-      fx.log(`records ${short(records.submitted!)} of the ${part} rows at ${short(records.commit)}: ${records.result}`);
-      writeState(fx.layout.state, state);
-      continue;
-    }
-    const why = !records.submitted ? `nothing was submitted (${records.result})` : answer ? `${answer.state}: ${answer.message}` : "the landing queue has no record of it";
-    const attempts = records.attempts ?? 1, kept = existsSync(records.delta), main = fx.git.commit("refs/heads/main")!;
-    if (attempts >= RECORDS_ATTEMPTS || !kept) {
-      if (answer?.state === "held") fx.queue.withdraw(records.submitted!);
-      records.settled = fx.now().toISOString();
-      records.result = `${why}; not applied again: ${kept ? `${attempts} attempt(s) made` : `its delta ${records.delta} is gone`}`;
-      task(fx, state, `- The full check's ${part} records of ${short(records.commit)} did not land: ${records.result}. Their rows stay pending for the next records run; see ${dirname(records.delta)}.`);
-      writeState(fx.layout.state, state);
-      continue;
-    }
-    const atOnce = answer?.state === "held" || (records.submitted !== null && answer === null);
-    if (!atOnce && main === records.base) continue;
-    if (answer?.state === "held") fx.queue.withdraw(records.submitted!);
-    fx.log(`records ${records.submitted ? short(records.submitted) : "(none submitted)"} of the ${part} rows at ${short(records.commit)}: ${why}; their delta is applied again on main ${short(main)}`);
-    await applyAndSubmit(fx, state, part, records, main);
-    again = true;
+    if (await followLanding(fx, state, records, {
+      named: submitted => `records ${submitted ? short(submitted) : "(none submitted)"} of the ${part} rows at ${short(records.commit)}`,
+      source: records.delta,
+      again: main => `their delta is applied again on main ${short(main)}`,
+      not: "not applied again",
+      gone: `its delta ${records.delta} is gone`,
+      given: result => `- The full check's ${part} records of ${short(records.commit)} did not land: ${result}. Their rows stay pending for the next records run; see ${dirname(records.delta)}.`,
+      remake: main => applyAndSubmit(fx, state, part, records, main),
+    })) again = true;
   }
   return again;
 }
@@ -676,14 +725,41 @@ async function followRecords(fx: Effects, state: State): Promise<boolean> {
  * may be another measurement's for an hour, and each attempt builds first.
  */
 export const BENCH_ASK_AGAIN_MS = 10 * 60_000;
-/** How many of a night's attempts a stopped controller may cost before the night is given up. */
-export const BENCH_INTERRUPTIONS = 3;
+/**
+ * The benchmarks unit's hang guard: a night's run takes two to three hours,
+ * and one still going at eight never finishes. Past it the unit is stopped,
+ * gone with no outcome, and nothing of it is measured.
+ */
+export const BENCH_HANG_GUARD = "8h";
+/** The benchmarks unit's outcome, and its own output, in its run's folder (measureJob). */
+export const BENCH_OUTCOME = "bench.outcome.json";
+export const BENCH_UNIT_LOG = "bench.unit.log";
+
+/** Whether the last night's run is being published: it kept a record, and nothing has settled it. */
+const publishing = (bench: BenchRun | undefined): bench is BenchRun & { record: string } => !!bench?.record && !bench.settled;
+
+/**
+ * The benchmarks unit: service.ts --benchmarks in the bench tree, at the
+ * commit it measures, on that tree's own code and Node, with the run's own
+ * copy of nts-bench. The session's memory is reserved by the scheduling
+ * history of the gate's target, where the build step made that nts-bench and
+ * where earlier sessions' peaks are kept.
+ */
+export function benchmarksUnit(layout: Layout, measuring: { commit: string; run: string }, node: string): UnitSpec {
+  const tree = layout.bench;
+  return {
+    name: BENCH_UNIT, cwd: tree, log: join(measuring.run, BENCH_UNIT_LOG), properties: [`RuntimeMaxSec=${BENCH_HANG_GUARD}`],
+    command: [node, join(tree, "tooling/full-check/service.ts"), "--benchmarks", `--commit=${measuring.commit}`, `--run=${measuring.run}`,
+      `--bench=${join(measuring.run, "nts-bench")}`, `--history=${join(layout.target, "gate-costs")}`, `--outcome=${join(measuring.run, BENCH_OUTCOME)}`],
+  };
+}
 
 /**
  * The nightly slot, answered: the benchmarks are due on the newest verified
  * until the next nightly slot, unless nts-bench already measured it. A night
  * still due when the next one comes is replaced, and its end says what held
- * it.
+ * it. A slot that comes while a night's run measures is answered when it
+ * ends (cycle).
  */
 function answerNightly(fx: Effects, state: State, night: Date, verified: string | null): void {
   const now = fx.now().toISOString(), left = state.benchmarks_due;
@@ -701,9 +777,13 @@ function answerNightly(fx: Effects, state: State, night: Date, verified: string 
   writeState(fx.layout.state, state);
 }
 
-/** What holds the due benchmarks now, for the status (`benchmarks.due.waiting`); the run that follows writes it down. */
+/**
+ * What holds the due benchmarks now, for the status (`benchmarks.due.waiting`);
+ * the run that follows writes it down. Nothing holds a night's run that
+ * measures: the core runs beside it.
+ */
 function holds(state: State, what: string): void {
-  if (state.benchmarks_due) state.benchmarks_due.waiting = what;
+  if (state.benchmarks_due && !state.benchmarks_due.measuring) state.benchmarks_due.waiting = what;
 }
 
 /** The night has its answer: the benchmarks are no longer due, and the status says how they ended. */
@@ -715,87 +795,185 @@ function endNight(fx: Effects, state: State, bench: Pick<BenchRun, "commit" | "a
   return "done";
 }
 
-/**
- * An attempt the state says is in flight was interrupted: a cycle runs its
- * own attempt to its end before the next begins, so only a controller that
- * stopped during one leaves it for a later cycle to find. It is tried again
- * while the night lasts, BENCH_INTERRUPTIONS lost attempts at most, and then
- * the night is given up as a task.
- */
-function interruptedBenchmarks(fx: Effects, state: State): void {
-  const due = state.benchmarks_due, lost = due?.measuring;
-  if (!due || !lost) return;
-  delete due.measuring;
-  due.interrupted = (due.interrupted ?? 0) + 1;
-  const result = `interrupted: the controller stopped while nts-bench measured, from ${lost.at}`;
-  if (due.interrupted < BENCH_INTERRUPTIONS) {
-    state.bench = { commit: lost.commit, at: lost.at, run: lost.run, result: `${result}; tried again`, submitted: null, measured: false, outcome: "interrupted" };
-    due.waiting = `the attempt from ${lost.at} was interrupted, and is tried again`;
-    fx.log(`benchmarks at ${short(lost.commit)}: ${state.bench.result}`);
-    writeState(fx.layout.state, state);
-    return;
-  }
-  endNight(fx, state, { commit: lost.commit, at: lost.at, run: lost.run, outcome: "interrupted",
-    result: `${result}; interrupted ${due.interrupted} times this night, so the next nightly slot tries again` });
-  task(fx, state, `- The nightly benchmarks at ${short(lost.commit)} were interrupted ${due.interrupted} times: the controller stopped while nts-bench measured; see ${lost.run}.`);
+/** The benchmarks stay due, asked again BENCH_ASK_AGAIN_MS later, and the status says what held this attempt. */
+function askLater(fx: Effects, state: State, commit: string, why: string): "waiting" {
+  Object.assign(state.benchmarks_due!, { waiting: why, asked: fx.now().toISOString() });
+  fx.log(`benchmarks at ${short(commit)}: ${why}; still due, and asked again in ${BENCH_ASK_AGAIN_MS / 60_000} min`);
   writeState(fx.layout.state, state);
+  return "waiting";
 }
 
 /**
- * nts-bench on `verified`, built by pinned.sh in the full check's tree (its
- * `build` step: nts-bench links the compiler crates, so it is built from the
- * commit it measures), admitted by the measurement lock (bench.ts), and its
- * results-only commit submitted. `waiting` when it did not start -- its build
- * held, or the lock not admitting it -- and nothing is kept: the benchmarks
- * stay due, asked again BENCH_ASK_AGAIN_MS later. `done` when the night has
- * its answer: a run record, a run that kept none, or a build red at
- * verified. The attempt is written down before nts-bench starts, so one a
- * stopped controller cut short is found (interruptedBenchmarks).
+ * nts-bench on `verified`, built by pinned.sh in the full check's gate tree
+ * (its `build` step: nts-bench links the compiler crates, so it is built from
+ * the commit it measures), copied into the run's folder before the next core
+ * run builds over it, and measured in the benchmarks unit beside the core
+ * (startMeasuring). `waiting` when its build was held: the benchmarks stay
+ * due, asked again later. `done` when the night has its answer at once: the
+ * build red at verified, or no nts-bench to measure with. `started` once the
+ * unit is.
  */
-async function runBenchmarks(fx: Effects, state: State, verified: string): Promise<"waiting" | "done"> {
+function startBenchmarks(fx: Effects, state: State, verified: string): "waiting" | "done" | "started" {
   const due = state.benchmarks_due!, at = fx.now().toISOString();
-  const wait = (why: string): "waiting" => {
-    Object.assign(due, { waiting: why, asked: at });
-    fx.log(`benchmarks at ${short(verified)}: ${why}; still due, and asked again in ${BENCH_ASK_AGAIN_MS / 60_000} min`);
-    writeState(fx.layout.state, state);
-    return "waiting";
-  };
   const built = doing(fx, state, "benchmarks", verified, () => fx.gate.run(verified, ["build"], "bench-build"), at);
-  if (built.verdict === "held") return wait(`the build at verified was held (${built.reasons.build ?? "no reason given"}); see ${built.run}`);
+  if (built.verdict === "held") return askLater(fx, state, verified, `the build at verified was held (${built.reasons.build ?? "no reason given"}); see ${built.run}`);
   if (built.verdict !== "green") return endNight(fx, state, { commit: verified, at, run: built.run, result: `not run: the build at verified is ${built.verdict}`, outcome: "not-run" });
-  const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`);
+  const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`), bench = join(run, "nts-bench");
   mkdirSync(run, { recursive: true });
+  try {
+    copyFileSync(join(fx.layout.target, "release/nts-bench"), bench);
+    chmodSync(bench, 0o755);
+  } catch (error) {
+    return endNight(fx, state, { commit: verified, at, run, result: `not run: the build at verified left no nts-bench to measure with (${message(error)})`, outcome: "not-run" });
+  }
   due.measuring = { commit: verified, at, run };
-  fx.log(`benchmarks: nts-bench on verified ${short(verified)}, once the measurement lock admits it; logs ${run}`);
-  let attempt: BenchAttempt | { failed: string };
-  try { attempt = doing(fx, state, "benchmarks", verified, () => fx.bench(fx.layout.tree, run), at); }
-  catch (error) { attempt = { failed: error instanceof Error ? error.message : String(error) }; }
-  delete due.measuring;
-  writeState(fx.layout.state, state);
-  if ("failed" in attempt) return endNight(fx, state, { commit: verified, at, run, result: `nts-bench could not be run: ${attempt.failed}`, outcome: "no-record" });
-  if (!attempt.admitted) {
-    // It started nothing: its log holds only the refusal, said here and in the state.
+  startMeasuring(fx, state, due.measuring);
+  return "started";
+}
+
+/**
+ * The benchmarks unit started at the commit it measures, in the bench tree set
+ * up there afresh: what an earlier start that stopped left in it is gone. The
+ * job is in the state before the unit exists (background.ts's start). A start
+ * that fails is a start all the same: the next cycle finds the unit gone with
+ * no outcome, and starts it once more or gives the night up (followBenchmarks).
+ */
+function startMeasuring(fx: Effects, state: State, measuring: Measuring, again = false): void {
+  const tree = fx.layout.bench, now = fx.now(), save = () => writeState(fx.layout.state, state);
+  let spec: UnitSpec | null = null, error: string | null = null;
+  try {
+    fx.checkout(tree, measuring.commit);
+    spec = benchmarksUnit(fx.layout, measuring, fx.node(tree));
+  } catch (cause) { error = `its tree could not be set up: ${message(cause)}`; }
+  if (!again || !measuring.job) measuring.job = newJob(BENCH_UNIT, join(measuring.run, BENCH_OUTCOME), now);
+  else if (!spec) Object.assign(measuring.job, { starts: measuring.job.starts + 1, at: now.toISOString() });
+  if (spec) error = again ? startAgain(fx.units, spec, measuring.job, now, save) : start(fx.units, spec, measuring.job, save);
+  fx.log(`benchmarks at ${short(measuring.commit)}: ${error ? `${measuring.job.unit} did not start: ${error}`
+    : `nts-bench measures in ${measuring.job.unit}${again ? ", started again" : ""}, once the measurement lock admits it`}; logs ${measuring.run}`);
+  save();
+}
+
+/**
+ * The benchmarks unit as it is now, and the last run's publication. Running,
+ * the cycle goes on beside it. Ended, the night has its answer (measured).
+ * Gone without an outcome, it is started once more, and then the night is
+ * given up as a task. A run that kept a record is followed until it lands
+ * (followLanding), published again on the newest main after a refusal.
+ * Returns whether it did work the cycle counts: a night answered, or a record
+ * published.
+ */
+async function followBenchmarks(fx: Effects, state: State): Promise<boolean> {
+  const due = state.benchmarks_due, measuring = due?.measuring;
+  if (due && measuring && !measuring.job) {
+    // An attempt from before the benchmarks ran in a unit of their own, which a stopped controller cut short.
+    delete due.measuring;
+    due.waiting = `the attempt from ${measuring.at} was cut short by a stopped controller, and is tried again`;
+    fx.log(`benchmarks at ${short(measuring.commit)}: ${due.waiting}`);
+    writeState(fx.layout.state, state);
+    return false;
+  }
+  if (due && measuring?.job) {
+    let seen: Seen<MeasureOutcome>;
+    try { seen = look<MeasureOutcome>(measuring.job, fx.units, fx.now()); }
+    catch (error) {
+      fx.log(`benchmarks: whether ${measuring.job.unit} runs cannot be told (${message(error)}); asked again next cycle`);
+      return false;
+    }
+    if (seen.state === "running") return false;
+    if (seen.state === "lost" && seen.again) {
+      fx.log(`benchmarks at ${short(measuring.commit)}: ${seen.why}; it is started once more`);
+      startMeasuring(fx, state, measuring, true);
+      return false;
+    }
+    // The run's copy of nts-bench serves no unit now; its logs, outcome and record stay.
+    rmSync(join(measuring.run, "nts-bench"), { force: true });
+    if (seen.state === "lost") {
+      endNight(fx, state, { commit: measuring.commit, at: measuring.at, run: measuring.run, outcome: "interrupted",
+        result: `${seen.why}, started ${measuring.job.starts} time(s); see ${join(measuring.run, BENCH_UNIT_LOG)}` });
+      task(fx, state, `- The nightly benchmarks at ${short(measuring.commit)} did not finish: ${state.bench!.result}. The next nightly slot measures again.`);
+      writeState(fx.layout.state, state);
+      return true;
+    }
+    delete due.measuring;
+    writeState(fx.layout.state, state);
+    return measured(fx, state, measuring, seen.outcome);
+  }
+  const bench = state.bench;
+  if (!publishing(bench)) return false;
+  return followLanding(fx, state, bench, {
+    named: submitted => `benchmark run ${submitted ? short(submitted) : "(none submitted)"} at ${short(bench.commit)}`,
+    source: bench.record,
+    again: main => `its record is published again on main ${short(main)}`,
+    not: "not published again",
+    gone: `its record ${bench.record} is gone`,
+    given: result => `- The nightly benchmark run at ${short(bench.commit)} did not land: ${result}. Its record ${bench.record} is kept with its run's logs; publish it on main with tooling/bench/run-record.ts publish.`,
+    remake: main => publishAndSubmit(fx, state, bench, main),
+  });
+}
+
+/**
+ * The night's answer from its unit's outcome. Not admitted, it started
+ * nothing: its folder goes, and the benchmarks stay due, asked again later.
+ * A run that kept no record ends the night as a task. One that kept a record
+ * is measured, and its record is published on the newest main and submitted.
+ */
+async function measured(fx: Effects, state: State, measuring: Measuring, outcome: Outcome & MeasureOutcome): Promise<boolean> {
+  const { commit, at, run } = measuring;
+  if (!outcome.admitted) {
+    // Its log holds only the refusal, said here and in the state.
     rmSync(run, { recursive: true, force: true });
-    return wait(`not admitted: ${attempt.reason}`);
+    askLater(fx, state, commit, `not admitted: ${outcome.reason ?? "no reason given"}`);
+    return false;
   }
-  const tree = new Git(fx.layout.tree, fx.git.env);
-  const found = resultsCommit(tree, verified);
-  if ("none" in found) {
-    endNight(fx, state, { commit: verified, at, run, result: `nts-bench exited ${attempt.status}: ${found.none}`, outcome: "no-record" });
-    task(fx, state, `- The nightly benchmark run at ${short(verified)} kept no run record (nts-bench exited ${attempt.status}: ${found.none}); see ${run}.`);
+  if (!outcome.record) {
+    endNight(fx, state, { commit, at, run, result: `nts-bench exited ${outcome.status}: ${outcome.none}`, outcome: "no-record" });
+    task(fx, state, `- The nightly benchmark run at ${short(commit)} kept no run record (nts-bench exited ${outcome.status}: ${outcome.none}); see ${run}.`);
     writeState(fx.layout.state, state);
-    return "done";
+    return true;
   }
-  fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(verified)}`, found.commit]);
-  const submitted = await submitTo(fx.queue, found.commit, { first: false });
-  const slower = slowerRows(tree.run(["show", `${found.commit}:${FULL_MD}`]));
-  endNight(fx, state, { commit: verified, at, run, outcome: "record", measured: true, slower, submitted: submitted.submitted ? found.commit : null,
-    result: `run record ${short(found.commit)}${attempt.status ? ` (nts-bench exited ${attempt.status})` : ""}: ${submitted.line}` });
-  if (slower.length) {
-    task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
+  endNight(fx, state, { commit, at, run, outcome: "record", measured: true, record: outcome.record,
+    result: `run record ${basename(outcome.record, ".json")}${outcome.status ? ` (nts-bench exited ${outcome.status})` : ""}, to publish on the newest main` });
+  await publishAndSubmit(fx, state, state.bench as BenchRun & { record: string }, fx.git.commit("refs/heads/main")!);
+  return true;
+}
+
+/**
+ * A night's run record published on `main`, the newest, by main's own
+ * run-record.ts publish in the bench tree, and the results-only commit it
+ * made there submitted. Each call is an attempt, whatever comes of it; one
+ * that commits nothing, because main has the record already, settles it. The
+ * first commit's full.md says which rows are slower than their own best: a
+ * task, once.
+ */
+async function publishAndSubmit(fx: Effects, state: State, bench: BenchRun & { record: string }, main: string): Promise<void> {
+  const attempt = (bench.attempts ?? 0) + 1, log = join(bench.run, `publish-${attempt}.log`);
+  Object.assign(bench, { attempts: attempt, base: main, submitted: null });
+  delete bench.answer;
+  try {
+    const dir = fx.layout.bench, tree = new Git(dir, fx.git.env);
+    const published = doing(fx, state, "benchmarks", bench.commit, () => publishAt(tree, main, commit => fx.checkout(dir, commit), at => fx.publisher(at, bench.record, log)));
+    if (published.kind === "failed") bench.result = `run-record.ts publish ${published.why} on main ${short(main)} (attempt ${attempt}); see ${log}`;
+    else if (published.kind === "none") {
+      bench.settled = fx.now().toISOString();
+      bench.result = `nothing left to publish on main ${short(main)}: main has its record and page already`;
+    } else {
+      // Reachable until it lands: the queue holds a commit, not a branch.
+      fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(bench.commit)}`, published.commit]);
+      const submitted = await submitTo(fx.queue, published.commit, { first: false });
+      bench.submitted = submitted.submitted ? published.commit : null;
+      bench.result = `run record ${basename(bench.record, ".json")} published on main ${short(main)} (attempt ${attempt}): ${submitted.line}`;
+      if (!bench.slower) {
+        bench.slower = slowerRows(tree.run(["show", `${published.commit}:${FULL_MD}`]));
+        if (bench.slower.length) task(fx, state, `- ${bench.slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(bench.commit)}: ${bench.slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
+      }
+    }
+    fx.log(`benchmarks at ${short(bench.commit)}: ${bench.result}`);
+  } catch (error) {
+    bench.result = `failed on main ${short(main)} (attempt ${attempt}): ${message(error)}`;
+    fx.log(`benchmarks: ${bench.result}`);
+  } finally {
     writeState(fx.layout.state, state);
   }
-  return "done";
 }
 
 export type CountEffects = {
@@ -895,7 +1073,7 @@ function clearCulprits(fx: Effects, state: State, part: Part, green: string): vo
   });
 }
 
-/** Old runs and probes go, but not the runs records still record or apply from; landed reverts lose the ref that kept them; verified is pushed. */
+/** Old runs and probes go, but not the runs records or a night's run still work from; landed reverts lose the ref that kept them; verified is pushed. */
 function housekeeping(fx: Effects, state: State): void {
   const now = fx.now().getTime();
   const kept = new Set([state.core.last_run?.run, state.wide.last_run?.run, state.core.last_green?.run, state.wide.last_green?.run]);
@@ -904,6 +1082,8 @@ function housekeeping(fx: Effects, state: State): void {
     if (recording(records)) kept.add(records.run);
     if (following(records)) kept.add(dirname(records.delta));
   }
+  kept.add(state.benchmarks_due?.measuring?.run);
+  if (publishing(state.bench)) kept.add(state.bench.run);
   if (existsSync(fx.layout.runs)) {
     // run.mjs points runs/latest at its newest run; a link is judged by its own age.
     for (const name of readdirSync(fx.layout.runs)) {
@@ -988,7 +1168,7 @@ function production(options: { schedule: Schedule }): Effects {
     node: tree => nodeToolchain(nodePin(tree), launcherEnvironment(process.env)).node,
     checkout: (tree, commit) => prepareTree(sharedCheckout(ROOT), tree, commit),
     applier: (tree, delta, log) => applyRecords(tree, delta, log),
-    bench: benchWithLock(ROOT, layout.target),
+    publisher: (tree, record, log) => publishRecord(tree, record, log),
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     push: commit => {
       const r = git.try(["push", "--quiet", "origin", `${commit}:refs/heads/verified`]);
@@ -1170,7 +1350,8 @@ export function statusText(s: FullCheckStatus): string {
     `         wide ${records(s.wide.records)}`,
     `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
       + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}${
-        s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}` : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
+        s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}${s.benchmarks.due.measuring.job ? ` in ${s.benchmarks.due.measuring.job.unit}` : ""}`
+          : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
     `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,
     ...s.count?.lines.map(line => `  ${line}`) ?? [],
     "tasks for an issue:", ...s.tasks.map(t => `  ${t.at} ${t.line}`),
@@ -1189,24 +1370,41 @@ export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus
   });
 }
 
-export type Options = { once: boolean; status: boolean; json: boolean; count: boolean; record: RecordJob | null; schedule: Schedule; ignored: string[] };
+export type Options = {
+  once: boolean; status: boolean; json: boolean; count: boolean;
+  /** A records unit's work (--record), or the benchmarks unit's (--benchmarks). */
+  record: RecordJob | null; benchmarks: MeasureJob | null;
+  schedule: Schedule; ignored: string[];
+};
+
+/** The values a unit's work is given on its command line. */
+const JOB_VALUES = ["commit", "run", "pin", "bench", "history", "outcome"] as const;
+type JobValue = (typeof JOB_VALUES)[number];
 
 export function parseOptions(argv: readonly string[]): Options {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let once = false, status = false, json = false, count = false;
-  const ignored: string[] = [], job: Partial<RecordJob> = {};
-  const value = (arg: string, name: Exclude<keyof RecordJob, "part">) => {
+  let once = false, status = false, json = false, count = false, benchmarks = false, part: Part | undefined;
+  const ignored: string[] = [], values: Partial<Record<JobValue, string>> = {};
+  const value = (arg: string, name: JobValue) => {
     const given = arg.slice(name.length + 3);
     if (name === "commit" ? !/^[0-9a-f]{40}$/.test(given) : !isAbsolute(given)) throw new Error(`--${name} takes ${name === "commit" ? "a full commit name" : "an absolute path"}, not ${JSON.stringify(given)}`);
-    job[name] = given;
+    values[name] = given;
   };
+  /** The work's values, every one of `needs` and no other. */
+  function job<T>(what: string, needs: readonly JobValue[]): T {
+    const missing = needs.filter(name => !values[name]), other = JOB_VALUES.filter(name => values[name] && !needs.includes(name));
+    if (missing.length) throw new Error(`${what} takes ${needs.map(name => `--${name}`).join(", ").replace(/, ([^,]*)$/, " and $1")}, all of them`);
+    if (other.length) throw new Error(`${other.map(name => `--${name}`).join(", ")} is not ${what}'s`);
+    return Object.fromEntries(needs.map(name => [name, values[name]])) as T;
+  }
   for (const arg of argv) {
     if (arg === "--once") once = true;
     else if (arg === "--status") status = true;
     else if (arg === "--json") json = true;
     else if (arg === "--count") count = true;
-    else if (/^--record=(?:core|wide)$/.test(arg)) job.part = arg.slice(9) as Part;
-    else if (/^--(?:commit|run|pin|outcome)=/.test(arg)) value(arg, arg.slice(2, arg.indexOf("=")) as Exclude<keyof RecordJob, "part">);
+    else if (/^--record=(?:core|wide)$/.test(arg)) part = arg.slice(9) as Part;
+    else if (arg === "--benchmarks") benchmarks = true;
+    else if (new RegExp(`^--(?:${JOB_VALUES.join("|")})=`).test(arg)) value(arg, arg.slice(2, arg.indexOf("=")) as JobValue);
     // A unit written before the benchmarks stayed due until the next nightly
     // slot still passes the wait that bounded them; it starts, and says so.
     else if (/^--bench-wait=\d+$/.test(arg)) ignored.push(arg);
@@ -1215,13 +1413,16 @@ export function parseOptions(argv: readonly string[]): Options {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json] | --count | --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
+    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json] | --count | --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>`
+      + ` | --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
   }
   if (json && !status) throw new Error("--json is for --status");
-  const given = Object.keys(job).length;
-  if (given && (!job.part || !job.commit || !job.run || !job.pin || !job.outcome)) throw new Error("--record takes --commit, --run, --pin and --outcome, all of them");
-  if ([once, status, count, given > 0].filter(Boolean).length > 1) throw new Error("--once, --status, --count and --record are each a command of its own");
-  return { once, status, json, count, record: given ? job as RecordJob : null, schedule, ignored };
+  if (part && benchmarks) throw new Error("--record and --benchmarks are each a command of its own");
+  const record = part ? { part, ...job<Omit<RecordJob, "part">>("--record", ["commit", "run", "pin", "outcome"]) } : null;
+  const measure = benchmarks ? job<MeasureJob>("--benchmarks", ["commit", "run", "bench", "history", "outcome"]) : null;
+  if (!record && !measure && Object.keys(values).length) throw new Error(`${Object.keys(values).map(name => `--${name}`).join(", ")} are for --record or --benchmarks`);
+  if ([once, status, count, !!record || !!measure].filter(Boolean).length > 1) throw new Error("--once, --status, --count, --record and --benchmarks are each a command of its own");
+  return { once, status, json, count, record, benchmarks: measure, schedule, ignored };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -1235,6 +1436,11 @@ async function main(argv: readonly string[]): Promise<number> {
   // A records unit's work: this code is its records tree's, at the run's commit (recordsUnit).
   if (options.record) {
     recordJob(ROOT, options.record, recordPending);
+    return 0;
+  }
+  // The benchmarks unit's work: this code is the bench tree's, at verified (benchmarksUnit).
+  if (options.benchmarks) {
+    measureJob(ROOT, options.benchmarks, benchWithLock(options.benchmarks.bench, options.benchmarks.history));
     return 0;
   }
   // The hourly count, beside the controller: it takes no lock of the controller's.

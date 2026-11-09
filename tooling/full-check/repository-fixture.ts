@@ -2,16 +2,17 @@
 // reads its verdicts from the commit it measures: a step FAILs at a commit
 // whose tree has `RED/<step>` (or `RED/<step>.<anything>`), is HELD where it
 // has `HELD/<step>`, and prints `LOG/<step>` into its log; and stand-ins for
-// the records' recorder, main's own --apply and the units background work
-// runs in. Tests only; no network, no systemd, no real gate.
+// the records' recorder, main's own --apply, nts-bench, main's own
+// run-record.ts publish and the units background work runs in. Tests only; no
+// network, no systemd, no real gate.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/delta.ts";
 import type { Units, UnitSpec } from "./background.ts";
-import type { Bench, BenchAttempt } from "./bench.ts";
+import { FULL_MD, RUNS, type Bench, type BenchAttempt, type Publisher } from "./bench.ts";
 import { Git } from "./git.ts";
 import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
 import type { LandingAnswer } from "./queue.ts";
@@ -63,8 +64,9 @@ export type FakeGate = Gate & { measured: { commit: string; steps: string[]; lab
 
 /**
  * The stand-in gate. Like pinned.sh it checks the measured commit out in the
- * full check's tree and leaves a compiler at target/release/nts. `flaky`
- * names steps that FAIL only the first time they are measured.
+ * full check's tree and leaves a compiler at target/release/nts, and an
+ * nts-bench beside it. `flaky` names steps that FAIL only the first time they
+ * are measured.
  */
 export function fakeGate(repo: Repository, options: { all?: string[]; wide?: string[]; flaky?: string[] } = {}): FakeGate {
   const all = options.all ?? ["build", "tests", "typescript-c", "integrity"];
@@ -83,6 +85,7 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
       else repo.git.run(["worktree", "add", "--detach", "-q", tree, commit]);
       mkdirSync(join(repo.layout.target, "release"), { recursive: true });
       writeFileSync(join(repo.layout.target, "release/nts"), `compiler at ${commit}\n`);
+      writeFileSync(join(repo.layout.target, "release/nts-bench"), `nts-bench at ${commit}\n`);
       const run = join(repo.layout.runs, `${label}-${commit.slice(0, 12)}-${++runs}`);
       mkdirSync(run, { recursive: true });
       const red = files(commit, "RED"), heldAt = files(commit, "HELD");
@@ -101,13 +104,13 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
 
 /**
  * A stand-in nts-bench: like the real one it keeps one run record and the
- * rendered page as a results-only commit on the tree's HEAD. `slower` names
- * the rows the page marks slower than their own best; `refuse` gives the
- * reasons the measurement lock does not admit the first attempts for, one
- * each; `noRecord` runs and keeps nothing; `during` is called while it
- * measures, when the controller's state is as a stop then would leave it.
+ * rendered page as a results-only commit on the tree's HEAD. Its record names
+ * the rows slower than their own best (`slower`), which the stand-in renderer
+ * marks on the page (renderStandIn); `refuse` gives the reasons the
+ * measurement lock does not admit the first attempts for, one each;
+ * `noRecord` runs and keeps nothing.
  */
-export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?: string[]; noRecord?: boolean; during?: () => void } = {}): Bench & { calls: string[] } {
+export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?: string[]; noRecord?: boolean } = {}): Bench & { calls: string[] } {
   const calls: string[] = [], refusals = [...options.refuse ?? []];
   const bench = (tree: string, run: string): BenchAttempt => {
     calls.push(tree);
@@ -116,16 +119,14 @@ export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?
       writeFileSync(join(run, "bench.log"), `${refusal}\n`);
       return { admitted: false, reason: refusal };
     }
-    options.during?.();
     writeFileSync(join(run, "bench.log"), "nts-bench\n");
     if (options.noRecord) return { admitted: true, status: 1 };
     const git = new Git(tree, ENV);
     const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
-    mkdirSync(join(tree, "results/benchmarks/runs"), { recursive: true });
-    writeFileSync(join(tree, "results/benchmarks/runs", `${id}.json`), "{}\n");
-    writeFileSync(join(tree, "results/benchmarks/full.md"), ["# Benchmark results", "", "| Case | nts C | nts C own best |", "|---|---|---|",
-      "|fast|1 ns|1 ns|", ...(options.slower ?? []).map(name => `|${name}|2 ns|1 ns **SLOWER THAN BEST**|`), ""].join("\n"));
-    const paths = [`results/benchmarks/runs/${id}.json`, "results/benchmarks/full.md"];
+    mkdirSync(join(tree, RUNS), { recursive: true });
+    writeFileSync(join(tree, RUNS, `${id}.json`), `${JSON.stringify({ id, slower: options.slower ?? [] })}\n`);
+    renderStandIn(tree);
+    const paths = [`${RUNS}/${id}.json`, FULL_MD];
     if (options.stray) { writeFileSync(join(tree, "stray.txt"), "x\n"); paths.push("stray.txt"); }
     git.run(["add", "--", ...paths]);
     git.run(["commit", "-q", "-m", `results: retain benchmark run ${id}`, "--", ...paths]);
@@ -133,6 +134,32 @@ export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?
   };
   return Object.assign(bench, { calls });
 }
+
+/** The stand-in renderer: full.md from the tree's run records, the newest one's slower rows marked as the real page marks them. */
+export function renderStandIn(tree: string): void {
+  const runs = existsSync(join(tree, RUNS)) ? readdirSync(join(tree, RUNS)).filter(name => name.endsWith(".json")).sort() : [];
+  const newest = runs.length ? JSON.parse(readFileSync(join(tree, RUNS, runs.at(-1)!), "utf8")) as { slower?: string[] } : {};
+  mkdirSync(dirname(join(tree, FULL_MD)), { recursive: true });
+  writeFileSync(join(tree, FULL_MD), ["# Benchmark results", "", `${runs.length} run(s)`, "", "| Case | nts C | nts C own best |", "|---|---|---|",
+    "|fast|1 ns|1 ns|", ...(newest.slower ?? []).map(name => `|${name}|2 ns|1 ns **SLOWER THAN BEST**|`), ""].join("\n"));
+}
+
+/**
+ * A stand-in for main's own run-record.ts publish: the record into the tree's
+ * runs, the page rendered again from them, and the two committed as a
+ * results-only commit on the tree's HEAD, main; nothing when main has them
+ * already. Its log ends as the real one's does, with the record's path.
+ */
+export const publishEveryRun: Publisher = (tree, record, log) => {
+  const git = new Git(tree, ENV), path = `${RUNS}/${basename(record)}`;
+  mkdirSync(join(tree, RUNS), { recursive: true });
+  writeFileSync(join(tree, path), readFileSync(record));
+  renderStandIn(tree);
+  git.run(["add", "--", path, FULL_MD]);
+  if (git.run(["diff", "--cached", "--name-only"])) git.run(["commit", "-q", "-m", `results: retain benchmark run ${basename(record, ".json")}`, "--", path, FULL_MD]);
+  writeFileSync(log, `${join(tree, path)}\n`);
+  return { status: 0, output: `${join(tree, path)}\n` };
+};
 
 export type StubQueue = {
   submitted: { commit: string; first: boolean }[]; withdrawn: string[];

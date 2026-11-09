@@ -160,15 +160,16 @@ landing checks' and agents', so those come first.
 - **The wide steps** (integrity, the profile, compile time, addons, interop,
   on-device and the rest, about an hour more) run on the newest `verified`
   commit a few times a day, and every night before the benchmarks.
-- **Records and the count run beside the parts,** each in a unit of its own,
-  so neither part waits for them. A part's records run (below) records in
-  `nts-full-check-records-<part>`, in that part's records tree, while the
-  core goes on running on each new `main`; the hourly count runs from its own
-  timer, `nts-full-check-count.timer`, whatever the parts are doing. The
-  controller names a records unit in its state before the unit starts, and a
-  controller that restarts finds it by that name: it waits while the unit
-  runs, applies what it recorded once it ends, and starts it once more, never
-  beside a running one, when it ended without saying how.
+- **Records, the benchmarks and the count run beside the parts,** each in a
+  unit of its own, so neither part waits for them. A part's records run
+  (below) records in `nts-full-check-records-<part>`, in that part's records
+  tree, and the nightly benchmarks measure in `nts-full-check-bench`, in a
+  bench tree, while the core goes on running on each new `main`; the hourly
+  count runs from its own timer, `nts-full-check-count.timer`, whatever the
+  parts are doing. The controller names a unit in its state before the unit
+  starts, and a controller that restarts finds it by that name: it waits
+  while the unit runs, lands what it made once it ends, and starts it once
+  more, never beside a running one, when it ended without saying how.
 
 What follows from a run:
 
@@ -234,12 +235,22 @@ regression becomes a task.
   whose reserved core another program used.
 - **Due from the nightly slot until they run.** The slot makes them due on
   the newest `verified`, whatever wide slots follow it, until they run or the
-  next nightly slot replaces them. They never block a landing, and run when
-  the core has nothing to do.
+  next nightly slot replaces them; a slot that comes while a night's run
+  measures waits for it. They never block a landing, start when the core has
+  nothing to do, and measure in their own unit while the core goes on.
 - **Only a record counts.** An attempt the measurement lock does not admit
-  leaves them due, asked again later rather than waited for; one a stopped
-  controller cut short is tried again; only a run that kept a record counts
-  as measured, and the full check's status says what stopped one.
+  leaves them due, asked again later rather than waited for; a run whose unit
+  stopped before it finished (stopped, killed, or past its eight-hour hang
+  guard) is started once more, then the night is a task; only a run that kept
+  a record counts as measured, and the full check's status says what stopped
+  one.
+- **A record lands on the newest `main`.** The run measures `verified`, which
+  `main` has moved past by the time it ends, so its record is published on
+  the newest `main` by `main`'s own renderer (`tooling/bench/run-record.ts
+  publish`), and that results-only commit is followed as a records commit
+  is: published again on the newest `main` after a refusal, a few times at
+  most, and then a task. One night's run is in flight at a time: a night
+  measures once the last run has landed or been given up.
 
 ## The machine
 
@@ -260,10 +271,10 @@ regression becomes a task.
 - **Where things live:** the pool is `~/.cache/nts-pool/<n>`
   (`node tooling/landing/pool.ts status`); the landing check keeps
   `~/.cache/nts-landing/{tree,target,runs}`; the full check, its controller
-  `nts-full-check` running from a tree at `verified` beside its records units
-  and the count's timer, keeps `~/.cache/nts-full-check/`: the controller's
-  tree, the gate's tree and target, a records tree for each part, its state,
-  the count's file and the runs. A tree's cargo target is its own: two trees
+  `nts-full-check` running from a tree at `verified` beside its records and
+  benchmarks units and the count's timer, keeps `~/.cache/nts-full-check/`: the controller's
+  tree, the gate's tree and target, a records tree for each part, the bench
+  tree, its state, the count's file and the runs. A tree's cargo target is its own: two trees
   sharing one run each other's compiled crates.
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; each keeps three days of them. A control or a bisect is a
@@ -319,6 +330,11 @@ the first node task.
   `main`, and a restarted controller adopts it by name; the count runs hourly
   from its own timer and writes its own file
   ([log](records/notebooks/decisions-log.md#records-and-the-count-run-beside-the-parts-11-09)).
+- **The nightly benchmarks run in a unit and land on the newest `main`**
+  (11-09): nts-bench measures `verified` in a unit and a tree of its own,
+  which a restarted controller adopts by name, and its record is published
+  on the newest `main` by `main`'s own renderer and followed as records are
+  ([log](records/notebooks/decisions-log.md#the-nightly-benchmarks-run-in-a-unit-and-land-on-the-newest-main-11-09)).
 - **One memory ledger for the machine** (11-09): every heavy job reserves its
   peak in one queue, in priority order (the landing check, agents' work, the
   full check); a gate run holds one reservation that grows and shrinks with

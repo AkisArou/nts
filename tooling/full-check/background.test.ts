@@ -127,3 +127,12 @@ test("a real unit that runs on is running, refuses a second of its name, and onc
   assert.deepEqual(look(job, units, LATER), { state: "lost", why: `${name} is gone and wrote no outcome`, again: true });
   assert.equal(units.running(`nts-test-background-never-${randomUUID().slice(0, 8)}`), false, "a name no unit has is not running");
 });
+
+test("a real unit's own properties reach it: past its hang guard it is stopped, gone with no outcome, and not measured", async t => {
+  const dir = scratch(t), units = systemdUnits(lowPriority(gateCpus(inheritedCpus())));
+  const name = ownedUnit(t, "guard"), outcome = join(dir, "outcome.json");
+  const job = newJob(name, outcome, AT);
+  assert.equal(start(units, { name, cwd: dir, command: ["tail", "-f", "/dev/null"], log: join(dir, "unit.log"), properties: ["RuntimeMaxSec=1"] }, job, () => {}), null);
+  await waitFor(`${name} to be stopped at its hang guard`, () => !units.running(name));
+  assert.deepEqual(look(job, units, LATER), { state: "lost", why: `${name} is gone and wrote no outcome`, again: true });
+});

@@ -1,7 +1,7 @@
 // node --test tooling/full-check/unit.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { COUNT_UNIT, countServiceText, countTimerText, lowPriority, parseUnitOptions, recordsUnitName, UNIT, unitText } from "./unit.ts";
+import { BENCH_UNIT, COUNT_UNIT, countServiceText, countTimerText, lowPriority, parseUnitOptions, recordsUnitName, UNIT, unitText } from "./unit.ts";
 import { layout } from "./state.ts";
 
 const ENV = { PATH: "/usr/bin:/home/u/.cargo/bin", HOME: "/home/u", SSH_AUTH_SOCK: "/run/user/1000/ssh-%agent", NODE_OPTIONS: "--inspect", SECRET_TOKEN: "x" };
@@ -37,8 +37,8 @@ test("the hourly count is a service its own timer starts: once from the controll
   assert.equal(COUNT_UNIT, `${UNIT}-count`);
 });
 
-test("each part's records unit has one name, so a second cannot start while one runs, and every unit runs at the controller's priority", () => {
-  assert.deepEqual([recordsUnitName("core"), recordsUnitName("wide")], ["nts-full-check-records-core", "nts-full-check-records-wide"]);
+test("each part's records unit and the nightly benchmarks' unit have one name, so a second cannot start while one runs, and every unit runs at the controller's priority", () => {
+  assert.deepEqual([recordsUnitName("core"), recordsUnitName("wide"), BENCH_UNIT], ["nts-full-check-records-core", "nts-full-check-records-wide", "nts-full-check-bench"]);
   assert.deepEqual(lowPriority("0-3,6-31"), ["Nice=19", "CPUWeight=20", "IOWeight=20", "CPUAffinity=0-3,6-31", "OOMScoreAdjust=500", "LimitCORE=0"]);
 });
 

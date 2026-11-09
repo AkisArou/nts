@@ -30,6 +30,11 @@ export type Layout = {
    * what it builds in its own `target/`.
    */
   records: Readonly<Record<Part, string>>;
+  /**
+   * The nightly benchmarks' tree: the benchmarks unit measures there at
+   * verified, and the controller publishes the run's record there on main.
+   */
+  bench: string;
   runs: string;
   state: string;
   /** The hourly count's own result (service.ts --count). */
@@ -46,6 +51,7 @@ export function layout(cache = join(homedir(), ".cache")): Layout {
     controller: join(home, "controller"),
     controllerLock: join(home, "controller.lock"),
     records: { core: join(home, "records", "core"), wide: join(home, "records", "wide") },
+    bench: join(home, "bench"),
     runs: join(home, "runs"),
     state: join(home, "state.json"),
     count: join(home, "count.json"),
@@ -130,28 +136,49 @@ export type RecordsRun = {
 
 /**
  * How a night's benchmarks ended: `record`, nts-bench kept a run record;
- * `no-record`, it ran and kept none; `interrupted`, the controller stopped
- * while it measured; `not-run`, the night ended before a run, its build red
- * at verified or the next nightly slot replacing it.
+ * `no-record`, it ran and kept none; `interrupted`, its unit ended without an
+ * outcome, stopped, killed or past its hang guard, as often as it is started;
+ * `not-run`, the night ended before a run, its build red at verified or the
+ * next nightly slot replacing it.
  */
 export type BenchOutcome = "record" | "no-record" | "interrupted" | "not-run";
 
+/**
+ * The last night's run, or the night that ended without one, and what came
+ * of it. A run that kept a record (`record`, in its run's folder) is
+ * published on the newest main as a results-only commit and followed until
+ * the landing check lands it, published again on the newest main after a
+ * refusal, a few times at most, as records are (service.ts's followLanding);
+ * `settled` is when it stopped following it.
+ */
 export type BenchRun = {
   commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[];
   outcome?: BenchOutcome;
+  /** The run's record, kept in its run's folder. */
+  record?: string;
+  /** How many times the record was published on main, the first time included. */
+  attempts?: number;
+  /** The main the last attempt published it on. */
+  base?: string;
+  /** The landing check's last answer to a submission. */
+  answer?: LandingAnswer;
+  /** When the full check stopped following it: landed, withdrawn, already on main, or given up. */
+  settled?: string;
 };
+
+/** The attempt in flight: its commit, when it began, its run's folder, and the benchmarks unit that measures (background.ts). */
+export type Measuring = { commit: string; at: string; run: string; job?: Job };
 
 /**
  * The nightly benchmarks from their slot until they run on the newest
  * `verified`, or the next nightly slot (`until`) replaces them. `waiting` is
  * what holds them now, and `asked` when an attempt last did not start;
- * `measuring` is the attempt in flight, which a cycle that finds it knows was
- * interrupted, and `interrupted` how many were this night.
+ * `measuring` is the attempt in flight, in its unit, which a controller that
+ * restarts adopts by its name.
  */
 export type BenchmarksDue = {
   since: string; until: string; waiting?: string; asked?: string;
-  measuring?: { commit: string; at: string; run: string };
-  interrupted?: number;
+  measuring?: Measuring;
 };
 
 /**

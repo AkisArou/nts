@@ -116,11 +116,11 @@ first red commit, which is reverted ahead of other landings; the issue that
 commit names is reopened, with the red steps and their logs. Record, benchmark
 and bisect against `verified`. Stop it only with
 `systemctl --user stop nts-full-check`; its records runs
-(`nts-full-check-records-core`, `-wide`) and its hourly count
-(`nts-full-check-count.timer`) are units of their own, stopped by name the
-same way, and a restarted controller adopts a records unit still running. A
-tool that keeps a folder in `~/.cache` adds it to
-`tooling/full-check/keep.json`.
+(`nts-full-check-records-core`, `-wide`), its nightly benchmarks
+(`nts-full-check-bench`) and its hourly count (`nts-full-check-count.timer`)
+are units of their own, stopped by name the same way, and a restarted
+controller adopts a records or benchmarks unit still running. A tool that
+keeps a folder in `~/.cache` adds it to `tooling/full-check/keep.json`.
 
 **Tests and benchmarks land without records** (user, 2026-11-05 and 11-06).
 Every record check lists a case that has no row yet as pending and does not
