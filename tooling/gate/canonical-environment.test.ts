@@ -1,8 +1,8 @@
 import {removable} from "./run-temporary.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {mkdirSync, existsSync, readFileSync, writeFileSync, symlinkSync, utimesSync, chmodSync, rmSync} from "node:fs";
-import {moduleClosure} from "./module-closure-fixture.ts";
+import {copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync, symlinkSync, utimesSync, chmodSync, rmSync} from "node:fs";
+import {copyModuleClosure,moduleClosure} from "./module-closure-fixture.ts";
 import {homedir} from "node:os";
 import {dirname, join} from "node:path";
 import {pathToFileURL} from "node:url";
@@ -92,10 +92,9 @@ test("only source-owned context grants gate capture policy and children retain i
 
 test("copied helpers omit undeclared oracle tools, reject missing declared tools and preserve owned handoffs",async t=>{
   const {run,base}=fixture(t),root=join(run,"fixture"),gate=join(root,"tooling/gate");mkdirSync(gate,{recursive:true});
-  for(const name of ["canonical-environment.ts","run-temporary.ts"])writeFileSync(join(gate,name),readFileSync(new URL(name,import.meta.url)));
   // Keep the helper's real static imports while the copied environment still
   // discovers declarations only from this isolated fixture's package root.
-  for(const name of ['differential','lanes'])symlinkSync(new URL('../'+name,import.meta.url),join(root,'tooling',name));
+  copyModuleClosure(['tooling/gate/canonical-environment.ts'],root);
   writeFileSync(join(root,"package.json"),JSON.stringify({type:"module"}));
   const copied=await import(pathToFileURL(join(gate,"canonical-environment.ts")).href);
   const absent=copied.gateEnvironment({...base,NTS_ORACLE_TYPESCRIPT:"/application/typescript"},{run});
@@ -241,7 +240,7 @@ test("the real runner records the environment and distinguishes verdict failures
     const target=join(root,file),original=join(source,"../..",file);
     mkdirSync(dirname(target),{recursive:true});
     if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
-    else symlinkSync(original,target);
+    else copyFileSync(original,target);
   }
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
@@ -311,11 +310,11 @@ test('the real runner preserves typed parent capture failures before launching a
       const target=join(root,file),original=join(source,"../..",file);
       mkdirSync(dirname(target),{recursive:true});
       if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
-      else symlinkSync(original,target);
+      else copyFileSync(original,target);
     }
     symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
-    const canonical=new URL('./canonical-environment.ts',import.meta.url).href,results=new URL('./step-result.ts',import.meta.url).href;
-    writeFileSync(join(gate,'canonical-environment.ts'),`export * from ${JSON.stringify(canonical)};import {CaseBudgetError,ToolingInstrumentError} from ${JSON.stringify(results)};export async function sealOracleRun(){throw ${kind==='case-budget'?"new CaseBudgetError('parent capture budget control')":"new ToolingInstrumentError('tooling-setup','oracle dependency seal changed: parent control')"};}\n`);
+    const canonical=new URL('./canonical-environment.ts',import.meta.url).href;
+    writeFileSync(join(gate,'canonical-environment.ts'),`export * from ${JSON.stringify(canonical)};import {CaseBudgetError,ToolingInstrumentError} from './step-result.ts';export async function sealOracleRun(){throw ${kind==='case-budget'?"new CaseBudgetError('parent capture budget control')":"new ToolingInstrumentError('tooling-setup','oracle dependency seal changed: parent control')"};}\n`);
     const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});assert.equal(listed.status,0,listed.stderr);
     writeFileSync(join(gate,'all.sh'),`#!/bin/sh
 if [ "$1" = --list ];then
@@ -343,7 +342,7 @@ test('SIGTERM releases a runner waiting for startup capture admission',async t=>
     const target=join(root,file),original=join(source,'../..',file);
     mkdirSync(dirname(target),{recursive:true});
     if(file==='tooling/gate/run.mjs')writeFileSync(target,readFileSync(original));
-    else symlinkSync(original,target);
+    else copyFileSync(original,target);
   }
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,'times.tsv'),join(gate,'times.tsv'));

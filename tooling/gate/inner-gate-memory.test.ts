@@ -17,7 +17,7 @@
 import assert from "node:assert/strict";
 import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
-import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
 import {join, dirname} from "node:path";
 
 import {createInterface} from "node:readline";
@@ -42,7 +42,7 @@ function fixture(t: TestContext) {
     const target = join(root, file), original = join(GATE, "../..", file);
     mkdirSync(dirname(target), {recursive: true});
     if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
-    else symlinkSync(original, target);
+    else copyFileSync(original, target);
   }
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));

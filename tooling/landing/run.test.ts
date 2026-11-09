@@ -37,7 +37,7 @@ function fixture(t: TestContext) {
     const target = join(tree, name), original = join(GATE, "../..", name);
     mkdirSync(dirname(target), {recursive: true});
     if (name === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
-    else symlinkSync(original, target);
+    else copyFileSync(original, target);
   }
   oracleWorkspaceFixture(t,tree);
   writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
@@ -314,10 +314,19 @@ test("pressure that never clears, and a hung step, hold the change for a person"
 test("the landing check's ceiling reaches the runner: a stuck step is stopped there and holds the change", t => {
   const f = fixture(t);
   f.control("outcomes", "stuck");
-  const ran = runLanding(f.options(["build", "outcomes", "rustfmt"], { ceiling: 2 }));
+  const ran = runLanding(f.options(["build", "outcomes"], { ceiling: 2 }));
   assert.equal(ran.state, "held", ran.message);
   assert.match(ran.message, /outcomes INSTRUMENT: step exceeded its bound of 2 s/);
-  assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "outcomes INSTRUMENT", "rustfmt PASS"]);
+  assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "outcomes INSTRUMENT"]);
+  // The completed control has its own ceiling: it proves the explicit ceiling
+  // leaves completed work intact, without requiring a real scope to enter and
+  // exit inside the stuck control's deliberately tiny two-second allowance.
+  const control = fixture(t);
+  const completed = runLanding(control.options(["build", "rustfmt"], { ceiling: 60 }));
+  assert.equal(completed.state, "green", completed.message);
+  assert.deepEqual(completed.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "rustfmt PASS"]);
+  const row = JSON.parse(readFileSync(join(control.run, "summary.json"), "utf8")).steps[0];
+  assert.equal(row.bound_s, 60);assert.equal(row.bound_basis, "ceiling");
 });
 
 test("a tree whose gate cannot say what its steps need holds the change", t => {

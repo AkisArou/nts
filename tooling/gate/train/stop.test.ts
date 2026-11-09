@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {moduleClosure} from "../module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../../differential/oracle-workspace-fixture.ts";
 import {test} from "node:test";
-import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {join, dirname} from "node:path";
 
 import {fileURLToPath} from "node:url";
@@ -105,7 +105,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
     const destination=join(root,file),original=join(source,"../..",file);
     mkdirSync(dirname(destination),{recursive:true});
     if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));
-    else symlinkSync(original,destination);
+    else copyFileSync(original,destination);
   }
   if (control.oracleCancellation) {oracleWorkspaceFixture(t,root);cancellationScope(gate, source, own, control.oracleCancellation === "seal");}
   writeFileSync(join(gate, "times.tsv"), "format\t3000\t3000\t1\nold-paths\t2000\t2000\t1\nrecords\t1000\t1000\t1\n");

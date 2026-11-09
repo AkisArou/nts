@@ -20,7 +20,7 @@ export type ProgramOracleHandoff={file:string;sha256:string};
 type ReaderRuntime={version:1;directory:string;bootstrapSha256:string;assets:Record<string,string>};
 type Root={runtime:ReaderRuntime;version:1;directory:string;identity:OracleIdentity;readerSha256:string;index:OracleSnapshotReference;count:number};
 const READER_MODULES=['oracle-results','oracle-filesystem','oracle-runtime'] as const;
-const RECIPE_SOURCES=[...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-assets.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-toolchain.json','oracle-results.ts','oracle-result-bootstrap.ts'];
+export const RECIPE_SOURCES=[...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-assets.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-toolchain.json','oracle-results.ts','oracle-result-bootstrap.ts'];
 const readerSourceHash=()=>resultHash(readFileSync(new URL('./oracle-results.ts',import.meta.url)));
 function publishReaderRuntime(directory:string):ReaderRuntime{
   const here=dirname(fileURLToPath(import.meta.url)),runtime=join(directory,'reader');mkdirSync(runtime,{recursive:true});

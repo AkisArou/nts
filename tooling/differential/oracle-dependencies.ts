@@ -14,6 +14,7 @@ import {activeCommand} from '../gate/active-command.ts';
 import {TemporaryAdmission,type TemporaryAdmissionContext} from '../gate/admission.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
+import {moduleClosure} from '../gate/module-closure.ts';
 export {CaseBudgetError,ToolingInstrumentError};
 
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
@@ -23,12 +24,13 @@ type Entry={path:string;kind:'directory';mode:number}|{path:string;kind:'file';m
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
 export type DependencyImage={version:1;source:string;sourceRevision:string;inputSet:InstallInputs;lockfileSha256:string;treeSha256:string;manager:ReturnType<typeof managerPin>;entries:Entry[];ownerStep:string|null;cost:{wallMs:number;selectionWallMs:number;userSeconds:number;systemSeconds:number;bytes:number;allocatedBytes:number;peakBytes:number;residentBudgetBytes:number;cpuBudgetSeconds:number;reservedBytes:number}};
 function git(root:string,...args:string[]){return execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:Infinity}).trim();}
-const PRODUCER_FILES=['tooling/differential/oracle-dependencies.ts','tooling/differential/oracle-filesystem.ts','tooling/differential/oracle-runtime.ts','tooling/differential/oracle-resolution.ts','tooling/lanes/dependency-inputs.ts','tooling/lanes/package-manager.ts','tooling/lanes/gate-resource.ts','tooling/lanes/durable-record.ts','tooling/gate/active-command.ts','tooling/gate/step-result.ts','tooling/gate/canonical-environment.ts','tooling/gate/run-temporary.ts','tooling/census/worker-memory.ts','tooling/gate/admission.ts','tooling/gate/case-costs.ts','tooling/gate/memory-calibration.ts','tooling/gate/tooling-slice.ts'];
 const CAPTURE_BYTES=2*2**30,CAPTURE_CPU_SECONDS=300;
 // Actual independent-copy capture allocated 518,709,248 bytes. Reserve the
 // next GiB before building; a larger image holds instead of publishing.
 const CAPTURE_DISK_BYTES=2**30;
-function producerIdentity(source:string){return hash(JSON.stringify(PRODUCER_FILES.map(file=>[file,hash(readFileSync(join(source,file)))])));}
+// The capability's tree owns its layout, including trees older or newer than
+// this launcher. Walk its declarations afresh before authenticating the bytes.
+function producerIdentity(source:string){return hash(JSON.stringify(moduleClosure(['tooling/differential/oracle-dependencies.ts'],{sourceRoot:source}).map(file=>[file,hash(readFileSync(join(source,file)))])));}
 export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null):DependencyCapability{
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input
