@@ -1,8 +1,8 @@
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {childTemporary,oracleToolchainLocation} from "../gate/canonical-environment.ts";
 // Explicit recording only. Plans come from the checker's actual population;
 // a partial oracle can never publish a smaller promise.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { homedir, setPriority } from "node:os";
 import { execFile, spawnSync } from "node:child_process";
@@ -413,16 +413,19 @@ async function recordNamed(names: string[]) {
   const root = git.stdout.trim();
   const cache = join(homedir(), ".cache/nts-oracle-record");
   mkdirSync(cache, { recursive: true });
-  mkdirSync(join(cache, "tmp"), { recursive: true });
   const evidence = mkdtempSync(join(cache, "run-"));
   console.log(`oracle evidence: ${evidence}`);
   names = [...new Set(names)].sort();
   for (const name of names) fixtureConfig(root, evidence, name);
   let binary = process.env.NTS_ORACLE_PLAN_BIN;
   if (!binary) {
+    // The build's temporary is its own: inside a canonical context, in the
+    // run's registered temporary and registered there (childTemporary).
+    const temporary = childTemporary({ ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "4" }, join(cache, "tmp"), "plan-build-");
     const build = spawnSync("sh", ["-c", "ulimit -c 0; exec nice -n 19 taskset -c 0-3,6-31 cargo build --profile nts-dev -p nts-differential --bin oracle-plan"], {
-      cwd: root, stdio: "inherit", env: { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "4", TMPDIR: join(cache, "tmp") },
+      cwd: root, stdio: "inherit", env: temporary.env,
     });
+    rmSync(temporary.dir, { recursive: true, force: true });
     if (build.status !== 0) throw new Error("building the fixture planner failed");
     binary = join(root, "target/nts-dev/oracle-plan");
   }

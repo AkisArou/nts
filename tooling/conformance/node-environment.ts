@@ -56,6 +56,14 @@ export function sweepLeftovers(home:string):number {
   return removed;
 }
 
+/**
+ * The environment node's own tests and the harness's children run in: host
+ * capabilities, the fixed ambient values, the harness's inputs and `owned`.
+ * It carries no canonical context (NTS_GATE_ENV_CONTEXT), so the TMPDIR it
+ * gives never meets one: a tool below it that runs in a context makes its own,
+ * as run.mjs does with gateEnvironment. A tool that gives a child its own
+ * temporary inside a context uses canonical-environment.ts's childTemporary.
+ */
 export function nodeEnvironment(launcher:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv={}):NodeJS.ProcessEnv {
   const host=hostEnvironment(launcher);
   const inputs=nodeInputs(launcher);

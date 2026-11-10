@@ -6,6 +6,8 @@ import {join} from "node:path";
 import {spawnTest} from "../gate/test-wait.ts";
 import {nodeEnvironment,OWNER_MARK,sweepLeftovers} from "./node-environment.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
+import {ENVIRONMENT_CONTEXT,gateEnvironment,ownedCacheEnvironment} from "../gate/canonical-environment.ts";
+import {removable} from "../gate/run-temporary.ts";
 
 test("node children keep canonical behavior under contaminated launchers",()=>{
   const root=newTestScratch("node-env-control");
@@ -63,4 +65,19 @@ test("the next runner removes what a killed one left, and touches nothing it did
   assert.equal(sweepLeftovers(home),2);
   assert.ok(!existsSync(join(cache,`n${dead.toString(36)}`))&&!existsSync(join(cache,"nts-conformance",String(dead))));
   for(const left of [`n${process.pid.toString(36)}`,`n${(dead-1).toString(36)}`,"n2a3b","nvim/init.lua"])assert.ok(existsSync(join(cache,left)),left);
+});
+
+test("node's environment carries no canonical context, so its TMPDIR never meets one, and run.mjs's own children nest in the run's temporary",t=>{
+  const run=newTestScratch("node-env-context");t.after(()=>{removable(run);rmSync(run,{recursive:true,force:true});});
+  const planned=gateEnvironment({PATH:process.env.PATH,HOME:join(run,"home")},{run});
+  const node=nodeEnvironment(planned.env,{TMPDIR:join(planned.env.TMPDIR!,"node")});
+  assert.equal(node[ENVIRONMENT_CONTEXT],undefined,"node's tests and the harness's children run outside any canonical context");
+  // run.mjs: a run of its own in the context's temporary, its children's environment from gateEnvironment.
+  const own=mkdtempSync(join(planned.env.TMPDIR!,"job-")),inner=gateEnvironment(planned.env,{run:own});
+  assert.equal(inner.env.TMPDIR,join(own,"tmp"));
+  assert.equal(JSON.parse(inner.env[ENVIRONMENT_CONTEXT]!).temporary.enclosing.path,planned.temporary.path,"nested in the run's registered temporary");
+  // What a child that captures oracle dependencies asks, held in run.mjs's children and in one planned below them.
+  assert.equal(ownedCacheEnvironment(inner.env,{temporary:inner.env.TMPDIR!}).TMPDIR,inner.env.TMPDIR);
+  const below=gateEnvironment(inner.env,{run:mkdtempSync(join(inner.env.TMPDIR!,"job-"))});
+  assert.equal(ownedCacheEnvironment(below.env,{temporary:below.env.TMPDIR!}).TMPDIR,below.env.TMPDIR);
 });

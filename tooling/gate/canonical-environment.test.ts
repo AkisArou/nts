@@ -14,7 +14,7 @@ import {instrumentPolicy} from "./step-result.ts";
 import * as canonicalEnvironment from "./canonical-environment.ts";
 import {
   assertLandingEnvironment, ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT,
-  FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,ownTemporary,
+  FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,ownTemporary,childTemporary,
 } from "./canonical-environment.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
@@ -97,6 +97,27 @@ test("a temporary outside its run's registered one is refused, and outside a can
   assert.equal(plain.TMPDIR,join(outside,"tmp"));
   assert.equal(plain[ENVIRONMENT_CONTEXT],undefined);
   assert.ok(existsSync(join(outside,"tmp")));
+});
+
+test("a child's own temporary is made in its canonical context's and registered there; outside one, under the tool's own folder",t=>{
+  const {run,base}=fixture(t),authority=cacheAuthority(),planned=gateEnvironment(base,{run}),outside=join(run,"outside");
+  const parent={...planned.env,NTS_CHECKERS:"1"},before=JSON.stringify(parent);
+  const own=childTemporary(parent,outside,"agree-");
+  assert.equal(JSON.stringify(parent),before,"the parent's environment is left as it was");
+  assert.equal(dirname(own.dir),planned.env.TMPDIR,"made in the context's registered temporary, not under the tool's own folder");
+  assert.equal(own.env.TMPDIR,join(own.dir,"tmp"));
+  assert.equal(own.env.NTS_CHECKERS,"1");
+  const context=JSON.parse(own.env[ENVIRONMENT_CONTEXT]!);
+  assert.equal(context.temporary.path,own.env.TMPDIR);
+  assert.equal(context.temporary.enclosing.path,planned.temporary.path);
+  // The check a child that captures oracle dependencies makes, held.
+  assert.equal(authority.environment(own.env,{temporary:own.env.TMPDIR!}).TMPDIR,own.env.TMPDIR);
+  assert.notEqual(childTemporary(parent,outside,"agree-").dir,own.dir,"each call makes a folder of its own");
+  const plain=childTemporary({HOME:base.HOME,TMPDIR:"/tmp"},outside,"agree-");
+  assert.equal(dirname(plain.dir),outside);
+  assert.equal(plain.env.TMPDIR,join(plain.dir,"tmp"));
+  assert.equal(plain.env[ENVIRONMENT_CONTEXT],undefined);
+  assert.throws(()=>childTemporary({...planned.env,TMPDIR:undefined},outside,"agree-"),/names no TMPDIR/);
 });
 
 test("the oracle toolchain location is supplied by the tooling tree",t=>{

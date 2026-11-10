@@ -1,7 +1,7 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
 import { createHash } from "node:crypto";
-import { existsSync,lstatSync,mkdirSync,readFileSync,realpathSync } from "node:fs";
+import { existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { dirname,join, relative, resolve, isAbsolute } from "node:path";
@@ -135,6 +135,24 @@ export function ownTemporary(run:string,env:NodeJS.ProcessEnv=process.env):strin
   Object.assign(env,storage);
   env[ENVIRONMENT_CONTEXT]=JSON.stringify({...context,report,temporary} satisfies Context);
   return storage.TMPDIR;
+}
+
+/**
+ * A temporary of its own for a child, and the child's environment, made from
+ * `env`, which is left as it was. In a canonical context it is a new folder in
+ * the context's registered temporary, registered there (`ownTemporary`), so
+ * the child's TMPDIR and context agree by construction; outside one, a new
+ * folder under `outside`, and only TMPDIR changes. `dir` is the folder; the
+ * child writes in `dir/tmp`. This is the one way a tool gives a child a
+ * TMPDIR of its own.
+ */
+export function childTemporary(env:NodeJS.ProcessEnv,outside:string,prefix:string):{env:NodeJS.ProcessEnv;dir:string} {
+  const base=env[ENVIRONMENT_CONTEXT]?env.TMPDIR:outside;
+  if(!base)throw new Error("a canonical context names no TMPDIR to make a child's temporary in");
+  mkdirSync(base,{recursive:true});
+  const dir=mkdtempSync(join(base,prefix)),child={...env};
+  ownTemporary(dir,child);
+  return {env:child,dir};
 }
 
 export function launcherPolicyNames(env: NodeJS.ProcessEnv): string[] {

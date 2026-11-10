@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -11,6 +11,9 @@ import {testScratch} from './test-scratch.ts';
 import {OracleCompileBudgetError} from '../differential/oracle-batch.ts';
 import {CaseBudgetError} from './step-result.ts';
 import {closeMemoryRun} from '../census/worker-memory.ts';
+import {gateEnvironment} from './canonical-environment.ts';
+import {ownMemory} from './test-memory.ts';
+import {spawnTest} from './test-wait.ts';
 after(closeMemoryRun);
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
   generator_version: 1, generator_digest: "generator", case_key: "key", case_count: 2,
@@ -302,4 +305,25 @@ test('a budget cannot replace a measured promise, and a count improves a budget'
   const measured=addRecord(limited,subject,[0.1,0.2],2);
   assert.equal(measured.rows[0]!.kind,'measured');assert.equal(measured.rows[0]!.budget,undefined);
   assert.throws(()=>addBudgetRecord(measured,subject,budget),CaseBudgetError);
+});
+
+test("inside an unsealed canonical run, the fixture planner's build gets a temporary of its own registered in its context",t=>{
+  const dir=testScratch(t,"oracle-plan-build"),home=join(dir,"home"),bin=join(dir,"bin"),log=join(dir,"cargo.log"),check=join(dir,"context-check.mjs");
+  mkdirSync(bin,{recursive:true});mkdirSync(home,{recursive:true});
+  // A cargo that makes the check a child that captures oracle dependencies makes, logs it, and fails the build.
+  writeFileSync(check,`import {appendFileSync} from "node:fs";
+import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./canonical-environment.ts",import.meta.url).href)};
+try{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});appendFileSync(${JSON.stringify(log)},"held\\n");}
+catch(error){appendFileSync(${JSON.stringify(log)},"refused: "+error.message+"\\n");}
+process.exit(1);
+`);
+  writeFileSync(join(bin,"cargo"),`#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(check)}\n`);chmodSync(join(bin,"cargo"),0o755);
+  // The context the full check's records unit runs in: canonical, its oracle dependencies unsealed.
+  const planned=gateEnvironment({PATH:`${bin}:${process.env.PATH}`,HOME:home},{run:join(home,".cache/gate-run"),owned:ownMemory(join(dir,"memory"))});
+  const repository=fileURLToPath(new URL("../../",import.meta.url));
+  const fixture=readdirSync(join(repository,"tests/programs")).sort().find(name=>existsSync(join(repository,"tests/programs",name,"tsconfig.json")))!;
+  const result=spawnTest(process.execPath,[join(repository,"tooling/differential/record-oracles.ts"),`tests/programs/${fixture}`],{cwd:repository,env:planned.env,encoding:"utf8"});
+  assert.notEqual(result.status,0,result.stdout+result.stderr);
+  assert.match(result.stderr,/building the fixture planner failed/);
+  assert.equal(readFileSync(log,"utf8"),"held\n");
 });

@@ -8,6 +8,7 @@ import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
 import { testScratch } from "./test-scratch.ts";
 import { ownMemory } from "./test-memory.ts";
+import { gateEnvironment } from "./canonical-environment.ts";
 
 function fixture(t:{after(fn:()=>void):void}) {
   const directory=testScratch(t, "agree-new-project-case");
@@ -50,6 +51,8 @@ function fixture(t:{after(fn:()=>void):void}) {
     const path=join(directory,role,"nts");mkdirSync(dirname(path));
     writeFileSync(path,`#!${process.execPath}
 if(process.argv[2]==="--help"){console.log("  check        compile, run, and compare against node (--json)");process.exit(0);}
+// The check a child that captures oracle dependencies makes of its environment, logged when a test asks.
+if(process.env.TEST_CONTEXT_LOG){const held=require("node:child_process").spawnSync(process.execPath,[process.env.TEST_CONTEXT_CHECK],{env:process.env,encoding:"utf8"});require("node:fs").appendFileSync(process.env.TEST_CONTEXT_LOG,(held.status===0?"held":"refused: "+held.stderr.trim().split("\\n").filter(Boolean).pop())+"\\n");}
 if(!process.argv.includes("--json"))throw new Error("test double requires structured checks");
 const role=${JSON.stringify(role)},name=process.argv[3].split("/")[2];
 const mode=(role==="before"?process.env[name==="new-fixture"?"TEST_NEW_BEFORE":"TEST_EXISTING_BEFORE"]:process.env[name==="new-fixture"?"TEST_NEW_AFTER":"TEST_EXISTING_AFTER"]??process.env.TEST_AFTER)??(role==="before"&&name==="new-fixture"?"population":"agree");
@@ -68,7 +71,7 @@ console.log(JSON.stringify(value));
   const [before,after]=binaries;
   writeFileSync(join(dirname(before),"provenance.json"),JSON.stringify({sha:base,clean:true,applied:null,binary_sha256:createHash("sha256").update(readFileSync(before)).digest("hex")}));
   const run=(extra:NodeJS.ProcessEnv={},comparisonBase=base)=>spawnTest(process.execPath,[join(root,"tooling/differential/agree.mjs"),before,after,"--only=new-fixture,existing",`--base=${comparisonBase}`],{cwd:root,env:{...env,...extra},encoding:"utf8"});
-  return {root,directory,base,before,after,run,put,git};
+  return {root,directory,base,before,after,run,put,git,env};
 }
 
 test("newness comes from added Git projects independently of oracle rows or backend keys",t=>{
@@ -171,4 +174,16 @@ test("JSON-capable test doubles cannot return agreement prose or contradictory f
     assert.doesNotMatch(result.stdout,/NEW\s+new-fixture/);
     assert.match(result.stdout,/NOT MEASURED/);
   }
+});
+
+test("inside an unsealed canonical run, every check's own temporary is registered in its context, so a child's owned cache check holds",t=>{
+  const f=fixture(t),log=join(f.directory,"context.log"),check=join(f.directory,"context-check.mjs");
+  writeFileSync(check,`import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./canonical-environment.ts",import.meta.url).href)};\ntry{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});}catch(error){console.error(error.message);process.exit(1);}\n`);
+  // The context the full check's records unit runs in: canonical, its oracle dependencies unsealed.
+  const planned=gateEnvironment(f.env,{run:join(f.env.HOME!,".cache/gate-run"),owned:{NTS_AGREE_JOBS:"1",...ownMemory(join(f.directory,"context-memory"))}});
+  const result=spawnTest(process.execPath,[join(f.root,"tooling/differential/agree.mjs"),f.before,f.after,"--only=new-fixture,existing",`--base=${f.base}`],
+    {cwd:f.root,env:{...planned.env,TEST_CONTEXT_LOG:log,TEST_CONTEXT_CHECK:check},encoding:"utf8"});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  const seen=readFileSync(log,"utf8").trim().split("\n");
+  assert.ok(seen.length>=3&&seen.every(line=>line==="held"),seen.join("\n"));
 });

@@ -82,7 +82,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
+  copyFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
   utimesSync, writeFileSync,
 } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
@@ -98,6 +98,7 @@ import { pendingContradiction, recordPath } from "./oracle-records.ts";
 import { pendingLine } from "../records/pending.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
+import { childTemporary } from "../gate/canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -408,10 +409,11 @@ const JOBS = Number(process.env.NTS_AGREE_JOBS ?? Math.min(8, availableParalleli
 await reserveJob({ key: "agree", units: JOBS, what: `agree.mjs: ${examples.length} example(s), ${JOBS} at a time` });
 
 // Every temporary file under `~/.cache`, never `/tmp`: `/tmp` here is a tmpfs
-// that fills, and runs out of inodes before it runs out of bytes.
+// that fills, and runs out of inodes before it runs out of bytes. Inside a
+// canonical context the checks' temporary is the run's own, registered in its
+// context (childTemporary), so what a check starts holds to it.
 mkdirSync(join(CACHE, "tmp"), { recursive: true });
-const scratch = mkdtempSync(join(CACHE, "tmp", "run-"));
-const env = { ...process.env, NTS_CHECKERS: "1", TMPDIR: scratch };
+const { env, dir: scratch } = childTemporary({ ...process.env, NTS_CHECKERS: "1" }, join(CACHE, "tmp"), "run-");
 let oracleRoot;
 try { oracleRoot = comparisonOracleRoot(ROOT, binaries, join(CACHE, "tmp")); }
 catch (error) { console.log(`  NOT MEASURED: oracle compatibility: ${error.message}`); process.exit(2); }
