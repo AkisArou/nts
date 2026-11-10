@@ -23,6 +23,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { OOM_SCORE } from "../gate/memory-ledger.ts";
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs } from "../landing/pool.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
@@ -43,7 +44,7 @@ export const BENCH_UNIT = `${UNIT}-bench`;
  * core dumps of the gate's deliberate crashes stored.
  */
 export function lowPriority(cpus = "0-3 6-31"): string[] {
-  return ["Nice=19", "CPUWeight=20", "IOWeight=20", `CPUAffinity=${cpus}`, "OOMScoreAdjust=500", "LimitCORE=0"];
+  return ["Nice=19", "CPUWeight=20", "IOWeight=20", `CPUAffinity=${cpus}`, `OOMScoreAdjust=${OOM_SCORE["full-check"]}`, "LimitCORE=0"];
 }
 
 export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; memoryHigh: string; env: NodeJS.ProcessEnv };
