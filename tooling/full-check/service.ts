@@ -79,6 +79,7 @@ import { prepareTree } from "../landing/service.ts";
 import { look, newJob, start, startAgain, systemdUnits, writeOutcome, type Outcome, type Seen, type Units, type UnitSpec } from "./background.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
 import { count as countMachine, countLines, gather, stopSlices as stopCountedSlices, sweep as sweepLeftovers, type CountResult, type Removable, type Stoppable } from "./count.ts";
+import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
@@ -1126,7 +1127,14 @@ function housekeeping(fx: Effects, state: State): void {
     // run.mjs points runs/latest at its newest run; a link is judged by its own age.
     for (const name of readdirSync(fx.layout.runs)) {
       const path = join(fx.layout.runs, name);
-      if (!kept.has(path) && now - lstatSync(path).mtimeMs > KEEP_RUNS_MS) rmSync(path, { recursive: true, force: true });
+      if (kept.has(path)) continue;
+      try {
+        if (now - lstatSync(path).mtimeMs <= KEEP_RUNS_MS) continue;
+        makeRemovable(path);
+        rmSync(path, { recursive: true, force: true });
+      } catch (error) {
+        fx.log(`kept run ${path}: cannot remove: ${message(error)}`);
+      }
     }
   }
   state.probes = state.probes.filter(p => now - Date.parse(p.at) <= 7 * DAY);

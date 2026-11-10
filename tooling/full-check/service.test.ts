@@ -9,7 +9,7 @@
 // newest main until it lands or its attempts run out.
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
+import {chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync} from "node:fs";
 import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
 import {applyEveryRow, assertMessage, checkoutIn, ENV, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
@@ -25,6 +25,7 @@ import {Git} from "./git.ts";
 import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSessionClosed} from './run-environment-fixture.ts';
 import {hostEnvironment} from '../gate/canonical-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
+import {removable as makeRemovable} from '../gate/run-temporary.ts';
 
 type Harness = Effects & {
   lines: string[]; queue: StubQueue; submitted: StubQueue["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[]; units: StubUnits;
@@ -108,6 +109,51 @@ async function recordAndApply(fx: Harness, part: Part = "core"): Promise<void> {
 
 const remoteVerified = (repo: Repository) => repo.git.run(["ls-remote", "origin", "refs/heads/verified"]).split("\t")[0] || null;
 const verified = (repo: Repository) => repo.git.commit("refs/heads/verified");
+
+test("housekeeping removes an aged sealed tree without following its link into a read-only store, then runs the core", async t => {
+  const repo = repository(t), commit = repo.commit({"a.txt":"1\n"},"first");
+  const fx = harness(repo, fakeGate(repo));
+  const run = join(repo.layout.runs,"aged-sealed-run"), sealed = join(run,"tmp/oracle-dependencies/node-26/tree/pkg");
+  const store = join(repo.root,"read-only-store"), file = join(store,"keep");
+  mkdirSync(sealed,{recursive:true}); mkdirSync(store);
+  writeFileSync(file,"the store stays untouched\n");
+  writeFileSync(join(sealed,"input.js"),"export const value = 7;\n",{mode:0o444});
+  symlinkSync(store,join(sealed,"store"));
+  const old = new Date(fx.now().getTime()-4*86_400_000);
+  utimesSync(run,old,old);
+  try {
+    for (const dir of [run,join(run,"tmp/oracle-dependencies"),sealed,store]) chmodSync(dir,0o555);
+    chmodSync(file,0o444);
+    assert.equal(await cycle(fx),"core");
+    assert.equal(existsSync(run),false);
+    assert.equal(lstatSync(store).mode&0o777,0o555,"the directory link was never followed");
+    assert.equal(lstatSync(file).mode&0o777,0o444);
+    assert.equal(readFileSync(file,"utf8"),"the store stays untouched\n");
+    assert.equal(verified(repo),commit);
+  } finally { makeRemovable(repo.root); }
+});
+
+test("housekeeping names a folder it cannot remove and continues to the other folders and core", async t => {
+  const repo = repository(t), commit = repo.commit({"a.txt":"1\n"},"first");
+  const fx = harness(repo, fakeGate(repo)), paths = ["aged-a","aged-b"].map(name=>join(repo.layout.runs,name));
+  const old = new Date(fx.now().getTime()-4*86_400_000);
+  for (const path of paths) { mkdirSync(path,{recursive:true}); writeFileSync(join(path,"input"),"old\n"); utimesSync(path,old,old); }
+  const log = fx.log;
+  fx.log = line => {
+    log(line);
+    // Release the filesystem obstruction on the actual failure report, so
+    // the next folder and the core's new run can be written, in either order.
+    if (line.startsWith("kept run ")) chmodSync(repo.layout.runs,0o755);
+  };
+  try {
+    chmodSync(repo.layout.runs,0o555);
+    assert.equal(await cycle(fx),"core");
+    const kept = paths.filter(path=>existsSync(path));
+    assert.equal(kept.length,1,"only the failed removal is left behind");
+    assert.ok(fx.lines.some(line=>line.startsWith(`kept run ${kept[0]}:`)&&line.includes("EACCES")),fx.lines.join("\n"));
+    assert.equal(verified(repo),commit);
+  } finally { chmodSync(repo.layout.runs,0o755); makeRemovable(repo.root); }
+});
 
 test("the core runs on the newest main, and verified moves and is pushed on green only", async t => {
   const repo = repository(t);
