@@ -6,7 +6,7 @@
 //
 //   node tooling/full-check/unit.ts                  print the controller's unit, and the count's service and timer
 //   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the three, reload systemd
-//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00 --memory-high=20G
+//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00
 //
 // Then `systemctl --user enable --now nts-full-check` starts the controller,
 // `systemctl --user enable --now nts-full-check-count.timer` the count, and
@@ -47,7 +47,7 @@ export function lowPriority(cpus = "0-3 6-31"): string[] {
   return ["Nice=19", "CPUWeight=20", "IOWeight=20", `CPUAffinity=${cpus}`, `OOMScoreAdjust=${OOM_SCORE["full-check"]}`, "LimitCORE=0"];
 }
 
-export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; memoryHigh: string; env: NodeJS.ProcessEnv };
+export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; env: NodeJS.ProcessEnv };
 
 /** A systemd unit-file value: quoted, with `%` (a specifier) and quotes escaped. */
 const quote = (value: string) => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%")}"`;
@@ -74,7 +74,6 @@ export function unitText(options: UnitOptions): string {
     "Restart=always",
     "RestartSec=60",
     ...lowPriority(),
-    `MemoryHigh=${options.memoryHigh}`,
     "KillMode=control-group",
     "TimeoutStopSec=120",
     ...environment(options.env),
@@ -126,9 +125,9 @@ export function countTimerText(): string {
   ].join("\n");
 }
 
-export function parseUnitOptions(argv: readonly string[]): { install: boolean; schedule: Schedule; memoryHigh: string } {
+export function parseUnitOptions(argv: readonly string[]): { install: boolean; schedule: Schedule } {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let install = false, memoryHigh = "20G";
+  let install = false;
   for (const arg of argv) {
     if (arg === "--install") install = true;
     else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
@@ -136,10 +135,9 @@ export function parseUnitOptions(argv: readonly string[]): { install: boolean; s
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else if (/^--memory-high=\d+[KMGT]$/.test(arg)) memoryHigh = arg.slice(14);
-    else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--memory-high=20G]`);
+    } else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
   }
-  return { install, schedule, memoryHigh };
+  return { install, schedule };
 }
 
 function run(command: string, args: string[], cwd: string): string {
@@ -151,7 +149,7 @@ function run(command: string, args: string[], cwd: string): string {
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {
     const options = parseUnitOptions(process.argv.slice(2));
-    const layout = defaultLayout(), unitOptions = { node: process.execPath, layout, schedule: options.schedule, memoryHigh: options.memoryHigh, env: process.env };
+    const layout = defaultLayout(), unitOptions = { node: process.execPath, layout, schedule: options.schedule, env: process.env };
     const files: [string, string][] = [
       [`${UNIT}.service`, unitText(unitOptions)], [`${COUNT_UNIT}.service`, countServiceText(unitOptions)], [`${COUNT_UNIT}.timer`, countTimerText()],
     ];
