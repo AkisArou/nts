@@ -103,11 +103,12 @@ JavaScript image, with the ordinary byte, domain and finalization checks, and
 does not start an SDK. Answers and replay images belong only to this run.
 
 The target is one constant for the pinned Node 26. The permanent syntax
-controls in `tooling/differential/oracle-emit.test.ts` run the emitted
-decorators, resource declarations and RegExp modifiers on that runtime. The
-pinned compiler rejects RegExp pattern modifiers at ES2024 with TS18062; Node
-26 runs the ES2026 output. The target names the pinned compiler's finite syntax
-transformation. A change to either pin must revisit these controls deliberately.
+controls in `tooling/differential/oracle-emit-resolution.test.ts` run the
+emitted decorators, resource declarations and RegExp modifiers on that
+runtime. The pinned compiler rejects RegExp pattern modifiers at ES2024 with
+TS18062; Node 26 runs the ES2026 output. The target names the pinned
+compiler's finite syntax transformation. A change to either pin must revisit
+these controls deliberately.
 
 The oracle identity binds the emit entry, loader, exact TypeScript version and
 package bytes; upgrading TypeScript requires the corpus-wide oracle migration
