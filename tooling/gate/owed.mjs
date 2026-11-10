@@ -1056,6 +1056,16 @@ export const RULES = [
     steps: ["tooling"],
     arms: [{ kind: "answers", asks: "does the service still read its state and count the machine", run: "node tooling/full-check/service.ts --status; node tooling/full-check/count.ts" }],
   },
+  {
+    // The agent launcher (tooling/agents/agents.ts): each agent a systemd
+    // user unit of its own, started and stopped by name; no gate step runs
+    // it, so its tests, which start real units, run in `tooling`.
+    name: "the agent launcher",
+    when: (p) => p.startsWith("tooling/agents/"),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the launcher still list its agents as another tool reads them", run: "node tooling/agents/agents.ts list --json" }],
+  },
 ];
 
 /** The node harness's paths: a file, or a directory and what is under it. */
