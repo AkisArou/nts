@@ -125,3 +125,28 @@ export function pending() { queueMicrotask(() => console.log("scheduled")); retu
             .contains("oracle not measured")
     );
 }
+
+#[test]
+fn every_result_writer_shares_the_string_row_limit() {
+    // Read when the test runs, never compiled in: a runtime source must not
+    // become an input of this crate, or every change to it owes this crate's
+    // steps (owed.mjs reads a crate's include_str! paths as its inputs).
+    let template = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/jvm/member-templates/src/nts/rt/Check.java.in");
+    let check = std::fs::read_to_string(&template).unwrap();
+    assert!(
+        check.contains(&format!(
+            "private static final int ROW_UNITS = {STRING_ROW_UNITS};"
+        )),
+        "nts.rt.Check"
+    );
+    assert!(
+        HARNESS_PRELUDE.contains(&format!("if (s->length > {STRING_ROW_UNITS}u)")),
+        "the C harness"
+    );
+    assert!(
+        driver_cases("file:///x.mjs", &[], Engine::Node)
+            .contains(&format!("if (s.length > {STRING_ROW_UNITS})")),
+        "the node driver"
+    );
+}

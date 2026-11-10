@@ -6,6 +6,8 @@ import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -16,6 +18,10 @@ public final class Check {
     private Check() {}
     private static final String PROGRAM = "nts.gen.Program";
     private static final char[] HEX = "0123456789abcdef".toCharArray();
+    // The most UTF-16 units a string result is written with in full; past it,
+    // its length and the SHA-256 of its code units, little-endian, as the node
+    // driver and the C harness write it (tooling/differential, STRING_ROW_UNITS).
+    private static final int ROW_UNITS = 4096;
     /**
      * Where result lines go, when the collector named a file.
      *
@@ -247,6 +253,21 @@ public final class Check {
         // answers nothing.
         if (value == null) {
             say(name + " " + at + (nullIsNull ? " null" : " undefined"));
+            return;
+        }
+        if (value.length() > ROW_UNITS) {
+            MessageDigest digest;
+            try { digest = MessageDigest.getInstance("SHA-256"); }
+            catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+            byte[] units = new byte[2 * 32768];
+            for (int start = 0; start < value.length(); start += 32768) {
+                int end = Math.min(value.length(), start + 32768), n = 0;
+                for (int i = start; i < end; ++i) { char c = value.charAt(i); units[n++] = (byte) c; units[n++] = (byte) (c >>> 8); }
+                digest.update(units, 0, n);
+            }
+            StringBuilder out = new StringBuilder(name.length() + 100).append(name).append(' ').append(at).append(" str ").append(value.length()).append(" sha256 ");
+            for (byte b : digest.digest()) { out.append(HEX[(b >>> 4) & 15]).append(HEX[b & 15]); }
+            say(out.toString());
             return;
         }
         StringBuilder out = new StringBuilder();
