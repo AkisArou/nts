@@ -56,6 +56,13 @@ fn native_classes(depth: u32) -> (SemanticSnapshot, NodeId, NodeId, NodeId) {
         });
         if at != 0 {
             let clause = node(&mut snapshot, syntax::HERITAGE_CLAUSE, Some(class));
+            // Capture writes a clause's keyword as its Children small
+            // bits (0 `extends`, 1 `implements`); `node` gives every
+            // node Flags data, which no captured clause carries.
+            snapshot.nodes[clause.0 as usize].data = NodeData::Children {
+                present: 0,
+                small: 0,
+            };
             let expression = node(
                 &mut snapshot,
                 syntax::EXPRESSION_WITH_TYPE_ARGUMENTS,
