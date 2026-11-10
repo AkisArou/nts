@@ -21,15 +21,15 @@ const checked = (command: string, args: string[]): string => {
 const control = (...args: string[]) => checked("systemctl", ["--user", ...args]);
 
 /**
- * A step slice's memory limit: `max`, the runaway bound past which the kernel
- * kills. Nothing throttles a step below it (no MemoryHigh), and swap is never
- * used.
+ * A step slice's memory limits: `high`, its grant, past which the kernel
+ * throttles and reclaims and nothing dies; and `max`, a hard bound above it,
+ * past which it kills. Swap is never used.
  */
-export type StepLimits = { max: number };
+export type StepLimits = { high: number; max: number };
 
 function startSlice(slice: string, boundTo: string, limits?: StepLimits): string {
   let created = false;
-  const memory = limits ? ["MemoryMax", "t", String(limits.max), "MemorySwapMax", "t", "0"] : [];
+  const memory = limits ? ["MemoryHigh", "t", String(limits.high), "MemoryMax", "t", String(limits.max), "MemorySwapMax", "t", "0"] : [];
   try {
     checked("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
       "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", String(5 + memory.length / 3), "Description", "s", "nts owned gate step",
@@ -54,8 +54,8 @@ function populated(group: string): 0 | 1 {
   return value === "0" ? 0 : 1;
 }
 
-/** What a cgroup's memory limits are now: the kernel's, rounded down to pages; `Infinity` for none. */
-export function readLimits(group: string): StepLimits & { high: number; swap: number } {
+/** What a cgroup's memory limits are now: the kernel's, rounded down to pages. */
+export function readLimits(group: string): StepLimits & { swap: number } {
   const read = (name: string) => {
     const text = readFileSync(`${CGROUP}${group}/${name}`, "utf8").trim();
     return text === "max" ? Infinity : Number(text);
@@ -63,27 +63,28 @@ export function readLimits(group: string): StepLimits & { high: number; swap: nu
   return { high: read("memory.high"), max: read("memory.max"), swap: read("memory.swap.max") };
 }
 
-/** Whether the kernel holds `group` to `limits`: its max finite, no more than asked and less than a page under it, no throttle below it, and no swap. */
+/** Whether the kernel holds `group` to `limits`: each limit finite, no more than asked and less than a page under it, and no swap. */
 function enforced(group: string, limits: StepLimits): boolean {
   const now = readLimits(group), page = 4096;
-  return Number.isSafeInteger(now.max) && now.max <= limits.max && now.max > limits.max - page && now.high === Infinity && now.swap === 0;
+  const near = (have: number, want: number) => Number.isSafeInteger(have) && have <= want && have > want - page;
+  return near(now.high, limits.high) && near(now.max, limits.max) && now.swap === 0;
 }
 
 /**
- * A cgroup's memory events, counted over it and everything under it: `max`,
- * times it reached memory.max; `oom_kill`, processes the kernel killed for
- * memory -- and `own_oom`, from memory.events.local, times its own memory.max
- * was the limit that ran out, so its kills were its own bound's, not a
- * worker's.
+ * A cgroup's memory events, counted over it and everything under it: `high`,
+ * times its charge passed memory.high and was throttled; `max`, times it
+ * reached memory.max; `oom_kill`, processes the kernel killed for memory --
+ * and `own_oom`, from memory.events.local, times its own memory.max was the
+ * limit that ran out, so its kills were its own bound's, not a worker's.
  */
-export type MemoryEvents = { max: number; oom: number; oom_kill: number; own_oom: number };
+export type MemoryEvents = { high: number; max: number; oom: number; oom_kill: number; own_oom: number };
 export function memoryEvents(group: string): MemoryEvents {
   const read = (file: string) => {
     const text = readFileSync(`${CGROUP}${group}/${file}`, "utf8");
     return (name: string) => Number(new RegExp(`^${name} (\\d+)$`, "m").exec(text)?.[1] ?? NaN);
   };
   const all = read("memory.events"), local = read("memory.events.local");
-  const events = { max: all("max"), oom: all("oom"), oom_kill: all("oom_kill"), own_oom: local("oom") };
+  const events = { high: all("high"), max: all("max"), oom: all("oom"), oom_kill: all("oom_kill"), own_oom: local("oom") };
   if (!Object.values(events).every(Number.isSafeInteger)) throw new Error(`${group}/memory.events lacks a memory event count`);
   return events;
 }
@@ -153,7 +154,7 @@ export class StepScope {
     if (!this.group.startsWith(`${root.group}/`)) throw new Error("step slice escaped its run's subtree");
     if (!enforced(this.group, limits)) {
       control("stop", this.slice);
-      throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryMax=${limits.max} alone and no swap`);
+      throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryHigh=${limits.high} MemoryMax=${limits.max} and no swap`);
     }
     this.wanted = this.held = limits;
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
@@ -162,9 +163,9 @@ export class StepScope {
   /** The limits the kernel holds the slice to: the last ones it was seen to take. */
   get limits(): StepLimits { return this.held; }
   /**
-   * Moves the slice's runaway bound to `limits`, through the user manager,
-   * without waiting the caller: one change at a time, the latest asked for
-   * last. Read back from the kernel before it counts as held.
+   * Moves the slice's limits to `limits`, through the user manager, without
+   * waiting the caller: one change at a time, the latest asked for last.
+   * Read back from the kernel before they count as held.
    */
   limit(limits: StepLimits): Promise<void> {
     this.wanted = limits;
@@ -172,17 +173,17 @@ export class StepScope {
     return this.limiting;
   }
   private async apply(): Promise<void> {
-    while (!this.closed && this.wanted.max !== this.held.max) {
+    while (!this.closed && (this.wanted.high !== this.held.high || this.wanted.max !== this.held.max)) {
       const want = this.wanted;
       await new Promise<void>((resolve, reject) => {
-        const child = spawn("systemctl", ["--user", "set-property", "--runtime", this.slice, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
+        const child = spawn("systemctl", ["--user", "set-property", "--runtime", this.slice, `MemoryHigh=${want.high}`, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
         let err = "";
         child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
         child.on("error", reject);
         child.on("close", code => code === 0 ? resolve() : reject(new Error(`systemctl set-property ${this.slice}: ${err.trim() || `exit ${code}`}`)));
       });
       if (this.closed) return;
-      if (!enforced(this.group, want)) throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryMax=${want.max}`);
+      if (!enforced(this.group, want)) throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryHigh=${want.high} MemoryMax=${want.max}`);
       this.held = want;
     }
   }

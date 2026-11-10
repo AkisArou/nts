@@ -15,7 +15,8 @@ import {inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, or
   unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
-import {OOM_SCORE} from "./memory-ledger.ts";
+import {processIdentity} from "./memory-ledger.ts";
+import {randomUUID} from "node:crypto";
 
 test("equal and missing estimates have a deterministic name tie-break", () => {
   const names = ["typescript-c", "tests", "blockers", "integrity"];
@@ -189,10 +190,10 @@ type MemoryRow = {
   /** GiB the step reserves (one token's, for an elastic step), as its history in the test's own target says; none, and it has no history. */
   reserve?: number;
 };
-type MemoryStep = { name: string; verdict: string; reason?: string; started_at: string; wall: number; memory_peak_bytes: number | null; log: string;
+type MemoryStep = { name: string; verdict: string; reason?: string; started_at: string; wall: number; memory_peak_bytes: number | null;
   instrument?: { kind: string };
   memory: { peak_bytes: number | null; reserved_bytes: number; over: boolean; basis: string;
-    grant_bytes: number; grown_bytes: number; bound_bytes: number; killed: number | null } };
+    grant_bytes: number; grown_bytes: number; throttled: number | null; killed: number | null } };
 /** The peak a history holds for a step to reserve `bytes`, a whole MiB of at least 128: 1.25 times it, rounded up to a MiB. */
 const peakFor = (bytes: number) => Math.floor(bytes / 1.25);
 
@@ -274,7 +275,7 @@ fi
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
     verdict: string; steps: MemoryStep[];
     memory: { priority: string; peak_bytes: number; growths: number; withdrawn: number; shrinks: number; outranked: number; waited_s: number; unmeasured: string[]; over: string[];
-      steps_grown: number; steps_killed: number };
+      steps_grown: number; steps_throttled: number; steps_killed: number };
   };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
   return { result, summary, step, output: result.stdout + result.stderr, history, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
@@ -393,9 +394,8 @@ esac
 });
 
 // The landing check in the run's ledger: once the run's reservation has grown
-// to 4 GiB, another landing job reserves 3.5 beside it, and the landing check
-// asks for 2 at landing priority; once the run has given memory back, the
-// other job ends. It says how its request went, and gives the memory back.
+// to 4 GiB, it asks for 3.5 at landing priority, says how its request went,
+// and gives the memory back.
 const LANDING = `import { mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const [ledger, meminfo, own, module] = process.argv.slice(1);
@@ -408,12 +408,8 @@ const run = test => () => readdirSync(admitted).some(name => {
 });
 const options = { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 };
 await until(admitted, run(bytes => bytes >= 4 * 2 ** 30));
-const other = await reserve({ bytes: 3.5 * 2 ** 30, what: "another landing job", priority: "landing" }, options);
 const lines = [];
-const asked = reserve({ bytes: 2 * 2 ** 30, what: "landing", priority: "landing" }, { ...options, report: line => lines.push(line) });
-await until(admitted, run(bytes => bytes < 4 * 2 ** 30));
-other.release();
-const held = await asked;
+const held = await reserve({ bytes: 3.5 * 2 ** 30, what: "landing", priority: "landing" }, { ...options, report: line => lines.push(line) });
 writeFileSync(join(own, "landing-admitted"), lines.join("\\n") + "\\n");
 held.release();
 `;
@@ -421,13 +417,15 @@ held.release();
 test("a run outranked by a request of higher priority starts nothing new and gives back what it does not use, then goes on", async t => {
   // A full-check run whose eight integrity workers take a 1 GiB token the
   // moment one comes back fills its reservation: 4 GiB, all the reading's
-  // 6.5 allow beside the 2 kept for the system. Another landing job's 3.5 are
-  // admitted beside them all the same, since the run promises a request that
-  // outranks it only what it uses and a margin (memory-ledger.ts); the
-  // landing check's 2 do not fit beside that job, and wait. Outranked, the
-  // run grants no token as its cases end and gives their memory back; once
-  // it has, the other job ends, the landing check is admitted, and integrity
-  // goes on, each worker taking one more token before it ends.
+  // 6.5 allow beside the 2 kept for the system. The reservation is capped --
+  // the kernel holds each step to its grant -- so the ledger keeps for the
+  // run all of it the run has not used (memory-ledger.ts), and the landing
+  // check's 3.5 do not fit beside it, nor beside the two blocks of slack or
+  // more the run keeps while nothing outranks it: they wait whenever the
+  // landing check first looks. Outranked, the run grants no token as its
+  // cases end and gives their memory back; once it has, the landing check is
+  // admitted, and integrity goes on, each worker taking one more token
+  // before it ends.
   let landing: ReturnType<typeof spawn> | undefined, fixture = "";
   t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
@@ -463,8 +461,8 @@ esac
   // The wait the ledger reports to the landing check: the run's look at the
   // queue, once a second, and its give-back.
   const told = readFileSync(join(fixture, "landing-admitted"), "utf8");
-  assert.match(told, /^memory: landing waits for 2\.0 GiB \(landing\): /m);
-  const waited = Number(/^memory: landing admitted with 2\.0 GiB after (\d+) s$/m.exec(told)?.[1]);
+  assert.match(told, /^memory: landing waits for 3\.5 GiB \(landing\): /m);
+  const waited = Number(/^memory: landing admitted with 3\.5 GiB after (\d+) s$/m.exec(told)?.[1]);
   assert.ok(waited <= 5, `admitted after ${waited} s:\n${told}`);
   assert.match(output, /memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use/);
   assert.match(output, /memory: no request of higher priority waits any more: the run goes on after \d+ s/);
@@ -557,49 +555,108 @@ test("an unmeasured step reserves at most the widest step's share, half of what 
   assert.deepEqual([step("format").memory.reserved_bytes, step("format").memory.basis], [15 * GiB, "share"]);
 });
 
-// A step's slice bounds only a runaway, and its grant grows while it runs, for
-// the ledger's accounting (run.mjs, "Memory"). Each fake step below fills real
-// memory, so each test's sizes are small; the kernel enforces every bound.
+// A step's grant is its slice's MemoryHigh, and grows while it runs (run.mjs,
+// "Memory"). Each fake step below fills real memory, so each test's sizes are
+// small; the kernel enforces every limit.
+// Writes an admitted entry into a run's ledger once the run's own reservation
+// is there: a job that took the room beside it.
+const BLOCKER = `import { mkdirSync, readdirSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const [ledger, id, entry] = process.argv.slice(1), admitted = join(ledger, "admitted");
+mkdirSync(admitted, { recursive: true });
+const run = () => readdirSync(admitted).some(name => { try { return JSON.parse(readFileSync(join(admitted, name), "utf8")).what.startsWith("gate run "); } catch { return false; } });
+await new Promise(resolve => { const watcher = watch(admitted, () => { if (run()) { watcher.close(); resolve(); } }); if (run()) { watcher.close(); resolve(); } });
+writeFileSync(join(ledger, "blocker.json"), entry);
+renameSync(join(ledger, "blocker.json"), join(admitted, id + ".json"));
+`;
+
 const fill = (gibibytes: number, chunks: number) => `exec node -e 'const held = []; for (let i = 0; i < ${chunks}; i++) held.push(Buffer.alloc(Math.round(${gibibytes} * 2 ** 30 / ${chunks}), 1)); console.log(held.length)'`;
 
-test("a step that fills past its grant, under its runaway bound, is never throttled and passes, its grant grown for the ledger", t => {
-  // format reserves 256 MiB, as its history says, and fills 1 GiB at once:
-  // under the 1.25 GiB runaway bound of its grant nothing holds it, and the
-  // run grows its grant from the reservation's slack, then by a growth of
-  // the reservation. Its processes carry the run's agent OOM score.
+test("a step's grant grows while it runs as its charge nears it, its slice's limits with it, and the step passes", t => {
+  // format reserves 256 MiB, as its history says, and fills 1 GiB, 64 MiB at
+  // a time: the run grows its grant from the reservation's slack, then by a
+  // growth of the reservation.
   const { result, summary, step, output } = memoryRun(t, {
     steps: "format", availableKiB: 16 * 2 ** 20,
     rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
     times: "format\t100\t20\t1\n",
-    payload: `\ncase $1 in\n  format) echo "oom_score_adj $(cat /proc/self/oom_score_adj)"; ${fill(1, 1)} ;;\nesac\n`,
+    payload: `\ncase $1 in\n  format) ${fill(1, 16)} ;;\nesac\n`,
   });
   assert.equal(result.status, 0, output);
   const format = step("format");
   assert.equal(format.verdict, "PASS", JSON.stringify(format));
   assert.ok(format.memory.grown_bytes > 0 && format.memory.grant_bytes > format.memory.reserved_bytes, JSON.stringify(format.memory));
-  assert.ok(format.memory.bound_bytes >= 1.25 * GiB, JSON.stringify(format.memory));
+  assert.ok(format.memory.grant_bytes >= (format.memory.peak_bytes ?? Infinity), "its grant covered what it held");
   assert.equal(format.memory.killed, 0);
   assert.equal(summary.memory.steps_grown, 1);
   assert.match(output, /-- format: memory grown by .* to .* \(charge /);
-  assert.equal(Number(/^oom_score_adj (\d+)$/m.exec(readFileSync(format.log, "utf8"))?.[1]), OOM_SCORE.agent);
 });
 
-test("a step past its runaway bound is killed there and held as memory pressure, never a FAIL", t => {
-  // A 3 GiB machine, 2 kept for the system: the run can hold 1 GiB at most,
-  // so no step's bound is above it. format fills 2 GiB at once and the
-  // kernel kills it at its bound.
+test("a step whose charge jumps past its grant within one sample is throttled at it, then grown, and passes", t => {
+  // format reserves 256 MiB and fills 2 GiB at once: past its MemoryHigh the
+  // kernel throttles it, and the run grows the grant and the hard bound above
+  // it before the charge reaches that bound.
+  const { result, step, output } = memoryRun(t, {
+    steps: "format", availableKiB: 16 * 2 ** 20,
+    rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
+    times: "format\t100\t20\t1\n",
+    payload: `\ncase $1 in\n  format) ${fill(2, 1)} ;;\nesac\n`,
+  });
+  assert.equal(result.status, 0, output);
+  const format = step("format");
+  assert.equal(format.verdict, "PASS", JSON.stringify(format));
+  assert.ok((format.memory.throttled ?? 0) > 0, `throttled past its grant: ${JSON.stringify(format.memory)}`);
+  assert.ok(format.memory.grant_bytes >= 2 * GiB, JSON.stringify(format.memory));
+  assert.equal(format.memory.killed, 0, "nothing reached its hard bound");
+});
+
+test("a step whose growth the machine could never give is held as memory pressure, never a FAIL", t => {
+  // A 3 GiB machine, 2 kept for the system: the run can hold 1 GiB at most.
+  // format fills 2 GiB: its grant grows to all the run could hold, it is
+  // throttled past it, and once it holds more than the ledger could ever
+  // give, it is stopped and held.
   const { result, summary, step, output } = memoryRun(t, {
     steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
     rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
     times: "format\t100\t20\t1\n",
-    payload: `\ncase $1 in\n  format) ${fill(2, 1)} ;;\nesac\n`,
+    payload: `\ncase $1 in\n  format) ${fill(2, 32)} ;;\nesac\n`,
   });
   assert.notEqual(result.status, 0, output);
   const format = step("format");
   assert.equal(format.verdict, "INSTRUMENT", JSON.stringify(format));
   assert.equal(format.instrument?.kind, "memory-pressure");
-  assert.match(format.reason ?? "", /^memory: the kernel killed \d+ process\(es\) of the step at its runaway bound of 1\.0 GiB/);
-  assert.ok(format.memory.killed > 0, JSON.stringify(format.memory));
-  assert.equal(summary.memory.steps_killed, 1);
+  assert.match(format.reason ?? "", /^memory: the step held .*, past the 1\.0 GiB the ledger could ever give the run/);
   assert.notEqual(summary.verdict, "green");
+});
+
+test("a step whose growth is not given in time is throttled at its grant, and held as memory pressure at its bound, never a FAIL", t => {
+  // Once the run holds its first block, another job takes all but half a
+  // block of the 16 GiB available beside it, so the run can grow no further.
+  // format reserves 256 MiB and charges 3 GiB of a memfd at once: its grant
+  // grows by the run's slack to all of the block, the kernel throttles it
+  // there -- even inside the one system call -- short of the hard bound
+  // above, and at its bound it is held.
+  const holder = spawn("cat", [], { stdio: ["pipe", "ignore", "ignore"] });
+  t.after(() => { holder.kill("SIGKILL"); });
+  let blocker: ReturnType<typeof spawn> | undefined;
+  t.after(() => { blocker?.kill("SIGKILL"); });
+  const { result, step, output } = memoryRun(t, {
+    steps: "format", availableKiB: 16 * 2 ** 20,
+    rows: { format: { slots: 1, reserve: 0.25, bound: 15 } },
+    times: "format\t100\t20\t1\n",
+    payload: `\ncase $1 in\n  format) exec python3 -c 'import os; fd = os.memfd_create("burst"); os.posix_fallocate(fd, 0, 3 << 30); print("held")' ;;\nesac\n`,
+    before: (_own, memory) => {
+      const who = processIdentity(holder.pid!)!, id = randomUUID();
+      const entry = JSON.stringify({ version: 2, id, seq: 0, bytes: 13.5 * GiB, what: "another job", priority: "agent",
+        owner: who, waiter: who, measure: { tree: true, cgroup: null }, since: new Date().toISOString(), grows: null }) + "\n";
+      blocker = spawn(process.execPath, ["--input-type=module", "-e", BLOCKER, memory.NTS_MEMORY_LEDGER, id, entry], { stdio: "ignore" });
+    },
+  });
+  assert.notEqual(result.status, 0, output);
+  const format = step("format");
+  assert.equal(format.verdict, "INSTRUMENT", JSON.stringify(format));
+  assert.equal(format.instrument?.kind, "memory-pressure");
+  assert.ok((format.memory.throttled ?? 0) > 0, JSON.stringify(format.memory));
+  assert.match(format.reason ?? "", /^memory: the step waited, throttled at its grant of .*, for a growth not given by its bound of 15 s/);
+  assert.match(output, /memory: gate run .* waits to grow by /, "its growth waited in the ledger");
 });

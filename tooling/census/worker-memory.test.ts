@@ -693,12 +693,12 @@ test("a pool whose reservation is outranked starts no new case until the request
   await gate.settled();
 });
 
-test("inside a gate step's bounded slice, the step's census has no aggregate cap of its own, and a case killed at the step's bound is pressure, never its budget", async t => {
-  // The step's slice, as run.mjs makes it: MemoryMax alone, here 256 MiB, so
-  // a case that holds more is killed at the step's bound. The census runs
-  // inside it, sized by the step's budget, as a step's does.
+test("inside a gate step's capped slice, the step's census has no aggregate cap of its own, and a case killed at the step's bound is pressure, never its budget", async t => {
+  // The step's slice, as run.mjs makes it: MemoryHigh and MemoryMax, here
+  // both 256 MiB, so a case that holds more is killed at the step's bound.
+  // The census runs inside it, sized by the step's budget, as a step's does.
   const { GateScopes } = await import("../gate/scopes/step-scope.ts");
-  const owner = new GateScopes(process.env), slice = owner.step({ max: 256 * 2 ** 20 });
+  const owner = new GateScopes(process.env), slice = owner.step({ high: 256 * 2 ** 20, max: 256 * 2 ** 20 });
   t.after(async () => { await slice.drain(); owner.close(); });
   const census = `import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";

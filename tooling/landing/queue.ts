@@ -22,7 +22,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
 import { durableRecord } from "../gate/durable-record.ts";
-import { OOM_SCORE } from "../gate/memory-ledger.ts";
 import { revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
 
@@ -192,8 +191,7 @@ export function ensureService(root: string, home = LANDING_HOME, env: NodeJS.Pro
   if (serviceRunning(home)) return "running";
   const script = join(root, "tooling/landing/check.ts");
   if (spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0) {
-    // Its work is the last a machine out of memory kills (OOM_SCORE).
-    const r = spawnSync("systemd-run", ["--user", `--unit=${SERVICE_UNIT}`, "--collect", "--quiet", "-p", "LimitCORE=0", "-p", `OOMScoreAdjust=${OOM_SCORE.landing}`,
+    const r = spawnSync("systemd-run", ["--user", `--unit=${SERVICE_UNIT}`, "--collect", "--quiet", "-p", "LimitCORE=0",
       `--working-directory=${root}`, ...systemdEnvironment(env), process.execPath, script, "serve"], { encoding: "utf8" });
     // A unit that exists already is one starting or draining: the lock says which soon.
     return r.status === 0 ? `started ${SERVICE_UNIT}` : /already (exists|loaded)/.test(r.stderr ?? "") ? "starting" : `could not start ${SERVICE_UNIT}: ${(r.stderr ?? "").trim()}`;

@@ -264,11 +264,8 @@ then a guard once fixed), `tests/memory/`.
   key held its last few times in your tree, waits its turn, holds the memory
   until the command ends, and records its peak for the next time; `node
   tooling/gate/admit.ts --status` shows who holds what, who waits, and what
-  was sized unmeasured or held more than it reserved. Nothing holds a job to
-  its reservation: a gate step's slice bounds only a runaway, and if the
-  machine itself runs out, the kernel kills the full check's work first,
-  then agents' (admit.ts ranks yours), and a landing's last. Still `nice -n
-  19` and one heavy job of yours at a time.
+  was sized unmeasured or held more than it reserved. Still `nice -n 19` and
+  one heavy job of yours at a time.
   Never SIGSTOP timed work: its wall-clock timeout keeps running, so
   suspension fabricates a timeout.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for

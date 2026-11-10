@@ -35,7 +35,7 @@ for (const beforeCheckout of [false, true]) test(`the next runner reaps a dead r
   });
   const code = `import {spawn} from 'node:child_process';import{writeFileSync}from'node:fs';
 import{GateScopes}from${JSON.stringify(new URL("./step-scope.ts", import.meta.url).href)};
-const owner=new GateScopes(process.env,${JSON.stringify(receipt)}),step=owner.step({max:2**31});
+const owner=new GateScopes(process.env,${JSON.stringify(receipt)}),step=owner.step({high:2**30,max:2**31});
 const command=step.command(process.execPath,['-e',${JSON.stringify(`const fs=require('node:fs');fs.watch(${JSON.stringify(own)},()=>{});fs.writeFileSync(${JSON.stringify(ready)},'ready');`)}]);
 spawn(command.command,command.args,{detached:true,stdio:'ignore',env:{...process.env,NTS_TOOLING_SLICE:step.slice}}).unref();
 writeFileSync(${JSON.stringify(info)},JSON.stringify({slice:owner.slice,group:owner.group}));`;

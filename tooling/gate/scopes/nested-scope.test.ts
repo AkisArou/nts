@@ -18,7 +18,7 @@ test("nested census scopes belong to one step and another run remains live when 
   try {
     for (const label of ["a", "b"]) {
       const owner = new GateScopes(process.env); owners.push(owner);
-      const scope = owner.step({ max: 2 ** 31 }), ready = join(own, `${label}.json`), release = join(own, `${label}.release`), workerReady = join(own, `${label}.worker.json`), metadata = join(own, `${label}.owner.json`);
+      const scope = owner.step({ high: 2 ** 30, max: 2 ** 31 }), ready = join(own, `${label}.json`), release = join(own, `${label}.release`), workerReady = join(own, `${label}.worker.json`), metadata = join(own, `${label}.owner.json`);
       const publish=JSON.stringify(new URL("../durable-record.ts",import.meta.url).href);
       const childSource = `import {readFileSync,watch,existsSync} from 'node:fs';import {durableRecord} from ${publish};
 durableRecord(${JSON.stringify(workerReady)},{group:readFileSync('/proc/self/cgroup','utf8'),cpus:/^Cpus_allowed_list:\\s+(.+)$/m.exec(readFileSync('/proc/self/status','utf8'))[1]});

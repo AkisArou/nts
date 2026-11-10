@@ -39,7 +39,7 @@
 // --json`'s envelope: version, kind ("memory") and at, numbers as numbers.
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
-import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, rankForOom, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
+import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 
 const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
   + "       node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
@@ -201,10 +201,8 @@ async function main(argv: readonly string[]): Promise<void> {
     process.kill(process.pid, stoppedBy);
     return;
   }
-  // Watched from outside: this process becomes the command, ranked for the
-  // OOM killer by its priority (memory-ledger.ts's OOM_SCORE).
+  // Watched from outside: this process becomes the command.
   if (options.job && !reservation.inherited) watchPeak(reservation, options.job, say);
-  rankForOom(options.priority, say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;
   try { execve(file, [options.command, ...options.args], env); }

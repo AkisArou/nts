@@ -183,11 +183,9 @@ export function orderStepStarts(names: readonly string[], seconds: (name: string
 // Memory reservations.
 // ---------------------------------------------------------------------------
 
-/** What a unit reserves per byte of the largest peak it was measured to hold. */
-export const RESERVATION_PER_PEAK = 1.25;
-/** One unit's reservation from its measured peaks: RESERVATION_PER_PEAK times the largest, at least LEAST_RESERVATION_BYTES, in whole MiB. */
+/** One unit's reservation from its measured peaks: 1.25 times the largest, at least LEAST_RESERVATION_BYTES, in whole MiB. */
 export function peakReservation(peaks: readonly number[]): number {
-  return Math.max(LEAST_RESERVATION_BYTES, Math.ceil(RESERVATION_PER_PEAK * Math.max(...peaks) / MIB) * MIB);
+  return Math.max(LEAST_RESERVATION_BYTES, Math.ceil(1.25 * Math.max(...peaks) / MIB) * MIB);
 }
 
 /** A share of the machine: `width` of its `slots`, never more than all of it. */

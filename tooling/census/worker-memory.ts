@@ -143,8 +143,8 @@ export type MemoryScope = { unit: string; ready: string; argv: string[]; env: No
 /**
  * The cgroup of the tooling slice this process runs in (NTS_TOOLING_SLICE)
  * when the kernel holds it to a finite memory.max with no swap: a gate step's
- * slice, bounded at the step's runaway bound (run.mjs, "Memory"). A census
- * inside it caps its aggregate at that slice's limit, not its own.
+ * slice, held to the step's grant (run.mjs, "Memory"). A census inside it
+ * caps its aggregate at that slice's limits, not its own.
  */
 function cappingSlice(): string | undefined {
   const slice = toolingSlice();
@@ -183,10 +183,9 @@ export class MemoryRun {
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
     mkdirSync(this.directory, { recursive: true });
     try {
-      // Inside a gate step, the step's slice bounds the aggregate at its
-      // runaway bound, which follows the step's grant: the aggregate has no
-      // cap of its own beneath it, and a kill there is pressure, never a
-      // case's.
+      // Inside a gate step, the step's slice holds the aggregate to its
+      // grant, which grows while the step runs: the aggregate has no cap of
+      // its own beneath it, and a kill there is pressure, never a case's.
       this.#outer = stepBudget ? cappingSlice() : undefined;
       this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes);
     } catch (error) {
@@ -238,7 +237,7 @@ export class MemoryRun {
   }
   aggregateOoms() { return events(this.group, true).oom; }
   effectiveBudgetBytes() {
-    // Inside a gate step, the step's slice's runaway bound, which follows its
+    // Inside a gate step, the step's slice's hard bound, which grows with its
     // grant.
     if (this.#outer) {
       const outer = Number(readFileSync(join(CGROUP, this.#outer, "memory.max"), "utf8"));
