@@ -6,8 +6,8 @@ import {resolve} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {spawn} from "node:child_process";
 import {mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
-import {join} from "node:path";
+import {availableParallelism,homedir} from "node:os";
+import {join,relative} from "node:path";
 import {randomUUID} from "node:crypto";
 import {publishHung,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
@@ -24,7 +24,19 @@ export function completedTestFailure(data:{details:{passed?:boolean;error?:unkno
   const failureType=typeof error==="object"&&error!==null&&"failureType" in error&&typeof error.failureType==="string"?error.failureType:"";
   return data.details.passed===false&&!data.todo&&!data.skip&&!["testAborted","cancelledByParent","subtestsFailed","testTimeoutFailure"].includes(failureType);
 }
-export type ToolingResult={status:0|1|2;completedFailures:number};
+/** One test file of a run: when it started after the run began and how long it ran, null where it never did, and whether it passed. */
+export type ToolingFileTime={file:string;startedMs:number|null;wallMs:number|null;passed:boolean|null};
+/** A run's own times: its wall, how many files it runs at once, and each file's. */
+export type ToolingTimes={version:1;wallMs:number;concurrency:number;files:ToolingFileTime[]};
+export type ToolingResult={status:0|1|2;completedFailures:number;times?:ToolingTimes};
+function readToolingTimes(value:unknown):ToolingTimes {
+  const times=value as ToolingTimes,span=(n:unknown)=>n===null||typeof n==="number"&&Number.isFinite(n)&&n>=0;
+  if(typeof value!=="object"||value===null||times.version!==1||typeof times.wallMs!=="number"||!span(times.wallMs)
+      ||!Number.isSafeInteger(times.concurrency)||times.concurrency<1||!Array.isArray(times.files)
+      ||times.files.some(row=>typeof row!=="object"||row===null||typeof row.file!=="string"||!span(row.startedMs)||!span(row.wallMs)||!(row.passed===null||typeof row.passed==="boolean")))
+    throw new ToolingInstrumentError("tooling-setup","invalid tooling worker file times");
+  return times;
+}
 /** A worker report is private to one invocation. Missing or malformed evidence
  * never becomes a successful run or an inferred failure count. */
 export function readToolingCompletion(value:unknown,nonce:string,status:number):ToolingResult {
@@ -33,7 +45,28 @@ export function readToolingCompletion(value:unknown,nonce:string,status:number):
   if(report.version!==2||report.nonce!==nonce||![0,1,2].includes(report.status as number)||report.status!==status
       ||typeof report.completedFailures!=="number"||!Number.isSafeInteger(report.completedFailures)||report.completedFailures<0
       ||(report.completedFailures>0&&status!==1))throw new ToolingInstrumentError("tooling-setup","tooling worker completion disagrees with its process status or completed-failure evidence");
-  return {status:report.status as ToolingResult["status"],completedFailures:report.completedFailures};
+  return {status:report.status as ToolingResult["status"],completedFailures:report.completedFailures,...(report.times===undefined?{}:{times:readToolingTimes(report.times)})};
+}
+
+/**
+ * What a run's file times say: its wall beside its files' walls; its critical
+ * path, the file that ended last; when its slots were last all busy, after
+ * which the files still running set the wall alone; and every file by wall.
+ */
+export function toolingTimesReport(times:ToolingTimes,root?:string):string[] {
+  const seconds=(ms:number)=>(ms/1000).toFixed(1)+" s",name=(file:string)=>root?relative(root,file):file;
+  const done=times.files.filter((row):row is ToolingFileTime&{startedMs:number;wallMs:number}=>row.startedMs!==null&&row.wallMs!==null);
+  const total=done.reduce((sum,row)=>sum+row.wallMs,0),end=(row:{startedMs:number;wallMs:number})=>row.startedMs+row.wallMs;
+  const lines=[`tooling files: ${times.files.length} in ${seconds(times.wallMs)}; their walls sum to ${seconds(total)}, ${(total/Math.max(times.wallMs,1)).toFixed(1)} running at once on average, of ${times.concurrency} at most`];
+  const last=done.reduce<typeof done[number]|undefined>((late,row)=>!late||end(row)>end(late)?row:late,undefined);
+  if(last)lines.push(`tooling critical path: ${name(last.file)}, from ${seconds(last.startedMs)} for ${seconds(last.wallMs)}`);
+  let running=0,full:number|null=null;
+  for(const [at,step] of done.flatMap(row=>[[row.startedMs,1],[end(row),-1]] as const).sort((a,b)=>a[0]-b[0]||a[1]-b[1])){running+=step;if(running>=times.concurrency)full=at;}
+  lines.push(full===null?`tooling slots: never all ${times.concurrency} busy`
+    :`tooling slots: all ${times.concurrency} last busy at ${seconds(full)}; ${done.filter(row=>end(row)>full!).length} file(s) ran on after it`);
+  for(const row of [...done].sort((a,b)=>b.wallMs-a.wallMs))lines.push(`tooling file ${seconds(row.wallMs).padStart(9)} from ${seconds(row.startedMs).padStart(8)}  ${name(row.file)}${row.passed?"":" (failed)"}`);
+  for(const row of times.files.filter(row=>row.startedMs===null||row.wallMs===null))lines.push(`tooling file  unfinished  ${name(row.file)}`);
+  return lines;
 }
 type ToolingRequest={files:string[];idleMs?:number;execArgv?:string[];complete:string;nonce:string};
 export function readToolingRequest(value:unknown):ToolingRequest {
@@ -77,6 +110,7 @@ export class ToolingTestOwners {
 type ToolingInstrument={
   scheduleIdle?:(callback:()=>void,milliseconds:number,file:string)=>()=>void;
   event?:(name:string,data:TestActivity)=>void;
+  now?:()=>number;
 };
 export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;instrument?:ToolingInstrument}={}):Promise<ToolingResult> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
@@ -99,12 +133,16 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     },options.idleMs??TOOLING_IDLE_GUARD_MS,file));
   };
   const fileOf=(data:TestActivity)=>owners.file(data);
+  // Each file's own wrapper test marks its process's start and end.
+  const clock=options.instrument?.now??(()=>performance.now()),begun=clock();
+  const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
   const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
     events.on("test:dequeue",data=>{
       const file=fileOf(data);if(!file)return;
       touch(file);
-      if(data.name&&resolve(data.name)!==file)open.set(file,(open.get(file)??new Map()).set(data.testId??data.name,data.name));
+      if(data.name&&resolve(data.name)===file)times.get(file)!.startedMs=clock()-begun;
+      else if(data.name)open.set(file,(open.get(file)??new Map()).set(data.testId??data.name,data.name));
     });
     for(const event of ["test:stdout","test:stderr","test:start","test:pass","test:fail","test:diagnostic"] as const){
       events.on(event,(data:any)=>{const file=fileOf(data);if(file&&active.has(file))touch(file);});
@@ -115,7 +153,10 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       if(completedTestFailure(data))priorFailures++;
       const file=fileOf(data);if(!file)return;
       open.get(file)?.delete(data.testId??data.name!);
-      if(resolve(data.name)===file){active.get(file)?.();active.delete(file);}
+      if(resolve(data.name)===file){
+        active.get(file)?.();active.delete(file);
+        const row=times.get(file)!;if(row.startedMs!==null){row.wallMs=clock()-begun-row.startedMs;row.passed=data.details.passed!==false;}
+      }
       else if(active.has(file))touch(file);
     });
     events.on("test:summary",data=>{if(!data.success)success=false;});
@@ -126,13 +167,15 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   report.pipe(options.output??process.stdout,{end:false});
   try{await finished(report);}catch(error){if(!hung)throw error;}
   finally{for(const cancel of active.values())cancel();}
+  // node:test runs this many files at once when concurrency is true.
+  const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
   if(hung){
     // Draining can deliver a completed failure after the guard's observation.
     // Publish the final evidence only after those events have been consumed.
     publishHung(hangReason(),options.resultEnv,priorFailures);
-    return {status:priorFailures>0?1:2,completedFailures:priorFailures};
+    return {status:priorFailures>0?1:2,completedFailures:priorFailures,times:measured};
   }
-  return {status:success?0:1,completedFailures:priorFailures};
+  return {status:success?0:1,completedFailures:priorFailures,times:measured};
 }
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
@@ -170,6 +213,11 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     process.off("SIGTERM",terminate);process.off("SIGINT",terminate);stop();
   }
 }
+/** The run's file times, after its tests' own report: a command line's run, never a fixture's. */
+function reportTimes(result:ToolingResult,root:string):number {
+  if(result.times)for(const line of toolingTimesReport(result.times,root))process.stdout.write(line+"\n");
+  return result.status;
+}
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   try {
     const args=process.argv.slice(2);
@@ -190,10 +238,10 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
       const root=resolve(fileURLToPath(new URL("../..",import.meta.url))),selection=discoverToolingTests(root);
       process.stdout.write(`tooling tests: ${selection.files.length} collected, ${selection.exclusions.length} explicitly assigned to another step, ${selection.inventoryCount} inventoried\n`);
       for(const row of selection.exclusions)process.stdout.write(`  ${row.path}: ${row.step} (${row.reason})\n`);
-      process.exitCode=(await runScopedTooling(selection.files.map(file=>resolve(root,file)))).status;
+      process.exitCode=reportTimes(await runScopedTooling(selection.files.map(file=>resolve(root,file))),root);
     } else {
       if(!args.length)throw new ToolingInstrumentError("tooling-setup","tooling runner needs explicit test files");
-      process.exitCode=(await runScopedTooling(args)).status;
+      process.exitCode=reportTimes(await runScopedTooling(args),process.cwd());
     }
   } catch(error) {
     const instrument=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError("tooling-setup",String(error),{cause:error});

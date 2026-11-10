@@ -8,7 +8,7 @@ import {pathToFileURL} from "node:url";
 import {PassThrough} from "node:stream";
 import {randomUUID} from "node:crypto";
 import {waitFor,spawnTest} from "./test-wait.ts";
-import {completedTestFailure,readToolingCompletion,readToolingRequest,ToolingTestOwners,runScopedTooling} from "./tooling-runner.ts";
+import {completedTestFailure,readToolingCompletion,readToolingRequest,ToolingTestOwners,runScopedTooling,toolingTimesReport} from "./tooling-runner.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix} from "./tooling-slice.ts";
 
@@ -164,6 +164,39 @@ test("worker completion requires nonce-bound final failure evidence",()=>{
       {...valid,status:0},{...valid,status:2}])
     assert.throws(()=>readToolingCompletion(changed,"owned",typeof changed==="object"&&changed!==null&&"status" in changed?Number(changed.status):1),/completion/);
   assert.throws(()=>readToolingCompletion(valid,"owned",0),/completion/);
+  const times={version:1,wallMs:20,concurrency:2,files:[{file:"/r/a.test.ts",startedMs:0,wallMs:20,passed:true},{file:"/r/b.test.ts",startedMs:null,wallMs:null,passed:null}]};
+  assert.deepEqual(readToolingCompletion({...valid,times},"owned",1),{status:1,completedFailures:2,times});
+  for(const changed of [{...times,version:2},{...times,wallMs:-1},{...times,concurrency:0},{...times,files:[{file:"/r/a.test.ts",startedMs:"0",wallMs:20,passed:true}]},{...times,files:[{file:"/r/a.test.ts",startedMs:0,wallMs:20,passed:"yes"}]}])
+    assert.throws(()=>readToolingCompletion({...valid,times:changed},"owned",1),/file times/);
+});
+
+test("a run's times report its wall, its critical path, when its slots were last all busy, and every file by wall",()=>{
+  const s=1000,times={version:1 as const,wallMs:20*s,concurrency:2,files:[
+    {file:"/r/a.test.ts",startedMs:0,wallMs:10*s,passed:true},{file:"/r/b.test.ts",startedMs:0,wallMs:3*s,passed:true},
+    {file:"/r/c.test.ts",startedMs:3*s,wallMs:3*s,passed:false},{file:"/r/d.test.ts",startedMs:6*s,wallMs:14*s,passed:true},
+    {file:"/r/e.test.ts",startedMs:null,wallMs:null,passed:null}]};
+  assert.deepEqual(toolingTimesReport(times,"/r"),[
+    "tooling files: 5 in 20.0 s; their walls sum to 30.0 s, 1.5 running at once on average, of 2 at most",
+    "tooling critical path: d.test.ts, from 6.0 s for 14.0 s",
+    "tooling slots: all 2 last busy at 6.0 s; 2 file(s) ran on after it",
+    "tooling file    14.0 s from    6.0 s  d.test.ts",
+    "tooling file    10.0 s from    0.0 s  a.test.ts",
+    "tooling file     3.0 s from    0.0 s  b.test.ts",
+    "tooling file     3.0 s from    3.0 s  c.test.ts (failed)",
+    "tooling file  unfinished  e.test.ts"]);
+});
+
+test("a scoped run measures each file's start and wall from its own wrapper test",async t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-times-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const pass=join(directory,"pass.test.mjs"),fail=join(directory,"fail.test.mjs");
+  writeFileSync(pass,"import {test} from 'node:test';test('pass',()=>{});\n");
+  writeFileSync(fail,"import {test} from 'node:test';test('fail',()=>{throw new Error('assertion control');});\n");
+  const output=new PassThrough();output.resume();
+  const {status,times}=await runScopedTooling([pass,fail],{fixture:true,output});
+  assert.equal(status,1);assert.ok(times,"the worker returns its run's times");
+  assert.deepEqual(times.files.map(row=>[row.file,row.passed]).sort(),[[fail,false],[pass,true]]);
+  for(const row of times.files)assert.ok(row.startedMs!==null&&row.wallMs!==null&&row.startedMs+row.wallMs<=times.wallMs,JSON.stringify(row));
+  assert.match(toolingTimesReport(times,directory)[0]!,/^tooling files: 2 in \d+\.\d s; their walls sum to \d+\.\d s/);
 });
 
 test("scoped runner passes explicit Node preloads into test children",async t=>{
@@ -282,7 +315,8 @@ const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instru
   }
  }
 }});
-console.log(JSON.stringify({...result,now,progress,shortClosed,reportWasWaiting,reportedShort:transcript.includes('short second')}));
+const {times:_times,...outcome}=result;
+console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting,reportedShort:transcript.includes('short second')}));
 `);
   const env:NodeJS.ProcessEnv={...process.env};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
