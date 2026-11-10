@@ -102,9 +102,10 @@ export const STEPS = [
   { name: "corpus", slots: 8, min: 4, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
     capabilities: ["jvm"],
   },
-  // One compile at a time, under the step's census cap (NTS_GATE_STEP_MEMORY_BYTES),
-  // which the records writer takes as its compile cap too (build-records.ts).
-  { name: "benches", slots: 1, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
+  // Each case's compile holds a token, under its own 6 GiB kernel cap, the one
+  // its rows were recorded under (build-records.ts): as wide as the other
+  // compile-per-case steps.
+  { name: "benches", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
   { name: "example-refusals", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, treeOnly: true, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, doc: "vendored React sources match the manifest" },

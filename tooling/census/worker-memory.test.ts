@@ -458,6 +458,34 @@ test("a serial runner shares one scope across compiles and removes every cgroup"
   assert.equal(existsSync(join(CGROUP, dirname(boundary))), false);
 });
 
+test("compiles at once in one process each run on a lane of their own, under the run's budget, and a later one takes an idle lane", () => {
+  const directory = scratch(), fifo = join(directory, "both-running");
+  try {
+    assert.equal(spawnTest("mkfifo", [fifo], { encoding: "utf8" }).status, 0);
+    // In a process of its own, so the run it makes is its alone. The first
+    // compile reads the fifo the second writes: neither ends until both run.
+    const code = `import {compileActive, memoryRun} from ${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)};
+const tools = {memoryCapKb: 64 * 1024}, cgroup = "cat /proc/self/cgroup", lane = result => /-w(direct\\d+)\\.slice\\//.exec(result.stdout)?.[1];
+const run = memoryRun(2 * 64 * 2 ** 20);
+const both = await Promise.all([compileActive(tools, "sh", ["-c", cgroup + "; cat " + ${JSON.stringify(fifo)}]),
+  compileActive(tools, "sh", ["-c", cgroup + "; echo both > " + ${JSON.stringify(fifo)}])]);
+const later = await compileActive(tools, "sh", ["-c", cgroup]);
+let refused = "";
+try { memoryRun(3 * 64 * 2 ** 20); } catch (error) { refused = String(error); }
+console.log(JSON.stringify({lanes: [...both, later].map(lane), limits: [...both, later].map(result => result.residentLimitBytes), read: both[0].stdout.trim().split("\\n").pop(), budget: run.budgetBytes, refused}));
+run.close();`;
+    const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const { lanes, limits, read, budget, refused } = JSON.parse(result.stdout);
+    assert.equal(read, "both", "the two compiles ran at once");
+    assert.ok(lanes[0] && lanes[1] && lanes[0] !== lanes[1], `two compiles at once never share a lane: ${lanes.join(", ")}`);
+    assert.ok(lanes.slice(0, 2).includes(lanes[2]), `a later compile takes an idle lane: ${lanes.join(", ")}`);
+    assert.deepEqual(limits, [64 * 2 ** 20, 64 * 2 ** 20, 64 * 2 ** 20], "each at its own cap");
+    assert.equal(budget, 2 * 64 * 2 ** 20, "the run's aggregate is the budget its first caller asked");
+    assert.match(refused, /this process's run holds \d+ bytes, not the \d+ asked for/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("byte budgets accept kernel page rounding while never exceeding the reservation", () => {
   const budget = 193 * 2 ** 20 + 13;
   const memory = new MemoryRun({ budgetBytes: budget, id: "page-rounding-control" });

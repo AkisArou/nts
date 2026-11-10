@@ -272,16 +272,34 @@ export function inResidentWorker(): boolean {
   return true;
 }
 
-let direct: { run: MemoryRun; workers: Map<number, MemoryWorker> } | undefined;
+/**
+ * The process's own run, for the compiles it starts itself (compileSync,
+ * compileActive), and their lanes: a worker slice per compile in flight, at
+ * that compile's cap, kept idle for the next compile of that cap once it ends.
+ * A process that compiles one thing at a time reuses one lane; one that runs
+ * several at once gives each a lane of its own, so no compile shares
+ * another's cap.
+ */
+let direct: { run: MemoryRun; idle: Map<number, MemoryWorker[]>; lanes: number } | undefined;
+let closesOnExit = false;
 /** Drain an existing serial/controller owner without creating another run. */
 export function closeMemoryRun(): void { direct?.run.close(); }
-export function memoryRun(): MemoryRun {
+/**
+ * The process's run, made on first use. Its aggregate's kernel cap is
+ * `budgetBytes` when given -- a caller that runs several compiles at once
+ * makes it hold all their caps -- else the step's (NTS_GATE_STEP_MEMORY_BYTES).
+ */
+export function memoryRun(budgetBytes?: number): MemoryRun {
   // A round closes its run as it ends; a later round of the same process (a
   // writer's repeat) gets one of its own. The handlers below close whichever
   // run is current.
-  if (direct?.run.closed) direct = { run: new MemoryRun(), workers: new Map() };
-  if (!direct) {
-    direct = { run: new MemoryRun(), workers: new Map() };
+  if (direct?.run.closed) direct = undefined;
+  if (direct && budgetBytes !== undefined && direct.run.budgetBytes !== budgetBytes) {
+    throw new Error(`resident cap: this process's run holds ${direct.run.budgetBytes} bytes, not the ${budgetBytes} asked for`);
+  }
+  direct ??= { run: new MemoryRun(budgetBytes === undefined ? {} : { budgetBytes }), idle: new Map(), lanes: 0 };
+  if (!closesOnExit) {
+    closesOnExit = true;
     process.on("exit", () => direct?.run.close());
     for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
       process.once(signal, () => { direct?.run.close(); process.exit(code); });
@@ -338,18 +356,17 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
   }
   // Standalone callers are bounded too. Serial runners and parallel census
   // workers enter a scope once, then compile without a per-case bus round trip.
-  memoryRun();
+  const run = memoryRun(), lanes = direct!;
   const bytes = Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024;
-  let worker = direct!.workers.get(bytes);
-  if (!worker) {
-    worker = direct!.run.worker(`direct${direct!.workers.size}`, bytes);
-    direct!.workers.set(bytes, worker);
-  }
+  const idle = lanes.idle.get(bytes) ?? [];
+  lanes.idle.set(bytes, idle);
+  const worker = idle.pop() ?? run.worker(`direct${lanes.lanes++}`, bytes);
   const scope = worker.scope("sh", noAddressLimit, options.env);
   const before = worker.counters();
   const aggregateBefore = worker.run.aggregateOoms();
   let closed=false;
-  const close=()=>{if(!closed){closed=true;worker.stop(scope);}};
+  // The lane is idle again once its scope is stopped, for the next compile of its cap.
+  const close=()=>{if(!closed){closed=true;worker.stop(scope);idle.push(worker);}};
   return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},close,finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
     try{
       if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);

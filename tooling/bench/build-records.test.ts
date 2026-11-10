@@ -53,7 +53,7 @@ test("compile observations retain defects and reject incomplete instruments", as
   }
 });
 
-test("the compile CLI records twice, checks changed outcomes, and refuses non-pins and resource stops", async t => {
+test("the compile CLI records one compile at a time and four at once alike, checks changed outcomes, and refuses non-pins and resource stops", async t => {
   const repository = fileURLToPath(new URL("../../", import.meta.url));
   const scratch = testScratch(t, "benchmark-record-cli");
   const root = join(scratch, "fixture"); mkdirSync(join(root, "tooling/bench"), { recursive: true });
@@ -106,14 +106,22 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
     delete selected[ENVIRONMENT_CONTEXT]; delete selected.NTS_GATE_RUN_DIR;
     return selected;
   };
-  const invoke = (mode: string, output: string, env: NodeJS.ProcessEnv = {}, bin = pinned) => spawnSync(process.execPath,
-    ["tooling/bench/build-records.ts", mode, "--output", output], { cwd: root, encoding: "utf8", maxBuffer: 8 << 20,
+  const invoke = (mode: string, output: string, env: NodeJS.ProcessEnv = {}, bin = pinned, extra: string[] = []) => spawnSync(process.execPath,
+    ["tooling/bench/build-records.ts", mode, "--output", output, ...extra], { cwd: root, encoding: "utf8", maxBuffer: 8 << 20,
       env: environment(env, bin) });
   const bare = invoke("--record", join(scratch, "bare"), {}, binary);
   assert.equal(bare.status, 124, bare.stdout + bare.stderr); assert.match(bare.stderr, /clean, unpatched pin/);
   assert.equal(existsSync(join(scratch, "bare/c/outcomes.tsv")), false);
-  for (const output of [first, second]) { const result = invoke("--record", output); assert.equal(result.status, 0, result.stdout + result.stderr); }
+  // One compile at a time and four at once write the same rows, byte for byte,
+  // and each record holds the other's compiles.
+  for (const [output, jobs] of [[first, "1"], [second, "4"]] as const) {
+    const result = invoke("--record", output, {}, pinned, ["--jobs", jobs]); assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
   for (const backend of ["c", "llvm", "jvm"]) assert.equal(readFileSync(join(first, backend, "outcomes.tsv"), "utf8"), readFileSync(join(second, backend, "outcomes.tsv"), "utf8"));
+  for (const [record, jobs] of [[first, "4"], [second, "1"]] as const) {
+    const held = invoke("--check", record, {}, pinned, ["--jobs", jobs]); assert.equal(held.status, 0, held.stdout + held.stderr);
+    assert.match(held.stdout, /; 0 changed outcomes, 0 accepted, 0 pending$/m);
+  }
   const { parseBenchmarkRecord } = await import("./outcomes.ts");
   const scope = parseBenchmarkRecord(readFileSync(join(first, "c/outcomes.tsv"), "utf8"));
   const control = scope.rows.find(row => row.path.endsWith("/control"))!;
@@ -155,6 +163,13 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   assert.match(kept.stdout, /^c benchmarks\/cases\/control: timeout, as recorded; a check does not measure it again$/m);
   assert.doesNotMatch(kept.stdout, /^c improved, record pending: benchmarks\/cases\/control /m, "measured, the fake compiler's pass would show");
   assert.match(kept.stdout, /^llvm benchmarks\/cases\/control: pass$/m, "the other backends' rows are measured");
+  // The compiles of a case at its bound in some backend's record start first, whatever its path.
+  const slowSubject = (backend: string, text: string) => backend === "c" ? text.split("\n").map(line => line.startsWith("benchmarks/cases/subject\t")
+    ? line.replace(/"outcome":\{[^}]*\}/, '"outcome":{"kind":"timeout","stage":"compile"}') : line).join("\n") : text;
+  const slowFirst = invoke("--check", variant("slow-first", slowSubject), {}, pinned, ["--jobs", "1"]);
+  assert.equal(slowFirst.status, 0, slowFirst.stdout + slowFirst.stderr);
+  assert.deepEqual(slowFirst.stdout.split("\n").filter(line => /^(?:c|llvm|jvm) benchmarks\/cases\/[\w-]+: [a-z-]+$/.test(line)).slice(0, 2),
+    ["llvm benchmarks/cases/subject: refused", "jvm benchmarks/cases/subject: refused"], slowFirst.stdout);
   const staleRow = (backend: string, text: string) => backend === "c" ? text + text.split("\n")[1]!.replace("benchmarks/cases/control", "benchmarks/cases/deleted") + "\n" : text;
   const stale = invoke("--check", variant("stale", staleRow)); assert.equal(stale.status, 124, stale.stdout + stale.stderr);
   assert.match(stale.stderr, /recorded benchmark scope gone missing: benchmarks\/cases\/deleted compile/, "a row whose case is gone still fails");
@@ -276,4 +291,53 @@ test("case identities cover imported sources, inherited configs and local data i
   const importedDomain=(await identity()).get(b);
   writeFileSync(domain, JSON.stringify({version:2}));
   assert.notEqual((await identity()).get(b),importedDomain,"an actually imported sidecar stays in the compiler's checked input graph");
+});
+
+test("compile cells run on their lanes at once, come back in their order, and stop at the first that throws", async () => {
+  const { compileCells } = await import("./build-records.ts");
+  type Outcome = import("./outcomes.ts").BenchmarkOutcome;
+  const cells = ["a", "b", "c", "d"].map(name => ({ path: `benchmarks/cases/${name}`, backend: "c" as const }));
+  const name = (cell: { path: string }) => cell.path.slice("benchmarks/cases/".length);
+  const outcome: Record<string, Outcome> = { a: { kind: "pass" }, b: { kind: "timeout", stage: "compile" },
+    c: { kind: "refused", diagnostic: "NTS1001 a shape" }, d: { kind: "pass" } };
+  // a compiles until b has timed out and c has started on b's lane: a compile
+  // past its bound is recorded beside one still running, and its lane goes on.
+  const started: string[] = [], ended: string[] = [];
+  const bEnded = Promise.withResolvers<void>(), cStarted = Promise.withResolvers<void>();
+  let running = 0, most = 0;
+  const outcomes = await compileCells(cells, 2, async (cell, lane) => {
+    started.push(`${name(cell)} on lane ${lane}`); running += 1; most = Math.max(most, running);
+    try {
+      if (name(cell) === "a") await Promise.all([bEnded.promise, cStarted.promise]);
+      if (name(cell) === "c") cStarted.resolve();
+      return outcome[name(cell)]!;
+    } finally { running -= 1; }
+  }, { ended: cell => { ended.push(name(cell)); if (name(cell) === "b") bEnded.resolve(); } });
+  assert.deepEqual(outcomes, cells.map(cell => outcome[name(cell)]), "the outcomes come back in the cells' order");
+  assert.equal(most, 2, "never more compiles at once than lanes");
+  assert.deepEqual(started.slice(0, 3), ["a on lane 0", "b on lane 1", "c on lane 1"]);
+  assert.ok(ended.indexOf("b") < ended.indexOf("a"), `the timeout is recorded while a still compiles: ${ended.join(", ")}`);
+  // A compile that throws stops the feed: the one running beside it ends, and nothing after them starts.
+  const tried: string[] = [], bThrown = Promise.withResolvers<void>();
+  await assert.rejects(compileCells(cells, 2, async cell => {
+    tried.push(name(cell));
+    if (name(cell) === "a") await bThrown.promise;
+    if (name(cell) === "b") { bThrown.resolve(); throw new Error("benchmark NOT MEASURED: b"); }
+    return outcome[name(cell)]!;
+  }), /benchmark NOT MEASURED: b/);
+  assert.deepEqual(tried, ["a", "b"], "no cell starts after the one that threw");
+});
+
+test("the records job reserves per lane: four lanes ask four times what one does, never past their caps", async t => {
+  const { COMPILE_CAP_BYTES, recordsJob } = await import("./build-records.ts");
+  const { jobSizing } = await import("../gate/memory-ledger.ts");
+  const { historyFile, writeCostHistory } = await import("../gate/step-scheduling.ts");
+  const env = { ...withoutHanded(process.env), ...ownMemory(join(testScratch(t, "benchmark-record-sizing"), "memory")) };
+  assert.equal(writeCostHistory(historyFile(env), { jobs: [{ key: "bench-compile-records", peak: 2 ** 30 }] }), undefined);
+  const one = jobSizing(recordsJob(1, "one lane"), env), four = jobSizing(recordsJob(4, "four lanes"), env);
+  assert.equal(one.basis, "measured");
+  assert.equal(four.units, 4);
+  assert.equal(four.bytes, 4 * one.bytes, "a lane's measured peak, times the lanes");
+  assert.equal(writeCostHistory(historyFile(env), { jobs: [{ key: "bench-compile-records", peak: 7 * 2 ** 30 }] }), undefined);
+  assert.equal(jobSizing(recordsJob(4, "four lanes"), env).bytes, 4 * COMPILE_CAP_BYTES, "never more than the lanes' own caps");
 });

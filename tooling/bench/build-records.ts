@@ -3,21 +3,22 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { memoryRun } from "../census/worker-memory.ts";
+import { closeMemoryRun, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
-import { reserveJob } from "../gate/memory-ledger.ts";
-import { withToken } from "../gate/tokens.mjs";
+import { createFeed, type CaseToken } from "../gate/admission.ts";
+import { reserveJob, type JobRequest } from "../gate/memory-ledger.ts";
+import { acquireToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { compileEnvironment, compileKey, observeCompile, projectFor, regularFiles } from "./compile-producer.ts";
 import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
-  serializeBenchmarkRecord, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
+  serializeBenchmarkRecord, type BenchmarkOutcome, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const BACKENDS = ["c", "llvm", "jvm"] as const;
@@ -27,7 +28,9 @@ const BACKENDS = ["c", "llvm", "jvm"] as const;
  * NTS_GATE_STEP_MEMORY_BYTES, and stays as it is, because it is the compile
  * key and would move every recorded row's driver.
  */
-const COMPILE_CAP_BYTES = 6 * 2 ** 30;
+export const COMPILE_CAP_BYTES = 6 * 2 ** 30;
+/** The compiles at once outside a gate, unless --jobs says otherwise: the census's width. */
+export const DEFAULT_LANES = Math.min(8, availableParallelism());
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 /** Measured compile cells against their rows: what the ratchet does not accept fails; what it accepts is listed. */
@@ -103,23 +106,85 @@ function publish(file: string, contents: string): void {
   finally { rmSync(temporary, { force: true }); }
 }
 
+/** One compile cell: a case on a backend. */
+export interface CompileCell { path: string; backend: Backend }
+
+/**
+ * The memory `lanes` compiles at once reserve outside a gate: what one lane
+ * of this job held at most in its earlier runs, times the lanes, and never
+ * more than their caps. The history keeps the peak per lane, so a run of any
+ * width reserves by it (memory-ledger.ts's jobSizing).
+ */
+export function recordsJob(lanes: number, what: string): JobRequest {
+  return { key: "bench-compile-records", units: lanes, atMostBytes: lanes * COMPILE_CAP_BYTES, what };
+}
+
+/**
+ * Compile `cells` on up to `lanes` at once, taken in their order: each holds
+ * one of the gate's tokens while it compiles (`token`, tokens.mjs's; none
+ * outside a gate), and none starts while the job's reservation is outranked
+ * (admission.ts's feed). The outcomes come back in the cells' order, whatever
+ * order the compiles ended in, and `ended` hears each as it ends. The first
+ * compile that throws stops the feed: the ones running then end, and it is
+ * thrown, so nothing is measured past it, as one at a time.
+ */
+export async function compileCells(cells: readonly CompileCell[], lanes: number, compile: (cell: CompileCell, lane: number) => Promise<BenchmarkOutcome>,
+  { token = (cell, signal) => acquireToken({ project: cell.path, backend: cell.backend }, signal), outranked = () => false, ended = () => {} }: {
+    token?: (cell: CompileCell, signal: AbortSignal) => Promise<(() => void) | null>;
+    outranked?: () => boolean;
+    ended?: (cell: CompileCell, outcome: BenchmarkOutcome) => void;
+  } = {}): Promise<BenchmarkOutcome[]> {
+  assert.ok(Number.isSafeInteger(lanes) && lanes >= 1, `compile lanes are a whole number of at least 1, not ${lanes}`);
+  const outcomes: BenchmarkOutcome[] = new Array(cells.length), stop = new AbortController();
+  let failure: { error: unknown } | undefined;
+  const cellToken: CaseToken = (entry, signal) => token(cells[Number(entry)]!, signal);
+  const feed = createFeed(cells.map((_, index) => String(index)), { token: cellToken, outranked });
+  const lane = async (index: number) => {
+    for (;;) {
+      let taken: { cell: number; release: () => void } | undefined;
+      await feed.feed({ write: (entry, release) => { taken = { cell: Number(entry), release }; }, end: () => {}, exited: () => failure !== undefined, signal: stop.signal });
+      if (taken === undefined) return;
+      try {
+        const outcome = await compile(cells[taken.cell]!, index);
+        outcomes[taken.cell] = outcome;
+        ended(cells[taken.cell]!, outcome);
+      } catch (error) {
+        failure ??= { error };
+        stop.abort();
+      } finally { taken.release(); }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(lanes, cells.length) }, (_, index) => lane(index)));
+  if (failure) throw failure.error;
+  return outcomes;
+}
+
 /**
  * `--record` writes every case's row from a clean pin of main. `--check` holds
  * each recorded row and reports a case with no row yet as pending, without
  * measuring it. `--record-pending` is the full check's writer, after landing:
  * from a clean pin it measures every case, holds the recorded ones, and on a
  * clean comparison writes the pending rows and the accepted changes, every other line byte
- * for byte.
+ * for byte. Each mode compiles up to `--jobs` cells at once (inside a gate,
+ * the step's workers, each holding a token), and its rows and comparisons are
+ * the same at any width.
  */
 export async function runBuildRecords(args = process.argv.slice(2)): Promise<number> {
-  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check" || mode === "--record-pending", "usage: build-records.ts --record|--check|--record-pending [--backend c|llvm|jvm] [--output directory] [case]");
-  let backends: readonly Backend[] = BACKENDS, output = join(ROOT, "results/benchmarks"), only: string | undefined;
+  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check" || mode === "--record-pending", "usage: build-records.ts --record|--check|--record-pending [--backend c|llvm|jvm] [--jobs N] [--output directory] [case]");
+  let backends: readonly Backend[] = BACKENDS, output = join(ROOT, "results/benchmarks"), only: string | undefined, jobs: number | undefined;
   while (args.length) {
     const flag = args.shift();
     if (flag === "--backend") { const value = args.shift(); assert.ok(BACKENDS.includes(value as Backend), "unknown benchmark backend"); backends = [value as Backend]; }
     else if (flag === "--output") { const value = args.shift(); assert.ok(value, "--output needs a directory"); output = resolve(value); }
+    else if (flag === "--jobs") { const value = Number(args.shift()); assert.ok(Number.isSafeInteger(value) && value >= 1, "--jobs takes a whole number of at least 1"); jobs = value; }
     else { assert.ok(flag && !flag.startsWith("-") && !only && mode === "--check", `unknown benchmark argument: ${flag}`); only = flag; }
   }
+  // How many compile at once: --jobs; else inside a gate, the step's workers,
+  // each of which holds one of its tokens while it compiles; else the census's
+  // width. Outside a gate no token is asked: the full check's records run is
+  // at its low CPU weight, and its reservation gives way in the ledger.
+  const width = jobs ?? (process.env.NTS_GATE_JOBS ? Number(process.env.NTS_GATE_JOBS) : DEFAULT_LANES);
+  assert.ok(Number.isSafeInteger(width) && width >= 1, `the step's workers are a whole number of at least 1, not ${process.env.NTS_GATE_JOBS}`);
   const binary = resolve(process.env.NTS_BIN ?? join(ROOT, "target/release/nts"));
   assert.ok(existsSync(binary), `benchmark compiler missing: ${binary}; set NTS_BIN`);
   const compiler = hash(readFileSync(binary)), pin = provenanceOf(binary);
@@ -133,16 +198,19 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const shown = (file: string) => { const local = relative(ROOT, file); return local.startsWith("..") || isAbsolute(local) ? file : local; };
   const base = process.env.TMPDIR ?? join(homedir(), ".cache/nts/benchmark-records"); mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "compile-"));
-  let resident = false, reservation: Awaited<ReturnType<typeof reserveJob>> | undefined;
+  let reservation: Awaited<ReturnType<typeof reserveJob>> | undefined;
   try {
-    // One compile at a time, under COMPILE_CAP_BYTES, in the benches step as
-    // in the records writer, whatever the step's own census cap: so a check
+    // Every compile under COMPILE_CAP_BYTES, in the benches step as in the
+    // records writer, whatever the step's own census cap: so a check
     // reproduces what was recorded, in a fresh tree as in a warm one.
     process.env.NTS_GATE_STEP_MEMORY_BYTES = String(COMPILE_CAP_BYTES);
     const environment = compileEnvironment(process.env, scratch, binary);
     const all = benchmarkCases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
     const identities = await benchmarkIdentities(ROOT, all, scratch), driver = compileKey(ROOT);
+    // Each case's project, written once before any compile reads it: its
+    // backends compile at once.
+    const projects = new Map(paths.map(path => [path, projectFor(ROOT, path, scratch)]));
     const records = new Map<Backend, BenchmarkRecord>(), pending = new Map<Backend, Set<string>>(), actual = new Map<Backend, BenchmarkRow[]>();
     for (const backend of backends) {
       if (mode !== "--record") {
@@ -156,6 +224,8 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       }
       actual.set(backend, []);
     }
+    const cell = (path: string, backend: Backend) => `${backend}\0${path}`;
+    const cells: CompileCell[] = [], kept = new Map<string, BenchmarkRow>();
     for (const path of paths) for (const backend of backends) {
       // A case with no row yet is not measured at landing: the full check records it.
       if (mode === "--check" && pending.get(backend)!.has(path)) continue;
@@ -165,18 +235,37 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       // writer measures every case, so a timeout that improves is still written.
       const recorded = mode === "--check" ? records.get(backend)!.rows.find(row => row.path === path && row.scope === "compile") : undefined;
       if (recorded?.outcome.kind === "timeout") {
-        actual.get(backend)!.push(recorded);
+        kept.set(cell(path, backend), recorded);
         console.log(`${backend} ${path}: timeout, as recorded; a check does not measure it again`);
         continue;
       }
-      // The compiles' memory, reserved once as the first one to measure starts:
-      // the step's, inside one; alone, what this job's earlier runs held.
-      reservation ??= await reserveJob({ key: "bench-compile-records", atMostBytes: COMPILE_CAP_BYTES, what: `benchmark compile records (${mode})` },
-        { report: message => console.error(message) });
-      resident = true;
-      const outcome = await withToken(() => observeCompile({ backend, project: projectFor(ROOT, path, scratch), output: join(scratch, "output"), binary, root: ROOT, env: environment }), { project: path, backend });
-      actual.get(backend)!.push({ path, scope: "compile", source: identities.get(path)!, driver, outcome });
-      console.log(`${backend} ${path}: ${outcome.kind}`);
+      cells.push({ path, backend });
+    }
+    // The longest compiles start first: every backend of a case whose compile
+    // reached its CPU bound in some backend's record. Fed in path order, the
+    // three compiles of the last such case started late and were the run's
+    // whole tail.
+    const slow = new Set([...records.values()].flatMap(record => record.rows.filter(row => row.scope === "compile" && row.outcome.kind === "timeout").map(row => row.path)));
+    const order = [...cells.filter(one => slow.has(one.path)), ...cells.filter(one => !slow.has(one.path))];
+    const lanes = Math.min(width, order.length), measured = new Map<string, BenchmarkOutcome>();
+    if (lanes > 0) {
+      // The compiles' memory, reserved once: the step's, inside one; alone,
+      // what each lane held in this job's earlier runs, times the lanes.
+      reservation = await reserveJob(recordsJob(lanes, `benchmark compile records (${mode}), ${lanes} at once`), { report: message => console.error(message) });
+      const held = reservation;
+      // Each compile on a lane of its own (worker-memory.ts), at
+      // COMPILE_CAP_BYTES, under an aggregate that holds every lane's cap: a
+      // compile meets no limit but its own, as it would alone.
+      memoryRun(lanes * COMPILE_CAP_BYTES);
+      const outcomes = await compileCells(order, lanes, (one, lane) => observeCompile({ backend: one.backend, project: projects.get(one.path)!, output: join(scratch, `output-${lane}`),
+        binary, root: ROOT, env: environment }), { outranked: () => held.outranked(), ended: (one, outcome) => console.log(`${one.backend} ${one.path}: ${outcome.kind}`) });
+      for (const [index, one] of order.entries()) measured.set(cell(one.path, one.backend), outcomes[index]!);
+    }
+    // The rows in the order one compile at a time keeps them, whatever order the compiles ended in.
+    for (const path of paths) for (const backend of backends) {
+      const recorded = kept.get(cell(path, backend)), outcome = measured.get(cell(path, backend));
+      if (recorded) actual.get(backend)!.push(recorded);
+      else if (outcome) actual.get(backend)!.push({ path, scope: "compile", source: identities.get(path)!, driver, outcome });
     }
     assert.equal(hash(readFileSync(binary)), compiler, "compiler bytes changed during recording");
     assert.equal(compileKey(ROOT), driver, "benchmark compile producer changed during recording");
@@ -208,7 +297,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes, ${accepted} accepted, ${waiting} pending`);
     return changed ? 1 : 0;
   } finally {
-    try { if (resident) memoryRun().close(); }
+    try { closeMemoryRun(); }
     finally { reservation?.release(); rmSync(scratch, { recursive: true, force: true }); }
   }
 }
