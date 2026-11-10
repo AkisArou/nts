@@ -219,6 +219,8 @@ type MemoryFixture = {
   owned?: Record<string, string>;
   /** The run's place in the ledger's queue, as its launcher's code gives it. */
   priority?: "landing" | "agent" | "full-check";
+  /** A controlled initial unit score; otherwise preserve the test's score. */
+  oomScore?: number;
   /** Runs before the runner starts, with the fixture's directory and memory. */
   before?: (own: string, memory: OwnMemory) => void;
   /** A private runner acknowledges this actual charge through the fixture's FIFO. */
@@ -233,7 +235,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -297,6 +299,9 @@ fi
   const setenv = Object.entries(planned.env).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
   const result = spawnTest("systemd-run", ["--user", `--unit=${unit}`, `--slice=${slice}`, "--collect", "--wait", "--pipe", "--quiet",
     "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=RuntimeMaxSec=300s", "--property=TimeoutStopSec=5s",
+    // A service is forked by the manager, so explicitly retain the caller's
+    // score as a normal child would. The runner then raises it to its priority.
+    `--property=OOMScoreAdjust=${Math.max(oomScore, OOM_SCORE.landing)}`,
     `--working-directory=${root}`, ...setenv, process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   assert.ok(existsSync(join(run, "summary.json")), result.stdout + result.stderr);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
@@ -594,6 +599,21 @@ test("an unmeasured step reserves at most the widest step's share, half of what 
 // the ledger's accounting (run.mjs, "Memory"). Each fake step below fills real
 // memory, so each test's sizes are small; the kernel enforces every bound.
 const fill = (gibibytes: number, chunks: number) => `exec node -e 'const held = []; for (let i = 0; i < ${chunks}; i++) held.push(Buffer.alloc(Math.round(${gibibytes} * 2 ** 30 / ${chunks}), 1)); console.log(held.length)'`;
+
+for (const priority of ["landing", "agent", "full-check"] as const) test(`a ${priority} run carries its OOM score into its production step scope`, t => {
+  // Start at the manager's floor even inside a full-check test process, so
+  // each real runner must apply its own priority before launching its scope.
+  const { result, summary, step, output } = memoryRun(t, {
+    steps: "format", priority, oomScore: OOM_SCORE.landing, availableKiB: 16 * 2 ** 20,
+    rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
+    times: "format\t100\t20\t1\n",
+    payload: 'echo "oom_score_adj $(cat /proc/self/oom_score_adj)"\n',
+  });
+  assert.equal(result.status, 0, output);
+  assert.equal(summary.memory.priority, priority);
+  assert.equal(step("format").verdict, "PASS", output);
+  assert.equal(Number(/^oom_score_adj (\d+)$/m.exec(readFileSync(step("format").log, "utf8"))?.[1]), OOM_SCORE[priority]);
+});
 
 test("a step that fills past its grant, under its runaway bound, is never throttled and passes, its grant grown for the ledger", t => {
   // format reserves 256 MiB, as its history says, and fills 1 GiB at once:
