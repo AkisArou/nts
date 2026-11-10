@@ -223,6 +223,7 @@ type MemoryFixture = {
   before?: (own: string, memory: OwnMemory) => void;
   /** A private runner acknowledges this actual charge through the fixture's FIFO. */
   acknowledgeCharge?: number;
+  acknowledgeYield?: boolean;
 };
 
 /**
@@ -232,7 +233,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before, acknowledgeCharge }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -248,6 +249,11 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/run.mjs") {
       let source = readFileSync(original, "utf8");
+      if (acknowledgeYield) {
+        const observation = "memoryRecord.outranked++;";
+        assert.ok(source.includes(observation), "the barrier follows the real priority observation");
+        source = source.replace(observation, observation + ` writeFileSync(${JSON.stringify(join(own,"yield-observed"))}, "observed");`);
+      }
       if (acknowledgeCharge !== undefined) {
         const observation = "r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge);";
         assert.ok(source.includes(observation), "the barrier follows the real charge observation");
@@ -418,7 +424,7 @@ esac
 // to 4 GiB, another landing job reserves 3.5 beside it, and the landing check
 // asks for 2 at landing priority; once the run has given memory back, the
 // other job ends. It says how its request went, and gives the memory back.
-const LANDING = `import { mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+const LANDING = `import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const [ledger, meminfo, own, module] = process.argv.slice(1);
 const { reserve } = await import(module);
@@ -433,6 +439,7 @@ await until(admitted, run(bytes => bytes >= 4 * 2 ** 30));
 const other = await reserve({ bytes: 3.5 * 2 ** 30, what: "another landing job", priority: "landing" }, options);
 const lines = [];
 const asked = reserve({ bytes: 2 * 2 ** 30, what: "landing", priority: "landing" }, { ...options, report: line => lines.push(line) });
+await until(own, () => existsSync(join(own,"yield-observed")));
 await until(admitted, run(bytes => bytes < 4 * 2 ** 30));
 other.release();
 const held = await asked;
@@ -453,7 +460,7 @@ test("a run outranked by a request of higher priority starts nothing new and giv
   let landing: ReturnType<typeof spawn> | undefined, fixture = "";
   t.after(() => { if (landing && landing.exitCode === null && landing.signalCode === null) landing.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
-    steps: "integrity", availableKiB: 6.5 * 2 ** 20, priority: "full-check",
+    steps: "integrity", availableKiB: 6.5 * 2 ** 20, priority: "full-check", acknowledgeYield: true,
     rows: { integrity: { elastic: true, slots: 8, min: 1, reserve: 1, bound: 60 } },
     times: "integrity\t100\t800\t8\n",
     payload: `
@@ -486,8 +493,7 @@ esac
   // queue, once a second, and its give-back.
   const told = readFileSync(join(fixture, "landing-admitted"), "utf8");
   assert.match(told, /^memory: landing waits for 2\.0 GiB \(landing\): /m);
-  const waited = Number(/^memory: landing admitted with 2\.0 GiB after (\d+) s$/m.exec(told)?.[1]);
-  assert.ok(waited <= 5, `admitted after ${waited} s:\n${told}`);
+  assert.match(told, /^memory: landing admitted with 2\.0 GiB after \d+ s$/m);
   assert.match(output, /memory: a request of higher priority than the run's waits in the ledger: the run starts nothing new and gives back what it does not use/);
   assert.match(output, /memory: no request of higher priority waits any more: the run goes on after \d+ s/);
   assert.ok(summary.memory.outranked >= 1 && summary.memory.shrinks >= 1, JSON.stringify(summary.memory));

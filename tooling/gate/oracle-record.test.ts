@@ -1,5 +1,5 @@
 import { after, test } from "node:test";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,9 +14,10 @@ import {CaseBudgetError} from './step-result.ts';
 import {closeMemoryRun} from '../census/worker-memory.ts';
 import {ORACLE_HEAP_FLAGS} from '../differential/oracle-execution.ts';
 import {ORACLE_EXECUTION_POLICY} from '../differential/oracle-execution-policy.ts';
-import {gateEnvironment} from './canonical-environment.ts';
+import {gateEnvironment,hostEnvironment} from './canonical-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {spawnTest} from './test-wait.ts';
+import {toolingSlice,toolingSliceArgs} from './tooling-slice.ts';
 after(closeMemoryRun);
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
   generator_version: 1, generator_digest: "generator", case_key: "key", case_count: 2,
@@ -375,13 +376,15 @@ function programs(root:string,names:readonly string[]){
   }
 }
 test("the records pass holds each planner as a worker does: past its bound after naming its entry, that entry's plan budget; naming none, silent or failing, a failure saying so",async t=>{
+  const unit=`nts-oracle-plan-control-${randomUUID()}`;
+  let sliceReceipt:string|undefined;
+  t.after(()=>{
+    spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});
+    if(sliceReceipt&&existsSync(sliceReceipt))spawnTest('systemctl',['--user','stop',readFileSync(sliceReceipt,'utf8')],{encoding:'utf8'});
+  });
   const root=testScratch(t,'oracle-plan-bound'),evidence=join(root,'evidence'),planner=join(root,'oracle-plan');
   // The test's own step frame: the hold a silent planner publishes reaches no gate step.
   const frame={NTS_GATE_STEP_RESULT:join(root,'step-result.json'),NTS_GATE_STEP:'oracle-plan-control',NTS_GATE_STEP_ATTEMPT:'control'};
-  const saved=Object.fromEntries(Object.keys(frame).map(name=>[name,process.env[name]]));
-  t.after(()=>{for(const [name,value] of Object.entries(saved))if(value===undefined)delete process.env[name];else process.env[name]=value;});
-  Object.assign(process.env,frame);
-  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
   programs(root,['slow','fine','early','quiet','broken']);
   const named=(name:string)=>JSON.stringify({entry:join(root,'tests/programs',name,'src/main.ts'),source:`tests/programs/${name}/src/main.ts`})+'\n';
   writeFileSync(join(root,'slow.entry'),named('slow'));writeFileSync(join(root,'fine.entry'),named('fine'));
@@ -396,9 +399,46 @@ case "$1" in
   *) echo "the program does not typecheck" >&2; exit 3 ;;
 esac
 `,{mode:0o755});
-  await planAll(planner,root,evidence,false,undefined,['slow','fine','early','quiet','broken'].map(name=>`tests/programs/${name}`),{cpuSeconds:0.5,idleMs:300});
+  // Enter one real bounded worker before applying the deliberately small
+  // planner inactivity allowance. Unit startup is not a quiet planner.
+  sliceReceipt=join(root,'resident-slice');
+  const control=join(root,'plan-control.mjs');
+  writeFileSync(control,`
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {planAll} from ${JSON.stringify(new URL('../differential/record-oracles.ts',import.meta.url).href)};
+import {ORACLE_PLANNER_LIMITS} from ${JSON.stringify(new URL('../differential/oracle-execution.ts',import.meta.url).href)};
+import {serialRun,inResidentWorker,memoryRun,closeMemoryRun} from ${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)};
+if(!inResidentWorker())writeFileSync(${JSON.stringify(sliceReceipt)},memoryRun().slice);
+serialRun({});
+try{
+  const collected={version:1,plans:[],unplanned:[],failures:[]};
+  for(const name of ['slow','fine','early','quiet','broken']){
+    const directory=join(${JSON.stringify(evidence)},name);
+    // Only the control that tests a bound receives that bound. Successful
+    // and failing exits are awaited with normal production supervision.
+    const limits={...ORACLE_PLANNER_LIMITS,...(name==='quiet'?{idleMs:300}:name==='slow'||name==='early'?{cpuSeconds:0.5}:{})};
+    await planAll(${JSON.stringify(planner)},${JSON.stringify(root)},directory,false,undefined,['tests/programs/'+name],limits);
+    const outcome=JSON.parse(readFileSync(join(directory,'plans.json'),'utf8'));
+    for(const key of ['plans','unplanned','failures'])collected[key].push(...(outcome[key]??[]));
+  }
+  mkdirSync(${JSON.stringify(evidence)},{recursive:true});
+  writeFileSync(join(${JSON.stringify(evidence)},'plans.json'),JSON.stringify(collected));
+}
+finally{closeMemoryRun();}
+`);
+  const inherited=toolingSlice();
+  const planned=gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),owned:{...frame,...ownMemory(join(root,'memory')),
+    ...(inherited?{NTS_TOOLING_SLICE:inherited}:{}),
+  }});
+  const actual=spawnTest('systemd-run',['--user',...toolingSliceArgs(),`--unit=${unit}`,'--collect','--quiet','--wait','--pipe',
+    '-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=180s','-p','TimeoutStopSec=5s',
+    ...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
+    process.execPath,control],{encoding:'utf8'});
+  assert.equal(actual.status,0,actual.stdout+actual.stderr);
+  const lines=actual.stdout.split('\n');
   const manifest=JSON.parse(readFileSync(join(evidence,'plans.json'),'utf8'));
-  assert.deepEqual(manifest.plans.map((one:{backend:string;source:string})=>[one.backend,one.source]),['c','llvm','jvm'].map(backend=>[backend,'tests/programs/fine/src/main.ts']));
+  assert.deepEqual(manifest.plans.map((one:{backend:string;source:string})=>[one.backend,one.source]),['c','llvm','jvm'].map(backend=>[backend,'tests/programs/fine/src/main.ts']),JSON.stringify(manifest.failures));
   assert.deepEqual(manifest.unplanned.map(({budget:{reason,...budget},...one}:{budget:{reason:string}})=>({...one,budget,reason:/^oracle planner timed out: .* used its 0\.5 s CPU bound/.test(reason)})),
     ['c','llvm','jvm'].map(backend=>({config:join(root,'tests/programs/slow/tsconfig.json'),source:'tests/programs/slow/src/main.ts',backend,
       budget:{phase:'plan',outcome:'timeout',bound:0.5,signal:'SIGKILL'},repository_root:root,reason:true})),'one plan budget per backend, for the entry it named');
