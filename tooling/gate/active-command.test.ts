@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
 import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {randomUUID} from "node:crypto";
 import {join} from "node:path";
 import {test} from "node:test";
 import {activeCommand,processActivity,CommandActivitySampler,threadsBusy} from "./active-command.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {waitFor} from "./test-wait.ts";
 import {testScratch} from "./test-scratch.ts";
+import {toolingSliceArgs} from "./tooling-slice.ts";
 
 function fixture(t) {
   const root=testScratch(t,"active-command-case");
@@ -125,6 +127,42 @@ test("CPU-busy work remains live without output beyond the idle guard",async t=>
   });
   assert.equal(result.status,0,result.out);assert.equal(result.out,"complete\n");assert.equal(result.hung,undefined);
   assert.ok(result.elapsedMs>2000);assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
+});
+
+test("a case its memory cap holds in the kernel past its idle guard is never taken for hung",async t=>{
+  // A case whose anonymous memory passes its cgroup's MemoryHigh with no swap
+  // does not slow, it stops: its thread waits in the kernel's throttle (D)
+  // with no CPU progress. Held there for three times its idle guard, then
+  // let go, it completes, and nothing calls it hung.
+  const {root,env}=fixture(t),unit=`nts-test-memory-held-${randomUUID().slice(0,8)}`;
+  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{stdio:"ignore"});});
+  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{encoding:"utf8"});return r.stdout.trim();};
+  // How long the case goes without CPU progress while held, sampled as an
+  // idle guard reading CPU alone would see it; once that is three idle
+  // guards, its cap is lifted.
+  let flatFrom:number|undefined,cpu:number|undefined,flatMs=0,high=0,lifted:boolean|Error=false;
+  const sample=setInterval(()=>{
+    if(lifted)return;
+    try{
+      const group=cgroup();if(!group)return;
+      const pid=readFileSync(`/sys/fs/cgroup${group}/cgroup.procs`,"utf8").trim().split("\n")[0];if(!pid)return;
+      const fields=readFileSync(`/proc/${pid}/stat`,"utf8").replace(/^.*\) /s,"").split(" "),used=Number(fields[11])+Number(fields[12]),now=performance.now();
+      if(used!==cpu){cpu=used;flatFrom=now;}
+      flatMs=Math.max(flatMs,now-flatFrom!);
+      high=Number(/^high (\d+)$/m.exec(readFileSync(`/sys/fs/cgroup${group}/memory.events`,"utf8"))?.[1]);
+    }catch{return;/* the case started or ended as it was read */}
+    if(high>0&&flatMs>=3000){try{control("set-property","--runtime",`${unit}.scope`,"MemoryHigh=infinity");lifted=true;}catch(error){lifted=error as Error;}}
+  },50);
+  t.after(()=>clearInterval(sample));
+  const result=await activeCommand("systemd-run",["--user","--scope","--quiet","--collect",`--unit=${unit}`,...toolingSliceArgs(),
+    "-p","MemoryHigh=64M","-p","MemoryMax=1G","-p","MemorySwapMax=0","-p","RuntimeMaxSec=60","--",
+    process.execPath,"-e","const held=[];for(let i=0;i<16;i++)held.push(Buffer.alloc(16*2**20,1));process.stdout.write('complete\\n');"],{cwd:root,env,idleMs:1000,pollMs:50});
+  clearInterval(sample);
+  if(lifted instanceof Error)throw lifted;
+  assert.equal(lifted,true,`never held three idle guards: ${Math.round(flatMs)} ms with no CPU progress at most, ${high} memory.high events`);
+  assert.equal(result.hung,undefined,result.out);assert.equal(result.status,0,result.out);assert.equal(result.stdout,"complete\n");
+  assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
 });
 
 test("an idle command is typed NOT RUN hung while completed exits keep their meaning",async t=>{

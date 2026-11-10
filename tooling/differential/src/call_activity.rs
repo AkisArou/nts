@@ -115,8 +115,18 @@ struct Process {
     group: u32,
     session: u32,
     running: bool,
+    /// Its main thread runs, waits for a core (R), or waits in the kernel (D).
+    busy: bool,
     started: u64,
     cpu: u64,
+}
+
+/// A thread that runs or waits for a core (R), or waits in the kernel (D) --
+/// on a disk, or held at its cgroup's memory limit -- is busy: a loaded
+/// machine or a memory cap can keep it there with no CPU progress, and that
+/// is not a hang. A thread asleep (S) waits for an event, as a hang does.
+fn busy_state(state: &str) -> bool {
+    matches!(state, "R" | "D")
 }
 
 fn process(text: &str) -> Result<Option<Process>> {
@@ -152,9 +162,25 @@ fn process(text: &str) -> Result<Option<Process>> {
         group: u32::try_from(group)?,
         session: u32::try_from(session)?,
         running: !matches!(fields[0], "Z" | "X"),
+        busy: busy_state(field(0)?),
         started: number(19)?,
         cpu,
     }))
+}
+
+/// Whether any thread of `pid` is busy: a process's own state is only its
+/// main thread's. A thread that ends as it is read is not busy.
+fn threads_busy(pid: u32) -> bool {
+    let Ok(tasks) = std::fs::read_dir(format!("/proc/{pid}/task")) else {
+        return false;
+    };
+    tasks.flatten().any(|task| {
+        std::fs::read_to_string(task.path().join("stat")).is_ok_and(|text| {
+            text.rfind(')')
+                .and_then(|end| text.get(end + 2..end + 3))
+                .is_some_and(busy_state)
+        })
+    })
 }
 
 fn process_at(pid: u32) -> Result<Option<Process>> {
@@ -297,6 +323,27 @@ fn group_cpu(group: u32) -> Result<u64> {
         }
     }
     Ok(cpu)
+}
+
+/// Whether a thread of any process in `group` is busy (`busy_state`).
+fn group_busy(group: u32) -> Result<bool> {
+    for entry in std::fs::read_dir("/proc")? {
+        let entry = entry?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse().ok())
+        else {
+            continue;
+        };
+        let Ok(Some(record)) = process_at(pid) else {
+            continue;
+        };
+        if record.group == group && record.running && (record.busy || threads_busy(pid)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn group_remains(group: u32) -> Result<bool> {
@@ -489,6 +536,28 @@ fn event_reader(
     })
 }
 
+/// What the supervisor reads of its owned group: /proc for a real child, a
+/// script in the tests of the idle decision.
+trait Probe {
+    fn leader(&self, group: u32) -> Result<Option<Process>>;
+    fn group_cpu(&self, group: u32) -> Result<u64>;
+    /// Whether a thread of the group is busy; asked only when no CPU moved.
+    fn busy(&self, group: u32, leader: &Process) -> Result<bool>;
+}
+
+struct Live;
+impl Probe for Live {
+    fn leader(&self, group: u32) -> Result<Option<Process>> {
+        process_at(group)
+    }
+    fn group_cpu(&self, group: u32) -> Result<u64> {
+        group_cpu(group)
+    }
+    fn busy(&self, group: u32, leader: &Process) -> Result<bool> {
+        Ok(leader.busy || threads_busy(group) || group_busy(group)?)
+    }
+}
+
 struct Watch {
     hz: u32,
     limits: Limits,
@@ -518,13 +587,14 @@ impl Watch {
     }
     fn sample(
         &mut self,
+        probe: &impl Probe,
         group: u32,
         identity: (u64, u32),
         channel: Option<&Channel>,
     ) -> Result<Option<Incomplete>> {
         let now = Instant::now();
         if now.duration_since(self.group_at) >= self.group_period {
-            let cpu = group_cpu(group)?;
+            let cpu = probe.group_cpu(group)?;
             if cpu != self.group_cpu {
                 self.last = now;
                 self.group_cpu = cpu;
@@ -544,7 +614,7 @@ impl Watch {
         }
         // The waiter may have reaped it before its exit message is dequeued.
         // That message, rather than a timer, will finish the owned group.
-        let Some(current) = process_at(group)? else {
+        let Some(current) = probe.leader(group)? else {
             return Ok(None);
         };
         ensure!(
@@ -554,6 +624,11 @@ impl Watch {
         if current.cpu != self.cpu {
             self.last = now;
             self.cpu = current.cpu;
+        } else if probe.busy(group, &current)? {
+            // Running, waiting for a core or held in the kernel, however long
+            // a loaded machine or a memory cap keeps it there: hung means
+            // every thread sleeps with no output and no CPU progress.
+            self.last = now;
         }
         let baseline = channel.map_or(0, |c| c.boundaries.previous_cpu);
         let used = seconds(current.cpu.saturating_sub(baseline), self.hz);
@@ -565,7 +640,7 @@ impl Watch {
             (now.duration_since(self.last) >= self.limits.idle).then(|| Incomplete {
                 kind: IncompleteKind::Hung,
                 reason: format!(
-                    "no output, completed call or process CPU activity for {} ms",
+                    "no output, completed call, process CPU activity or busy thread for {} ms",
                     self.limits.idle.as_millis()
                 ),
                 case_index: channel.and_then(|c| {
@@ -737,6 +812,7 @@ impl Running {
                         self.close()?;
                     } else if sample_at.elapsed() >= period {
                         self.incomplete = self.watch.sample(
+                            &Live,
                             self.owned.pid,
                             self.owned.identity.context("owned identity")?,
                             self.channel.as_ref(),
@@ -832,6 +908,161 @@ mod tests {
         assert!(finished.output.status.success());
         assert!(finished.incomplete.is_none());
         assert_eq!(finished.output.stdout, b"");
+    }
+
+    /// A group whose CPU never moves, whose leader keeps its identity, and
+    /// whose threads are busy or asleep as scripted.
+    struct Scripted {
+        busy: bool,
+    }
+    impl Probe for Scripted {
+        fn leader(&self, group: u32) -> Result<Option<Process>> {
+            Ok(Some(Process {
+                group,
+                session: group,
+                running: true,
+                busy: self.busy,
+                started: 7,
+                cpu: 100,
+            }))
+        }
+        fn group_cpu(&self, _: u32) -> Result<u64> {
+            Ok(100)
+        }
+        fn busy(&self, _: u32, leader: &Process) -> Result<bool> {
+            Ok(leader.busy)
+        }
+    }
+
+    /// How sampling `probe` for five times its idle guard ends.
+    fn sampled(probe: &Scripted) -> Option<IncompleteKind> {
+        let idle = Duration::from_millis(60);
+        let identity = probe.leader(42).unwrap().unwrap();
+        let mut watch = Watch::new(
+            &identity,
+            100,
+            Limits {
+                cpu_seconds: 30.0,
+                idle,
+            },
+            None,
+        );
+        let ends = Instant::now() + idle * 5;
+        while Instant::now() < ends {
+            if let Some(incomplete) = watch.sample(probe, 42, (7, 42), None).unwrap() {
+                return Some(incomplete.kind);
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        None
+    }
+
+    #[test]
+    fn a_busy_thread_with_no_cpu_progress_is_never_idle() {
+        // A child that waits for a core on a loaded machine, or that its
+        // memory cap holds in the kernel, shows R or D and no CPU progress for
+        // longer than its idle guard: it is still running. One whose every
+        // thread sleeps is hung.
+        assert!(sampled(&Scripted { busy: true }).is_none());
+        assert!(matches!(
+            sampled(&Scripted { busy: false }),
+            Some(IncompleteKind::Hung)
+        ));
+    }
+
+    #[test]
+    fn running_waiting_and_kernel_held_threads_are_busy_and_sleeping_ones_are_not() {
+        let stat = |state: &str| {
+            format!("42 (node) {state} 1 42 42 0 -1 4194304 0 0 0 0 1 2 0 0 20 0 1 0 7 0 0")
+        };
+        for (state, busy) in [("R", true), ("D", true), ("S", false), ("I", false)] {
+            let record = process(&stat(state)).unwrap().unwrap();
+            assert_eq!(record.busy, busy, "a thread in {state}");
+            assert_eq!((record.group, record.started, record.cpu), (42, 7, 3));
+        }
+    }
+
+    /// The highest CPU this process may use, outside the measurement pair
+    /// (4 and 5).
+    fn shared_core() -> u32 {
+        let status = std::fs::read_to_string("/proc/self/status").unwrap();
+        let allowed = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+            .unwrap();
+        let mut cpus = Vec::new();
+        for part in allowed.trim().split(',') {
+            let (low, high) = part.split_once('-').unwrap_or((part, part));
+            cpus.extend(low.parse::<u32>().unwrap()..=high.parse::<u32>().unwrap());
+        }
+        cpus.into_iter()
+            .filter(|cpu| !matches!(cpu, 4 | 5))
+            .max()
+            .unwrap()
+    }
+
+    /// `program` on `core` in a scope of its own at CPU `weight`, beside its
+    /// siblings in the tooling run's slice when there is one.
+    fn weighted(weight: u32, unit: &str, core: u32, program: &[&str]) -> Command {
+        let mut command = Command::new("systemd-run");
+        command.args(["--user", "--scope", "--quiet", "--collect"]);
+        command.arg(format!("--unit={unit}"));
+        command.args([
+            "-p",
+            &format!("CPUWeight={weight}"),
+            "-p",
+            "RuntimeMaxSec=60",
+        ]);
+        if let Ok(slice) = std::env::var("NTS_TOOLING_SLICE") {
+            command.arg(format!("--slice={slice}"));
+        }
+        command.args(["--", "taskset", "-c", &core.to_string()]);
+        command.args(program);
+        command
+    }
+
+    #[test]
+    fn a_busy_child_that_busier_siblings_keep_from_its_core_is_never_idle() {
+        // #630's condition, made certain: the child shares one core with four
+        // spinning siblings at ten thousand times its CPU weight, so for their
+        // four seconds it is runnable (R) with almost no CPU, past its one
+        // second idle guard; once they end it finishes its 50 ms of CPU.
+        let core = shared_core();
+        let id = std::process::id();
+        let mut siblings = weighted(
+            10_000,
+            &format!("nts-test-busy-siblings-{id}"),
+            core,
+            &[
+                "sh",
+                "-c",
+                "for i in 1 2 3 4; do timeout 4 sh -c 'while :; do :; done' & done; wait",
+            ],
+        )
+        .spawn()
+        .unwrap();
+        thread::sleep(Duration::from_millis(300));
+        let child = weighted(
+            1,
+            &format!("nts-test-busy-child-{id}"),
+            core,
+            &[
+                "node",
+                "-e",
+                "const start=process.cpuUsage();for(;;){const used=process.cpuUsage(start);if(used.user+used.system>=50_000)break;}",
+            ],
+        );
+        let finished = command(
+            child,
+            Limits {
+                cpu_seconds: 30.0,
+                idle: Duration::from_secs(1),
+            },
+        );
+        let _ = siblings.wait();
+        let finished = finished.unwrap();
+        assert!(finished.incomplete.is_none(), "{:?}", finished.incomplete);
+        assert!(finished.output.status.success());
     }
 
     #[test]
