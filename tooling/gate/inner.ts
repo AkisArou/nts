@@ -25,9 +25,10 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 // 1. `cargo fmt --check`, and `clang-format --dry-run -Werror` on any
 //    runtime C the change edited.
 // 2. `cargo clippy --workspace --all-targets -- -D warnings`.
-// 3. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
+// 3. Build this tree's `nts-dev` compiler, including with `--no-agree`.
+// 4. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
 //    and the three backends, with the frontend compiled into this tree's binary.
-// 4. `agree.mjs` on c, llvm and jvm, main's pinned compiler before and
+// 5. `agree.mjs` on c, llvm and jvm, main's pinned compiler before and
 //    this tree's `nts-dev` build after -- and with `NTS_RC=1` on c and llvm
 //    when the change reaches the compiler or a runtime, since reference
 //    counting is decided in core.
@@ -185,25 +186,32 @@ function main(argv: readonly string[]): number {
   const tests = ["test", "--profile", "nts-dev", "--no-fail-fast", ...crates.flatMap((name) => ["-p", name])];
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
   const nativeFrontend = changed.some((path) => /^(compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
+  const after = join(ROOT, "target/nts-dev/nts");
+  let compilerReady = false;
   const going =
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
     step("clippy", () => heavy({ key: "inner-clippy", what: "clippy", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
-    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: join(ROOT, "target/nts-dev/nts") })) &&
+    step("build", () => {
+      const status = heavy({ key: "inner-build", what: "the compiler", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]);
+      compilerReady = status === 0;
+      return status;
+    }) &&
+    // Even --keep-going cannot authorize tests against a failed build's stale binary.
+    compilerReady &&
+    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: after })) &&
     // Native vendor integrity and complete reachable graphs over the corpus.
     (!nativeFrontend || step("frontend-tsrs", () => heavy({ key: "inner-frontend-tsrs", what: "native frontend checks", memoryMax: "16G", workers: 4 },
       "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));
 
   if (going && agree) {
     const before = text("node", ["tooling/conformance/pin.ts", base]).trim().split("\n").at(-1) ?? "";
-    const after = join(ROOT, "target/nts-dev/nts");
-    const built = step("build", () => heavy({ key: "inner-build", what: "the compiler", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]));
     const runs: [string, string][] = [["c", "0"], ["llvm", "0"], ["jvm", "0"]];
     if (reachesCounting(changed)) {
       runs.push(["c", "1"], ["llvm", "1"]);
     }
-    let fine = built;
+    let fine = true;
     for (const [backend, rc] of runs) {
       if (!fine) {
         break;

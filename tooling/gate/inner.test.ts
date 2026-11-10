@@ -12,6 +12,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cpusOffMeasurement, cratesTouched, formattedRuntimeC, reachesCounting } from "./inner.ts";
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { copyModuleClosure } from "./module-closure-fixture.ts";
+import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
+import { ownMemory } from "./test-memory.ts";
+import { newTestScratch } from "./test-scratch.ts";
+import { removable } from "./run-temporary.ts";
+import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "./tooling-slice.ts";
 
 const PACKAGES = [
   { name: "alpha", dir: "compiler/sample-alpha" },
@@ -58,3 +69,68 @@ test("runtime C is formatted at the top level and in tests/, never in a vendored
     ["runtime/c/sample.c", "runtime/c/tests/sample.c", "runtime/c/sample.h"],
   );
 });
+
+for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", false, false], ["stale", true, false], ["stale", true, true]] as const) {
+  test(`--no-agree builds before tests: ${initial}, build fails=${fails}, keep-going=${keepGoing}`, t => {
+    const root = newTestScratch("inner-compiler"), tree = join(root, "tree"), bin = join(root, "bin");
+    const unit = `nts-test-inner-compiler-${randomUUID()}`, slice = newToolingSlice(true);
+    t.after(() => {
+      spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+      stopToolingSlice(slice);
+      removable(root); rmSync(root, { recursive: true, force: true });
+    });
+    copyModuleClosure(["tooling/gate/inner.ts"], tree);
+    // Package inputs are explicit; the copied module graph has no install.
+    mkdirSync(join(root, "node_modules"));
+    symlinkSync(dirname(createRequire(import.meta.url).resolve("typescript/package.json")), join(root, "node_modules/typescript"));
+    copyFileSync(new URL("../differential/oracle-toolchain.json", import.meta.url), join(tree, "tooling/differential/oracle-toolchain.json"));
+    const script = join(tree, "tooling/gate/inner.ts");
+    // Route the CLI's run storage into this fixture; its control flow is exact.
+    writeFileSync(script, readFileSync(script, "utf8").replace("homedir()", JSON.stringify(join(root, "home"))));
+    writeFileSync(join(tree, ".tool-versions"), `nodejs ${process.versions.node}\n`);
+    mkdirSync(bin);
+    const compiler = join(tree, "target/nts-dev/nts"), calls = join(root, "cargo.jsonl");
+    mkdirSync(dirname(compiler), { recursive: true });
+    const executable = (value: string) => `#!${process.execPath}\nconsole.log(${JSON.stringify(value)});\n`;
+    writeFileSync(compiler, executable(initial), { mode: 0o755 });
+    utimesSync(compiler, 1, 1);
+    writeFileSync(join(tree, ".gitignore"), "target/\n");
+    writeFileSync(join(bin, "cargo"), `#!${process.execPath}
+import {appendFileSync,writeFileSync,readFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2);appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
+if(args[0]==='metadata') console.log(JSON.stringify({packages:[]}));
+if(args[0]==='build') {
+  if(${fails}) process.exit(23);
+  if(!readFileSync(${JSON.stringify(compiler)},'utf8').includes('fresh')) writeFileSync(${JSON.stringify(compiler)},${JSON.stringify(executable("fresh"))},{mode:0o755});
+}
+if(args[0]==='test') {
+  if(process.env.NTS_BIN!==${JSON.stringify(compiler)}||process.env.NTS_CHECKERS!=='1') process.exit(24);
+  const ran=spawnSync(process.env.NTS_BIN,[],{encoding:'utf8'}); if(ran.status!==0||ran.stdout.trim()!=='fresh') process.exit(25);
+}
+`, { mode: 0o755 });
+    // The real admission runner is not under test. Its private stand-in runs
+    // only fake cargo, while the real inner CLI builds its normal commands.
+    writeFileSync(join(tree, "tooling/gate/admit.ts"), `import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2),command=args.slice(args.indexOf('--')+1);
+process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1);
+`);
+    for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["-c", "user.name=inner-test", "-c", "user.email=inner@example.invalid", "commit", "-qm", "fixture"]]) {
+      const ran = spawnSync("git", args, { cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
+    }
+    const memory = ownMemory(join(root, "memory"));
+    const env = gateEnvironment({ ...hostEnvironment(process.env), PATH: bin + ":" + process.env.PATH },
+      { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice }, standalone: true }).env;
+    const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
+    const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
+      "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",
+      ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], { encoding: "utf8" });
+    assert.equal(ran.status, fails ? 1 : 0, ran.stdout + ran.stderr);
+    assert.ok(existsSync(calls), ran.stdout + ran.stderr);
+    const phases = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
+    const build = phases.findIndex(args => args[0] === "build"), tests = phases.findIndex(args => args[0] === "test");
+    assert.ok(build >= 0, ran.stdout + ran.stderr);
+    assert.deepEqual(phases[build], ["build", "--profile", "nts-dev", "-p", "nts-cli"]);
+    if (fails) assert.equal(tests, -1, "a failed build must never test its stale compiler, even with --keep-going");
+    else assert.ok(tests > build, "both stale and fresh controls test only after a successful compiler build");
+  });
+}
