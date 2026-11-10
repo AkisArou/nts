@@ -565,6 +565,8 @@ fn classify(
             mutates: &summaries.mutates,
             mutating_slots: &summaries.mutating_slots,
         };
+        // Read once, by the first value in the block that asks.
+        let windows = std::cell::OnceCell::new();
         for param in &block.params {
             if owned(func, layouts, *param) {
                 of[param.0 as usize] = if decided.crossing.contains(param) {
@@ -589,15 +591,9 @@ fn classify(
             }
             let kind = &func.values[value.0 as usize].kind;
             let safely = || {
-                borrows_safely(
-                    func,
-                    &block.ops,
-                    index,
-                    *value,
-                    here,
-                    &block.terminator,
-                    &around,
-                )
+                let windows = windows
+                    .get_or_init(|| Windows::of(func, &block.ops, &block.terminator, &around));
+                borrows_safely(func, windows, index, *value, here, &around)
             };
             of[value.0 as usize] = if decided.takes.contains(value) {
                 Ownership::Taken
@@ -1693,7 +1689,7 @@ fn initializing_stores(
         if attributable {
             for base in &fresh.bases {
                 for field in reference_fields(func, layouts, *base) {
-                    if !fresh.written.contains(&(*base, u64::from(field))) {
+                    if !fresh.written.contains(*base, u64::from(field)) {
                         still_zero[at].insert((*base, field));
                     }
                 }
@@ -2968,7 +2964,7 @@ fn zeroed_parameters(
                                 } => nulled.get(from.as_str()).is_some_and(|f| f.contains(field)),
                                 _ => {
                                     fresh.bases.contains(given)
-                                        && !fresh.written.contains(&(*given, u64::from(*field)))
+                                        && !fresh.written.contains(*given, u64::from(*field))
                                 }
                             };
                             if !vouched {
@@ -3810,52 +3806,102 @@ pub(super) fn is_load(kind: &OpKind) -> bool {
 /// gets to assume.
 fn borrows_safely(
     func: &Func,
-    original: &[ValueId],
+    windows: &Windows,
     at: usize,
     value: ValueId,
     block: BlockId,
-    terminator: &super::Terminator,
     around: &Surroundings<'_>,
 ) -> bool {
     if !eliding() || !around.live.dies_in(block, value) {
         return false;
     }
     // Handed on by the terminator, so its reference goes somewhere.
-    if super::operands_of_terminator(terminator).contains(&value) {
+    if windows.reads.by_terminator.contains(&value) {
         return false;
     }
+    // From the op after this one to the last that reads it or a view of it,
+    // nothing may end the borrow (see [`Ends`]); a store into this value of
+    // something else does not, and every one of those reads it, so all of them
+    // fall inside.
+    let last = windows.covered.get(&value).copied().unwrap_or(at).max(at);
+    let within = |before: &[u32]| before[last + 1] - before[at + 1];
+    within(&windows.ending) == 0
+        && (parameter_field(func, value) || within(&windows.ending_unless_a_field) == 0)
+        && within(&windows.stores) == windows.stores_into.get(&value).copied().unwrap_or(0)
+}
 
-    // A view of the value reads it: `NativeStringView` holds no count of its
-    // own, so what reads the view -- the native call it was lent for -- reads
-    // the value, and the borrow must cover it. Counting only the value's own
-    // operands ended the window at the view, and a callback the call ran could
-    // overwrite the slot and free the string while C read it
-    // (tests/interop/native-string-view-lend).
-    let mut read = vec![value];
-    let mut last = at;
-    for (index, other) in original.iter().enumerate().skip(at + 1) {
-        let kind = &func.values[other.0 as usize].kind;
-        if super::verify::operands(kind)
-            .iter()
-            .any(|operand| read.contains(operand))
-        {
-            last = index;
+/// Where each value of one block is last read: the position of the last op
+/// that reads it, and whether the terminator reads it.
+///
+/// Read once per block, so that "does anything after here read it" is a
+/// lookup. Asked of every value a block makes, a scan of the rest of the block
+/// for each was the block's ops squared, with an operand list allocated per
+/// pair: jetstream-flight-planner's module initializer is one block of 84k
+/// entries, and under `--rc` it was still compiling after 21.9 CPU minutes.
+pub(super) struct LastReads {
+    last: rustc_hash::FxHashMap<ValueId, usize>,
+    by_terminator: rustc_hash::FxHashSet<ValueId>,
+}
+
+impl LastReads {
+    pub(super) fn of(func: &Func, ops: &[ValueId], terminator: &super::Terminator) -> Self {
+        let mut last = rustc_hash::FxHashMap::default();
+        for (at, op) in ops.iter().enumerate() {
+            super::verify::reads(&func.values[op.0 as usize].kind).each(|value| {
+                last.insert(value, at);
+            });
         }
-        if let OpKind::NativeStringView { string } = kind
-            && read.contains(string)
-        {
-            read.push(*other);
+        let by_terminator = super::operands_of_terminator(terminator)
+            .into_iter()
+            .collect();
+        Self {
+            last,
+            by_terminator,
         }
     }
 
-    !original[at + 1..=last].iter().any(|other| {
-        match &func.values[other.0 as usize].kind {
+    /// Whether an op after position `at`, or the terminator, reads `value`.
+    pub(super) fn read_after(&self, at: usize, value: ValueId) -> bool {
+        self.by_terminator.contains(&value) || self.last.get(&value).is_some_and(|last| *last > at)
+    }
+}
+
+/// What can end a borrow, op by op: what [`borrows_safely`] asks of every op
+/// between a borrowed value and its last read.
+enum Ends {
+    /// Nothing: no call that can store or release, and no store.
+    Nothing,
+    /// Every borrow: a call that can overwrite a slot or give up a reference.
+    Every,
+    /// Every borrow but one read out of a field of a parameter: a runtime
+    /// array helper writes element storage and runs no program code, so it
+    /// cannot overwrite a field, and it cannot give up a parameter, which the
+    /// caller holds. `app.rows.splice(i, 1)` borrows `app.rows` across the
+    /// call -- see `keeps_field_borrows`.
+    UnlessAParameterField,
+    /// A store, which ends every borrow but one of its own receiver.
+    ///
+    /// A store *into* a value cannot invalidate it. It overwrites a slot inside
+    /// the container and leaves the reference that names the container alone:
+    /// `piles[i] = disk` overwrites an element, and `piles` is still held by the
+    /// `this.piles` it was read from. What a store *can* invalidate is a borrow
+    /// read from the slot being written -- and that is a different value, which
+    /// this still refuses because the container of that store is not it.
+    /// Storing the borrowed value itself is a transfer, and a transfer needs a
+    /// reference of its own however the store is aimed.
+    Store { into: ValueId, stored: ValueId },
+}
+
+impl Ends {
+    fn of(kind: &OpKind, around: &Surroundings<'_>) -> Self {
+        let every = |ends: bool| if ends { Self::Every } else { Self::Nothing };
+        match kind {
             // A callee that stores nothing, anywhere it can reach, cannot
             // overwrite the slot this was read from -- see `mutating`.
             OpKind::Call {
                 callee: super::Callee::Direct(name),
                 ..
-            } => around.mutates.contains(name),
+            } => every(around.mutates.contains(name)),
             // A dispatch, where the callee is a slot rather than a name. Safe
             // when no implementation in the slot stores anything -- the same
             // question `mutates` answers for a direct call, asked of the whole
@@ -3863,47 +3909,114 @@ fn borrows_safely(
             OpKind::Call {
                 callee: super::Callee::Virtual { slot, .. },
                 ..
-            } => around.mutating_slots.contains(slot),
-            // A runtime array helper writes element storage and runs no
-            // program code, so it cannot overwrite a field, and it cannot give
-            // up a parameter, which the caller holds. `app.rows.splice(i, 1)`
-            // borrows `app.rows` across the call -- see `keeps_field_borrows`.
-            //
-            // And a helper that stores nothing and releases nothing
+            } => every(around.mutating_slots.contains(slot)),
+            // A helper that stores nothing and releases nothing
             // (`runtime::stores_nothing`) cannot overwrite any slot or give up
             // any reference, so nothing borrowed can end in it.
             OpKind::Call {
                 callee: super::Callee::External(name),
                 ..
             } => {
-                !(super::runtime::stores_nothing(name)
-                    || (super::keeps_field_borrows(name) && parameter_field(func, value)))
+                if super::runtime::stores_nothing(name) {
+                    Self::Nothing
+                } else if super::keeps_field_borrows(name) {
+                    Self::UnlessAParameterField
+                } else {
+                    Self::Every
+                }
             }
-            OpKind::Call { .. } => true,
-            // A store *into* this value cannot invalidate it. It overwrites a
-            // slot inside the container and leaves the reference that names the
-            // container alone: `piles[i] = disk` overwrites an element, and
-            // `piles` is still held by the `this.piles` it was read from.
-            //
-            // What a store *can* invalidate is a borrow read from the slot
-            // being written -- and that is a different value, which this still
-            // refuses because the container of that store is not it.
-            //
-            // Storing the borrowed value itself is a transfer, and a transfer
-            // needs a reference of its own however the store is aimed.
+            OpKind::Call { .. } => Self::Every,
             OpKind::FieldSet {
-                object,
+                object: into,
                 value: stored,
                 ..
-            } => *object != value || *stored == value,
-            OpKind::ArraySet {
-                array,
+            }
+            | OpKind::ArraySet {
+                array: into,
                 value: stored,
                 ..
-            } => *array != value || *stored == value,
-            _ => false,
+            } => Self::Store {
+                into: *into,
+                stored: *stored,
+            },
+            _ => Self::Nothing,
         }
-    })
+    }
+}
+
+/// What [`borrows_safely`] asks of one block, read once: where each value's
+/// last read falls, and how many ops before each position can end a borrow.
+struct Windows {
+    reads: LastReads,
+    /// The last position that reads a value or a view lent from it.
+    ///
+    /// A view of the value reads it: `NativeStringView` holds no count of its
+    /// own, so what reads the view -- the native call it was lent for -- reads
+    /// the value, and the borrow must cover it. Counting only the value's own
+    /// operands ended the window at the view, and a callback the call ran could
+    /// overwrite the slot and free the string while C read it
+    /// (tests/interop/native-string-view-lend). Views of a view count too.
+    covered: rustc_hash::FxHashMap<ValueId, usize>,
+    /// The ops before each position that end every borrow ([`Ends::Every`]).
+    ending: Vec<u32>,
+    /// ... and the ones that end a borrow unless it is a parameter's field.
+    ending_unless_a_field: Vec<u32>,
+    /// ... and the stores ([`Ends::Store`]).
+    stores: Vec<u32>,
+    /// For each value, the stores into it of something else: the stores that
+    /// do not end its borrow.
+    stores_into: rustc_hash::FxHashMap<ValueId, u32>,
+}
+
+impl Windows {
+    fn of(
+        func: &Func,
+        ops: &[ValueId],
+        terminator: &super::Terminator,
+        around: &Surroundings<'_>,
+    ) -> Self {
+        let reads = LastReads::of(func, ops, terminator);
+        // Backwards, so that a view's own views are folded into it before it
+        // is folded into its string: a view comes after what it views.
+        let mut covered = reads.last.clone();
+        for op in ops.iter().rev() {
+            if let OpKind::NativeStringView { string } = func.values[op.0 as usize].kind
+                && let Some(&through) = covered.get(op)
+            {
+                let at = covered.entry(string).or_insert(through);
+                *at = (*at).max(through);
+            }
+        }
+        let mut ending = vec![0; ops.len() + 1];
+        let mut ending_unless_a_field = vec![0; ops.len() + 1];
+        let mut stores = vec![0; ops.len() + 1];
+        let mut stores_into: rustc_hash::FxHashMap<ValueId, u32> = rustc_hash::FxHashMap::default();
+        for (at, op) in ops.iter().enumerate() {
+            let (mut every, mut unless_a_field, mut store) = (0, 0, 0);
+            match Ends::of(&func.values[op.0 as usize].kind, around) {
+                Ends::Nothing => {}
+                Ends::Every => every = 1,
+                Ends::UnlessAParameterField => unless_a_field = 1,
+                Ends::Store { into, stored } => {
+                    store = 1;
+                    if stored != into {
+                        *stores_into.entry(into).or_default() += 1;
+                    }
+                }
+            }
+            ending[at + 1] = ending[at] + every;
+            ending_unless_a_field[at + 1] = ending_unless_a_field[at] + unless_a_field;
+            stores[at + 1] = stores[at] + store;
+        }
+        Self {
+            reads,
+            covered,
+            ending,
+            ending_unless_a_field,
+            stores,
+            stores_into,
+        }
+    }
 }
 
 /// Whether `value` is read out of a field of one of this function's parameters.
@@ -3958,7 +4071,7 @@ struct Fresh {
     /// Objects and arrays whose slots this block still knows about.
     bases: rustc_hash::FxHashSet<ValueId>,
     /// Slots already written, so the second store to one is not initializing.
-    written: rustc_hash::FxHashSet<(ValueId, u64)>,
+    written: Written,
     /// Bases that have been stored somewhere, and so can be read back out.
     ///
     /// Storing `x` into `y.f` writes *`y`*'s slot and leaves `x`'s alone, so `x`
@@ -4055,11 +4168,70 @@ fn freshness(
     entry.into_iter().map(Option::unwrap_or_default).collect()
 }
 
+/// The slots written so far, by the base they belong to.
+///
+/// Forgetting a base's slots -- an allocation makes them zeros again, an edge
+/// re-binds a block parameter -- is one removal. A set of pairs was a walk over
+/// every slot written so far, for each allocation: one block of 16,000 object
+/// literals wrote 32,000 slots and walked them 16,000 times.
+///
+/// Holds no empty set of slots, so two that hold the same slots are equal, as
+/// the fixpoint that compares them needs.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct Written(rustc_hash::FxHashMap<ValueId, rustc_hash::FxHashSet<u64>>);
+
+impl Written {
+    fn contains(&self, base: ValueId, slot: u64) -> bool {
+        self.0.get(&base).is_some_and(|slots| slots.contains(&slot))
+    }
+
+    fn insert(&mut self, base: ValueId, slot: u64) {
+        self.0.entry(base).or_default().insert(slot);
+    }
+
+    fn remove(&mut self, base: ValueId, slot: u64) {
+        if let Some(slots) = self.0.get_mut(&base) {
+            slots.remove(&slot);
+            if slots.is_empty() {
+                self.0.remove(&base);
+            }
+        }
+    }
+
+    /// Every slot of `base` is a zero again, or `base` names something new.
+    fn forget(&mut self, base: ValueId) {
+        self.0.remove(&base);
+    }
+
+    fn retain_bases(&mut self, keep: impl Fn(&ValueId) -> bool) {
+        self.0.retain(|base, _| keep(base));
+    }
+
+    /// `to` has written what `from` had written in `of`.
+    fn carry(&mut self, of: &Self, from: ValueId, to: ValueId) {
+        if let Some(slots) = of.0.get(&from) {
+            self.0.entry(to).or_default().extend(slots.iter().copied());
+        }
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        let mut both = self.clone();
+        for (base, slots) in &other.0 {
+            both.0
+                .entry(*base)
+                .or_default()
+                .extend(slots.iter().copied());
+        }
+        both
+    }
+}
+
 impl Fresh {
     /// Once a base is not fresh, its alias and slot marks carry no authority.
     /// A later allocation resets them, and phi rebinding clears them too.
     fn canonicalize(&mut self) {
-        self.written.retain(|(base, _)| self.bases.contains(base));
+        let bases = &self.bases;
+        self.written.retain_bases(|base| bases.contains(base));
         self.escaped.retain(|base| self.bases.contains(base));
     }
 
@@ -4084,7 +4256,7 @@ impl Fresh {
                 fresh.bases.insert(parameter);
                 for field in reference_fields(func, layouts, parameter) {
                     if !zeroed.contains(&(*slot, field)) {
-                        fresh.written.insert((parameter, u64::from(field)));
+                        fresh.written.insert(parameter, u64::from(field));
                     }
                 }
             }
@@ -4118,7 +4290,7 @@ impl Fresh {
         for param in params {
             carried.bases.remove(param);
             carried.escaped.remove(param);
-            carried.written.retain(|(held, _)| held != param);
+            carried.written.forget(*param);
         }
         for (slot, param) in params.iter().enumerate() {
             let Some(arg) = args.get(slot) else { continue };
@@ -4128,11 +4300,7 @@ impl Fresh {
             if self.escaped.contains(arg) {
                 carried.escaped.insert(*param);
             }
-            for (held, field) in &self.written {
-                if held == arg {
-                    carried.written.insert((*param, *field));
-                }
-            }
+            carried.written.carry(&self.written, *arg, *param);
         }
         carried
     }
@@ -4144,7 +4312,7 @@ impl Fresh {
     fn both(&self, other: &Self) -> Self {
         Self {
             bases: self.bases.intersection(&other.bases).copied().collect(),
-            written: self.written.union(&other.written).copied().collect(),
+            written: self.written.union(&other.written),
             // Reachable on either path is reachable.
             escaped: self.escaped.union(&other.escaped).copied().collect(),
         }
@@ -4154,12 +4322,12 @@ impl Fresh {
     fn initializing(&self, func: &Func, store: &OpKind) -> bool {
         match store {
             OpKind::FieldSet { object, field, .. } => {
-                self.bases.contains(object) && !self.written.contains(&(*object, u64::from(*field)))
+                self.bases.contains(object) && !self.written.contains(*object, u64::from(*field))
             }
             OpKind::ArraySet { array, index, .. } => {
                 self.bases.contains(array)
                     && slot_of(func, *index)
-                        .is_some_and(|slot| !self.written.contains(&(*array, slot)))
+                        .is_some_and(|slot| !self.written.contains(*array, slot))
             }
             _ => false,
         }
@@ -4195,7 +4363,7 @@ impl Fresh {
                 // null. It made `store-elsewhere` twice as expensive as it had
                 // been an hour earlier, which is the sort of thing a suite that
                 // runs in twenty seconds says immediately.
-                self.written.retain(|(held, _)| *held != value);
+                self.written.forget(value);
             }
             OpKind::FieldSet {
                 object,
@@ -4210,14 +4378,14 @@ impl Fresh {
                 // round -- `nulled-field` pays one an iteration for exactly
                 // that.
                 if matches!(func.values[stored.0 as usize].kind, OpKind::ConstNull) {
-                    self.written.remove(&(*object, u64::from(*field)));
+                    self.written.remove(*object, u64::from(*field));
                 } else {
-                    self.written.insert((*object, u64::from(*field)));
+                    self.written.insert(*object, u64::from(*field));
                 }
             }
             OpKind::ArraySet { array, index, .. } => {
                 if let Some(slot) = slot_of(func, *index) {
-                    self.written.insert((*array, slot));
+                    self.written.insert(*array, slot);
                 } else {
                     // An index this pass cannot name could be any of them, so
                     // the whole array stops being something it knows about.

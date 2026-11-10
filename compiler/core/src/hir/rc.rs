@@ -888,6 +888,9 @@ fn count_ops(
 ) -> Counted {
     let layouts = declared.layouts;
     let Settled { map, live, .. } = settled;
+    // Read before anything below rewrites an op: no rewrite changes what an op
+    // reads (an append and a twin keep their arguments), so it stays exact.
+    let reads = own::LastReads::of(func, original, terminator);
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
     let mut repackaged = rustc_hash::FxHashMap::default();
@@ -914,14 +917,13 @@ fn count_ops(
         //
         // The guards are the ones the hand-over arm below uses, for the same
         // reasons ([`dies_here`]).
-        let later = &original[index + 1..];
         if let OpKind::Binary {
             op: super::BinOp::Concat,
             lhs,
             rhs,
         } = &kind
             && own::counted(func, layouts, *lhs)
-            && dies_here(func, layouts, settled, at, later, terminator, *lhs)
+            && dies_here(func, layouts, settled, at, &reads, index, *lhs)
             && moved.insert(*lhs)
         {
             let (lhs, rhs) = (*lhs, *rhs);
@@ -958,7 +960,7 @@ fn count_ops(
                 //
                 // A runtime append whose left side survives it calls its
                 // non-consuming twin instead ([`twin_instead`]).
-                if dies_here(func, layouts, settled, at, later, terminator, given)
+                if dies_here(func, layouts, settled, at, &reads, index, given)
                     && moved.insert(given)
                 {
                     report.moves += 1;
@@ -1092,7 +1094,7 @@ fn count_ops(
             && let Some(source) = another_name_for(&kind)
             && own::counted(func, layouts, source)
             && (func.values[source.0 as usize].ty.counting().is_none() || only_erased(func, source))
-            && dies_here(func, layouts, settled, at, later, terminator, source)
+            && dies_here(func, layouts, settled, at, &reads, index, source)
             && moved.insert(source)
         {
             repackaged.insert(source, *value);
@@ -1321,12 +1323,12 @@ fn twin_instead(func: &mut Func, value: ValueId, given: ValueId) -> bool {
     true
 }
 
-/// Whether the reference `given` holds can be handed on by the operation that
-/// `later` follows: this function holds it, and nothing after reads it.
+/// Whether the reference `given` holds can be handed on by the operation at
+/// `index` in the block: this function holds it, and nothing after reads it.
 ///
 /// `dies_in` says the value's last read is somewhere in this block, not that it
 /// is *here*, so the operations after this one and the terminator are checked
-/// too. Handing over a reference that is read again afterwards leaves the
+/// too, through the block's [`own::LastReads`]. Handing over a reference that is read again afterwards leaves the
 /// caller using something it no longer holds. In `cycles` that made every
 /// self-cycle uncollectable rather than dangling: the object's only reference
 /// became the one inside itself, so no count ever fell, no candidate was ever
@@ -1340,18 +1342,15 @@ fn dies_here(
     layouts: &[Layout],
     settled: &Settled<'_>,
     at: BlockId,
-    later: &[ValueId],
-    terminator: &super::Terminator,
+    reads: &own::LastReads,
+    index: usize,
     given: ValueId,
 ) -> bool {
     let Settled { map, live, .. } = settled;
     (own::owned(func, layouts, given) || map.owns(given))
         && !map.borrowed(given)
         && live.dies_in(at, given)
-        && !later
-            .iter()
-            .any(|op| super::verify::operands(&func.values[op.0 as usize].kind).contains(&given))
-        && !super::operands_of_terminator(terminator).contains(&given)
+        && !reads.read_after(index, given)
 }
 
 /// What the *program* declares, as opposed to what a function computed.
