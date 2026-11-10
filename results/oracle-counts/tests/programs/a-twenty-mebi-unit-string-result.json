@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-twenty-mebi-unit-string-result",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-twenty-mebi-unit-string-result/src/main.ts",
+      "signature": "d2b6bd4fe56e32ebfc024e02530b840fe88dd895a3da6347d98476090771108d",
+      "keys": {
+        "c": "466d958509d6fecfa3e538674c4deff6",
+        "jvm": "ea7e1df5da921d8cf176d6fa113cdec5",
+        "llvm": "c79a3b1532856a63fb7a1de8a620a14c"
+      },
+      "cases_sha256": "69d956bdc5cc5ab9bc4c57cd79ec8afcd69276e9b5ec301b6b9e88005efe733e",
+      "driver_sha256": "dff98d2053a21df079a4a2732e31008ae38e97722c60bd95fb16b1257b1bcb83",
+      "populations": {
+        "result": {
+          "count": 1,
+          "cases_sha256": "69d956bdc5cc5ab9bc4c57cd79ec8afcd69276e9b5ec301b6b9e88005efe733e"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-result-at-its-row-limit",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-result-at-its-row-limit/src/main.ts",
+      "signature": "925a4469d74de8b7bb047cace78cdaf9a59c7272f8c6f3680737ca7f4d3c1c23",
+      "keys": {
+        "c": "aecd15140f6f1dc2cf6b25916e4d82f4",
+        "jvm": "b2b74cd6e724da24cb71034f2f7faad9",
+        "llvm": "9bb9c0c3d880e243d04d368a7d88fd48"
+      },
+      "cases_sha256": "4f8e5ef325d57de4c72d556d3d63048aac252ab8d6d5b4bb2b2ffb9b6c1dd751",
+      "driver_sha256": "2194a55ff126c9a1c325ff35ffceac8f5e3cd1519619bf17b6a3a7a971169459",
+      "populations": {
+        "atLimit": {
+          "count": 1,
+          "cases_sha256": "cc5d740e07c10306604147d7b3acc34ebc36fcbafffeae7be2b8e50e2ae9c973"
+        },
+        "pastLimit": {
+          "count": 1,
+          "cases_sha256": "d253c159f0879614b2cf458bc136ebbe7cdd6de0d6bfaca6389750a5f906553e"
+        }
+      },
+      "complete": true,
+      "count": 2
+    }
+  ]
+}
