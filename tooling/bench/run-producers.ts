@@ -193,7 +193,10 @@ export function fromNts(
         c,
         absent(
           failure?.kind === "build_failed" ? "BUILD_FAILED" : "NOT_RUN",
-          failure ? string(failure.reason) : "No measurement was returned for this column",
+          failure ? string(failure.reason) :
+            values(object(raw.session ?? {}).unreached ?? []).includes(name)
+              ? "Session time budget exhausted before this case completed"
+              : "No measurement was returned for this column",
           failure ? clean(failure) : (raw.failed ?? null),
         ),
       ]),

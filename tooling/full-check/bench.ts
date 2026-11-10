@@ -33,7 +33,7 @@
 // (run-record.ts publish, publishAt), submits that results-only commit, and
 // follows it as it follows records.
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nodePin } from "../bootstrap/node.ts";
@@ -43,7 +43,8 @@ import { launcherEnvironment } from "../landing/run.ts";
 import { writeOutcome } from "./background.ts";
 import { Git } from "./git.ts";
 
-const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
+const SESSION = fileURLToPath(new URL("./bench-session.ts", import.meta.url));
+const SESSION_OUTCOME = "session.outcome.json";
 
 /**
  * with-lock.sh's exit for a run it does not start (EX_TEMPFAIL), and
@@ -52,7 +53,8 @@ const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
 export const NOT_ADMITTED_EXIT = 75;
 
 /** One attempt at the benchmarks: not admitted, and why; or admitted, with the run's exit status. */
-export type BenchAttempt = { admitted: false; reason: string } | { admitted: true; status: number };
+export type SessionBudget = { milliseconds: number; unreached: string[] };
+export type BenchAttempt = { admitted: false; reason: string } | { admitted: true; status: number; budget?: SessionBudget; record?: string };
 /** Measure in `tree`, keeping the output in `run`. */
 export type Bench = (tree: string, run: string) => BenchAttempt;
 
@@ -68,18 +70,22 @@ export const RUNS = "results/benchmarks/runs";
  * what earlier sessions held, in the scheduling history `history`; then
  * with-lock.sh, which admits the run on the reserved core; then `binary`
  * (nts-bench) --root <tree>. admit.ts becomes with-lock.sh, so the exit is
- * the lock's or nts-bench's.
+ * the lock's or nts-bench's. The session supervisor owns the measurement unit
+ * and its observation budget; it keeps a durable partial record at the budget.
  */
-export function benchWithLock(binary: string, history: string): Bench {
+export function benchWithLock(binary: string, history: string, ownerUnit: string): Bench {
   return (tree, run) => {
     const log = join(run, "bench.log");
+    rmSync(join(run, SESSION_OUTCOME), { force: true });
     const out = openSync(log, "a");
     let status: number;
     try {
-      status = spawnSync(process.execPath, [ADMIT, "--key", "bench-session", "--what", `nightly benchmarks in ${tree}`, "--", "sh", join(tree, "tooling/gate/with-lock.sh"), binary, "--root", tree],
-        { cwd: tree, stdio: ["ignore", out, out], env: { ...process.env, NTS_MEMORY_PRIORITY: "full-check", NTS_GATE_COSTS_DIR: history } }).status ?? 1;
+      status = spawnSync(process.execPath, [SESSION, tree, run, binary, history, ownerUnit],
+        { cwd: tree, stdio: ["ignore", out, out] }).status ?? 1;
     } finally { closeSync(out); }
-    return status === NOT_ADMITTED_EXIT ? { admitted: false, reason: admission(readFileSync(log, "utf8")) } : { admitted: true, status };
+    if (status === NOT_ADMITTED_EXIT) return { admitted: false, reason: admission(readFileSync(log, "utf8")) };
+    const outcome = join(run, SESSION_OUTCOME);
+    return existsSync(outcome) ? JSON.parse(readFileSync(outcome, "utf8")) as BenchAttempt : { admitted: true, status };
   };
 }
 
@@ -124,27 +130,36 @@ export type MeasureJob = {
 };
 
 /** What the benchmarks unit's outcome says beside nts-bench's exit status: whether the lock admitted the run, and the record it kept, or why none. */
-export type MeasureOutcome = { admitted: boolean; reason?: string; record?: string; none?: string };
+export type MeasureOutcome = { admitted: boolean; reason?: string; record?: string; none?: string; budget?: SessionBudget };
 
 /**
  * The benchmarks unit's work, in its own tree at the commit it measures: the
- * attempt (`bench`), and then, as its last act, its outcome. A run that kept
+ * attempt (`bench`), and then, as its last act, its outcome. A budget keeps its
+ * sealed prefix directly in the run's folder. An ordinary run that kept
  * a record leaves a copy of it, the bytes nts-bench committed, in the run's
  * folder, which the controller publishes from once the tree is at main.
  */
 export function measureJob(tree: string, job: MeasureJob, bench: Bench): void {
   const attempt = bench(tree, job.run);
   if (!attempt.admitted) { writeOutcome<MeasureOutcome>(job.outcome, { status: NOT_ADMITTED_EXIT, admitted: false, reason: attempt.reason }); return; }
+  const budget = attempt.budget ? { budget: attempt.budget } : {};
+  if (attempt.budget && attempt.record) {
+    const record = join(job.run, basename(attempt.record));
+    const bytes = readFileSync(attempt.record);
+    if (record !== attempt.record) writeFileSync(record, bytes);
+    writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, ...budget, record });
+    return;
+  }
   const git = new Git(tree), found = resultsCommit(git, job.commit);
-  if ("none" in found) { writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, none: found.none }); return; }
+  if ("none" in found) { writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, ...budget, none: found.none }); return; }
   const records = git.run(["diff", "--name-only", job.commit, found.commit, "--", RUNS]).split("\n").filter(Boolean);
   if (records.length !== 1) {
-    writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, none: `the results commit ${found.commit.slice(0, 12)} holds ${records.length} run records, not one` });
+    writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, ...budget, none: `the results commit ${found.commit.slice(0, 12)} holds ${records.length} run records, not one` });
     return;
   }
   const record = join(job.run, basename(records[0]!));
   writeFileSync(record, git.output(["show", `${found.commit}:${records[0]}`]));
-  writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, record });
+  writeOutcome<MeasureOutcome>(job.outcome, { status: attempt.status, admitted: true, ...budget, record });
 }
 
 /** main's own run-record.ts publish of `record` in `tree`, which is at main; its output goes to `log`. */

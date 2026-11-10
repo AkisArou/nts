@@ -1,6 +1,33 @@
 //! Producers pass observations to TypeScript; it alone validates, publishes and renders records.
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
+use std::io::Write;
+
+/// Append-only recovery for a session whose current case cannot finish. Flush
+/// each complete frame before announcing its row; publication still uses the
+/// shared record authority, including all its checksum and workload checks.
+pub(super) struct Journal(std::fs::File);
+
+impl Journal {
+    pub(super) fn create(path: &str, header: &serde_json::Value) -> Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .with_context(|| format!("creating benchmark journal {path}"))?;
+        let mut journal = Self(file);
+        journal.append(header)?;
+        Ok(journal)
+    }
+
+    pub(super) fn append(&mut self, frame: &serde_json::Value) -> Result<()> {
+        serde_json::to_writer(&mut self.0, frame)?;
+        self.0.write_all(b"\n")?;
+        self.0
+            .sync_data()
+            .context("committing benchmark journal frame")
+    }
+}
 
 pub(super) fn command(root: &Utf8Path, mode: &str, args: &[&str]) -> Result<String> {
     let output = std::process::Command::new("node")

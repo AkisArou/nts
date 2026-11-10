@@ -181,6 +181,8 @@ export type BenchRun = {
   outcome?: BenchOutcome;
   /** The run's record, kept in its run's folder. */
   record?: string;
+  /** A terminal observation budget, retained while its partial record lands. */
+  budget?: { milliseconds: number; unreached: string[] };
   /** How many times the record was published on main, the first time included. */
   attempts?: number;
   /** The main the last attempt published it on. */

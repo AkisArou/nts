@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostname, cpus } from "node:os";
 import {
@@ -16,9 +16,11 @@ import {
   publishRun,
   renderRuns,
   type Json,
+  type RunRecord,
 } from "./run-record.ts";
 import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
+import { readJournal } from "./run-journal.ts";
 function command(root: string, program: string, args: string[]): string {
   const r = spawnSync(program, args, { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
@@ -111,31 +113,7 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
   };
 }
 export function finish(root: string, input: string): string {
-  cleanSources(root);
-  const raw = JSON.parse(readFileSync(input, "utf8"));
-  assert.ok(
-    raw.metadata,
-    "raw run has no captured metadata; import it explicitly as a historical observation",
-  );
-  const metadata: Metadata = {
-    ...raw.metadata,
-    finishedAt: new Date().toISOString(),
-    complete:
-      raw.requested.length === 0 &&
-      raw.lanes === null &&
-      raw.cases.length === raw.metadata.inventory.length,
-    machine: {
-      ...raw.metadata.machine,
-      conditions: { ...raw.metadata.machine.conditions, end: conditions() },
-    },
-  };
-  const hosts = Object.fromEntries(
-    raw.measured.map((m: { shown: string; hosts?: { cells: unknown } }) => [
-      m.shown,
-      m.hosts?.cells ?? {},
-    ]),
-  );
-  const record = fromNts(metadata, raw, {}, hosts);
+  const record = seal(root, JSON.parse(readFileSync(input, "utf8")));
   const published = publishRun(root, record);
   const failures = record.rows.flatMap((row) =>
     Object.entries(row.cells)
@@ -147,6 +125,50 @@ export function finish(root: string, input: string): string {
       "Benchmark observations retained at " + published + "; failed: " + failures.join("; "),
     );
   return published;
+}
+
+/** Seal the durable prefix after the session's unit has stopped. */
+export function finishBudget(root: string, journal: string, budgetMs: number): { record: string; unreached: string[] } {
+  const { raw, unreached } = readJournal(journal);
+  const retained = join(root, "results/benchmarks/runs", raw.metadata.id + ".json");
+  // The budget can expire during normal publication. Keep an already sealed
+  // record's exact identity, rather than re-stamping its observations.
+  const session = { kind: "time-budget", budgetMs, unreached };
+  const record = existsSync(retained) ? parseRun(JSON.parse(readFileSync(retained, "utf8"))) : seal(root, { ...raw, session });
+  // Publication belongs to the controller on the newest main. A budget must
+  // not depend on finishing a results commit interrupted in the measured tree.
+  const path = join(dirname(journal), record.id + ".json");
+  writeFileSync(path, JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
+  return { record: path, unreached };
+}
+
+function seal(root: string, raw: any): RunRecord {
+  cleanSources(root);
+  assert.ok(
+    raw.metadata,
+    "raw run has no captured metadata; import it explicitly as a historical observation",
+  );
+  const metadata: Metadata = {
+    ...raw.metadata,
+    finishedAt: new Date().toISOString(),
+    complete:
+      raw.session === undefined &&
+      raw.requested.length === 0 &&
+      raw.lanes === null &&
+      raw.cases.length === raw.metadata.inventory.length,
+    ...(raw.session ? { provenance: { ...raw.metadata.provenance, session: raw.session } } : {}),
+    machine: {
+      ...raw.metadata.machine,
+      conditions: { ...raw.metadata.machine.conditions, end: conditions() },
+    },
+  };
+  const hosts = Object.fromEntries(
+    raw.measured.map((m: { shown: string; hosts?: { cells: unknown } }) => [
+      m.shown,
+      m.hosts?.cells ?? {},
+    ]),
+  );
+  return fromNts(metadata, raw, {}, hosts);
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode, root, ...args] = process.argv.slice(2);

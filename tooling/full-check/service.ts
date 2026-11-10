@@ -814,10 +814,12 @@ function holds(state: State, what: string): void {
 }
 
 /** The night has its answer: the benchmarks are no longer due, and the status says how they ended. */
+const budgetText = (budget: MeasureOutcome["budget"]) => budget ? `; session time budget exhausted; unreached: ${budget.unreached.join(", ") || "(none)"}` : "";
+
 function endNight(fx: Effects, state: State, bench: Pick<BenchRun, "commit" | "at" | "run" | "result" | "outcome"> & Partial<BenchRun>): "done" {
   state.bench = { submitted: null, measured: false, ...bench };
   delete state.benchmarks_due;
-  fx.log(`benchmarks at ${bench.commit ? short(bench.commit) : "nothing verified"}: ${bench.result}`);
+  fx.log(`benchmarks at ${bench.commit ? short(bench.commit) : "nothing verified"}: ${bench.result}${budgetText(bench.budget)}`);
   writeState(fx.layout.state, state);
   return "done";
 }
@@ -946,6 +948,7 @@ async function followBenchmarks(fx: Effects, state: State): Promise<boolean> {
  */
 async function measured(fx: Effects, state: State, measuring: Measuring, outcome: Outcome & MeasureOutcome): Promise<boolean> {
   const { commit, at, run } = measuring;
+  const budget = budgetText(outcome.budget);
   if (!outcome.admitted) {
     // Its log holds only the refusal, said here and in the state.
     rmSync(run, { recursive: true, force: true });
@@ -953,12 +956,12 @@ async function measured(fx: Effects, state: State, measuring: Measuring, outcome
     return false;
   }
   if (!outcome.record) {
-    endNight(fx, state, { commit, at, run, result: `nts-bench exited ${outcome.status}: ${outcome.none}`, outcome: "no-record" });
-    task(fx, state, `- The nightly benchmark run at ${short(commit)} kept no run record (nts-bench exited ${outcome.status}: ${outcome.none}); see ${run}.`);
+    endNight(fx, state, { commit, at, run, result: `nts-bench exited ${outcome.status}: ${outcome.none}`, outcome: "no-record", budget: outcome.budget });
+    task(fx, state, `- The nightly benchmark run at ${short(commit)} kept no run record (nts-bench exited ${outcome.status}: ${outcome.none}${budget}); see ${run}.`);
     writeState(fx.layout.state, state);
     return true;
   }
-  endNight(fx, state, { commit, at, run, outcome: "record", measured: true, record: outcome.record,
+  endNight(fx, state, { commit, at, run, outcome: "record", measured: true, record: outcome.record, budget: outcome.budget,
     result: `run record ${basename(outcome.record, ".json")}${outcome.status ? ` (nts-bench exited ${outcome.status})` : ""}, to publish on the newest main` });
   await publishAndSubmit(fx, state, state.bench as BenchRun & { record: string }, fx.git.commit("refs/heads/main")!);
   return true;
@@ -1382,7 +1385,7 @@ export function statusText(s: FullCheckStatus): string {
     `culprits: ${s.culprits.map(c => `${short(c.commit)} (${c.steps.join(", ")}) revert ${c.revert ? short(c.revert) : "none"}${c.reason ? ` -- ${c.reason}` : ""}`).join("; ") || "none"}`,
     `records: core ${records(s.core.records)}`,
     `         wide ${records(s.wide.records)}`,
-    `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.outcome ? `${s.benchmarks.last.outcome}: ` : ""}${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
+    `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.outcome ? `${s.benchmarks.last.outcome}: ` : ""}${s.benchmarks.last.result}${budgetText(s.benchmarks.last.budget)}; ${s.benchmarks.last.run}` : "none"}`
       + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}${
         s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}${s.benchmarks.due.measuring.job ? ` in ${s.benchmarks.due.measuring.job.unit}` : ""}`
           : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
@@ -1474,7 +1477,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   // The benchmarks unit's work: this code is the bench tree's, at verified (benchmarksUnit).
   if (options.benchmarks) {
-    measureJob(ROOT, options.benchmarks, benchWithLock(options.benchmarks.bench, options.benchmarks.history));
+    measureJob(ROOT, options.benchmarks, benchWithLock(options.benchmarks.bench, options.benchmarks.history, BENCH_UNIT));
     return 0;
   }
   // The hourly count, beside the controller: it takes no lock of the controller's.

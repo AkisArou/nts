@@ -694,6 +694,34 @@ test("the wide steps run on verified at a slot, not on main", async t => {
 
 const BEFORE = new Date(2026, 10, 6, 23, 0), NIGHT = new Date(2026, 10, 7, 3, 30), NEXT_NIGHT = new Date(2026, 10, 8, 3, 30);
 
+test("a benchmark session's budget answers the night once, with or without a retained record", async t => {
+  for (const kept of [true, false]) {
+    const repo = repository(t), gate = fakeGate(repo), measured = stubBench();
+    let attempts = 0;
+    const bench: Bench = (tree, run) => {
+      attempts++;
+      const result = kept ? measured(tree, run) : { admitted: true as const, status: 124 };
+      assert.ok(result.admitted);
+      return { ...result, status: 124, budget: { milliseconds: 10, unreached: ["never-started"] } };
+    };
+    const at = machine(repo, gate, { bench });
+    repo.commit({ "a.txt": "verified\n" }, "verified");
+    await cycle(at(BEFORE));
+    const night = at(NIGHT);
+    await cycle(night);
+    await cycle(night);
+    measureIn(night);
+    assert.equal(await cycle(night), "benchmarks");
+    const state = readState(repo.layout.state);
+    assert.equal(state.benchmarks_due, undefined);
+    assert.deepEqual(state.bench!.budget, { milliseconds: 10, unreached: ["never-started"] });
+    assert.ok(night.lines.some(line => line.includes("session time budget exhausted; unreached: never-started")));
+    assert.equal(Boolean(state.bench!.record), kept);
+    await cycle(night);
+    assert.equal(attempts, 1, "a budget is an outcome, so the controller never repeats that session");
+  }
+});
+
 test("the nightly slot makes the benchmarks due; nts-bench measures verified in a unit and a tree of its own, and its record is published on the newest main", async t => {
   const repo = repository(t), gate = fakeGate(repo), bench = stubBench({ slower: ["awfy-list", "richards"] }), at = machine(repo, gate, { bench });
   const first = repo.commit({ "a.txt": "1\n" }, "verified one");

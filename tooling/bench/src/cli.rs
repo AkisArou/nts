@@ -18,12 +18,14 @@ pub(super) enum Command {
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Arguments {
     pub(super) root: Option<String>,
+    pub(super) journal: Option<String>,
     pub(super) command: Command,
 }
 
 pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments> {
     let mut args = args.into_iter().peekable();
     let mut root = None;
+    let mut journal = None;
     let mut command = None;
     let mut cases = Vec::new();
     while let Some(arg) = args.next() {
@@ -38,6 +40,14 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
                 }
             }
             "--help" | "-h" => set_command(&mut command, Command::Help)?,
+            "--journal" => {
+                let Some(path) = args.next().filter(|next| !next.starts_with('-')) else {
+                    bail!("`--journal` needs a path after it");
+                };
+                if journal.replace(path).is_some() {
+                    bail!("`--journal` was supplied more than once");
+                }
+            }
             "--render" => {
                 let path = args.peek().is_some_and(|next| !next.starts_with('-'));
                 let path = path.then(|| args.next().expect("peeked render path"));
@@ -53,6 +63,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
     }
     Ok(Arguments {
         root,
+        journal,
         command: command.unwrap_or(Command::Measure(cases)),
     })
 }

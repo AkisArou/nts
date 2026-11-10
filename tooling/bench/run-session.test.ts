@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
+import { readJournal } from "./run-journal.ts";
 const script = fileURLToPath(new URL("./run-session.ts", import.meta.url));
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -47,6 +48,22 @@ function fixture() {
     ],
   };
 }
+
+test("journal recovery accepts only a complete ordered prefix and never an interrupted row", t => {
+  const root = testScratch(t, "bench-journal"), path = join(root, "run.jsonl"), raw = fixture();
+  const header = JSON.stringify({ version: 1, metadata: raw.metadata, cases: ["control", "next"], requested: [], lanes: null }) + "\n";
+  const frame = JSON.stringify({ name: "control", measured: raw.measured[0], failure: null, spoiled: false, failed: [], conditions: {} }) + "\n";
+  writeFileSync(path, header + frame + '{"name":"next"');
+  const saved = readJournal(path);
+  assert.deepEqual(saved.unreached, ["next"]);
+  assert.deepEqual(saved.raw.measured, raw.measured);
+  writeFileSync(path, header + frame + frame);
+  assert.throws(() => readJournal(path), /out-of-order/);
+  writeFileSync(path, header + frame + "{bad}\n");
+  assert.throws(() => readJournal(path), SyntaxError);
+  writeFileSync(path, header.slice(0, -1));
+  assert.throws(() => readJournal(path), /no committed header/);
+});
 test("actual session CLI renders a header and a typed row, and rejects the old missing-import bridge", () => {
   const root = newTestScratch("bench-session-cli");
   try {
@@ -65,7 +82,7 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
         .replace('from "../jvm/vm-flags.ts"', "from " + JSON.stringify(new URL("../jvm/vm-flags.ts", import.meta.url).href));
     assert.notEqual(changed, source);
     writeFileSync(mutant, changed);
-    for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts"])
+    for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts", "run-journal.ts"])
       symlinkSync(fileURLToPath(new URL("./" + name, import.meta.url)), join(root, name));
     const old = spawnSync(process.execPath, [mutant, "header", root], { encoding: "utf8" });
     assert.equal(old.status, 1);

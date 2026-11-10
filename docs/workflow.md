@@ -242,6 +242,12 @@ regression becomes a task.
   next nightly slot replaces them; a slot that comes while a night's run
   measures waits for it. They never block a landing, start when the core has
   nothing to do, and measure in their own unit while the core goes on.
+- **A session ends with its own outcome.** Its seven-and-a-half-hour observation
+  budget includes admission. At the budget it stops its measurement unit,
+  retains every completed row, names the cases not reached as `NOT_RUN`, and
+  ends the night without restarting. The partial immutable run keeps its
+  observations without replacing the newest complete run in `full.md`.
+  The containing unit's eight-hour guard bounds a runaway, including finalization.
 - **Only a record counts.** An attempt the measurement lock does not admit
   leaves them due, asked again later rather than waited for; a run whose unit
   stopped before it finished (stopped, killed, or past its eight-hour hang

@@ -354,14 +354,44 @@ fn run() -> Result<()> {
 
     let metadata = results::begin(&root)?;
     let lanes = wanted_lanes();
+    let journal = args
+        .journal
+        .as_deref()
+        .map(|path| {
+            results::Journal::create(
+                path,
+                &serde_json::json!({
+                    "version": 1, "metadata": metadata, "lanes": lanes, "requested": requested,
+                    "cases": cases.iter().filter_map(|case| case.file_name()).collect::<Vec<_>>()
+                }),
+            )
+        })
+        .transpose()?;
+    let (run, rows) = measure_cases(&root, &out, &cases, metadata, requested, lanes, journal)?;
+    finish(&root, &run, &rows, &cases)
+}
+
+/// Complete cases in order; the journal retains each validated prefix while
+/// the next case runs, including when that case never returns.
+fn measure_cases(
+    root: &Utf8Path,
+    out: &Utf8Path,
+    cases: &[Utf8PathBuf],
+    metadata: serde_json::Value,
+    requested: Vec<String>,
+    lanes: Option<Vec<String>>,
+    mut journal: Option<results::Journal>,
+) -> Result<(Run, Vec<Row>)> {
     let mut rows = Vec::new();
     let mut measured = Vec::new();
     let mut spoiled = Vec::new();
     let mut failed = Vec::new();
     let mut conditions = std::collections::BTreeMap::new();
     let mut row_failures = std::collections::BTreeMap::new();
-    for case in &cases {
+    for case in cases {
         let name = case.file_name().unwrap_or("?");
+        let failed_before = failed.len();
+        let measured_before = measured.len();
         // Before each case rather than once at the start: a program that comes
         // to the reserved core while the suite is halfway through spoils the
         // rows after it and none before, and a note on those rows is worth
@@ -371,9 +401,9 @@ fn run() -> Result<()> {
         disturbance_note(name, early.as_deref());
         // A row that fails its checks keeps its measurements: `--render` judges
         // them again, which is the point of saving them.
-        let before = results::conditions(&root)?;
+        let before = results::conditions(root)?;
         let sibling = reserved::read().ok();
-        let computed = run_case(&root, case, &out);
+        let computed = run_case(root, case, out);
         let late = early.is_none().then(|| sibling_busy(sibling)).flatten();
         disturbance_note(name, late.as_deref());
         if early.is_some() || late.is_some() {
@@ -393,28 +423,38 @@ fn run() -> Result<()> {
             if let Some(row) = accept_result(&measurements.shown, assembled, &mut failed) {
                 rows.push(row);
             }
-            results::print_row(
-                &root,
-                &metadata,
-                &measurements,
-                lanes.as_deref(),
-                row_failures.get(name),
-            )?;
             measured.push(measurements);
         }
-        let after = results::conditions(&root)?;
+        let after = results::conditions(root)?;
         conditions.insert(
             name.to_owned(),
             serde_json::json!({"before":before,"after":after}),
         );
+        let observation = measured.get(measured_before);
+        if let Some(journal) = &mut journal {
+            journal.append(&serde_json::json!({
+                "name": name, "measured": observation, "failure": row_failures.get(name),
+                "conditions": conditions.get(name), "spoiled": early.is_some() || late.is_some(),
+                "failed": &failed[failed_before..]
+            }))?;
+        }
+        if let Some(observation) = observation {
+            results::print_row(
+                root,
+                &metadata,
+                observation,
+                lanes.as_deref(),
+                row_failures.get(name),
+            )?;
+        }
     }
 
     let run = Run {
         metadata: Some(metadata),
         conditions,
         row_failures,
-        lanes: lanes.clone(),
-        requested: requested.clone(),
+        lanes,
+        requested,
         cases: cases
             .iter()
             .filter_map(|case| case.file_name().map(str::to_owned))
@@ -423,7 +463,7 @@ fn run() -> Result<()> {
         failed,
         measured,
     };
-    finish(&root, &run, &rows, &cases)
+    Ok((run, rows))
 }
 
 /// Resolve the requested inventory before any compilation or measurement.
