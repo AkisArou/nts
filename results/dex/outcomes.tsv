@@ -63,6 +63,7 @@ benchmarks/cases/immutable-update	{"outcome":{"kind":"pass"}}
 benchmarks/cases/in-narrowing	{"outcome":{"kind":"pass"}}
 benchmarks/cases/instanceof	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-acorn-wtb	{"outcome":{"kind":"pass"}}
+benchmarks/cases/jetstream-ai-astar	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-babylon-wtb	{"outcome":{"kind":"build-failure","diagnostic":"Illegal class file: Interface nts/gen/SyntaxError must extend class java.lang.Object. Found: nts/gen/Error. Class file version 52."}}
 benchmarks/cases/jetstream-bigint-bigdenary	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-bigint-paillier	{"outcome":{"kind":"pass"}}
@@ -71,8 +72,11 @@ benchmarks/cases/jetstream-crypto-sha1-sp	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-datetimeformat-intl	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-espree-wtb	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-esprima-next-wtb	{"outcome":{"kind":"pass"}}
+benchmarks/cases/jetstream-flight-planner	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-gaussian-blur	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-hash-map	{"outcome":{"kind":"pass"}}
+benchmarks/cases/jetstream-json-parse-inspector	{"outcome":{"kind":"pass"}}
+benchmarks/cases/jetstream-json-stringify-inspector	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-lazy-collections	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-listformat-intl	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-numberformat-intl	{"outcome":{"kind":"pass"}}
@@ -86,6 +90,7 @@ benchmarks/cases/jetstream-stanford-crypto-pbkdf2	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-stanford-crypto-sha256	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-string-unpack-code-sp	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-sync-fs	{"outcome":{"kind":"pass"}}
+benchmarks/cases/jetstream-threejs	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-typescript-octane	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-unipoker	{"outcome":{"kind":"pass"}}
 benchmarks/cases/jetstream-validatorjs	{"outcome":{"kind":"pass"}}
@@ -250,6 +255,7 @@ tests/programs/a-computed-index-is-not-a-member-name	{"outcome":{"kind":"pass"}}
 tests/programs/a-computed-index-write-on-a-typed-array-subclass-receiver	{"outcome":{"kind":"pass"}}
 tests/programs/a-computed-key-that-is-constant	{"outcome":{"kind":"pass"}}
 tests/programs/a-computed-numeric-accessor-keeps-its-canonical-key	{"outcome":{"kind":"pass"}}
+tests/programs/a-concrete-backing-type-in-a-typed-array-subclass-base	{"outcome":{"kind":"pass"}}
 tests/programs/a-const-read-through-a-closure-before-its-declaration-throws	{"outcome":{"kind":"pass"}}
 tests/programs/a-constant-in-a-function-scope-destructuring-loop	{"outcome":{"kind":"pass"}}
 tests/programs/a-constant-in-a-module-scope-destructuring-loop	{"outcome":{"kind":"pass"}}
@@ -430,6 +436,7 @@ tests/programs/a-mixed-reference-default-keeps-its-typed-call	{"outcome":{"kind"
 tests/programs/a-module-block-closure-writes-before-initialization	{"outcome":{"kind":"pass"}}
 tests/programs/a-module-const-that-asks-what-is-provided	{"outcome":{"kind":"pass"}}
 tests/programs/a-module-constant-read-through-calls	{"outcome":{"kind":"pass"}}
+tests/programs/a-module-facade-called-through-live-imports	{"outcome":{"kind":"pass"}}
 tests/programs/a-module-literal-past-the-jvm-method-limit	{"outcome":{"kind":"pass"}}
 tests/programs/a-module-read-of-a-cut-binding	{"outcome":{"kind":"pass"}}
 tests/programs/a-module-scope-switch	{"outcome":{"kind":"pass"}}
@@ -519,6 +526,7 @@ tests/programs/a-renamed-body-beside-an-erasing-runtime-helper	{"outcome":{"kind
 tests/programs/a-renamed-private-body-beside-a-runtime-helper	{"outcome":{"kind":"pass"}}
 tests/programs/a-repeat-count-that-truncates-to-zero	{"outcome":{"kind":"pass"}}
 tests/programs/a-required-cast-member-may-be-absent	{"outcome":{"kind":"pass"}}
+tests/programs/a-resizable-array-buffer-with-a-small-maximum	{"outcome":{"kind":"pass"}}
 tests/programs/a-resolve-after-resolving-with-a-promise-is-ignored	{"outcome":{"kind":"pass"}}
 tests/programs/a-rest-element-collected-through-its-iterator	{"outcome":{"kind":"pass"}}
 tests/programs/a-rest-element-over-erased-elements	{"outcome":{"kind":"pass"}}
@@ -612,6 +620,7 @@ tests/programs/a-string-parameter-appended-onto-is-taken-over	{"outcome":{"kind"
 tests/programs/a-string-prefix-test-at-a-given-position	{"outcome":{"kind":"pass"}}
 tests/programs/a-string-prefix-test-at-the-start	{"outcome":{"kind":"pass"}}
 tests/programs/a-string-rejection-caught-reads-as-a-string	{"outcome":{"kind":"pass"}}
+tests/programs/a-string-result-at-its-row-limit	{"outcome":{"kind":"pass"}}
 tests/programs/a-string-scan-cursor-stays-integral	{"outcome":{"kind":"pass"}}
 tests/programs/a-string-search-uses-a-string-needle	{"outcome":{"kind":"pass"}}
 tests/programs/a-string-strictly-equal-to-a-string-or-number	{"outcome":{"kind":"pass"}}
@@ -678,6 +687,7 @@ tests/programs/a-tuple-of-references-on-wasm	{"outcome":{"kind":"pass"}}
 tests/programs/a-tuple-of-references-read-at-a-later-slot	{"outcome":{"kind":"pass"}}
 tests/programs/a-tuple-of-references-with-defaults	{"outcome":{"kind":"pass"}}
 tests/programs/a-tuple-whose-elements-differ-in-kind	{"outcome":{"kind":"pass"}}
+tests/programs/a-twenty-mebi-unit-string-result	{"outcome":{"kind":"pass"}}
 tests/programs/a-type-argument-built-from-a-callers-type-parameter-as-a-union	{"outcome":{"kind":"pass"}}
 tests/programs/a-type-guard-through-a-cast-over-a-union	{"outcome":{"kind":"pass"}}
 tests/programs/a-type-predicate-that-narrows	{"outcome":{"kind":"pass"}}
@@ -787,6 +797,7 @@ tests/programs/an-async-throw-rejects-with-what-it-throws	{"outcome":{"kind":"pa
 tests/programs/an-await-of-a-plain-value	{"outcome":{"kind":"pass"}}
 tests/programs/an-await-of-a-thenable	{"outcome":{"kind":"pass"}}
 tests/programs/an-await-of-an-erased-promise	{"outcome":{"kind":"pass"}}
+tests/programs/an-eight-mebi-unit-string-result	{"outcome":{"kind":"pass"}}
 tests/programs/an-element-assertion-in-a-raising-closure	{"outcome":{"kind":"pass"}}
 tests/programs/an-element-default-over-a-short-array	{"outcome":{"kind":"pass"}}
 tests/programs/an-element-of-a-mapped-array	{"outcome":{"kind":"pass"}}
@@ -854,6 +865,7 @@ tests/programs/an-interface-raising-call-reaching-a-quiet-and-a-narrower-impleme
 tests/programs/an-intrinsic-guarded-by-its-typeof	{"outcome":{"kind":"pass"}}
 tests/programs/an-intrinsic-helper-passed-as-a-function	{"outcome":{"kind":"pass"}}
 tests/programs/an-is-view-test-of-a-typed-array-subclass	{"outcome":{"kind":"pass"}}
+tests/programs/an-iterable-interface-kept-in-a-nullable-field	{"outcome":{"kind":"pass"}}
 tests/programs/an-iteration-protocol-type-held-and-passed	{"outcome":{"kind":"pass"}}
 tests/programs/an-object-and-a-boolean-as-a-value	{"outcome":{"kind":"pass"}}
 tests/programs/an-object-converted-to-a-string	{"outcome":{"kind":"pass"}}
@@ -1068,6 +1080,8 @@ tests/programs/literals	{"outcome":{"kind":"pass"}}
 tests/programs/logical-assignment	{"outcome":{"kind":"pass"}}
 tests/programs/loops	{"outcome":{"kind":"pass"}}
 tests/programs/loops-that-always-leave	{"outcome":{"kind":"pass"}}
+tests/programs/many-class-layouts-sharing-a-numeric-prefix	{"outcome":{"kind":"pass"}}
+tests/programs/many-class-layouts-with-distinct-prefixes	{"outcome":{"kind":"pass"}}
 tests/programs/many-closures	{"outcome":{"kind":"pass"}}
 tests/programs/map-and-set	{"outcome":{"kind":"pass"}}
 tests/programs/map-keys-compare-by-same-value-zero	{"outcome":{"kind":"pass"}}

@@ -312,6 +312,7 @@ test/built-ins/Math/sqrt/S15.8.2.17_A2.js	pass
 test/built-ins/Math/sqrt/S15.8.2.17_A3.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A4.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A5.js	pass	
+test/built-ins/Math/sqrt/results.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A1.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A2.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A3.js	pass	
@@ -601,6 +602,7 @@ test/built-ins/String/prototype/codePointAt/return-single-code-unit.js	pass
 test/built-ins/String/prototype/codePointAt/return-utf16-decode.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T10.js	fail	nts: uncaught Test262Error: #1: var x; var __obj = {toString:function(){return "A";}, valueOf:function(){return "_A_";}}; var __str = "lego"; __str.concat(__obj) === "legoA". Actual: lego
 test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail_2.js	pass	
@@ -637,9 +639,11 @@ test/built-ins/String/prototype/indexOf/S15.5.4.7_A2_T4.js	pass
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T1.js	pass	
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T3.js	pass	
 test/built-ins/String/prototype/lastIndexOf/not-a-substring.js	pass	
+test/built-ins/String/prototype/padEnd/exception-fill-string-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/built-ins/String/prototype/padEnd/fill-string-empty.js	pass	
 test/built-ins/String/prototype/padEnd/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padEnd/normal-operation.js	pass	
+test/built-ins/String/prototype/padStart/exception-fill-string-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/built-ins/String/prototype/padStart/fill-string-empty.js	pass	
 test/built-ins/String/prototype/padStart/max-length-not-greater-than-string.js	pass	
 test/built-ins/String/prototype/padStart/normal-operation.js	pass	
@@ -661,6 +665,7 @@ test/built-ins/String/prototype/replaceAll/searchValue-empty-string.js	pass
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T14.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T4.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A1_T7.js	pass	
+test/built-ins/String/prototype/split/separator-undef.js	fail	nts: uncaught Test262Error: implicit separator, result.length
 test/built-ins/String/prototype/startsWith/coerced-values-of-position.js	pass	
 test/built-ins/String/prototype/startsWith/out-of-bounds-position.js	pass	
 test/built-ins/String/prototype/startsWith/return-abrupt-from-position-as-symbol.js	pass	
@@ -753,6 +758,7 @@ test/built-ins/Symbol/for/create-value.js	pass
 test/built-ins/Symbol/for/retrieve-value.js	pass	
 test/built-ins/Symbol/keyFor/arg-symbol-registry-hit.js	pass	
 test/built-ins/Symbol/prototype/description/description-symboldescriptivestring.js	pass	
+test/built-ins/TypedArray/prototype/join/separator-tostring-once-after-resized.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/decodeURI/S15.1.3.1_A1.10_T1.js	pass	
 test/built-ins/decodeURI/S15.1.3.1_A1.11_T1.js	pass	
 test/built-ins/decodeURI/S15.1.3.1_A1.11_T2.js	pass	

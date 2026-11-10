@@ -8,7 +8,7 @@
 # module	G user instructions (all threads/descendants from exec)	CPU s
 runtime/node/assert	168.588	15.251
 runtime/node/async_hooks	2.809	0.228
-runtime/node/buffer	8.786	0.732
+runtime/node/buffer	6.282	1.085
 runtime/node/child_process	249.780	23.210
 runtime/node/cluster	271.702	25.991
 runtime/node/console	175.411	17.385
@@ -20,19 +20,23 @@ runtime/node/events	161.539	15.310
 runtime/node/fs	337.316	32.944
 runtime/node/http	335.896	31.210
 runtime/node/net	247.366	22.743
-runtime/node/os	9.450	0.802
+runtime/node/os	6.546	1.148
 runtime/node/path	7.484	0.617
 runtime/node/perf_hooks	173.603	15.585
 runtime/node/process	334.725	32.751
 runtime/node/punycode	0.773	0.078
-runtime/node/querystring	13.315	1.119
+runtime/node/querystring	7.331	1.271
 runtime/node/readline	200.700	19.334
 runtime/node/stream	228.053	22.960
-runtime/node/string_decoder	9.128	0.763
+runtime/node/string_decoder	6.368	1.085
 runtime/node/timers	4.675	0.404
 runtime/node/tty	0.050	0.011
-runtime/node/url	33.666	2.828
+runtime/node/url	25.024	4.423
 runtime/node/util	172.179	15.703
 runtime/node/zlib	351.882	33.218
 runtime/web-platform	203.948	18.709
-tests/compile-time/escape-analysis-scaling	2.006	0.139
+tests/compile-time/escape-analysis-scaling	1.583	0.276
+tests/compile-time/evolved-type-scaling	1.217	0.217
+tests/compile-time/length-fold-scaling	7.602	1.279
+tests/compile-time/literal-text-scaling	12.683	2.934
+tests/compile-time/scalar-replacement-scaling	8.558	1.876

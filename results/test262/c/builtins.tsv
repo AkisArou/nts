@@ -312,6 +312,7 @@ test/built-ins/Math/sqrt/S15.8.2.17_A2.js	pass
 test/built-ins/Math/sqrt/S15.8.2.17_A3.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A4.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A5.js	pass	
+test/built-ins/Math/sqrt/results.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A1.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A2.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A3.js	pass	

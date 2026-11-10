@@ -21,6 +21,7 @@ test/staging/sm/Number/toString-radix-handling.js	pass
 test/staging/sm/Number/tonumber-string-hex.js	pass	
 test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass	
 test/staging/sm/String/15.5.4.7.js	pass	
+test/staging/sm/String/string-code-point-upper-lower-mapping.js	pass	
 test/staging/sm/String/string-space-trim.js	pass	
 test/staging/sm/String/two-length-nonlatin-indexOf.js	pass	
 test/staging/sm/TypedArray/constructor_bad-args.js	fail	nts: uncaught Test262Error: throws: nothing was thrown

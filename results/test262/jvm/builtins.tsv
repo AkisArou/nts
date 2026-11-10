@@ -312,6 +312,7 @@ test/built-ins/Math/sqrt/S15.8.2.17_A2.js	pass
 test/built-ins/Math/sqrt/S15.8.2.17_A3.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A4.js	pass	
 test/built-ins/Math/sqrt/S15.8.2.17_A5.js	pass	
+test/built-ins/Math/sqrt/results.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A1.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A2.js	pass	
 test/built-ins/Math/tan/S15.8.2.18_A3.js	pass	
@@ -602,6 +603,9 @@ test/built-ins/String/prototype/codePointAt/return-utf16-decode.js	pass
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js	pass	
 test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T5.js	pass	
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T7.js	fail	nts: uncaught Test262Error: #1: String("lego").concat(undefined) === "legoundefined". Actual: legonull
+test/built-ins/String/prototype/concat/S15.5.4.6_A1_T8.js	fail	nts: uncaught Test262Error: #1: String(42).concat(void 0) === "42undefined". Actual: 42null
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Fail_2.js	pass	
 test/built-ins/String/prototype/endsWith/String.prototype.endsWith_Success.js	pass	
