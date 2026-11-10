@@ -1886,28 +1886,39 @@ fn local_tuples(func: &Func) -> LocalTuples {
         );
     }
     // Every position stored where the tuple is built, before any read there.
+    // Track those prefixes together: an array with no remaining read must
+    // not scan the rest of the block on its own.
     for block in &func.blocks {
-        for (at, &op) in block.ops.iter().enumerate() {
-            if !tuples.contains_key(&op) || escaped.contains(&op) {
-                continue;
+        let mut pending: FxHashMap<ValueId, Vec<bool>> = FxHashMap::default();
+        for &op in &block.ops {
+            if let Some(slots) = tuples.get(&op)
+                && !escaped.contains(&op)
+            {
+                pending.insert(op, vec![false; slots.len()]);
             }
-            let length = tuples[&op].len();
-            let mut stored = vec![false; length];
-            for &later in &block.ops[at + 1..] {
-                match &func.values[later.0 as usize].kind {
-                    OpKind::ArraySet { array, index, .. } if *array == op => {
-                        if let Some(slot) = position(*index).and_then(|at| stored.get_mut(at)) {
-                            *slot = true;
-                        }
+            match &func.values[op.0 as usize].kind {
+                OpKind::ArraySet { array, index, .. } => {
+                    if let Some(stored) = pending.get_mut(array)
+                        && let Some(slot) = position(*index).and_then(|at| stored.get_mut(at))
+                    {
+                        *slot = true;
                     }
-                    OpKind::ArrayGet { array, .. } if *array == op => break,
-                    _ => {}
                 }
-            }
-            if stored.contains(&false) {
-                escaped.insert(op);
+                OpKind::ArrayGet { array, .. } => {
+                    if let Some(stored) = pending.remove(array)
+                        && stored.contains(&false)
+                    {
+                        escaped.insert(*array);
+                    }
+                }
+                _ => {}
             }
         }
+        escaped.extend(
+            pending
+                .into_iter()
+                .filter_map(|(array, stored)| stored.contains(&false).then_some(array)),
+        );
     }
     tuples.retain(|array, _| !escaped.contains(array));
     tuples
