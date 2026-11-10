@@ -76,21 +76,31 @@ child.on("close",status=>{
   }
 });
 
-// Every project's four listings queue on one pool, so a project's recorded
-// cost must be its own work: the longest of its listings, each timed while it
-// holds its token. Timed from when its scan began -- all scans begin at once --
-// it would be the moment the project finished, and the next run, drawing the
-// longest first, would start whatever finished last. One worker draws the
-// heavy project first, so the light one waits behind all of its work.
+// Each completed listing advances the fixture's clock by its assigned cost.
+// One worker draws the heavy project first, so charging the light project's
+// queue wait or summing its four listings changes its recorded cost.
 test("integrity records a project's own listing time, not when it finished", () => {
   const dir = newTestScratch("integrity-cost-order");
   try {
     const bin = join(dir, "bin");
     mkdirSync(bin);
+    const clock = join(dir, "clock");
+    writeFileSync(clock, "0");
+    const preload = join(dir, "clock.mjs");
+    writeFileSync(preload, `
+import {readFileSync} from "node:fs";
+Object.defineProperty(performance, "now", {
+  value: () => Number(readFileSync(process.env.CONTROL_CLOCK, "utf8")),
+});
+`);
     const compiler = join(bin, "nts");
     writeFileSync(compiler, `#!/usr/bin/env node
+import {readFileSync,renameSync,writeFileSync} from "node:fs";
 const argv=process.argv.slice(2);
-if(argv[0]==="hir"&&argv[1]==="--prepared"&&argv.at(-1).endsWith("cost-heavy")){let sum=0;for(let i=0;i<1e9;i++)sum+=i;if(sum<0)process.stderr.write(String(sum));}
+const clock=process.env.CONTROL_CLOCK;
+const cost=argv[0]==="hir"&&argv[1]==="--prepared"&&argv.at(-1).endsWith("cost-heavy") ? 64 : 8;
+writeFileSync(clock+".next",String(Number(readFileSync(clock,"utf8"))+cost));
+renameSync(clock+".next",clock);
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
 `);
     chmodSync(compiler, 0o755);
@@ -98,14 +108,14 @@ if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 fu
     mkdirSync(costs);
     const heavy = "runtime/node/cost-heavy", light = "runtime/node/cost-light";
     writeFileSync(join(costs, "integrity.json"), JSON.stringify({ [heavy]: 100, [light]: 1 }) + "\n");
-    const env = { ...process.env, NTS_BIN: compiler, LC_ALL: "C", NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: costs };
+    const env = { ...process.env, NTS_BIN: compiler, LC_ALL: "C", NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: costs, CONTROL_CLOCK: clock };
     delete env.NTS_INTEGRITY_KEEP;
     delete env.NTS_GATE_TOKENS;
-    const result = spawnTest(process.execPath, ["tooling/conformance/integrity.ts", heavy, light], { cwd: ROOT, env, encoding: "utf8" });
+    const result = spawnTest(process.execPath, ["--import", preload, "tooling/conformance/integrity.ts", heavy, light], { cwd: ROOT, env, encoding: "utf8" });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /2 of 2 project\(s\) measured/);
     const recorded = JSON.parse(readFileSync(join(costs, "integrity.json"), "utf8"));
-    assert.ok(recorded[light] < recorded[heavy], `the light project waited behind the heavy one, so only its own work may count: ${JSON.stringify(recorded)}`);
+    assert.deepEqual(recorded, { [heavy]: 0.064, [light]: 0.008 });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

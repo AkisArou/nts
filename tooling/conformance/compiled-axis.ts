@@ -7,7 +7,8 @@ import {ToolingInstrumentError,PressureError} from "../gate/step-result.ts";
 import {memoryEvents} from "../census/worker-memory.ts";
 import {reportCheckFailure,checkFailurePolicy} from "../differential/check-report.ts";
 import {AXIS_PREFIX,axisRow,axisFailure,nodeFiles,commandObservation} from "./compiled-axis-rows.mjs";
-import {nodeEnvironment} from "./node-environment.ts";
+import {nodeEnvironment,nodeToolingEnvironment} from "./node-environment.ts";
+import {childTemporary} from "../gate/canonical-environment.ts";
 
 const root=resolve(import.meta.dirname,"../.."),out=resolve(process.env.NTS_ADDON_OUT??join(root,"target/node"));
 mkdirSync(out,{recursive:true});
@@ -23,11 +24,13 @@ const incomplete:unknown[]=[];
 let total=0,hollow=0,unmeasured=0,artifactFailures=0,completedFailures=0;
 let partialReal=0,partialHollow=0,undetermined=0;
 
-async function command(module:string,phase:string,executable:string,args:string[],extra:NodeJS.ProcessEnv={}){
+async function command(module:string,phase:string,executable:string,args:string[],extra:NodeJS.ProcessEnv={},tooling=false){
   const group=/^0::(.+)$/m.exec(readFileSync("/proc/self/cgroup","utf8"))?.[1];
   if(!group||group==="/"||group.split("/").includes(".."))throw new ToolingInstrumentError("tooling-setup","command has no observable owned cgroup");
   const before=memoryEvents(group),aggregateBefore=memoryEvents(dirname(group),true).oom;
-  const result=await activeCommand(executable,args,{cwd:root,env:{...env,...extra},maxBuffer:64*1024*1024,
+  const child=tooling?childTemporary({...process.env,...reservation.env},out,`${module}-${phase}-`):undefined;
+  const environment=child?nodeToolingEnvironment(child.env,{NTS_ADDON_OUT:out,...reservation.env,...extra}):{...env,...extra};
+  const result=await activeCommand(executable,args,{cwd:root,env:environment,maxBuffer:64*1024*1024,
     onActivity:event=>process.stderr.write(`node:${module} ${phase} activity: ${event.cpu} CPU ticks\n`)});
   writeFileSync(join(out,`${module}.${phase}.log`),result.out);
   const after=memoryEvents(group),aggregateAfter=memoryEvents(dirname(group),true).oom;
@@ -70,7 +73,7 @@ for(const module of modules){
     for(const phase of ["intact","empty"]){
       const result=await command(module,phase,process.execPath,[join(root,"tooling/conformance/run.mjs"),"--module",module,"--addon",addon,"--json",...(phase==="empty"?["--empty-exports"]:[])],{
         NTS_CONFORMANCE_TIMEOUT_MS:process.env.NTS_CONFORMANCE_TIMEOUT_MS??"20000",NTS_CONFORMANCE_ALLOW_EMPTY_SURFACE:"1",
-      });
+      },true);
       // A missing or truncated arm is not an arm that found no passes.
       if(result.signal)throw new ToolingInstrumentError("tooling-setup",`${module} ${phase}: ${result.signal}`);
       const raw=JSON.parse(result.stdout),report=nodeFiles(raw);

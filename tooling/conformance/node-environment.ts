@@ -1,8 +1,8 @@
 // Ambient behavior belongs to the gate's environment contract. Only the
 // harness's explicit inputs and child protocol cross this boundary as well.
-import {hostEnvironment,FIXED_AMBIENT} from "../gate/canonical-environment.ts";
+import {hostEnvironment,FIXED_AMBIENT,ENVIRONMENT_CONTEXT,gateEnvironment} from "../gate/canonical-environment.ts";
 import {existsSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {join,resolve} from "node:path";
+import {dirname,join,resolve} from "node:path";
 
 const INPUTS = [
   "NTS_BIN", "NTS_COMPILER", "NTS_ADDON_OUT", "NTS_CONFORMANCE_OUT",
@@ -60,9 +60,8 @@ export function sweepLeftovers(home:string):number {
  * The environment node's own tests and the harness's children run in: host
  * capabilities, the fixed ambient values, the harness's inputs and `owned`.
  * It carries no canonical context (NTS_GATE_ENV_CONTEXT), so the TMPDIR it
- * gives never meets one: a tool below it that runs in a context makes its own,
- * as run.mjs does with gateEnvironment. A tool that gives a child its own
- * temporary inside a context uses canonical-environment.ts's childTemporary.
+ * gives never meets one. Tooling children use nodeToolingEnvironment instead,
+ * after childTemporary has registered their own temporary in the context.
  */
 export function nodeEnvironment(launcher:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv={}):NodeJS.ProcessEnv {
   const host=hostEnvironment(launcher);
@@ -81,4 +80,13 @@ export function nodeEnvironment(launcher:NodeJS.ProcessEnv,owned:NodeJS.ProcessE
   mkdirSync(env.TMPDIR,{recursive:true});
   mkdirSync(env.NODE_TEST_DIR,{recursive:true});
   return env;
+}
+
+/** Tooling keeps the canonical handoff; node's actual tests keep the boundary above. */
+export function nodeToolingEnvironment(launcher:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv={}):NodeJS.ProcessEnv {
+  const paths=nodeEnvironment(launcher,owned);
+  if(!launcher[ENVIRONMENT_CONTEXT])return paths;
+  return gateEnvironment(launcher,{run:dirname(launcher.TMPDIR!),owned:{
+    ...nodeInputs(launcher),...owned,NODE_TEST_DIR:paths.NODE_TEST_DIR,NTS_CHECKERS:"1",
+  }}).env;
 }

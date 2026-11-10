@@ -67,7 +67,8 @@
 // exit 124; a definite failure before a stall still fails. Exit 2: no start.
 
 import { spawn, spawnSync } from "node:child_process";
-import { nodeEnvironment } from "./node-environment.ts";
+import { nodeEnvironment,nodeToolingEnvironment } from "./node-environment.ts";
+import { childTemporary } from "../gate/canonical-environment.ts";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -437,10 +438,9 @@ if (axisModules.length === 0) {
  */
 function axis(arm, modules) {
   const addons = join(arm.dir, "addons");
-  const tmp = join(arm.dir, "tmp");
   mkdirSync(addons, { recursive: true });
-  mkdirSync(tmp, { recursive: true });
-  const axisEnv = nodeEnvironment(process.env, { NTS_BIN: arm.nts, NTS_ADDON_OUT: addons, TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) });
+  const child=childTemporary(process.env,join(arm.dir,"tmp"),"axis-");
+  const axisEnv = nodeToolingEnvironment(child.env, { NTS_BIN: arm.nts, NTS_ADDON_OUT: addons, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) });
   const r = spawnSync("bash", [join(HERE, "compiled-axis.sh"), ...modules], {
     cwd: ROOT,
     encoding: "utf8",

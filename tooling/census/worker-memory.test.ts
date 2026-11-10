@@ -197,14 +197,16 @@ mock.module(${JSON.stringify(activeModule)},{namedExports:{...real,activeCommand
  for(const key of ['idleMs','pollMs','cpuBudgetSeconds','onActivity'])assert.equal(options[key],expected[key],key+' was dropped');
  return real.activeCommand(command,args,options);
 }}});
-const {compileActive,memoryRun}=await import(${JSON.stringify(memoryModule)});
+const {compileActive,inResidentWorker,serialRun}=await import(${JSON.stringify(memoryModule)});
+const tools={memoryCapKb:256*1024};
+// Enter the bounded scope before testing a case's short activity limits.
+serialRun(tools);
+assert.ok(inResidentWorker());
 const env={...process.env,NTS_GATE_STEP:'resident-bridge',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:${JSON.stringify(join(directory, "instrument.json"))}};
-try{
- expected={idleMs:1000,pollMs:50,cpuBudgetSeconds:0.1,onActivity(){}};
- await assert.rejects(compileActive({memoryCapKb:64*1024},'python3',['-c','while True: pass'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='runaway');
- expected={idleMs:500,pollMs:50,cpuBudgetSeconds:10,onActivity(){}};
- await assert.rejects(compileActive({memoryCapKb:64*1024},'python3',['-c','import time;time.sleep(3600)'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='hung');
-}finally{memoryRun().close();}
+expected={idleMs:real.COMMAND_IDLE_GUARD_MS,pollMs:50,cpuBudgetSeconds:0.1,onActivity(){}};
+await assert.rejects(compileActive(tools,'python3',['-c','while True: pass'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='runaway');
+expected={idleMs:500,pollMs:50,cpuBudgetSeconds:10,onActivity(){}};
+await assert.rejects(compileActive(tools,'python3',['-c','import time;time.sleep(3600)'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='hung');
 console.log('resident bounds retained');`;
   const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "-e", code], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stdout + result.stderr); assert.match(result.stdout, /resident bounds retained/);

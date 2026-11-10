@@ -45,12 +45,13 @@
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { reportCheckFailure, checkFailurePolicy } from "../differential/check-report.ts";
-import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis, AXIS_PREFIX, axisFailure } from "./compiled-axis-rows.mjs";
-import { nodeEnvironment } from "./node-environment.ts";
+import { nodeToolingEnvironment } from "./node-environment.ts";
+import { childTemporary } from "../gate/canonical-environment.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -102,7 +103,7 @@ async function runAxis() {
   }
   const base = join(homedir(), ".cache/nts-compiled-axis");
   mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "run-"));
+  const {dir:scratch,env:childEnv} = childTemporary(process.env,base,"run-");
   runScratch = scratch;
   console.log(`  per-file axis artifacts: ${scratch}`);
   // Pinned: a peer relinking target/release/nts mid-run rebuilds half the
@@ -111,9 +112,9 @@ async function runAxis() {
   const nts = join(scratch, "nts");
   copyFileSync(source, nts);
   chmodSync(nts, 0o755);
-  for (const d of ["addons", "tmp"]) mkdirSync(join(scratch, d));
+  mkdirSync(join(scratch,"addons"));
   console.log(`  running compiled-axis.sh against ${source} (pinned); about 16 minutes`);
-  const env = nodeEnvironment(process.env, { NTS_BIN: nts, NTS_ADDON_OUT: join(scratch, "addons"), TMPDIR: join(scratch, "tmp") });
+  const env = nodeToolingEnvironment(childEnv, { NTS_BIN: nts, NTS_ADDON_OUT: join(scratch, "addons") });
   writeFileSync(join(scratch, "environment.json"), JSON.stringify(env, null, 2) + "\n");
   const run = await activeCommand("bash", [join(HERE, "compiled-axis.sh")], {
     cwd: ROOT,
