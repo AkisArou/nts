@@ -82,7 +82,11 @@ pub(super) fn resolve(
     }
     let budget = recorded_budget(entry, backend.name(), &key)?;
     if let Some(budget) = &budget {
-        eprintln!("ORACLE BUDGET (recorded, retrying): {entry}: {budget}");
+        if budget["outcome"] == "margin" {
+            eprintln!("ORACLE MARGIN (recorded, no count): {entry}: {budget}");
+        } else {
+            eprintln!("ORACLE BUDGET (recorded, retrying): {entry}: {budget}");
+        }
     }
     Ok(Resolution::Recorded(Coverage { count, key, budget }))
 }
@@ -116,9 +120,16 @@ pub(super) fn recorded_budget(entry: &Utf8Path, backend: &str, key: &str) -> Res
         .map(|row| row["budget"].clone()))
 }
 
+/// Whether a run that completed improves on its recorded budget: one stopped
+/// at a bound that now completes does. A margin's runs completed as recorded,
+/// so completing again is no improvement on it.
+fn improves(budget: Option<&Value>) -> bool {
+    budget.is_some_and(|budget| budget["outcome"] != "margin")
+}
+
 /// A hint schedules fresh recording. It never supplies a count or a verdict.
 pub(super) fn improvement(entry: &Utf8Path, coverage: &Coverage) -> Result<()> {
-    if coverage.budget.is_none() {
+    if !improves(coverage.budget.as_ref()) {
         return Ok(());
     }
     let Some((root, source)) = root_and_source(entry) else {
@@ -313,6 +324,25 @@ mod tests {
             "keys":{"c":"key"},"complete":true,"count":2}]});
         validate(&table, "a", "c", "key", 2, "digest").unwrap();
         assert!(validate(&table, "a", "llvm", "key", 2, "digest").is_err());
+    }
+
+    #[test]
+    fn a_completed_run_improves_on_a_recorded_stop_and_never_on_a_margin() {
+        assert!(!improves(None));
+        assert!(improves(Some(
+            &json!({"version":1,"phase":"execute","outcome":"timeout",
+            "bound":60,"signal":"SIGKILL","reason":"oracle timed out"})
+        )));
+        let margin = json!({"version":1,"phase":"execute","outcome":"margin","bound":60,
+            "signal":null,"cpu_s":[32.2,32.2],
+            "reason":"node used 32.2 and 32.2 s of its 60 s CPU bound; a count needs both runs within half of it (30 s)"});
+        assert!(
+            !improves(Some(&margin)),
+            "a margin's runs complete as recorded"
+        );
+        let table = json!({"version":1,"rows":[{"kind":"budget","source":"a","keys":{"c":"key"},
+            "budget":margin}]});
+        validate(&table, "a", "c", "key", 120, "digest").unwrap();
     }
 
     #[test]

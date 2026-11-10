@@ -13,11 +13,11 @@ import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_ME
 import {reserveJob} from "../gate/memory-ledger.ts";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
-import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleBudget,type OracleLimits} from "./oracle-execution.ts";
+import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleLimits} from "./oracle-execution.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
-  type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
+  type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
   tsconfig?: string;
   source_exports?: string[];
@@ -146,7 +146,19 @@ export function oracleBudgetRevision(root:string,source:string){
     producer:digest(JSON.stringify(oracleIdentity(oracleToolchainLocation()))+readFileSync(new URL('./oracle-execution.ts',import.meta.url),'utf8')+readFileSync(new URL('./oracle-batch.ts',import.meta.url),'utf8')),
     policy:digest(readFileSync(new URL('./oracle-execution-policy.ts',import.meta.url),'utf8')+JSON.stringify({compileCpu:COMPILE_CPU_BOUND_SECONDS,compileResident:ORACLE_COMPILE_MEMORY_BYTES}))};
 }
-export function addBudgetRecord(table:Table,plan:Plan,budget:OracleBudget):Table{
+/**
+ * The budget of runs that delivered every case within `bound` CPU seconds, but
+ * at least one past the half of it a count needs: what each used, and no
+ * count. A slower run could stop at the bound and lose cases.
+ */
+export function marginBudget(cpu:readonly number[],bound:number):MarginBudget{
+  if(cpu.length!==2||cpu.some(seconds=>!Number.isFinite(seconds)||seconds<0||seconds>bound)||!cpu.some(seconds=>seconds*2>bound))
+    throw new Error('not a margin measurement: two runs within the CPU bound, one past its half');
+  const used=cpu.map(seconds=>Math.round(seconds*10)/10);
+  return {phase:'execute',outcome:'margin',bound,signal:null,cpu_s:used,
+    reason:`node used ${used[0]} and ${used[1]} s of its ${bound} s CPU bound; a count needs both runs within half of it (${bound/2} s)`};
+}
+export function addBudgetRecord(table:Table,plan:Plan,budget:RecordedBudget):Table{
   validateSourcePlan(plan);
   if(table.rows.some(row=>row.source===plan.source&&row.kind==='measured'&&row.keys[plan.backend]))throw new CaseBudgetError('REGRESSED oracle population: '+plan.source+' measured -> '+budget.outcome);
   let row:Row={...identity(plan),kind:'budget',budget:{version:1,...budget},source_digest:plan.source_digest,revision:oracleBudgetRevision(plan.repository_root??process.cwd(),plan.source),
@@ -338,7 +350,7 @@ export async function recordAll(evidence: string, output: string, measure = meas
   const measured = new Map<string, { cpu: number[]; count: number }>();
   const failed = new Map<string, Error>();
   const exceptions = new Set<string>();
-  const findings: { source: string; backend: string; driver_sha256: string; outcome: 'timeout'|'memory-cap'|'not-measured'; error: string; detail: string }[] = [];
+  const findings: { source: string; backend: string; driver_sha256: string; outcome: 'timeout'|'memory-cap'|'margin'|'not-measured'; error: string; detail: string }[] = [];
   let preparations:Record<string,OraclePreparation>|undefined;
   if(measure===measureDriver){
     const unique=new Map(manifest.plans.filter(plan=>plan.case_count>0).map(plan=>[digest(plan.driver),plan]));
@@ -349,7 +361,7 @@ export async function recordAll(evidence: string, output: string, measure = meas
     const identity = digest(plan.driver);
     const exception = table.rows.find(row => row.kind === "no-oracle" && row.source === plan.source && row.keys[plan.backend] === plan.case_key && row.source_digest === plan.source_digest && plan.case_count === 0);
     if (exception) { exceptions.add(identity); console.log("no-oracle", plan.source, exception.reason); continue; }
-    let measurement = measured.get(identity);
+    let measurement = measured.get(identity), margin: MarginBudget | undefined;
     try {
       if (failed.has(identity)) throw failed.get(identity);
       // A population of no cases has no oracle to prepare or run, so no count
@@ -359,9 +371,14 @@ export async function recordAll(evidence: string, output: string, measure = meas
         measurement = await measure(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
         measured.set(identity, measurement);
       }
-
-      table = addRecord(table, plan, measurement.cpu, measurement.count);
-      console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
+      // Every case delivered within the bound, but a run past half of it: a
+      // margin row, which names what each run used and holds no count.
+      const bound = oracleExecutionLimits(plan.source).cpuSeconds;
+      if (measurement.count === plan.case_count && measurement.cpu.some(seconds => seconds * 2 > bound)) margin = marginBudget(measurement.cpu, bound);
+      else {
+        table = addRecord(table, plan, measurement.cpu, measurement.count);
+        console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
+      }
     } catch (error) {
       const run = error instanceof OracleRunFailure ? error : undefined;
       const failure = run ? run.failure : error instanceof Error ? error : new Error(String(error));
@@ -375,6 +392,13 @@ export async function recordAll(evidence: string, output: string, measure = meas
       if(budget)table=addBudgetRecord(table,plan,budget);
       findings.push({ source: plan.source, backend: plan.backend, driver_sha256: identity, outcome, error: message, detail });
       console.log(outcome==='not-measured'?'NOT MEASURED':outcome.toUpperCase(),plan.backend,plan.source,message,`(full error: ${detail})`);
+    }
+    // Outside the measurement's catch, as a budget is: a population measured
+    // before is refused as a regression, never read as not measured.
+    if (margin) {
+      table = addBudgetRecord(table, plan, margin);
+      findings.push({ source: plan.source, backend: plan.backend, driver_sha256: identity, outcome: "margin", error: margin.reason, detail: join(evidence, "measurement-summary.json") });
+      console.log("MARGIN", plan.backend, plan.source, margin.reason);
     }
   }
 

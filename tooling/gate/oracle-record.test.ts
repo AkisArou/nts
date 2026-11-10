@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
-import { readRecords } from "../differential/oracle-records.ts";
+import { parseShard, readRecords } from "../differential/oracle-records.ts";
+import { oracleExecutionLimits } from "../differential/oracle-execution.ts";
 import { fileURLToPath } from "node:url";
 import {testScratch} from './test-scratch.ts';
 import {OracleCompileBudgetError} from '../differential/oracle-batch.ts';
@@ -326,4 +327,42 @@ process.exit(1);
   assert.notEqual(result.status,0,result.stdout+result.stderr);
   assert.match(result.stderr,/building the fixture planner failed/);
   assert.equal(readFileSync(log,"utf8"),"held\n");
+});
+
+test("runs past half their CPU bound are a margin row naming what each used, with no count; just under half is measured",async t=>{
+  const root=testScratch(t,'oracle-record-margin'),saved=process.env.NTS_BENCH_CPUS;
+  t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  // A test program's oracle has 15 CPU seconds, so a count needs each run within 7.5.
+  const near='tests/programs/margin/near.ts',under='tests/programs/margin/under.ts';
+  assert.equal(oracleExecutionLimits(near).cpuSeconds,15);
+  mkdirSync(join(root,'tests/programs/margin'),{recursive:true});
+  for(const source of [near,under])writeFileSync(join(root,source),'export const x=1;');
+  writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[
+    {...plan,source:near,source_digest:'a'.repeat(32),repository_root:root,driver:'near driver'},
+    {...plan,source:under,source_digest:'b'.repeat(32),repository_root:root,driver:'under driver'},
+  ]}));
+  const output=join(root,'counts.json');writeFileSync(output,'{"version":1,"rows":[]}\n');
+  await recordAll(root,output,async p=>({cpu:p.source===near?[7.6,7.6]:[7.4,7.4],count:2}));
+  const rows=JSON.parse(readFileSync(output,'utf8')).rows,row=(source:string)=>rows.find((value:{source:string})=>value.source===source);
+  assert.deepEqual([row(near).kind,row(near).count,row(near).complete],['budget',undefined,undefined],'a margin never claims a count');
+  assert.deepEqual(row(near).budget,{version:1,phase:'execute',outcome:'margin',bound:15,signal:null,cpu_s:[7.6,7.6],
+    reason:'node used 7.6 and 7.6 s of its 15 s CPU bound; a count needs both runs within half of it (7.5 s)'});
+  assert.deepEqual([row(under).kind,row(under).count],['measured',2],'just under half, it is measured');
+  const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
+  assert.deepEqual(summary.findings.map((finding:{source:string;outcome:string})=>[finding.source,finding.outcome]),[[near,'margin']],'a finding, never not measured');
+  assert.ok(lines.some(line=>line.startsWith(`MARGIN c ${near} node used 7.6 and 7.6 s of its 15 s CPU bound`)),lines.join('\n'));
+  // It reads back as written; a margin with no run past half, with no CPU, or a stop that names CPU, does not.
+  // With the recorded identity's digests in place of this file's short test values.
+  const shard=(budget:object)=>({version:2,fixture:'tests/programs/margin',rows:[{...row(near),keys:{c:'c'.repeat(32)},signature:'d'.repeat(64),cases_sha256:'e'.repeat(64),driver_sha256:'f'.repeat(64),budget}]});
+  assert.deepEqual(parseShard(shard(row(near).budget),'tests/programs/margin').rows[0]!.budget,row(near).budget);
+  for(const [budget,refusal] of [
+    [{...row(near).budget,cpu_s:[7.4,7.4]},/invalid oracle margin/],
+    [{...row(near).budget,cpu_s:undefined},/invalid oracle margin/],
+    [{...row(near).budget,cpu_s:[16,1]},/invalid oracle margin/],
+    [{...row(near).budget,outcome:'timeout',signal:'SIGKILL'},/only a margin names the CPU/],
+  ] as const)assert.throws(()=>parseShard(shard(JSON.parse(JSON.stringify(budget))),'tests/programs/margin'),refusal);
+  // A population measured before, past half now, is refused as a regression.
+  await assert.rejects(recordAll(root,output,async p=>({cpu:[7.6,7.6],count:2})),/REGRESSED oracle population: tests\/programs\/margin\/under\.ts measured -> margin/);
 });

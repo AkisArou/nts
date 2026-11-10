@@ -12,10 +12,18 @@ export const GENERATOR = `${RECORDS}/_generator.json`;
 export type NumericDomain = { min?: number; max?: number; integer?: boolean; allowNaN?: boolean; reason: string };
 export type RecordedDomain = { identity: string; declaration: { version: number; functions: Record<string, Record<string, NumericDomain>> } };
 export type Populations = Record<string, { count: number; cases_sha256: string }>;
+/**
+ * Runs that delivered every case within their CPU bound, but past the half of
+ * it a count needs: recorded with the CPU each used, and no count, since a
+ * slower run could lose cases (record-oracles.ts's recordAll).
+ */
+export type MarginBudget = { phase: "execute"; outcome: "margin"; bound: number; signal: null; cpu_s: number[]; reason: string };
+/** What a budget row records: an oracle stopped at a bound, or runs too close to one to count. */
+export type RecordedBudget = OracleBudget | MarginBudget;
 export type OracleRow = { kind: "measured" | "no-oracle" | "budget"; source: string; signature: string;
   input_domain?: RecordedDomain; populations?: Populations;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
-  budget?: OracleBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
+  budget?: RecordedBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
   count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
 export type OracleTable = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: OracleRow[] };
 export type Generator = { version: 1; generator_version: number; generator_digest: string; seed: null };
@@ -126,9 +134,17 @@ export function parseRow(value: unknown): OracleRow {
   } else if(raw.kind==='budget'){
     if(['count','complete','node_cpu_s','populations','reason'].some(key=>key in raw))fail('budget row cannot claim a count or complete execution');
     row.source_digest=hash(raw.source_digest,32,'source_digest');
-    const budget=object(raw.budget,'oracle budget');fields(budget,['version','phase','outcome','bound','signal','reason'],'oracle budget');
-    if(budget.version!==1||!['prepare','execute'].includes(String(budget.phase))||!['timeout','memory-cap'].includes(String(budget.outcome))||typeof budget.bound!=='number'||!Number.isFinite(budget.bound)||budget.bound<=0||!(budget.signal===null||typeof budget.signal==='string'&&/^SIG[A-Z0-9]+$/.test(budget.signal)))fail('invalid versioned oracle budget');
-    row.budget={version:1,phase:budget.phase as OracleBudget['phase'],outcome:budget.outcome as OracleBudget['outcome'],bound:budget.bound,signal:budget.signal as string|null,reason:text(budget.reason,'budget reason')};
+    const budget=object(raw.budget,'oracle budget');fields(budget,['version','phase','outcome','bound','signal','reason','cpu_s'],'oracle budget');
+    if(budget.version!==1||!['prepare','execute'].includes(String(budget.phase))||!['timeout','memory-cap','margin'].includes(String(budget.outcome))||typeof budget.bound!=='number'||!Number.isFinite(budget.bound)||budget.bound<=0||!(budget.signal===null||typeof budget.signal==='string'&&/^SIG[A-Z0-9]+$/.test(budget.signal)))fail('invalid versioned oracle budget');
+    if(budget.outcome==='margin'){
+      // Both runs finished within the bound, and at least one past its half.
+      const cpu=budget.cpu_s,bound=budget.bound;
+      if(budget.phase!=='execute'||budget.signal!==null||!Array.isArray(cpu)||cpu.length!==2||!cpu.every((seconds):seconds is number=>typeof seconds==='number'&&Number.isFinite(seconds)&&seconds>=0&&seconds<=bound)||!cpu.some(seconds=>seconds*2>bound))fail('invalid oracle margin: two runs within the bound, one past its half');
+      row.budget={version:1,phase:'execute',outcome:'margin',bound,signal:null,cpu_s:[...cpu],reason:text(budget.reason,'budget reason')};
+    }else{
+      if('cpu_s' in budget)fail('only a margin names the CPU its runs used');
+      row.budget={version:1,phase:budget.phase as OracleBudget['phase'],outcome:budget.outcome as OracleBudget['outcome'],bound:budget.bound,signal:budget.signal as string|null,reason:text(budget.reason,'budget reason')};
+    }
     const revision=object(raw.revision,'budget revision');fields(revision,['entry','node','producer','policy'],'budget revision');
     row.revision={entry:hash(revision.entry,64,'entry revision'),node:hash(revision.node,64,'Node revision'),producer:hash(revision.producer,64,'producer revision'),policy:hash(revision.policy,64,'policy revision')};
   } else {
@@ -319,7 +335,8 @@ export function requestOracleImprovement(root:string,entry:string):void{
   const source=entry.startsWith(root+'/')?entry.slice(root.length+1):null;if(!source)return;
   const fixture=fixtureOf(source),file=join(root,recordPath(fixture));if(!existsSync(file))return;
   const bytes=readFileSync(file),record=parseShard(JSON.parse(bytes.toString()),fixture);
-  if(!record.rows.some(row=>row.source===source&&row.kind==='budget'))return;
+  // A margin's runs complete as recorded: finishing is no improvement on it.
+  if(!record.rows.some(row=>row.source===source&&row.kind==='budget'&&row.budget?.outcome!=='margin'))return;
   const hint=oracleImprovementPath(fixture);mkdirSync(dirname(hint),{recursive:true});
   const temporary=hint+'.'+process.pid;writeFileSync(temporary,JSON.stringify({fixture,recordSha256:createHash('sha256').update(bytes).digest('hex')})+'\n');renameSync(temporary,hint);
   console.error('ORACLE IMPROVED: '+source+': budget -> measured; fresh recording requested');
