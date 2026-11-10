@@ -1,0 +1,37 @@
+name: Foundation or theme group
+description: A design with independently landable task sub-issues; never an agent assignment
+labels: ["kind:group"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prefer `node tooling/tasks/new.ts --role group`, which checks the parent role and creates the
+        sub-issue link. Add exactly one area label. A group never carries the task label.
+  - type: textarea
+    id: goal
+    attributes: { label: Goal }
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes: { label: Why }
+    validations: { required: true }
+  - type: input
+    id: design
+    attributes: { label: Design, description: "The governing repository design page." }
+    validations: { required: true }
+  - type: textarea
+    id: parts
+    attributes: { label: Parts, description: "Wanted slices; make a task only when its scope is selected." }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes: { label: Done when }
+    validations: { required: true }
+  - type: textarea
+    id: tests
+    attributes: { label: Tests and rows, description: "Canonical page-owned rows or explicit executable contract tests." }
+    validations: { required: true }
+  - type: input
+    id: parent
+    attributes: { label: Parent, description: "The kind:parent stream issue, as #N." }
+    validations: { required: true }

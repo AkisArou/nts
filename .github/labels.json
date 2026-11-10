@@ -27,7 +27,8 @@
     { "name": "kind:conformance", "color": "c5def5", "description": "A test262 or TypeScript conformance family" },
     { "name": "kind:backlog", "color": "c5def5", "description": "Noted, not scheduled" },
     { "name": "kind:question", "color": "c5def5", "description": "A question to answer before work is written" },
-    { "name": "kind:parent", "color": "000000", "description": "A stream: its tasks are its sub-issues" },
+    { "name": "kind:group", "color": "5319e7", "description": "A foundation or coherent theme holding independently landable task issues" },
+    { "name": "kind:parent", "color": "000000", "description": "A stream: its foundation and theme groups are its sub-issues" },
 
     { "name": "state:held", "color": "e4e669", "description": "Waits on something the issue names" },
     { "name": "state:parked", "color": "e4e669", "description": "Waits on a decision, a licence or the user's word" },

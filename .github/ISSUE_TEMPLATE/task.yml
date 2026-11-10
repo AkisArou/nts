@@ -17,7 +17,7 @@ body:
     validations: { required: true }
   - type: textarea
     id: paths
-    attributes: { label: Paths, description: "What it may touch, or \"to scope when taken\"." }
+    attributes: { label: Paths, description: "The concrete paths this change may touch." }
     validations: { required: true }
   - type: textarea
     id: done
@@ -29,5 +29,5 @@ body:
     validations: { required: true }
   - type: input
     id: parent
-    attributes: { label: Parent, description: "The stream's parent issue, as #N." }
+    attributes: { label: Parent, description: "The kind:group parent issue, as #N." }
     validations: { required: true }
