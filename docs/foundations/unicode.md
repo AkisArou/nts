@@ -210,3 +210,17 @@ entirely.
 
 The study behind this page, with its measurements, computed table sizes and 60
 sources, is [in the records](../records/notebooks/studies/unicode.md).
+
+## Rows
+
+### unicode
+
+- `case-convert`
+- `case-convert-cjk`
+- `case-convert-greek`
+- `case-convert-late-change`
+- `case-convert-latin1`
+- `case-convert-unchanged`
+- `case-convert-unchanged-greek`
+- `node-utf8`
+- `utf8-encode`

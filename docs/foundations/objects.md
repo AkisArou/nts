@@ -332,3 +332,61 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
   class, direct wherever the class is proved ([Typed arrays](#typed-arrays);
   11-01,
   [log](../records/notebooks/decisions-log.md#typed-array-subclasses-11-01)).
+
+## Rows
+
+### maps
+
+- `jetstream-hash-map`
+- `map-and-set`
+- `map-entries-top-k`
+- `map-literal-keys`
+- `map-word-counts`
+- `str-map-keys`
+- `symbol-keyed-map`
+- `symbol-keys`
+
+### arrays
+
+- `array-copying-methods`
+- `array-from`
+- `array-methods`
+- `array-mutations`
+- `array-predicates`
+- `arrays`
+- `bytes`
+- `elementwise`
+- `growth-fixed`
+- `growth-grown`
+- `pipeline`
+- `sort-objects`
+
+### objects
+
+- `dispatch`
+- `face-fields`
+- `generic-classes`
+- `instanceof`
+- `objects`
+
+### functions
+
+- `closure-merge`
+- `closures`
+- `module-closures`
+- `uniform-callback`
+- `uniform-callback-arguments`
+- `uniform-callback-default`
+
+### dynamic-values
+
+- `absences`
+- `erasure-stored-typed`
+- `erasure-stored-unknown`
+- `erasure-typed`
+- `erasure-unknown`
+- `in-narrowing`
+- `optional-chain`
+- `printer-erased`
+- `upcast`
+- `user-iterable`

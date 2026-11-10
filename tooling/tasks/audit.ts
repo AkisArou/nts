@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseRowLists, rowLists, type RowList } from "../bench/groups.ts";
 import { gh, type Gh } from "./new.ts";
 import { bodyProblems, labelProblems, parentProblems, parseCard, readSpec, roleOf, type LabelSpec } from "./spec.ts";
 import { issueOfBranch } from "./branch.ts";
@@ -13,7 +14,7 @@ export type Issue = { number: number; title: string; body: string; labels: strin
   parent: number | null; children: number[]; updatedAt: string; closedAt?: string | null };
 export type Snapshot = { version: 1; complete: boolean; capturedAt: string; issues: Issue[]; branches: string[]; refs?: string[]; reason?: string };
 export type Finding = { code: string; severity: "error" | "warning" | "info"; issue?: number; message: string; protected?: boolean };
-export type RowList = { page: string; name: string; rows: string[] };
+export { parseRowLists, rowLists, type RowList };
 export type Options = { spec?: LabelSpec; streams: readonly number[]; cases?: readonly string[]; rows?: readonly RowList[];
   exists?: (path: string) => boolean; protected?: readonly number[]; now?: string; readyDays?: number };
 export type Report = { version: 1; complete: boolean; capturedAt: string; open: number; findings: Finding[]; errors: number; warnings: number };
@@ -159,29 +160,7 @@ export function capture(run: Gh = gh, now = new Date().toISOString(), refs: read
   } catch (e) { return { version:1, complete:false, capturedAt:now, issues, branches, refs:[...refs], reason:e instanceof Error ? e.message : String(e) }; }
 }
 
-/** Canonical lists are Markdown Rows sections on their owning pages (#643).
- * Backticked row IDs in a list are declarations; prose examples elsewhere are not.
- */
-export function parseRowLists(page: string, markdown: string): RowList[] {
-  const out:RowList[]=[];let inRows=false,name=page,fence:string|null=null;
-  for(const line of markdown.split("\n")) {
-    const marker=/^\s*(`{3,}|~{3,})/.exec(line)?.[1];
-    if(marker){if(fence===null)fence=marker;else if(marker[0]===fence[0]&&marker.length>=fence.length)fence=null;continue;}
-    if(fence!==null)continue;
-    if(/^#{1,2} /.test(line)){inRows=/^## Rows\b/.test(line);name=line.replace(/^#+ /,"");}
-    else if(inRows&&/^### /.test(line))name=line.slice(4);
-    else if(inRows&&/^\s*- /.test(line)){
-      const rows=[...line.matchAll(/`([a-z0-9]+(?:-[a-z0-9]+)*)`/g)].map(m=>m[1]!);
-      if(rows.length)out.push({page,name,rows});
-    }
-  }
-  return out;
-}
-export function rowLists(root: string): RowList[] {
-  const dir=join(root,"docs/foundations"),pages=readdirSync(dir).filter(p=>p.endsWith(".md")).map(p=>`docs/foundations/${p}`);
-  if(existsSync(join(root,"docs/primitives.md")))pages.push("docs/primitives.md");
-  return pages.flatMap(page=>parseRowLists(page,readFileSync(join(root,page),"utf8")));
-}
+{}
 /** Local task branches and cited pins share the repository's object store. */
 export function localRefs(root: string): string[] {
   const result=spawnSync("git",["-C",root,"for-each-ref","--format=%(refname)%09%(refname:short)","refs/heads","refs/cited","refs/archive"],{encoding:"utf8"});

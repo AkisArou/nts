@@ -112,3 +112,23 @@ the code.
   the header, the escape primitive, Wasm strings, then parse regions. Strings
   are never stored as UTF-8, and there are no run-time ropes unless a row
   proves them ([log](../records/notebooks/decisions-log.md#strings-10-22)).
+
+## Rows
+
+### strings
+
+- `jetstream-string-unpack-code-sp`
+- `str-append-length`
+- `str-append-loop`
+- `str-compare`
+- `str-concat-pair`
+- `str-equal`
+- `str-index-of`
+- `str-index-read`
+- `str-join`
+- `str-search-defaults`
+- `str-slice-keep`
+- `str-split`
+- `str-template`
+- `strings`
+- `substrings`

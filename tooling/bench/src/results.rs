@@ -49,6 +49,12 @@ pub(super) fn command(root: &Utf8Path, mode: &str, args: &[&str]) -> Result<Stri
         .to_owned())
 }
 
+/// A foundation group's rows, read from the canonical declaration by the
+/// shared authority before anything is set up or measured.
+pub(super) fn group_cases(root: &Utf8Path, name: &str) -> Result<Vec<String>> {
+    serde_json::from_str(&command(root, "group", &[name])?).context("invalid benchmark group rows")
+}
+
 pub(super) fn begin(root: &Utf8Path) -> Result<serde_json::Value> {
     ensure!(
         env!("NTS_BENCH_SOURCE_DIRTY") == "false",

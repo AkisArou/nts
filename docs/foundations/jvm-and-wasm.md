@@ -70,3 +70,8 @@ before they are decided.
   per-table tree fallback, while numbers and BigInts take the shared keyed
   definition; final once the map rows are measured (with X-4; 10-28,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+
+## Rows
+
+No group is named here. Every benchmark row already carries each backend's
+standing; row ownership stays with the foundation each row measures.

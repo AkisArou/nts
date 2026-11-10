@@ -229,3 +229,27 @@ including `Math` on the JVM (J3).
   ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22),
   decision 2). With `Math` bit-identical to node, that makes `Math.random`
   V8's own generator.
+
+## Rows
+
+### numbers
+
+- `accumulate`
+- `checksum`
+- `fib`
+- `loop`
+
+### bigint
+
+- `bigint`
+- `jetstream-bigint-bigdenary`
+- `jetstream-bigint-paillier`
+
+### number-text
+
+- `number-format`
+- `number-format-double`
+- `parse-int-decimal`
+- `parse-int-default`
+- `parse-int-runtime`
+- `str-to-number`

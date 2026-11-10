@@ -100,6 +100,14 @@ Each foundation has its own page: what it is, its representation per backend,
 what each operation costs, the decisions and why, the benchmark rows it is held
 to, and what is still open.
 
+Those rows are declared in each page's `Rows` section: one `### <group>` per
+group and one backticked benchmark case name per list item, never numbers.
+That declaration is canonical for the task audit and the benchmark tools:
+`nts-bench --group <group>` measures exactly its rows, and
+[`results/benchmarks/full.md`](../../results/benchmarks/full.md) shows each
+group together. A row may be named by more than one foundation when each
+measures it; a row no page names is ungrouped.
+
 | page | status |
 |---|---|
 | [Numbers](numbers.md) | built, except `Math` through V8's `ieee754` (decided) |

@@ -328,7 +328,10 @@ fn run() -> Result<()> {
             let path = path.map_or_else(|| run_file(&root), Utf8PathBuf::from);
             return render(&root, &path);
         }
-        cli::Command::Measure(cases) => cases,
+        cli::Command::Measure(cases) => match &args.group {
+            Some(group) => results::group_cases(&root, group)?,
+            None => cases,
+        },
         cli::Command::Help | cli::Command::Count => unreachable!("handled before setup"),
     };
     let cases = selected_cases(&root, &requested)?;

@@ -198,6 +198,24 @@ test("slower-than-best flag stays beside current timing and all best provenance"
   assert.match(rendered, /node: 2 WON/);
 });
 
+test("full.md shows each declared group together with its standing, and the rest as ungrouped", () => {
+  const rendered = renderFull([fixture()], [
+    { name: "alpha", pages: ["docs/foundations/objects.md"], rows: ["b"] },
+    { name: "absent", pages: ["docs/foundations/hashing.md"], rows: ["not-in-run"] },
+  ]);
+  const alphaAt = rendered.indexOf("## alpha"), ungroupedAt = rendered.indexOf("## Ungrouped");
+  assert.ok(alphaAt >= 0 && ungroupedAt > alphaAt, rendered);
+  assert.ok(!rendered.includes("## absent"), "a group with no row in the run is not rendered");
+  assert.match(rendered, /## alpha\n\nDeclared by \[docs\/foundations\/objects\.md\]\(\.\.\/\.\.\/docs\/foundations\/objects\.md\)\./);
+  const inAlpha = rendered.slice(alphaAt, ungroupedAt), inUngrouped = rendered.slice(ungroupedAt);
+  assert.match(inAlpha, /^\|b\|/m);
+  assert.ok(!/^\|a\|/m.test(inAlpha), inAlpha);
+  assert.match(inAlpha, /- \*\*nts C\*\*: node: 1 WON;/);
+  assert.match(inUngrouped, /No foundation page names these rows\./);
+  assert.match(inUngrouped, /^\|a\|/m);
+  assert.ok(!/^\|b\|/m.test(inUngrouped), inUngrouped);
+});
+
 test("immutable publication refuses overwrite and renders latest complete, including beside-gate conditions", () => {
   const root = temp();
   try {
@@ -340,6 +358,7 @@ test("the real check CLI detects a one-change renderer drift", () => {
       source = readFileSync(implementation, "utf8");
     assert.ok(source.includes("# Benchmark results"));
     writeFileSync(mutant, source.replaceAll("# Benchmark results", "# Drifted benchmark results"));
+    writeFileSync(join(root, "groups.ts"), readFileSync(fileURLToPath(new URL("./groups.ts", import.meta.url))));
     const good = spawnSync(process.execPath, [implementation, "check", root], { encoding: "utf8" });
     assert.equal(good.status, 0, good.stderr);
     const bad = spawnSync(process.execPath, [mutant, "check", root], { encoding: "utf8" });

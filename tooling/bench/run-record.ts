@@ -16,6 +16,7 @@ import {
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -424,7 +425,7 @@ export function checkRecords(root: string): { runs: number; complete: number } {
   const full = join(root, "results/benchmarks/full.md");
   check(existsSync(full), "missing benchmark full.md");
   check(
-    readFileSync(full, "utf8") === renderFull(runs),
+    readFileSync(full, "utf8") === renderFull(runs, readBenchmarkGroups(root)),
     "benchmark full.md differs from the shared renderer",
   );
   return { runs: runs.length, complete: runs.filter((r) => r.complete).length };
@@ -579,11 +580,22 @@ const time = (ns: number) =>
       ? (ns / 1e3).toFixed(2) + " µs"
       : (ns / 1e6).toFixed(2) + " ms";
 const escape = (s: string) => s.replaceAll("|", "\\|").replaceAll("\n", " ");
-export function renderFull(runs: RunRecord[]): string {
-  const model = results(runs);
-  if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
-  const { run } = model;
-  const counts = BACKENDS.map((backend) => {
+/** Verdict counts over one set of rendered rows: a group's standing against the bar. */
+function verdictCounts(rows: RowResult[]): string[] {
+  return BACKENDS.map((backend) => {
+    const columns = COMPARATORS.map((c) => {
+      const count: VerdictCounts = {};
+      for (const row of rows) {
+        const kind = row.backends[backend].versus[c].kind;
+        count[kind] = (count[kind] ?? 0) + 1;
+      }
+      return c + ": " + Object.entries(count).map(([kind, n]) => n + " " + kind).join(", ");
+    });
+    return "- **" + backend + "**: " + columns.join("; ") + ".";
+  });
+}
+function globalCounts(model: Results): string[] {
+  return BACKENDS.map((backend) => {
     const columns = COMPARATORS.map(
       (c) =>
         c +
@@ -594,7 +606,14 @@ export function renderFull(runs: RunRecord[]): string {
     );
     return "- **" + backend + "**: " + columns.join("; ") + ".";
   });
+}
+export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] = []): string {
+  const model = results(runs);
+  if (!model) return "# Benchmark results\n\nNo complete run has been retained.\n";
+  const { run } = model;
+  const counts = globalCounts(model);
   const header = `# Benchmark results\n\nNewest complete run: [${run.id}](runs/${run.id}.json). Compiler ${run.compiler.commit}; source ${run.sourceCommit}. Harness ${run.harness.identity}; contract ${run.harness.contract ?? "unknown (historical)"}. Verdict policy v${POLICY.version}, [The bar](../../${POLICY.authority}).\n\n${counts.join("\n")}\n\nConditions: ${JSON.stringify(run.machine.conditions)}. Per-row conditions and sibling samples are retained in the run JSON. All ratios are within this run. Each backend is held separately to the bar: node and Bun JIT require 0.80×; Bun AOT/ScriptC ties use max(1.05, the two cells' observed spread). A refusal is not a timing.\n\nOwn-best values are per backend, using compatible machine, workload/input and harness contracts. Unknown historical identities and invalid cells are excluded. A slower-than-best flag is a cross-run observation with provenance, beside the current value. Historical runs with unknown completion times sort by the date recorded in their filename.\n`;
+  const tableFor = (rows: RowResult[]): string => {
   const native = ["nts C", "nts LLVM"] as const;
   const columns = [
     "Case",
@@ -604,7 +623,7 @@ export function renderFull(runs: RunRecord[]): string {
     ...BACKENDS.map((b) => b + " own best"),
   ];
   const table = ["| " + columns.join(" | ") + " |", "|" + columns.map(() => "---").join("|") + "|"];
-  for (const { row, backends, llvmVersusC } of model.rows) {
+  for (const { row, backends, llvmVersusC } of rows) {
     const cells = COLUMNS.map((c) => {
       const cell = row.cells[c];
       return cell.status === "OK"
@@ -647,6 +666,8 @@ export function renderFull(runs: RunRecord[]): string {
         "|",
     );
   }
+  return table.join("\n");
+  };
   const notes = run.rows.flatMap((row) =>
     Object.entries(row.cells)
       .filter(([_, c]) => c.status !== "OK" && c.reason)
@@ -654,7 +675,21 @@ export function renderFull(runs: RunRecord[]): string {
         ([name, c]) => "- " + row.name + ", " + name + ": " + c.status + ": " + escape(c.reason!),
       ),
   );
-  return header + "\n" + table.join("\n") + "\n\n" + notes.join("\n") + "\n";
+  if (!groups.length) return header + "\n" + tableFor(model.rows) + "\n\n" + notes.join("\n") + "\n";
+  const grouped = new Set<string>(), sections: string[] = [];
+  const section = (title: string, declaredBy: string | null, rows: RowResult[]) => {
+    const source = declaredBy ? `Declared by ${declaredBy}.\n\n` : "No foundation page names these rows.\n\n";
+    sections.push(`## ${title}\n\n${source}${verdictCounts(rows).join("\n")}\n\n${tableFor(rows)}`);
+  };
+  for (const group of groups) {
+    const names = new Set(group.rows), rows = model.rows.filter((row) => names.has(row.row.name));
+    if (!rows.length) continue;
+    for (const row of rows) grouped.add(row.row.name);
+    section(group.name, group.pages.map((page) => `[${page}](../../${page})`).join(", "), rows);
+  }
+  const ungrouped = model.rows.filter((row) => !grouped.has(row.row.name));
+  if (ungrouped.length) section("Ungrouped", null, ungrouped);
+  return header + "\n" + sections.join("\n\n") + "\n\n" + notes.join("\n") + "\n";
 }
 export function consoleHeader(): string {
   return [
@@ -701,7 +736,7 @@ function atomic(path: string, body: string, createOnly: boolean): void {
 function renderLocked(root: string): string {
   const full = join(root, "results/benchmarks/full.md");
   mkdirSync(join(root, "results/benchmarks"), { recursive: true });
-  atomic(full, renderFull(readRuns(root)), false);
+  atomic(full, renderFull(readRuns(root), readBenchmarkGroups(root)), false);
   return full;
 }
 export function renderRuns(root: string): string {

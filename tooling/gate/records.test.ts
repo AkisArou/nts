@@ -26,7 +26,7 @@ test("the real records step validates benchmark evidence and its rendered table"
   };
   const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{cwd:root,encoding:"utf8"});
   try {
-    for(const path of ["tooling/gate/all.sh","tooling/gate/records.ts","tooling/bench/run-record.ts"]) {
+    for(const path of ["tooling/gate/all.sh","tooling/gate/records.ts","tooling/bench/run-record.ts","tooling/bench/groups.ts"]) {
       mkdirSync(dirname(join(root,path)),{recursive:true});
       writeFileSync(join(root,path),readFileSync(fileURLToPath(new URL("../../"+path,import.meta.url))));
     }

@@ -1,11 +1,14 @@
 use anyhow::{Result, bail};
 
 pub(super) const USAGE: &str = "Usage: nts-bench [--root <tree>] [case ...]
+       nts-bench [--root <tree>] --group <name>
        nts-bench [--root <tree>] --render [run.json]
        nts-bench --help
 
 With no case names, measures every benchmark case. Explicit case names select
-only those rows. --render renders a saved run without measuring workloads.";
+only those rows. `--group <name>` measures exactly the rows the foundation
+page naming that group declares. --render renders a saved run without
+measuring workloads.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Command {
@@ -19,6 +22,7 @@ pub(super) enum Command {
 pub(super) struct Arguments {
     pub(super) root: Option<String>,
     pub(super) journal: Option<String>,
+    pub(super) group: Option<String>,
     pub(super) command: Command,
 }
 
@@ -26,6 +30,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
     let mut args = args.into_iter().peekable();
     let mut root = None;
     let mut journal = None;
+    let mut group = None;
     let mut command = None;
     let mut cases = Vec::new();
     while let Some(arg) = args.next() {
@@ -48,6 +53,14 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
                     bail!("`--journal` was supplied more than once");
                 }
             }
+            "--group" => {
+                let Some(name) = args.next().filter(|next| !next.starts_with('-')) else {
+                    bail!("`--group` needs a name after it");
+                };
+                if group.replace(name).is_some() {
+                    bail!("`--group` was supplied more than once");
+                }
+            }
             "--render" => {
                 let path = args.peek().is_some_and(|next| !next.starts_with('-'));
                 let path = path.then(|| args.next().expect("peeked render path"));
@@ -61,9 +74,15 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
     if command.is_some() && !cases.is_empty() {
         bail!("case names cannot be combined with --help, --render or --count");
     }
+    if group.is_some() && (command.is_some() || !cases.is_empty()) {
+        bail!(
+            "`--group` selects its rows on its own; it cannot be combined with case names, --help, --render or --count"
+        );
+    }
     Ok(Arguments {
         root,
         journal,
+        group,
         command: command.unwrap_or(Command::Measure(cases)),
     })
 }
@@ -132,5 +151,24 @@ mod tests {
         assert!(parse(argv(&["--root", "--help"])).is_err());
         assert!(parse(argv(&["--root", "a", "--root", "b"])).is_err());
         assert!(parse(argv(&["--render", "run.json", "fib"])).is_err());
+    }
+
+    #[test]
+    fn a_group_is_its_own_selection() {
+        let args = parse(argv(&["--root", "/tree", "--group", "maps"]))
+            .expect("valid benchmark arguments");
+        assert_eq!(args.group.as_deref(), Some("maps"));
+        assert_eq!(args.command, Command::Measure(vec![]));
+        for case in [
+            &["--group"][..],
+            &["--group", "maps", "--group", "json"],
+            &["--group", "maps", "fib"],
+            &["fib", "--group", "maps"],
+            &["--group", "maps", "--render"],
+            &["--group", "maps", "--count"],
+            &["--group", "maps", "--help"],
+        ] {
+            assert!(parse(argv(case)).is_err(), "{case:?}");
+        }
     }
 }

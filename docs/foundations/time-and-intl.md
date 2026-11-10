@@ -155,3 +155,13 @@ provide it to Wasm is still to be researched (G15 in
 - **ICU is bundled, never the platform's,** for exactness (D2, D3); the
   choice is revisited for mobile size (D-3; 10-28,
   [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+
+## Rows
+
+### intl
+
+- `jetstream-datetimeformat-intl`
+- `jetstream-listformat-intl`
+- `jetstream-numberformat-intl`
+- `jetstream-pluralrules-intl`
+- `jetstream-relativetimeformat-intl`

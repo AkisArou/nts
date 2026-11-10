@@ -20,6 +20,7 @@ import {
 } from "./run-record.ts";
 import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
+import { groupRows, readBenchmarkGroups } from "./groups.ts";
 import { readJournal } from "./run-journal.ts";
 function command(root: string, program: string, args: string[]): string {
   const r = spawnSync(program, args, { cwd: root, encoding: "utf8" });
@@ -172,8 +173,12 @@ function seal(root: string, raw: any): RunRecord {
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode, root, ...args] = process.argv.slice(2);
-  assert.ok(root, "run-session.ts <begin|finish|render|conditions> <root>");
-  if (mode === "header") console.log(consoleHeader());
+  assert.ok(root, "run-session.ts <begin|finish|render|conditions|group> <root>");
+  if (mode === "group") {
+    const rows = groupRows(readBenchmarkGroups(root), args[0] ?? "");
+    if (!rows) throw new Error(`unknown benchmark group \`${args[0]}\``);
+    console.log(JSON.stringify(rows));
+  } else if (mode === "header") console.log(consoleHeader());
   else if (mode === "row") {
     const raw = JSON.parse(readFileSync(args[0], "utf8"));
     const hosts = Object.fromEntries(

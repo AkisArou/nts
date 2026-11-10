@@ -58,3 +58,23 @@ generated parsers.
   has its own untyped parser, and then becomes the test oracle (G9; 10-28,
   [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
   Not built: no `JSON.parse` is provided yet.
+
+## Rows
+
+### json
+
+- `awfy-json`
+- `jetstream-json-parse-inspector`
+- `jetstream-json-stringify-inspector`
+- `json-build-append`
+- `json-build-join`
+- `json-parse`
+- `json-parse-typed`
+- `json-quote`
+- `json-scan`
+- `json-serialize`
+- `json-stringify-builtin`
+- `json-stringify-doc`
+- `json-stringify-fused`
+- `json-stringify-inline`
+- `json-stringify-typed`

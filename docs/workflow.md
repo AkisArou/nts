@@ -273,6 +273,15 @@ Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
 (4 and 5), and produce the report with every row and its ratios. A
 regression becomes a task.
 
+**Rows belong to foundation groups.** Each foundation page's `Rows` section
+is the canonical declaration, naming case names and never numbers.
+`nts-bench --group <name>` measures exactly one group's rows, and
+`results/benchmarks/full.md` shows each group together with its standing
+against the bar (node and Bun JIT at 0.8x, Bun AOT and ScriptC tied or
+beaten). A row no page names is listed as ungrouped. A foundation task's
+review covers its whole group, not one row: a part that speeds one row and
+slows another in its group is seen in the same sitting.
+
 - **A measurement waits for CPU 4 with its sibling 5 idle, and for nothing
   else.** Gates, landing checks and agents' work run on the other CPUs and
   never hold it; every row records the machine's load and free memory beside

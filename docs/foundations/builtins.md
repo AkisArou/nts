@@ -389,3 +389,9 @@ From the user ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes
     `runtime/node` re-exports them.
 11. One full lib (ESNext plus DOM) for every target, with NTS1100 as the
     per-target error, not per-target libs.
+
+## Rows
+
+No group is named here. This page decides which implementation each target
+uses; the speed of each implementation is measured by the rows its own
+foundation page names.

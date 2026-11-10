@@ -109,3 +109,17 @@ Both are in the [log](../records/notebooks/decisions-log.md#objects-10-22).
   A/B shows the cost; on the JVM, J2 of
   [the JVM and Wasm](jvm-and-wasm.md#proposed-decisions) (X-4; 10-28,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+
+## Rows
+
+### hashing
+
+- `jetstream-hash-map`
+- `map-and-set`
+- `map-entries-top-k`
+- `map-literal-keys`
+- `map-word-counts`
+- `record-word-counts`
+- `str-map-keys`
+- `symbol-keyed-map`
+- `symbol-keys`

@@ -512,3 +512,23 @@ From the calling-C audit (10-30,
 
 The study behind this page, with its measurements, the comparison with 15
 systems and about 70 sources, is [in the records](../records/notebooks/studies/memory.md).
+
+## Rows
+
+### memory
+
+- `array-copying-methods`
+- `awfy-towers`
+- `cyclic-churn`
+- `event-state`
+- `immutable-update`
+- `json-build-append`
+- `json-stringify-doc`
+- `map-entries-top-k`
+- `module-loop-retained`
+- `objects`
+- `pipeline`
+- `record-word-counts`
+- `release-acyclic`
+- `sort-objects`
+- `tree-teardown`
