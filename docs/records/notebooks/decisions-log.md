@@ -1832,3 +1832,38 @@ As built:
 - a takeover (`replaces`) never draws on what it takes over;
 - the ledger's status shows each drawing reservation beneath the one it draws
   on, with its share of it.
+
+## A step's grant is its slice's limit, and grows while it runs (11-10)
+
+The coordinator decided, on #609, that each gate step's slice is held to the
+memory the ledger granted it, with the grant grown while the step runs, so the
+ledger promises only what the kernel enforces. Step slices had no limit of
+their own: only a census aggregate was capped, at twice its reservation, so
+several steps growing past their reservations together could squeeze work
+already admitted, and an outranked run could grow back past what a landing
+had been admitted beside (#615's caveat).
+
+As built:
+- a running step's grant -- a fixed step its reservation, an elastic step one
+  token's share per token it holds, each with what it grew by -- is its
+  slice's MemoryHigh, where the kernel throttles and reclaims and nothing
+  dies (an elastic step holding no token is allowed one token's share for
+  its idle workers, uncounted); MemoryMax is a hard bound above it, a block or a quarter of
+  the grant, with no swap, for a runaway; the run counts each step at its
+  grant, and a throttled burst briefly past it is bounded by that margin;
+- every 250 ms the runner grows a step whose charge nears its grant, or
+  passed it, by what it is over by and a quarter of its grant, at least 64
+  MiB, from the reservation's slack or a growth of it, and both limits rise
+  together; the
+  charge leaves out page cache, so the kernel reclaiming a step's cache at its
+  grant never grows it;
+- a step killed at its own hard bound, one stopped holding more than the
+  ledger could ever give, and one still throttled for a growth not given by
+  its bound are memory pressure (held, retried), never FAIL;
+- a census inside a step has no aggregate cap of its own: it verifies the
+  step slice's, and a case killed there is pressure, requeued;
+- a gate run's reservation is capped, and the ledger promises a capped one
+  all it has not used instead of #615's use and a margin; jobs that are not
+  capped keep that yield (#627 caps them);
+- only a waiting request that could fit were every admitted job to end makes
+  a job yield.

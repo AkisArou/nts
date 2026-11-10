@@ -37,10 +37,9 @@
 // with a desktop running, never has it free. There is no declared number
 // anywhere: the step table names none.
 //
-// **A reservation decides when work starts, never its verdict.** The kernel
-// cap a step's census runs under (censusCapBytes) is never below one census
-// worker's own cap, so a case replayed alone meets only its own limit in a
-// fresh tree as in a warm one.
+// **A reservation decides when work starts, never its verdict.** A step's
+// slice is held to its grant and grows while it runs (run.mjs, "Memory"); a
+// step killed at its hard bound is memory pressure, held, never a FAIL.
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -227,18 +226,6 @@ export function unitReservation(history: CostHistory, of: { step: string } | { j
   if (own && own.unit === unit) return { bytes: peakReservation(own.peaks), basis: "measured" };
   if (rows.length) return { bytes: Math.max(...rows.map(row => peakReservation(row.peaks))), basis: "largest" };
   return { bytes: share, basis: "share" };
-}
-
-/**
- * The kernel cap a step's census aggregate runs under
- * (NTS_GATE_STEP_MEMORY_BYTES): twice the step's reservation, so a peak can
- * pass the reservation and be measured -- the step is then over, and its next
- * reservation covers the peak; never below its share of the machine, which an
- * empty history reserves; and never below one census worker's own cap, so a
- * case replayed alone meets only its own limit.
- */
-export function censusCapBytes(reservedBytes: number, shareBytes: number, workerBytes: number): number {
-  return Math.max(2 * reservedBytes, shareBytes, workerBytes);
 }
 
 // ---------------------------------------------------------------------------

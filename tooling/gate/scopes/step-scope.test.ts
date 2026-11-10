@@ -27,7 +27,7 @@ test("a delegated cpuset is applied to the owned scope without creating a siblin
   } });
   try {
     const { GateScopes } = await import(new URL("./step-scope.ts?ceiling-control", import.meta.url).href);
-    const owner = new GateScopes(process.env), step = owner.step();
+    const owner = new GateScopes(process.env), step = owner.step({ high: 2 ** 30, max: 2 ** 31 });
     try {
       const launch = step.command("/bin/true", []);
       assert.equal(launch.command, "systemd-run");

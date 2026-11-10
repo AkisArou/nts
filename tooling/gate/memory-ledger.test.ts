@@ -995,3 +995,39 @@ test("a request can name the reservation it runs inside: one its own process hol
   for (const reservation of [alone, other, run, holder]) reservation.release();
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
+
+test("a capped reservation promises all it has not used, even to a request that outranks it; an uncapped one, its use and a margin", async t => {
+  const f = fixture(t); // 20 available
+  // Two agents' jobs of 6, each using 1: one a gate run whose kernel limits bound it (capped), one not.
+  const run = await f.ask({ bytes: 6 * GiB, what: "gate run", capped: true });
+  const job = await f.ask({ bytes: 6 * GiB, what: "fixed job" });
+  for (const what of ["gate run", "fixed job"]) f.used.set(what, GiB);
+  f.memory(18);
+  // A landing's decision: the capped run promises its 5 unused, the uncapped job 0.25.
+  const landing = await f.ask({ bytes: GiB, what: "landing", priority: "landing" });
+  assert.equal(f.of("landing").at(-1)?.pendingBytes, 5 * GiB + GiB / 4);
+  assert.equal(readLedger(f.dir).admitted.find(entry => entry.what === "gate run")?.capped, true);
+  for (const reservation of [landing, job, run]) reservation.release();
+});
+
+test("a waiter that could not fit were every admitted job to end makes nobody yield; one that could does", async t => {
+  const f = fixture(t); // 20 available of 64
+  const job = await f.ask({ bytes: 4 * GiB, what: "agent job" });
+  const other = await f.ask({ bytes: 8 * GiB, what: "another landing's job", priority: "landing" });
+  // Memory nobody reserved holds most of the machine: a landing request of
+  // 30 could not fit even were both jobs to end. It waits, and frees nothing
+  // a yield could give it.
+  f.memory(10);
+  const huge = f.ask({ bytes: 30 * GiB, what: "landing", priority: "landing" });
+  await waitFor("the landing request to wait", () => f.of("landing").length >= 1, { stopped: f.stopped });
+  assert.equal(f.of("landing")[0]!.fits, false);
+  assert.equal(readLedger(f.dir).waiting[0]?.fits, false, "its entry says it could not fit");
+  assert.equal(job.outranked(), false, "nobody yields to it");
+  // Memory frees, but the other landing's job holds 8: it could fit now, and waits, and the agent's job yields to it.
+  f.memory(40);
+  await waitFor("the landing request to find it could fit", () => readLedger(f.dir).waiting[0]?.fits === true, { stopped: f.stopped });
+  assert.equal(job.outranked(), true);
+  other.release();
+  (await huge).release();
+  job.release();
+});

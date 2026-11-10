@@ -362,6 +362,11 @@ the first node task.
   first and asks the ledger only for the rest, so a holder whose child needs
   memory never waits for itself
   ([log](records/notebooks/decisions-log.md#a-reservation-made-inside-another-jobs-draws-on-it-first-11-10)).
+- **A step's grant is its slice's limit, and grows while it runs** (11-10):
+  a step's slice has MemoryHigh at its grant and a hard MemoryMax above it;
+  the runner grows the grant as the step's charge nears it, and a step held
+  short of memory is pressure, never a FAIL
+  ([log](records/notebooks/decisions-log.md#a-steps-grant-is-its-slices-limit-and-grows-while-it-runs-11-10)).
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit

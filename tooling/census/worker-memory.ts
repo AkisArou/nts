@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
-import { toolingSlicePrefix } from "../gate/tooling-slice.ts";
+import { toolingSlice, toolingSlicePrefix } from "../gate/tooling-slice.ts";
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -19,8 +19,8 @@ const WORKER_CAP_KB = 6_000_000;
 
 /**
  * One census worker's own kernel cap, in bytes: what a case may hold alone.
- * The gate never caps a step's census aggregate below it (run.mjs's
- * censusCap), so a case replayed alone meets only this limit.
+ * The gate never sizes a step's workers below it (run.mjs's stepBudget), so a
+ * case replayed alone meets only this limit.
  */
 export function workerCapBytes(env: NodeJS.ProcessEnv = process.env): number {
   return Number(env.NTS_CENSUS_MEMORY_CAP_KB ?? WORKER_CAP_KB) * 1024;
@@ -140,6 +140,26 @@ const ENTRY = [
 
 export type MemoryScope = { unit: string; ready: string; argv: string[]; env: NodeJS.ProcessEnv };
 
+/**
+ * The cgroup of the tooling slice this process runs in (NTS_TOOLING_SLICE)
+ * when the kernel holds it to a finite memory.max with no swap: a gate step's
+ * slice, held to the step's grant (run.mjs, "Memory"). A census inside it
+ * caps its aggregate at that slice's limits, not its own.
+ */
+function cappingSlice(): string | undefined {
+  const slice = toolingSlice();
+  if (!slice) return undefined;
+  // Its cgroup is an ancestor of this process's own: read, never asked of
+  // the manager.
+  const own = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
+  const at = own.split("/").indexOf(slice);
+  if (at < 1) return undefined;
+  const group = own.split("/").slice(0, at + 1).join("/");
+  const read = (name: string) => { try { return readFileSync(join(CGROUP, group, name), "utf8").trim(); } catch { return ""; } };
+  const max = Number(read("memory.max"));
+  return Number.isSafeInteger(max) && max >= 1 && read("memory.swap.max") === "0" ? group : undefined;
+}
+
 export class MemoryRun {
   readonly prefix: string;
   readonly slice: string;
@@ -149,22 +169,33 @@ export class MemoryRun {
   #workers: MemoryWorker[] = [];
   #closed = false;
   #recordPeak = false;
-  constructor({ budgetBytes = Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) } = {}) {
-    this.budgetBytes = integer(budgetBytes, "resident run budget");
+  /** The gate step's slice that holds the aggregate to its limits, when it runs in one (`cappingSlice`). */
+  #outer: string | undefined;
+  constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) }: { budgetBytes?: number; id?: string } = {}) {
+    // A budget of its own -- a caller's, as a capture's or a test's -- is its
+    // aggregate's own cap wherever it runs; the step's budget (the default)
+    // is the step slice's to enforce inside a gate step.
+    const stepBudget = budgetBytes === undefined;
+    this.budgetBytes = integer(budgetBytes ?? Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), "resident run budget");
     this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     this.prefix = toolingSlicePrefix(`ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`);
     this.slice = `${this.prefix}.slice`;
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
     mkdirSync(this.directory, { recursive: true });
     try {
-      this.group = this.#slice(this.slice, this.budgetBytes);
+      // Inside a gate step, the step's slice holds the aggregate to its
+      // grant, which grows while the step runs: the aggregate has no cap of
+      // its own beneath it, and a kill there is pressure, never a case's.
+      this.#outer = stepBudget ? cappingSlice() : undefined;
+      this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes);
     } catch (error) {
       failedSetup(error, () => this.close());
     }
   }
-  #slice(unit: string, bytes: number, parent?: string) {
+  #slice(unit: string, bytes: number | null, parent?: string) {
     try {
-      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", "5", "Description", "s", `nts census resident cap ${this.prefix}`, "MemoryMax", "t", String(bytes), "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "0");
+      const cap = bytes === null ? [] : ["MemoryMax", "t", String(bytes)];
+      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3), "Description", "s", `nts census resident cap ${this.prefix}`, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "0");
       // StartTransientUnit returns a queued job, not an active slice. Join
       // that job before reading ControlGroup or any kernel memory controls.
       systemctl("start", unit);
@@ -175,11 +206,22 @@ export class MemoryRun {
       return failedSetup(error, () => manager("StopUnit", "ss", unit, "replace"));
     }
   }
-  #verify(group: string, maximum: number) {
+  #verify(group: string, maximum: number | null) {
     // The kernel rounds byte budgets down to whole pages. Its actual ceiling
-    // must remain finite, positive and no greater than the reserved budget.
+    // must remain finite, positive and no greater than the reserved budget;
+    // an aggregate inside a gate step has none of its own, and the step's
+    // slice above it must.
+    const swapless = (at: string) => readFileSync(join(CGROUP, at, "memory.swap.max"), "utf8").trim() === "0";
+    if (maximum === null) {
+      const outer = this.#outer!, limit = Number(readFileSync(join(CGROUP, outer, "memory.max"), "utf8"));
+      if (!group || !group.startsWith(`${outer}/`) || readFileSync(join(CGROUP, group, "memory.max"), "utf8").trim() !== "max" || !swapless(group)
+          || !Number.isSafeInteger(limit) || limit < 1 || !swapless(outer)) {
+        throw new Error(`resident cap: the step slice ${outer} does not hold ${group} to a finite ceiling with swap zero`);
+      }
+      return;
+    }
     const limit = group ? Number(readFileSync(join(CGROUP, group, "memory.max"), "utf8")) : NaN;
-    if (!group || !Number.isSafeInteger(limit) || limit < 1 || limit > maximum || readFileSync(join(CGROUP, group, "memory.swap.max"), "utf8").trim() !== "0") {
+    if (!group || !Number.isSafeInteger(limit) || limit < 1 || limit > maximum || !swapless(group)) {
       throw new Error(`resident cap: kernel did not enforce ${maximum} bytes/swap zero for ${group}`);
     }
   }
@@ -195,6 +237,13 @@ export class MemoryRun {
   }
   aggregateOoms() { return events(this.group, true).oom; }
   effectiveBudgetBytes() {
+    // Inside a gate step, the step's slice's hard bound, which grows with its
+    // grant.
+    if (this.#outer) {
+      const outer = Number(readFileSync(join(CGROUP, this.#outer, "memory.max"), "utf8"));
+      if (!Number.isSafeInteger(outer) || outer < 1) throw new Error("resident cap: the step slice's ceiling is not finite");
+      return outer;
+    }
     const bytes = Number(readFileSync(join(CGROUP, this.group, "memory.max"), "utf8"));
     if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > this.budgetBytes) throw new Error("resident cap: aggregate ceiling changed outside its reservation");
     return bytes;

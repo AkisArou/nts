@@ -96,10 +96,10 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
     let done=0,budgets=0;
     const report=(message:string)=>process.stderr.write('  '+message+'\n');
     // Each worker holds an equal share of the job's memory: inside a gate
-    // step, the step's census cap (NTS_GATE_STEP_MEMORY_BYTES), never below
-    // one census worker's own cap; alone, the census budget the pool reserves
-    // within. A fixed size would decide which programs fit regardless of
-    // what the step may hold.
+    // step, what the step sizes its workers by (NTS_GATE_STEP_MEMORY_BYTES),
+    // never below one census worker's own cap; alone, the census budget the
+    // pool reserves within. A fixed size would decide which programs fit
+    // regardless of what the step may hold.
     const memory=memoryRun(),workers=Math.min(jobs,paths.length);
     await runMemoryWorkers({paths,jobs:workers,memory,workerBytes:Math.floor(memory.budgetBytes/Math.max(1,workers)),recycleAfterCases:16,
       key:'program-oracles',what:'program oracle references',token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),

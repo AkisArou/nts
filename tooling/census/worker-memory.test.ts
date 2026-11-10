@@ -65,11 +65,24 @@ async function gatePool(n: number) {
  * 8 GiB read less the 2 kept for the system, so it outranks the pool until it
  * is withdrawn; `ended` settles once it has.
  */
+/**
+ * Another landing's job, admitted before a pool starts: it holds 4 of the
+ * reading's 6 GiB beside the floor, so `landingAhead`'s request waits though
+ * it could fit once that job ends -- the only kind of waiter that makes a
+ * lower-priority job yield (memory-ledger.ts's `outranked`).
+ */
+async function landingBlocker(t: { after(fn: () => void): void }): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...ownMemory };
+  delete env.NTS_MEMORY_RESERVATION;
+  const held = await reserve({ bytes: 4 * 2 ** 30, what: "another landing's job", priority: "landing" }, { env });
+  t.after(() => held.release());
+}
+
 function landingAhead(t: { after(fn: () => void): void }): { withdraw: () => void; ended: Promise<unknown> } {
   const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...process.env, ...ownMemory };
   delete env.NTS_MEMORY_RESERVATION;
   t.after(() => ahead.abort());
-  const ended = reserve({ bytes: 7 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
+  const ended = reserve({ bytes: 4 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
   ended.catch(() => {});
   if (readLedger(ownMemory.NTS_MEMORY_LEDGER).waiting.length !== 1) {
     ahead.abort();
@@ -263,6 +276,7 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   }
   const rows: any[] = [];
   const reports: string[] = [];
+  await landingBlocker(t);
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
   const gate = await gatePool(2);
   t.after(gate.close);
@@ -652,6 +666,7 @@ compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024*
 test("a pool whose reservation is outranked starts no new case until the request ahead of it has gone", async t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
+  await landingBlocker(t);
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "outranked-pool" }), gate = await gatePool(1);
   t.after(gate.close);
   const rows: { path: string; waitingInLedger?: number }[] = [], asked: string[] = [];
@@ -676,4 +691,41 @@ test("a pool whose reservation is outranked starts no new case until the request
   assert.deepEqual(rows.map(row => row.path), ["gate-a", "probe-ledger"]);
   assert.equal(rows[1]?.waitingInLedger, 0, "the next case started only once the landing request had gone");
   await gate.settled();
+});
+
+test("inside a gate step's capped slice, the step's census has no aggregate cap of its own, and a case killed at the step's bound is pressure, never its budget", async t => {
+  // The step's slice, as run.mjs makes it: MemoryHigh and MemoryMax, here
+  // both 256 MiB, so a case that holds more is killed at the step's bound.
+  // The census runs inside it, sized by the step's budget, as a step's does.
+  const { GateScopes } = await import("../gate/scopes/step-scope.ts");
+  const owner = new GateScopes(process.env), slice = owner.step({ high: 256 * 2 ** 20, max: 256 * 2 ** 20 });
+  t.after(async () => { await slice.drain(); owner.close(); });
+  const census = `import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const { MemoryRun, memoryCause } = await import(${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});
+const memory = new MemoryRun({ id: "capped-step" });
+const own = readFileSync("/sys/fs/cgroup" + memory.group + "/memory.max", "utf8").trim(), effective = memory.effectiveBudgetBytes();
+// A worker whose own cap is above the step's: the step's bound fires first.
+const worker = memory.worker("over", 512 * 2 ** 20);
+const before = worker.counters(), aggregateBefore = memory.aggregateOoms();
+const scope = worker.scope(process.execPath, ["-e", "const held = Buffer.alloc(400 * 2 ** 20, 1); console.log(held.length)"]);
+const killed = spawnSync("systemd-run", scope.argv, { env: scope.env, stdio: "ignore" });
+const cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms());
+worker.stop(scope);
+memory.close();
+console.log(JSON.stringify({ own, effective, status: killed.status, cause, group: memory.group }));`;
+  const launch = slice.command(process.execPath, ["--input-type=module", "-e", census]);
+  const ran = spawnTest(launch.command, launch.args, { encoding: "utf8",
+    env: { ...process.env, NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
+  assert.equal(ran.status, 0, ran.stdout + ran.stderr);
+  const seen = JSON.parse(ran.stdout.trim().split("\n").at(-1)!) as { own: string; effective: number; status: number; cause: string; group: string };
+  assert.equal(seen.own, "max", "no cap of its own beneath the step's");
+  assert.ok(seen.group.startsWith(`${slice.group}/`));
+  assert.equal(seen.effective, 256 * 2 ** 20, "the step's bound is its ceiling");
+  assert.notEqual(seen.status, 0, "the case was killed");
+  assert.equal(seen.cause, "system-pressure", "killed by the step's bound: neither its own cap nor an aggregate's");
+  // A census given a budget of its own keeps its own cap, wherever it runs.
+  const fixture = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "own-budget" });
+  try { assert.notEqual(readFileSync(join(CGROUP, fixture.group, "memory.max"), "utf8").trim(), "max"); }
+  finally { fixture.close(); }
 });

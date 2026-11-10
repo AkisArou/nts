@@ -49,7 +49,13 @@
 // stopped, and its whole promise counts again once nothing outranks it. The
 // ledger stays accounting only: such a job can still grow back to its whole
 // reservation after the request was admitted on its smaller figure, which
-// only a kernel cap equal to its grant could bound.
+// only a kernel cap equal to its grant could bound. A capped reservation (a
+// gate run, whose every step's slice the kernel holds to its grant within
+// what the run holds) has that cap: it can never take more than it holds,
+// so it promises all it has not used, and yields by giving back what its
+// steps do not hold (run.mjs). Only a waiting request that could fit were
+// every admitted job to end makes a job yield (`outranked`): a yield frees
+// nothing another one could use.
 //
 // **A request can take over a reservation** (`replaces`): admitting it ends
 // that one under the same lock, so nothing is admitted between the two, and
@@ -434,6 +440,15 @@ export type LedgerEntry = {
   drawsOn?: string;
   /** Of an admitted reservation that draws on another, the bytes of it that came from that one. */
   drawn?: number;
+  /**
+   * Its job's memory is bounded by kernel limits within these bytes (a gate
+   * run's step slices, capped at their grants): it can never take more than
+   * it holds, so it promises all it has not used, even to a request that
+   * outranks it.
+   */
+  capped?: boolean;
+  /** Of a waiting request, whether its last decision found it could fit were every admitted job to end. */
+  fits?: boolean;
 };
 type State = "waiting" | "admitted";
 
@@ -461,7 +476,8 @@ function parseEntry(text: string, file: string): LedgerEntry {
       || !keyList(entry.unmeasured) || !keyList(entry.over)
       || (entry.replaces !== undefined && (typeof entry.replaces !== "string" || !ID.test(entry.replaces)))
       || (entry.drawsOn !== undefined && (typeof entry.drawsOn !== "string" || !ID.test(entry.drawsOn)))
-      || (entry.drawn !== undefined && (!Number.isSafeInteger(entry.drawn) || entry.drawn < 0 || entry.drawn > entry.bytes))) {
+      || (entry.drawn !== undefined && (!Number.isSafeInteger(entry.drawn) || entry.drawn < 0 || entry.drawn > entry.bytes))
+      || (entry.capped !== undefined && typeof entry.capped !== "boolean") || (entry.fits !== undefined && typeof entry.fits !== "boolean")) {
     throw new Error(`${file} is not a memory ledger entry`);
   }
   return entry;
@@ -558,6 +574,8 @@ export type ReserveRequest = {
    * process's reservation, if one holds any.
    */
   drawsOn?: string;
+  /** Its job's memory is bounded by kernel limits within what it holds (LedgerEntry's `capped`). */
+  capped?: boolean;
 };
 
 /** One decision on one request: what it saw and what it decided. */
@@ -623,7 +641,8 @@ export type Reservation = {
   shrink(bytes: number): Promise<void>;
   /**
    * Whether a live request of higher priority than this reservation's waits
-   * now; inside a parent's reservation, than the parent's. Its holder should
+   * now, one that could fit were every admitted job to end; inside a
+   * parent's reservation, than the parent's. Its holder should
    * then start nothing new and give back what it does not use, so that the
    * request ahead of it waits only for work already running to end: nothing
    * running is ever stopped for it. Read without the lock.
@@ -651,9 +670,13 @@ function amount(bytes: number, what: string, verb: string): void {
 
 const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
 
-/** Whether a request of higher priority than `priority` waits in `dir`, among those whose waiter and owner are alive. */
+/**
+ * Whether a request of higher priority than `priority` waits in `dir`, among
+ * those whose waiter and owner are alive and that could fit were every
+ * admitted job to end: one that could not is not helped by what a yield frees.
+ */
 function outrankedIn(dir: string, priority: Priority): boolean {
-  return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && alive(entry.waiter) && alive(entry.owner));
+  return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
 }
 
 /**
@@ -799,14 +822,16 @@ const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for $
  * `deciding` takes over, nothing (see the top of this file). With no request
  * deciding, each its whole promise.
  */
-function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority">; used: number; lent: number }>,
+function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority" | "capped">; used: number; lent: number }>,
   deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
   let pending = 0;
   for (const { entry, used, lent } of admitted) {
     if (entry.id === deciding?.replaces) continue;
     // What it has lent the reservations that draw on it is theirs to promise.
     const own = Math.max(0, entry.bytes - lent);
-    const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
+    // A capped one can never take more than it holds: it promises all it has
+    // not used. An uncapped one is promised away as its use and a margin.
+    const yields = !entry.capped && deciding !== null && rank(deciding.priority) < rank(entry.priority);
     pending += Math.max(0, (yields ? Math.min(own, peakReservation([Math.max(1, used)])) : own) - used);
   }
   return pending;
@@ -924,13 +949,17 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   } else if (go) {
     // Admitted, it says what it drew on the reservation it draws on.
     const on = drawnOn(self, admitted);
-    const entry: LedgerEntry = { ...self, drawsOn: on, ...(on === undefined ? {} : { drawn: drawnBytes }) };
+    const entry: LedgerEntry = { ...self, fits: undefined, drawsOn: on, ...(on === undefined ? {} : { drawn: drawnBytes }) };
     if (listed) {
       writeEntry(dir, "waiting", entry);
       renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
     } else writeEntry(dir, "admitted", entry);
     if (on !== undefined && drawnBytes) report(`memory: ${self.what} drew ${gib(drawnBytes)} of its ${gib(self.bytes)} on ${admitted.get(on)!.what}'s unused reservation`);
-  } else if (!listed) writeEntry(dir, "waiting", self);
+  } else if (!listed || self.fits !== fits) {
+    // Waiting, it says whether it could fit, which `outranked` reads.
+    self.fits = fits;
+    writeEntry(dir, "waiting", self);
+  }
   // The reservation it takes over ends with the decision that admits it.
   const replaced = self.replaces === undefined ? undefined : admitted.get(self.replaces);
   if (go && replaced !== undefined) {
@@ -1092,6 +1121,7 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
     ...(unmeasured.length ? { unmeasured } : {}),
     ...(request.replaces !== undefined ? { replaces: request.replaces } : {}),
     ...(drawsOn !== undefined ? { drawsOn } : {}),
+    ...(request.capped ? { capped: true } : {}),
   };
   const used = options.used;
   const context: Context = {
@@ -1300,10 +1330,12 @@ export type LedgerStatus = {
    * draws on, of which `drawn_bytes` are its bytes; `lent_bytes`: what this
    * one has lent those that draw on it, which it does not promise.
    * `used_bytes` leaves out what a reservation that draws on this one
-   * measures itself.
+   * measures itself. `capped`: its job's memory is bounded by kernel limits
+   * within its bytes (a gate run's step slices), so it promises all it has
+   * not used.
    */
   admitted: { id: string; what: string; priority: Priority; bytes: number; used_bytes: number; owner_pid: number; since: string; live: boolean;
-    unmeasured: string[]; over: string[]; draws_on: string | null; drawn_bytes: number; lent_bytes: number }[];
+    unmeasured: string[]; over: string[]; draws_on: string | null; drawn_bytes: number; lent_bytes: number; capped: boolean }[];
   /** In the queue's order. */
   waiting: { id: string; what: string; priority: Priority; bytes: number; grows: string | null; owner_pid: number; waiter_pid: number; since: string; waited_s: number; live: boolean }[];
 };
@@ -1327,7 +1359,7 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
       id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes,
       used_bytes: account.used, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
       unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
-      draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : entry.drawn ?? 0, lent_bytes: account.lent,
+      draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : entry.drawn ?? 0, lent_bytes: account.lent, capped: entry.capped === true,
     };
   });
   const head = view.waiting.find(entry => entry.live) ?? null;

@@ -37,8 +37,8 @@ import {isAbsolute, relative, sep} from 'node:path';
 import {GateScopes as ActualGateScopes} from ${JSON.stringify(actual)};
 export * from ${JSON.stringify(actual)};
 export class GateScopes extends ActualGateScopes {
-  override step() {
-    const scope=super.step(),kill=scope.kill.bind(scope),drain=scope.drain.bind(scope);
+  override step(limits) {
+    const scope=super.step(limits),kill=scope.kill.bind(scope),drain=scope.drain.bind(scope);
     let cancelled=false,draining=false;
     scope.drain=()=>{draining=true;return drain();};
     scope.kill=()=>{

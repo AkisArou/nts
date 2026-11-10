@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -20,12 +20,20 @@ const checked = (command: string, args: string[]): string => {
 };
 const control = (...args: string[]) => checked("systemctl", ["--user", ...args]);
 
-function startSlice(slice: string, boundTo: string): string {
+/**
+ * A step slice's memory limits: `high`, its grant, past which the kernel
+ * throttles and reclaims and nothing dies; and `max`, a hard bound above it,
+ * past which it kills. Swap is never used.
+ */
+export type StepLimits = { high: number; max: number };
+
+function startSlice(slice: string, boundTo: string, limits?: StepLimits): string {
   let created = false;
+  const memory = limits ? ["MemoryHigh", "t", String(limits.high), "MemoryMax", "t", String(limits.max), "MemorySwapMax", "t", "0"] : [];
   try {
     checked("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
-      "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", "5", "Description", "s", "nts owned gate step",
-      "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "BindsTo", "as", "1", boundTo, "After", "as", "1", boundTo, "0"]);
+      "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", String(5 + memory.length / 3), "Description", "s", "nts owned gate step",
+      "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "BindsTo", "as", "1", boundTo, "After", "as", "1", boundTo, ...memory, "0"]);
     created = true;
     control("start", slice); // Join StartTransientUnit's queued job.
     const group = control("show", slice, "--property=ControlGroup", "--value");
@@ -44,6 +52,41 @@ function populated(group: string): 0 | 1 {
   const value = /^populated ([01])$/m.exec(readFileSync(`${CGROUP}${group}/cgroup.events`, "utf8"))?.[1];
   if (value === undefined) throw new Error("step cgroup lacks a populated answer");
   return value === "0" ? 0 : 1;
+}
+
+/** What a cgroup's memory limits are now: the kernel's, rounded down to pages. */
+export function readLimits(group: string): StepLimits & { swap: number } {
+  const read = (name: string) => {
+    const text = readFileSync(`${CGROUP}${group}/${name}`, "utf8").trim();
+    return text === "max" ? Infinity : Number(text);
+  };
+  return { high: read("memory.high"), max: read("memory.max"), swap: read("memory.swap.max") };
+}
+
+/** Whether the kernel holds `group` to `limits`: each limit finite, no more than asked and less than a page under it, and no swap. */
+function enforced(group: string, limits: StepLimits): boolean {
+  const now = readLimits(group), page = 4096;
+  const near = (have: number, want: number) => Number.isSafeInteger(have) && have <= want && have > want - page;
+  return near(now.high, limits.high) && near(now.max, limits.max) && now.swap === 0;
+}
+
+/**
+ * A cgroup's memory events, counted over it and everything under it: `high`,
+ * times its charge passed memory.high and was throttled; `max`, times it
+ * reached memory.max; `oom_kill`, processes the kernel killed for memory --
+ * and `own_oom`, from memory.events.local, times its own memory.max was the
+ * limit that ran out, so its kills were its own bound's, not a worker's.
+ */
+export type MemoryEvents = { high: number; max: number; oom: number; oom_kill: number; own_oom: number };
+export function memoryEvents(group: string): MemoryEvents {
+  const read = (file: string) => {
+    const text = readFileSync(`${CGROUP}${group}/${file}`, "utf8");
+    return (name: string) => Number(new RegExp(`^${name} (\\d+)$`, "m").exec(text)?.[1] ?? NaN);
+  };
+  const all = read("memory.events"), local = read("memory.events.local");
+  const events = { high: all("high"), max: all("max"), oom: all("oom"), oom_kill: all("oom_kill"), own_oom: local("oom") };
+  if (!Object.values(events).every(Number.isSafeInteger)) throw new Error(`${group}/memory.events lacks a memory event count`);
+  return events;
 }
 
 /** The most the cgroup and everything under it has held, or null where the kernel does not say. */
@@ -99,15 +142,53 @@ export class StepScope {
   private readonly nonce = randomUUID();
   private readonly entryPath: string;
   private peak: number | null = null;
-  constructor(root: GateScopes) {
+  private events: MemoryEvents | null = null;
+  private limiting: Promise<void> | null = null;
+  private wanted: StepLimits;
+  private held: StepLimits;
+  constructor(root: GateScopes, limits: StepLimits) {
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = `${this.slice.slice(0, -6)}-step.scope`;
-    this.group = startSlice(this.slice, root.slice);
+    this.group = startSlice(this.slice, root.slice, limits);
     this.entryPath = join(root.directory, `step-entry-${this.nonce}.json`);
     if (!this.group.startsWith(`${root.group}/`)) throw new Error("step slice escaped its run's subtree");
+    if (!enforced(this.group, limits)) {
+      control("stop", this.slice);
+      throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryHigh=${limits.high} MemoryMax=${limits.max} and no swap`);
+    }
+    this.wanted = this.held = limits;
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     this.device = identity.dev; this.inode = identity.ino;
   }
+  /** The limits the kernel holds the slice to: the last ones it was seen to take. */
+  get limits(): StepLimits { return this.held; }
+  /**
+   * Moves the slice's limits to `limits`, through the user manager, without
+   * waiting the caller: one change at a time, the latest asked for last.
+   * Read back from the kernel before they count as held.
+   */
+  limit(limits: StepLimits): Promise<void> {
+    this.wanted = limits;
+    this.limiting ??= this.apply().finally(() => { this.limiting = null; });
+    return this.limiting;
+  }
+  private async apply(): Promise<void> {
+    while (!this.closed && (this.wanted.high !== this.held.high || this.wanted.max !== this.held.max)) {
+      const want = this.wanted;
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn("systemctl", ["--user", "set-property", "--runtime", this.slice, `MemoryHigh=${want.high}`, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
+        let err = "";
+        child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
+        child.on("error", reject);
+        child.on("close", code => code === 0 ? resolve() : reject(new Error(`systemctl set-property ${this.slice}: ${err.trim() || `exit ${code}`}`)));
+      });
+      if (this.closed) return;
+      if (!enforced(this.group, want)) throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryHigh=${want.high} MemoryMax=${want.max}`);
+      this.held = want;
+    }
+  }
+  /** The slice's memory events so far: read live while it runs, and once more as `drain` empties it. */
+  memoryEvents(): MemoryEvents { return this.events ?? memoryEvents(this.group); }
   command(command: string, args: string[]): { command: string; args: string[] } {
     if (this.launched) throw new Error("step scope launched twice");
     this.launched = true;
@@ -134,6 +215,7 @@ export class StepScope {
       device: String(this.device), inode: String(this.inode), populated: 0, observed_at: new Date().toISOString() };
     // Nothing of the step runs any more, and stopping the slice removes its cgroup.
     this.peak = memoryPeak(this.group);
+    this.events = memoryEvents(this.group);
     control("stop", this.slice);
     this.closed = true;
     return proof;
@@ -161,7 +243,7 @@ export class GateScopes {
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     this.owner?.complete({ group: this.group, device: String(identity.dev), inode: String(identity.ino) });
   }
-  step(): StepScope { return new StepScope(this); }
+  step(limits: StepLimits): StepScope { return new StepScope(this, limits); }
   close(): void {
     if (populated(this.group)) throw new Error("gate still owns populated step scopes");
     control("stop", this.slice);
