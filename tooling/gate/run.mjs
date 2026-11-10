@@ -93,7 +93,7 @@
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {stepBound, stepBoundReason} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -108,7 +108,7 @@ import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
-import {cgroupCharge, gib, machineMemory, priorityOf, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
+import {cgroupCharge, gib, machineMemory, priorityOf, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
 import {workerCapBytes} from "../census/worker-memory.ts";
 import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
 import {defaultSlots, frontendBudget} from "./budget.ts";
@@ -229,6 +229,9 @@ const PRIORITY = (() => {
   try { return priorityOf(env); }
   catch (error) { usage(error.message); }
 })();
+// Its steps inherit its OOM score: a machine that runs out kills the lowest
+// priority's work first (memory-ledger.ts's OOM_SCORE).
+rankForOom(PRIORITY, (line) => process.stderr.write(`run.mjs: ${line}\n`));
 const FRONTENDS = (() => {
   try { return frontendBudget(env, SLOTS); }
   catch (error) { usage(error.message); }
@@ -448,9 +451,9 @@ function report(name) {
   const held = r.memory?.peak_bytes != null ? `, held ${gib(r.memory.peak_bytes)} of ${gib(r.memory.reserved_bytes)}` : "";
   if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${how}${held})` : ""}\n`;
   if (r.memory?.over) block += `${color(33, "  memory")}: ${name} held ${gib(r.memory.peak_bytes)}, past its ${gib(r.memory.reserved_bytes)} reservation; its next run reserves by what it held\n`;
-  if (r.memory?.grown_bytes || r.memory?.throttled || r.memory?.killed) {
-    block += `  memory: ${name} was granted ${gib(r.memory.grant_bytes)} at its end, grown by ${gib(r.memory.grown_bytes)} while it ran; `
-      + `throttled past its grant ${r.memory.throttled ?? 0} time(s), ${r.memory.killed ?? 0} process(es) killed at its hard bound\n`;
+  if (r.memory?.grown_bytes || r.memory?.killed) {
+    block += `  memory: ${name} was counted for ${gib(r.memory.grant_bytes)} at its end, grown by ${gib(r.memory.grown_bytes)} while it ran; `
+      + `${r.memory.killed ?? 0} process(es) killed at its runaway bound of ${gib(r.memory.bound_bytes)}\n`;
   }
   if (r.verdict === "FAIL") block += `${color(31, "FAILED")}: ${name}\n`;
   else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
@@ -542,13 +545,13 @@ function used(includeElastic = true) {
       const held = tokensOf(name, r);
       elastic += 1;
       slots += held;
-      bytes += counted(name, r);
+      bytes += grantOf(name, r);
       if (s.fe) fe += held;
       continue;
     }
     if (r.rider) riding += r.slots;
     else slots += r.slots;
-    bytes += counted(name, r);
+    bytes += grantOf(name, r);
     if (s.fe) fe += r.slots;
   }
   return { slots, bytes, fe, locks, riding, elastic };
@@ -604,8 +607,7 @@ function admit(step, u) {
     // Started with its whole pool of workers; they wait for tokens, so
     // starting it takes no slot, and no memory: each token is granted its
     // share. A cap on how many wait at once keeps the idle workers (a shell
-    // or node each) to a few hundred megabytes, which its slice's limit
-    // allows it beside its tokens' shares (`limitOf`).
+    // or node each) to a few hundred megabytes.
     return { slots: u.elastic >= ELASTIC_CAP ? 0 : step.slots };
   }
   let slots = 0, rider = false;
@@ -728,15 +730,15 @@ let pending = [];
 // step its reservation, an elastic step one token's share per token it
 // holds, each with what it grew by while it ran (`used()`).
 //
-// **A step's grant is its slice's limit.** Its slice starts with MemoryHigh
-// at its grant -- past it the kernel throttles and reclaims, and nothing dies
-// -- and MemoryMax a hard bound above it, a block or a quarter of the grant,
-// with no swap. So the ledger is promised only what the kernel enforces: a
-// throttled burst briefly past a grant is bounded by its hard bound's margin,
-// and an elastic step holding no token is allowed one token's share for its
-// idle workers, uncounted, as starting it takes no memory.
-// The run's reservation says so (`capped`), and the ledger promises a capped
-// one all it has not used, never only its use and a margin.
+// **A step's slice bounds only a runaway** (`runawayBound`). Its MemoryMax
+// is twice what the step was measured to hold, and never below its grant and
+// a block or a quarter of it more, with no swap and no MemoryHigh: nothing
+// throttles a step to its grant, since anonymous memory held at MemoryHigh
+// without swap does not slow but stops, and a stopped step's wall clock runs
+// on. A step killed at its bound is memory pressure -- held as an INSTRUMENT
+// (a census requeues the case), never a FAIL. The grant is the ledger's
+// accounting, and the machine's own OOM killer takes the lowest priority's
+// work first (`OOM_SCORE`).
 //
 // **A step reserves what it was measured to hold** (step-scheduling.ts): per
 // unit -- the step, or one token -- 1.25 times the largest of the peaks its
@@ -749,16 +751,14 @@ let pending = [];
 // and the ledger's entry says so -- and to the history, for its next run.
 // Unmeasured steps are named in the run's entry from the start.
 //
-// **A grant grows while its step runs** (`watchMemory`). A step whose charge
-// nears its grant (within an eighth), or passed it, wants what it is over by
-// and a quarter of its grant more, at least 64 MiB: the reservation's slack
-// gives it at once, else the run's growth does, and both limits rise with the
-// grant. The charge leaves out page cache: the kernel reclaiming it at a
-// grant (memory.events `high`) is counted, never grown for. A step whose
-// growth is not given in time is throttled at its grant; one that reaches its
-// hard bound is killed there, and that is memory pressure -- the step is held
-// as an INSTRUMENT (a census requeues the case), never a FAIL. An elastic
-// step's limits follow its tokens, lowered only once its charge is clear.
+// **A grant grows while its step runs** (`watchMemory`), for the ledger's
+// accounting. A step whose charge nears its grant (within an eighth), or
+// passed it, wants what it is over by and a quarter of its grant more, at
+// least 64 MiB: the reservation's slack gives it at once, else the run's
+// growth does, and its runaway bound rises with it. The charge leaves out
+// page cache. Nothing waits for a growth: the step runs on while the run asks.
+// An elastic step's bound follows its tokens, lowered only once its charge is
+// clear of it.
 //
 // **It grows by what waits.** When a step that has its slots, or a token that
 // has a free slot, does not fit beside what runs, the run asks the ledger for
@@ -832,14 +832,18 @@ const tokenBytes = (step) => sizing(step).bytes;
 // counted while it runs without a token server, and while it drains.
 const stepBytes = (step, slots = width(step.name)) => Math.min(capacity, step.elastic ? sizing(step).bytes * slots : sizing(step).bytes);
 // What a step's tools size their workers by (NTS_GATE_STEP_MEMORY_BYTES): its
-// grant at its full width and the hard bound above it, never below one census
-// worker's own cap. Its slice's live limits are what the kernel holds it to.
-const stepBudget = (step) => Math.max(hardBound(stepBytes(step)), workerCapBytes(env));
+// grant at its full width and a margin above it, never below one census
+// worker's own cap.
+const stepBudget = (step) => Math.max(withMargin(stepBytes(step)), workerCapBytes(env));
 const PAGE = 4096;
-// A step's hard bound (MemoryMax) above its grant (MemoryHigh): room for a
-// burst the sampler has not grown the grant for yet, a block or a quarter of
-// the grant, whichever is more. Only a runaway reaches it.
-const hardBound = (grant) => Math.ceil((grant + Math.max(BLOCK, grant / 4)) / PAGE) * PAGE;
+const pages = (bytes) => Math.ceil(bytes / PAGE) * PAGE;
+// A grant and a block or a quarter of it more, whichever is more.
+const withMargin = (grant) => pages(grant + Math.max(BLOCK, grant / 4));
+// A step's MemoryMax: twice what it was measured to hold (a grant is
+// RESERVATION_PER_PEAK times that), never below its grant and a margin, and
+// never past what the machine could ever give the run. Only a runaway
+// reaches it.
+const runawayBound = (grant) => Math.min(pages(capacity), Math.max(withMargin(grant), pages(2 * grant / RESERVATION_PER_PEAK)));
 // How near its grant a running step's charge comes before the run grows it:
 // within an eighth of it.
 const nearGrant = (grant) => grant / 8;
@@ -857,16 +861,13 @@ function grantOf(name, r) {
   const step = BY_NAME.get(name);
   return (r.elastic ? tokensOf(name, r) * tokenBytes(step) : stepBytes(step, r.slots)) + r.extra;
 }
-// What its slice's MemoryHigh is: its grant, and for an elastic step holding
-// no token one token's share all the same, for its idle workers, which the
-// run does not count (starting it takes no memory, as above).
+// What its runaway bound is reckoned from: its grant, and for an elastic step
+// holding no token one token's share all the same, for its idle workers,
+// which the run does not count (starting it takes no memory, as above).
 function limitOf(name, r) {
   const step = BY_NAME.get(name);
   return r.elastic ? Math.max(1, tokensOf(name, r)) * tokenBytes(step) + r.extra : grantOf(name, r);
 }
-// What the run counts for a running step: its grant, and while its slice's
-// limit is being lowered, what the kernel still allows it beyond.
-const counted = (name, r) => grantOf(name, r) + Math.max(0, r.scope.limits.high - limitOf(name, r));
 let growth = null; // { bytes, controller, withdrawn } while a growth waits
 // What the run must hold for the first step that waits only for memory to
 // start beside what runs (schedule); 0 when none waits.
@@ -874,7 +875,7 @@ let memoryWanted = 0;
 let withholdBytes = 0;
 let memoryCheck = null;
 const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shrinks: 0, outranked: 0, outranked_s: 0,
-  steps_grown: 0, steps_throttled: 0, steps_killed: 0 };
+  steps_grown: 0, steps_killed: 0 };
 // The ledger's last answer to `outranked`, when it was read, and since when it has been yes.
 let outrankedNow = false, outrankedRead = 0, outrankedSince = 0, outrankedLook = null;
 const reserved = () => reservation?.bytes ?? 0;
@@ -919,10 +920,9 @@ function sampleStep(r) {
 // Every SAMPLE_MS: each running step's charge; a step whose charge nears its
 // grant, or passed it, wants more -- a quarter of its grant, at least 64 MiB,
 // beyond what it is over by -- which the reservation's slack gives at once,
-// or else the run's growth; and each slice's limits follow its grant. The
-// charge leaves out file pages and reclaimable slab, as the ledger's does:
-// the kernel reclaiming a step's page cache at its grant (memory.events
-// `high`) never grows it. Outranked, the run grows no step.
+// or else the run's growth; and each slice's runaway bound follows its grant.
+// The charge leaves out file pages and reclaimable slab, as the ledger's
+// does. Outranked, the run grows no step's grant; nothing holds the step.
 const memoryClock = setInterval(watchMemory, SAMPLE_MS);
 memoryClock.unref();
 function watchMemory() {
@@ -930,26 +930,12 @@ function watchMemory() {
   for (const [name, r] of running) {
     if (r.draining) continue;
     sampleStep(r);
-    let events;
-    try { events = r.scope.memoryEvents(); } catch { continue; }
-    r.highEvents = events.high;
     const grant = limitOf(name, r);
-    if (yielding || stopping) { r.want = 0; r.hopeless = 0; continue; }
+    if (yielding || stopping) { r.want = 0; continue; }
     if (r.charge >= grant - nearGrant(grant)) r.want = Math.max(r.want, Math.ceil((Math.max(0, r.charge - grant) + growthOf(grant)) / MIB) * MIB);
-    // Past what the machine could ever grant it, throttled, it would wait
-    // for ever: two samples running, it is stopped, and held as memory
-    // pressure. One that the other running steps' grants keep from more
-    // waits for them, throttled.
-    r.hopeless = r.charge > capacity ? r.hopeless + 1 : 0;
-    if (r.hopeless >= 2 && !r.memoryStopped) {
-      r.memoryStopped = true;
-      process.stderr.write(`-- ${name}: holds ${gib(r.charge)}, past the ${gib(capacity)} the ledger could ever give the run: stopped, as memory pressure\n`);
-      try { r.scope.kill(); }
-      catch (error) { stop(`cannot stop ${name} for memory: ${error.message}`); }
-    }
   }
   feedSteps();
-  for (const [name, r] of running) if (!r.draining) applyLimits(name, r);
+  for (const [name, r] of running) if (!r.draining) applyBound(name, r);
   if (!yielding && [...running.values()].some(r => r.want > 0)) adjustMemory();
 }
 // What running steps want beyond their grants, from the reservation's slack.
@@ -965,21 +951,16 @@ function feedSteps() {
     process.stderr.write(`-- ${name}: memory grown by ${gib(give)} to ${gib(limitOf(name, r))} (charge ${gib(r.charge)})\n`);
   }
 }
-// Moves a step's slice limits to its grant: MemoryHigh at it, MemoryMax its
-// hard bound above. Lowered -- an elastic step's tokens given back -- only
-// once its charge is clear of the lower grant, so no running step is squeezed.
-function applyLimits(name, r) {
-  const held = r.scope.limits;
-  let high = limitOf(name, r);
-  if (high < held.high && r.charge + nearGrant(high) > high) high = held.high;
-  if (high === held.high) return;
-  // Lowered, the run counts the step at its old limit until the kernel holds
-  // the slice to the new one (`counted`); then a step or token waiting for
-  // that memory looks again.
-  const lowered = high < held.high;
-  r.scope.limit({ high, max: hardBound(high) })
-    .then(() => { if (lowered && !stopping && !summaryWritten) schedule(); },
-      error => process.stderr.write(`run.mjs: ${name}'s memory limits stay at MemoryHigh ${gib(r.scope.limits.high)}: ${error.message}\n`));
+// Moves a step's slice's MemoryMax to the runaway bound of its grant. Lowered
+// -- an elastic step's tokens given back -- only once its charge is clear of
+// the lower bound, so no running step is killed for what it already holds.
+function applyBound(name, r) {
+  const held = r.scope.limits.max;
+  let max = runawayBound(limitOf(name, r));
+  if (max < held && r.charge + nearGrant(max) > max) max = held;
+  if (max === held) return;
+  r.scope.limit({ max })
+    .catch(error => process.stderr.write(`run.mjs: ${name}'s runaway bound stays at ${gib(r.scope.limits.max)}: ${error.message}\n`));
 }
 
 const noteSize = () => { memoryRecord.peak_bytes = Math.max(memoryRecord.peak_bytes, reserved()); };
@@ -1035,10 +1016,8 @@ async function reserveMemory() {
   const own = { ...env };
   delete own[RESERVATION_ENV];
   const asked = Date.now();
-  // Capped: its every step's slice is held to its grant, within what the run
-  // holds, so it can never take more than it holds (see "Memory").
   reservation = await reserve({ bytes: BLOCK, what: `gate run ${RUN_DIR}`, priority: PRIORITY, owner: { cgroup: scopes.group }, unmeasured: unmeasured(), replaces,
-    drawsOn: LAUNCHER_RESERVATION, capped: true },
+    drawsOn: LAUNCHER_RESERVATION },
     { env: own, signal: startupAbort.signal, report: (line) => process.stdout.write(`  ${line}\n`) });
   memoryRecord.waited_s += (Date.now() - asked) / 1000;
   noteSize();
@@ -1152,9 +1131,9 @@ function schedule() {
 function start(step, slots, rider = false) {
   const bound = boundOf(step);
   let scope;
-  // Its slice is held to its grant from the start (see "Memory").
+  // Its slice bounds a runaway from the start (see "Memory").
   const elastic = Boolean(step.elastic && tokenAddr), grant = elastic ? tokenBytes(step) : stepBytes(step, slots);
-  try { scope = scopes.step({ high: grant, max: hardBound(grant) }); }
+  try { scope = scopes.step({ max: runawayBound(grant) }); }
   catch (error) {
     finish(step.name, "INSTRUMENT", `step scope setup failed: ${error.message}`, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT" } });
     report(step.name); stop(`step scope setup failed: ${error.message}`); return;
@@ -1176,9 +1155,9 @@ function start(step, slots, rider = false) {
   closeSync(fd);
   const started = Date.now();
   // `extra`: what it grew by while it ran; `want`: what it waits to grow by;
-  // `grown`, `highEvents`: what it grew by in all, and the throttles seen.
+  // `grown`: what it grew by in all.
   const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false, peakCharge: undefined,
-    charge: 0, extra: 0, want: 0, grown: 0, highEvents: 0, hopeless: 0, memoryStopped: false, boundStarved: false };
+    charge: 0, extra: 0, want: 0, grown: 0 };
   running.set(step.name, owned);
   // **Past its bound the step is stopped through its own scope** and held: its
   // log stays, and it is neither a pass nor a red verdict about the change.
@@ -1186,8 +1165,6 @@ function start(step, slots, rider = false) {
   let boundTimer;
   const stopAtBound = () => {
     if (!stopping) owned.overBound = true;
-    // Throttled at its grant for a growth not given by its bound: memory.
-    if (!owned.boundStarved) owned.boundStarved = owned.want > 0 && owned.charge >= limitOf(step.name, owned) - nearGrant(limitOf(step.name, owned));
     try { scope.kill(); }
     catch (error) { stop(`cannot stop ${step.name} at its bound: ${error.message}`); return; }
     boundTimer = setTimeout(stopAtBound, 5000);
@@ -1238,16 +1215,15 @@ function start(step, slots, rider = false) {
     // page cache included.
     const units = step.elastic ? Math.max(1, elastic ? tok.peak.get(step.name) ?? 0 : slots) : 1;
     const sized = sizing(step), peak = owned.peakCharge ?? null, reservedBytes = sized.bytes * units;
-    // What it was granted at its end, what it grew by, how often the kernel
-    // throttled it past its grant, and the processes the kernel killed at its
-    // hard bound (`memory.events`, read as its slice emptied).
+    // What it was counted for at its end, what it grew by, its runaway
+    // bound, and the processes the kernel killed there (`memory.events`, read
+    // as its slice emptied).
     let events = null;
     try { events = scope.memoryEvents(); } catch { /* the slice was never read */ }
     const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: peak !== null && peak > reservedBytes, basis: sized.basis,
-      grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, throttled: events?.high ?? null,
+      grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, bound_bytes: scope.limits.max,
       killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0 };
     if (owned.grown > 0) memoryRecord.steps_grown++;
-    if (events?.high > 0) memoryRecord.steps_throttled++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
       memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis };
@@ -1270,9 +1246,6 @@ function start(step, slots, rider = false) {
     if (cleanupError || spawnError) {
       const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "tooling-cleanup", verdict: "INSTRUMENT", reason } });
-    } else if (owned.overBound && owned.boundStarved) {
-      const reason = `memory: the step waited, throttled at its grant of ${gib(memory.grant_bytes)}, for a growth not given by its bound of ${bound.seconds} s; ${stepBoundReason(bound.seconds)}`;
-      finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "memory-pressure", verdict: "INSTRUMENT", reason } });
     } else if (owned.overBound) {
       const reason = stepBoundReason(bound.seconds);
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "step-bound", verdict: "INSTRUMENT", reason } });
@@ -1282,13 +1255,9 @@ function start(step, slots, rider = false) {
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
     } else if (entryError) {
       finish(step.name, "INSTRUMENT", entryError, { ...extra, instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: entryError } });
-    } else if (owned.memoryStopped) {
-      const reason = `memory: the step held ${gib(peak ?? 0)}, past the ${gib(capacity)} the ledger could ever give the run; stopped through its scope`;
-      finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "memory-pressure", verdict: "INSTRUMENT", reason } });
     } else if (memory.killed > 0 && (signal || code !== 0) && !instrument) {
-      // Killed at its hard bound, its growth not given in time: the machine's
-      // memory, never a verdict about the change.
-      const reason = `memory: the kernel killed ${memory.killed} process(es) of the step at its hard bound of ${gib(hardBound(memory.grant_bytes))} (granted ${gib(memory.grant_bytes)}); ${signal ? `killed by ${signal}` : `exit ${code}`}`;
+      // Killed at its runaway bound: memory, never a verdict about the change.
+      const reason = `memory: the kernel killed ${memory.killed} process(es) of the step at its runaway bound of ${gib(memory.bound_bytes)} (counted for ${gib(memory.grant_bytes)}); ${signal ? `killed by ${signal}` : `exit ${code}`}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "memory-pressure", verdict: "INSTRUMENT", reason } });
     } else {
       const status = signal ? `killed by ${signal}` : `exit ${code}`;
@@ -1459,8 +1428,8 @@ function done() {
   for (const s of slow) {
     lines.push(color(31, `  SLOWER   ${s.name.padEnd(24)} ${s.kind} ${Math.round(s.now)}s, ${s.ratio.toFixed(1)}x its baseline of ${Math.round(s.was)}s (tooling/gate/times.tsv)`));
   }
-  if (memoryRecord.steps_grown || memoryRecord.steps_throttled || memoryRecord.steps_killed) {
-    lines.push(`  memory: ${memoryRecord.steps_grown} step(s) grown while they ran, ${memoryRecord.steps_throttled} throttled past their grants, ${memoryRecord.steps_killed} killed at their hard bounds`);
+  if (memoryRecord.steps_grown || memoryRecord.steps_killed) {
+    lines.push(`  memory: ${memoryRecord.steps_grown} step(s) grown while they ran, ${memoryRecord.steps_killed} killed at their runaway bounds`);
   }
   lines.push(`  ${plan.length} requested: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.INSTRUMENT} INSTRUMENT, ${counts.SKIPPED} SKIPPED, ${counts["NOT RUN"]} NOT RUN in ${Math.round(wall)}s  (slots ${SLOTS}, memory ${gib(memoryRecord.peak_bytes)} at most at ${PRIORITY} priority, ${Math.round(memoryRecord.waited_s)}s waited, frontends ${FRONTENDS})`);
   if (FAIL_FAST) lines.push(color(33, "  NTS_GATE_FAIL_FAST: an inner-loop run, not landing evidence"));

@@ -6,15 +6,15 @@
 //
 //   node --test tooling/gate/memory-ledger.test.ts
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, ownedBy, parseBytes, parseMeminfo, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory } from "./step-scheduling.ts";
@@ -996,20 +996,6 @@ test("a request can name the reservation it runs inside: one its own process hol
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
-test("a capped reservation promises all it has not used, even to a request that outranks it; an uncapped one, its use and a margin", async t => {
-  const f = fixture(t); // 20 available
-  // Two agents' jobs of 6, each using 1: one a gate run whose kernel limits bound it (capped), one not.
-  const run = await f.ask({ bytes: 6 * GiB, what: "gate run", capped: true });
-  const job = await f.ask({ bytes: 6 * GiB, what: "fixed job" });
-  for (const what of ["gate run", "fixed job"]) f.used.set(what, GiB);
-  f.memory(18);
-  // A landing's decision: the capped run promises its 5 unused, the uncapped job 0.25.
-  const landing = await f.ask({ bytes: GiB, what: "landing", priority: "landing" });
-  assert.equal(f.of("landing").at(-1)?.pendingBytes, 5 * GiB + GiB / 4);
-  assert.equal(readLedger(f.dir).admitted.find(entry => entry.what === "gate run")?.capped, true);
-  for (const reservation of [landing, job, run]) reservation.release();
-});
-
 test("a waiter that could not fit were every admitted job to end makes nobody yield; one that could does", async t => {
   const f = fixture(t); // 20 available of 64
   const job = await f.ask({ bytes: 4 * GiB, what: "agent job" });
@@ -1030,4 +1016,17 @@ test("a waiter that could not fit were every admitted job to end makes nobody yi
   other.release();
   (await huge).release();
   job.release();
+});
+
+test("work is ranked for the OOM killer by priority, a landing's last to go and the full check's first; a score is raised, never lowered", () => {
+  assert.ok(OOM_SCORE.landing < OOM_SCORE.agent && OOM_SCORE.agent < OOM_SCORE["full-check"]);
+  const inherited = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), ledger = pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href;
+  // A child ranks itself, from `start` when given (a process may raise its own).
+  const ranked = (priority: string, start?: number) => Number(spawnSync(process.execPath, ["--input-type=module", "-e",
+    `import { readFileSync, writeFileSync } from "node:fs";${start === undefined ? "" : ` writeFileSync("/proc/self/oom_score_adj", "${start}");`}
+const { rankForOom } = await import(${JSON.stringify(ledger)}); rankForOom(${JSON.stringify(priority)}); process.stdout.write(readFileSync("/proc/self/oom_score_adj", "utf8"));`],
+  { encoding: "utf8" }).stdout);
+  for (const priority of PRIORITIES) assert.equal(ranked(priority), Math.max(inherited, OOM_SCORE[priority]), priority);
+  // Above its priority's score already, it stays: an unprivileged process cannot lower its own.
+  assert.equal(ranked("landing", 900), 900);
 });
