@@ -61,6 +61,7 @@ impl<'p, 'r> Capture<'p, 'r> {
         files: impl IntoIterator<Item = File<'p>>,
         semantics: nts_frontend_tsrs::ProjectSemantics,
     ) -> Result<Self, SnapshotError> {
+        let roots: FxHashSet<&Utf8Path> = semantics.root_files.iter().map(AsRef::as_ref).collect();
         let mut capture = Self {
             snapshot: SemanticSnapshot {
                 schema_version: SCHEMA_VERSION,
@@ -145,6 +146,7 @@ impl<'p, 'r> Capture<'p, 'r> {
                 digest: tree.tree.digest,
                 rewritten_by: None,
                 rewritten_map: Vec::new(),
+                root: roots.contains(file.path()),
             });
             capture.files.push((file, NodeId(base)));
             capture.snapshot.modules.push(ModuleRecord {

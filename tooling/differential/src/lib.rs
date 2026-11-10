@@ -1123,57 +1123,161 @@ fn drivable(ty: &HirType) -> bool {
 /// where `length` counts two and a code point is one.
 const STRINGS: &[&str] = &["", "hello world", "abcabc", "héllo wörld", "a\u{1F600}b"];
 
-/// The file to hand to node.
+/// The file to hand to node: the program's own root, never a module it only
+/// imports. The functions compared have to be *importable*, and node imports
+/// one module. Over the root files the tsconfig names, declaration files
+/// aside, as the capture recorded them:
+///
+/// 1. a single root is the entry -- a benchmark's `case.ts`;
+/// 2. among several, the one named `main.ts` or `main.tsx` -- a test
+///    program's `src/main.ts`;
+/// 3. otherwise the first root no other module imports, and when every root
+///    is imported (roots that import each other), the first root.
+///
+/// **Roots, not every module.** The rule used to take the first module named
+/// `main.ts` anywhere in the program, and jetstream-lebab-wtb vendors two
+/// (`vendor/ast-types/lib/main.ts`, `vendor/recast/main.ts`): its `case.ts`
+/// was never planned, and the vendored module's exports were. A module the
+/// program reaches by an import is never a root, so it is never the entry.
+/// And roots, not the order modules were decoded in: a program's first module
+/// is whatever its root imports first, so every Are We Fast Yet case's base
+/// class was once its entry, and `bench-agree` compared none of them.
 fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8PathBuf> {
-    // The functions being compared have to be *importable*, and node imports one
-    // module. In a program of several, `main.ts` is where the exported surface
-    // is by convention -- and taking whichever module happened to be decoded
-    // first meant a multi-module program tested nothing while looking as though
-    // it had.
-    let named_main = snapshot.sources.iter().find(|source| {
-        Utf8Path::new(&source.display_path)
+    let root = |source: &nts_diagnostics::SourceFile| {
+        source.root && !source.display_path.as_str().ends_with(".d.ts")
+    };
+    let roots: Vec<_> = snapshot
+        .sources
+        .iter()
+        .filter(|source| root(source))
+        .collect();
+    match roots.as_slice() {
+        [] => bail!("the program names no root file"),
+        [only] => return Ok(only.display_path.clone()),
+        _ => {}
+    }
+    if let Some(main) = roots.iter().find(|source| {
+        source
+            .display_path
             .file_name()
             .is_some_and(|name| name == "main.ts" || name == "main.tsx")
-    });
-    if let Some(source) = named_main {
-        return Ok(source.display_path.clone());
+    }) {
+        return Ok(main.display_path.clone());
     }
-
-    // **The module nothing imports.** Without a `main.ts`, the first module
-    // decoded was taken -- and a program's first decoded module is whatever
-    // its root imports first: every Are We Fast Yet case's `case.ts` imports
-    // its base class, so the base class was the entry, its exports were the
-    // surface, and `nts check` said "nothing to check" for all of them. The
-    // `bench-agree` step had never compared one. The root is the module no
-    // other module of the program imports; a declaration file is never one.
     let imported: std::collections::HashSet<nts_semantic_schema::ModuleId> = snapshot
         .modules
         .iter()
         .flat_map(|module| module.imports.iter().copied())
         .collect();
-    let root = snapshot
+    let unimported = snapshot
         .modules
         .iter()
         .enumerate()
         .find_map(|(index, module)| {
             let id = nts_semantic_schema::ModuleId(u32::try_from(index).ok()?);
             let source = snapshot.sources.get(module.file.0 as usize)?;
-            (!imported.contains(&id) && !source.display_path.as_str().ends_with(".d.ts"))
-                .then(|| source.display_path.clone())
+            (root(source) && !imported.contains(&id)).then(|| source.display_path.clone())
         });
-    if let Some(root) = root {
-        return Ok(root);
+    Ok(unimported.unwrap_or_else(|| roots[0].display_path.clone()))
+}
+
+#[cfg(test)]
+mod entry_tests {
+    #![allow(clippy::unwrap_used)]
+    use camino::{Utf8Path, Utf8PathBuf};
+    use nts_frontend_ts::Frontend;
+    use serde_json::json;
+
+    /// A scratch project of `files` whose tsconfig names its roots by `roots`.
+    fn project(
+        label: &str,
+        roots: serde_json::Value,
+        files: &[(&str, &str)],
+    ) -> (super::Scratch, Utf8PathBuf, Frontend) {
+        let path = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-entry-{label}-{}", std::process::id()));
+        for (name, text) in files {
+            let file = path.join(name);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, text).unwrap();
+        }
+        let repository = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize_utf8()
+            .unwrap();
+        let mut config = json!({"extends":repository.join("tsconfig.fixtures.json")});
+        let serde_json::Value::Object(roots) = roots else {
+            panic!("a tsconfig's roots are an object: {roots}")
+        };
+        config.as_object_mut().unwrap().extend(roots);
+        let tsconfig = path.join("tsconfig.json");
+        std::fs::write(&tsconfig, config.to_string()).unwrap();
+        let frontend = Frontend::new(&path).with_checkers(std::num::NonZeroU16::MIN);
+        (super::Scratch::holding(path), tsconfig, frontend)
     }
 
-    let module = snapshot
-        .modules
-        .first()
-        .context("the program has no modules")?;
-    let file = snapshot
-        .sources
-        .get(module.file.0 as usize)
-        .context("the entry module has no source file")?;
-    Ok(file.display_path.clone())
+    /// The entry and the exports of `case.ts`'s project, with its helper at `helper`.
+    fn planned(label: &str, helper: &str) -> (String, serde_json::Value) {
+        let case = format!(
+            "import {{ twice }} from './{helper}';\nexport function run(n: number): number {{ return twice(n) + 1; }}\n"
+        );
+        let (_scratch, config, mut frontend) = project(
+            label,
+            json!({"files":["case.ts"]}),
+            &[
+                ("case.ts", case.as_str()),
+                (
+                    helper,
+                    "export function twice(n: number): number { return n * 2; }\n",
+                ),
+            ],
+        );
+        let plan = super::oracle_plan(&config, &mut frontend, super::Backend::C).unwrap();
+        (
+            plan["entry"].as_str().unwrap().to_owned(),
+            plan["source_exports"].clone(),
+        )
+    }
+
+    #[test]
+    fn a_vendored_main_the_root_imports_is_never_the_entry() {
+        let (entry, exports) = planned("vendored-main", "vendor/lib/main.ts");
+        assert!(entry.ends_with("/case.ts"), "{entry}");
+        assert_eq!(exports, json!(["run"]));
+    }
+
+    #[test]
+    fn a_root_importing_a_vendored_index_is_the_entry() {
+        // The control: the same program with the vendored file not named main.
+        let (entry, exports) = planned("vendored-index", "vendor/lib/index.ts");
+        assert!(entry.ends_with("/case.ts"), "{entry}");
+        assert_eq!(exports, json!(["run"]));
+    }
+
+    #[test]
+    fn a_main_among_roots_that_import_each_other_is_the_entry() {
+        // tests/refusals/entry-named-in-a-cycle's shape: both roots are imported.
+        let (_scratch, config, mut frontend) = project(
+            "cycle",
+            json!({"include":["src"]}),
+            &[
+                (
+                    "src/main.ts",
+                    "import { helper } from './back.ts';\nexport function alpha(n: number): number { return n + 1; }\nexport function beta(n: number): number { return helper(n); }\n",
+                ),
+                (
+                    "src/back.ts",
+                    "import { alpha } from './main.ts';\nexport function helper(n: number): number { return alpha(n) * 2; }\n",
+                ),
+            ],
+        );
+        let plan = super::oracle_plan(&config, &mut frontend, super::Backend::C).unwrap();
+        assert!(
+            plan["entry"].as_str().unwrap().ends_with("/src/main.ts"),
+            "{plan}"
+        );
+    }
 }
 
 /// The names the entry module exports.

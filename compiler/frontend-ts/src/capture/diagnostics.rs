@@ -125,6 +125,7 @@ impl Diagnostics<'_> {
                 display_path: path.to_owned(),
                 rewritten_by: None,
                 rewritten_map: Vec::new(),
+                root: false,
             });
             id
         };

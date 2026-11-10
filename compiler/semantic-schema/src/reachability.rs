@@ -587,6 +587,7 @@ mod tests {
             display_path: uri.into(),
             rewritten_by: None,
             rewritten_map: Vec::new(),
+            root: false,
         }
     }
 

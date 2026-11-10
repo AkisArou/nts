@@ -52,6 +52,11 @@ pub struct SourceFile {
     /// the transform gave no map.
     #[serde(default)]
     pub rewritten_map: Vec<RewrittenSegment>,
+    /// Whether the program names it as a root file: its tsconfig's `files`,
+    /// or what `include` less `exclude` expands to. A file it reaches only by
+    /// an import is none, and so is one outside a captured program.
+    #[serde(default)]
+    pub root: bool,
 }
 
 /// A range of a rewritten file's text and where it came from, in bytes.

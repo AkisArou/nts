@@ -222,6 +222,7 @@ mod tests {
                 display_path: name.into(),
                 rewritten_by: None,
                 rewritten_map: Vec::new(),
+                root: false,
             })
             .collect();
         let node = |kind, text: Option<&str>, parent, children, span| NodeRecord {

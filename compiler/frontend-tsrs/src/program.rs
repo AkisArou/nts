@@ -104,6 +104,9 @@ pub struct ProjectSemantics {
     pub no_unchecked_indexed_access: bool,
     pub exact_optional_property_types: bool,
     pub disabled_strict_sources: Vec<crate::StrictOptionSource>,
+    /// The program's root files, as its command line names them: the
+    /// tsconfig's `files`, and what `include` less `exclude` expands to.
+    pub root_files: Vec<Utf8PathBuf>,
 }
 
 /// Files to check for diagnostics. Config, program/options and global errors
@@ -908,6 +911,7 @@ impl<'s, S: ViewPhase> Project<'s, S> {
             no_unchecked_indexed_access: options.no_unchecked_indexed_access.is_true(),
             exact_optional_property_types: options.exact_optional_property_types.is_true(),
             disabled_strict_sources: self.native.disabled_strict_sources.clone(),
+            root_files: self.root_paths().map(ToOwned::to_owned).collect(),
         }
     }
     #[must_use]

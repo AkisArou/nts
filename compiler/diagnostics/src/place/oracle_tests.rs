@@ -34,6 +34,7 @@ impl Scratch {
             display_path: self.0.clone(),
             rewritten_by: None,
             rewritten_map: Vec::new(),
+            root: false,
         }
     }
 }

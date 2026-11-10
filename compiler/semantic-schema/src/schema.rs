@@ -70,7 +70,8 @@ use crate::origin::Origin;
 /// and selected overloads, for inspection-to-final-capture rebinding.
 /// 52: checker-proved membership in the global value and type binding tables.
 /// 53: tuple element kinds, initial fixed prefix and readonly metadata.
-pub const SCHEMA_VERSION: u32 = 54;
+/// 55: `SourceFile::root`, the program's root files.
+pub const SCHEMA_VERSION: u32 = 55;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

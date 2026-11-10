@@ -31,6 +31,7 @@ fn import(phase: u8) -> SemanticSnapshot {
             display_path: "main.ts".into(),
             rewritten_by: None,
             rewritten_map: Vec::new(),
+            root: false,
         }],
         nodes: vec![
             node(

@@ -342,6 +342,7 @@ mod tests {
             display_path: "src/App.tsx".into(),
             rewritten_by: rewritten_by.map(str::to_owned),
             rewritten_map: Vec::new(),
+            root: false,
         }]
     }
 
