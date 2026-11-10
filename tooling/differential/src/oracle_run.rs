@@ -254,12 +254,23 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
+        // Started as every oracle child is: with the toolchain's heap flags.
+        let toolchain: Value =
+            serde_json::from_str(include_str!("../oracle-toolchain.json")).unwrap();
+        let heap: Vec<&str> = toolchain["execution"]["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|flag| flag.starts_with("--max-"))
+            .collect();
+        assert_eq!(heap.len(), 2, "the toolchain sets the oracle's heap");
         for (source, cpu) in [
             ("benchmarks/cases/private/case.ts", 60),
             ("tests/programs/private/main.ts", 15),
         ] {
             let mut command = Command::new("node");
-            command.args(["-e","const m=new WebAssembly.Memory({initial:1,maximum:65536});process.stdout.write(Buffer.from([0,255,128]));process.stderr.write(Buffer.from([254,0]))"]);
+            command.args(&heap).args(["-e","const m=new WebAssembly.Memory({initial:1,maximum:65536});process.stdout.write(Buffer.from([0,255,128]));process.stderr.write(Buffer.from([254,0]))"]);
             let result = execute_owned(&command, Utf8Path::new(source), &root).unwrap();
             assert!(
                 result.output.status.success(),
@@ -275,6 +286,20 @@ mod tests {
             );
             assert!(result.status["budget"].is_null());
         }
+        // The control differs in one thing: no heap flags, which the shared launcher refuses.
+        let mut bare = Command::new("node");
+        bare.args(["-e", "process.exit(0)"]);
+        let Err(refused) = execute_owned(
+            &bare,
+            Utf8Path::new("tests/programs/private/main.ts"),
+            &root,
+        ) else {
+            panic!("an oracle child without the heap flags ran");
+        };
+        assert!(
+            format!("{refused:#}").contains("oracle execution refused"),
+            "{refused:#}"
+        );
     }
 
     fn node(source: &str, cpu: u64) -> Command {

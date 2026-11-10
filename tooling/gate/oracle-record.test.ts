@@ -12,6 +12,8 @@ import {testScratch} from './test-scratch.ts';
 import {OracleCompileBudgetError} from '../differential/oracle-batch.ts';
 import {CaseBudgetError} from './step-result.ts';
 import {closeMemoryRun} from '../census/worker-memory.ts';
+import {ORACLE_HEAP_FLAGS} from '../differential/oracle-execution.ts';
+import {ORACLE_EXECUTION_POLICY} from '../differential/oracle-execution-policy.ts';
 import {gateEnvironment} from './canonical-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {spawnTest} from './test-wait.ts';
@@ -209,20 +211,17 @@ function recordingArm(t:{after(fn:()=>void):void},name:string,driver:string){
 test("an oracle stopped at V8's heap limit is a memory-cap budget at that limit, and its failure file keeps V8's words",async t=>{
   t.mock.method(console,'log',()=>{});
   const arm=recordingArm(t,'oracle-record-heap','heap driver');
-  // node sizes its heap from the scope only when no flag sets it, so the shell's own NODE_OPTIONS must not.
-  const env={...process.env};delete env.NODE_OPTIONS;
-  const limits={cpuSeconds:15,residentBytes:512*2**20};
+  // In the policy's own scope, whatever NODE_OPTIONS the shell has: the heap flags decide the limit.
   await recordAll(arm.root,arm.output,async(p,evidence,identity)=>{
     const dir=join(evidence,identity);mkdirSync(dir,{recursive:true});
-    await runOracleArm(dir,0,process.execPath,['-e','const held=[];for(;;)held.push({a:1,b:[1,2,3,4,5,6,7,8]});'],{source:p.source,env,limits});
+    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(new Array(1<<17).fill(1.5));'],{source:p.source,env:process.env});
     return assert.fail('a run past its heap limit was measured');
   });
   const [row]=JSON.parse(readFileSync(arm.output,'utf8')).rows;
   assert.equal(row.kind,'budget');assert.equal(row.count,undefined);
-  const {reason,bound,...budget}=row.budget;
-  assert.deepEqual(budget,{version:1,phase:'execute',outcome:'memory-cap',signal:'SIGABRT'});
-  assert.ok(bound<limits.residentBytes,'the row names the heap limit, not the resident bound the run never reached');
-  assert.match(reason,new RegExp(`^oracle memory-cap: ${arm.source} stopped at V8's ${bound} byte JavaScript heap limit, which node set from its ${limits.residentBytes} byte resident scope: FATAL ERROR: `));
+  const {reason,...budget}=row.budget;
+  assert.deepEqual(budget,{version:1,phase:'execute',outcome:'memory-cap',bound:ORACLE_EXECUTION_POLICY.heapBytes,signal:'SIGABRT'},'the row names the policy\'s heap, not the resident bound the run never reached');
+  assert.match(reason,new RegExp(`^oracle memory-cap: ${arm.source} stopped at V8's ${ORACLE_EXECUTION_POLICY.heapBytes} byte JavaScript heap limit, the oracle execution policy's: FATAL ERROR: `));
   const [finding]=arm.summary().findings;
   assert.equal(finding!.outcome,'memory-cap');
   const failure=readFileSync(finding!.detail,'utf8');
@@ -236,7 +235,7 @@ test('an oracle run that measured nothing keeps the end of its stderr, in whole 
   const said=Array.from({length:400},(_,line)=>`line ${line} of what the child said`).join('\n')+'\n';
   await assert.rejects(recordAll(arm.root,arm.output,async(p,evidence,identity)=>{
     const dir=join(evidence,identity);mkdirSync(dir,{recursive:true});
-    await runOracleArm(dir,0,process.execPath,['-e',`process.stderr.write(${JSON.stringify(said)});process.exitCode=3;`],{source:p.source,env:process.env});
+    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e',`process.stderr.write(${JSON.stringify(said)});process.exitCode=3;`],{source:p.source,env:process.env});
     return assert.fail('a failed run was measured');
   }),/recording incomplete/);
   const [finding]=arm.summary().findings;

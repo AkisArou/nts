@@ -212,10 +212,14 @@ const executableStat=statSync,processIdentityRead=readFileSync;
 export const nodeExecutableIdentity=(pid:number):NodeExecutableIdentity=>{const info=executableStat('/proc/'+pid+'/exe',{bigint:true});return {dev:String(info.dev),ino:String(info.ino)};};
 export const nodeProcessBirth=(pid:number)=>{const text=processIdentityRead('/proc/'+pid+'/stat','utf8'),end=text.lastIndexOf(')');if(end<0)throw Error('invalid process identity');const fields=text.slice(end+2).split(' ');if(fields[0]==='Z'||!fields[19])throw Error('process is not alive');return fields[19];};
 export const nodeProcessAlive=(owner:{pid:number;birth:string})=>{try{return nodeProcessBirth(owner.pid)===owner.birth;}catch{return false;}};
+/** A flag that sets V8's heap limit, as node and V8 spell it, dashes or underscores. */
+export const V8_HEAP_FLAG=/^--max[-_](?:old[-_]space[-_]size(?:[-_]percentage)?|semi[-_]space[-_]size|heap[-_]size)(?:=|$)/;
 export function nodeResolutionOptions(flags:string[],env:NodeJS.ProcessEnv=process.env,bootstrap?:string,preloads:readonly string[]=[]):NodeResolutionOptions{
-  // Keep all execution flags, except the exact owned bootstrap and these
-  // presentation/profiling options. Unknown options never silently reuse a
-  // probe. NODE_OPTIONS remains exact, including its original spelling.
+  // Keep all execution flags, except the exact owned bootstrap, these
+  // presentation/profiling options and the heap bounds, which resolve nothing:
+  // every oracle child carries the execution policy's, and a child the program
+  // starts itself need not. Unknown options never silently reuse a probe.
+  // NODE_OPTIONS remains exact, including its original spelling.
   const execution:string[]=[];
   for(let index=0;index<flags.length;index++){
     const flag=flags[index]!;
@@ -226,7 +230,7 @@ export function nodeResolutionOptions(flags:string[],env:NodeJS.ProcessEnv=proce
     if(flag==='--input-type'){index++;continue;}
     if(flag.startsWith('--input-type='))continue;
     if(flag==='--no-warnings'||flag==='--enable-source-maps'||flag==='--no-enable-source-maps'||flag==='--cpu-prof'||flag==='--heap-prof')continue;
-    if(/^--(?:cpu|heap)-prof-(?:dir|name|interval)(?:=|$)/.test(flag)){if(!flag.includes('='))index++;continue;}
+    if(/^--(?:cpu|heap)-prof-(?:dir|name|interval)(?:=|$)/.test(flag)||V8_HEAP_FLAG.test(flag)){if(!flag.includes('='))index++;continue;}
     execution.push(flag);
   }
   return {flags:execution,nodeOptions:env.NODE_OPTIONS??''};

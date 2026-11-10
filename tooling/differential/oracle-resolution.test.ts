@@ -18,6 +18,15 @@ async function close(session:NodeResolutionSession){
   await closeNodeResolutionSession(session);
   await waitFor('the oracle Node resolution holder to exit',()=>holderGone(()=>readFileSync('/proc/'+session.holder.pid+'/stat')));
 }
+test('a heap bound resolves nothing, so a nested child without the oracle child\'s heap flags keeps its resolution identity',()=>{
+  const env={NODE_OPTIONS:'--max-old-space-size=8192'};
+  const oracle=nodeResolutionOptions(['--enable-source-maps','--max-old-space-size=1024','--max-semi-space-size=16','--preserve-symlinks'],env);
+  assert.deepEqual(oracle,{flags:['--preserve-symlinks'],nodeOptions:'--max-old-space-size=8192'});
+  assert.deepEqual(nodeResolutionOptions(['--preserve-symlinks'],env),oracle,'a child the program starts itself');
+  assert.deepEqual(nodeResolutionOptions(['--max_semi_space_size','64','--max-heap-size=512','--preserve-symlinks'],env),oracle);
+  // The control differs in one thing: a resolver flag, which still changes the identity.
+  assert.notDeepEqual(nodeResolutionOptions(['--preserve-symlinks-main'],env),oracle);
+});
 test('holder disappearance keeps a live stat provisional',()=>assert.equal(holderGone(()=>Buffer.from('live stat')),false));
 for(const code of ['ENOENT','ESRCH'])test('holder disappearance recognizes '+code,()=>{
   const error=Object.assign(new Error('controlled process disappearance'),{code});

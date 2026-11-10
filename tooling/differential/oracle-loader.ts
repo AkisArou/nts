@@ -7,7 +7,7 @@ import {appendFileSync,openSync,closeSync,readSync,fstatSync,constants,existsSyn
 import {basename,dirname,join,resolve,relative,isAbsolute,sep,parse} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {observeOracleAssets} from './oracle-assets.ts';
-import {dependencySealReady,dependencySealError,checkerImportIdentity,validateRuntimeObservations as validateHostObservations,parseOracleLoaderEvents,checkNodeResolutionSession,nodeResolutionOptions,OracleResolutionDomain,OraclePathPrefixes,ORACLE_NODE_RESOLUTION_RECIPE,oracleFileUrlErrorProof,capturedModuleIdentity,readOracleSnapshotIndex,type CheckerImportRelation,type HostObservation} from './oracle-runtime.ts';
+import {dependencySealReady,dependencySealError,checkerImportIdentity,validateRuntimeObservations as validateHostObservations,parseOracleLoaderEvents,checkNodeResolutionSession,nodeResolutionOptions,OracleResolutionDomain,OraclePathPrefixes,ORACLE_NODE_RESOLUTION_RECIPE,oracleFileUrlErrorProof,capturedModuleIdentity,readOracleSnapshotIndex,V8_HEAP_FLAG,type CheckerImportRelation,type HostObservation} from './oracle-runtime.ts';
 import type {OracleSnapshotIdentity,OracleRuntimeNode,OracleRuntimeDescriptor,OracleRuntimeRoute,OwnerImportRoute} from './oracle-emit.ts';
 
 let originalPath:(file:string)=>string=()=>{throw Error('oracle loader has not completed bootstrap');};
@@ -327,9 +327,13 @@ const workerLaunch=(file:string|null,parent:string,args:unknown,kind:'file'|'eva
       appendEvent({version:1,status:'child-launch-failed',execution:child.id});
     }catch(error){appendEvent({version:1,status:'instrument',reason:error instanceof Error?error.message:String(error)});}finally{capturedClose(reader);}
   };
+  // This oracle child's own heap bounds are process-wide: node applies them to
+  // every isolate of the process, and refuses them in a Worker's own arguments.
+  const ownHeap=new Set(process.execArgv.filter(flag=>V8_HEAP_FLAG.test(flag)));
   const execution:string[]=['--import',bootstrapURL];
   for(let index=0;index<flags.length;index++){
     if(flags[index]==='--import'&&flags[index+1]===bootstrapURL){index++;continue;}
+    if(ownHeap.has(flags[index]))continue;
     execution.push(flags[index]);
   }
   return Object.freeze({context:child.context,args:execution,failed:(error:unknown)=>finish(error,true),ended:(error?:unknown)=>finish(error)});

@@ -3,11 +3,13 @@
 // reservations are not memory consumption, and a signal alone proves no cap.
 //
 // Two memory bounds hold an oracle: the resident scope, which the kernel
-// enforces, and the JavaScript heap, which V8 enforces and node sizes from that
-// scope's memory bound when no flag sets it (1072 MiB in a 2 GiB scope). A run
-// V8 stops at its heap limit ends with SIGABRT and V8's own words on stderr,
-// before the scope is full; that stop is the oracle's memory budget, at the
-// heap limit the run had, which is measured in a scope like its own.
+// enforces, and the JavaScript heap, which V8 enforces at the policy's
+// heapBytes. Every oracle child starts with oracle-toolchain.json's execution
+// flags, which set that heap. On the command line they follow an inherited
+// NODE_OPTIONS, so its own heap flags lose; the one option that would still
+// override them is refused by name. A run V8 stops at its heap limit ends with
+// SIGABRT and V8's own words on stderr, before the scope is full; that stop is
+// the oracle's memory budget, at the policy's heap.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {basename,resolve} from 'node:path';
@@ -17,10 +19,14 @@ import {CaseBudgetError,PressureError,ToolingInstrumentError,publishPressure} fr
 import {memoryRun,memoryCause,memoryDisposition,closeMemoryRun,compileActive} from '../census/worker-memory.ts';
 
 import {ORACLE_EXECUTION_POLICY as policy} from './oracle-execution-policy.ts';
-import type {OracleBudget} from './oracle-runtime.ts';
+import {V8_HEAP_FLAG,type OracleBudget} from './oracle-runtime.ts';
 export type {OracleBudget} from './oracle-runtime.ts';
-assert.equal(policy.version,1,'unknown oracle execution policy');
-for(const key of ['cpuSeconds','benchmarkCpuSeconds','residentBytes'] as const)assert.ok(Number.isSafeInteger(policy[key])&&policy[key]>0,'invalid oracle execution policy: '+key);
+assert.equal(policy.version,2,'unknown oracle execution policy');
+for(const key of ['cpuSeconds','benchmarkCpuSeconds','residentBytes','heapBytes'] as const)assert.ok(Number.isSafeInteger(policy[key])&&policy[key]>0,'invalid oracle execution policy: '+key);
+assert.ok(policy.heapBytes<policy.residentBytes,'the oracle heap must fit its resident scope');
+/** The heap flags every oracle child starts with: those in oracle-toolchain.json's execution arguments, the policy's heap. */
+export const ORACLE_HEAP_FLAGS:readonly string[]=Object.freeze((JSON.parse(readFileSync(new URL('./oracle-toolchain.json',import.meta.url),'utf8')).execution.args as string[]).filter(flag=>V8_HEAP_FLAG.test(flag)));
+assert.deepEqual(ORACLE_HEAP_FLAGS.map(flag=>flag.split('=')[0]),['--max-old-space-size','--max-semi-space-size'],'oracle execution arguments do not set the heap');
 export type OracleLimits={cpuSeconds:number;residentBytes:number};
 export function oracleExecutionLimits(source:string):OracleLimits{
   const benchmark=source.replaceAll('\\','/').startsWith('benchmarks/cases/');
@@ -43,9 +49,8 @@ export function v8HeapStop(stderr:string):string|null{
   return /^FATAL ERROR: .*\bheap limit\b.* - JavaScript heap out of memory$/m.exec(stderr)?.[0]??null;
 }
 
-/** The node an oracle command runs: the program past the wrappers that start it, `taskset -c <cpus>` and `prlimit --<limit>`; null when it is no node. */
-export function oracleNode(command:string,args:readonly string[]):string|null{
-  const line=[command,...args];
+/** Where an oracle command's node is: past the wrappers that start it, `taskset -c <cpus>` and `prlimit --<limit>`; -1 when it is no node. */
+function nodeAt(line:readonly string[]):number{
   let at=0;
   for(;;){
     const word=basename(line[at]??'');
@@ -54,26 +59,32 @@ export function oracleNode(command:string,args:readonly string[]):string|null{
     break;
   }
   const program=line[at];
-  return program&&/^node\d*$/.test(basename(program))?program:null;
+  return program&&/^node\d*$/.test(basename(program))?at:-1;
+}
+/** The node an oracle command runs, or null when it is no node. */
+export function oracleNode(command:string,args:readonly string[]):string|null{
+  const line=[command,...args],at=nodeAt(line);
+  return at<0?null:line[at]!;
 }
 
-const HEAP_PROBE="process.stdout.write(String(require('node:v8').getHeapStatistics().heap_size_limit))";
 /**
- * The JavaScript heap limit a run had: node sizes it at start from the memory
- * bound of the cgroup it starts in, unless a flag in its environment sets it,
- * so the same node, with the same environment, in a resident scope of the same
- * size, says what it was. Null when that cannot be told.
+ * Why a command cannot be an oracle child, or null. An oracle child runs node
+ * with the policy's heap flags and no other heap flag, so V8's limit is the
+ * policy's heapBytes, and no NODE_OPTIONS option it inherits overrides them.
  */
-async function heapLimit(node:string,limits:OracleLimits,env:NodeJS.ProcessEnv,cwd:string):Promise<number|null>{
-  const resident=memoryRun().worker('heap'+ordinal++,limits.residentBytes);
-  const scope=resident.scope(node,['-e',HEAP_PROBE],env);
-  try{
-    const probe=await activeCommand('systemd-run',scope.argv,{cwd,env:scope.env,eachProcessCpuSeconds:limits.cpuSeconds,idleMs:COMMAND_IDLE_GUARD_MS,maxBuffer:2**20});
-    const bytes=Number(probe.stdout.trim());
-    return probe.status===0&&Number.isSafeInteger(bytes)&&bytes>0?bytes:null;
-  }finally{resident.stop(scope);resident.close();}
+export function oracleChildProblem(command:string,args:readonly string[],env:NodeJS.ProcessEnv):string|null{
+  const line=[command,...args],at=nodeAt(line);
+  if(at<0)return `an oracle child runs node, not ${line.join(' ')}`;
+  const flags=line.slice(at+1).filter(flag=>V8_HEAP_FLAG.test(flag));
+  if(JSON.stringify(flags)!==JSON.stringify(ORACLE_HEAP_FLAGS))
+    return `an oracle child starts with the oracle execution policy's heap flags (${ORACLE_HEAP_FLAGS.join(' ')}) and no other, not ${flags.join(' ')||'none'}`;
+  // node lets this one option override an explicit old space, wherever it is set.
+  const option=(env.NODE_OPTIONS??'').split(/\s+/).find(word=>/^--max[-_]old[-_]space[-_]size[-_]percentage(?:=|$)/.test(word));
+  return option?`NODE_OPTIONS sets ${option}, which overrides the oracle execution policy's heap; unset it`:null;
 }
 export async function runOracleCommand(command:string,args:string[],options:{source:string;cwd?:string;env:NodeJS.ProcessEnv;limits?:OracleLimits;idleMs?:number}):Promise<OracleCommandResult>{
+  const problem=oracleChildProblem(command,args,options.env);
+  if(problem)throw new ToolingInstrumentError('tooling-setup','oracle execution refused: '+problem);
   const limits=options.limits??oracleExecutionLimits(options.source);
   const memory=memoryRun(),resident=memory.worker('execution'+ordinal++,limits.residentBytes);
   const scope=resident.scope('prlimit',['--core=0',command,...args],options.env);
@@ -93,11 +104,10 @@ export async function runOracleCommand(command:string,args:string[],options:{sou
     let budget:OracleBudget|undefined=disposition==='budget'
       ?{phase:'execute',outcome:'memory-cap',bound:limits.residentBytes,signal,reason:`oracle memory-cap: ${options.source} exceeded its ${limits.residentBytes} byte resident budget`}
       :result.timeout?{phase:'execute',outcome:'timeout',bound:limits.cpuSeconds,signal,reason:'oracle timed out: '+result.timeout}:undefined;
-    // V8's stop at its heap limit, which is the bound the row names: the scope was not full.
+    // V8's stop at its heap limit, the policy's, which is the bound the row names: the scope was not full.
     const stop=!budget&&signal==='SIGABRT'?v8HeapStop(stderrRaw.toString('utf8')):null;
-    const node=stop?oracleNode(command,args):null,heap=node?await heapLimit(node,limits,options.env,options.cwd??process.cwd()):null;
-    if(stop&&heap)budget={phase:'execute',outcome:'memory-cap',bound:heap,signal,
-      reason:`oracle memory-cap: ${options.source} stopped at V8's ${heap} byte JavaScript heap limit, which node set from its ${limits.residentBytes} byte resident scope: ${stop}`};
+    if(stop)budget={phase:'execute',outcome:'memory-cap',bound:policy.heapBytes,signal,
+      reason:`oracle memory-cap: ${options.source} stopped at V8's ${policy.heapBytes} byte JavaScript heap limit, the oracle execution policy's: ${stop}`};
     return {stdoutHex:stdoutRaw.toString('hex'),stderrHex:stderrRaw.toString('hex'),run:{...result,error:result.error?.message},limits,residentPeakBytes:Number(readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8')),...(budget?{budget}:{})};
   }finally{resident.stop(scope);resident.close();}
 }
