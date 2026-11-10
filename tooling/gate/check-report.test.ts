@@ -174,3 +174,13 @@ test('version 3 oracle budgets are loud typed case outcomes with no invented cou
   assert.equal(consumerExit({...decoded,budget:{recorded:false,value:decoded.budget!.value}},'benchmark'),1,'a budget replacing a count is red');
   assert.throws(()=>parseJsonReport(JSON.stringify({...value,version:2}),1),/fields|revision/);
 });
+
+test('a planner past its bound answers a shared reference with a plan budget: recorded, it is retried; unrecorded, red',()=>{
+  const budget={phase:'plan',outcome:'timeout',bound:600,signal:'SIGKILL',reason:'oracle planner timed out'};
+  const value={version:3,status:'error',counts:null,oracle:null,refusals:[],disagreements:[],aborts:[],incomplete:[],error:{kind:'oracle_budget',source:'benchmarks/cases/private/case.ts',message:'ORACLE BUDGET: plan timeout at 600 CPU-s',budget:{recorded:true,value:budget}}};
+  const decoded=decodeCheck('json-v1',1,JSON.stringify(value),'');
+  assert.equal(decoded.outcome,Outcome.ORACLE_BUDGET);assert.deepEqual(decoded.budget,{recorded:true,value:budget});
+  assert.equal(consumerExit(decoded,'benchmark'),5);
+  assert.equal(consumerExit({...decoded,budget:{recorded:false,value:decoded.budget!.value}},'benchmark'),1);
+  assert.throws(()=>parseJsonReport(JSON.stringify({...value,error:{...value.error,budget:{recorded:true,value:{...budget,phase:'link'}}}}),1),/invalid budget phase/);
+});

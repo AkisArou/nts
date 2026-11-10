@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {availableParallelism} from 'node:os';
 import {REPOSITORY,oracleRecipeIdentity} from './oracle-emit.ts';
 import {OracleFilesystem,type HostObservation} from './oracle-filesystem.ts';
-import {readRecords,fixtureOf} from './oracle-records.ts';
+import {readRecords,fixtureOf,type OracleTable} from './oracle-records.ts';
 import {createProgramOracleResults,resultHash,type ProgramAnswer,type ProgramCapture} from './oracle-results.ts';
 import {programOracleDirectory} from './oracle-result-scope.ts';
 export {programOracleDirectory} from './oracle-result-scope.ts';
@@ -48,12 +48,29 @@ export function sweepOracleTask(directory:string):ProgramOracleTask{
 export function hasOracleWork(row:{kind:string;count?:number}):boolean{
   return row.kind==='budget'||row.kind==='measured'&&!!row.count;
 }
-export function programOracleTasks(directory:string):ProgramOracleTask[]{
-  const tasks:ProgramOracleTask[]=[],seen=new Set<string>();
-  for(const row of readRecords(REPOSITORY).rows){
+/**
+ * The entry each fixture's program oracle plans: its row's, or its plan
+ * budget's, which is a budget too and so work to retry. A fixture has one.
+ */
+export function programOracleSources(table:Pick<OracleTable,'rows'|'unplanned'>):string[]{
+  const sources=new Map<string,string>();
+  for(const row of table.rows){
     const benchmark=row.source.startsWith('benchmarks/cases/');
     if(!benchmark&&(!hasOracleWork(row)||!row.source.startsWith('tests/programs/')))continue;
-    const fixture=fixtureOf(row.source);if(seen.has(fixture))throw Error('program oracle has multiple source entries: '+fixture);seen.add(fixture);
+    const fixture=fixtureOf(row.source);if(sources.has(fixture))throw Error('program oracle has multiple source entries: '+fixture);
+    sources.set(fixture,row.source);
+  }
+  for(const {source} of table.unplanned??[]){
+    const fixture=fixtureOf(source),known=sources.get(fixture);
+    if(known!==undefined&&known!==source)throw Error('program oracle has multiple source entries: '+fixture);
+    sources.set(fixture,source);
+  }
+  return [...sources.values()];
+}
+export function programOracleTasks(directory:string):ProgramOracleTask[]{
+  const tasks:ProgramOracleTask[]=[];
+  for(const source of programOracleSources(readRecords(REPOSITORY))){
+    const benchmark=source.startsWith('benchmarks/cases/'),fixture=fixtureOf(source);
     let project=join(REPOSITORY,fixture,'tsconfig.json');
     const fs=new OracleFilesystem();
     if(benchmark&&!fs.fileExists(project)){
@@ -61,7 +78,7 @@ export function programOracleTasks(directory:string):ProgramOracleTask[]{
       project=join(generated,fixture.split('/').at(-1)!+'.tsconfig.json');
       writeFileSync(project,JSON.stringify({extends:join(REPOSITORY,'tsconfig.fixtures.json'),include:[join(REPOSITORY,fixture,'case.ts')]}));
     }
-    tasks.push({subject:fixture,project,entry:join(REPOSITORY,row.source),mode:'calls',
+    tasks.push({subject:fixture,project,entry:join(REPOSITORY,source),mode:'calls',
       program:PROGRAM_EMIT_PROJECTS.includes(fixture.split('/').at(-1)!),observations:fs.captured()});
   }
   const inputs=join(directory,'inputs');mkdirSync(inputs,{recursive:true});

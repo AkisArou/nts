@@ -21,6 +21,11 @@ struct Shard {
     version: u32,
     fixture: String,
     rows: Vec<Value>,
+    /// A planner past its CPU bound on these backends named its entry and
+    /// planned nothing: the entry's plan budget, beside the rows, which no case
+    /// key names.
+    #[serde(default)]
+    unplanned: Option<Value>,
 }
 
 fn fixture_of(source: &str) -> Result<String> {
@@ -59,13 +64,35 @@ fn header(bytes: &[u8]) -> Result<()> {
 fn record(bytes: &[u8], expected: &str) -> Result<Value> {
     let record: Shard = serde_json::from_slice(bytes)?;
     ensure!(
-        matches!(record.version, 1 | 2) && record.fixture == expected && !record.rows.is_empty(),
+        matches!(record.version, 1 | 2)
+            && record.fixture == expected
+            && (!record.rows.is_empty() || record.unplanned.is_some()),
         "oracle not measured: invalid fixture record for {expected}"
     );
     ensure!(
-        record.version == 2 || !record.rows.iter().any(|row| row["kind"] == "budget"),
+        record.version == 2
+            || (record.unplanned.is_none()
+                && !record.rows.iter().any(|row| row["kind"] == "budget")),
         "oracle budget rows require fixture record version 2"
     );
+    if let Some(unplanned) = &record.unplanned {
+        let backends = unplanned["backends"]
+            .as_array()
+            .context("a plan budget names its backends")?;
+        let source = unplanned["source"]
+            .as_str()
+            .context("a plan budget names its entry")?;
+        ensure!(
+            fixture_of(source)? == expected
+                && !backends.is_empty()
+                && backends
+                    .iter()
+                    .all(|backend| matches!(backend.as_str(), Some("c" | "llvm" | "jvm")))
+                && unplanned["budget"]["version"] == 1
+                && unplanned["budget"]["phase"] == "plan",
+            "oracle not measured: invalid plan budget for {expected}"
+        );
+    }
     let mut identities = std::collections::BTreeSet::new();
     let mut populations = std::collections::BTreeSet::new();
     for row in &record.rows {
@@ -99,7 +126,7 @@ fn record(bytes: &[u8], expected: &str) -> Result<Value> {
             );
         }
     }
-    Ok(serde_json::json!({"version":1,"rows":record.rows}))
+    Ok(serde_json::json!({"version":1,"rows":record.rows,"unplanned":record.unplanned}))
 }
 
 /// The record a source's fixture is held to, relative to the repository.
@@ -200,6 +227,33 @@ mod tests {
         );
         shard["version"] = json!(3);
         assert!(record(&serde_json::to_vec(&shard).unwrap(), fixture).is_err());
+    }
+
+    #[test]
+    fn a_plan_budget_is_its_entrys_record_beside_rows_it_may_have_none_of() {
+        let fixture = "benchmarks/cases/slow";
+        let shard = json!({"version":2,"fixture":fixture,"rows":[],"unplanned":{
+            "source":"benchmarks/cases/slow/case.ts","backends":["c","llvm"],
+            "budget":{"version":1,"phase":"plan","outcome":"timeout","bound":600,"signal":"SIGKILL","reason":"oracle planner timed out"},
+            "revision":{"entry":"e","node":"n","producer":"p","policy":"q"}}});
+        let read = |value: &Value| record(&serde_json::to_vec(value).unwrap(), fixture);
+        let parsed = read(&shard).unwrap();
+        assert_eq!(parsed["rows"], json!([]));
+        assert_eq!(parsed["unplanned"]["backends"], json!(["c", "llvm"]));
+        let mut empty = shard.clone();
+        empty.as_object_mut().unwrap().remove("unplanned");
+        assert!(read(&empty).is_err(), "a record of nothing");
+        for (path, value) in [
+            ("/version", json!(1)),
+            ("/unplanned/source", json!("benchmarks/cases/other/case.ts")),
+            ("/unplanned/backends", json!([])),
+            ("/unplanned/backends", json!(["wasm"])),
+            ("/unplanned/budget/phase", json!("execute")),
+        ] {
+            let mut changed = shard.clone();
+            *changed.pointer_mut(path).unwrap() = value;
+            assert!(read(&changed).is_err(), "{path}");
+        }
     }
 
     #[test]

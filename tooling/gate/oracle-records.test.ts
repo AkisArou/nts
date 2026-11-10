@@ -114,6 +114,30 @@ test("a partial committed directory never falls back to a leftover flat table", 
   assert.throws(() => readRecordsAt(root, "HEAD"), /no generator header/);
 }));
 
+test("a plan budget is its entry's record, alone or beside rows, and reads back as written", () => fixture((root, table) => {
+  subject(root, "slow");
+  const unplanned = { source: "tests/programs/slow/src/main.ts", backends: ["c", "llvm"],
+    budget: { version: 1 as const, phase: "plan" as const, outcome: "timeout" as const, bound: 600, signal: "SIGKILL", reason: "oracle planner timed out" },
+    revision: { entry: "a".repeat(64), node: "b".repeat(64), producer: "c".repeat(64), policy: "d".repeat(64) } };
+  const updated = { ...table, unplanned: [unplanned] };
+  writeRecords(root, updated, new Set(["tests/programs/slow"]));
+  const shard = JSON.parse(readFileSync(join(root, recordPath("tests/programs/slow")), "utf8"));
+  assert.deepEqual(shard, { version: 2, fixture: "tests/programs/slow", rows: [], unplanned }, "no population, so no row");
+  assert.deepEqual(readRecords(root), updated);
+  assert.deepEqual(parseLegacyTable(updated), updated);
+  for (const [changed, refusal] of [
+    [{ ...shard, version: 1 }, /version 2/],
+    [{ version: 2, fixture: "tests/programs/slow", rows: [] }, /invalid or misnamed/],
+    [{ ...shard, unplanned: { ...unplanned, source: "tests/programs/first/src/main.ts" } }, /another fixture's source/],
+    [{ ...shard, unplanned: { ...unplanned, backends: ["llvm", "c"] } }, /backends once each, in order/],
+    [{ ...shard, unplanned: { ...unplanned, backends: ["c", "c"] } }, /backends once each, in order/],
+    [{ ...shard, unplanned: { ...unplanned, budget: { ...unplanned.budget, phase: "execute" } } }, /invalid versioned plan budget/],
+    [{ ...shard, unplanned: { ...unplanned, budget: { ...unplanned.budget, count: 3 } } }, /unknown field count/],
+  ] as const) assert.throws(() => parseShard(changed, "tests/programs/slow"), refusal);
+  rmSync(join(root, "tests/programs/slow/src/main.ts"));
+  assert.throws(() => readRecords(root), /orphaned source record tests\/programs\/slow/, "an entry that is gone");
+}));
+
 test('budget records require revision 2 and can claim neither count nor completion',()=>{
   const budget={...row('first'),kind:'budget',source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'memory-cap',bound:2*2**30,signal:null,reason:'own resident hit'},revision:{entry:'a'.repeat(64),node:'b'.repeat(64),producer:'c'.repeat(64),policy:'d'.repeat(64)}};
   delete (budget as Partial<OracleRow>).count;delete (budget as Partial<OracleRow>).complete;

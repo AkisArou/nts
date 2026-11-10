@@ -5,19 +5,17 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { homedir, setPriority } from "node:os";
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
-const executeFile = promisify(execFile);
+import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
-import {runOracleCommand,oracleExecutionLimits,OracleBudgetError,type OracleLimits} from "./oracle-execution.ts";
+import {runOracleCommand,runOraclePlanner,oracleExecutionLimits,OracleBudgetError,type OracleBudget,type OracleLimits,type OraclePlannerLimits} from "./oracle-execution.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
-  type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
+  type BudgetRevision, type MarginBudget, type RecordedBudget, type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
   tsconfig?: string;
   source_exports?: string[];
@@ -25,7 +23,13 @@ type Plan = { version: number; backend: string; source: string; source_digest: s
   repository_root?: string;
   generator_version: number; generator_digest: string; case_key: string; case_count: number;
   cases: string[]; signature: unknown[]; driver: string };
-type Manifest = { version: number; plans: Plan[]; failures: { config: string; backend: string; error: string }[] };
+/**
+ * What planning found: the populations planned, the planners that failed (a
+ * hold, with what each said), and the entries whose planner ran past its CPU
+ * bound on a backend, which planned nothing there (a plan budget).
+ */
+type Manifest = { version: number; plans: Plan[]; failures: { config: string; backend: string; error: string }[];
+  unplanned?: { config: string; source: string; backend: string; budget: OracleBudget & { phase: "plan" }; repository_root: string }[] };
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 function atomic(path: string, value: unknown) {
@@ -39,7 +43,8 @@ export function writeTable(path: string, table: Table) {
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.${process.pid}.tmp`;
   const header = JSON.stringify({ version: 1, generator_version: table.generator_version, generator_digest: table.generator_digest, seed: table.seed });
-  writeFileSync(temporary, header.slice(0, -1) + ',"rows":[\n' + rows.map(row => JSON.stringify({ ...row, keys: Object.fromEntries(Object.entries(row.keys).sort(([a], [b]) => a.localeCompare(b, "en"))) })).join(",\n") + "\n]}\n");
+  const unplanned = table.unplanned?.length ? ',"unplanned":' + JSON.stringify([...table.unplanned].sort((a, b) => a.source.localeCompare(b.source, "en"))) : "";
+  writeFileSync(temporary, header.slice(0, -1) + ',"rows":[\n' + rows.map(row => JSON.stringify({ ...row, keys: Object.fromEntries(Object.entries(row.keys).sort(([a], [b]) => a.localeCompare(b, "en"))) })).join(",\n") + "\n]" + unplanned + "}\n");
   renameSync(temporary, path);
 }
 export function canonicalDriver(plan: Plan): string {
@@ -135,16 +140,63 @@ export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: nu
   const row: Row = { kind: "measured", ...id, keys: { ...old?.keys, ...id.keys },
     count: delivered, complete: true, populations: population,
     ...(domain === undefined ? {} : { input_domain: domain }) };
-  return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(old => !(old.source === row.source && old.signature === row.signature)), row] };
+  return withRow(table, plan, row);
+}
+/** The table with `row` in place of its population's row, under `plan`'s generator; its plan budgets stay as they are. */
+function withRow(table: Table, plan: Plan, row: Row): Table {
+  return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null,
+    rows: [...table.rows.filter(old => old.source !== row.source || old.signature !== row.signature), row], ...(table.unplanned ? { unplanned: table.unplanned } : {}) };
 }
 /** No count is claimed when a case passed its own bound. A measured row
  * cannot get worse through a recording pass. */
 let nodeRevision:string|undefined;
-export function oracleBudgetRevision(root:string,source:string){
-  const domain=join(root,fixtureOf(source),'case.domains.json');
-  return {entry:digest(JSON.stringify([readFileSync(join(root,source),'utf8'),existsSync(domain)?readFileSync(domain,'utf8'):null])),node:nodeRevision??=createHash('sha256').update(readFileSync(process.platform==='linux'?'/proc/self/exe':process.execPath)).digest('hex'),
+/** A budget's provenance, given its entry: the Node, the producer and the policy it was measured under. */
+function budgetRevision(entry:string):BudgetRevision{
+  return {entry,node:nodeRevision??=createHash('sha256').update(readFileSync(process.platform==='linux'?'/proc/self/exe':process.execPath)).digest('hex'),
     producer:digest(JSON.stringify(oracleIdentity(oracleToolchainLocation()))+readFileSync(new URL('./oracle-execution.ts',import.meta.url),'utf8')+readFileSync(new URL('./oracle-batch.ts',import.meta.url),'utf8')),
     policy:digest(readFileSync(new URL('./oracle-execution-policy.ts',import.meta.url),'utf8')+JSON.stringify({compileCpu:COMPILE_CPU_BOUND_SECONDS,compileResident:ORACLE_COMPILE_MEMORY_BYTES}))};
+}
+export function oracleBudgetRevision(root:string,source:string){
+  const domain=join(root,fixtureOf(source),'case.domains.json');
+  return budgetRevision(digest(JSON.stringify([readFileSync(join(root,source),'utf8'),existsSync(domain)?readFileSync(domain,'utf8'):null])));
+}
+/** Every regular file under `directory`, by its path from `root`, in order. */
+function fixtureFiles(root:string,directory:string):string[]{
+  return readdirSync(directory,{withFileTypes:true}).flatMap(entry=>{
+    const path=join(directory,entry.name);
+    return entry.isDirectory()?fixtureFiles(root,path):entry.isFile()?[relative(root,path)]:[];
+  }).sort();
+}
+/**
+ * A plan budget's provenance. Its planner planned nothing, so no source is
+ * known: its entry is the digest of every file of its fixture, all the
+ * planner reads, so a change to any of them plans it again.
+ */
+export function oracleUnplannedRevision(root:string,fixture:string):BudgetRevision{
+  return budgetRevision(digest(JSON.stringify(fixtureFiles(root,join(root,fixture)).map(path=>[path,createHash('sha256').update(readFileSync(join(root,path))).digest('hex')]))));
+}
+/**
+ * The table with `source`'s planner past its CPU bound on `backend`: the plan
+ * budget of its fixture names that backend beside the others it names. An
+ * unchanged budget keeps its original provenance, as a budget row does. A
+ * population measured on that backend is refused as a regression, as a
+ * budget row refuses one.
+ */
+export function addUnplanned(table:Table,root:string,source:string,backend:string,budget:OracleBudget&{phase:'plan'}):Table{
+  const fixture=fixtureOf(source);
+  if(table.rows.some(row=>row.source===source&&row.kind==='measured'&&row.keys[backend]))throw new CaseBudgetError(`REGRESSED oracle population: ${source} (${backend}) measured -> plan timeout`);
+  const previous=table.unplanned?.find(one=>fixtureOf(one.source)===fixture),revision=oracleUnplannedRevision(root,fixture);
+  const backends=[...new Set([...(previous?.source===source?previous.backends:[]),backend])].sort();
+  const entry=previous?.source===source&&JSON.stringify(previous.revision)===JSON.stringify(revision)?{...previous,backends}
+    :{source,backends,budget:{version:1 as const,...budget},revision};
+  return {...table,unplanned:[...(table.unplanned??[]).filter(one=>fixtureOf(one.source)!==fixture),entry].sort((a,b)=>a.source.localeCompare(b.source,'en'))};
+}
+/** The table with `source` planned on `backend` this time: its plan budget no longer names that backend, and goes when it names none. */
+export function dropUnplanned(table:Table,source:string,backend:string):Table{
+  if(!table.unplanned?.some(one=>one.source===source&&one.backends.includes(backend)))return table;
+  const unplanned=table.unplanned.flatMap(one=>one.source!==source?[one]:one.backends.length===1?[]:[{...one,backends:one.backends.filter(name=>name!==backend)}]);
+  const {unplanned:_previous,...rest}=table;
+  return unplanned.length?{...rest,unplanned}:rest;
 }
 /**
  * The budget of runs that delivered every case within `bound` CPU seconds, but
@@ -167,7 +219,7 @@ export function addBudgetRecord(table:Table,plan:Plan,budget:RecordedBudget):Tab
   row.keys={...previous?.keys,...row.keys};
   // An unchanged recorded defect keeps its original provenance.
   if(previous?.kind==='budget'&&JSON.stringify(previous.revision)===JSON.stringify(row.revision))row={...previous,keys:row.keys};
-  return {version:1,generator_version:plan.generator_version,generator_digest:plan.generator_digest,seed:null,rows:[...table.rows.filter(one=>one.source!==row.source||one.signature!==row.signature),row]};
+  return withRow(table,plan,row);
 }
 
 export function noOracleRecord(plan: Plan, reason: string): Row {
@@ -179,21 +231,36 @@ export function noOracleRecord(plan: Plan, reason: string): Row {
 function addNoOracle(table: Table, plan: Plan, reason: string): Table {
   const row = noOracleRecord(plan, reason), old = table.rows.find(r => r.source === row.source && r.signature === row.signature);
   row.keys = { ...old?.keys, ...row.keys };
-  return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(r => !(r.source === row.source && r.signature === row.signature)), row] };
+  return withRow(table, plan, row);
 }
-async function planAll(binary: string, root: string, evidence: string, rc = false, only?: string, named?: string[]) {
+/**
+ * Plan every fixture's population on each backend: its oracle-plan run, the
+ * case's compile, held as a program-oracles worker holds it
+ * (runOraclePlanner): its CPU bound on every process, and the shared activity
+ * guard. Past its bound it planned nothing: a plan budget for the entry it
+ * named first. A planner that fails, goes silent or runs away, or passes its
+ * bound before it names its entry, is a failure with what it said, and the
+ * recording holds on it.
+ */
+export async function planAll(binary: string, root: string, evidence: string, rc = false, only?: string, named?: string[], limits?: OraclePlannerLimits) {
   mkdirSync(evidence, { recursive: true });
-  const configs = named ? named.map(name => fixtureConfig(root, evidence, name)) : readdirSync(join(root, "tests/programs"), { withFileTypes: true })
+  // The fixture each project plans, which the entry a plan budget names is one of.
+  const fixtures = new Map<string, string>();
+  const configs = named ? named.map(name => {
+    const config = fixtureConfig(root, evidence, name);
+    fixtures.set(config, relative(root, resolve(root, name.replace(/\/tsconfig\.json$/, ""))).replaceAll("\\", "/"));
+    return config;
+  }) : readdirSync(join(root, "tests/programs"), { withFileTypes: true })
     .filter(e => e.isDirectory() && !["invalid", "unsupported"].includes(e.name))
-    .map(e => join(root, "tests/programs", e.name, "tsconfig.json")).filter(existsSync);
+    .map(e => { const config = join(root, "tests/programs", e.name, "tsconfig.json"); fixtures.set(config, `tests/programs/${e.name}`); return config; }).filter(existsSync);
   for (const name of named ? [] : readdirSync(join(root, "benchmarks/cases"))) {
     const dir = join(root, "benchmarks/cases", name);
     if (!existsSync(join(dir, "case.ts"))) continue;
-    if (existsSync(join(dir, "tsconfig.json"))) configs.push(join(dir, "tsconfig.json"));
+    if (existsSync(join(dir, "tsconfig.json"))) { configs.push(join(dir, "tsconfig.json")); fixtures.set(join(dir, "tsconfig.json"), `benchmarks/cases/${name}`); }
     else {
       const config = join(evidence, `bench-${name}.json`);
       atomic(config, { extends: join(root, "tsconfig.fixtures.json"), include: [join(dir, "case.ts")] });
-      configs.push(config);
+      configs.push(config); fixtures.set(config, `benchmarks/cases/${name}`);
     }
   }
   if (only) {
@@ -209,7 +276,7 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
   const configHash = digest(JSON.stringify(configs.sort()));
   if (manifest.config_list_digest && manifest.config_list_digest !== configHash) throw new Error("project list changed; use fresh evidence");
   manifest.config_list_digest = configHash;
-  manifest.completed ??= { normal: Math.floor((manifest.plans.length + manifest.failures.length) / 4), rc: 0 };
+  manifest.completed ??= { normal: Math.floor((manifest.plans.length + manifest.failures.length + (manifest.unplanned?.length ?? 0)) / 4), rc: 0 };
   const mode = rc ? "rc" : "normal";
   const backends = rc ? ["c", "llvm"] : ["c", "llvm", "jvm"];
   const ordered = configs.sort();
@@ -218,10 +285,14 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
     // Two captures form one bounded phase, inside the recording's
     // reservation; backend order in the manifest stays deterministic.
     for (let first = 0; first < backends.length; first += 2) {
-      const results = await Promise.all(backends.slice(first, first + 2).map(async backend => {
+      const results = await Promise.all(backends.slice(first, first + 2).map(async (backend): Promise<{ backend: string; plan?: Plan; budget?: OracleBudget & { phase: "plan" }; source?: string; error?: string }> => {
         try {
-          const result = await executeFile(binary, [config], { cwd: root, env: { ...process.env, NTS_BACKEND: backend, NTS_CHECKERS: "1", NTS_RC: rc ? "1" : "0" }, maxBuffer: 64 * 2 ** 20 });
-          return { backend, plan: JSON.parse(result.stdout) as Plan };
+          const planned = await runOraclePlanner(binary, [config], { cwd: root, env: { ...process.env, NTS_BACKEND: backend, NTS_CHECKERS: "1", NTS_RC: rc ? "1" : "0" }, limits });
+          if ("plan" in planned) return { backend, plan: JSON.parse(planned.plan) as Plan };
+          // A budget is for the entry its planner named before its bound.
+          if (!planned.entry) return { backend, error: `oracle planner passed its CPU bound before it named its entry: ${planned.budget.reason}` };
+          if (!planned.entry.source) return { backend, error: `oracle planner passed its CPU bound planning ${planned.entry.entry}, which is no fixture's entry: ${planned.budget.reason}` };
+          return { backend, budget: planned.budget, source: planned.entry.source };
         } catch (error) {
           return { backend, error: String(error) };
         }
@@ -235,9 +306,13 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
           if (named && !named.some(name => plan.source.startsWith(relative(root, resolve(root, name.replace(/\/tsconfig\.json$/, ""))).replaceAll("\\", "/") + "/"))) throw new Error(`planner returned an unrequested source: ${plan.source}`);
           manifest.plans.push(plan);
           console.log("plan", result.backend, plan.source, plan.case_count);
+        } else if (result.budget && result.source) {
+          if (fixtureOf(result.source) !== fixtures.get(config)) throw new Error(`planner named another fixture's entry: ${result.source} for ${config}`);
+          (manifest.unplanned ??= []).push({ config, source: result.source, backend: result.backend, budget: result.budget, repository_root: root });
+          console.log("plan budget", result.backend, result.source, result.budget.reason);
         } else {
           manifest.failures.push({ config, backend: result.backend, error: result.error! });
-          console.log("plan unavailable", result.backend, config);
+          console.log("plan unavailable", result.backend, config, result.error!.split("\n", 1)[0]);
         }
       }
     }
@@ -402,14 +477,21 @@ export async function recordAll(evidence: string, output: string, measure = meas
     }
   }
 
-  const summary = { complete_unique_drivers: measured.size, failed_unique_drivers: failed.size,
+  // A planner past its CPU bound planned nothing on that backend: its entry's
+  // plan budget names the backend. A backend planned this time leaves it.
+  for (const plan of manifest.plans) table = dropUnplanned(table, plan.source, plan.backend);
+  for (const one of manifest.unplanned ?? []) {
+    table = addUnplanned(table, one.repository_root, one.source, one.backend, one.budget);
+    console.log("PLAN BUDGET", one.backend, one.source, one.budget.reason);
+  }
+  const summary = { complete_unique_drivers: measured.size, failed_unique_drivers: failed.size, unplanned: manifest.unplanned ?? [],
     recorded_populations: table.rows.filter(row => row.kind === "measured").length, no_oracle_unique_drivers: exceptions.size,
     worst_node_cpu_s_to_done: Math.max(0, ...[...measured.values()].flatMap(m => m.cpu)), findings,
     preparation_failures: manifest.failures, measurements: Object.fromEntries(measured) };
   const summaryPath=join(evidence,"measurement-summary.json");
   atomic(summaryPath, summary);
-  const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,...counts}=summary;
-  console.log(JSON.stringify({...counts,failed_populations:findings.length,preparation_failures:manifest.failures.length,summary:summaryPath}));
+  const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,unplanned:_unplanned,...counts}=summary;
+  console.log(JSON.stringify({...counts,failed_populations:findings.length,preparation_failures:manifest.failures.length,plan_budgets:(manifest.unplanned??[]).length,summary:summaryPath}));
   if (findings.some(finding=>finding.outcome==='not-measured') || manifest.failures.length) throw new ToolingInstrumentError('tooling-setup',"recording incomplete; review every not-measured project before submitting; "+summaryPath);
   writeTable(output, table);
 }
@@ -455,9 +537,10 @@ async function recordNamed(names: string[]) {
   }
   await planAll(resolve(binary), root, evidence, false, undefined, names);
   await planAll(resolve(binary), root, evidence, true, undefined, names);
-  const plans = (json(join(evidence, "plans.json")) as Manifest).plans;
+  const manifest = json(join(evidence, "plans.json")) as Manifest, plans = manifest.plans;
   const selected = new Set(plans.map(plan => plan.source));
-  const fixtures = new Set([...selected].map(fixtureOf));
+  // An entry whose planner ran past its bound planned no population: its plan budget publishes its fixture.
+  const fixtures = new Set([...[...selected].map(fixtureOf), ...(manifest.unplanned ?? []).map(one => fixtureOf(one.source))]);
   const before = readRecords(root);
   const originalHeader = readFileSync(join(root, GENERATOR));
   const original = new Map([...fixtures].map(fixture => {
@@ -480,7 +563,10 @@ async function recordNamed(names: string[]) {
     }
   }
   const recorded = parseLegacyTable(json(stage));
-  const result = { ...recorded, rows: [...before.rows.filter(row => !selected.has(row.source)), ...recorded.rows.filter(row => identities.has(`${row.source}\0${row.signature}`))] };
+  const unplanned = [...(before.unplanned ?? []).filter(one => !fixtures.has(fixtureOf(one.source))), ...(recorded.unplanned ?? []).filter(one => fixtures.has(fixtureOf(one.source)))];
+  const { unplanned: _recorded, ...header } = recorded;
+  const result = { ...header, rows: [...before.rows.filter(row => !selected.has(row.source)), ...recorded.rows.filter(row => identities.has(`${row.source}\0${row.signature}`))],
+    ...(unplanned.length ? { unplanned } : {}) };
   writeRecords(root, result, fixtures);
   console.log(`recorded ${names.length} named fixture(s), ${selected.size} source(s); evidence: ${evidence}`);
 }

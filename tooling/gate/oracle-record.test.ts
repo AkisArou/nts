@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
+import { addRecord, canonicalDriver, completeRows, noOracleRecord, oracleUnplannedRevision, planAll, recordAll, runOracleArm, STDERR_TAIL_BYTES, validateSourcePlan } from "../differential/record-oracles.ts";
 import { parseShard, readRecords } from "../differential/oracle-records.ts";
 import { oracleExecutionLimits } from "../differential/oracle-execution.ts";
 import { fileURLToPath } from "node:url";
@@ -364,4 +364,93 @@ test("runs past half their CPU bound are a margin row naming what each used, wit
   ] as const)assert.throws(()=>parseShard(shard(JSON.parse(JSON.stringify(budget))),'tests/programs/margin'),refusal);
   // A population measured before, past half now, is refused as a regression.
   await assert.rejects(recordAll(root,output,async p=>({cpu:[7.6,7.6],count:2})),/REGRESSED oracle population: tests\/programs\/margin\/under\.ts measured -> margin/);
+});
+
+/** Program fixtures under `root`, each a tsconfig and its src/main.ts entry. */
+function programs(root:string,names:readonly string[]){
+  for(const name of names){
+    mkdirSync(join(root,'tests/programs',name,'src'),{recursive:true});
+    writeFileSync(join(root,'tests/programs',name,'tsconfig.json'),'{"include":["src"]}\n');
+    writeFileSync(join(root,'tests/programs',name,'src/main.ts'),'export function work(n: number): number { return n; }\n');
+  }
+}
+test("the records pass holds each planner as a worker does: past its bound after naming its entry, that entry's plan budget; naming none, silent or failing, a failure saying so",async t=>{
+  const root=testScratch(t,'oracle-plan-bound'),evidence=join(root,'evidence'),planner=join(root,'oracle-plan');
+  // The test's own step frame: the hold a silent planner publishes reaches no gate step.
+  const frame={NTS_GATE_STEP_RESULT:join(root,'step-result.json'),NTS_GATE_STEP:'oracle-plan-control',NTS_GATE_STEP_ATTEMPT:'control'};
+  const saved=Object.fromEntries(Object.keys(frame).map(name=>[name,process.env[name]]));
+  t.after(()=>{for(const [name,value] of Object.entries(saved))if(value===undefined)delete process.env[name];else process.env[name]=value;});
+  Object.assign(process.env,frame);
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  programs(root,['slow','fine','early','quiet','broken']);
+  const named=(name:string)=>JSON.stringify({entry:join(root,'tests/programs',name,'src/main.ts'),source:`tests/programs/${name}/src/main.ts`})+'\n';
+  writeFileSync(join(root,'slow.entry'),named('slow'));writeFileSync(join(root,'fine.entry'),named('fine'));
+  for(const backend of ['c','llvm','jvm'])writeFileSync(join(root,`fine-${backend}.plan`),JSON.stringify({...plan,backend,source:'tests/programs/fine/src/main.ts',entry:join(root,'tests/programs/fine/src/main.ts'),driver:'fine driver'})+'\n');
+  // slow names its entry, then plans past its bound; early never gets as far; quiet goes silent; broken fails.
+  writeFileSync(planner,`#!/bin/sh
+case "$1" in
+  */slow/*) cat ${JSON.stringify(join(root,'slow.entry'))}; while :; do :; done ;;
+  */fine/*) cat ${JSON.stringify(join(root,'fine.entry'))} ${JSON.stringify(root)}/fine-$NTS_BACKEND.plan ;;
+  */early/*) while :; do :; done ;;
+  */quiet/*) exec tail -f /dev/null ;;
+  *) echo "the program does not typecheck" >&2; exit 3 ;;
+esac
+`,{mode:0o755});
+  await planAll(planner,root,evidence,false,undefined,['slow','fine','early','quiet','broken'].map(name=>`tests/programs/${name}`),{cpuSeconds:0.5,idleMs:300});
+  const manifest=JSON.parse(readFileSync(join(evidence,'plans.json'),'utf8'));
+  assert.deepEqual(manifest.plans.map((one:{backend:string;source:string})=>[one.backend,one.source]),['c','llvm','jvm'].map(backend=>[backend,'tests/programs/fine/src/main.ts']));
+  assert.deepEqual(manifest.unplanned.map(({budget:{reason,...budget},...one}:{budget:{reason:string}})=>({...one,budget,reason:/^oracle planner timed out: .* used its 0\.5 s CPU bound/.test(reason)})),
+    ['c','llvm','jvm'].map(backend=>({config:join(root,'tests/programs/slow/tsconfig.json'),source:'tests/programs/slow/src/main.ts',backend,
+      budget:{phase:'plan',outcome:'timeout',bound:0.5,signal:'SIGKILL'},repository_root:root,reason:true})),'one plan budget per backend, for the entry it named');
+  const failures=(name:string)=>manifest.failures.filter((one:{config:string})=>one.config.includes(`/${name}/`)).map((one:{backend:string;error:string})=>[one.backend,one.error]);
+  for(const [name,said] of [['early',/^oracle planner passed its CPU bound before it named its entry: oracle planner timed out/],
+    ['quiet',/^CommandNotMeasuredError: command NOT RUN \(hung\): .*; no output/s],['broken',/^ToolingInstrumentError: oracle planner held: exit 3\n.*does not typecheck/s]] as const){
+    assert.deepEqual(failures(name).map(([backend]:string[])=>backend),['c','llvm','jvm'],name);
+    for(const [,error] of failures(name))assert.match(error,said,name);
+  }
+  assert.ok(lines.includes(`plan budget c tests/programs/slow/src/main.ts ${manifest.unplanned[0].budget.reason}`),lines.join('\n'));
+  assert.ok(lines.some(line=>line.startsWith(`plan unavailable c ${join(root,'tests/programs/early/tsconfig.json')} oracle planner passed its CPU bound before it named its entry`)),lines.join('\n'));
+  assert.equal(JSON.parse(readFileSync(frame.NTS_GATE_STEP_RESULT,'utf8')).kind,'hung','a silent planner is the step hold');
+});
+
+test("a plan budget is one record for its entry: planned backends leave it, a measured population is never replaced by it, and rows stay as they were",async t=>{
+  const root=testScratch(t,'oracle-record-unplanned'),saved=process.env.NTS_BENCH_CPUS;
+  t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  programs(root,['slow','fine']);
+  const slow='tests/programs/slow/src/main.ts',fine='tests/programs/fine/src/main.ts';
+  const budget={phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL',reason:'oracle planner timed out: 600 s'};
+  const planned=(source:string,backend:string,digit:string)=>({...plan,backend,source,source_digest:digit.repeat(32),repository_root:root,driver:source+' driver',case_key:digit.repeat(32)});
+  const pass=(plans:object[],unplanned:string[])=>writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans,
+    unplanned:unplanned.map(backend=>({config:join(root,'tests/programs/slow/tsconfig.json'),source:slow,backend,budget,repository_root:root}))}));
+  const output=join(root,'counts.json');writeFileSync(output,'{"version":1,"rows":[]}\n');
+  const measure=async (one:{case_count:number})=>({cpu:[0.1,0.2],count:one.case_count});
+  const fineRow=()=>JSON.parse(readFileSync(output,'utf8')).rows.find((row:{source:string})=>row.source===fine);
+  pass([planned(fine,'c','1')],['c','llvm']);
+  await recordAll(root,output,measure);
+  const first=JSON.parse(readFileSync(output,'utf8')),revision=oracleUnplannedRevision(root,'tests/programs/slow');
+  assert.deepEqual(first.unplanned,[{source:slow,backends:['c','llvm'],budget:{version:1,...budget},revision}],'one record names both backends');
+  assert.equal(first.rows.some((row:{source:string})=>row.source===slow),false,'no population, so no row');
+  assert.ok(lines.includes(`PLAN BUDGET c ${slow} ${budget.reason}`),lines.join('\n'));
+  assert.equal(JSON.parse(lines.at(-1)!).plan_budgets,2);
+  const recorded=fineRow();
+  // The next pass plans slow on c: its population is measured, and the plan budget names only llvm, with its provenance.
+  pass([planned(fine,'c','1'),planned(slow,'c','2')],['llvm']);
+  await recordAll(root,output,measure);
+  const second=JSON.parse(readFileSync(output,'utf8'));
+  assert.deepEqual(second.unplanned,[{source:slow,backends:['llvm'],budget:{version:1,...budget},revision}]);
+  assert.equal(second.rows.find((row:{source:string})=>row.source===slow).kind,'measured');
+  assert.deepEqual(fineRow(),recorded,'a row the plan budget does not answer is unchanged');
+  // Planned on llvm too: the plan budget goes.
+  pass([planned(slow,'c','2'),planned(slow,'llvm','3')],[]);
+  await recordAll(root,output,measure);
+  assert.equal('unplanned' in JSON.parse(readFileSync(output,'utf8')),false);
+  // A planner past its bound where a population was measured is a regression, never a plan budget.
+  pass([],['c']);
+  await assert.rejects(recordAll(root,output,measure),(error:Error)=>error instanceof CaseBudgetError&&/REGRESSED oracle population: tests\/programs\/slow\/src\/main\.ts \(c\) measured -> plan timeout/.test(error.message));
+  // It reads back as written, beside the rows a record may have none of.
+  const shard={version:2,fixture:'tests/programs/slow',rows:[],unplanned:first.unplanned[0]};
+  assert.deepEqual(parseShard(shard,'tests/programs/slow').unplanned,first.unplanned[0]);
+  assert.throws(()=>parseShard({...shard,unplanned:{...shard.unplanned,driver_sha256:'f'.repeat(64)}},'tests/programs/slow'),/unknown field driver_sha256/,'a plan budget names no driver');
 });

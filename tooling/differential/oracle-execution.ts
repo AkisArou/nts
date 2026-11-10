@@ -12,7 +12,7 @@
 // the oracle's memory budget, at the policy's heap.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {basename,resolve} from 'node:path';
+import {basename,isAbsolute,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {activeCommand,COMMAND_ACTIVITY_POLL_MS,COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,type ActiveResult} from '../gate/active-command.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError,publishPressure} from '../gate/step-result.ts';
@@ -119,18 +119,38 @@ export async function runOracleCommand(command:string,args:string[],options:{sou
  * planned no population, which is the case's budget in the plan phase. One that
  * went silent or ran away measured nothing; the supervisor publishes that as
  * the step's hold. In a census worker the planner shares the worker's resident
- * scope, and a kill at its limit is the pool's memory-cap bucket. */
+ * scope, and a kill at its limit is the pool's memory-cap bucket.
+ *
+ * Its first line names its entry, once its capture finds it and before it
+ * plans (oracle-plan.rs); the plan is the rest. A budget carries the entry
+ * when the planner named it before its bound: the entry the budget is for. */
 export type OraclePlannerLimits={cpuSeconds:number;idleMs:number};
 export const ORACLE_PLANNER_LIMITS:Readonly<OraclePlannerLimits>={cpuSeconds:COMPILE_CPU_BOUND_SECONDS,idleMs:COMMAND_IDLE_GUARD_MS};
-export type OraclePlanned={plan:string}|{budget:OracleBudget&{phase:'plan'}};
+/** A planner's entry: the module, absolute, and the source a record names it by when it is a fixture's. */
+export type OraclePlanEntry={entry:string;source:string|null};
+export type OraclePlanned={plan:string;entry:OraclePlanEntry}|{budget:OracleBudget&{phase:'plan'};entry?:OraclePlanEntry};
+function plannedEntry(line:string):OraclePlanEntry{
+  let value:unknown;
+  try{value=JSON.parse(line);}catch{value=undefined;}
+  const named=value as Partial<OraclePlanEntry>|null|undefined;
+  if(!named||typeof named!=='object'||Object.keys(named).sort().join()!=='entry,source'||typeof named.entry!=='string'||!isAbsolute(named.entry)
+    ||!(named.source===null||typeof named.source==='string'&&named.source!==''))
+    throw new ToolingInstrumentError('tooling-setup','oracle planner held: its first line names no entry: '+line.slice(0,200));
+  return {entry:named.entry,source:named.source};
+}
 export async function runOraclePlanner(planner:string,args:readonly string[],options:{env:NodeJS.ProcessEnv;cwd?:string;limits?:OraclePlannerLimits}):Promise<OraclePlanned>{
   const limits=options.limits??ORACLE_PLANNER_LIMITS;
   const result=await compileActive({},planner,args,{cwd:options.cwd??process.cwd(),env:options.env,maxBuffer:64*2**20,
     eachProcessCpuSeconds:limits.cpuSeconds,idleMs:limits.idleMs,pollMs:Math.min(COMMAND_ACTIVITY_POLL_MS,limits.idleMs/4)});
-  if(result.timeout&&!result.memoryKilled)return {budget:{phase:'plan',outcome:'timeout',bound:limits.cpuSeconds,signal:result.signal,reason:'oracle planner timed out: '+result.timeout}};
+  const end=result.stdout.indexOf('\n');
+  if(result.timeout&&!result.memoryKilled){
+    const budget={phase:'plan' as const,outcome:'timeout' as const,bound:limits.cpuSeconds,signal:result.signal,reason:'oracle planner timed out: '+result.timeout};
+    return end<0?{budget}:{budget,entry:plannedEntry(result.stdout.slice(0,end))};
+  }
   if(result.status!==0||result.signal||result.error||result.memoryKilled)
     throw new ToolingInstrumentError('tooling-setup','oracle planner held: '+(result.error?.message??result.signal??'exit '+result.status)+'\n'+result.out);
-  return {plan:result.stdout};
+  if(end<0)throw new ToolingInstrumentError('tooling-setup','oracle planner held: it named no entry\n'+result.out);
+  return {plan:result.stdout.slice(end+1),entry:plannedEntry(result.stdout.slice(0,end))};
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

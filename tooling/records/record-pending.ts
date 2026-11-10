@@ -85,10 +85,10 @@ import { compareTypeScriptObservation, mergeTypeScriptRecord, parseObservation, 
 import { acceptedChange, improves, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
-import { GENERATOR, pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures } from "../differential/oracle-records.ts";
+import { GENERATOR, pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures, type OracleRow } from "../differential/oracle-records.ts";
 import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, mergeRunRecord, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
 import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets, written } from "../android/dex-record.ts";
-import {oracleBudgetRevision} from "../differential/record-oracles.ts";
+import {oracleBudgetRevision,oracleUnplannedRevision} from "../differential/record-oracles.ts";
 import { WIDE } from "../gate/owed.mjs";
 import { mergeTest262Record, parseTest262Row } from "../census/test262-record.ts";
 import { ARMS, COMPILE_ARMS, calibrationEntries, compileTimeModules, readCounterTable, tableLines, withCalibrationEntries, withTableLines, type CompileArm } from "../gate/compile-counter.ts";
@@ -221,8 +221,11 @@ export function oracleRefreshes(root:string):Pending[]{
   for(const name of oracleBudgetFixtures(root)){
     const file=join(root,recordPath(name));if(!existsSync(file))continue;
     const raw=JSON.parse(read(root,recordPath(name)));
-    if(!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))continue;
-    for(const row of parseShard(raw,name).rows)if(row.kind==='budget'&&JSON.stringify(row.revision)!==JSON.stringify(oracleBudgetRevision(root,row.source)))names.add(name);
+    if(!('unplanned' in raw)&&!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))continue;
+    const shard=parseShard(raw,name);
+    for(const row of shard.rows)if(row.kind==='budget'&&JSON.stringify(row.revision)!==JSON.stringify(oracleBudgetRevision(root,row.source)))names.add(name);
+    // A plan budget's provenance is its fixture's files, its Node, producer and policy.
+    if(shard.unplanned&&JSON.stringify(shard.unplanned.revision)!==JSON.stringify(oracleUnplannedRevision(root,name)))names.add(name);
   }
   return [...names].sort().map(name=>({kind:'oracle-counts',name,record:recordPath(name)}));
 }
@@ -380,20 +383,7 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
   }
   if (kind === "oracle-counts") {
     const fixture = caseOfRecord(kind, file);
-    if(before!==null){
-      const old=JSON.parse(before),next=JSON.parse(after);
-      assert.ok(old.rows?.some((row:{kind?:string})=>row.kind==='budget'),`${file}: a recorded population was rewritten; a count has no improvement`);
-      const was=parseShard(old,fixture),now=parseShard(next,fixture);const improved:string[]=[];
-      assert.equal(was.rows.length,now.rows.length,'oracle refresh changed its population inventory');
-      for(const row of was.rows){
-        const replacement=now.rows.find(one=>one.source===row.source&&one.signature===row.signature);
-        assert.ok(replacement,'oracle refresh removed a population');
-        if(JSON.stringify(row)===JSON.stringify(replacement))continue;
-        assert.ok(row.kind==='budget'&&(replacement.kind==='measured'||replacement.kind==='budget'&&JSON.stringify(row.revision)!==JSON.stringify(replacement.revision)),'only a budget -> measured improvement or changed budget identity may replace a recorded row');
-        improved.push(row.source+' budget -> '+replacement.kind);
-      }
-      assert.ok(improved.length,'a recorded population was rewritten without an improvement');return improved;
-    }
+    if (before !== null) return auditOracleRefresh(file, fixture, before, after);
     assert.ok(pending.has(fixture), `${file} was written for ${fixture}, which was not pending`);
     return [`${fixture} (pending)`];
   }
@@ -405,6 +395,53 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
   const was = JSON.parse(before), change = judge(was, now);
   assert.ok(acceptedChange(change), `${file} was rewritten, and the ratchet does not accept it`);
   return [`${fixture} ${was.category} -> ${now.category} (${label(change)})`];
+}
+
+/**
+ * One refreshed fixture record's change: only what a budget answered may
+ * change. A budget row becomes measured or changes its identity. Where the
+ * plan budget named a backend its entry planned nothing on, a population of
+ * that entry may gain the backend's key or appear, keyed only on such
+ * backends. The plan budget itself may narrow, go, or change its identity,
+ * and a new one may name only backends its entry has no measured row on.
+ * Every other row stays as it was.
+ */
+function auditOracleRefresh(file: string, fixture: string, before: string, after: string): string[] {
+  const old = JSON.parse(before), next = JSON.parse(after);
+  assert.ok(old.rows?.some((row: { kind?: string }) => row.kind === "budget") || "unplanned" in old, `${file}: a recorded population was rewritten; a count has no improvement`);
+  const was = parseShard(old, fixture), now = parseShard(next, fixture), improved: string[] = [];
+  const unplanned = was.unplanned, same = (a: OracleRow, b: OracleRow) => a.source === b.source && a.signature === b.signature;
+  // The backends a row of the plan budget's entry gained, when it gained keys only on backends the budget named.
+  const planned = (row: OracleRow, replacement: OracleRow): string[] => {
+    if (unplanned?.source !== row.source || JSON.stringify({ ...replacement, keys: row.keys }) !== JSON.stringify(row)) return [];
+    const gained = Object.keys(replacement.keys).filter(backend => row.keys[backend] === undefined);
+    return gained.length && gained.every(backend => unplanned.backends.includes(backend)) && Object.entries(row.keys).every(([backend, key]) => replacement.keys[backend] === key) ? gained : [];
+  };
+  for (const row of was.rows) {
+    const replacement = now.rows.find(one => same(one, row));
+    assert.ok(replacement, "oracle refresh removed a population");
+    if (JSON.stringify(row) === JSON.stringify(replacement)) continue;
+    const gained = planned(row, replacement);
+    if (gained.length) { improved.push(`${row.source} planned on ${gained.join(", ")}`); continue; }
+    assert.ok(row.kind === "budget" && (replacement.kind === "measured" || replacement.kind === "budget" && JSON.stringify(row.revision) !== JSON.stringify(replacement.revision)), "only a budget -> measured improvement or changed budget identity may replace a recorded row");
+    improved.push(row.source + " budget -> " + replacement.kind);
+  }
+  for (const row of now.rows.filter(one => !was.rows.some(other => same(one, other)))) {
+    assert.ok(unplanned?.source === row.source && Object.keys(row.keys).every(backend => unplanned.backends.includes(backend)), "oracle refresh changed its population inventory");
+    improved.push(`${row.source} plan budget -> ${row.kind}`);
+  }
+  if (JSON.stringify(was.unplanned) !== JSON.stringify(now.unplanned)) {
+    const changed = now.unplanned;
+    if (changed === undefined) improved.push(`${unplanned!.source} plan budget gone: planned on every backend`);
+    else if (unplanned?.source === changed.source && JSON.stringify(changed.revision) !== JSON.stringify(unplanned.revision)) improved.push(`${changed.source} plan budget identity changed`);
+    else if (unplanned?.source === changed.source && JSON.stringify({ ...changed, backends: unplanned.backends }) === JSON.stringify(unplanned) && changed.backends.every(backend => unplanned.backends.includes(backend))) improved.push(`${changed.source} plan budget narrowed to ${changed.backends.join(", ")}`);
+    else {
+      assert.ok(unplanned === undefined && !now.rows.some(row => row.source === changed.source && row.kind === "measured" && changed.backends.some(backend => row.keys[backend] !== undefined)), "a plan budget may only narrow, go or change its identity, and a new one cannot replace a measured population");
+      improved.push(`${changed.source} budget -> plan budget`);
+    }
+  }
+  assert.ok(improved.length, "a recorded population was rewritten without an improvement");
+  return improved;
 }
 
 /**

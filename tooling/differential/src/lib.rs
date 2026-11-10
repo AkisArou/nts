@@ -846,7 +846,37 @@ pub fn oracle_plan(
     source: &mut Frontend,
     backend: Backend,
 ) -> Result<serde_json::Value> {
+    oracle_plan_naming(tsconfig, source, backend, |_| Ok(()))
+}
+
+/// The entry module a plan is for, as the capture found it.
+#[derive(Debug, serde::Serialize)]
+pub struct PlanEntry {
+    /// The entry module, absolute.
+    pub entry: Utf8PathBuf,
+    /// The source a record names it by, when it is a fixture's.
+    pub source: Option<String>,
+}
+
+/// [`oracle_plan`], telling `named` its entry as soon as the capture finds it,
+/// before the population is planned: a planner stopped at its CPU bound has
+/// still named the entry its budget is for.
+///
+/// # Errors
+///
+/// As [`oracle_plan`], and whatever `named` returns.
+pub fn oracle_plan_naming(
+    tsconfig: &Utf8Path,
+    source: &mut Frontend,
+    backend: Backend,
+    named: impl FnOnce(&PlanEntry) -> Result<()>,
+) -> Result<serde_json::Value> {
     let snapshot = capture(tsconfig, source)?;
+    let entry = entry_module(&snapshot)?.canonicalize_utf8()?;
+    named(&PlanEntry {
+        source: corpus_source(&entry),
+        entry,
+    })?;
     let checked = case_population(&snapshot)?;
     let (cases, signature) = oracle_population(&checked.testable);
     let key = oracle_case_key(backend, &cases, &signature)?;

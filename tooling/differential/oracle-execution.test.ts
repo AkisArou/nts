@@ -109,6 +109,9 @@ function planner(t:{after(fn:()=>void):void},interpreter:string,body:string){
 test('the planner is held as a case compile is: its CPU bound, and the shared activity guard',()=>{
   assert.deepEqual(ORACLE_PLANNER_LIMITS,{cpuSeconds:COMPILE_CPU_BOUND_SECONDS,idleMs:COMMAND_IDLE_GUARD_MS});
 });
+// What oracle-plan prints first, once its capture finds its entry.
+const ENTRY={entry:'/fixtures/benchmarks/cases/slow/case.ts',source:'benchmarks/cases/slow/case.ts'};
+const named=`process.stdout.write(${JSON.stringify(JSON.stringify(ENTRY)+'\n')});`;
 test('a planner past its CPU bound planned no population: a plan budget, which is no hold',async t=>{
   const f=planner(t,process.execPath,'for(;;){}');
   const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000}});
@@ -116,14 +119,29 @@ test('a planner past its CPU bound planned no population: a plan budget, which i
   const {reason,...budget}=planned.budget;
   assert.deepEqual(budget,{phase:'plan',outcome:'timeout',bound:0.3,signal:'SIGKILL'});
   assert.match(reason,/^oracle planner timed out: .* used its 0\.3 s CPU bound: process \d+ own CPU reached/);
+  assert.equal(planned.entry,undefined,'it named no entry before its bound');
   assert.equal(f.published(),null,'a budget is the case outcome, never the step hold');
+});
+test('a plan budget is for the entry its planner named before its bound',async t=>{
+  const f=planner(t,process.execPath,named+'for(;;){}');
+  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000}});
+  assert.ok('budget' in planned,JSON.stringify(planned));
+  assert.deepEqual(planned.entry,ENTRY);
+  assert.equal(f.published(),null);
 });
 test('an active planner that prints nothing until it is done is not stopped by the activity bound',async t=>{
   // Three CPU seconds with no output: three times the inactivity guard.
-  const f=planner(t,process.execPath,'while(process.cpuUsage().user<3e6){}\nprocess.stdout.write(JSON.stringify({planned:process.argv[2]})+"\\n");');
+  const f=planner(t,process.execPath,'while(process.cpuUsage().user<3e6){}\n'+named+'process.stdout.write(JSON.stringify({planned:process.argv[2]})+"\\n");');
   const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:1000}});
-  assert.deepEqual(planned,{plan:'{"planned":"project.json"}\n'});
+  assert.deepEqual(planned,{plan:'{"planned":"project.json"}\n',entry:ENTRY},'the plan is the rest, byte for byte');
   assert.equal(f.published(),null);
+});
+test('a planner that names no entry first is held, never read as a plan',async t=>{
+  for(const body of ['process.stdout.write(JSON.stringify({planned:true})+"\\n");','process.stdout.write(\'{"entry":"relative.ts","source":null}\\n{}\\n\');','process.stdout.write("{}");']){
+    const f=planner(t,process.execPath,body);
+    await assert.rejects(runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:60_000}}),
+      error=>error instanceof ToolingInstrumentError&&/^oracle planner held: (its first line names no entry|it named no entry)/.test(error.message),body);
+  }
 });
 test('a planner with no output, CPU or busy thread measured nothing: hung, held, never a budget',async t=>{
   const f=planner(t,'/bin/sh','exec tail -f /dev/null');

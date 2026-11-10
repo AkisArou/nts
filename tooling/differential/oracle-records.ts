@@ -25,9 +25,20 @@ export type OracleRow = { kind: "measured" | "no-oracle" | "budget"; source: str
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
   budget?: RecordedBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
   count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
-export type OracleTable = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: OracleRow[] };
+/** What a budget row's provenance names: the entry, Node, the producer and the policy it was measured under. */
+export type BudgetRevision = { entry: string; node: string; producer: string; policy: string };
+/**
+ * An entry whose planner ran past its CPU bound on these backends: it named
+ * its entry, then planned no population, so there is no case key, signature
+ * or driver to key a row by. Its fixture's record holds it beside its rows,
+ * and it answers every driver of the entry on those backends that no row
+ * answers (oracle_coverage.rs). Its revision's entry is the digest of the
+ * fixture's files, everything the planner reads.
+ */
+export type Unplanned = { source: string; backends: string[]; budget: OracleBudget & { version: 1; phase: "plan" }; revision: BudgetRevision };
+export type OracleTable = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: OracleRow[]; unplanned?: Unplanned[] };
 export type Generator = { version: 1; generator_version: number; generator_digest: string; seed: null };
-type Shard = { version: 1|2; fixture: string; rows: OracleRow[] };
+type Shard = { version: 1|2; fixture: string; rows: OracleRow[]; unplanned?: Unplanned };
 type Object_ = Record<string, unknown>;
 const BACKENDS = new Set(["c", "llvm", "jvm"]);
 
@@ -172,20 +183,41 @@ function unique(rows: OracleRow[]): OracleRow[] {
 
 export function parseLegacyTable(value: unknown): OracleTable {
   const raw = object(value, "legacy table");
-  fields(raw, ["version", "generator_version", "generator_digest", "seed", "rows"], "legacy table");
-  const { rows, ...header } = raw;
+  fields(raw, ["version", "generator_version", "generator_digest", "seed", "rows", "unplanned"], "legacy table");
+  const { rows, unplanned, ...header } = raw;
   if (!Array.isArray(rows)) fail("legacy table needs rows");
-  return { ...parseGenerator(header), rows: unique(rows.map(parseRow)) };
+  if (unplanned !== undefined && !Array.isArray(unplanned)) fail("a table's plan budgets are a list");
+  const plans = (unplanned as unknown[] | undefined)?.map(parseUnplanned);
+  return { ...parseGenerator(header), rows: unique(rows.map(parseRow)), ...(plans?.length ? { unplanned: plans } : {}) };
+}
+
+function revision(value: unknown, where: string): BudgetRevision {
+  const raw = object(value, where); fields(raw, ["entry", "node", "producer", "policy"], where);
+  return { entry: hash(raw.entry, 64, "entry revision"), node: hash(raw.node, 64, "Node revision"), producer: hash(raw.producer, 64, "producer revision"), policy: hash(raw.policy, 64, "policy revision") };
+}
+
+/** A plan budget (`Unplanned`), for an entry of a fixture's. */
+function parseUnplanned(value: unknown): Unplanned {
+  const raw = object(value, "unplanned"); fields(raw, ["source", "backends", "budget", "revision"], "unplanned");
+  const source = text(raw.source, "plan budget source"); fixtureOf(source);
+  if (!Array.isArray(raw.backends) || !raw.backends.length || raw.backends.some(backend => typeof backend !== "string" || !BACKENDS.has(backend))
+    || new Set(raw.backends).size !== raw.backends.length || [...raw.backends].sort().join() !== raw.backends.join()) fail("unplanned names its backends once each, in order");
+  const budget = object(raw.budget, "plan budget"); fields(budget, ["version", "phase", "outcome", "bound", "signal", "reason"], "plan budget");
+  if (budget.version !== 1 || budget.phase !== "plan" || budget.outcome !== "timeout" || typeof budget.bound !== "number" || !Number.isFinite(budget.bound) || budget.bound <= 0
+    || !(budget.signal === null || typeof budget.signal === "string" && /^SIG[A-Z0-9]+$/.test(budget.signal))) fail("invalid versioned plan budget");
+  return { source, backends: raw.backends as string[], budget: { version: 1, phase: "plan", outcome: "timeout", bound: budget.bound, signal: budget.signal as string | null, reason: text(budget.reason, "plan budget reason") },
+    revision: revision(raw.revision, "plan budget revision") };
 }
 
 export function parseShard(value: unknown, fixture: string): Shard {
   recordPath(fixture);
-  const raw = object(value, `fixture ${fixture}`); fields(raw, ["version", "fixture", "rows"], `fixture ${fixture}`);
-  if ((raw.version !== 1 && raw.version !== 2) || raw.fixture !== fixture || !Array.isArray(raw.rows) || raw.rows.length === 0) fail(`invalid or misnamed fixture record ${fixture}`);
-  const rows = unique(raw.rows.map(parseRow));
-  if (rows.some(row => fixtureOf(row.source) !== fixture)) fail(`record ${fixture} contains another fixture's source`);
-  if(rows.some(row=>row.kind==='budget')&&raw.version!==2)fail('oracle budget rows require fixture record version 2');
-  return { version: raw.version as 1|2, fixture, rows };
+  const raw = object(value, `fixture ${fixture}`); fields(raw, ["version", "fixture", "rows", "unplanned"], `fixture ${fixture}`);
+  // A record holds its populations, or the plan budget of a fixture that planned none, or both.
+  if ((raw.version !== 1 && raw.version !== 2) || raw.fixture !== fixture || !Array.isArray(raw.rows) || (raw.rows.length === 0 && !("unplanned" in raw))) fail(`invalid or misnamed fixture record ${fixture}`);
+  const rows = unique(raw.rows.map(parseRow)), unplanned = "unplanned" in raw ? parseUnplanned(raw.unplanned) : undefined;
+  if (rows.some(row => fixtureOf(row.source) !== fixture) || unplanned && fixtureOf(unplanned.source) !== fixture) fail(`record ${fixture} contains another fixture's source`);
+  if((rows.some(row=>row.kind==='budget')||unplanned)&&raw.version!==2)fail('oracle budget rows require fixture record version 2');
+  return { version: raw.version as 1|2, fixture, rows, ...(unplanned ? { unplanned } : {}) };
 }
 
 // These are compiler-checker negative inputs, not executable oracle subjects.
@@ -217,7 +249,7 @@ function files(directory: string, prefix = ""): string[] {
  */
 export function readRecords(root: string): OracleTable {
   const header = parseGenerator(JSON.parse(readFileSync(join(root, GENERATOR), "utf8")));
-  const expected = inventory(root), found = new Set<string>(), rows: OracleRow[] = [];
+  const expected = inventory(root), found = new Set<string>(), rows: OracleRow[] = [], unplanned: Unplanned[] = [];
   for (const relative of files(join(root, RECORDS))) {
     if (relative === "_generator.json") continue;
     const fixture = relative.slice(0, -".json".length);
@@ -226,9 +258,11 @@ export function readRecords(root: string): OracleTable {
     found.add(fixture);
     const shard = parseShard(JSON.parse(readFileSync(join(root, RECORDS, relative), "utf8")), fixture);
     for (const row of shard.rows) if (!existsSync(join(root, row.source))) fail(`orphaned source record ${row.source}`);
+    if (shard.unplanned && !existsSync(join(root, shard.unplanned.source))) fail(`orphaned source record ${shard.unplanned.source}`);
     rows.push(...shard.rows);
+    if (shard.unplanned) unplanned.push(shard.unplanned);
   }
-  return { ...header, rows: unique(rows) };
+  return { ...header, rows: unique(rows), ...(unplanned.length ? { unplanned } : {}) };
 }
 
 /** The fixtures with no record yet: pending, recorded after landing by the full check. */
@@ -261,11 +295,16 @@ function atomic(root: string, path: string, value: unknown): void {
 }
 
 export function writeRecords(root: string, table: OracleTable, selected?: ReadonlySet<string>): void {
-  const { rows, ...rawHeader } = table;
-  const header = parseGenerator(rawHeader), groups = new Map<string, OracleRow[]>();
+  const { rows, unplanned: plans = [], ...rawHeader } = table;
+  const header = parseGenerator(rawHeader), groups = new Map<string, OracleRow[]>(), unplanned = new Map<string, Unplanned>();
   for (const row of unique(rows.map(parseRow))) {
     const fixture = fixtureOf(row.source), group = groups.get(fixture) ?? [];
     group.push(row); groups.set(fixture, group);
+  }
+  for (const plan of plans) {
+    const fixture = fixtureOf(plan.source);
+    if (unplanned.has(fixture)) fail(`two plan budgets for ${fixture}`);
+    unplanned.set(fixture, plan); if (!groups.has(fixture)) groups.set(fixture, []);
   }
   const expected = inventory(root);
   if (selected === undefined) for (const fixture of expected) {
@@ -273,7 +312,8 @@ export function writeRecords(root: string, table: OracleTable, selected?: Readon
   }
   for (const fixture of selected ?? groups.keys()) {
     if (!expected.has(fixture)) fail(`orphaned fixture ${fixture}`);
-    const shard = parseShard({ version: groups.get(fixture)?.some(row=>row.kind==='budget')?2:1, fixture, rows: groups.get(fixture) }, fixture);
+    const plan = unplanned.get(fixture);
+    const shard = parseShard({ version: groups.get(fixture)?.some(row=>row.kind==='budget')||plan?2:1, fixture, rows: groups.get(fixture) ?? [], ...(plan ? { unplanned: plan } : {}) }, fixture);
     atomic(root, join(root, recordPath(fixture)), shard);
   }
   const path = join(root, GENERATOR), bytes = JSON.stringify(header, null, 2) + "\n";
@@ -304,7 +344,7 @@ export function readRecordsAt(root: string, revision: string): OracleTable {
     const fixture = program?.[1] ?? benchmark?.[1];
     if (fixture && !NOT_SUBJECTS.has(fixture)) expected.add(fixture);
   }
-  const found = new Set<string>(), rows: OracleRow[] = [];
+  const found = new Set<string>(), rows: OracleRow[] = [], unplanned: Unplanned[] = [];
   for (const path of [...paths].filter(path => path.startsWith(RECORDS + "/") && path !== GENERATOR).sort()) {
     if (!path.endsWith(".json")) fail(`unexpected committed record-store entry ${path}`);
     const fixture = path.slice(RECORDS.length + 1, -".json".length);
@@ -313,10 +353,12 @@ export function readRecordsAt(root: string, revision: string): OracleTable {
     found.add(fixture);
     const shard = parseShard(read(path), fixture);
     for (const row of shard.rows) if (!paths.has(row.source)) fail(`orphaned committed source record ${row.source}`);
+    if (shard.unplanned && !paths.has(shard.unplanned.source)) fail(`orphaned committed source record ${shard.unplanned.source}`);
     rows.push(...shard.rows);
+    if (shard.unplanned) unplanned.push(shard.unplanned);
   }
   for (const fixture of expected) if (!found.has(fixture)) fail(`missing committed fixture record ${fixture}`);
-  return { ...header, rows: unique(rows) };
+  return { ...header, rows: unique(rows), ...(unplanned.length ? { unplanned } : {}) };
 }
 
 export function oracleImprovementDirectory():string{return join(homedir(),'.cache/nts-oracle-record/improvements');}
@@ -326,8 +368,8 @@ export function hintedOracleImprovements(root:string):string[]{
   return [...inventory(root)].filter(fixture=>{
     const file=join(root,recordPath(fixture)),hint=oracleImprovementPath(fixture);
     if(!existsSync(file)||!existsSync(hint))return false;
-    const record=readFileSync(file),value=JSON.parse(readFileSync(hint,'utf8'));
-    return value.fixture===fixture&&value.recordSha256===createHash('sha256').update(record).digest('hex')&&parseShard(JSON.parse(record.toString()),fixture).rows.some(row=>row.kind==='budget');
+    const record=readFileSync(file),value=JSON.parse(readFileSync(hint,'utf8')),shard=parseShard(JSON.parse(record.toString()),fixture);
+    return value.fixture===fixture&&value.recordSha256===createHash('sha256').update(record).digest('hex')&&(shard.unplanned!==undefined||shard.rows.some(row=>row.kind==='budget'));
   }).sort();
 }
 
@@ -336,7 +378,8 @@ export function requestOracleImprovement(root:string,entry:string):void{
   const fixture=fixtureOf(source),file=join(root,recordPath(fixture));if(!existsSync(file))return;
   const bytes=readFileSync(file),record=parseShard(JSON.parse(bytes.toString()),fixture);
   // A margin's runs complete as recorded: finishing is no improvement on it.
-  if(!record.rows.some(row=>row.source===source&&row.kind==='budget'&&row.budget?.outcome!=='margin'))return;
+  // A plan budget's is: the entry planned this time.
+  if(record.unplanned?.source!==source&&!record.rows.some(row=>row.source===source&&row.kind==='budget'&&row.budget?.outcome!=='margin'))return;
   const hint=oracleImprovementPath(fixture);mkdirSync(dirname(hint),{recursive:true});
   const temporary=hint+'.'+process.pid;writeFileSync(temporary,JSON.stringify({fixture,recordSha256:createHash('sha256').update(bytes).digest('hex')})+'\n');renameSync(temporary,hint);
   console.error('ORACLE IMPROVED: '+source+': budget -> measured; fresh recording requested');
@@ -346,7 +389,7 @@ export function oracleBudgetFixtures(root:string):string[]{
   return [...inventory(root)].filter(fixture=>{
     const file=join(root,recordPath(fixture));if(!existsSync(file))return false;
     const raw=JSON.parse(readFileSync(file,'utf8'));
-    if(!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))return false;
+    if(!('unplanned' in raw)&&!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))return false;
     parseShard(raw,fixture);return true;
   }).sort();
 }

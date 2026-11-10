@@ -1,4 +1,10 @@
 //! Gate tooling's pool inventory; no native arm or oracle is executed.
+//!
+//! `oracle-plan <tsconfig>` prints two lines: the entry it plans, as soon as
+//! its capture finds it, then the plan. A planner stopped at its CPU bound has
+//! printed the first, which names the entry its plan budget is for.
+use std::io::Write;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use nts_codegen_common::Backend;
@@ -31,7 +37,20 @@ fn main() -> Result<()> {
         .canonicalize_utf8()
         .context("locating project config")?;
     let mut frontend = Frontend::new(cwd);
-    let plan = nts_differential::oracle_plan(&config, &mut frontend, Backend::from_environment()?)?;
+    let plan = nts_differential::oracle_plan_naming(
+        &config,
+        &mut frontend,
+        Backend::from_environment()?,
+        |entry| {
+            // Written out before the population is planned, so a stop at the
+            // bound cannot lose it.
+            let mut out = std::io::stdout().lock();
+            serde_json::to_writer(&mut out, entry)?;
+            writeln!(out)?;
+            out.flush()?;
+            Ok(())
+        },
+    )?;
     serde_json::to_writer(std::io::stdout(), &plan)?;
     println!();
     Ok(())

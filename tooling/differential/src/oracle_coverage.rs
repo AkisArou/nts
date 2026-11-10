@@ -110,14 +110,33 @@ pub(super) fn recorded_budget(entry: &Utf8Path, backend: &str, key: &str) -> Res
     let Some(table) = super::oracle_records::read(&root, &source)? else {
         return Ok(None);
     };
-    Ok(table["rows"]
-        .as_array()
-        .context("oracle rows missing")?
+    budget_of(&table, &source, backend, key)
+}
+
+/// The budget a fixture record answers a population with: its own row's, when
+/// a row names the population (a measured one answers with none); else the
+/// entry's plan budget, when it names the backend: its planner planned nothing
+/// there, so it answers every driver of the entry.
+fn budget_of(table: &Value, source: &str, backend: &str, key: &str) -> Result<Option<Value>> {
+    let rows = table["rows"].as_array().context("oracle rows missing")?;
+    if let Some(row) = rows
         .iter()
-        .find(|row| {
-            row["source"] == source && row["keys"][backend] == key && row["kind"] == "budget"
-        })
-        .map(|row| row["budget"].clone()))
+        .find(|row| row["source"] == source && row["keys"][backend] == key)
+    {
+        return Ok((row["kind"] == "budget").then(|| row["budget"].clone()));
+    }
+    Ok(unplanned(table, source, backend).map(|unplanned| unplanned["budget"].clone()))
+}
+
+/// The plan budget of `source`, when it names `backend`.
+fn unplanned<'a>(table: &'a Value, source: &str, backend: &str) -> Option<&'a Value> {
+    let unplanned = &table["unplanned"];
+    (unplanned["source"] == source
+        && unplanned["backends"]
+            .as_array()?
+            .iter()
+            .any(|named| named == backend))
+    .then_some(unplanned)
 }
 
 /// Whether a run that completed improves on its recorded budget: one stopped
@@ -211,6 +230,11 @@ fn validate(
         .iter()
         .filter(|row| row["source"] == source && row["keys"][backend] == key)
         .collect();
+    // No row names the population, and the entry's planner planned nothing on
+    // this backend: its plan budget is the recorded answer.
+    if found.is_empty() && unplanned(table, source, backend).is_some() {
+        return Ok(());
+    }
     ensure!(
         found.len() == 1,
         "oracle not measured: {source} ({backend}) has no unique recorded population {key}; run: {command}"
@@ -343,6 +367,45 @@ mod tests {
         let table = json!({"version":1,"rows":[{"kind":"budget","source":"a","keys":{"c":"key"},
             "budget":margin}]});
         validate(&table, "a", "c", "key", 120, "digest").unwrap();
+    }
+
+    #[test]
+    fn a_plan_budget_answers_every_driver_of_its_entry_that_no_row_answers() {
+        let plan = json!({"version":1,"phase":"plan","outcome":"timeout","bound":600,
+            "signal":"SIGKILL","reason":"oracle planner timed out"});
+        let mut table = json!({"version":1,"rows":[],
+            "unplanned":{"source":"a","backends":["c","llvm"],"budget":plan}});
+        for (key, generated) in [("one", 3), ("another", 0)] {
+            validate(&table, "a", "c", key, generated, "digest").unwrap();
+            assert_eq!(
+                budget_of(&table, "a", "c", key).unwrap(),
+                Some(plan.clone())
+            );
+        }
+        validate(&table, "a", "llvm", "one", 3, "digest").unwrap();
+        assert!(
+            validate(&table, "a", "jvm", "one", 3, "digest").is_err(),
+            "a backend it does not name"
+        );
+        assert!(
+            validate(&table, "b", "c", "one", 3, "digest").is_err(),
+            "another entry"
+        );
+        assert_eq!(budget_of(&table, "a", "jvm", "one").unwrap(), None);
+        // A row that names the population wins, and is held to its count.
+        table["rows"] = json!([{"kind":"measured","source":"a","keys":{"c":"one"},
+            "complete":true,"count":3}]);
+        validate(&table, "a", "c", "one", 3, "digest").unwrap();
+        assert!(validate(&table, "a", "c", "one", 2, "digest").is_err());
+        assert_eq!(budget_of(&table, "a", "c", "one").unwrap(), None);
+        assert_eq!(
+            budget_of(&table, "a", "c", "another").unwrap(),
+            Some(plan.clone())
+        );
+        assert!(
+            improves(Some(&plan)),
+            "a completed run improves on a stop at the plan's bound"
+        );
     }
 
     #[test]

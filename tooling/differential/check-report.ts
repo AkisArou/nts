@@ -120,7 +120,8 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
       exactKeys(value,['phase','outcome','bound','signal','reason'],'oracle budget fields');
       assert.ok(typeof value.bound==='number'&&Number.isFinite(value.bound)&&value.bound>0,'invalid oracle bound');
       assert.ok(value.signal===null||typeof value.signal==='string'&&/^SIG[A-Z0-9]+$/.test(value.signal),'invalid oracle signal');
-      budget={recorded:envelope.recorded as boolean,value:{phase:member(value.phase,['prepare','execute'] as const,'invalid budget phase'),outcome:member(value.outcome,['timeout','memory-cap'] as const,'invalid budget outcome'),bound:value.bound,signal:value.signal as string|null,reason:text(value.reason,'missing budget reason')}};
+      // A planner past its bound answers a shared reference with a plan budget (oracle-results.ts).
+      budget={recorded:envelope.recorded as boolean,value:{phase:member(value.phase,['plan','prepare','execute'] as const,'invalid budget phase'),outcome:member(value.outcome,['timeout','memory-cap'] as const,'invalid budget outcome'),bound:value.bound,signal:value.signal as string|null,reason:text(value.reason,'missing budget reason')}};
     }else assert.notEqual(error.kind,'oracle_budget','an oracle budget needs check revision 3');
     return { version, ...(version >= 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: {
       kind: member(error.kind, FAILURE_KINDS, 'unknown check failure kind'),...(budget?{budget}:{}),

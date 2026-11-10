@@ -6,7 +6,7 @@ import {dirname,join,resolve} from 'node:path';
 import {test} from 'node:test';
 import {REPOSITORY,verifyToolchain,oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import * as producer from './program-oracles.ts';
-import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,hasOracleWork,type ProgramOracleTask} from './program-oracles.ts';
+import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,programOracleSources,hasOracleWork,type ProgramOracleTask} from './program-oracles.ts';
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
@@ -22,12 +22,23 @@ test('a recorded budget is retried without treating its missing count as zero',(
   assert.equal(hasOracleWork({kind:'no-oracle'}),false);
 });
 
+test('a plan budget is work to retry: its entry is planned again, once per fixture',()=>{
+  const row=(source:string,kind:'measured'|'no-oracle',count?:number)=>({kind,source,signature:'s',keys:{c:'k'},cases_sha256:'c',driver_sha256:'d',...(count===undefined?{}:{count})});
+  const plan=(source:string)=>({source,backends:['c'],budget:{version:1 as const,phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL',reason:'oracle planner timed out'},
+    revision:{entry:'e',node:'n',producer:'p',policy:'q'}});
+  const measured='tests/programs/measured/src/main.ts',unplanned='benchmarks/cases/slow/case.ts',bare='tests/programs/bare/src/main.ts';
+  assert.deepEqual(programOracleSources({rows:[row(measured,'measured',4),row(bare,'no-oracle')],unplanned:[plan(unplanned),plan(measured)]}),[measured,unplanned],
+    'a plan budget alone is a task, and one beside its own row is the same task');
+  assert.deepEqual(programOracleSources({rows:[row(bare,'no-oracle')],unplanned:[plan(bare)]}),[bare],'a plan budget is work where a no-oracle row is none');
+  assert.throws(()=>programOracleSources({rows:[row(measured,'measured',4)],unplanned:[plan('tests/programs/measured/src/other.ts')]}),/multiple source entries: tests\/programs\/measured/);
+});
+
 test('the measured example corpus names every type-directed emit project',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
   const {API}:typeof import('typescript/sync')=require('typescript/sync'),ast:typeof import('typescript/ast')=require('typescript/ast');
   const api=new API({cwd:REPOSITORY,tsserverPath:compiler}),needed=new Set<string>();
   try{
-    const projects=new Set(readRecords(REPOSITORY).rows.filter(row=>hasOracleWork(row)&&row.source.startsWith('tests/programs/')).map(row=>fixtureOf(row.source)));
+    const projects=new Set(programOracleSources(readRecords(REPOSITORY)).filter(source=>source.startsWith('tests/programs/')).map(fixtureOf));
     for(const project of projects){
       const parsed=api.parseConfigFile(join(REPOSITORY,project,'tsconfig.json'));
       assert.equal(parsed.errors.length,0,project);
