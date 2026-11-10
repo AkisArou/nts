@@ -2,11 +2,12 @@ import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,type ResolutionDomainRecord} from './oracle-filesystem.ts';
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,writeFileSync,rmSync,symlinkSync,realpathSync,lstatSync,readdirSync,readlinkSync,readFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,writeFileSync,rmSync,symlinkSync,realpathSync,lstatSync,readdirSync,readlinkSync,readFileSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve,sep} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex} from './oracle-filesystem.ts';
+import {MAX_SNAPSHOT_BUCKET_BYTES,snapshotSlot} from './oracle-runtime.ts';
 test('invalid local file URL syntax has a complete empty ESM lookup domain',async t=>{
   const domain=new OracleResolutionDomain({recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:[],excluded:[],aliases:[],files:[],directories:[],absent:[],scopeAbsent:[],moduleAbsent:[],packages:[]});
   for(const nodeMajor of [26]){
@@ -66,6 +67,46 @@ test('snapshot compact table and requested bucket each chain to the parent hash'
   assert.throws(()=>reader.get('descriptor'),/snapshot.*changed/,'used bucket bytes are hashed before their fields are used');
   rmSync(data);writeFileSync(data,originalData);
   assert.deepEqual(readOracleSnapshotIndex(root,reference).get('descriptor'),{role:'control'});
+});
+// A program's answers can pass a bucket's bound on their own:
+// jetstream-json-stringify-inspector's rows were 245.7 MiB on 11-09.
+type MovedCost={movedReads:number;movedBytes:number};
+test('a record that would carry its bucket past its bound is moved out in chunks and read back whole',t=>{
+  const root=fixture(t),big={rows:['x'.repeat(MAX_SNAPSHOT_BUCKET_BYTES+1024)]},huge={rows:['y'.repeat(2*MAX_SNAPSHOT_BUCKET_BYTES+7)]},small={kind:'file',sha256:'small'};
+  const reference=writeOracleSnapshotIndex(root,[['case\0small',small],['case\0big',big],['case\0huge',huge]]);
+  const files=readdirSync(join(root,'runtime-index'));
+  for(const file of files)assert.ok(statSync(join(root,'runtime-index',file)).size<=MAX_SNAPSHOT_BUCKET_BYTES,'every file is within the bucket bound: '+file);
+  const reader=readOracleSnapshotIndex(root,reference),cost=()=>reader.cost as typeof reader.cost&MovedCost;
+  assert.deepEqual(reader.get('case\0small'),small);
+  assert.equal(cost().movedReads,0,'a record left in its bucket reads nothing moved');
+  assert.deepEqual(reader.get('case\0big'),big);
+  assert.deepEqual(reader.get('case\0huge'),huge);
+  assert.equal(cost().movedReads,2);assert.equal(cost().movedBytes,Buffer.byteLength(JSON.stringify(big))+Buffer.byteLength(JSON.stringify(huge)));
+  assert.deepEqual(reader.get('case\0huge'),huge);assert.equal(cost().movedReads,2,'a moved record is read once');
+  // big's JSON is one whole chunk and a short one, huge's two whole chunks and a short one.
+  assert.equal(files.filter(file=>statSync(join(root,'runtime-index',file)).size===MAX_SNAPSHOT_BUCKET_BYTES).length,3);
+});
+test('a moved record whose chunk is changed, resized or missing is refused, and read again once it is whole',t=>{
+  const root=fixture(t),big={rows:['z'.repeat(MAX_SNAPSHOT_BUCKET_BYTES+1)]};
+  const reference=writeOracleSnapshotIndex(root,[['case\0big',big]]);
+  const format=JSON.parse(readFileSync(join(root,reference.path),'utf8')) as {table:{path:string};data:{path:string}};
+  const chunks=readdirSync(join(root,'runtime-index')).filter(file=>file.endsWith('.bin')&&![format.table.path,format.data.path].includes('runtime-index/'+file));
+  assert.equal(chunks.length,2);
+  const file=join(root,'runtime-index',chunks[0]!),original=readFileSync(file),changed=Buffer.from(original);changed[0]!^=1;
+  for(const [bytes,refused] of [[changed,/changed: moved record chunk/],[original.subarray(1),/size changed/],[null,/moved record chunk is missing/]] as const){
+    rmSync(file);if(bytes)writeFileSync(file,bytes);
+    assert.throws(()=>readOracleSnapshotIndex(root,reference).get('case\0big'),refused);
+  }
+  writeFileSync(file,original);
+  assert.deepEqual(readOracleSnapshotIndex(root,reference).get('case\0big'),big);
+});
+test('a bucket with nothing to move keeps its bytes: each slot\'s rows as JSON.stringify writes them',t=>{
+  const root=fixture(t),records=Array.from({length:300},(_,index)=>['path\0/snapshot/source-'+index,{kind:'file',index}] as [string,unknown]);
+  const reference=writeOracleSnapshotIndex(root,records);
+  const format=JSON.parse(readFileSync(join(root,reference.path),'utf8')) as {slots:number;data:{path:string}};
+  const expected=Array.from({length:format.slots},(_,slot)=>records.filter(([key])=>snapshotSlot(key,format.slots)===slot).sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0))
+    .map((rows,slot)=>rows.length?JSON.stringify({version:1,slot,entries:rows})+'\n':'').join('');
+  assert.equal(readFileSync(join(root,format.data.path),'utf8'),expected);
 });
 test('output exclusion construction membership work grows linearly with root count',()=>{
   const sizes=[32,64],counts=sizes.map(size=>{

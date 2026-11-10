@@ -1,7 +1,7 @@
 // Filesystem answers, including unsuccessful lookups, are oracle inputs.
 // This module uses builtins only: application loaders never import the emitter.
 import {createHash} from 'node:crypto';
-import {snapshotHash,snapshotSlot,SNAPSHOT_SLOT_BYTES,MAX_SNAPSHOT_SLOTS,MAX_SNAPSHOT_BUCKET_RECORDS,MAX_SNAPSHOT_BUCKET_BYTES,type SnapshotSlotIndex,type OracleSnapshotReference} from './oracle-runtime.ts';
+import {snapshotHash,snapshotSlot,SNAPSHOT_SLOT_BYTES,MAX_SNAPSHOT_SLOTS,MAX_SNAPSHOT_BUCKET_RECORDS,MAX_SNAPSHOT_BUCKET_BYTES,type SnapshotMovedRecord,type SnapshotSlotIndex,type OracleSnapshotReference} from './oracle-runtime.ts';
 export {dependencySealIdentity,dependencySealReady,dependencySealError,ownsDependencyRun,DEPENDENCY_SEAL_FIELDS,checkerImportIdentity,readOracleSnapshotIndex} from './oracle-runtime.ts';
 export type {DependencySealIdentity,DependencyRunSeal,CheckerImportRelation,OracleSnapshotReference} from './oracle-runtime.ts';
 
@@ -100,7 +100,14 @@ export class OracleFilesystem{
 }
 
 
-/** Publication only. The table authenticates bounded independently read buckets. */
+/**
+ * Publication only. The table authenticates bounded independently read
+ * buckets. A record whose JSON would carry its bucket past the bucket bound is
+ * moved out of it: its JSON is written as content-addressed chunks, none past
+ * that bound, and its row names them, `[key, null, {sha256, bytes, chunks}]`.
+ * A bucket's largest records leave first, by size and then key, until it fits,
+ * and a bucket that fits moves nothing.
+ */
 export function writeOracleSnapshotIndex(directory:string,records:Iterable<readonly [string,unknown]>):OracleSnapshotReference{
   mkdirSync(join(directory,'runtime-index'),{recursive:true});
   const entries:[string,unknown][]=[],keys=new Set<string>();
@@ -115,20 +122,38 @@ export function writeOracleSnapshotIndex(directory:string,records:Iterable<reado
     if(largest<=16||slots===MAX_SNAPSHOT_SLOTS){if(largest>MAX_SNAPSHOT_BUCKET_RECORDS)throw Error('oracle snapshot metadata bucket exceeds its record bound');break;}
     slots*=2;
   }
-  const table=Buffer.alloc(slots*SNAPSHOT_SLOT_BYTES),chunks:Buffer[]=[];let offset=0;
-  for(let slot=0;slot<slots;slot++){
-    const rows=groups[slot]!;if(!rows.length)continue;
-    rows.sort((a,b)=>compare(a[0],b[0]));const bytes=Buffer.from(JSON.stringify({version:1,slot,entries:rows})+'\n');
-    if(bytes.length>MAX_SNAPSHOT_BUCKET_BYTES||offset+bytes.length>=2**32)throw Error('oracle snapshot metadata data exceeds its byte bound');
-    table.writeUInt32LE(offset,slot*SNAPSHOT_SLOT_BYTES);table.writeUInt32LE(bytes.length,slot*SNAPSHOT_SLOT_BYTES+4);snapshotHash(bytes).copy(table,slot*SNAPSHOT_SLOT_BYTES+8);
-    chunks.push(bytes);offset+=bytes.length;
-  }
   const put=(bytes:Buffer,extension:'json'|'bin'):OracleSnapshotReference=>{
     const sha256=snapshotHash(bytes).toString('hex'),path='runtime-index/'+sha256+'.'+extension,file=join(directory,path);
     try{writeFileSync(file,bytes,{flag:'wx',mode:0o400});}
     catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||!readFileSync(file).equals(bytes))throw error;}
     return {path,sha256};
   };
-  const data=Buffer.concat(chunks),descriptor:SnapshotSlotIndex={version:2,slots,slotBytes:40,table:put(table,'bin'),data:{...put(data,'bin'),bytes:data.length}};
+  const moved=(value:string):SnapshotMovedRecord=>{
+    const json=Buffer.from(value),chunks:{sha256:string;bytes:number}[]=[];
+    for(let at=0;at<json.length;at+=MAX_SNAPSHOT_BUCKET_BYTES){const part=json.subarray(at,at+MAX_SNAPSHOT_BUCKET_BYTES);chunks.push({sha256:put(part,'bin').sha256,bytes:part.length});}
+    return {sha256:snapshotHash(json).toString('hex'),bytes:json.length,chunks};
+  };
+  const table=Buffer.alloc(slots*SNAPSHOT_SLOT_BYTES),buckets:Buffer[]=[];let offset=0;
+  for(let slot=0;slot<slots;slot++){
+    const rows=groups[slot]!;if(!rows.length)continue;
+    rows.sort((a,b)=>compare(a[0],b[0]));
+    // The bucket is these rows' JSON as JSON.stringify writes it, so sizes are
+    // known before any of it is built, and nothing outgrows the bound in memory.
+    const values=rows.map(([,value])=>JSON.stringify(value)??'null'),texts=rows.map(([key],at)=>'['+JSON.stringify(key)+','+values[at]+']');
+    const head=`{"version":1,"slot":${slot},"entries":[`,tail=']}\n',size=(text:string)=>Buffer.byteLength(text);
+    let bytes=size(head)+size(tail)+texts.length-1+texts.reduce((sum,text)=>sum+size(text),0);
+    if(bytes>MAX_SNAPSHOT_BUCKET_BYTES){
+      const order=texts.map((text,at)=>({at,bytes:size(text)})).sort((a,b)=>b.bytes-a.bytes||compare(rows[a.at]![0],rows[b.at]![0]));
+      for(const {at,bytes:was} of order){
+        texts[at]=JSON.stringify([rows[at]![0],null,moved(values[at]!)]);bytes+=size(texts[at]!)-was;
+        if(bytes<=MAX_SNAPSHOT_BUCKET_BYTES)break;
+      }
+    }
+    const bucket=Buffer.from(head+texts.join(',')+tail);
+    if(bucket.length>MAX_SNAPSHOT_BUCKET_BYTES||offset+bucket.length>=2**32)throw Error('oracle snapshot metadata data exceeds its byte bound');
+    table.writeUInt32LE(offset,slot*SNAPSHOT_SLOT_BYTES);table.writeUInt32LE(bucket.length,slot*SNAPSHOT_SLOT_BYTES+4);snapshotHash(bucket).copy(table,slot*SNAPSHOT_SLOT_BYTES+8);
+    buckets.push(bucket);offset+=bucket.length;
+  }
+  const data=Buffer.concat(buckets),descriptor:SnapshotSlotIndex={version:2,slots,slotBytes:40,table:put(table,'bin'),data:{...put(data,'bin'),bytes:data.length}};
   return put(Buffer.from(JSON.stringify(descriptor)+'\n'),'json');
 }

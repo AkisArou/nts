@@ -99,7 +99,9 @@ export function dependencySealReady(cap:{version:number;directory:string;ownerSt
 
 /** A parent-pinned metadata file. Its path is relative to one snapshot. */
 export type OracleSnapshotReference=Readonly<{path:string;sha256:string}>;
-type SnapshotBucket={version:1;slot:number;entries:[string,unknown][]};
+/** A record moved out of its bucket: its JSON's hash and size, and the content-addressed chunks it is written in, none past the bucket bound. */
+export type SnapshotMovedRecord={sha256:string;bytes:number;chunks:{sha256:string;bytes:number}[]};
+type SnapshotBucket={version:1;slot:number;entries:([string,unknown]|[string,null,SnapshotMovedRecord])[]};
 export type SnapshotSlotIndex={version:2;slots:number;slotBytes:40;table:OracleSnapshotReference;data:OracleSnapshotReference&{bytes:number}};
 // Capture descriptor operations and hashing before governed code replaces
 // public builtin methods. Every returned value comes from these checked bytes.
@@ -127,8 +129,24 @@ const snapshotRead=(file:string,size?:number,offset=0,expectedSize?:number):Buff
     return bytes;
   }finally{snapshotIO.close(fd);}
 };
+const hex64=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+const snapshotSize=(value:unknown,most:number):value is number=>Number.isSafeInteger(value)&&(value as number)>0&&(value as number)<=most;
+/** A moved record's row, checked before any of its chunks is opened. */
+class SnapshotMoved {
+  readonly record:SnapshotMovedRecord;
+  constructor(record:SnapshotMovedRecord){
+    const keys=(value:object,names:string)=>Object.keys(value).sort().join(',')===names;
+    if(typeof record!=='object'||record===null||!keys(record,'bytes,chunks,sha256')||!hex64(record.sha256)||!snapshotSize(record.bytes,Number.MAX_SAFE_INTEGER)
+       ||!Array.isArray(record.chunks)||!record.chunks.length
+       ||record.chunks.some(chunk=>typeof chunk!=='object'||chunk===null||!keys(chunk,'bytes,sha256')||!hex64(chunk.sha256)||!snapshotSize(chunk.bytes,MAX_SNAPSHOT_BUCKET_BYTES))
+       ||record.chunks.reduce((sum,chunk)=>sum+chunk.bytes,0)!==record.bytes)
+      throw Error('oracle snapshot metadata moved record is malformed');
+    this.record=record;
+  }
+}
 /** One parent-root identity and private checked table per reader. Only the
- * selected bucket is read; missing keys never prove filesystem absence. */
+ * selected bucket is read, and a moved record only when its key is asked
+ * for; missing keys never prove filesystem absence. */
 export function readOracleSnapshotIndex(directory:string,root:OracleSnapshotReference){
   const directoryInfo=snapshotIO.kind(join(directory,'runtime-index'));
   if(!directoryInfo.isDirectory()||directoryInfo.isSymbolicLink())throw Error('oracle snapshot metadata directory changed');
@@ -138,12 +156,37 @@ export function readOracleSnapshotIndex(directory:string,root:OracleSnapshotRefe
   if(!descriptor||Object.keys(descriptor).sort().join(',')!=='data,slotBytes,slots,table,version'||descriptor.version!==2||descriptor.slotBytes!==SNAPSHOT_SLOT_BYTES||!Number.isInteger(descriptor.slots)||descriptor.slots<1||descriptor.slots>MAX_SNAPSHOT_SLOTS||(descriptor.slots&(descriptor.slots-1))!==0||!descriptor.data||Object.keys(descriptor.data).sort().join(',')!=='bytes,path,sha256'||!Number.isSafeInteger(descriptor.data.bytes)||descriptor.data.bytes<0||descriptor.data.bytes>=2**32)throw Error('oracle snapshot metadata descriptor is malformed');
   const table=snapshotRead(snapshotReference(directory,descriptor.table,'bin'),descriptor.slots*SNAPSHOT_SLOT_BYTES,0,descriptor.slots*SNAPSHOT_SLOT_BYTES);
   if(snapshotHash(table).toString('hex')!==descriptor.table.sha256)throw Error('oracle snapshot metadata table changed');
-  const data=snapshotReference(directory,{path:descriptor.data.path,sha256:descriptor.data.sha256},'bin'),cache=new Map<number,ReadonlyMap<string,unknown>>();
+  const data=snapshotReference(directory,{path:descriptor.data.path,sha256:descriptor.data.sha256},'bin'),cache=new Map<number,Map<string,unknown>>();
   // Observation only; deterministic guards bind these to actual read/hash sites.
-  const cost={descriptorBytes:bytes.length,tableBytes:table.length,bucketBytes:0,bucketReads:0,recordsParsed:0,authenticationHashes:2};
+  const cost={descriptorBytes:bytes.length,tableBytes:table.length,bucketBytes:0,bucketReads:0,recordsParsed:0,authenticationHashes:2,movedReads:0,movedBytes:0};
+  // Each chunk at its exact recorded size, into one buffer: the record is
+  // parsed only once every chunk and then the whole record has been checked.
+  const movedValue=({record}:SnapshotMoved):unknown=>{
+    const whole=Buffer.allocUnsafe(record.bytes);let at=0;
+    for(const chunk of record.chunks){
+      const file=snapshotReference(directory,{path:'runtime-index/'+chunk.sha256+'.bin',sha256:chunk.sha256},'bin');
+      let fd:number;
+      try{fd=snapshotIO.open(file,constants.O_RDONLY|constants.O_NOFOLLOW);}
+      catch(error){throw Error('oracle snapshot metadata moved record chunk is missing: '+file,{cause:error});}
+      try{
+        const info=snapshotIO.stat(fd);if(!info.isFile()||info.size!==chunk.bytes)throw Error('oracle snapshot metadata size changed: '+file);
+        for(let done=0;done<chunk.bytes;){const read=snapshotIO.read(fd,whole,at+done,chunk.bytes-done,done);if(!read)throw Error('oracle snapshot metadata read changed: '+file);done+=read;}
+      }finally{snapshotIO.close(fd);}
+      cost.authenticationHashes++;
+      if(snapshotHash(whole.subarray(at,at+chunk.bytes)).toString('hex')!==chunk.sha256)throw Error('oracle snapshot metadata changed: moved record chunk');
+      at+=chunk.bytes;
+    }
+    cost.authenticationHashes++;cost.movedReads++;cost.movedBytes+=record.bytes;
+    if(snapshotHash(whole).toString('hex')!==record.sha256)throw Error('oracle snapshot metadata changed: moved record');
+    return JSON.parse(whole.toString('utf8'));
+  };
   return {get cost(){return Object.freeze({...cost});},get(key:string):unknown{
     if(typeof key!=='string')throw Error('oracle snapshot metadata query key is invalid');
-    const slot=snapshotSlot(key,descriptor.slots),previous=cache.get(slot);if(previous)return previous.get(key);
+    const slot=snapshotSlot(key,descriptor.slots),previous=cache.get(slot);
+    if(previous){
+      const value=previous.get(key);if(!(value instanceof SnapshotMoved))return value;
+      const read=movedValue(value);previous.set(key,read);return read;
+    }
     const offset=table.readUInt32LE(slot*SNAPSHOT_SLOT_BYTES),length=table.readUInt32LE(slot*SNAPSHOT_SLOT_BYTES+4),entries=new Map<string,unknown>();
     if(length){
       if(length>MAX_SNAPSHOT_BUCKET_BYTES||offset+length>descriptor.data.bytes)throw Error('oracle snapshot metadata bucket bounds changed');
@@ -152,11 +195,13 @@ export function readOracleSnapshotIndex(directory:string,root:OracleSnapshotRefe
       const record=JSON.parse(bytes.toString('utf8')) as SnapshotBucket;
       if(!record||Object.keys(record).sort().join(',')!=='entries,slot,version'||record.version!==1||record.slot!==slot||!Array.isArray(record.entries)||record.entries.length<1||record.entries.length>MAX_SNAPSHOT_BUCKET_RECORDS)throw Error('oracle snapshot metadata bucket is malformed');
       for(const row of record.entries){
-        if(!Array.isArray(row)||row.length!==2||typeof row[0]!=='string'||entries.has(row[0])||snapshotSlot(row[0],descriptor.slots)!==slot)throw Error('oracle snapshot metadata bucket has invalid or duplicate keys');
-        entries.set(row[0],row[1]);cost.recordsParsed++;
+        if(!Array.isArray(row)||!(row.length===2||row.length===3&&row[1]===null)||typeof row[0]!=='string'||entries.has(row[0])||snapshotSlot(row[0],descriptor.slots)!==slot)throw Error('oracle snapshot metadata bucket has invalid or duplicate keys');
+        entries.set(row[0],row.length===3?new SnapshotMoved(row[2]):row[1]);cost.recordsParsed++;
       }
     }else if(offset!==0||!table.subarray(slot*SNAPSHOT_SLOT_BYTES+8,(slot+1)*SNAPSHOT_SLOT_BYTES).equals(Buffer.alloc(32)))throw Error('oracle snapshot metadata empty slot is malformed');
-    cache.set(slot,entries);return entries.get(key);
+    cache.set(slot,entries);
+    const value=entries.get(key);if(!(value instanceof SnapshotMoved))return value;
+    const read=movedValue(value);entries.set(key,read);return read;
   }};
 }
 
