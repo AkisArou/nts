@@ -22,8 +22,9 @@ design isn't known, measure until it is, then build it.
 
 ## Tasks
 
-Work is a task: a GitHub issue under its stream's parent issue, one agent per
-task, small enough to land within a day ([`docs/workflow.md`](docs/workflow.md)).
+Work is a task: a GitHub issue under its foundation or theme group, with
+groups under their stream's parent issue. One agent takes one task, small
+enough to land within a day ([`docs/workflow.md`](docs/workflow.md)).
 Every issue is made with `node tooling/tasks/new.ts`, which checks its card and
 labels; [`docs/plan.md`](docs/plan.md) holds the priorities and the order of the
 streams.

@@ -1958,3 +1958,32 @@ As recorded:
   are dropped: it never reuses a verdict;
 - open question L22 no longer plans a validated cache.
 
+## Streams, groups and tasks (11-10)
+
+The user approved the whole-project issue organization and its maintenance:
+
+- The plan's streams are `kind:parent` issues. Each foundation or coherent
+  theme is a `kind:group` under its stream, with its governing design and
+  acceptance rows or executable contract tests. One independently landable
+  change is a task under a group, for one agent, small enough to land within
+  a day.
+- `task` marks a ready leaf only. Unscoped and held or parked work stays
+  open without it; groups are never assigned to agents. Labels retain one
+  area, one kind and at most one state. A landed task closes itself and
+  leaves an unfinished group open.
+- Close wanted work only when it is on main, its remaining scope is retained
+  in a duplicate's destination, or an adopted decision supersedes it. Name
+  the evidence. Age is never a reason to close it.
+- The creation tool checks the shared cards and actual parent roles in both
+  its CLI and batch forms. The read-only hierarchy audit runs at coordinator
+  checkpoints, never as a timer or a network dependency of the compiler's
+  gate. This keeps the no-periodic-issue-audit decision; the machine count's
+  existing minimum open-number lookup is unchanged.
+- Benchmark row lists are owned by their design pages and shared by group
+  selection and reporting. A new row is planned until its instrument exists;
+  no results or oracle counts are invented before landing.
+
+This replaces the direct stream-to-task hierarchy in the 11-09 task decision.
+Priorities, native-first ordering, phase holds and the measuring decision are
+unchanged: instruction counts decide regressions, and wall time counts only
+past max(3%, twice the spread).

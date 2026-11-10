@@ -34,34 +34,66 @@ follows; this page is the why and the whole picture.
 - **A design first, when there is a design to make.** A short note says
   what will be built and why; the user or the coordinator agrees; then the
   slices are written as tasks.
-- **Tasks are GitHub issues,** one per task, each a sub-issue of its stream's
-  parent issue. [`plan.md`](plan.md) holds the priorities and the order of the
-  streams; the work's state lives on the issues. Chores, which no stream
-  owns, are on signalbox's local board.
-- **One spec for an issue, kept where issues are made.** Every issue is made
-  with `node tooling/tasks/new.ts`, which refuses one that breaks the spec;
-  a GitHub issue form asks for the same card in the browser.
-  - Labels, from [`.github/labels.json`](../.github/labels.json): `task` when
-    an agent can take it, exactly one `area:`, exactly one `kind:`, at most
-    one `state:`. `node tooling/tasks/labels.ts sync --prune` keeps GitHub's
-    labels equal to the file.
-  - A task's card, in this order: Goal, Why, Paths, Done when, Tests and rows,
-    then, when they say something, Depends on, Branch, Check first and Parent.
+- **Streams hold groups; groups hold tasks.** A stream is a `kind:parent`
+  GitHub issue named in [the plan](plan.md#streams). A foundation or coherent
+  theme is a `kind:group` sub-issue of its stream: it names its governing
+  design, acceptance rows or executable contract tests, and wanted parts.
+  A task is a leaf under exactly one group, one independently landable
+  change for one agent. Questions and unscoped wanted leaves also belong
+  under a group. Priorities and stream order stay in `plan.md`; work's state
+  lives on its issues. Chores, which no stream owns, are on signalbox's local
+  board.
+- **`task` means ready to take.** Its paths, completion test, fixtures and
+  controls or instrument checks, and dependencies are concrete. A group or
+  question never carries `task`. An unscoped, held, parked or needs-user leaf
+  stays open without it, with its `state:` label when something holds it.
+  A ready card has no placeholder, Parts checklist or unresolved dependency.
+- **One spec where issues are made.** Every issue goes through
+  `node tooling/tasks/new.ts`, in either its CLI or batch form; both validate
+  actual parent roles read-only before writing. The browser forms use the
+  same card headings.
+  - Labels, from [`.github/labels.json`](../.github/labels.json): exactly one
+    `area:`, exactly one `kind:`, at most one `state:`, and `task` only on a
+    ready leaf. `node tooling/tasks/labels.ts sync --prune` keeps GitHub's
+    label vocabulary equal to the file.
+  - A ready task's card, in order: Goal, Why, Paths, Done when, Tests and rows,
+    then the optional Depends on, Branch, provenance, Check first and Parent
+    fields. Its Parent names its group, and agrees with the GitHub link.
+  - A group's card names Goal, Why, Design, Parts, Done when, Tests and rows,
+    and Parent. Benchmark membership belongs to the design page's canonical
+    Rows declaration, read by the benchmark tools. Planned instruments are
+    distinct from existing measured cases; a mechanism task waits for the
+    instrument it needs. A contract-only group states why throughput rows
+    do not apply and names its executable checks.
+- **Check the hierarchy at coordinator checkpoints.** Run
+  `node tooling/tasks/audit.ts` at sitting start, before dispatch, after a
+  batch of landings or reverts or a design change, and before resuming a
+  stream. It only reads: incomplete API data is an incomplete audit, never
+  a clean result. It reports parent/card/label drift, cycles, open work under
+  closed groups, missing rows and fixtures, dependencies and branch/ref
+  problems. Ready work waiting without a branch is queue information, not
+  abandonment. There is no periodic structural issue audit and no networked
+  issue audit in the compiler's gate; the hourly machine count's minimum
+  open-number lookup stays as it is.
 - **A task's branch names its issue:** `<N>` or `<N>-<slug>`, by
   `tooling/tasks/branch.ts`. `node tooling/landing/pool.ts take --issue <N>`
   takes a tree on it, and the hourly count names a branch while its issue is
   open.
-- **A landing closes its issue.** A change from issue N's branch that does
-  not name the issue lands with `Fixes #N` added to its last commit, and
-  GitHub closes the issue when `main` reaches it. A slice that leaves its
-  task open says `Part of #N` in its message; a change that names its issue
-  either way keeps its own words (`tooling/tasks/links.ts`).
+- **A landing closes its task, not its unfinished group.** A change from
+  issue N's branch that does not name the issue lands with `Fixes #N` added
+  to its last commit. A slice that leaves its task open says `Part of #N`;
+  a change that names its issue either way keeps its own words
+  (`tooling/tasks/links.ts`). A group stays open while any wanted part or
+  child is unfinished.
+- **Undone work stays visible.** Close only when its work is on main, it
+  duplicates another issue whose destination retains every remaining part,
+  or an adopted decision supersedes it. Name the main evidence, destination
+  or decision. Age never closes an issue. A reverted task is reopened by the
+  full check and is taken again.
 - **Nothing valuable sits on a branch.** Unfinished work on a branch is
-  either an open task's, or it is deleted. Old
-  branches are not kept "just in case": that is how work gets forgotten.
-  A commit that a record cites by hash stays reachable through
-  `refs/cited/<sha>`, a pointer at that commit alone, so deleting a branch
-  never breaks a citation.
+  either an open task's, or it is deleted. A commit a record cites by hash
+  stays reachable through `refs/cited/<sha>`, a pointer at that commit alone,
+  so deleting a branch never breaks a citation.
 
 ## Agents
 
@@ -334,11 +366,14 @@ the first node task.
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08),
   [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09),
   [log](records/notebooks/decisions-log.md#the-full-check-stops-empty-unbound-nts-slices-11-10)).
-- **Tasks are GitHub issues** (11-09): one issue per task under its stream's
-  parent issue, made by `tooling/tasks/new.ts` against one label and card
-  spec; `plan.md` keeps the priorities and the order of the streams; a
-  task's branch names its issue; no periodic check reads the issues
-  ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
+- **Streams, groups and tasks** (11-10): a stream holds foundation and theme
+  groups; a group names its design and rows or executable contracts and
+  holds independently landable tasks. Only a ready leaf carries `task`.
+  Creation checks the shared card and actual parent roles; the read-only
+  hierarchy audit runs at coordinator checkpoints, never periodically.
+  Undone work stays visible until main evidence, a retained duplicate scope
+  or an adopted superseding decision accounts for it
+  ([log](records/notebooks/decisions-log.md#streams-groups-and-tasks-11-10)).
 - **Records and the count run beside the parts** (11-09): a part's records
   run records in a unit and a tree of its own while the core runs on each new
   `main`, and a restarted controller adopts it by name; the count runs hourly

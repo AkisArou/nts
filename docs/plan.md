@@ -1,8 +1,9 @@
 # The plan
 
 What nts builds, and in what order: the priorities, and the streams of work
-in the order they are taken. Each task is a GitHub issue under its stream's
-parent issue, its card in the issue and its state on it
+in the order they are taken. Each stream has a parent issue, each foundation
+or coherent theme a group under it, and each independently landable change
+a task under its group. The work's card and state live on its issue
 ([workflow](workflow.md#tasks)); chores are on the local board. The designs
 the tasks build are in [`foundations/`](foundations), and the questions still
 open are in [`open-questions.md`](open-questions.md).
@@ -47,8 +48,10 @@ Branches the count names from here, besides each open issue's own:
 
 ## Streams
 
-In the order they are taken. A stream's tasks are its parent issue's
-sub-issues; their order is their dependencies, then the ranking.
+In the order they are taken. A stream contains groups for its foundations
+and coherent themes; each group contains the tasks that build it. Their
+order is their dependencies, then the ranking. Correctness keeps its
+priority even when a foundation group owns the affected representation.
 
 | stream | what | when | parent issue |
 |---|---|---|---|
@@ -69,13 +72,17 @@ sub-issues; their order is their dependencies, then the ranking.
    Java; the Computer Language Benchmarks Game, Octane and ARES-6; startup,
    size and peak-RSS rows (P-2); a differential program fuzzer (Q-6).
 2. **Memory stages 1 and 2** ([memory](foundations/memory.md)), beside
-   **Unicode stage 1** ([unicode](foundations/unicode.md)).
+   **native Unicode stage 1** ([unicode](foundations/unicode.md)). The JVM's
+   tables follow the managed-backend phase.
 3. **Typed containers:** `Map` and `Set` stored by the proven layout of their
    keys and values ([objects](foundations/objects.md)).
 4. **Then** memory stage 3, Unicode stages 2–3, strings stages D and E
    ([strings](foundations/strings.md)), numbers
    ([numbers](foundations/numbers.md)) and the keyed hash
    ([hashing](foundations/hashing.md)).
+   Typed JSON parsing ([JSON](foundations/json.md)) follows the general
+   parser and memory causes it relies on, before specialization is used to
+   claim the ordinary TypeScript row fixed.
 5. **The builtins mechanism** ([builtins](foundations/builtins.md)), with
    WinterTC's Minimum Common Web API as the web floor on native and the JVM.
 6. **The dependency policy** (D-1), written as a foundations page.
@@ -140,7 +147,7 @@ in the log, from [Language (10-28)](records/notebooks/decisions-log.md#language-
 on. How the old plan was folded into this one is in
 [the plan's history](records/notebooks/plan-history.md).
 
-- **Tasks are GitHub issues** (11-09): this page keeps the priorities and the
-  order of the streams; each task is an issue under its stream's parent
-  issue, chores are on the local board, and a task's branch names its issue
-  ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
+- **Task hierarchy:** this page keeps the priorities and the order of the
+  streams; streams hold foundation and theme groups, groups hold task
+  issues, chores are on the local board, and a task's branch names its issue
+  ([log](records/notebooks/decisions-log.md#streams-groups-and-tasks-11-10)).
