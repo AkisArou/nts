@@ -93,7 +93,7 @@
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {RESERVATION_PER_PEAK, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {stepBound, stepBoundReason} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -531,7 +531,8 @@ function captureCost(name, log) {
 // ---------------------------------------------------------------------------
 // What the running steps hold: slots, frontends, and the bytes of the run's
 // memory reservation they are counted for -- a fixed step its reservation, an
-// elastic step one token's per token held (see "Memory").
+// elastic step its held tokens', each its own size or its step's unit (see
+// "Memory").
 function used(includeElastic = true) {
   let slots = 0, bytes = 0, fe = 0, riding = 0;
   const locks = new Set();
@@ -653,9 +654,14 @@ function admit(step, u) {
 // it holds (`workEstimate` minus the token-seconds it has used), plus
 // the seconds its oldest worker has waited, so a short step is never starved
 // by a long one; the favoured step's claim counts double. A token is granted
-// only with one token's reservation of its step (`tokenBytes`) in the run's
-// reservation. Tokens, and the memory they would take, are kept back for the
-// first fixed step that waits (`withhold`, `withholdBytes`).
+// only with its size in the run's reservation: the size its request names --
+// what its case was measured to hold -- or else one token's reservation of
+// its step (`tokenBytes`). A step's first request that fits goes first, so a
+// small case is not held behind a large one of its step that waits for
+// memory; requests of its unit are as before, its oldest first. A sized
+// token's step has its limits raised to hold it before it is answered.
+// Tokens, and the memory they would take, are kept back for the first fixed
+// step that waits (`withhold`, `withholdBytes`).
 // ---------------------------------------------------------------------------
 const ELASTIC_CAP = Math.max(6, Math.ceil(SLOTS * 0.75));
 let withhold = 0;
@@ -683,18 +689,30 @@ const tok = createTokenPool({
     const c = left / (held + 1) + waitedS;
     return BY_NAME.get(step)?.favoured ? 2 * c : c;
   },
-  // A token is a case starting, so it needs its step's token reservation in the run's
-  // reservation, beside what a waiting fixed step has withheld; when it does
-  // not fit, the run may ask the ledger for more.
-  eligible: (step) => {
+  // A token is a case starting, so it needs its size -- its request's, else its
+  // step's token reservation -- in the run's reservation, beside what a waiting
+  // fixed step has withheld; when it does not fit, the run may ask the ledger
+  // for more.
+  eligible: (step, bytes) => {
     if (outranked()) return false;
     const row = BY_NAME.get(step);
     if (!row) return true;
     const u = used();
     if (row.fe && u.fe >= FRONTENDS) return false;
-    if (u.bytes + withholdBytes + tokenBytes(row) <= reserved()) return true;
+    if (u.bytes + withholdBytes + (bytes ?? tokenBytes(row)) <= reserved()) return true;
     wantMemory();
     return false;
+  },
+  // A sized token is answered once its step's slice can hold it: when its
+  // grant, now with this token, takes the runaway bound past the slice's
+  // MemoryMax, the bound is raised before its case starts.
+  answering: (step) => {
+    const r = running.get(step);
+    if (!r?.elastic || r.draining) return null;
+    const max = runawayBound(limitOf(step, r));
+    if (max <= r.scope.limits.max) return null;
+    return r.scope.limit({ max })
+      .catch(error => process.stderr.write(`run.mjs: ${step}'s runaway bound stays at ${gib(r.scope.limits.max)}: ${error.message}\n`));
   },
   known: (step) => BY_NAME.has(step),
   observe: (event) => caseCosts?.record({ ...event, compiler_sha: identities.nts?.sha256, memory: memoryState(),
@@ -707,7 +725,8 @@ const account = () => tok.account();
 // Sampling never calls schedule(), grant(), or any other policy decision.
 const costClock = setInterval(() => caseCosts?.record({ event: "pool.state", memory: memoryState(),
   used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold,
-  held: Object.fromEntries(tok.held), waiting: tok.waiting.map(w => ({ request:w.id, step:w.step, pid:w.pid })),
+  held: Object.fromEntries(tok.held), ...(tok.sized.size ? { sized: Object.fromEntries(tok.sized) } : {}),
+  waiting: tok.waiting.map(w => ({ request:w.id, step:w.step, pid:w.pid, bytes:w.bytes })),
   running: [...running.keys()],
   fixed_grants: Object.fromEntries([...running].filter(([,r]) => !r.elastic).map(([name,r]) => [name,{ slots:r.slots, rider:r.rider }])),
   runner_cpu: process.resourceUsage() }), 500);
@@ -727,8 +746,9 @@ let pending = [];
 // no token reads the host's free memory. The reservation is measured as the
 // run's own slice cgroup, which holds every step's slice, so the ledger sees
 // the whole run as one job. A running step is counted for its grant: a fixed
-// step its reservation, an elastic step one token's share per token it
-// holds, each with what it grew by while it ran (`used()`).
+// step its reservation, an elastic step its held tokens' -- each its own size
+// when its request named one, else one token's share -- each with what it
+// grew by while it ran (`used()`).
 //
 // **A step's slice bounds only a runaway** (`runawayBound`). Its MemoryMax
 // is twice what the step was measured to hold, and never below its grant and
@@ -854,19 +874,22 @@ const MIB = 2 ** 20;
 const growthOf = (grant) => Math.max(grant / 4, 64 * MIB);
 // The tokens an elastic step holds now; while it drains, its whole width.
 const tokensOf = (name, r) => r.draining ? r.slots : tok.held.get(name) ?? 0;
+// What an elastic step's tokens are counted for: each sized one at its size,
+// each other at its step's unit; while it drains, its whole width of units.
+const heldBytes = (name, r) => elasticHeldBytes(tokensOf(name, r), r.draining ? undefined : tok.sized.get(name), tokenBytes(BY_NAME.get(name)));
 // What a running step is granted: a fixed step its reservation; an elastic
-// step one token's share per token it holds; each with what it grew by
-// while it ran.
+// step its held tokens'; each with what it grew by while it ran.
 function grantOf(name, r) {
   const step = BY_NAME.get(name);
-  return (r.elastic ? tokensOf(name, r) * tokenBytes(step) : stepBytes(step, r.slots)) + r.extra;
+  return (r.elastic ? heldBytes(name, r) : stepBytes(step, r.slots)) + r.extra;
 }
 // What its runaway bound is reckoned from: its grant, and for an elastic step
-// holding no token one token's share all the same, for its idle workers,
-// which the run does not count (starting it takes no memory, as above).
+// holding less than one token's share, one token's share all the same, for
+// its idle workers, which the run does not count (starting it takes no
+// memory, as above).
 function limitOf(name, r) {
   const step = BY_NAME.get(name);
-  return r.elastic ? Math.max(1, tokensOf(name, r)) * tokenBytes(step) + r.extra : grantOf(name, r);
+  return r.elastic ? Math.max(heldBytes(name, r), tokenBytes(step)) + r.extra : grantOf(name, r);
 }
 let growth = null; // { bytes, controller, withdrawn } while a growth waits
 // What the run must hold for the first step that waits only for memory to
@@ -880,16 +903,19 @@ const memoryRecord = { peak_bytes: 0, waited_s: 0, growths: 0, withdrawn: 0, shr
 let outrankedNow = false, outrankedRead = 0, outrankedSince = 0, outrankedLook = null;
 const reserved = () => reservation?.bytes ?? 0;
 
-// What a waiting token's share lacks in the reservation, beside what runs and
-// what a waiting step has claimed: the most among the steps whose workers
-// wait while a slot is free for them.
+// What a waiting token lacks in the reservation, beside what runs and what a
+// waiting step has claimed: the most among the steps whose workers wait while
+// a slot is free for them, each for its oldest request -- its size, else its
+// step's token share.
 function tokenShort(u) {
   if (!tokenAddr || SLOTS - u.slots - withhold <= 0) return 0;
   let short = 0;
-  for (const step of new Set(tok.waiting.map(w => w.step))) {
+  const oldest = new Map();
+  for (const w of tok.waiting) if (!oldest.has(w.step)) oldest.set(w.step, w);
+  for (const [step, w] of oldest) {
     const row = BY_NAME.get(step);
     if (!row || (row.fe && u.fe >= FRONTENDS)) continue;
-    short = Math.max(short, u.bytes + withholdBytes + tokenBytes(row) - reserved());
+    short = Math.max(short, u.bytes + withholdBytes + (w.bytes ?? tokenBytes(row)) - reserved());
   }
   return short;
 }

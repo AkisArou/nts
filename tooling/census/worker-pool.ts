@@ -17,7 +17,9 @@ import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { createFeed, type CaseToken } from "../gate/admission.ts";
-import { reserveJob, type Reservation } from "../gate/memory-ledger.ts";
+import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledger.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
 
 export type ResidentPoolOptions = {
@@ -36,12 +38,22 @@ export type ResidentPoolOptions = {
   key?: string;
   /** Reclaim a warm producer's heaps after this many completed cases. */
   recycleAfterCases?: number;
+  /**
+   * Reclaim them at once after a case that leaves its worker holding more
+   * than this, on the memory ledger's basis (cgroupCharge): a heavy case's
+   * heaps are then neither held through the cases after it nor measured as
+   * theirs. `charge` reads a worker slice's charge (its group).
+   */
+  recycleAboveBytes?: number;
+  charge?: (group: string) => number;
 };
+
+const sliceCharge = (group: string) => cgroupCharge(readFileSync(join("/sys/fs/cgroup", group, "memory.current"), "utf8"), readFileSync(join("/sys/fs/cgroup", group, "memory.stat"), "utf8"));
 
 type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
-async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, token, recycleAfterCases }: ResidentPoolOptions,
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, token, recycleAfterCases, recycleAboveBytes, charge = sliceCharge }: ResidentPoolOptions,
   work: Dispatch[], isolated: boolean, reservation: Reservation, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
   // Asked before each case, which takes far longer than the ledger's answer.
@@ -133,14 +145,18 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           try {
             const row = JSON.parse(line);
             if (row.path !== active?.path) throw new Error(`worker ${index} answered ${row.path}, expected ${active?.path}`);
+            const answered = row.path;
             const failed = finish(row);
             const recycled = recycleAfterCases !== undefined && ++completedCases >= recycleAfterCases;
-            const restart = failed || recycled;
+            const held = recycleAboveBytes === undefined || failed || recycled ? 0 : charge(bound.group);
+            const heavy = held > recycleAboveBytes!;
+            const restart = failed || recycled || heavy;
             // Stop the entire scope before reuse, including any compiler child
             // left by a timed-out command. Only this worker is replaced.
             if (restart) {
               restarting = true;
               if(recycled&&!failed)report(`resident worker ${index}: recycling after ${completedCases} completed cases`);
+              if(heavy)report(`resident worker ${index}: recycling after ${answered} left it holding ${Math.round(held/2**20)} MiB`);
               bound.stop(scope);
             } else {
               void feed();
@@ -215,6 +231,10 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   if(options.recycleAfterCases!==undefined&&(!Number.isSafeInteger(options.recycleAfterCases)||options.recycleAfterCases<1)){
     options.memory.close();
     throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive completed-case count');
+  }
+  if(options.recycleAboveBytes!==undefined&&(!Number.isSafeInteger(options.recycleAboveBytes)||options.recycleAboveBytes<1)){
+    options.memory.close();
+    throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive byte bound');
   }
   if (typeof options.token !== "function") {
     options.memory.close();

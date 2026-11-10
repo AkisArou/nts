@@ -37,6 +37,15 @@
 // with a desktop running, never has it free. There is no declared number
 // anywhere: the step table names none.
 //
+// **A case can be its own unit.** An elastic step whose cases differ by
+// orders of magnitude keeps a history of its own beside steps.json,
+// `cases/<step>.json`: each case's last few peaks, by the case's key, kept
+// and reserved as a unit's are. Its tool asks for each case's token at that
+// case's reservation (tokens.mjs, a request's `bytes`), and for one it has
+// not measured at the step's unit. program-oracles does: a median program
+// held 139 MiB and three held two gigabytes, so a token sized for every
+// program at once asked eighteen times what most of them hold.
+//
 // **A reservation decides when work starts, never its verdict.** A step's
 // slice is held to its grant and grows while it runs (run.mjs, "Memory"); a
 // step killed at its hard bound is memory pressure, held, never a FAIL.
@@ -190,6 +199,15 @@ export function peakReservation(peaks: readonly number[]): number {
   return Math.max(LEAST_RESERVATION_BYTES, Math.ceil(RESERVATION_PER_PEAK * Math.max(...peaks) / MIB) * MIB);
 }
 
+/**
+ * What an elastic step's held tokens are counted for: each sized one at its
+ * size, the rest at the step's unit. Held tokens of its unit alone are
+ * exactly `tokens * unit`, as before sizes.
+ */
+export function elasticHeldBytes(tokens: number, sized: { readonly count: number; readonly bytes: number } | undefined, unit: number): number {
+  return (tokens - (sized?.count ?? 0)) * unit + (sized?.bytes ?? 0);
+}
+
 /** A share of the machine: `width` of its `slots`, never more than all of it. */
 export function machineShare(totalBytes: number, width: number, slots: number): number {
   return Math.floor(totalBytes * Math.min(width, slots) / slots);
@@ -302,6 +320,72 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
     for (const row of observed.jobs ?? []) if (KEY.test(row.key) && bytes(row.peak)) jobs.set(row.key, appended(jobs.get(row.key), "worker", row.peak));
     const sorted = <T>(map: ReadonlyMap<string, T>) => Object.fromEntries([...map].sort(([a], [b]) => nameOrder(a, b)));
     writeFileSync(pending, JSON.stringify({ version: 3, steps: sorted(steps), jobs: sorted(jobs) }) + "\n", { flag: "wx", mode: 0o600 });
+    renameSync(pending, file);
+    return;
+  } catch (error) { return error instanceof Error ? error.message : String(error); }
+  finally {
+    try { rmSync(pending, { force: true }); } catch { /* no verdict depends on this cache */ }
+    unlock?.();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cases.
+// ---------------------------------------------------------------------------
+
+/** A case's key: what its tool calls it, a path or a name, printable and bounded. */
+const CASE_KEY = /^[^\u0000-\u001f\u007f]{1,512}$/;
+/** Each case's last few peaks, oldest first, by its key. */
+export type CaseHistory = ReadonlyMap<string, readonly number[]>;
+export type CaseObservation = { key: string; peak: number };
+
+/** The case history of `step` beside the target's steps.json (`historyFile`). */
+export function caseHistoryFile(step: string, env: NodeJS.ProcessEnv = process.env, root: string = TOOLING_ROOT): string {
+  if (!KEY.test(step)) throw new Error(`not a step name: ${step}`);
+  return join(dirname(historyFile(env, root)), "cases", `${step}.json`);
+}
+
+/** The case history in `file`; missing, corrupt or of another version, an empty one. */
+export function readCaseHistory(file: string): CaseHistory {
+  let value: unknown;
+  try { value = JSON.parse(readFileSync(file, "utf8")); } catch { return new Map(); }
+  if (!record(value) || value.version !== 1 || !keys(value, ["version", "cases"]) || !record(value.cases)) return new Map();
+  const cases = new Map<string, readonly number[]>();
+  for (const [key, peaks] of Object.entries(value.cases)) {
+    if (!CASE_KEY.test(key) || !Array.isArray(peaks) || peaks.length === 0 || peaks.length > KEPT_PEAKS || !peaks.every(bytes)) return new Map();
+    cases.set(key, peaks);
+  }
+  return cases;
+}
+
+/** What a case reserves: as a unit does, from its last few peaks; undefined when it was never measured. */
+export function caseReservation(history: CaseHistory, key: string): number | undefined {
+  const peaks = history.get(key);
+  return peaks ? peakReservation(peaks) : undefined;
+}
+
+/**
+ * Adds each case's peak to the history in `file`, under its lock, and
+ * publishes it atomically. Its directory is made only beside an existing
+ * target's history directory, or with it when the target exists. A failure
+ * is observation-only, returned as a warning.
+ */
+export function writeCaseHistory(file: string, observed: Iterable<CaseObservation>): string | undefined {
+  const pending = `${file}.${process.pid}.${randomUUID()}`;
+  let unlock: (() => void) | null = null;
+  try {
+    for (const dir of [dirname(dirname(file)), dirname(file)]) {
+      try { mkdirSync(dir); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    }
+    unlock = lockHistory(file);
+    if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
+    const cases = new Map(readCaseHistory(file));
+    for (const row of observed) {
+      if (!CASE_KEY.test(row.key) || !bytes(row.peak)) continue;
+      cases.set(row.key, [...cases.get(row.key) ?? [], row.peak].slice(-KEPT_PEAKS));
+    }
+    const sorted = Object.fromEntries([...cases].sort(([a], [b]) => nameOrder(a, b)));
+    writeFileSync(pending, JSON.stringify({ version: 1, cases: sorted }) + "\n", { flag: "wx", mode: 0o600 });
     renameSync(pending, file);
     return;
   } catch (error) { return error instanceof Error ? error.message : String(error); }

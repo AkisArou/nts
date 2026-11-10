@@ -11,7 +11,7 @@ import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {spawn} from "node:child_process";
 import {once} from "node:events";
-import {inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
+import {RESERVATION_PER_PEAK, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
@@ -605,4 +605,64 @@ test("a step past its runaway bound is killed there and held as memory pressure,
   assert.ok(format.memory.killed > 0, JSON.stringify(format.memory));
   assert.equal(summary.memory.steps_killed, 1);
   assert.notEqual(summary.verdict, "green");
+});
+test("an elastic step's held tokens are its unit's alone exactly as before sizes, and each sized one counts at its size", () => {
+  for (const unit of [1, 268435456, 2537553920]) for (let tokens = 0; tokens <= 6; tokens++) {
+    assert.ok(Object.is(elasticHeldBytes(tokens, undefined, unit), tokens * unit), `${tokens} of ${unit}`);
+    assert.ok(Object.is(elasticHeldBytes(tokens, { count: 0, bytes: 0 }, unit), tokens * unit));
+  }
+  assert.equal(elasticHeldBytes(3, { count: 2, bytes: 300 * MiB }, GiB), GiB + 300 * MiB);
+});
+
+test("a case's peaks are kept, by its key, and it reserves as a unit does; a case never measured reserves nothing of its own", t => {
+  const own = testScratch(t, "case-history"), env = { NTS_GATE_COSTS_DIR: join(own, "costs") };
+  mkdirSync(env.NTS_GATE_COSTS_DIR);
+  const file = caseHistoryFile("program-oracles", env);
+  assert.equal(file, join(own, "costs", "cases", "program-oracles.json"));
+  assert.equal(readCaseHistory(file).size, 0);
+  for (let run = 1; run <= KEPT_PEAKS + 1; run++)
+    assert.equal(writeCaseHistory(file, [{ key: "benchmarks/cases/heavy", peak: run * GiB }, { key: "tests/programs/light", peak: 140 * MiB }]), undefined);
+  const history = readCaseHistory(file);
+  assert.deepEqual(history.get("benchmarks/cases/heavy"), Array.from({ length: KEPT_PEAKS }, (_, i) => (i + 2) * GiB), "the last few, oldest first");
+  assert.equal(caseReservation(history, "benchmarks/cases/heavy"), peakReservation([(KEPT_PEAKS + 1) * GiB]));
+  assert.equal(caseReservation(history, "tests/programs/light"), peakReservation([140 * MiB]));
+  assert.equal(caseReservation(history, "tests/programs/new"), undefined);
+  writeFileSync(file, '{"version":1,"cases":{"x":[-1]}}');
+  assert.equal(readCaseHistory(file).size, 0, "a corrupt history is an empty one");
+});
+
+test("a sized token is answered once its step's slice can hold it: its runaway bound follows its held tokens' sizes", t => {
+  // integrity's unit is 256 MiB; its worker asks for a 1 GiB token and then a
+  // 512 MiB one, and reads its slice's MemoryMax as each is answered.
+  const tokens = new URL("./tokens.mjs", import.meta.url).href;
+  let fixture = "";
+  const { result, step, output } = memoryRun(t, {
+    steps: "integrity", availableKiB: 16 * 2 ** 20,
+    rows: { integrity: { elastic: true, slots: 2, min: 1, reserve: 0.25, bound: 60 } },
+    times: "integrity\t100\t20\t2\n",
+    before: own => { fixture = own; },
+    payload: `
+case $1 in
+  integrity) exec node --input-type=module -e '
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const { acquireToken } = await import(process.argv[1]);
+const slice = join("/sys/fs/cgroup", dirname(readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "")));
+const high = () => Number(readFileSync(join(slice, "memory.max"), "utf8"));
+const first = await acquireToken({}, undefined, 2 ** 30), atFirst = high();
+const second = await acquireToken({}, undefined, 2 ** 29), atSecond = high();
+writeFileSync(process.argv[2] + "/highs.json", JSON.stringify([atFirst, atSecond]));
+first(); second();
+' ${JSON.stringify(tokens)} "$2" ;;
+esac
+`,
+  });
+  assert.equal(result.status, 0, output);
+  assert.equal(step("integrity").verdict, "PASS", output);
+  const [atFirst, atSecond] = JSON.parse(readFileSync(join(fixture, "highs.json"), "utf8")) as [number, number];
+  // The runaway bound of a grant: the grant and a block or a quarter of it,
+  // or twice what it was measured to hold, whichever is more.
+  const bound = (grant: number) => Math.max(grant + Math.max(GiB, grant / 4), 2 * grant / RESERVATION_PER_PEAK);
+  assert.equal(atFirst, bound(GiB), `its 1 GiB token's bound at its answer, not its 256 MiB unit's: ${atFirst}`);
+  assert.equal(atSecond, bound(1.5 * GiB), `both its tokens' sizes: ${atSecond}`);
 });

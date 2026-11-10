@@ -3206,8 +3206,11 @@ fn run_node_cases(
         coverage,
         emitted,
     )
+    .map(|(run, _)| run)
 }
 
+/// The run, and the most the oracle's own resident scope held: a
+/// measurement beside the answer, never part of it or of its status.
 fn execute_node_driver(
     dir: &Utf8Path,
     entry: &Utf8Path,
@@ -3215,7 +3218,7 @@ fn execute_node_driver(
     sources: Option<&[nts_diagnostics::SourceFile]>,
     coverage: &oracle_coverage::Coverage,
     emitted: &oracle_emit::Prepared,
-) -> Result<Run> {
+) -> Result<(Run, Option<u64>)> {
     let path = dir.join("check_driver.mjs");
     std::fs::write(&path, driver_text)?;
     let shadow = sources.and_then(|sources| artifact_shadow::oracle(dir, sources, emitted));
@@ -3238,9 +3241,11 @@ fn execute_node_driver(
         );
     let mut status = serde_json::Value::Null;
     let mut completion = serde_json::Value::Null;
+    let mut resident_peak_bytes = None;
     let result = case_costs::child("oracle.execute", || {
         let finished = oracle_run::execute(&without_colour(command), entry)?;
         status = finished.status;
+        resident_peak_bytes = finished.resident_peak_bytes;
         Ok::<_, anyhow::Error>(finished.output)
     })
     .and_then(|output| {
@@ -3277,7 +3282,7 @@ fn execute_node_driver(
         })
     });
     artifact_shadow::finish_oracle(shadow, &result, &status, &completion);
-    result
+    result.map(|run| (run, resident_peak_bytes))
 }
 
 /// Execute a captured plan with the same supervisor and completion reader as
@@ -3323,7 +3328,7 @@ pub fn execute_oracle_plan(
         budget: oracle_coverage::recorded_budget(entry, text("backend")?, text("case_key")?)?,
     };
     std::fs::create_dir_all(directory)?;
-    let run = match execute_node_driver(
+    let (run, resident_peak_bytes) = match execute_node_driver(
         directory,
         entry,
         text("driver")?,
@@ -3331,7 +3336,7 @@ pub fn execute_oracle_plan(
         &coverage,
         &prepared,
     ) {
-        Ok(run) => run,
+        Ok(done) => done,
         Err(error) => {
             if let Some(budget) = error.downcast_ref::<oracle_coverage::BudgetExceeded>() {
                 return Ok(
@@ -3341,10 +3346,12 @@ pub fn execute_oracle_plan(
             return Err(error);
         }
     };
-    // The producer owns finalization and only then publishes the improvement hint.
+    // The producer owns finalization and only then publishes the improvement
+    // hint. The oracle's resident peak sizes its case's next token.
     Ok(
         serde_json::json!({"version":1,"provisional":true,"rows":run.results,
-        "stdout":run.output.stdout,"stderr":run.output.stderr}),
+        "stdout":run.output.stdout,"stderr":run.output.stderr,
+        "residentPeakBytes":resident_peak_bytes}),
     )
 }
 

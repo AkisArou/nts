@@ -1,5 +1,5 @@
 // The pool owns admission, tokens and this process's complete resident group.
-import {writeFileSync,mkdirSync} from 'node:fs';
+import {writeFileSync,mkdirSync,openSync,readFileSync,readSync,writeSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {createInterface} from 'node:readline';
 import {OracleWorker,REPOSITORY,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot,type OraclePrepared} from './oracle-emit.ts';
@@ -7,7 +7,7 @@ import {requestOracleImprovement} from './oracle-records.ts';
 import {runOraclePlanner,type OracleBudget} from './oracle-execution.ts';
 import {resultHash,type ProgramAnswer} from './oracle-results.ts';
 import {OracleFilesystem} from './oracle-filesystem.ts';
-import type {ProgramOracleTask} from './program-oracles.ts';
+import type {ProgramMemory,ProgramOracleTask} from './program-oracles.ts';
 import {captureProgramOracle} from './oracle-result-capture.ts';
 import {compileSync,inResidentWorker} from '../census/worker-memory.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
@@ -29,8 +29,17 @@ function execute(args:string[]){
   if(result.status!==0||result.signal||result.error)throw Error('program oracle supervisor held: '+result.stdout+result.stderr);
   return result.stdout;
 }
+// What this worker's scope holds at most over one program: its memory.peak,
+// reset for each program through a descriptor of its own (Linux 6.12 and
+// later); where the kernel cannot reset it, the program is not measured.
+const peakFile=join('/sys/fs/cgroup',readFileSync('/proc/self/cgroup','utf8').trim().replace(/^0::/,''),'memory.peak');
+let peakFd:number|null=null;
+try{peakFd=openSync(peakFile,'r+');}catch{peakFd=null;}
+const resetPeak=()=>{if(peakFd===null)return false;try{writeSync(peakFd,'reset\n');return true;}catch{return false;}};
+const readPeak=()=>{const buffer=Buffer.alloc(32);const n=readSync(peakFd!,buffer,0,buffer.length,0);return Number(buffer.toString('utf8',0,n).trim());};
 try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infinity})){
   if(!path)continue;
+  const measuring=resetPeak();let oraclePeakBytes:number|null=null;
   let owner:OraclePrepared|undefined,directory:string|undefined,keep=false;
   try{
     const taskFiles=new OracleFilesystem(),taskText=taskFiles.readFile(path);
@@ -49,7 +58,8 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
         const planText=planned.plan,plan=JSON.parse(planText) as {driver:string;case_count:number};
         const file=join(scratch,'plan.json');writeFileSync(file,planText);
         const result=JSON.parse(execute([file,resultHash(planText),owner.manifest,scratch])) as
-          {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[];budget?:OracleBudget&{phase:'prepare'|'execute'}};
+          {version:number;provisional:boolean;rows:string[];stdout:number[];stderr:number[];budget?:OracleBudget&{phase:'prepare'|'execute'};residentPeakBytes?:number|null};
+        if(Number.isSafeInteger(result.residentPeakBytes)&&result.residentPeakBytes!>0)oraclePeakBytes=result.residentPeakBytes!;
         if(result.version!==1||result.provisional!==true)throw Error('program oracle supervisor returned no provisional answer');
         answer=result.budget?{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'budget',driverSha256:resultHash(plan.driver),budget:result.budget}
           :{version:1,subject:task.subject,project:task.project,entry:task.entry,kind:'calls',driverSha256:resultHash(plan.driver),count:plan.case_count,
@@ -69,7 +79,9 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
     // The warm SDK and its captured package bytes are never retained here.
     keep=answer.kind==='calls';
     if(!keep)removeOracleSnapshot(directory);
-    process.stdout.write(JSON.stringify({path,bucket:'oracle-reference',answer,capture})+'\n');
+    const scopePeakBytes=measuring?readPeak():0;
+    const memory:ProgramMemory|undefined=Number.isSafeInteger(scopePeakBytes)&&scopePeakBytes>0?{scopePeakBytes,oraclePeakBytes}:undefined;
+    process.stdout.write(JSON.stringify({path,bucket:'oracle-reference',answer,capture,...(memory?{memory}:{})})+'\n');
   }catch(error){process.stdout.write(JSON.stringify({path,bucket:'infrastructure-error',why:error instanceof Error?error.stack:String(error)})+'\n');}
   finally{if(directory&&!keep)removeOracleSnapshot(directory);}
 }}finally{worker.close();}

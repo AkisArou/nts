@@ -6,6 +6,7 @@ import { waitFor } from "./test-wait.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { connect } from "node:net";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -206,4 +207,97 @@ test("shell telemetry preserves project names without adding protocol lines", as
     assert.equal(decodeURIComponent(request.context.slice(5)), project);
     assert.equal(observations.filter(e => e.event === "token.grant").length, 1);
   } finally { p.close(); }
+});
+
+// A request line as tokens.mjs and token.sh send it, on its own connection:
+// `go` resolves true, a close without it false.
+function asking(p, line) {
+  const at = p.addr.lastIndexOf(":");
+  const sock = connect({ host: p.addr.slice(0, at), port: Number(p.addr.slice(at + 1)) });
+  const go = new Promise((resolve) => {
+    sock.on("data", (d) => { if (String(d).startsWith("go")) resolve(true); });
+    sock.on("close", () => resolve(false));
+  });
+  sock.write(line + "\n");
+  return { go, close: () => sock.destroy() };
+}
+const UNIT = 600;
+
+test("a sized request that fits goes before an older one of its step that does not, and each token counts at its size", async () => {
+  const q = createTokenPool({
+    free: () => 3 - q.total, claim: (step, { waitedS }) => waitedS, known: () => true,
+    eligible: (step, bytes) => held() + (bytes ?? UNIT) <= 1000,
+  });
+  const held = () => [...q.held].reduce((sum, [step, n]) => sum + (n - (q.sized.get(step)?.count ?? 0)) * UNIT + (q.sized.get(step)?.bytes ?? 0), 0);
+  await q.start();
+  try {
+    const unit = asking(q, "want oracles 1");
+    assert.equal(await unit.go, true);
+    const large = asking(q, "want oracles 2 bytes:700");
+    await waitFor("the large request to wait", () => q.waiting.length === 1);
+    const small = asking(q, "want oracles 3 bytes:300");
+    assert.equal(await small.go, true, "the small one fits beside the unit and goes first");
+    assert.deepEqual(q.sized.get("oracles"), { count: 1, bytes: 300 });
+    assert.equal(q.held.get("oracles"), 2);
+    assert.equal(held(), 900);
+    unit.close();
+    assert.equal(await large.go, true, "once the unit returns, the large one fits");
+    assert.deepEqual(q.sized.get("oracles"), { count: 2, bytes: 1000 });
+    small.close(); large.close();
+    await waitFor("every token back", () => q.total === 0);
+    assert.deepEqual(q.sized.get("oracles"), { count: 0, bytes: 0 });
+  } finally { q.close(); }
+});
+
+test("requests of a step's unit are asked about once per step, oldest first, exactly as before sizes", async () => {
+  const log = [], grants = [];
+  const q = createTokenPool({
+    free: () => 3 - q.total, claim: (step, { waitedS }) => waitedS, known: () => true,
+    eligible: (step, bytes) => { log.push([step, bytes ?? null]); return q.total < 2; },
+    observe: (e) => { if (e.event === "token.grant") grants.push([e.step, e.request]); },
+  });
+  await q.start();
+  try {
+    const a = asking(q, "want x 1"); assert.equal(await a.go, true);
+    const b = asking(q, "want x 2"); assert.equal(await b.go, true);
+    const c = asking(q, "want x 3"), d = asking(q, "want y 4"), e = asking(q, "want x 5");
+    await waitFor("three waiting", () => q.waiting.length === 3);
+    log.length = 0;
+    a.close();
+    assert.equal(await c.go, true);
+    await waitFor("the next choice", () => q.total === 2);
+    // One question per step and choice, by its oldest, in the order the steps first wait.
+    assert.deepEqual(log.slice(0, 2), [["x", null], ["y", null]]);
+    assert.deepEqual(grants.map(([step]) => step), ["x", "x", "x"]);
+    assert.equal(q.sized.size, 0, "no sized books for a step of its unit");
+    for (const r of [b, c, d, e]) r.close();
+  } finally { q.close(); }
+});
+
+test("a malformed size is refused without a token, and a sized token is answered only once its step's limits hold it", async () => {
+  // The server's own writes to the sized token's connection, from its grant on.
+  let raise;
+  const writes = [];
+  const q = createTokenPool({
+    free: () => 3 - q.total, claim: () => 1, known: () => true,
+    answering: (_step, w) => {
+      const write = w.sock.write.bind(w.sock);
+      w.sock.write = (data) => { writes.push(String(data)); return write(data); };
+      return new Promise((resolve) => { raise = resolve; });
+    },
+  });
+  await q.start();
+  try {
+    for (const bad of ["bytes:-5", "bytes:0", "bytes:1.5", "bytes:12x"]) assert.equal(await asking(q, `want x 1 ${bad}`).go, false, bad);
+    assert.equal(q.total, 0);
+    const unit = asking(q, "want x 2");
+    assert.equal(await unit.go, true, "a request of the unit is answered at once");
+    const sized = asking(q, "want x 3 bytes:4096");
+    await waitFor("the sized token granted, its answer held", () => q.total === 2 && raise !== undefined);
+    assert.deepEqual(writes, [], "no go before its limits hold it");
+    raise();
+    assert.equal(await sized.go, true);
+    assert.deepEqual(writes, ["go\n"]);
+    unit.close(); sized.close();
+  } finally { q.close(); }
 });

@@ -29,15 +29,18 @@ process.env.NTS_GATE_TOKEN_HELD = "1";
 
 /**
  * A client of the token pool at `where` (`host:port`) asking for `step`.
- * `acquire(context, signal)` resolves to the release of one granted token:
+ * `acquire(context, signal, bytes)` resolves to the release of one granted token:
  * calling it closes the connection, and calling it again does nothing.
  * `signal` aborting while the request waits closes the pending connection --
  * the runner counts it cancelled, never granted -- and resolves to `null`.
+ * `bytes`, when given, is the memory the case was measured to hold: the
+ * runner grants the token when that fits and counts it at that size.
  */
 export function tokenClient(where, step) {
   const i = where.lastIndexOf(":");
   const address = { host: where.slice(0, i), port: Number(where.slice(i + 1)) };
-  const acquire = (context, signal) => {
+  const acquire = (context, signal, bytes) => {
+    if (bytes !== undefined && !(Number.isSafeInteger(bytes) && bytes > 0)) return Promise.reject(new Error(`tokens.mjs: a token's size is a positive whole number of bytes, not ${bytes}`));
     if (signal?.aborted) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
       const sock = connect(address);
@@ -63,7 +66,7 @@ export function tokenClient(where, step) {
       sock.setEncoding("utf8");
       sock.on("connect", () => {
         const label = process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
-        sock.write(`want ${step} ${process.pid}${label}\n`);
+        sock.write(`want ${step} ${process.pid}${bytes === undefined ? "" : ` bytes:${bytes}`}${label}\n`);
       });
       sock.on("data", (d) => {
         buf += d;
@@ -88,11 +91,11 @@ const gate = ENABLED ? tokenClient(WHERE, STEP) : null;
 
 /**
  * This process's step's token from the gate's pool (`tokenClient`'s
- * `acquire`). Outside a gate it resolves at once to a release that does
- * nothing.
+ * `acquire`), of `bytes` when the case's size is known. Outside a gate it
+ * resolves at once to a release that does nothing.
  */
-export function acquireToken(context, signal) {
-  return gate ? gate.acquire(context, signal) : Promise.resolve(() => {});
+export function acquireToken(context, signal, bytes) {
+  return gate ? gate.acquire(context, signal, bytes) : Promise.resolve(() => {});
 }
 
 export async function withToken(fn, context) {

@@ -119,6 +119,23 @@ test('a bounded resident pool recycles only after completed cases and returns ev
   assert.equal(existsSync(join(CGROUP,memory.group)),false,'all worker generations drain before the pool finishes');
 });
 
+test('a case that leaves its worker holding past the bound is followed by a fresh worker, and a case under it is not',async t=>{
+  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const memory=new MemoryRun({budgetBytes:192*2**20,id:'held-memory-recycling'}),gate=await gatePool(1);
+  t.after(gate.close);
+  const rows:{path:string;pid:number;bucket:string}[]=[],paths=Array.from({length:6},(_,index)=>'safe-'+index);
+  // The worker's charge after each case: the third leaves 600 MiB behind.
+  let answered=0;
+  const charge=()=>++answered===3?600*2**20:100*2**20;
+  const summary=await runMemoryWorkers({paths,jobs:1,memory,workerBytes:128*2**20,recycleAboveBytes:512*2**20,charge,
+    token:gate.token,args:(index:number)=>[fixture,directory,String(index)],onRow:(row:{path:string;pid:number;bucket:string})=>rows.push(row)});
+  assert.deepEqual(rows.map(row=>row.path),paths);
+  const counts=new Map<number,number>();for(const row of rows)counts.set(row.pid,(counts.get(row.pid)??0)+1);
+  assert.deepEqual([...counts.values()],[3,3],'only the case past the bound ends its worker');
+  assert.equal(summary.pressureRequeues,0);
+  await gate.settled();assert.equal(gate.seen.grant,paths.length);assert.equal(gate.seen.release,paths.length);
+});
+
 test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: TEST_HANG_MS }, t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));

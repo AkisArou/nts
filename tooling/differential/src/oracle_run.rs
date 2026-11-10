@@ -8,6 +8,10 @@ use std::time::Duration;
 pub(super) struct Finished {
     pub(super) output: Output,
     pub(super) status: Value,
+    /// The most the oracle's own resident scope held: a measurement, kept
+    /// beside the status, never in it, so no answer, identity or shadow
+    /// differs between two runs of one oracle by it.
+    pub(super) resident_peak_bytes: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -139,6 +143,7 @@ fn execute_owned(command: &Command, source: &Utf8Path, root: &Utf8Path) -> Resul
         },
         status: json!({"version":2,"exit_code":code,"signal":signal,"stop":stop,
             "budget":result["budget"],"cpu_limit_s":result["limits"]["cpuSeconds"],"resident_limit_bytes":result["limits"]["residentBytes"]}),
+        resident_peak_bytes: result["residentPeakBytes"].as_u64(),
     })
 }
 
@@ -220,6 +225,7 @@ pub(super) fn run(command: Command, idle: Duration) -> Result<Finished> {
     Ok(Finished {
         output: finished.output,
         status,
+        resident_peak_bytes: None,
     })
 }
 
