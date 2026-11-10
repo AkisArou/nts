@@ -5,9 +5,9 @@
 //
 //   node --test tooling/landing/service.test.ts
 //
-// The selection and the step runs are stubs (selection.test.ts and
-// run.test.ts check the real ones); the landing tree is prepared for real, and
-// a check is red when the tree it checks has a file named RED.
+// The selection and the step runs are stubs (selection.test.ts and the
+// run-*.test.ts files check the real ones); the landing tree is prepared for
+// real, and a check is red when the tree it checks has a file named RED.
 import { test, type TestContext } from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
