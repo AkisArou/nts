@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "fixture": "benchmarks/cases/jetstream-threejs",
+  "rows": [
+    {
+      "kind": "budget",
+      "source": "benchmarks/cases/jetstream-threejs/case.ts",
+      "signature": "e9c5aea0e6295d8099223267236bf0a559b2dc7c615e052aef363bd6fcf2c800",
+      "keys": {
+        "c": "04b3e4ac86ab22c478617dd1438e2a74",
+        "jvm": "a6e9952fe8008b4202ae2c36384d4dbb",
+        "llvm": "be28041c4b6b15e854888945e7865cc0"
+      },
+      "cases_sha256": "d1f3168a185d5ccbe391e94cf1113d0c4648098b625d5e87000b54c6c7783d10",
+      "driver_sha256": "e83b974e4e0efd9f52c9f5f450de3c8f5c828c53844f78bf39891e5113a57604",
+      "input_domain": {
+        "identity": "4c57fabb3d0a37f01e4a5c942cfe186b",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "source_digest": "2285d4c40edd32efbfe61970dcd11a3e",
+      "budget": {
+        "version": 1,
+        "phase": "execute",
+        "outcome": "memory-cap",
+        "bound": 1124073472,
+        "signal": "SIGABRT",
+        "reason": "oracle memory-cap: benchmarks/cases/jetstream-threejs/case.ts stopped at V8's 1124073472 byte JavaScript heap limit, which node set from its 2147483648 byte resident scope: FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory"
+      },
+      "revision": {
+        "entry": "b9057ca5ad7e3373283e85902c5592eab6ab21678371ef45749b1251a6f7734c",
+        "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+        "producer": "cbbfbd41a1f1231acd2f57b70b4de624f3a42a7d9d92e6e642b4394b2b4cd6d0",
+        "policy": "7e5da4ec60c82b6d3496a2288247cde2c6b9ae97e17149ea0ec5c88ad891e2ab"
+      }
+    }
+  ]
+}
