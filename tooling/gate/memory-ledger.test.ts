@@ -18,8 +18,6 @@ import {
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory } from "./step-scheduling.ts";
-import { defaultSlots } from "./budget.ts";
-import { cpus } from "node:os";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import { withoutHanded } from "./test-memory.ts";
@@ -671,6 +669,7 @@ const job = (f: Fixture, extra: Readonly<Record<string, string>> = {}, keep = fa
 
 test("a job reserves once: alone, a reservation of its own that what it starts runs inside; inside one, nothing", async t => {
   const f = fixture(t);
+  seedJobs(f, { job: GiB });
   const alone = job(f, { NTS_MEMORY_PRIORITY: "full-check" });
   assert.equal(alone.status, 0, alone.stderr);
   assert.deepEqual(JSON.parse(alone.stdout), { inherited: false, named: true, again: [true, true], held: [["job", GiB, "full-check"]], cleared: true, restored: true },
@@ -763,14 +762,14 @@ test("a job reserves what its earlier runs held per worker, and the peak it held
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
-test("a job never measured reserves the largest of its kind, or its share of the machine, and the ledger's status says so, and when it is over", async t => {
+test("an unmeasured job has no forecast; status still names unmeasured steps and fixed reservations that ran over", async t => {
   const f = fixture(t);
   const share = jobSizing({ key: "fresh" }, f.env);
-  assert.equal(share.basis, "share");
-  assert.equal(share.bytes, Math.floor(62 * GiB / defaultSlots(cpus().length)), "one slot's share of what the ledger can give: the machine less the system's floor");
+  assert.equal(share.basis, "live");
+  assert.equal(share.bytes, 0, "no forecast before the first live sample");
   seedJobs(f, { other: 3 * GiB });
-  assert.deepEqual([jobSizing({ key: "fresh", units: 2 }, f.env).bytes, jobSizing({ key: "fresh", units: 2 }, f.env).basis], [6 * GiB, "largest"]);
-  assert.equal(jobSizing({ key: "fresh", units: 2, atMostBytes: 4 * GiB }, f.env).bytes, 4 * GiB, "never more than the job's own cap");
+  assert.deepEqual([jobSizing({ key: "fresh", units: 2 }, f.env).bytes, jobSizing({ key: "fresh", units: 2 }, f.env).basis], [0, "live"]);
+  assert.equal(jobSizing({ key: "fresh", units: 2, atMostBytes: 4 * GiB }, f.env).bytes, 0, "a cap does not invent a forecast");
   assert.throws(() => jobSizing({ key: "Not A Key" }, f.env), TypeError);
   const held = await f.ask({ bytes: 4 * GiB, what: "fresh job", unmeasured: ["fresh"] });
   await noteOver(f.dir, held.id, "fresh");
@@ -781,6 +780,74 @@ test("a job never measured reserves the largest of its kind, or its share of the
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /fresh job\n      unmeasured \(sized by the largest of its kind, or its share of the machine\): fresh\n      over \(held more than it reserved\): fresh\n/);
   held.release();
+});
+
+test("a live job beside a measured job promises only its current margin, which follows both growth and shrink", async t => {
+  const f = fixture(t);
+  const measured = await f.ask({ bytes: 8 * GiB, what: "measured" });
+  f.used.set("measured", 2 * GiB);
+  f.used.set("live", GiB); f.memory(17);
+  const live = await f.ask({ bytes: 0, what: "live", liveUse: true, unmeasured: ["fresh"] });
+  assert.equal(live.bytes, 1.25 * GiB);
+  const probe = await f.ask({ bytes: GiB, what: "probe" });
+  assert.deepEqual([f.of("probe").at(-1)!.pendingBytes, f.of("probe").at(-1)!.roomBytes], [6.25 * GiB, 8.75 * GiB]);
+  probe.release();
+  f.used.set("live", 4 * GiB); f.memory(14);
+  assert.equal(live.bytes, 5 * GiB);
+  const grown = await f.ask({ bytes: GiB, what: "grown probe" });
+  assert.deepEqual([f.of("grown probe").at(-1)!.pendingBytes, f.of("grown probe").at(-1)!.roomBytes], [7 * GiB, 5 * GiB]);
+  grown.release();
+  f.used.set("live", GiB); f.memory(17);
+  const shrunk = await f.ask({ bytes: GiB, what: "shrunk probe" });
+  assert.equal(f.of("shrunk probe").at(-1)!.pendingBytes, 6.25 * GiB);
+  assert.equal(measured.bytes, 8 * GiB, "the measured forecast stays fixed");
+  shrunk.release(); live.release(); measured.release();
+});
+
+test("a live job waits until its margin fits", async t => {
+  const f = fixture(t);
+  f.used.set("live waiter", GiB); f.memory(2.1);
+  const request = f.ask({ bytes: 0, what: "live waiter", liveUse: true });
+  await waitFor("the live margin to wait", () => f.of("live waiter").length > 0, { stopped: f.stopped });
+  assert.equal(readLedger(f.dir).admitted.length, 0);
+  f.memory(2.5);
+  const held = await request;
+  assert.equal(held.bytes, 1.25 * GiB);
+  held.release();
+});
+
+test("a live ancestor has no unused forecast to lend a separate job", async t => {
+  const f = fixture(t), child = ownerProcess(t);
+  f.used.set("live ancestor", GiB);
+  const parent = await f.ask({ bytes: 0, what: "live ancestor", liveUse: true });
+  f.used.set("live descendant", GiB); f.memory(2.3);
+  const request = f.ask({ bytes: 0, what: "live descendant", liveUse: true, owner: { pid: child.pid } });
+  await waitFor("the independent live margin", () => f.of("live descendant").length > 0);
+  assert.equal(f.of("live descendant")[0].drawnBytes, 0);
+  assert.equal(readLedger(f.dir).admitted.length, 1);
+  f.memory(3);
+  const held = await request;
+  held.release(); parent.release();
+});
+
+test("a live child's changing charge draws on its fixed ancestor without stranding unused forecasts", async t => {
+  const f = fixture(t), child = ownerProcess(t);
+  const parent = await f.ask({ bytes: 8 * GiB, what: "fixed ancestor" });
+  f.used.set("fixed ancestor", 2 * GiB);
+  f.used.set("live child", GiB); f.memory(17);
+  const live = await f.ask({ bytes: 0, what: "live child", liveUse: true, owner: { pid: child.pid } });
+  assert.equal(readLedger(f.dir).admitted.find(entry => entry.id === live.id)!.drawsOn, parent.id);
+  const initial = await f.ask({ bytes: GiB, what: "initial nested probe" });
+  assert.equal(f.of("initial nested probe").at(-1)!.pendingBytes, 5 * GiB);
+  initial.release();
+  f.used.set("live child", 4 * GiB); f.memory(14);
+  const grown = await f.ask({ bytes: GiB, what: "grown nested probe" });
+  assert.equal(f.of("grown nested probe").at(-1)!.pendingBytes, 2 * GiB);
+  grown.release();
+  f.used.set("live child", GiB); f.memory(17);
+  const shrunk = await f.ask({ bytes: GiB, what: "shrunk nested probe" });
+  assert.equal(f.of("shrunk nested probe").at(-1)!.pendingBytes, 5 * GiB);
+  shrunk.release(); live.release(); parent.release();
 });
 
 // A command admit.ts becomes: it holds 160 MiB until the ledger's entry for
@@ -810,12 +877,12 @@ test("admit.ts --key reserves what its key held, and its watcher has the command
   assert.match(admit(f, ["--key", "admitted-job", "--bytes", "1G", "--", "true"]).stderr, /one of --key and --bytes says what to reserve/);
 });
 
-test("an unmeasured key is never sized past the widest step's share: half of what the ledger can give", t => {
+test("an unmeasured job ignores other jobs and machine width; a measured reservation keeps its machine cap", t => {
   const f = fixture(t); // 64 GiB, 62 of it the ledger can give
   const wide = jobSizing({ key: "wide", units: 24 }, f.env);
-  assert.deepEqual([wide.bytes, wide.basis], [31 * GiB, "share"], "24 workers' share would be all of it");
+  assert.deepEqual([wide.bytes, wide.basis], [0, "live"], "worker count does not invent a forecast");
   seedJobs(f, { huge: 70 * GiB });
-  assert.deepEqual([jobSizing({ key: "fresh" }, f.env).bytes, jobSizing({ key: "fresh" }, f.env).basis], [31 * GiB, "largest"]);
+  assert.deepEqual([jobSizing({ key: "fresh" }, f.env).bytes, jobSizing({ key: "fresh" }, f.env).basis], [0, "live"]);
   assert.equal(jobSizing({ key: "huge" }, f.env).bytes, 62 * GiB, "a measured reservation stays capped at all the ledger can give");
 });
 

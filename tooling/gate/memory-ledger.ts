@@ -11,6 +11,10 @@
 //   pending = the sum, over live reservations, of max(0, reserved - used)
 //   admitted when MemAvailable - pending >= its bytes + SYSTEM_FLOOR_BYTES
 //
+// An unmeasured job has no forecast. It asks only for the margin on its live
+// use (MemAvailable already excludes that use), and promises live use plus
+// that margin at every decision. Its watcher records its peak for next time.
+//
 // **"Used" is counted in MemAvailable's own currency**: what the job holds
 // that nobody else can have. MemAvailable already counts a job's file cache
 // and reclaimable slab as available; counting them as used as well would
@@ -126,13 +130,12 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { cpus, homedir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { defaultSlots } from "./budget.ts";
-import { historyFile, KEY, machineShare, peakReservation, readCostHistory, unitReservation, unmeasuredLimit, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
+import { historyFile, KEY, peakReservation, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
 export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
@@ -449,6 +452,10 @@ export type LedgerEntry = {
   grows: string | null;
   /** The steps or jobs this reservation sized without a measurement of their own in their history. */
   unmeasured?: string[];
+  /** An unmeasured job promises its live use and margin, rather than a forecast. */
+  liveUse?: boolean;
+  /** Largest live sample observed by this job's peak watcher. */
+  sampledPeak?: number;
   /** The steps or jobs of this reservation that held more than they reserved. */
   over?: string[];
   /** For a request of its own, the admitted reservation it takes over: admitting it ends that one. */
@@ -488,6 +495,8 @@ function parseEntry(text: string, file: string): LedgerEntry {
       || (cgroup !== null && (typeof cgroup?.path !== "string" || typeof cgroup.inode !== "string"))
       || (entry.grows !== null && (typeof entry.grows !== "string" || !ID.test(entry.grows)))
       || !keyList(entry.unmeasured) || !keyList(entry.over)
+      || (entry.liveUse !== undefined && typeof entry.liveUse !== "boolean")
+      || (entry.sampledPeak !== undefined && (!Number.isSafeInteger(entry.sampledPeak) || entry.sampledPeak <= 0))
       || (entry.replaces !== undefined && (typeof entry.replaces !== "string" || !ID.test(entry.replaces)))
       || (entry.drawsOn !== undefined && (typeof entry.drawsOn !== "string" || !ID.test(entry.drawsOn)))
       || (entry.drawn !== undefined && (!Number.isSafeInteger(entry.drawn) || entry.drawn < 0 || entry.drawn > entry.bytes))
@@ -578,6 +587,8 @@ export type ReserveRequest = {
   bytes: number; what: string; priority?: Priority; owner?: OwnerSpec;
   /** The steps or jobs these bytes were sized for without a measurement of their own: the entry says so. */
   unmeasured?: readonly string[];
+  /** No forecast exists: admit its live margin and charge live use until its peak is known. */
+  liveUse?: boolean;
   /** An admitted reservation this one takes over: the decision that admits it ends that one, under the same lock. */
   replaces?: string;
   /**
@@ -644,14 +655,15 @@ export type Reservation = {
   inherited: boolean;
   /** What a child process needs to run inside this reservation. */
   env: Readonly<Record<string, string>>;
-  /** What it holds: the bytes reserved, with every growth admitted and every shrink given back. */
+  /** Its fixed forecast, or an unmeasured job's live use and margin. */
   readonly bytes: number;
   /**
    * Waits until `bytes` more may start, exactly as a new request of `bytes`
    * at this reservation's priority would, then holds them in this
    * reservation's own entry. One growth at a time; `signal` withdraws it while
    * it waits, and so does `release`. Inside a parent's reservation it asks
-   * for nothing, as `reserve` does there.
+   * for nothing, as `reserve` does there. A live job follows its use and
+   * asks nothing for explicit growth or shrink.
    */
   grow(bytes: number, options?: { signal?: AbortSignal }): Promise<void>;
   /**
@@ -818,6 +830,11 @@ export async function noteOver(dir: string, id: string, key: string): Promise<vo
   await rewriteEntry(dir, id, entry => entry.over?.includes(key) ? null : { ...entry, over: [...entry.over ?? [], key] });
 }
 
+/** Publishes a live job's observed peak before its watcher waits again. */
+export async function noteSampledPeak(dir: string, id: string, bytes: number): Promise<void> {
+  await rewriteEntry(dir, id, entry => !entry.liveUse || bytes <= (entry.sampledPeak ?? 0) ? null : { ...entry, sampledPeak: bytes });
+}
+
 function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure {
   if (cgroup === undefined) return { tree: true, cgroup: ownCgroup(owner.pid) };
   if (!cgroup.startsWith("/") || cgroup === "/" || cgroup.endsWith("/") || cgroup.split("/").some(part => part === "." || part === "..")) {
@@ -843,7 +860,7 @@ const requestFor = (entry: LedgerEntry) => entry.grows === null ? `request for $
  * `deciding` takes over, nothing (see the top of this file). With no request
  * deciding, each its whole promise.
  */
-function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority">; used: number; lent: number }>,
+function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes" | "priority" | "liveUse">; used: number; lent: number }>,
   deciding: Pick<LedgerEntry, "priority" | "replaces"> | null): number {
   let pending = 0;
   for (const { entry, used, lent } of admitted) {
@@ -851,13 +868,14 @@ function pendingFor(admitted: Iterable<{ entry: Pick<LedgerEntry, "id" | "bytes"
     // What it has lent the reservations that draw on it is theirs to promise.
     const own = Math.max(0, entry.bytes - lent);
     const yields = deciding !== null && rank(deciding.priority) < rank(entry.priority);
-    pending += Math.max(0, (yields ? Math.min(own, peakReservation([Math.max(1, used)])) : own) - used);
+    const live = peakReservation([Math.max(1, used)]);
+    pending += Math.max(0, (entry.liveUse ? live : yields ? Math.min(own, live) : own) - used);
   }
   return pending;
 }
 
 /** What an admitted reservation uses now, and what it has lent the reservations that draw on it. */
-type Account = { used: number; lent: number };
+type Account = { used: number; lent: number; drawn: number };
 
 /**
  * Each admitted reservation's account. One that draws on another (`drawsOn`)
@@ -880,7 +898,19 @@ function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: Led
       if (child.measure.tree) for (const pid of processTree(child.owner.pid, table())) theirs.add(pid);
       if (child.measure.cgroup !== null) for (const pid of cgroupMembers(child.measure.cgroup.path)) theirs.add(pid);
     }
-    accounts.set(entry.id, { used: use(entry, theirs), lent: children.reduce((sum, child) => sum + (child.drawn ?? 0), 0) });
+    accounts.set(entry.id, { used: use(entry, theirs), lent: 0, drawn: entry.drawn ?? 0 });
+  }
+  for (const entry of admitted.values()) {
+    const account = accounts.get(entry.id)!, children = drawers.get(entry.id) ?? [];
+    account.lent = children.filter(child => !child.liveUse).reduce((sum, child) => sum + (child.drawn ?? 0), 0);
+    let unused = entry.liveUse ? 0 : Math.max(0, entry.bytes - account.used - account.lent);
+    // A live child's share follows its current charge, so its growth and
+    // shrink neither duplicate nor strand the ancestor's unused forecast.
+    for (const child of children.filter(child => child.liveUse).sort(queueOrder)) {
+      const theirs = accounts.get(child.id)!;
+      theirs.drawn = Math.min(unused, peakReservation([Math.max(1, theirs.used)]));
+      unused -= theirs.drawn; account.lent += theirs.drawn;
+    }
   }
   return accounts;
 }
@@ -930,6 +960,15 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const accounts = accountsOf(admitted, (entry, exclude) => context.used(entry, read, exclude), read);
+  // MemAvailable already excludes these waiting processes' live use. They
+  // ask only for the additional margin, not for memory they hold already.
+  const liveMargins = new Map<string, number>();
+  for (const entry of [...waiting, self]) if (entry.liveUse) {
+    const used = context.used(entry, read, NONE);
+    const charged = peakReservation([Math.max(1, used)]);
+    if (entry.id === self.id) self.bytes = charged;
+    liveMargins.set(entry.id, Math.max(0, charged - used));
+  }
   const usedBytes = [...accounts.values()].reduce((sum, account) => sum + account.used, 0);
   const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry, ...accounts.get(entry.id)! })), self);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
@@ -943,12 +982,12 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     const on = drawnOn(entry, admitted);
     if (on === undefined) continue;
     const account = accounts.get(on)!;
-    const unused = left.get(on) ?? Math.max(0, admitted.get(on)!.bytes - account.lent - account.used);
+    const unused = left.get(on) ?? (admitted.get(on)!.liveUse ? 0 : Math.max(0, admitted.get(on)!.bytes - account.lent - account.used));
     const take = Math.min(entry.bytes, unused);
     left.set(on, unused - take);
     draws.set(entry.id, take);
   }
-  const ask = (entry: LedgerEntry) => entry.bytes - (draws.get(entry.id) ?? 0);
+  const ask = (entry: LedgerEntry) => Math.max(0, (liveMargins.get(entry.id) ?? entry.bytes) - (draws.get(entry.id) ?? 0));
   // What a request would hold beyond what it draws: a growth with its reservation's own part.
   const whole = (entry: LedgerEntry) => {
     const into = entry.grows === null ? undefined : admitted.get(entry.grows);
@@ -1063,10 +1102,11 @@ function holding(self: LedgerEntry, context: Context): Reservation {
     : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
     id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir),
-    get bytes() { return bytes; },
+    get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
       amount(more, self.what, "grows by");
       if (released) throw new Error(`memory: ${self.what}'s reservation has been released, so it cannot grow`);
+      if (self.liveUse) return; // No forecast: live accounting follows its use instead.
       if (growing !== null) throw new Error(`memory: ${self.what} already waits to grow; it grows by one request at a time`);
       const never = neverFits(bytes + more, readMeminfo(context.meminfo).totalBytes, `${self.what} asks to grow by ${gib(more)} to ${gib(bytes + more)}`);
       if (never !== null) throw new RangeError(never);
@@ -1096,6 +1136,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
     async shrink(less) {
       amount(less, self.what, "gives back");
       if (released) return;
+      if (self.liveUse) return;
       if (less >= bytes) throw new RangeError(`memory: ${self.what} holds ${gib(bytes)}, so it cannot give back ${gib(less)}; release it instead`);
       bytes -= less;
       try { await rewrite(); }
@@ -1123,7 +1164,9 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const dir = resolve(options.dir ?? env[LEDGER_ENV] ?? LEDGER_DIR);
   const report = options.report ?? (() => {});
   const what = label(request.what);
-  const { bytes, priority = "agent" } = request;
+  const { priority = "agent" } = request;
+  if (request.liveUse && request.bytes !== 0) throw new TypeError("a live job has no byte forecast; pass zero bytes");
+  const bytes = request.liveUse ? peakReservation([1]) : request.bytes;
   amount(bytes, what, "reserves");
   if (!PRIORITIES.includes(priority)) throw new RangeError(`memory: no priority ${String(priority)}; one of ${PRIORITIES.join(", ")}`);
   const nested = inside(env[RESERVATION_ENV], dir, request.owner?.pid ?? process.pid, what, bytes, report);
@@ -1165,6 +1208,7 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
     version: 2, id: randomUUID(), seq: 0, bytes, what, priority, owner, waiter,
     measure: measureFor(owner, request.owner?.cgroup), since: new Date().toISOString(), grows: null,
     ...(unmeasured.length ? { unmeasured } : {}),
+    ...(request.liveUse ? { liveUse: true } : {}),
     ...(request.replaces !== undefined ? { replaces: request.replaces } : {}),
     ...(drawsOn !== undefined ? { drawsOn } : {}),
   };
@@ -1202,11 +1246,9 @@ export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: 
 /**
  * What a job reserves in the environment `env`: per worker, what its own
  * peaks in the history of the target it runs against say (step-scheduling.ts's
- * `historyFile`); never measured there, the largest a job worker reserves
- * there; with none, one slot's share of what the ledger can give (MemTotal
- * less the system's floor), per worker. Never more than the machine could
- * give, nor than the job's own cap; unmeasured, never more than the widest
- * step's share (`unmeasuredLimit`).
+ * `historyFile`). A job without peaks returns zero and basis `live`: no
+ * forecast, with admission and accounting following live use and its margin.
+ * Measured forecasts stay capped at the machine and the job's own kernel cap.
  */
 export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.ProcessEnv = process.env): JobSizing {
   const units = request.units ?? 1;
@@ -1216,10 +1258,9 @@ export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.Process
   const history = historyFile(env);
   const { totalBytes } = machineMemory(env);
   const capacity = totalBytes - SYSTEM_FLOOR_BYTES;
-  const unit = unitReservation(readCostHistory(history), { job: request.key }, "worker", machineShare(capacity, 1, defaultSlots(cpus().length)));
-  // Unmeasured, never more than the widest step's share: a guess the machine has free.
-  const most = unit.basis === "measured" ? capacity : unmeasuredLimit(capacity);
-  const bytes = Math.max(1, Math.min(unit.bytes * units, most, request.atMostBytes ?? Infinity));
+  const unit = unitReservation(readCostHistory(history), { job: request.key }, "worker", 0);
+  if (unit.basis === "live") return { bytes: 0, basis: "live", history, units };
+  const bytes = Math.max(1, Math.min(unit.bytes * units, capacity, request.atMostBytes ?? Infinity));
   return { bytes, basis: unit.basis, history, units };
 }
 
@@ -1301,7 +1342,7 @@ export async function reserveJob(request: JobRequest,
   const env = options.env ?? process.env;
   const report = options.report ?? (line => process.stderr.write(`${line}\n`));
   const sizing = jobSizing(request, env);
-  const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), unmeasured: sizing.basis === "measured" ? [] : [request.key] },
+  const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), liveUse: sizing.basis === "live", unmeasured: sizing.basis === "measured" ? [] : [request.key] },
     { env, signal: options.signal, report });
   if (held.inherited) return held;
   const sampler = samplePeak(held, request.key);
@@ -1365,7 +1406,8 @@ export type LedgerStatus = {
    * What the live admitted jobs have still to take, and the room that leaves
    * the queue, as the decision on its head counts them: a reservation of
    * lower priority than the head promises it only its use and a margin.
-   * With nothing waiting, each promises all it has not used.
+   * A live job promises only its current margin at every priority. With
+   * nothing waiting, a measured forecast promises all it has not used.
    */
   pending_bytes: number; room_bytes: number;
   /**
@@ -1378,7 +1420,7 @@ export type LedgerStatus = {
    * measures itself.
    */
   admitted: { id: string; what: string; priority: Priority; bytes: number; used_bytes: number; owner_pid: number; since: string; live: boolean;
-    unmeasured: string[]; over: string[]; draws_on: string | null; drawn_bytes: number; lent_bytes: number }[];
+    unmeasured: string[]; over: string[]; draws_on: string | null; drawn_bytes: number; lent_bytes: number; liveUse?: boolean }[];
   /** In the queue's order. */
   waiting: { id: string; what: string; priority: Priority; bytes: number; grows: string | null; owner_pid: number; waiter_pid: number; since: string; waited_s: number; live: boolean }[];
 };
@@ -1396,13 +1438,14 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
   const live = new Map(view.admitted.filter(entry => entry.live).map(entry => [entry.id, entry]));
   const accounts = accountsOf(live, (entry, exclude) => measured(entry, read, exclude), read);
   const admitted = view.admitted.map(entry => {
-    const account = accounts.get(entry.id) ?? { used: 0, lent: 0 };
+    const account = accounts.get(entry.id) ?? { used: 0, lent: 0, drawn: 0 };
     const on = entry.live ? drawnOn(entry, live) : undefined;
     return {
-      id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes,
+      id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.liveUse ? peakReservation([Math.max(1, account.used)]) : entry.bytes,
+      ...(entry.liveUse ? { liveUse: true } : {}),
       used_bytes: account.used, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
       unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
-      draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : entry.drawn ?? 0, lent_bytes: account.lent,
+      draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : account.drawn, lent_bytes: account.lent,
     };
   });
   const head = view.waiting.find(entry => entry.live) ?? null;

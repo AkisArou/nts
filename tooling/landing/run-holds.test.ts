@@ -12,6 +12,7 @@ import {fileURLToPath} from "node:url";
 import {PROFILE,pendingLines,runLanding} from "./run.ts";
 import {gib,jobSizing,readLedger} from "../gate/memory-ledger.ts";
 import {STEPS} from "../gate/step-table.mjs";
+import {peakReservation} from "../gate/step-scheduling.ts";
 import {waitFor} from "../gate/test-wait.ts";
 import {fixture,HOLDER} from './run-fixture.ts';
 
@@ -50,19 +51,19 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
 });
 
-test("a tree with no history sizes its landing build as the build step, at its row's width, not one share per cargo job", async t => {
+test("a tree with no history admits its landing build by live use, without guessing a share per cargo job", async t => {
   const f = fixture(t);
   const workers = STEPS.find(row => row.name === "build")!.slots;
   const sized = jobSizing({ key: "landing-build", units: workers }, f.memory), cargo = jobSizing({ key: "landing-build", units: 24 }, f.memory);
-  assert.equal(sized.basis, "share");
-  assert.ok(sized.bytes < cargo.bytes, "less than cargo's 24 jobs' shares would be");
+  assert.deepEqual([sized.bytes,sized.basis], [0,"live"]);
+  assert.deepEqual([cargo.bytes,cargo.basis], [sized.bytes,sized.basis], "a worker count cannot forecast an unmeasured job");
   // The build copies its own entry in the ledger, which the landing names in its environment.
   const entry = join(f.own, "build-entry.json");
   const ran = await runLanding(f.options(["build", "rustfmt"], { build: ["sh", "-c",
     `cat "$NTS_MEMORY_LEDGER/admitted/$NTS_MEMORY_RESERVATION.json" > ${JSON.stringify(entry)}; mkdir -p "$CARGO_TARGET_DIR/${PROFILE}"; printf '#!/bin/sh\\n' > "$NTS_BIN"; chmod +x "$NTS_BIN"`] }));
   assert.equal(ran.state, "green", ran.message);
-  const held = JSON.parse(readFileSync(entry, "utf8")) as { bytes: number; unmeasured?: string[] };
-  assert.deepEqual([held.bytes, held.unmeasured], [sized.bytes, ["landing-build"]]);
+  const held = JSON.parse(readFileSync(entry, "utf8")) as { bytes: number; liveUse?: boolean; unmeasured?: string[] };
+  assert.deepEqual([held.bytes, held.liveUse, held.unmeasured], [peakReservation([1]), true, ["landing-build"]]);
 });
 
 test("pressure that never clears, and a hung step, hold the change for a person", async t => {

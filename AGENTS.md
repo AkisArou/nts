@@ -271,6 +271,13 @@ then a guard once fixed), `tests/memory/`.
   19` and one heavy job of yours at a time.
   Never SIGSTOP timed work: its wall-clock timeout keeps running, so
   suspension fabricates a timeout.
+  A job with no peak in its history is charged its live use and a margin,
+  rather than another job's peak or a share of the machine; its observed
+  peak sizes its next run. Standard proof commands use stable keys across
+  tasks: `hir-compare` for the corpus prepared-HIR comparison,
+  `test262-records` for the five test262 records (through `admit.ts`), and
+  `perf-count` for instruction counts (through `with-lock.sh`). Put the
+  issue and experiment in `--what` or the log name, never in these keys.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the
@@ -293,8 +300,8 @@ then a guard once fixed), `tests/memory/`.
 - Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a
   commit, under
   `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;
-  an ad-hoc measurement names its own key:
-  `tooling/gate/with-lock.sh --wait --key perf-<what> taskset -c 4 <command>`.
+  an instruction count uses its stable key:
+  `tooling/gate/with-lock.sh --wait --key perf-count taskset -c 4 <command>`.
   The wrapper takes the CPU lock and the session's memory together under
   its key; waiting for either, including quiet CPUs, holds neither. Tickets
   retain arrival order within the ledger's priorities. Start the wrapper

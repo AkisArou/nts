@@ -21,6 +21,18 @@ with its key. The legacy directory mutex remains compatible with measurements
 running older commits. The owning shell keeps the joint grant through its
 payload and releases the mutex on exit.
 
+## Unmeasured jobs use live accounting (11-10)
+
+Issue #641: an unrelated job's measured peak is not a forecast for an
+unmeasured job. Its first run asks for the margin on its current use; while
+it runs, ledger decisions charge current use and that margin. The watcher
+records its peak for the next run, including when a unit ends its remaining
+processes after the command exits. Measured jobs keep their existing peak
+reservations. Live descendants draw on a fixed ancestor's unused forecast
+as their use changes, while a live ancestor promises no unused forecast.
+The prepared-HIR comparison, instruction counts and five test262 records
+use the stable keys hir-compare, perf-count and test262-records.
+
 ## The bar
 
 - **Performance is the reason nts exists:** beat node **and Bun** by a wide

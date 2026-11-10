@@ -361,11 +361,18 @@ the first node task.
   ([log](records/notebooks/decisions-log.md#measurement-admission-takes-memory-and-cpus-together-11-10)).
 - **Reservations are measured peaks** (11-09): a step or job reserves 1.25
   times the largest of its last five peaks, sampled on the ledger's own
-  basis and kept in its tree's scheduling history; never measured there, the
-  largest of its kind, else its share of the machine; nothing declares a
-  number; a step's census runs under twice its reservation, never below one
+  basis and kept in its tree's scheduling history. A step never measured
+  there uses the largest of its kind, else its share of the machine. An
+  unmeasured job is charged live use and margin until its first peak is
+  recorded; it borrows no other job's forecast. Nothing declares a number;
+  a step's census runs under twice its reservation, never below one
   worker's own cap, so a verdict never depends on the history
   ([log](records/notebooks/decisions-log.md#reservations-are-measured-peaks-11-09)).
+- **Proof jobs have stable history keys**: `hir-compare`, `perf-count` and
+  `test262-records` name the prepared-HIR corpus comparison, instruction
+  counts and five test262 records. Issue numbers belong in labels and logs,
+  so a fresh task can use the warm tree's observations
+  ([log](records/notebooks/decisions-log.md#unmeasured-jobs-use-live-accounting-11-10)).
 - **Reservations yield to a request that outranks them** (11-09): for a
   waiting request's decision, a reservation of lower priority counts as what
   its job uses and a margin, whatever holds it; a landing's build hands its

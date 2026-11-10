@@ -466,6 +466,12 @@ echo launched > step-launched
 fi
 `);
   const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
+  // This arm waits for a measured capture's forecast. An unknown capture
+  // asks only for its live margin and would fit beside the runner.
+  mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
+  writeFileSync(join(memory.NTS_GATE_COSTS_DIR,'steps.json'),JSON.stringify({version:3,steps:{},jobs:{
+    'oracle-dependency-capture':{unit:'worker',peaks:[Math.floor(2*2**30/1.25)]},
+  }})+'\n');
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
   const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',

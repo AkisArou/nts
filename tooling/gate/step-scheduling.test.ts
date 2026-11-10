@@ -2,14 +2,16 @@ import assert from "node:assert/strict";
 import {moduleClosure} from "./module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {test} from "node:test";
-import {copyFileSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
 import {join, dirname} from "node:path";
 
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
-import {spawn} from "node:child_process";
+import {spawn, spawnSync} from "node:child_process";
+import {randomUUID} from "node:crypto";
+import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
 import {RESERVATION_PER_PEAK, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
@@ -91,7 +93,7 @@ test("an unmeasured step reserves the largest of its kind, and with nothing meas
   assert.deepEqual(unitReservation(history, { step: "examples" }, "token", 1), { bytes: 500 * MiB, basis: "largest" }, "the largest token's");
   assert.deepEqual(unitReservation(history, { step: "integrity" }, "step", 7), { bytes: 5 * GiB, basis: "largest" },
     "peaks measured per token say nothing of the step as a whole");
-  assert.deepEqual(unitReservation(history, { job: "record-oracles" }, "worker", 1), { bytes: 1000 * MiB, basis: "largest" }, "the largest job worker's");
+  assert.deepEqual(unitReservation(history, { job: "record-oracles" }, "worker", 1), { bytes: 0, basis: "live" }, "an unrelated job is no forecast");
   const empty = { steps: new Map(), jobs: new Map() };
   assert.deepEqual(unitReservation(empty, { step: "tests" }, "step", machineShare(32 * GiB, 8, 24)), { bytes: Math.floor(32 * GiB / 3), basis: "share" });
   assert.equal(machineShare(32 * GiB, 48, 24), 32 * GiB, "never more than the machine");
@@ -219,6 +221,8 @@ type MemoryFixture = {
   priority?: "landing" | "agent" | "full-check";
   /** Runs before the runner starts, with the fixture's directory and memory. */
   before?: (own: string, memory: OwnMemory) => void;
+  /** A private runner acknowledges this actual charge through the fixture's FIFO. */
+  acknowledgeCharge?: number;
 };
 
 /**
@@ -228,16 +232,30 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, before, acknowledgeCharge }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
-  t.after(() => { removable(own); rmSync(own, { recursive: true, force: true }); });
+  const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
+  t.after(() => {
+    spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    if (!inherited) stopToolingSlice(slice);
+    removable(own); rmSync(own, { recursive: true, force: true });
+  });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
   mkdirSync(gate, { recursive: true }); mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
   for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
     const destination = join(root, name), original = join(source, "../..", name);
     mkdirSync(dirname(destination), { recursive: true });
-    if (name === "tooling/gate/run.mjs") writeFileSync(destination, readFileSync(original));
+    if (name === "tooling/gate/run.mjs") {
+      let source = readFileSync(original, "utf8");
+      if (acknowledgeCharge !== undefined) {
+        const observation = "r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge);";
+        assert.ok(source.includes(observation), "the barrier follows the real charge observation");
+        source = source.replace(observation, observation
+          + ` if (!r.chargeAcknowledged && r.charge >= ${acknowledgeCharge}) { r.chargeAcknowledged = true; writeFileSync(${JSON.stringify(join(own, "charge-observed"))}, "observed"); }`);
+      }
+      writeFileSync(destination, source);
+    }
     else if (name === "tooling/gate/step-table.mjs") {
       writeFileSync(destination, `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(original).href)};
 const rows = ${JSON.stringify(Object.fromEntries(Object.entries(rows).map(([name, { reserve: _, ...row }]) => [name, row])))};
@@ -268,9 +286,13 @@ fi
     : [[name, { memory: { unit: row.elastic ? "token" : "step", peaks: [peakFor(row.reserve * GiB)] } }]])) }) + "\n");
   before?.(own, memory);
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, CARGO_TARGET_DIR: target, ...(priority ? { NTS_MEMORY_PRIORITY: priority } : {}), ...owned,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "10", ...memory, NTS_TOOLING_SLICE: slice, CARGO_TARGET_DIR: target, ...(priority ? { NTS_MEMORY_PRIORITY: priority } : {}), ...owned,
   } });
-  const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
+  const setenv = Object.entries(planned.env).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
+  const result = spawnTest("systemd-run", ["--user", `--unit=${unit}`, `--slice=${slice}`, "--collect", "--wait", "--pipe", "--quiet",
+    "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=RuntimeMaxSec=300s", "--property=TimeoutStopSec=5s",
+    `--working-directory=${root}`, ...setenv, process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
+  assert.ok(existsSync(join(run, "summary.json")), result.stdout + result.stderr);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
     verdict: string; steps: MemoryStep[];
     memory: { priority: string; peak_bytes: number; growths: number; withdrawn: number; shrinks: number; outranked: number; waited_s: number; unmeasured: string[]; over: string[];
@@ -520,6 +542,7 @@ test("a narrow census step with no history passes a case that needs more than it
   // cap, so the case passes here as in a tree whose history knew it.
   const { result, summary, step, output } = memoryRun(t, {
     steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
+    acknowledgeCharge: 700 * MiB,
     rows: { format: { slots: 1, bound: 300 } },
     owned: { NTS_CENSUS_MEMORY_CAP_KB: String(2 ** 20) },
     times: "format\t100\t20\t1\n",
@@ -528,12 +551,16 @@ case $1 in
   format) exec node "$(dirname "$0")/census-case.ts" ;;
 esac
 `,
-    before: own => writeFileSync(join(own, "repo/tooling/gate/census-case.ts"), `import { compileSync, serialRun } from ${JSON.stringify(new URL("../census/worker-memory.ts", import.meta.url).href)};
+    before: own => {
+      const fifo = join(own, "charge-observed");
+      assert.equal(spawnTest("mkfifo", [fifo], { encoding: "utf8" }).status, 0);
+      writeFileSync(join(own, "repo/tooling/gate/census-case.ts"), `import { compileSync, serialRun } from ${JSON.stringify(new URL("../census/worker-memory.ts", import.meta.url).href)};
 const cap = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB);
 serialRun({ memoryCapKb: cap });
-const held = compileSync({ memoryCapKb: cap }, "python3", ["-c", "held = bytes([1]) * (750 * 2 ** 20); print(len(held))"], { encoding: "utf8" });
+const held = compileSync({ memoryCapKb: cap }, "python3", ["-c", "import sys; held = bytes([1]) * (750 * 2 ** 20); open(sys.argv[1]).read(); print(len(held))", ${JSON.stringify(fifo)}], { encoding: "utf8" });
 if (held.status !== 0 || held.memoryKilled) throw new Error("the case did not run to its end: " + held.stderr);
-`),
+`);
+    },
   });
   assert.equal(result.status, 0, output);
   assert.equal(summary.verdict, "green", JSON.stringify(step("format")));

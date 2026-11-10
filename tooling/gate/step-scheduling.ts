@@ -28,11 +28,13 @@
 // unit of the step: the whole step for a fixed step, one token for an elastic
 // one, one worker for a job. The last KEPT_PEAKS peaks are kept, and a unit
 // reserves 1.25 times the largest, so one small run never shrinks a
-// reservation. A key never measured in this history reserves the largest
+// reservation. A job without peaks is charged live use and margin by the
+// ledger and records its first peak for next time. A step never measured
+// in this history reserves the largest
 // reservation of its kind here; with none, its share of the machine: of what
 // the ledger can ever give (MemTotal less the system's floor), its width over
-// the slots, so a run whose every slot is busy fits. Either way an unmeasured
-// key reserves at most half of what the ledger can give, the widest step's
+// the slots, so a run whose every slot is busy fits. An unmeasured step
+// reserves at most half of what the ledger can give, the widest step's
 // share (`unmeasuredLimit`): a guess is never so large that the machine,
 // with a desktop running, never has it free. There is no declared number
 // anywhere: the step table names none.
@@ -227,23 +229,23 @@ export function unmeasuredLimit(capacityBytes: number): number {
 export type MemorySizing = {
   /** Per unit. */
   bytes: number;
-  /** Its own peaks; else the largest reservation of its kind in the history; else its share of the machine. */
-  basis: "measured" | "largest" | "share";
+  /** Own peaks; else live accounting for a job, or largest/share estimates for a step. Zero bytes means no job forecast. */
+  basis: "measured" | "largest" | "share" | "live";
 };
 
 /**
  * What one unit of a step or a job reserves: from its own measured peaks;
- * never measured in this history, the largest reservation of a unit of its
- * kind here (a fixed step's, a token's, a job worker's); with none, `share`.
+ * never measured, a job has no forecast and uses live ledger accounting.
+ * A step uses the largest reservation of its unit kind here, else `share`.
  * A step whose peaks were measured over another unit (it was fixed, and is
  * elastic now) has none of its own.
  */
 export function unitReservation(history: CostHistory, of: { step: string } | { job: string }, unit: MemoryUnit, share: number): MemorySizing {
-  const rows: Peaks[] = "step" in of
-    ? [...history.steps.values()].flatMap(row => row.memory?.unit === unit ? [row.memory] : [])
-    : [...history.jobs.values()];
   const own = "step" in of ? history.steps.get(of.step)?.memory : history.jobs.get(of.job);
   if (own && own.unit === unit) return { bytes: peakReservation(own.peaks), basis: "measured" };
+  // No forecast exists for this job. The ledger charges its live use and margin.
+  if ("job" in of) return { bytes: 0, basis: "live" };
+  const rows = [...history.steps.values()].flatMap(row => row.memory?.unit === unit ? [row.memory] : []);
   if (rows.length) return { bytes: Math.max(...rows.map(row => peakReservation(row.peaks))), basis: "largest" };
   return { bytes: share, basis: "share" };
 }

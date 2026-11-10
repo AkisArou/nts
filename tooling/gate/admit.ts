@@ -10,6 +10,8 @@
 // it runs against (memory-ledger.ts's `jobSizing`), never more than
 // `--at-most` (its own kernel cap, say). Its peak is watched while it runs
 // and added to that history once it ends, so its next run reserves by it.
+// Without an observation of its own, the job has no forecast: admission asks
+// for its live margin and the ledger follows its use until that first peak.
 // With `--bytes`, it reserves that much, and nothing is measured.
 //
 // It waits its turn in the ledger (./memory-ledger.ts), printing a line when
@@ -147,7 +149,7 @@ function admittedRows(admitted: LedgerStatus["admitted"], clock: (iso: string) =
     rows.push(`    ${pad}${entry.priority.padEnd(10)} ${gib(entry.bytes).padStart(10)}, using ${gib(entry.used_bytes).padStart(10)}  `
       + `pid ${entry.owner_pid}  since ${clock(entry.since)}${entry.live ? "" : "  (its owner has exited)"}  ${entry.what}`
       + (entry.drawn_bytes ? `\n      ${pad}drew ${gib(entry.drawn_bytes)} of it on the reservation above` : "")
-      + (entry.unmeasured.length ? `\n      ${pad}unmeasured (sized by the largest of its kind, or its share of the machine): ${entry.unmeasured.join(" ")}` : "")
+      + (entry.unmeasured.length ? `\n      ${pad}unmeasured (${entry.liveUse ? "live use and margin" : "sized by the largest of its kind, or its share of the machine"}): ${entry.unmeasured.join(" ")}` : "")
       + (entry.over.length ? `\n      ${pad}over (held more than it reserved): ${entry.over.join(" ")}` : ""));
     for (const child of beneath.get(entry.id) ?? []) show(child, depth + 1);
   };
@@ -203,6 +205,7 @@ async function main(argv: readonly string[]): Promise<void> {
   process.once("exit", cleanup);
   try {
     reservation = await reserve({ bytes: options.bytes, what: options.what, priority: options.priority,
+      liveUse: options.job?.basis === "live",
       unmeasured: options.job && options.job.basis !== "measured" ? [options.job.key] : [] }, { report: say, signal: waiting.signal, joint });
   } catch (error) {
     cleanup();

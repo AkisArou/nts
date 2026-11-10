@@ -70,6 +70,8 @@ test("a session waits for its memory in the ledger without holding the lock: ano
   // 2.5 GiB available, 2 kept for the system: not the session's share.
   const f = fixture(t, 2.5 * GiB_KIB), first = join(f.root, "first-ran"), second = join(f.root, "second-ran");
   const waiting = join(f.memory.NTS_MEMORY_LEDGER, "waiting");
+  mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
+  writeFileSync(join(f.memory.NTS_GATE_COSTS_DIR, "steps.json"), JSON.stringify({ version: 3, steps: {}, jobs: { "perf-waiting": { unit: "worker", peaks: [2 ** 30] } } }));
   const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-waiting", "sh", "-c", `: > ${JSON.stringify(first)}`]);
   const session = spawn("systemd-run", args, { stdio: ["ignore", "ignore", "pipe"] });
   let err = "";
