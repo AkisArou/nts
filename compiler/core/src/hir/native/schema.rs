@@ -2,8 +2,8 @@
 //! it must not fall back to managed-object layout or guessed member offsets.
 use super::{Field, Pointee, Record, RecordKind, TypePath, scalar};
 use nts_semantic_schema::{
-    LiteralValue, MemberKind, NodeId, NodeKind, PropertyKey, PropertyRecord, SemanticSnapshot,
-    SymbolId, TypeId, TypeKind, syntax,
+    HeritageKind, LiteralValue, MemberKind, NodeId, NodeKind, PropertyKey, PropertyRecord,
+    SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax,
 };
 
 #[cfg(test)]
@@ -390,10 +390,8 @@ fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let declaration = class_declaration(snapshot, record.symbol?)?;
     let tag = objc_name(snapshot, declaration)?;
     let mut ancestors = Vec::new();
-    let mut at = base_class(snapshot, declaration);
-    while let Some(base) = at {
+    for base in ancestry(snapshot, declaration)? {
         ancestors.push(objc_name(snapshot, base)?);
-        at = base_class(snapshot, base);
     }
     ancestors.reverse();
     Some(Pointee::Opaque(super::Handle {
@@ -440,14 +438,8 @@ pub(crate) fn extends_objc(snapshot: &SemanticSnapshot, declaration: NodeId) -> 
     if objc_tag(snapshot, declaration).is_some() {
         return false;
     }
-    let mut at = base_class(snapshot, declaration);
-    while let Some(base) = at {
-        if objc_tag(snapshot, base).is_some() {
-            return true;
-        }
-        at = base_class(snapshot, base);
-    }
-    false
+    ancestry(snapshot, declaration)
+        .is_some_and(|chain| chain.iter().any(|base| objc_tag(snapshot, *base).is_some()))
 }
 
 /// Whether a runtime registers the class a program writes, so that its
@@ -485,7 +477,11 @@ pub(crate) fn gobject_parent(
     let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
     let base = syntax_children(snapshot, declaration)
         .into_iter()
-        .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
+        .filter(|child| {
+            is(*child, syntax::HERITAGE_CLAUSE)
+                && node(*child)
+                    .is_some_and(|n| HeritageKind::from_data(n.data) == HeritageKind::Extends)
+        })
         .flat_map(|clause| syntax_children(snapshot, clause))
         .find_map(|expression| syntax_children(snapshot, expression).first().copied())?;
     gtype_function(snapshot, node(base)?.symbol?)
@@ -614,8 +610,7 @@ pub(crate) fn composable_base(
     if is_com_class(snapshot, declaration) {
         return None;
     }
-    let mut at = base_class(snapshot, declaration);
-    while let Some(base) = at {
+    for base in ancestry(snapshot, declaration)? {
         if let Some(tag) = composable_tag(snapshot, base) {
             let words: Vec<&str> = tag.split_whitespace().collect();
             return match words.as_slice() {
@@ -629,7 +624,6 @@ pub(crate) fn composable_base(
                 _ => None,
             };
         }
-        at = base_class(snapshot, base);
     }
     None
 }
@@ -668,14 +662,44 @@ pub(crate) fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -
     })
 }
 
-/// The class a class declaration extends. Of its heritage clauses, the one
-/// naming a class: `implements` names interfaces.
+/// Every class a class declaration extends, nearest first, by
+/// [`base_class`] steps. `None` when the chain leads back to a class
+/// already in it: such a chain's ancestry is unknown -- a checker
+/// error a captured snapshot can still carry -- and a caller must
+/// not read it as the empty chain, so each one fails closed
+/// (`docs/architecture.md`: a cut-off ancestry walk is unknown, not
+/// empty). Each class is visited at most once, so the walk ends by
+/// construction, with no cap.
+fn ancestry(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<Vec<NodeId>> {
+    let mut seen = rustc_hash::FxHashSet::default();
+    seen.insert(declaration);
+    let mut chain = Vec::new();
+    let mut at = base_class(snapshot, declaration);
+    while let Some(base) = at {
+        if !seen.insert(base) {
+            return None;
+        }
+        chain.push(base);
+        at = base_class(snapshot, base);
+    }
+    Some(chain)
+}
+
+/// The class a class declaration extends: the class its `extends`
+/// clause names. An `implements` clause names interfaces, never a
+/// base -- reading it as one made `class Counter implements Counter`
+/// (an interface merged with the class) its own base, and every
+/// ancestry walk over it looped for ever (#497).
 fn base_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<NodeId> {
     let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
     let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
     syntax_children(snapshot, declaration)
         .into_iter()
-        .filter(|child| is(*child, syntax::HERITAGE_CLAUSE))
+        .filter(|child| {
+            is(*child, syntax::HERITAGE_CLAUSE)
+                && node(*child)
+                    .is_some_and(|n| HeritageKind::from_data(n.data) == HeritageKind::Extends)
+        })
         .flat_map(|clause| syntax_children(snapshot, clause))
         .filter_map(|expression| syntax_children(snapshot, expression).first().copied())
         .filter_map(|name| node(name)?.symbol)
