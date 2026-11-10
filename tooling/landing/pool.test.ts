@@ -5,8 +5,9 @@
 //   node --test tooling/landing/pool.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import { scratchRepo } from "./scratch-repo.ts";
@@ -167,18 +168,82 @@ test("after its task lands, the tree is reset to the new main, unless it holds u
   const { s, p } = pool(t);
   const a = p.take("fix/a"), b = p.take("fix/b");
   s.commit({ "src/landed.txt": "landed\n" }, "landed");
-  const released = p.release("fix/a");
+  const released = p.release("fix/a", a.head);
   assert.equal(released.state, "reset");
   assert.equal(released.tree?.head, s.git(["rev-parse", "main"]));
   assert.ok(existsSync(join(a.path, "src/landed.txt")));
   writeFileSync(join(b.path, "left.txt"), "left behind\n");
-  const kept = p.release("fix/b");
+  const kept = p.release("fix/b", b.head);
   assert.equal(kept.state, "kept");
-  assert.match(kept.reason ?? "", /uncommitted changes: \?\? left.txt/);
-  assert.equal(p.release("fix/none").state, "none");
+  assert.match(kept.reason ?? "", /uncommitted changes: \?\? left.txt; it stays on its branch, and the next upkeep resets it once they are gone and nothing uses it/);
+  assert.equal(p.release("fix/none", b.head).state, "none");
   const status = describePool(p.trees(), NOW);
   assert.match(status, / 1 {2}\S+ {2}free, idle 0m/);
-  assert.match(status, / 2 {2}\S+ {2}task fix\/b \(1 behind\), 1 uncommitted, idle 0m/);
+  assert.match(status, / 2 {2}\S+ {2}landed fix\/b \(1 behind\), 1 uncommitted, idle 0m/);
+  // Its work left: the upkeep keeps it, and resets it once the work is gone.
+  assert.match(pruneLines(p.prune({ now: NOW }), NOW).join("\n"), /^pool: kept tree 2 on its landed branch fix\/b: it has uncommitted changes: \?\? left.txt$/m);
+  rmSync(join(b.path, "left.txt"));
+  const settled = p.prune({ now: NOW });
+  assert.deepEqual(settled.released.map(r => `${r.tree.name} ${r.branch}: ${r.outcome.map(o => `${o.where} ${o.state}`).join(", ")}`), ["2 fix/b: local deleted"]);
+  assert.deepEqual(names(p), ["1 free", "2 free"]);
+  assert.equal(p.landed().size, 0, "its mark goes with it");
+});
+
+test("a tree a process still uses stays on its landed branch, says what uses it, and the upkeep resets it once nothing does", async t => {
+  const { s, p } = pool(t);
+  const a = p.take("fix/a");
+  const tip = s.commit({ "src/a.txt": "the task's change\n" }, "the task's change", a.path);
+  // An agent's test, or a person's shell, with its working directory in the tree.
+  const shell = spawn("cat", [], { cwd: join(a.path, "src"), stdio: ["pipe", "ignore", "ignore"] });
+  // Ended when its input closes, here or, if an assertion stops the test first, after it.
+  t.after(() => { shell.stdin.end(); });
+  await once(shell, "spawn");
+  s.commit({ "src/landed.txt": "landed\n" }, "landed");
+  const kept = p.release("fix/a", tip);
+  assert.equal(kept.state, "kept");
+  assert.equal(kept.reason, `pool tree 1 stays on its branch while pid ${shell.pid} cat (its working directory) still uses it `
+    + "(a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does");
+  assert.deepEqual(names(p), ["1 landed fix/a", "2 free"]);
+  assert.equal(p.landed().get("fix/a"), tip, "marked landed at the commit that landed");
+  assert.match(describePool(p.trees(), NOW), new RegExp(` 1 {2}\\S+ {2}landed fix/a \\(1 ahead of main, 1 behind\\), kept while pid ${shell.pid} cat \\(its working directory\\) still uses it, idle 0m`));
+  assert.throws(() => s.git(["branch", "-D", "fix/a"]), /checked out|used by worktree/, "its branch stays with its tree");
+  const waiting = p.prune({ now: NOW });
+  assert.deepEqual(waiting.released, []);
+  assert.deepEqual(pruneLines(waiting, NOW), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`]);
+  assert.equal(p.take("fix/b").name, "2", "a landed tree is not free");
+  shell.stdin.end(); await once(shell, "exit");
+  assert.match(describePool(p.trees(), NOW), / 1 {2}\S+ {2}landed fix\/a \(1 ahead of main, 1 behind\), reset at the next upkeep, idle 0m/);
+  const settled = p.prune({ now: NOW });
+  assert.deepEqual(settled.released.map(r => `${r.tree.name} ${r.branch}: ${r.outcome.map(o => `${o.where} ${o.state}`).join(", ")}`), ["1 fix/a: local deleted"]);
+  assert.match(pruneLines(settled, NOW)[0]!, /^pool: reset tree 1, whose task fix\/a landed, now that nothing uses it; its branch here deleted$/);
+  assert.deepEqual(names(p), ["1 free", "2 held fix/b"]);
+  assert.equal(p.trees()[0]!.head, s.git(["rev-parse", "main"]), "at the newest main");
+  assert.equal(p.landed().size, 0);
+});
+
+test("a landed branch that moves on is its task's again: its mark goes and its tree stays held", async t => {
+  const { s, p } = pool(t);
+  const a = p.take("fix/a");
+  const shell = spawn("cat", [], { cwd: a.path, stdio: ["pipe", "ignore", "ignore"] });
+  await once(shell, "spawn");
+  try {
+    assert.equal(p.release("fix/a", a.head).state, "kept");
+    assert.deepEqual(names(p), ["1 landed fix/a", "2 free"]);
+    s.commit({ "src/next.txt": "the next slice\n" }, "the next slice", a.path);
+    assert.deepEqual(names(p), ["1 held fix/a", "2 free"], "a new commit: the task goes on");
+    p.prune({ now: NOW });
+    assert.equal(p.landed().size, 0, "the upkeep drops the mark");
+    // A landing of a commit its tree has gone past leaves the tree as it is, unmarked.
+    const past = p.release("fix/a", a.head);
+    assert.deepEqual([past.state, past.reason], ["kept", "pool tree 1 has commits past the one that landed, so it stays its task's"]);
+    assert.deepEqual([names(p), p.landed().size], [["1 held fix/a", "2 free"], 0]);
+    // Asked for again, a landed task's tree is its own again too.
+    const tip = s.git(["rev-parse", "HEAD"], a.path);
+    assert.equal(p.release("fix/a", tip).state, "kept");
+    assert.equal(p.take("fix/a").state, "held");
+    assert.equal(p.landed().size, 0);
+  } finally { shell.stdin.end(); await once(shell, "exit"); }
+  assert.equal(s.git(["rev-parse", "--abbrev-ref", "HEAD"], a.path), "fix/a");
 });
 
 test("the upkeep removes free trees idle past the limit, cold ones first, keeps the warm minimum, and never touches a held or dirty tree", t => {

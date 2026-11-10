@@ -9,6 +9,8 @@
 // run.test.ts check the real ones); the landing tree is prepared for real, and
 // a check is red when the tree it checks has a file named RED.
 import { test, type TestContext } from "node:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -254,6 +256,31 @@ test("tidying up after main moved never un-lands a change", async t => {
   assert.equal(r.state, "landed");
   assert.equal(f.main(), a.sha);
   assert.match(r.message, /the pool tree was not released: pool lock held by process 1/);
+});
+
+test("a landing whose tree a process still uses keeps the tree on its branch and says why; the upkeep resets it once nothing does", async t => {
+  const f = service(t);
+  const a = f.task("fix/a", { "src/a.txt": "a\n" });
+  // The task's own tests still run in its tree after it queued.
+  const tests = spawn("cat", [], { cwd: a.tree, stdio: ["pipe", "ignore", "ignore"] });
+  // Ended when its input closes, here or, if an assertion stops the test first, after it.
+  t.after(() => { tests.stdin.end(); });
+  await once(tests, "spawn");
+  const ea = f.submit("fix/a", a.sha);
+  await drain(f.config);
+  const r = f.queue.result(ea.id)!;
+  assert.equal(r.state, "landed");
+  assert.equal(f.main(), a.sha);
+  assert.match(r.message, new RegExp(`pool tree 1 stays on its branch while pid ${tests.pid} cat \\(its working directory\\) still uses it `
+    + `\\(a shell or editor with its working directory there counts too\\); the next upkeep resets it once nothing does`));
+  assert.equal(f.s.git(["rev-parse", "--abbrev-ref", "HEAD"], a.tree), "fix/a", "nothing changed under the running tests");
+  assert.equal(f.s.git(["ls-remote", "--heads", "origin", "fix/a"]), "", "its branch on origin is deleted as before");
+  assert.deepEqual(f.pool.trees().map(t => `${t.name} ${t.state}`), ["1 landed", "2 free"]);
+  tests.stdin.end(); await once(tests, "exit");
+  assert.deepEqual(f.pool.prune().released.map(released => `${released.tree.name} ${released.branch}`), ["1 fix/a"]);
+  assert.deepEqual(f.pool.trees().map(t => `${t.name} ${t.state}`), ["1 free", "2 free"]);
+  assert.equal(f.pool.trees()[0]!.head, f.main(), "at the main it landed as");
+  assert.equal(f.s.git(["branch", "--list", "fix/a"]), "", "and its branch here goes with the reset");
 });
 
 test("a second service finds the first draining and leaves", async t => {

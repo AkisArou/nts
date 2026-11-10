@@ -25,7 +25,10 @@
 // them, so nothing else can disagree. The landing check gives a task's tree
 // back when the task lands; a tree with uncommitted changes is never reset or
 // removed, so nothing left in it is lost -- `give --discard` is the person's
-// decision.
+// decision. Nor is a tree reset while a process uses it (tree-users.ts): such a
+// tree, or one with work left in it, stays on its landed branch with a ref
+// naming the commit that landed (LANDED_REFS), and the next upkeep resets it
+// once nothing uses it and nothing is left in it.
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statfsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -36,8 +39,11 @@ import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, 
 import { withLock } from "./lock.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { issueBranch } from "../tasks/branch.ts";
+import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
+/** Where a held tree's branch is marked landed, at the commit that landed: refs/nts/landed/<branch>. */
+export const LANDED_REFS = "refs/nts/landed/";
 /** A free tree idle longer than this goes in the hourly upkeep. */
 export const IDLE_LIMIT_MS = 3 * DAY;
 /** The free trees the upkeep always keeps, warm for the next tasks. */
@@ -47,11 +53,14 @@ export const COLD_TARGET_BYTES = 25 * GB;
 /** What must stay free beside a new tree's target: the gate's floor for its temporaries. */
 export const DISK_MARGIN_BYTES = TEMP_DISK_FLOOR_BYTES;
 
-export type TreeState = "free" | "held" | "dirty" | "missing";
+/** "landed": held by a task that landed while its tree was in use or had work left in it, and reset once neither holds. */
+export type TreeState = "free" | "held" | "landed" | "dirty" | "missing";
 export type PoolTree = {
   name: string; path: string; state: TreeState; branch: string | null; head: string; changes: string[]; ahead: number; behind: number;
   /** When the tree's HEAD last moved (ms since the epoch): a task taking it, committing in it, or giving it back. */
   movedAt: number | null;
+  /** What still uses a landed tree (tree-users.ts); read for landed trees only. */
+  users: TreeUser[];
 };
 /** A tree with its cargo target measured; null when it has none yet. */
 export type MeasuredTree = PoolTree & { targetBytes: number | null };
@@ -76,7 +85,15 @@ export type PoolOptions = {
   targetBytes?: (tree: string) => number | null;
 };
 export type Given = { tree: PoolTree; branch: BranchOutcome[] };
-export type Pruned = { removed: { tree: PoolTree; targetBytes: number | null }[]; kept: { tree: PoolTree; why: string }[]; free: number };
+/**
+ * The upkeep's work: landed trees reset now that nothing uses them, with what
+ * became of their branch here; landed trees still kept, and why; free trees
+ * removed; and free trees that could not be.
+ */
+export type Pruned = {
+  released: { tree: PoolTree; branch: string; outcome: BranchOutcome[] }[]; waiting: { tree: PoolTree; why: string }[];
+  removed: { tree: PoolTree; targetBytes: number | null }[]; kept: { tree: PoolTree; why: string }[]; free: number;
+};
 
 /** The machine cannot host another tree now: `room` says why. */
 export class PoolFull extends Error {
@@ -135,17 +152,27 @@ export class Pool {
     const head = run(this.git, ["rev-parse", "--path-format=absolute", "--git-path", "HEAD"], path);
     try { return head.status === 0 ? statSync(head.stdout).mtimeMs : null; } catch { return null; }
   }
+  /** Each branch marked landed, at the commit that landed (LANDED_REFS). */
+  landed(): Map<string, string> {
+    const listed = checked(this.git, ["for-each-ref", "--format=%(objectname) %(refname)", LANDED_REFS], this.git.root);
+    return new Map(listed.split("\n").filter(Boolean).map(line => { const [sha, ref] = line.split(" "); return [ref!.slice(LANDED_REFS.length), sha!]; }));
+  }
+  private mark(branch: string, sha: string): void { checked(this.git, ["update-ref", `${LANDED_REFS}${branch}`, sha], this.git.root); }
+  private forget(branch: string | null): void { if (branch) run(this.git, ["update-ref", "-d", `${LANDED_REFS}${branch}`], this.git.root); }
   /** Every tree of the pool, by number, with what holds it. */
   trees(): PoolTree[] {
     const registered = new Map(worktrees(this.git).map(t => [resolve(t.path), t]));
-    const main = revParse(this.git, "refs/heads/main");
+    const main = revParse(this.git, "refs/heads/main"), landed = this.landed();
     return this.names().map(name => {
       const path = join(this.dir, name), tree = registered.get(path);
-      if (!tree || !existsSync(join(path, ".git"))) return { name, path, state: "missing" as const, branch: null, head: "", changes: [], ahead: 0, behind: 0, movedAt: null };
+      if (!tree || !existsSync(join(path, ".git"))) return { name, path, state: "missing" as const, branch: null, head: "", changes: [], ahead: 0, behind: 0, movedAt: null, users: [] };
       const changes = checked(this.git, ["status", "--porcelain", "--untracked-files=normal"], path).split("\n").filter(Boolean);
       const [behind, ahead] = checked(this.git, ["rev-list", "--left-right", "--count", `${main}...HEAD`], path).split(/\s+/).map(Number);
-      const state: TreeState = tree.branch ? "held" : changes.length ? "dirty" : "free";
-      return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path) };
+      // A branch marked landed at the commit its tree is still on: the task is done there.
+      const done = tree.branch !== null && landed.get(tree.branch) === tree.head;
+      const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length ? "dirty" : "free";
+      return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
+        users: done ? treeUsers(path) : [] };
     });
   }
   /** Every tree, with its target measured. */
@@ -200,6 +227,8 @@ export class Pool {
     return this.locked(() => {
       const trees = this.trees();
       const mine = trees.find(t => t.branch === branch);
+      // Asked for again, a landed task's tree is held: its task goes on there.
+      if (mine?.state === "landed") { this.forget(branch); return this.trees().find(t => t.name === mine.name)!; }
       if (mine) return mine;
       const elsewhere = worktrees(this.git).find(t => t.branch === branch);
       if (elsewhere) throw new Error(`${branch} is checked out in ${elsewhere.path}, outside the pool`);
@@ -236,19 +265,53 @@ export class Pool {
       if (tree.changes.length && !discard) throw new Error(`pool tree ${tree.name} has uncommitted changes, kept: ${tree.changes.slice(0, 5).join("; ")}${tree.changes.length > 5 ? "; ..." : ""} (give it back with --discard to drop them)`);
       this.detach(tree.path, discard);
       const branch = discard && tree.branch ? deleteBranch(this.git, tree.branch, tree.head, this.remote) : [];
+      // A person's give decides for a landed tree too.
+      this.forget(tree.branch);
       return { tree: this.trees().find(t => t.name === tree.name)!, branch };
     });
   }
 
-  /** After `branch` landed: its tree, detached at main, unless it has uncommitted changes. */
-  release(branch: string): { tree: PoolTree | null; state: "reset" | "kept" | "none"; reason?: string } {
+  /**
+   * After `branch` landed at `landed`: its tree, detached at main. A tree
+   * with uncommitted changes, or one a process still uses (tree-users.ts), is
+   * kept on its branch, marked landed at `landed`, and the upkeep resets it
+   * once nothing uses it and nothing is left in it.
+   */
+  release(branch: string, landed: string): { tree: PoolTree | null; state: "reset" | "kept" | "none"; reason?: string } {
     return this.locked(() => {
       const tree = this.trees().find(t => t.branch === branch) ?? null;
       if (!tree) return { tree: null, state: "none" };
-      if (tree.changes.length) return { tree, state: "kept", reason: `pool tree ${tree.name} has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
+      // Committed on past what landed: its task goes on there.
+      if (tree.head !== landed) return { tree, state: "kept", reason: `pool tree ${tree.name} has commits past the one that landed, so it stays its task's` };
+      const users = treeUsers(tree.path);
+      if (tree.changes.length || users.length) {
+        this.mark(branch, landed);
+        const held = this.trees().find(t => t.name === tree.name)!;
+        return { tree: held, state: "kept", reason: tree.changes.length
+          ? `pool tree ${tree.name} has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}; it stays on its branch, and the next upkeep resets it once they are gone and nothing uses it`
+          : `pool tree ${tree.name} stays on its branch while ${using(users)} (a shell or editor with its working directory there counts too); the next upkeep resets it once nothing does` };
+      }
       this.detach(tree.path, false);
+      this.forget(branch);
       return { tree: this.trees().find(t => t.name === tree.name)!, state: "reset" };
     });
+  }
+
+  /**
+   * A landed tree (`release`), reset now that nothing uses it and nothing is
+   * left in it, its branch here deleted while it is still at the commit that
+   * landed; else why it stays. A landed branch that moved on is its task's
+   * again: its mark goes, and its tree stays held.
+   */
+  private settle(tree: PoolTree, landed: string): { outcome: BranchOutcome[] } | { why: string } | null {
+    if (tree.head !== landed) { this.forget(tree.branch); return null; }
+    if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
+    const users = treeUsers(tree.path);
+    if (users.length) return { why: `${using(users)} (a shell or editor with its working directory there counts too)` };
+    this.detach(tree.path, false);
+    const outcome = deleteBranch(this.git, tree.branch!, landed, null);
+    this.forget(tree.branch);
+    return { outcome };
   }
 
   private detach(path: string, discard: boolean): void {
@@ -259,14 +322,31 @@ export class Pool {
   }
 
   /**
-   * The upkeep: free trees idle longer than `idleMs` go, cold ones first, then
-   * the longest idle, while more than `keep` trees are free. A held, dirty or
-   * missing tree is never touched. One tree at a time under the pool's lock,
-   * so a task taking a tree waits for one removal at most.
+   * The upkeep: first each landed tree is reset once nothing uses it and
+   * nothing is left in it (`settle`). Then free trees idle longer than
+   * `idleMs` go, cold ones first, then the longest idle, while more than
+   * `keep` trees are free. A held, dirty or missing tree is never touched.
+   * One tree at a time under the pool's lock, so a task taking a tree waits
+   * for one reset or removal at most.
    */
   prune({ idleMs = IDLE_LIMIT_MS, keep = WARM_MINIMUM, now = Date.now() }: { idleMs?: number; keep?: number; now?: number } = {}): Pruned {
-    const out: Pruned = { removed: [], kept: [], free: 0 };
+    const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0 };
     if (!existsSync(this.dir)) return out;
+    for (const name of this.locked(() => this.trees().filter(t => t.state === "landed").map(t => t.name))) {
+      this.locked(() => {
+        const tree = this.trees().find(t => t.name === name), landed = tree?.branch ? this.landed().get(tree.branch) : undefined;
+        if (!tree || landed === undefined) return;
+        const settled = this.settle(tree, landed);
+        if (settled && "why" in settled) out.waiting.push({ tree, why: settled.why });
+        else if (settled) out.released.push({ tree: this.trees().find(t => t.name === name)!, branch: tree.branch!, outcome: settled.outcome });
+      });
+    }
+    // A mark whose branch moved on is its task's again, and one whose branch no
+    // tree holds was given back by hand or lost its tree: either marks nothing.
+    this.locked(() => {
+      const heads = new Map(this.trees().flatMap(t => t.branch ? [[t.branch, t.head] as const] : []));
+      for (const [branch, landed] of this.landed()) if (heads.get(branch) !== landed) this.forget(branch);
+    });
     const tried = new Set<string>();
     for (;;) {
       const next = this.locked(() => {
@@ -308,6 +388,8 @@ export function linkInputs(root: string): Inputs {
 export const POOL_HOME = join(homedir(), ".cache/nts-pool");
 
 const gb = (bytes: number) => `${(bytes / GB).toFixed(1)} GB`;
+/** "pid 123 zsh (its working directory) uses it", "... use it". */
+const using = (users: readonly TreeUser[]) => `${describeUsers(users)} still ${users.length === 1 ? "uses" : "use"} it`;
 /** "4d 2h", "3h 12m", "7m". */
 export function idleFor(ms: number): string {
   const m = Math.max(0, Math.floor(ms / 60_000)), h = Math.floor(m / 60), d = Math.floor(h / 24);
@@ -317,12 +399,13 @@ export function idleFor(ms: number): string {
 export function describePool(trees: readonly (PoolTree | MeasuredTree)[], now = Date.now()): string {
   if (!trees.length) return "  no pool trees";
   return trees.map(t => {
-    const task = t.branch ? `task ${t.branch}` : t.state;
+    const task = t.state === "landed" ? `landed ${t.branch}` : t.branch ? `task ${t.branch}` : t.state;
     const where = t.state === "missing" ? "" : `${t.ahead ? `${t.ahead} ahead of main` : ""}${t.ahead && t.behind ? ", " : ""}${t.behind ? `${t.behind} behind` : ""}`;
     const changes = t.changes.length ? `, ${t.changes.length} uncommitted` : "";
+    const landed = t.state !== "landed" ? "" : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
     const idle = t.movedAt === null ? "" : `, idle ${idleFor(now - t.movedAt)}`;
     const target = "targetBytes" in t ? `, ${t.targetBytes === null ? "no target" : `target ${gb(t.targetBytes)}`}` : "";
-    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${idle}${target}`;
+    return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}`;
   }).join("\n");
 }
 
@@ -339,14 +422,18 @@ export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Ro
     trees: trees.map(t => ({
       name: t.name, path: t.path, state: t.state, task: t.branch, head: t.head, ahead: t.ahead, behind: t.behind, uncommitted: t.changes.length,
       moved_at: t.movedAt === null ? null : new Date(t.movedAt).toISOString(), idle_ms: t.movedAt === null ? null : Math.max(0, now - t.movedAt), target_bytes: t.targetBytes,
+      users: t.users.map(user => ({ pid: user.pid, command: user.command, where: user.where })),
     })),
   };
 }
 
 /** The upkeep's lines, for the full check's log. */
 export function pruneLines(pruned: Pruned, now = Date.now()): string[] {
-  const lines = pruned.removed.map(({ tree, targetBytes }) =>
-    `pool: removed tree ${tree.name}, free and idle ${tree.movedAt === null ? "?" : idleFor(now - tree.movedAt)}${targetBytes === null ? "" : `, with its ${gb(targetBytes)} target`}`);
+  const lines = pruned.released.map(({ tree, branch, outcome }) =>
+    `pool: reset tree ${tree.name}, whose task ${branch} landed, now that nothing uses it${outcome.map(b => `; its branch here ${b.state}${b.reason ? ` (${b.reason})` : ""}`).join("")}`);
+  for (const { tree, why } of pruned.waiting) lines.push(`pool: kept tree ${tree.name} on its landed branch ${tree.branch}: ${why}`);
+  lines.push(...pruned.removed.map(({ tree, targetBytes }) =>
+    `pool: removed tree ${tree.name}, free and idle ${tree.movedAt === null ? "?" : idleFor(now - tree.movedAt)}${targetBytes === null ? "" : `, with its ${gb(targetBytes)} target`}`));
   for (const { tree, why } of pruned.kept) lines.push(`pool: kept tree ${tree.name}, which could not be removed: ${why}`);
   if (pruned.removed.length) lines.push(`pool: ${pruned.free} free tree${pruned.free === 1 ? "" : "s"} kept warm`);
   return lines;

@@ -12,7 +12,9 @@
 //   4. move main to it, by compare-and-swap; if main moved meanwhile, check it
 //      again on the new main;
 //   5. push main, give the task's pool tree back at the new main, and delete
-//      the task's branch here and on the remote.
+//      the task's branch here and on the remote. A tree something still uses,
+//      or with work left in it, stays on its branch, and the pool's next
+//      upkeep resets it once neither holds (pool.ts's release).
 //
 // One service drains at a time (the owner lock); a crash puts the change it
 // was checking back in front, or, when main already moved to it, finishes
@@ -183,7 +185,7 @@ function finishLanding(config: Config, queue: Queue, entry: Entry, base: string,
   // Main has moved: what follows tidies up, and its failures are reported, never a reason to un-land.
   const pushed = config.remote ? pushMain(g, config.remote) : { ok: true as const };
   let pool: ReturnType<Pool["release"]> | null = null;
-  try { pool = entry.branch && config.pool ? config.pool.release(entry.branch) : null; }
+  try { pool = entry.branch && config.pool ? config.pool.release(entry.branch, entry.sha) : null; }
   catch (error) { pool = { tree: null, state: "kept", reason: `the pool tree was not released: ${(error as Error).message}` }; }
   let branch: BranchOutcome[] = [];
   try { branch = entry.branch ? deleteBranch(g, entry.branch, entry.sha, config.remote) : []; }

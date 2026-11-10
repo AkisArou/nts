@@ -50,7 +50,7 @@ node tooling/landing/pool.ts give <branch> --discard   # drop a task: its branch
 
 Never make a worktree of your own: the pool's trees keep their build folders
 warm, and the full check counts every tree outside it as red. Landing gives
-the tree back. `~/Projects/nts` is `main`, and nobody edits there. It
+the tree back once nothing runs in it. `~/Projects/nts` is `main`, and nobody edits there. It
 supplies the inputs no commit carries (`third_party/*` corpora); the native
 checker is compiled into nts, and every tree shares the object store.
 
@@ -94,7 +94,10 @@ node tooling/landing/check.ts <commit>             # queue it; run it in the bac
 One service, `nts-landing-check`, checks one change at a time against the
 newest `main`, in ten minutes or less. A conflict refuses it, naming the
 files. Green fast-forwards and pushes `main`, deletes your branch here and on
-GitHub, and resets your pool tree. It also closes your issue: a change from
+GitHub, and resets your pool tree once nothing runs in it: a process with its
+working directory or an open file there, a shell or editor included, keeps
+the tree on your branch, and the pool's next upkeep resets it once nothing
+does. It also closes your issue: a change from
 issue N's branch that does not name the issue gets `Fixes #N` in its last
 commit, so a slice that leaves the task open says `Part of #N` in its
 message. Red names the failing steps and the run's
