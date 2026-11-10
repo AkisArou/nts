@@ -415,12 +415,13 @@ the first node task.
   comparator, and the run's metadata. `results/benchmarks/full.md` is
   rendered from the newest complete run, with nts's best result per row
   beside it, so a row slower than nts's own best shows as a regression.
-- **The full check's later additions** (10-28): a weekly run with result
-  caches off; native instruction counts gated per benchmark row against the
-  noise band; a sanitized, reference-counted differential run over the
-  corpus; the compile-time guard extended to code generation and link time;
-  result caches keyed on the schema, compiler and runtime digests. Not built
-  yet.
+- **The full check's later additions** (10-28): native instruction counts
+  gated per benchmark row against the noise band; a sanitized,
+  reference-counted differential run over the corpus; the compile-time guard
+  extended to code generation and link time. Not built yet.
+- **No result caches** (11-10): the full check runs every case it owes and
+  never reuses a verdict from an earlier run
+  ([log](records/notebooks/decisions-log.md#the-compiler-is-made-fast-not-cached-11-10)).
 - **Platforms:** Apple and Windows programs may stay unrun when their only
   refusals are platform skips. A red that only affects the JVM is recorded in
   `tooling/conformance/jvm-declines.known` and fixed afterwards.

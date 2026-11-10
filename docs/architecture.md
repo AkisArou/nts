@@ -79,3 +79,10 @@ third_party/    tsrs, typescript (corpus), test262, node, chromium and other pin
   preferred to any cap. [Memory](foundations/memory.md#principles)'s
   "fail closed" is this rule for the memory analyses
   ([log](records/notebooks/decisions-log.md#compiler-10-29)).
+- The compiler keeps none of its own work between runs: every compile reads
+  and analyses the whole program, and the compiler is made fast by doing less
+  work, never by reusing earlier results. A cache of the compiler's work is
+  the last resort. Caches of another tool's work stay where each is keyed on
+  every byte that tool reads: clang's objects in `build.cache`, and the
+  compiled runtime the checks reuse
+  ([log](records/notebooks/decisions-log.md#the-compiler-is-made-fast-not-cached-11-10)).

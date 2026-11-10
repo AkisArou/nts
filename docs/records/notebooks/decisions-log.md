@@ -1897,3 +1897,22 @@ As built:
   work 300 (admit.ts and agent-priority gate runs raise themselves, since an
   agent's shell sits at 0), the full check 500.
 
+## The compiler is made fast, not cached (11-10)
+
+The user decided that the compiler's speed comes from the compiler itself,
+and that caching its work is the last resort. The compiler already kept none
+of its own work between runs: the frontend's semantic snapshot cache had been
+deleted after it kept a missing sibling module missing once the file
+appeared.
+
+As recorded:
+- no cache of the compiler's own work (snapshots, HIR, results) between runs;
+  memoization inside one compile stays, since it is work done once;
+- caches of another tool's work stay, each keyed on every byte the tool
+  reads: `build.cache`'s clang objects, and the compiled runtime objects the
+  differential checks and the test262 census reuse (in one `nts check`,
+  clang took 2.03 s of 2.06);
+- the full check's planned result caches, and the weekly run with them off,
+  are dropped: it never reuses a verdict;
+- open question L22 no longer plans a validated cache.
+
