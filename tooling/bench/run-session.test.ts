@@ -82,7 +82,7 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
         .replace('from "../jvm/vm-flags.ts"', "from " + JSON.stringify(new URL("../jvm/vm-flags.ts", import.meta.url).href));
     assert.notEqual(changed, source);
     writeFileSync(mutant, changed);
-    for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts", "run-journal.ts"])
+    for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts", "run-journal.ts", "groups.ts"])
       symlinkSync(fileURLToPath(new URL("./" + name, import.meta.url)), join(root, name));
     const old = spawnSync(process.execPath, [mutant, "header", root], { encoding: "utf8" });
     assert.equal(old.status, 1);
