@@ -295,9 +295,11 @@ then a guard once fixed), `tests/memory/`.
   `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;
   an ad-hoc measurement names its own key:
   `tooling/gate/with-lock.sh --wait --key perf-<what> taskset -c 4 <command>`.
-  The wrapper reserves the session's memory under its key before it takes
-  the lock, so a wait for memory never holds CPUs 4–5, and what the command
-  starts runs inside that reservation; without a key it refuses. It waits
+  The wrapper takes the CPU lock and the session's memory together under
+  its key; waiting for either, including quiet CPUs, holds neither. Tickets
+  retain arrival order within the ledger's priorities. Start the wrapper
+  directly, without an outer `admit.ts` reservation. What the command starts
+  runs inside its reservation; without a key it refuses. It waits
   only for CPUs 4–5 to be quiet and sets `NTS_BENCH_CPUS=4`; a command other
   than `nts-bench` needs its own `taskset -c 4`.
   Compare ratios within one run, never absolute times across runs.

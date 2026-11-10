@@ -1,7 +1,7 @@
 // node --test tooling/full-check/bench.test.ts
 //
-// How the benchmarks unit asks for a run -- the session's memory, then the
-// measurement lock, from its own tree -- and what it keeps of one: the record
+// How the benchmarks unit asks for joint memory and CPU admission in its
+// own tree, and what it keeps of a run: the record
 // in nts-bench's results-only commit on verified, nothing else; and how that
 // record is published on main, by main's own run-record.ts, as a results-only
 // commit there.
@@ -65,7 +65,7 @@ test("rows full.md marks slower than their own best are read by case", () => {
   assert.deepEqual(slowerRows(page), ["awfy-list"]);
 });
 
-test("the session reserves first, by the history it is given, then the tree's own with-lock.sh admits nts-bench, without --wait; exit 75 is a run that did not start", t => {
+test("the session delegates joint admission to the tree's with-lock.sh with its key and history, without --wait; exit75 did not start", t => {
   const root = scratch(t, "full-check-lock-");
   const gate = join(root, "tree/tooling/gate"), tree = join(root, "tree"), run = join(root, "run"), history = join(root, "target/gate-costs");
   for (const dir of [gate, run]) mkdirSync(dir, { recursive: true });
@@ -91,10 +91,10 @@ writeFileSync(${JSON.stringify(join(run, "second.json"))}, JSON.stringify(bench(
 `);
   assert.deepEqual(JSON.parse(readFileSync(join(run, "first.json"), "utf8")), { admitted: true, status: 0 });
   const argv = readFileSync(join(gate, "argv"), "utf8").split("\n").filter(Boolean);
-  assert.deepEqual(argv.slice(0, 4), [join(run, "nts-bench"), "--root", tree, "--journal"]);
-  assert.ok(argv[4].startsWith(run + "/bench-"));
-  assert.deepEqual(readFileSync(join(gate, "memory"), "utf8").split("\n").filter(Boolean), ["full-check", "a reservation", history],
-    "the session holds its memory before the lock admits it, at the full check's priority, sized by the history it is given");
+  assert.deepEqual(argv.slice(0, 6), ["--key", "bench-session", join(run, "nts-bench"), "--root", tree, "--journal"]);
+  assert.ok(argv[6].startsWith(run + "/bench-"));
+  assert.deepEqual(readFileSync(join(gate, "memory"), "utf8").split("\n").filter(Boolean), ["full-check", history],
+    "the caller carries priority and history but no memory reservation into joint admission");
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).admitted.filter(entry => entry.live).length, 0, "the session's reservation ends with it");
   const identity = readFileSync(join(gate, "identity"), "utf8").split("\n");
   assert.deepEqual(identity.slice(0, 3), ["", "", ""], "a canonical command never receives another unit's systemd metadata");
@@ -134,7 +134,7 @@ for (const stopFails of [false, true]) test(`a session past its budget retains i
   writeFileSync(journal, JSON.stringify({ version: 1, metadata, cases, requested: [], lanes: null }) + "\n" +
     JSON.stringify({ name: "control", measured: observed, failure: null, conditions: {}, spoiled: false, failed: [] }) + "\n" + '{"name":"not-reached"');
   const gate = join(repo.dir, "tooling/gate"); mkdirSync(gate, { recursive: true });
-  writeFileSync(join(gate, "with-lock.sh"), 'exec "$@"\n');
+  writeFileSync(join(gate, "with-lock.sh"), 'shift 2\nexec "$@"\n');
   const binary = join(run, "blocked-bench");
   const marker = join(run, "stop-refused"), bin = join(run, "bin");
   if (stopFails) {

@@ -9,6 +9,18 @@ is in [the records](..).
 
 Dates are 2026.
 
+## Measurement admission takes memory and CPUs together (11-10)
+
+Issue #640: a measurement waiting behind the nightly benchmark held an unused
+memory reservation for hours. CPU tickets now retain priority and arrival
+without a memory promise. A ready ticket enters the memory queue; under the
+ledger lock the memory decision takes the CPU mutex nonblocking only if
+memory fits. A CPU-blocked ticket leaves the memory queue, and quiet-core
+observation holds neither resource. The nightly calls the wrapper directly
+with its key. The legacy directory mutex remains compatible with measurements
+running older commits. The owning shell keeps the joint grant through its
+payload and releases the mutex on exit.
+
 ## The bar
 
 - **Performance is the reason nts exists:** beat node **and Bun** by a wide

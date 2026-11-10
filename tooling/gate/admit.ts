@@ -40,6 +40,7 @@
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
 import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, rankForOom, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
+import { measurementAdmission, MeasurementBusy } from "./measurement-admission.ts";
 
 const USAGE = "usage: node tooling/gate/admit.ts --key <name> [--workers <N>] [--at-most <N|8G>] [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
   + "       node tooling/gate/admit.ts --bytes <N|8G> [--priority landing|agent|full-check] [--what <label>] -- <command> [args...]\n"
@@ -61,11 +62,13 @@ function say(line: string): void {
   try { writeSync(2, `${line}\n`); } catch { /* there is nowhere left to say it */ }
 }
 
-type Options = { bytes: number; job: (JobSizing & { key: string }) | null; priority: Priority; what: string; command: string; args: string[] };
+type Options = { bytes: number; job: (JobSizing & { key: string }) | null; priority: Priority; what: string; command: string; args: string[];
+  measurement?: { lock: string; wait: boolean; quiet: boolean } };
 
 function parse(argv: readonly string[]): Options {
   let bytes: number | undefined, what: string | undefined, key: string | undefined, workers: number | undefined, atMost: number | undefined;
   let priority: Priority | undefined;
+  let measurementLock: string | undefined, measurementWait = false, measurementQuiet = true;
   let at = 0;
   for (; at < argv.length && argv[at] !== "--"; at++) {
     const arg = argv[at]!, equals = arg.startsWith("--") ? arg.indexOf("=") : -1;
@@ -79,7 +82,10 @@ function parse(argv: readonly string[]): Options {
       try { bytes = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
     } else if (flag === "--at-most") {
       try { atMost = parseBytes(value()); } catch (error) { throw new Refusal((error as Error).message, 125, true); }
-    } else if (flag === "--key") key = value();
+    } else if (flag === "--measurement-lock") measurementLock = resolve(value());
+    else if (flag === "--measurement-wait") measurementWait = true;
+    else if (flag === "--measurement-no-quiet") measurementQuiet = false;
+    else if (flag === "--key") key = value();
     else if (flag === "--workers") {
       const given = value();
       if (!/^[1-9]\d*$/.test(given) || !Number.isSafeInteger(Number(given))) throw new Refusal(`--workers is a positive whole number, not ${given}`, 125, true);
@@ -101,7 +107,8 @@ function parse(argv: readonly string[]): Options {
     try { job = { key, ...jobSizing({ key, units: workers, atMostBytes: atMost }) }; }
     catch (error) { throw new Refusal((error as Error).message, 125, error instanceof TypeError); }
   }
-  return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args };
+  return { bytes: job?.bytes ?? bytes!, job, priority, what: what ?? [command, ...args].join(" "), command, args,
+    ...(measurementLock === undefined ? {} : { measurement: { lock: measurementLock, wait: measurementWait, quiet: measurementQuiet } }) };
 }
 
 const runnable = (file: string) => {
@@ -191,10 +198,14 @@ async function main(argv: readonly string[]): Promise<void> {
     process.on(signal, () => { stoppedBy ??= signal; waiting.abort(); });
   }
   let reservation: Awaited<ReturnType<typeof reserve>>;
+  const joint = options.measurement && measurementAdmission({ ...options.measurement, priority: options.priority, report: say });
+  const cleanup = () => joint?.close();
+  process.once("exit", cleanup);
   try {
     reservation = await reserve({ bytes: options.bytes, what: options.what, priority: options.priority,
-      unmeasured: options.job && options.job.basis !== "measured" ? [options.job.key] : [] }, { report: say, signal: waiting.signal });
+      unmeasured: options.job && options.job.basis !== "measured" ? [options.job.key] : [] }, { report: say, signal: waiting.signal, joint });
   } catch (error) {
+    cleanup();
     if (stoppedBy === undefined) throw error;
     // The request is withdrawn. End by the signal, as the command would have.
     process.removeAllListeners(stoppedBy);
@@ -207,6 +218,8 @@ async function main(argv: readonly string[]): Promise<void> {
   rankForOom(options.priority, say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;
+  // The shell keeps this pid, validates the lock's owner and owns its EXIT trap.
+  // On success no JS callback survives; on exec failure cleanup remains ours.
   try { execve(file, [options.command, ...options.args], env); }
   catch (error) { failure = error; }
   if ((failure as NodeJS.ErrnoException).code === "ENOEXEC") {
@@ -215,11 +228,12 @@ async function main(argv: readonly string[]): Promise<void> {
     catch (error) { failure = error; }
   }
   reservation.release();
+  cleanup();
   throw new Refusal(`cannot run ${options.command}: ${(failure as Error).message}`, 126);
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
-  say(`admit: ${error instanceof Error ? error.message : String(error)}`);
+  say(`${error instanceof MeasurementBusy ? "" : "admit: "}${error instanceof Error ? error.message : String(error)}`);
   if (error instanceof Refusal && error.usage) say(USAGE);
-  process.exitCode = error instanceof Refusal ? error.status : 125;
+  process.exitCode = error instanceof Refusal || error instanceof MeasurementBusy ? error.status : 125;
 });

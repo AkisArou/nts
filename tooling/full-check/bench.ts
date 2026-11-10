@@ -4,16 +4,15 @@
 //
 //   tooling/gate/with-lock.sh --key bench-session target/release/nts-bench --root <tree>
 //
-// here asked without --wait, and inside the session's reservation, which
-// admit.ts holds (below), so with-lock.sh is given no key.
+// here asked without --wait. The wrapper takes memory and the CPU mutex
+// together under the session's key; waiting holds neither resource.
 //
 // A measurement waits for the reserved core and nothing else (AGENTS.md, The
 // machine): gates, landing checks and agents' work run on the other CPUs, and
 // nts-bench records the machine's load and free memory beside every row.
 // with-lock.sh admits the run once CPUs 4-5 are quiet, and nts-bench asks
-// again before it starts. The session's memory is reserved first, once, at
-// the full check's priority (admit.ts --key bench-session), so a wait in the
-// memory ledger never holds the measurement lock, and every case's host
+// again before it starts. Joint admission uses the full check's priority
+// and the bench-session history; every case's host
 // columns run inside that reservation. A run either did not start -- the lock held by
 // another measurement, or the pair busy -- which is exit 75 from either and
 // leaves the benchmarks due for a later cycle, so the full check never waits
@@ -67,8 +66,8 @@ export const RUNS = "results/benchmarks/runs";
 /**
  * The production benchmark, in a tree with that tree's own tools: the
  * session's memory, reserved in the ledger at the full check's priority by
- * what earlier sessions held, in the scheduling history `history`; then
- * with-lock.sh, which admits the run on the reserved core; then `binary`
+ * what earlier sessions held, in the scheduling history `history`, together
+ * with with-lock.sh's reserved core; then `binary`
  * (nts-bench) --root <tree>. admit.ts becomes with-lock.sh, so the exit is
  * the lock's or nts-bench's. The session supervisor owns the measurement unit
  * and its observation budget; it keeps a durable partial record at the budget.

@@ -36,6 +36,17 @@ const PROGRAM_SHARE_ON_AVERAGE = 0.01;
 /** At most this share of the whole window may be busy at all. */
 const BUSY_SHARE = 0.1;
 
+/** Rolling observations reusable while admission waits for memory, without holding the CPU mutex. */
+export class QuietWindow {
+  private window: { at: number; ticks: Ticks }[] = [];
+  sample(at: number, ticks: Ticks, quietMs = 45000): boolean {
+    if (!this.window.length || programRan(this.window.at(-1)!.ticks, ticks)) this.window = [{ at, ticks }];
+    else this.window.push({ at, ticks });
+    while (this.window.length > 2 && at - this.window[1].at >= quietMs) this.window.shift();
+    return at - this.window[0].at >= quietMs && coreIsQuiet(this.window[0].ticks, ticks);
+  }
+}
+
 /**
  * Whether a program ran on either sibling between two samples. A missing or
  * reset counter counts as one: what cannot be read is not known to be quiet.
@@ -98,19 +109,12 @@ export async function waitForQuiet(options: {
 }): Promise<boolean> {
   const { read, now, sleep, quietMs = 45000, timeoutMs = 180000, sampleMs = 1000 } = options;
   const started = now();
-  let window: { at: number; ticks: Ticks }[] = [{ at: started, ticks: read() }];
+  const window = new QuietWindow();
+  window.sample(started, read(), quietMs);
   while (now() - started < timeoutMs) {
     await sleep(Math.min(sampleMs, timeoutMs - (now() - started)));
     const current = { at: now(), ticks: read() };
-    if (programRan(window[window.length - 1].ticks, current.ticks)) {
-      window = [current];
-      continue;
-    }
-    window.push(current);
-    // The oldest samples go while the window is still long enough without
-    // them, so the average is over the last `quietMs` and not since the start.
-    while (window.length > 2 && current.at - window[1].at >= quietMs) window.shift();
-    if (current.at - window[0].at >= quietMs && coreIsQuiet(window[0].ticks, current.ticks)) return true;
+    if (window.sample(current.at, current.ticks, quietMs)) return true;
   }
   return false;
 }

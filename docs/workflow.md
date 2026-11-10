@@ -351,6 +351,14 @@ the first node task.
   its steps; a job yields while one of higher priority waits; and no tool
   waits for the host's free memory itself
   ([log](records/notebooks/decisions-log.md#one-memory-ledger-for-the-machine-11-09)).
+- **Measurement admission takes memory and CPUs together**: a measurement
+  ticket retains priority and arrival without promising memory. Only a ticket
+  ready to take the CPU mutex enters the memory queue; the ledger decision
+  takes the mutex nonblocking and admits its memory together. Waiting for
+  memory, another measurement or quiet CPUs holds neither. The wrapper is
+  the entry point, without an outer memory admission. A measurement inside
+  an ancestor's job shares its reservation
+  ([log](records/notebooks/decisions-log.md#measurement-admission-takes-memory-and-cpus-together-11-10)).
 - **Reservations are measured peaks** (11-09): a step or job reserves 1.25
   times the largest of its last five peaks, sampled on the ledger's own
   basis and kept in its tree's scheduling history; never measured there, the

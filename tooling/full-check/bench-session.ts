@@ -19,7 +19,6 @@ import { finishRunTemporary } from "../gate/run-temporary.ts";
 // finalization. Admission and waiting for the reserved core spend this budget.
 export const BENCH_SESSION_BUDGET_MS = 7.5 * 60 * 60_000;
 export const SESSION_OUTCOME = "session.outcome.json";
-const ADMIT = fileURLToPath(new URL("../gate/admit.ts", import.meta.url));
 
 export async function runSession(tree: string, run: string, binary: string, history: string,
   ownerUnit: string, budgetMs = BENCH_SESSION_BUDGET_MS, journal = join(run, `bench-${randomUUID()}.jsonl`)): Promise<BenchAttempt> {
@@ -34,8 +33,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
     owned: { NTS_MEMORY_PRIORITY: "full-check", NTS_GATE_COSTS_DIR: history } });
   const sealed = await sealOracleRun(planned);
   const handoff = join(run, `${unit}.command.json`);
-  writeFileSync(handoff, JSON.stringify({ cwd: tree, env: sealed.env, command: [process.execPath, ADMIT, "--key", "bench-session", "--what", `nightly benchmarks in ${tree}`, "--",
-    "sh", join(tree, "tooling/gate/with-lock.sh"), binary, "--root", tree, "--journal", journal] }));
+  writeFileSync(handoff, JSON.stringify({ cwd: tree, env: sealed.env, command: ["sh", join(tree, "tooling/gate/with-lock.sh"), "--key", "bench-session", binary, "--root", tree, "--journal", journal] }));
   const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
     ...lowPriority().map(setting => `--property=${setting}`), "--property=TimeoutStopSec=5s",
     `--property=BindsTo=${ownerUnit}.service`, `--property=After=${ownerUnit}.service`,

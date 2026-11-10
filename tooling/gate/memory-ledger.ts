@@ -414,7 +414,7 @@ export type Queued = { id: string; bytes: number; priority: Priority; seq: numbe
 const rank = (priority: Priority) => PRIORITIES.indexOf(priority);
 
 /** Priority first, then arrival. */
-export function queueOrder(a: Queued, b: Queued): number {
+export function queueOrder(a: Pick<Queued, "priority" | "seq">, b: Pick<Queued, "priority" | "seq">): number {
   return rank(a.priority) - rank(b.priority) || a.seq - b.seq;
 }
 
@@ -607,6 +607,14 @@ export type Decision = {
 };
 
 
+/** A second resource acquired in the same decision as memory, never while waiting for memory. */
+export type JointAdmission = {
+  /** Called under the ledger lock. False withdraws the memory request without losing the resource's queue position. */
+  ready(): boolean;
+  /** Nonblocking, under the same lock, only after memory fits. False leaves neither resource held. */
+  acquire(): boolean;
+};
+
 export type ReserveOptions = {
   /** Read for RESERVATION_ENV, LEDGER_ENV and NTS_MEMINFO; process.env unless given. */
   env?: NodeJS.ProcessEnv;
@@ -625,6 +633,7 @@ export type ReserveOptions = {
   everyMs?: number;
   /** What an admitted job uses now, in place of reading the host: for tests. */
   used?: (entry: LedgerEntry) => number;
+  joint?: JointAdmission;
 };
 
 export type Reservation = {
@@ -883,7 +892,7 @@ function drawnOn(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>)
 }
 
 /** One decision, holding the lock: drop what is dead, then admit `self` or queue it. */
-function decide(context: Context, self: LedgerEntry, registered: boolean): { decision: Decision; registered: boolean } {
+function decide(context: Context, self: LedgerEntry, registered: boolean, joint?: JointAdmission): { decision: Decision; registered: boolean } {
   const { dir, report } = context;
   for (const state of ["waiting", "admitted"] as const) mkdirSync(join(dir, state), { recursive: true });
   // What a writer left between its write and its rename: none writes without the lock.
@@ -951,7 +960,9 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   // nobody: a holder whose child needs memory never waits for itself.
   const queue = everyone.filter(entry => ask(entry) > 0 && whole(entry) <= freeBytes).map(entry => ({ ...entry, bytes: ask(entry) }));
   const drawnBytes = draws.get(self.id) ?? 0;
-  const go = fits && (ask(self) === 0 || admissible(roomBytes, queue).has(self.id));
+  const memoryFits = fits && (ask(self) === 0 || admissible(roomBytes, queue).has(self.id));
+  const resourceBusy = memoryFits && joint !== undefined && !joint.acquire();
+  const go = memoryFits && !resourceBusy;
   if (go && grown !== undefined) {
     // The growth joins its reservation: one entry, and one measure, per job.
     writeEntry(dir, "admitted", { ...grown, bytes: grown.bytes + self.bytes, ...(drawnBytes ? { drawn: (grown.drawn ?? 0) + drawnBytes } : {}) });
@@ -965,6 +976,8 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
       renameSync(entryPath(dir, "waiting", self.id), entryPath(dir, "admitted", self.id));
     } else writeEntry(dir, "admitted", entry);
     if (on !== undefined && drawnBytes) report(`memory: ${self.what} drew ${gib(drawnBytes)} of its ${gib(self.bytes)} on ${admitted.get(on)!.what}'s unused reservation`);
+  } else if (resourceBusy) {
+    if (listed) removeQuietly(entryPath(dir, "waiting", self.id));
   } else if (!listed || self.fits !== fits) {
     // Waiting, it says whether it could fit, which `outranked` reads.
     self.fits = fits;
@@ -978,7 +991,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
   }
   return {
     decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits, drawnBytes },
-    registered: !go,
+    registered: !go && !resourceBusy,
   };
 }
 
@@ -989,7 +1002,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean): { dec
  * anything else. Returns that decision, and how long the request waited
  * (null when it did not).
  */
-async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | undefined, waits: () => string, admitted: () => void = () => {}): Promise<{ decision: Decision; waitedMs: number | null }> {
+async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | undefined, waits: () => string, admitted: () => void = () => {}, joint?: JointAdmission): Promise<{ decision: Decision; waitedMs: number | null }> {
   let registered = false;
   let waitedFrom: number | undefined;
   // A decision holds the lock for milliseconds, so a busy lock is tried again
@@ -1005,9 +1018,15 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
         continue;
       }
       retry = LOCK_RETRY_MS;
-      let outcome: ReturnType<typeof decide>;
-      try { outcome = decide(context, self, registered); }
+      let outcome: ReturnType<typeof decide> | undefined;
+      try {
+        if (joint !== undefined && !joint.ready()) {
+          if (registered) removeQuietly(entryPath(context.dir, "waiting", self.id));
+          registered = false;
+        } else outcome = decide(context, self, registered, joint);
+      }
       finally { lock.release(); }
+      if (outcome === undefined) { await pause(context.every, undefined, { signal }); continue; }
       registered = outcome.registered;
       const { decision } = outcome;
       if (decision.admitted) {
@@ -1108,7 +1127,24 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   amount(bytes, what, "reserves");
   if (!PRIORITIES.includes(priority)) throw new RangeError(`memory: no priority ${String(priority)}; one of ${PRIORITIES.join(", ")}`);
   const nested = inside(env[RESERVATION_ENV], dir, request.owner?.pid ?? process.pid, what, bytes, report);
-  if (nested !== null) return nested;
+  if (nested !== null) {
+    if (options.joint !== undefined) {
+      // A caller may measure inside an ancestor's job, but must not pre-reserve
+      // the measurement itself: that would keep memory while its CPUs wait.
+      const entry = readEntries(dir, "admitted").find(entry => entry.id === nested.id);
+      if (entry?.owner.pid === process.pid) throw new Error("a measurement must enter through with-lock.sh --key, without an outer admit.ts reservation");
+      for (;;) {
+        options.signal?.throwIfAborted();
+        const lock = lockLedger(dir);
+        let go = false;
+        try { if (lock !== null) go = options.joint.ready() && options.joint.acquire(); }
+        finally { lock?.release(); }
+        if (go) break;
+        await pause(options.everyMs ?? POLL_MS, undefined, { signal: options.signal });
+      }
+    }
+    return nested;
+  }
 
   const waiter = processIdentity(process.pid);
   if (waiter === null) throw new Error("this process has no identity in /proc");
@@ -1137,7 +1173,7 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
     dir, meminfo, report, every: options.everyMs ?? POLL_MS, observe: options.observe ?? (() => {}),
     used: used ? entry => used(entry) : measured,
   };
-  const { decision, waitedMs } = await wait(context, self, options.signal, () => `waits for ${gib(bytes)}`);
+  const { decision, waitedMs } = await wait(context, self, options.signal, () => `waits for ${gib(bytes)}`, undefined, options.joint);
   const reservation = holding(self, context);
   try { context.observe(decision); }
   catch (error) { reservation.release(); throw error; }

@@ -122,6 +122,51 @@ function fixture(t: TestContext): Fixture {
   };
 }
 
+test("joint admission checks and claims the second resource under the ledger lock, only once memory fits", async t => {
+  const f = fixture(t);
+  f.memory(2.5);
+  let attempts = 0;
+  const request = f.ask({ bytes: 6 * GiB, what: "joint request" }, { joint: {
+    ready: () => { assert.equal(lockLedger(f.dir), null); return true; },
+    acquire: () => { assert.equal(lockLedger(f.dir), null); attempts++; return true; },
+  } });
+  await waitFor("joint memory wait", () => readLedger(f.dir).waiting.length === 1, { stopped: f.stopped });
+  assert.equal(attempts, 0, "waiting for memory holds no second resource");
+  f.memory(20);
+  const held = await request;
+  assert.equal(attempts, 1);
+  held.release();
+});
+
+test("losing a second resource withdraws the memory wait and keeps no promise ahead of ordinary jobs", async t => {
+  const f = fixture(t), abort = new AbortController();
+  f.memory(2.5);
+  let ready = true, checked = false;
+  const request = f.ask({ bytes: 6 * GiB, what: "resource waiter" }, { signal: abort.signal, joint: {
+    ready: () => { checked = true; return ready; }, acquire: () => false,
+  } });
+  await waitFor("queued joint request", () => readLedger(f.dir).waiting.length === 1);
+  ready = false; checked = false;
+  await waitFor("resource deferral", () => checked && readLedger(f.dir).waiting.length === 0);
+  const ordinary = await f.ask({ bytes: 128 * 2 ** 20, what: "ordinary job" });
+  ordinary.release();
+  abort.abort();
+  await assert.rejects(request, { name: "AbortError" });
+  assert.equal(readLedger(f.dir).admitted.length, 0);
+});
+
+test("a lost nonblocking resource claim leaves neither an admission nor a queued memory promise", async t => {
+  const f = fixture(t), abort = new AbortController();
+  let tried = false;
+  const request = f.ask({ bytes: 6 * GiB, what: "lost resource race" }, { signal: abort.signal, joint: {
+    ready: () => true, acquire: () => { tried = true; return false; },
+  } });
+  await waitFor("failed joint claim", () => tried);
+  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+  abort.abort();
+  await assert.rejects(request, { name: "AbortError" });
+});
+
 /** A live process to own a reservation, stopped by its own handle. */
 function ownerProcess(t: TestContext): ChildProcess & { pid: number } {
   const child = spawn("cat", [], { stdio: ["pipe", "ignore", "ignore"] });

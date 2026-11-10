@@ -11,10 +11,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { cpuList, cpuSubset, defaultCpus, formatCpus, gateCommand, gateCpus, inheritedCpus, selectScope, verifyCeiling } from "./affinity.ts";
 import { coreIsQuiet, coreTicks, waitForQuiet } from "./measurement.ts";
-import { reserve } from "./memory-ledger.ts";
-import { ownMemory, withoutHanded } from "./test-memory.ts";
-
-const WITH_LOCK = new URL("./with-lock.sh", import.meta.url).pathname;
 const PINNED = new URL("./pinned.sh", import.meta.url).pathname;
 const stat = (at: number, busy: number[] = []) => [0, 4, 5, 16].map((cpu) => {
   const user = busy.includes(cpu) ? at : 0;
@@ -160,50 +156,6 @@ test("quiet admission needs a full quiet window after activity", async () => {
   });
   assert.equal(result, true);
   assert.equal(now, 50);
-});
-
-test("the wrapper releases its own lock after quiet timeout and command failure, preserving another holder", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "nts-measurement-test-"));
-  // Each run measures inside a reservation of this test's own, in a ledger of
-  // its own, so the wrapper asks the ledger for nothing (with-lock.test.ts).
-  const memory = ownMemory(join(dir, "memory"));
-  const held = await reserve({ bytes: 2 ** 20, what: "the wrapper's lock test" }, { env: memory });
-  try {
-    const bin = join(dir, "bin");
-    mkdirSync(bin);
-    // Stub only quiet admission, not lock acquisition or the command. Pure
-    // tests above drive the real timer and counters with a controlled clock.
-    writeFileSync(join(bin, "node"), '#!/bin/sh\nexit "$TEST_QUIET_EXIT"\n');
-    chmodSync(join(bin, "node"), 0o755);
-    const lock = join(dir, "measurement.lock.d");
-    const ran = join(dir, "ran");
-    const env = { ...withoutHanded(process.env), ...memory, ...held.env, PATH: `${bin}:${process.env.PATH}`, NTS_MEASUREMENT_LOCK: lock, TEST_QUIET_EXIT: "75" };
-    const command = ["-c", 'echo "$NTS_BENCH_CPUS" > "$1"; exit 7', "_", ran];
-    let result = spawnSync("sh", [WITH_LOCK, "sh", ...command], { env, encoding: "utf8" });
-    assert.equal(result.status, 75, result.stderr);
-    assert.equal(existsSync(ran), false);
-    assert.equal(existsSync(lock), false, "quiet timeout must release its lock");
-    result = spawnSync("sh", [WITH_LOCK, "sh", ...command], { env: { ...env, TEST_QUIET_EXIT: "0" }, encoding: "utf8" });
-    assert.equal(result.status, 7, result.stderr);
-    assert.equal(readFileSync(ran, "utf8"), "4\n");
-    assert.equal(existsSync(lock), false, "command failure must release its lock");
-    rmSync(ran);
-    mkdirSync(lock);
-    writeFileSync(join(lock, "pid"), String(process.pid));
-    result = spawnSync("sh", [WITH_LOCK, "sh", ...command], { env, encoding: "utf8" });
-    assert.equal(result.status, 75);
-    assert.equal(readFileSync(join(lock, "pid"), "utf8"), String(process.pid));
-    assert.equal(existsSync(ran), false);
-    // An actually stale holder is reclaimed; no process-name search.
-    writeFileSync(join(lock, "pid"), "2147483647");
-    result = spawnSync("sh", [WITH_LOCK, "sh", ...command], { env, encoding: "utf8" });
-    assert.equal(result.status, 75);
-    assert.match(result.stderr, /lock is stale/);
-    assert.equal(existsSync(lock), false);
-  } finally {
-    held.release();
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test("pinned.sh restricts its own entry before invoking git or a build", { skip: process.platform !== "linux" }, () => {
