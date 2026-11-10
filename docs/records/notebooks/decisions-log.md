@@ -1987,3 +1987,18 @@ This replaces the direct stream-to-task hierarchy in the 11-09 task decision.
 Priorities, native-first ordering, phase holds and the measuring decision are
 unchanged: instruction counts decide regressions, and wall time counts only
 past max(3%, twice the spread).
+
+## Step budgets exclude idle admission waits (11-10)
+
+The wide test262 census used most of its stated hour waiting for memory or
+higher-priority work, and its wall timer stopped it before its records were
+checked. An elastic step now spends its execution budget while a case holds
+a token or its script works. With no active case, only a known gate-owned
+memory, priority, slot or frontend wait suspends that budget. Token
+transitions account for short cases between polls; a script without a
+request and an eligible but unanswered request still spend the budget.
+
+Every case supervisor retains its own clocks. Fixed steps retain their wall
+bounds, and a landing's ceiling independently bounds wall time including
+waits. Step summaries and logs separate execution and admission waits; the
+census streams progress and reports its worker count and directory time.

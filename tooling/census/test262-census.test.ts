@@ -63,6 +63,8 @@ test("a test262 run held to a record lists the cases it lacks and its fails that
   writeFileSync(fixture, recordOf(real, `${fixed}\tfail\tuncaught Test262Error: a fixture's fail`));
   const checked = census("test/harness", "--check", fixture, "--paths-from", selection);
   assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.match(checked.stderr,/census start: test\/harness; 2 case\(s\); 2 worker\(s\)/);
+  assert.match(checked.stderr,/census complete: test\/harness; 2\/2 attempted; 2 worker\(s\); [\d.]+ s elapsed/);
   assert.match(checked.stdout, literally(`${pendingLine(gone!, fixture)}: pass`));
   assert.match(checked.stdout, literally(improvedLine(fixed!, fixture, "fail", "pass")));
   assert.equal(readFileSync(fixture, "utf8").includes(`${gone}\t`), false, "a check lists, and writes nothing");

@@ -95,7 +95,7 @@ import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstr
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
-import {stepBound, stepBoundReason} from "./step-bound.ts";
+import {StepBoundClock, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -715,8 +715,15 @@ const tok = createTokenPool({
       .catch(error => process.stderr.write(`run.mjs: ${step}'s runaway bound stays at ${gib(r.scope.limits.max)}: ${error.message}\n`));
   },
   known: (step) => BY_NAME.has(step),
-  observe: (event) => caseCosts?.record({ ...event, compiler_sha: identities.nts?.sha256, memory: memoryState(),
-    used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold }),
+  observe: (event) => {
+    caseCosts?.record({ ...event, compiler_sha: identities.nts?.sha256, memory: memoryState(),
+      used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold });
+    // Observe actual token transitions too: a case can start and finish
+    // between clock polls, and all of its execution must spend the budget.
+    if (event.event === "pool.change") observeStepBounds();
+    // Cancellation is traced before its request leaves the waiting list.
+    if (event.event === "token.cancel") queueMicrotask(observeStepBounds);
+  },
   released: () => { if (!stopping) schedule(); },
 });
 let tokenAddr = null;
@@ -1009,6 +1016,9 @@ function outranked() {
     process.stdout.write(`  memory: no request of higher priority waits any more: the run goes on after ${Math.round((now - outrankedSince) / 1000)} s\n`);
   }
   outrankedNow = answer;
+  // A token can discover the higher priority waiter before any case starts.
+  // Then no case completion is available to schedule the run again.
+  if (answer && !stopping && !summaryWritten) lookAgain();
   return answer;
 }
 
@@ -1016,6 +1026,11 @@ function outranked() {
 // it looks at the ledger again every second until it goes on.
 function lookAgain() {
   outrankedLook ??= setTimeout(() => { outrankedLook = null; schedule(); }, 1000);
+}
+
+function observeStepBounds() {
+  const u = used(), now = performance.now();
+  for (const r of running.values()) r.observeBound?.(now, u);
 }
 
 /** The steps this run sizes without a measurement of their own in this target's history. */
@@ -1189,6 +1204,15 @@ function start(step, slots, rider = false) {
   // log stays, and it is neither a pass nor a red verdict about the change.
   // Killed again until it exits: a kill reaches only what its scope holds.
   let boundTimer;
+  const boundStarted = performance.now(), boundClock = new StepBoundClock(bound.seconds, boundStarted, STEP_CEILING);
+  let boundState = boundClock.observe(boundStarted), boundFailure;
+  owned.observeBound = (now, u) => {
+    const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
+      requests: tok.waiting.filter(request => request.step === step.name).map(request => request.bytes ?? tokenBytes(step)),
+      freeSlots: SLOTS - u.slots - withhold, freeFrontends: step.fe ? FRONTENDS - u.fe : Infinity,
+      freeBytes: reserved() - u.bytes - withholdBytes });
+    boundState = boundClock.observe(now, waiting);
+  };
   const stopAtBound = () => {
     if (!stopping) owned.overBound = true;
     try { scope.kill(); }
@@ -1196,16 +1220,30 @@ function start(step, slots, rider = false) {
     boundTimer = setTimeout(stopAtBound, 5000);
     boundTimer.unref();
   };
-  boundTimer = setTimeout(stopAtBound, bound.seconds * 1000);
+  const checkBound = () => {
+    outranked();
+    owned.observeBound(performance.now(), used());
+    if (boundState.expired) {
+      boundFailure = boundState.used_s < bound.seconds && STEP_CEILING !== undefined
+        ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s` : stepBoundReason(bound.seconds);
+      stopAtBound();
+    } else {
+      boundTimer = setTimeout(checkBound, 500);
+      boundTimer.unref();
+    }
+  };
+  boundTimer = setTimeout(checkBound, Math.min(500, bound.seconds * 1000));
   boundTimer.unref();
   process.stderr.write(elastic
-    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; bound ${bound.seconds} s)\n`
+    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; execution bound ${bound.seconds} s; admission waits excluded${STEP_CEILING === undefined ? "" : `; wall ceiling ${STEP_CEILING} s`})\n`
     : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s)\n`);
   let completed = false;
   const complete = async (code, signal, spawnError) => {
     if (completed) return;
     completed = true;
     clearTimeout(boundTimer);
+    delete owned.observeBound;
+    boundState = boundClock.observe(performance.now());
     // A last sample, of whatever of the step still runs: a step shorter than
     // the sampling interval is measured by it.
     sampleStep(owned);
@@ -1229,7 +1267,8 @@ function start(step, slots, rider = false) {
       }
     } catch {}
     // After the drain, so no process of the step can still write over it.
-    if (owned.overBound) writeFileSync(log, `\n${stepBoundReason(bound.seconds)}: stopped through its scope\n`, { flag: "a" });
+    if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}\n`, { flag: "a" });
+    if (owned.overBound) writeFileSync(log, `\n${boundFailure}: stopped through its scope\n`, { flag: "a" });
     let oracleCapture, captureProblem;
     try { oracleCapture = captureCost(step.name, log); } catch (error) { captureProblem = error.message; }
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
@@ -1252,7 +1291,8 @@ function start(step, slots, rider = false) {
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
-      memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis };
+      memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
+      bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
     if (oracleCapture) extra.oracle_capture = oracleCapture;
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;
@@ -1273,7 +1313,7 @@ function start(step, slots, rider = false) {
       const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "tooling-cleanup", verdict: "INSTRUMENT", reason } });
     } else if (owned.overBound) {
-      const reason = stepBoundReason(bound.seconds);
+      const reason = boundFailure;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "step-bound", verdict: "INSTRUMENT", reason } });
     } else if (stopping && !instrument && (signal || code !== 0)) {
       // A step stopped with the rest is not run, unless its own instrument

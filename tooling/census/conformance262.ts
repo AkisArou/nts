@@ -549,6 +549,7 @@ async function runAll(all) {
   if (paths.length > 0) {
     const workers = Math.min(jobs, paths.length);
     const report = (message: string) => process.stderr.write(`  ${message}\n`);
+    report(`census start: ${under}; ${paths.length} case(s); ${workers} worker(s)`);
     try {
       await runMemoryWorkers({
         paths, jobs: workers, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024, key: `conformance262-${BACKEND}`, what: `conformance262 --backend ${BACKEND}: ${paths.length} case(s)`,
@@ -573,6 +574,7 @@ async function runAll(all) {
           (rowsFile ? ` and are kept in ${rowsFile} -- rerun with --resume` : ""),
       );
     }
+    report(`census complete: ${under}; ${done}/${paths.length} attempted; ${workers} worker(s); ${((Date.now()-started)/1000).toFixed(1)} s elapsed`);
   }
   return results;
 }

@@ -1990,16 +1990,14 @@ test262_census() {
     under=${pair%%:*}
     record=results/test262/$backend/${pair##*:}.tsv
     echo "  $under on $backend, whole, against $record:"
-    out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
-      --backend "$backend" --under "$under" --check "$record" --jobs "$cap" 2>&1)
-    status=$?
-    if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
-      # Not measured: keep its complete cause, which may precede any report.
-      printf '%s\n' "$out"
-      failed="$failed $under"
-      continue
+    # Stream the census, including its admission, worker count and progress.
+    # A stopped directory must leave the work it reached visible in the log.
+    if NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
+      --backend "$backend" --under "$under" --check "$record" --jobs "$cap" 2>&1; then
+      status=0
+    else
+      status=$?
     fi
-    printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|headline|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|UNSTABLE|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
     [ "$status" -eq 0 ] || failed="$failed $under"
   done
   if [ -n "$failed" ]; then

@@ -149,8 +149,12 @@ landing.
 ([`tooling/gate/step-bound.ts`](../tooling/gate/step-bound.ts)): the one its
 row states, else three times its recorded cost and the run's over their
 slots, at least an hour; in a landing check, at most max(15 minutes, three
-times the change's estimate). A step past its bound is stopped and held for
-a person. A single case past its own bound, a compile past ten CPU minutes
+times the change's estimate). A tokened step spends this execution allowance
+while a case runs or its script works; a known admission wait with no case
+running spends none. This includes memory, priority, slots and frontend
+admission. The log and summary name these waits. A landing's ceiling always
+bounds wall time, including waits. A step past its bound is stopped and held
+for a person. A single case past its own bound, a compile past ten CPU minutes
 or a compiled call past its allowance, is a `timeout`: a loud defect,
 recorded like any other outcome, so a spinning compile is a finding, never a
 stall.
@@ -354,6 +358,13 @@ the first node task.
 
 ## Decisions
 
+- **Step budgets count execution and expose admission waits**: an elastic
+  step with no active case suspends its execution budget only for the
+  runner's known memory, priority, slot or frontend wait. Token transitions
+  account for short cases between polls. Case supervisors keep their own
+  clocks, fixed steps keep their wall bounds, and a landing's independent
+  ceiling includes all waits
+  ([log](records/notebooks/decisions-log.md#step-budgets-exclude-idle-admission-waits-11-10)).
 - **This workflow** (11-06): the landing check, the full check after
   landing, tasks that land within a day, agents per task, and the fresh start
   ([log](records/notebooks/decisions-log.md#fresh-start-11-06)).

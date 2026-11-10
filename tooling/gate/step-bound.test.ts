@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { readBaseline } from "../landing/selection.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
-import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, landingCeiling, stepBound, stepBoundReason, unmeasuredSteps } from "./step-bound.ts";
+import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, StepBoundClock, landingCeiling, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
 import { instrumentPolicy } from "./step-result.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
@@ -22,6 +22,30 @@ import { removable } from "./run-temporary.ts";
 import { ownMemory } from "./test-memory.ts";
 
 const baseline = () => readBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
+
+test("only a gate-owned admission wait with no executing case suspends a step's execution budget", () => {
+  const ready = { elastic:true, held:0, outranked:false, requests:[8,4], freeSlots:1, freeFrontends:1, freeBytes:4 };
+  assert.equal(stepBoundWait(ready), undefined, "one eligible request can execute");
+  assert.equal(stepBoundWait({...ready,freeBytes:3}), "memory");
+  assert.equal(stepBoundWait({...ready,freeSlots:0}), "slots");
+  assert.equal(stepBoundWait({...ready,freeFrontends:0}), "frontends");
+  assert.equal(stepBoundWait({...ready,outranked:true,requests:[]}), "priority", "a yielding feed asks for no new token");
+  assert.equal(stepBoundWait({...ready,held:1,outranked:true,freeBytes:0}), undefined, "an executing case consumes the budget throughout");
+  assert.equal(stepBoundWait({...ready,requests:[],freeBytes:0}), undefined, "a script with no admission request consumes the budget");
+  assert.equal(stepBoundWait({...ready,elastic:false,outranked:true}), undefined, "a fixed step's work is not tracked by tokens");
+});
+
+test("admission waits leave execution time intact, while a landing's wall ceiling always expires", () => {
+  const clock = new StepBoundClock(2,0);
+  clock.observe(0,"memory");
+  assert.equal(clock.observe(10_000,"priority").expired,false);
+  assert.equal(clock.observe(11_000).expired,false);
+  assert.equal(clock.observe(12_000).expired,false);
+  assert.deepEqual(clock.observe(13_000), {used_s:2,waited_s:{memory:10,priority:1},expired:true});
+  const landing = new StepBoundClock(2,0,3);
+  landing.observe(0,"memory");
+  assert.deepEqual(landing.observe(3000,"memory"),{used_s:0,waited_s:{memory:3},expired:true});
+});
 
 test("a stated bound wins; otherwise three times the step's work and the run's over their slots, above a floor", () => {
   const run = { cost: 2400, slots: 24 };

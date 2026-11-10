@@ -1,4 +1,4 @@
-// How long a gate step may run (tooling/gate/run.mjs). A step past its bound is
+// How long a gate step may execute (tooling/gate/run.mjs). A step past its bound is
 // stopped through its own scope and held: its log is kept, and it is never a
 // pass and never a red verdict about the change. On 2026-11-07 the `dex` step
 // compiled one benchmark port for 4.6 hours at full CPU, nothing bounded it,
@@ -33,6 +33,49 @@ export const LANDING_CEILING_FLOOR_S = 15 * 60;
 
 export type StepBound = { seconds: number; basis: "stated" | "derived" | "ceiling" };
 export type BoundRow = { name: string; bound?: number; treeOnly?: boolean };
+
+export type BoundWait = "memory" | "priority" | "slots" | "frontends";
+
+/** A gate-owned admission wait, with no case executing, consumes no execution
+ * budget. A script without a pending request still consumes it, as does a
+ * case holding a token, even when other workers wait. */
+export function stepBoundWait(state: {
+  elastic: boolean; held: number; outranked: boolean; requests: readonly number[];
+  freeSlots: number; freeFrontends: number; freeBytes: number;
+}): BoundWait | undefined {
+  if (!state.elastic || state.held > 0) return;
+  if (state.outranked) return "priority";
+  if (!state.requests.length) return;
+  if (state.freeSlots <= 0) return "slots";
+  if (state.freeFrontends <= 0) return "frontends";
+  if (state.requests.every(bytes => bytes > state.freeBytes)) return "memory";
+}
+
+/** The step's execution budget, with an independent wall ceiling for a
+ * landing. Only the runner's admission decisions can suspend this clock;
+ * individual command supervisors keep their own clocks throughout. */
+export class StepBoundClock {
+  #start: number;
+  #last: number;
+  #wait: BoundWait | undefined;
+  #used = 0;
+  #waited: Partial<Record<BoundWait, number>> = {};
+  #seconds: number;
+  #ceiling: number | undefined;
+
+  constructor(seconds: number, startedMs: number, ceilingSeconds?: number) {
+    this.#seconds = seconds; this.#start = this.#last = startedMs; this.#ceiling = ceilingSeconds;
+  }
+
+  observe(nowMs: number, waiting?: BoundWait) {
+    const elapsed = Math.max(0, nowMs - this.#last) / 1000;
+    if (this.#wait) this.#waited[this.#wait] = (this.#waited[this.#wait] ?? 0) + elapsed;
+    else this.#used += elapsed;
+    this.#last = nowMs; this.#wait = waiting;
+    return { used_s: this.#used, waited_s: { ...this.#waited },
+      expired: this.#used >= this.#seconds || this.#ceiling !== undefined && (nowMs - this.#start) / 1000 >= this.#ceiling };
+  }
+}
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 /** A cost can be nothing: a check that takes no measurable time measured 0. */
