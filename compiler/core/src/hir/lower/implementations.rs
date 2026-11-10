@@ -14,6 +14,9 @@ pub(super) struct LoweringSnapshot<'a> {
     probe_context: std::cell::OnceCell<super::ProbeContext>,
     pub(super) scopes: super::scopes::Index,
     implementations: ImplementationIndex,
+    /// Every node carrying a symbol, in snapshot order. Shared by probes and
+    /// body builders so evolving declarations read only their own mentions.
+    mentions: OnceLock<FxHashMap<SymbolId, Vec<NodeId>>>,
     /// Per symbol, its references that stand where a write lands. Built on
     /// the first question, in one pass over the nodes, by the classifier the
     /// asker supplies (`reassigned_anywhere`); every later question is a
@@ -37,6 +40,7 @@ impl<'a> LoweringSnapshot<'a> {
             probe_context: std::cell::OnceCell::new(),
             scopes: super::scopes::Index::new(semantic),
             implementations: ImplementationIndex::build(semantic),
+            mentions: OnceLock::new(),
             written: OnceLock::new(),
             dictionary_members: OnceLock::new(),
         }
@@ -44,6 +48,21 @@ impl<'a> LoweringSnapshot<'a> {
 
     pub(super) fn implementation_of(&self, declaration: NodeId) -> NodeId {
         self.implementations.0[declaration.0 as usize]
+    }
+
+    pub(super) fn mentions_of(&self, symbol: SymbolId) -> &[NodeId] {
+        self.mentions
+            .get_or_init(|| {
+                let mut by_symbol: FxHashMap<SymbolId, Vec<NodeId>> = FxHashMap::default();
+                for (at, node) in (0..=u32::MAX).zip(&self.semantic.nodes) {
+                    if let Some(symbol) = node.symbol {
+                        by_symbol.entry(symbol).or_default().push(NodeId(at));
+                    }
+                }
+                by_symbol
+            })
+            .get(&symbol)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// The written references of every symbol, built once by `index`.

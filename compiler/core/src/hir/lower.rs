@@ -66223,9 +66223,8 @@ impl<'a> FuncBuilder<'a> {
     fn evolved_type(&self, name: NodeId) -> Option<HirType> {
         let symbol = self.node(name).symbol?;
         let mut settled: Option<HirType> = None;
-        for at in 0..self.snapshot.nodes.len() {
-            let id = NodeId(u32::try_from(at).ok()?);
-            if id == name || self.node(id).symbol != Some(symbol) {
+        for &id in self.snapshot.mentions_of(symbol) {
+            if id == name {
                 continue;
             }
             let Some(ty) = self.type_of(id) else {
