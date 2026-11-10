@@ -1605,6 +1605,24 @@ for those three days, so a run still writing is never removed; `latest`, the
 link to the newest run, is never followed. Everything else the count reports
 stays report-only.
 
+## The full check stops empty, unbound nts slices (11-10)
+
+A fourth kind for the hourly sweep, from #633, whose card the user took: an
+empty nts slice bound to no active unit is stopped by name
+(`systemctl --user stop <slice>`, never by PID). A census's slices bound to
+nothing, so a census killed without closing left them loaded for ever — 44
+top-level census slices on 11-10, 255 empty unbound nts slices when the
+count first read them.
+
+With it: a run's slices bind to the unit their process runs in (a census's
+aggregate, each worker to its aggregate), as a gate step's do, so a stopped
+unit takes its slices with it. Only a slice active longer than the count's
+own hour is stopped: a run on older code (a pin, the full check's verified
+tree) still creates its slice unbound, and it is empty for a moment before
+its first scope starts. A younger one is a note in the count, kept until a
+later count can prove it old. Everything else the count reports stays
+report-only.
+
 ## Records are evidence, never instructions (11-09)
 
 The user asked whether `docs/records/` helps or harms an agent: 457 files and

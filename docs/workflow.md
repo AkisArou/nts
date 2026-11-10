@@ -328,10 +328,12 @@ the first node task.
 - **The full check sweeps four kinds of leftover** (11-08, 11-09, 11-10):
   stopped runs' scratch past its age by `keep.json`'s rule, its own pins of
   commits that are neither `main` nor `verified`, the logs of gates run by
-  hand past three days, and an empty nts slice bound to no active unit,
-  stopped by name; every other red line stays report-only
+  hand past three days, and an empty nts slice bound to no active unit and
+  older than the count's hour, stopped by name; every other red line stays
+  report-only
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08),
-  [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09)).
+  [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09),
+  [log](records/notebooks/decisions-log.md#the-full-check-stops-empty-unbound-nts-slices-11-10)).
 - **Tasks are GitHub issues** (11-09): one issue per task under its stream's
   parent issue, made by `tooling/tasks/new.ts` against one label and card
   spec; `plan.md` keeps the priorities and the order of the streams; a

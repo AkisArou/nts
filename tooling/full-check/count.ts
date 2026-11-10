@@ -54,6 +54,8 @@ export type Slice = {
   populated: boolean;
   /** Its `BindsTo` units. */
   bindsTo: string[];
+  /** How long it has been active, from its ActiveEnterTimestamp; null when unread. */
+  ageMs: number | null;
 };
 export type Unavailable = { error: string };
 const unavailable = (x: unknown): x is Unavailable => typeof x === "object" && x !== null && "error" in x;
@@ -334,6 +336,9 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
   red.push(...nodeTestRoots(input, context));
 }
 
+/** The count's own interval: a slice younger than this may be a live run's, not a leftover. */
+const HOUR_MS = 3_600_000;
+
 /**
  * An empty nts slice bound to no active unit is a run's leftover (#633): a
  * slice a tool started transiently (a gate step's, a census's), holding no
@@ -342,6 +347,14 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
  * stops with it, and a structural parent (`nts.slice`, not transient) is
  * systemd's hierarchy, not a run's. Each leftover is named, and the sweep
  * stops it by name.
+ *
+ * Only a slice active longer than the count's own interval (one hour) is
+ * stopped: a run on code from before slices were bound (a pin, the full
+ * check's verified tree) creates its slice unbound, and it is empty for a
+ * moment before its first scope starts. A younger one -- or one whose age
+ * is unread -- is a note, kept until a later count can prove it old. Age
+ * never runs backwards, so the sweep needs no second age reading: it
+ * re-reads only what can change, populated and bound.
  */
 function sliceLines(input: CountInput, red: string[], notes: string[], stoppable: Stoppable[]): void {
   if (unavailable(input.slices)) { notes.push(`not counted: the user manager's slices (${input.slices.error})`); return; }
@@ -349,6 +362,12 @@ function sliceLines(input: CountInput, red: string[], notes: string[], stoppable
   for (const slice of [...input.slices].sort((a, b) => a.unit.localeCompare(b.unit))) {
     if (!slice.unit.startsWith("nts") || !slice.unit.endsWith(".slice") || !slice.transient || !slice.active || slice.populated) continue;
     if (slice.bindsTo.some(unit => active.has(unit))) continue;
+    if (slice.ageMs === null || slice.ageMs <= HOUR_MS) {
+      notes.push(slice.ageMs === null
+        ? `slice ${slice.unit}: empty and bound to no active unit, its age unread; kept until a count can prove it old`
+        : `slice ${slice.unit}: empty and bound to no active unit, but only ${Math.floor(slice.ageMs / 60_000)} min old; a run may still start in it`);
+      continue;
+    }
     red.push(`slice ${slice.unit}: empty and bound to no active unit; the run that started it is gone`);
     stoppable.push({ unit: slice.unit, why: "empty and bound to no active unit" });
   }
@@ -399,23 +418,25 @@ function populated(group: string): boolean {
   }
 }
 
-type Shown = { loaded: boolean; transient: boolean; active: boolean; bindsTo: string[]; group: string };
+type Shown = { loaded: boolean; transient: boolean; active: boolean; bindsTo: string[]; group: string; enteredMonotonicUs: number | null };
 /** `systemctl show` for slices, by unit: one call, its blocks parsed. A unit the manager does not hold reads LoadState other than loaded. */
 function showSlices(units: string[]): Map<string, Shown> {
   const shown = new Map<string, Shown>();
   if (!units.length) return shown;
-  const result = spawnSync("systemctl", ["--user", "show", ...units, "--property=Id,LoadState,ActiveState,Transient,BindsTo,ControlGroup"], { encoding: "utf8", maxBuffer: 1 << 26 });
+  const result = spawnSync("systemctl", ["--user", "show", ...units, "--property=Id,LoadState,ActiveState,Transient,BindsTo,ControlGroup,ActiveEnterTimestampMonotonic"], { encoding: "utf8", maxBuffer: 1 << 26 });
   if (result.error || result.status !== 0) throw new Error(`systemctl show: ${result.error?.message ?? result.stderr.trim() ?? `exit ${result.status}`}`);
   for (const block of result.stdout.split("\n\n")) {
     const fields = new Map(block.split("\n").filter(Boolean).map(line => { const at = line.indexOf("="); return [line.slice(0, at), line.slice(at + 1)] as const; }));
     const id = fields.get("Id");
     if (!id) continue;
+    const entered = Number(fields.get("ActiveEnterTimestampMonotonic"));
     shown.set(id, {
       loaded: fields.get("LoadState") === "loaded",
       transient: fields.get("Transient") === "yes",
       active: fields.get("ActiveState") === "active",
       bindsTo: (fields.get("BindsTo") ?? "").split(" ").filter(Boolean),
       group: fields.get("ControlGroup") ?? "",
+      enteredMonotonicUs: Number.isSafeInteger(entered) && entered > 0 ? entered : null,
     });
   }
   return shown;
@@ -483,9 +504,13 @@ function readSlices(repo: string): { slices: Slice[]; activeUnits: string[] } | 
     const activeUnits = (JSON.parse(units.out) as { unit: string; active: string }[]).filter(unit => unit.active === "active").map(unit => unit.unit);
     const candidates = (JSON.parse(listed.out) as { unit: string }[]).map(slice => slice.unit).filter(unit => unit.startsWith("nts"));
     const shown = showSlices(candidates);
+    // systemd's monotonic timestamps are CLOCK_MONOTONIC microseconds;
+    // /proc/uptime is the same clock, in seconds.
+    const uptimeMs = Number(readFileSync("/proc/uptime", "utf8").split(" ")[0]) * 1000;
     const slices: Slice[] = candidates.flatMap(unit => {
       const slice = shown.get(unit);
-      return slice?.loaded ? [{ unit, transient: slice.transient, active: slice.active, populated: slice.group ? populated(slice.group) : false, bindsTo: slice.bindsTo }] : [];
+      const ageMs = slice?.enteredMonotonicUs ? uptimeMs - slice.enteredMonotonicUs / 1000 : null;
+      return slice?.loaded ? [{ unit, transient: slice.transient, active: slice.active, populated: slice.group ? populated(slice.group) : false, bindsTo: slice.bindsTo, ageMs: ageMs !== null && Number.isFinite(ageMs) && ageMs >= 0 ? ageMs : null }] : [];
     });
     return { slices, activeUnits };
   } catch (error) {

@@ -149,10 +149,10 @@ function input(t: TestContext, overrides: Partial<CountInput> = {}): CountInput 
     // worker bound to it, the hierarchy's structural parents, and another
     // tool's transient slice.
     slices: [
-      { unit: "ntscensusrunp1xaaaa.slice", transient: true, active: true, populated: true, bindsTo: ["run-step.scope"] },
-      { unit: "ntscensusrunp1xaaaa-w0.slice", transient: true, active: true, populated: false, bindsTo: ["ntscensusrunp1xaaaa.slice"] },
-      { unit: "nts.slice", transient: false, active: true, populated: false, bindsTo: [] },
-      { unit: "app-example.slice", transient: true, active: true, populated: false, bindsTo: [] },
+      { unit: "ntscensusrunp1xaaaa.slice", transient: true, active: true, populated: true, bindsTo: ["run-step.scope"], ageMs: 7_200_000 },
+      { unit: "ntscensusrunp1xaaaa-w0.slice", transient: true, active: true, populated: false, bindsTo: ["ntscensusrunp1xaaaa.slice"], ageMs: 7_200_000 },
+      { unit: "nts.slice", transient: false, active: true, populated: false, bindsTo: [], ageMs: 7_200_000 },
+      { unit: "app-example.slice", transient: true, active: true, populated: false, bindsTo: [], ageMs: 7_200_000 },
     ],
     activeUnits: ["run-step.scope", "ntscensusrunp1xaaaa.slice", "ntscensusrunp1xaaaa-w0.slice", "nts.slice", "app-example.slice"],
     now: NOW,
@@ -248,7 +248,7 @@ test("the count names an empty nts slice bound to no active unit, and only that"
     cache, local: ["main", "coordinator/pending-records"], remote: ["main", "verified"], pulls: [],
     worktrees: [{ path: "/home/u/Projects/nts", branch: "refs/heads/main" }],
   };
-  const left: Slice = { unit: "ntscensusleftp2xbbbb.slice", transient: true, active: true, populated: false, bindsTo: [] };
+  const left: Slice = { unit: "ntscensusleftp2xbbbb.slice", transient: true, active: true, populated: false, bindsTo: [], ageMs: 7_200_000 };
   const judged = (slices: Slice[], activeUnits: string[] = []) => count(input(t, { ...clean, slices, activeUnits }), KEEP);
   const lines = (result: ReturnType<typeof count>) => result.red.filter(line => line.startsWith("slice "));
 
@@ -258,6 +258,15 @@ test("the count names an empty nts slice bound to no active unit, and only that"
 
   // Bound to a unit that is no longer active: as unbound.
   assert.deepEqual(lines(judged([{ ...left, bindsTo: ["gone.scope"] }], [])), lines(unbound));
+  // Younger than the count's own hour, or its age unread: a run on older
+  // code may still start in it; a note, never a stop.
+  const young = judged([{ ...left, ageMs: 5 * 60_000 }]);
+  assert.deepEqual(lines(young), []);
+  assert.deepEqual(young.stoppable, []);
+  assert.deepEqual(young.notes, [`slice ${left.unit}: empty and bound to no active unit, but only 5 min old; a run may still start in it`]);
+  const unreadAge = judged([{ ...left, ageMs: null }]);
+  assert.deepEqual(lines(unreadAge), []);
+  assert.deepEqual(unreadAge.notes, [`slice ${left.unit}: empty and bound to no active unit, its age unread; kept until a count can prove it old`]);
   // Bound to a live unit: it stops with that unit, not the sweep's.
   assert.deepEqual(lines(judged([{ ...left, bindsTo: ["live.scope"] }], ["live.scope"])), []);
   // Populated, inactive, structural (not transient) and another tool's: not a leftover.
