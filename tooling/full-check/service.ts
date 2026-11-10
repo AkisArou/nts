@@ -78,7 +78,7 @@ import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing
 import { prepareTree } from "../landing/service.ts";
 import { look, newJob, start, startAgain, systemdUnits, writeOutcome, type Outcome, type Seen, type Units, type UnitSpec } from "./background.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
-import { count as countMachine, countLines, gather, sweep as sweepLeftovers, type CountResult, type Removable } from "./count.ts";
+import { count as countMachine, countLines, gather, stopSlices as stopCountedSlices, sweep as sweepLeftovers, type CountResult, type Removable, type Stoppable } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
@@ -1016,6 +1016,8 @@ export type CountEffects = {
   count: () => CountResult;
   /** Remove the leftovers the count found removable (count.ts's sweep), a line each. */
   sweep: (removable: readonly Removable[]) => string[];
+  /** Stop the slices the count found stoppable (count.ts's stopSlices), by name, a line each. */
+  stopSlices: (stoppable: readonly Stoppable[]) => string[];
   /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
   prunePool: () => string[];
   /** Recomputable cache upkeep, report-only. */
@@ -1043,14 +1045,15 @@ export function countOnce(fx: CountEffects): CountRecord {
   let result: CountResult;
   try {
     result = fx.count();
-    // The three kinds of leftover the full check removes itself; what is left is
+    // The kinds of leftover the full check removes itself; what is left is
     // counted again, so the count says what remains.
-    if (result.removable.length) {
+    if (result.removable.length || result.stoppable.length) {
       for (const line of fx.sweep(result.removable)) fx.log(line);
+      for (const line of fx.stopSlices(result.stoppable)) fx.log(line);
       result = fx.count();
     }
   }
-  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${message(error)}`], removable: [] }; }
+  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${message(error)}`], removable: [], stoppable: [] }; }
   const counted = { at: fx.now().toISOString(), verdict: result.verdict, lines: [...result.red, ...result.notes] };
   for (const line of countLines(result)) fx.log(line);
   writeCount(fx.file, counted);
@@ -1221,6 +1224,7 @@ function countEffects(layout: Layout): CountEffects {
   return {
     count: () => countMachine({ ...gather(ROOT), held: recordingPins(readState(layout.state)) }),
     sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),
+    stopSlices: stoppable => stopCountedSlices(stoppable),
     prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
     pruneNodeCache: () => pruneNodeCompileCache(),
     file: layout.count,

@@ -297,12 +297,13 @@ regression becomes a task.
   does not name with its reason. Rules alone let 1,364 branches, 185
   worktrees and 120 GB of evidence folders pile up by 11-06; a red step does
   not.
-- **The full check removes three kinds of leftover itself,** each hour before
+- **The full check removes four kinds of leftover itself,** each hour before
   it counts: what a stopped run left in a tool's scratch root past that
   root's age in `keep.json`, with nothing inside it changed since; its own
   pins of commits that are neither `main` nor `verified`, a day old and named
-  by no task; and the logs of gates run by hand (`~/.cache/nts-gate/runs`)
-  past three days, with nothing inside them changed for those three days.
+  by no task; the logs of gates run by hand (`~/.cache/nts-gate/runs`)
+  past three days, with nothing inside them changed for those three days;
+  and an empty nts slice bound to no active unit, stopped by name.
   Everything else the count only reports.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
@@ -324,10 +325,11 @@ the first node task.
 - **This workflow** (11-06): the landing check, the full check after
   landing, tasks that land within a day, agents per task, and the fresh start
   ([log](records/notebooks/decisions-log.md#fresh-start-11-06)).
-- **The full check sweeps three kinds of leftover** (11-08, 11-09): stopped
-  runs' scratch past its age by `keep.json`'s rule, its own pins of commits
-  that are neither `main` nor `verified`, and the logs of gates run by hand
-  past three days; every other red line stays report-only
+- **The full check sweeps four kinds of leftover** (11-08, 11-09, 11-10):
+  stopped runs' scratch past its age by `keep.json`'s rule, its own pins of
+  commits that are neither `main` nor `verified`, the logs of gates run by
+  hand past three days, and an empty nts slice bound to no active unit,
+  stopped by name; every other red line stays report-only
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08),
   [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09)).
 - **Tasks are GitHub issues** (11-09): one issue per task under its stream's

@@ -10,6 +10,7 @@ import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { toolingSlice, toolingSlicePrefix } from "../gate/tooling-slice.ts";
+import { bindsToProperties, ownUnit } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -188,15 +189,21 @@ export class MemoryRun {
       // cap of its own beneath it, and a kill there is pressure, never a
       // case's.
       this.#outer = stepBudget ? cappingSlice() : undefined;
-      this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes);
+      // Bound to the unit this process runs in, as a gate run's root slice
+      // is: a census killed without close() -- its unit stopped, itself
+      // SIGKILLed -- takes its slices with that unit instead of leaving
+      // them loaded for ever (#633). No named unit, no binding: the count
+      // finds what such a run leaves.
+      this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes, ownUnit());
     } catch (error) {
       failedSetup(error, () => this.close());
     }
   }
-  #slice(unit: string, bytes: number | null, parent?: string) {
+  #slice(unit: string, bytes: number | null, boundTo: string | undefined, parent?: string) {
     try {
       const cap = bytes === null ? [] : ["MemoryMax", "t", String(bytes)];
-      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3), "Description", "s", `nts census resident cap ${this.prefix}`, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "0");
+      const binds = bindsToProperties(boundTo);
+      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + binds.length / 4), "Description", "s", `nts census resident cap ${this.prefix}`, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
       // StartTransientUnit returns a queued job, not an active slice. Join
       // that job before reading ControlGroup or any kernel memory controls.
       systemctl("start", unit);
@@ -231,7 +238,9 @@ export class MemoryRun {
     const limit = bytes === 0 ? this.budgetBytes : Math.min(integer(bytes, "resident worker budget"), this.budgetBytes);
     const slice = `${this.prefix}-w${index}.slice`;
     if (!/^[a-zA-Z0-9]+$/.test(String(index))) throw new Error("invalid resident worker index");
-    const group = this.#slice(slice, limit, this.group);
+    // A worker slice binds to its run's aggregate, as a step slice binds
+    // to its run's root: stopping the aggregate stops every worker.
+    const group = this.#slice(slice, limit, this.slice, this.group);
     const worker = new MemoryWorker(this, slice, group, limit);
     this.#workers.push(worker);
     return worker;

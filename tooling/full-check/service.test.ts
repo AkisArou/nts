@@ -1018,8 +1018,9 @@ test("the benchmarks unit's command is the job its own tree's service.ts parses,
 function counting(repo: Repository, options: Partial<CountEffects> = {}): CountEffects & { lines: string[] } {
   const lines: string[] = [];
   return {
-    count: () => ({ verdict: "PASS", red: [], notes: [], removable: [] }),
+    count: () => ({ verdict: "PASS", red: [], notes: [], removable: [], stoppable: [] }),
     sweep: () => [],
+    stopSlices: () => [],
     prunePool: () => [],
     pruneNodeCache: () => ({root:"private fixture",state:"missing",removed:0,removedBytes:0,kept:0,keptBytes:0,changed:0,skipped:0,errors:[]}),
     file: repo.layout.count,
@@ -1036,7 +1037,7 @@ test("the hourly count runs the pool's upkeep first and writes what it found to 
   let fail = false;
   const fx = counting(repo, {
     prunePool: () => { order.push("pool"); if (fail) throw new Error("the pool's lock is held"); return ["pool: removed tree 3, free and idle 4d 2h"]; },
-    count: () => { order.push("count"); return { verdict: "FAIL", red: ["branch x (on the machine): named by no open issue"], notes: ["not counted: GitHub's branches"], removable: [] }; },
+    count: () => { order.push("count"); return { verdict: "FAIL", red: ["branch x (on the machine): named by no open issue"], notes: ["not counted: GitHub's branches"], removable: [], stoppable: [] }; },
   });
   const counted = { at: fx.now().toISOString(), verdict: "FAIL", lines: ["branch x (on the machine): named by no open issue", "not counted: GitHub's branches"] };
   assert.deepEqual(countOnce(fx), counted);
@@ -1257,19 +1258,23 @@ test('records use the newly verified environment, in the records tree at the ver
   await assertSessionClosed(observed);
 });
 
-test("the hourly count removes what it found removable, then counts again", t => {
+test("the hourly count removes what it found removable, stops what it found stoppable, then counts again", t => {
   const repo = repository(t);
   const left = { path: "/home/u/.cache/nts-messages/run-stopped", why: "left by tooling/messages.ts 2.0 days ago" };
+  const slice = { unit: "ntscensusleftp2xbbbb.slice", why: "empty and bound to no active unit" };
   let counted = 0;
-  const swept: string[][] = [];
+  const swept: string[][] = [], stopped: string[][] = [];
   const fx = counting(repo, {
     count: () => counted++ === 0
-      ? { verdict: "FAIL", red: ["~/.cache/nts-messages: 1 folder(s) left"], notes: [], removable: [left] }
-      : { verdict: "PASS", red: [], notes: [], removable: [] },
+      ? { verdict: "FAIL", red: ["~/.cache/nts-messages: 1 folder(s) left"], notes: [], removable: [left], stoppable: [slice] }
+      : { verdict: "PASS", red: [], notes: [], removable: [], stoppable: [] },
     sweep: removable => { swept.push(removable.map(one => one.path)); return [`swept ~/.cache/nts-messages/run-stopped: ${left.why}`]; },
+    stopSlices: stoppable => { stopped.push(stoppable.map(one => one.unit)); return [`stopped ${slice.unit}: ${slice.why}`]; },
   });
   assert.equal(countOnce(fx).verdict, "PASS");
   assert.deepEqual(swept, [[left.path]]);
+  assert.deepEqual(stopped, [[slice.unit]]);
+  assert.ok(fx.lines.includes(`stopped ${slice.unit}: ${slice.why}`), fx.lines.join("\n"));
   assert.equal(counted, 2, "what is left is counted after the sweep");
   assert.equal(readCount(repo.layout.count)?.verdict, "PASS");
   assert.ok(fx.lines.includes(`swept ~/.cache/nts-messages/run-stopped: ${left.why}`), fx.lines.join("\n"));

@@ -25,8 +25,10 @@ type Cancellation = { slice: string; signal: string; record: string; before: str
 // seam, after the failing trigger has been judged, to exercise SIGTERM with
 // either an intact seal or a seal changed at that exact cancellation boundary.
 function cancellationScope(gate: string, source: string, own: string, corrupt: boolean): void {
-  const scopes = join(gate, "scopes"); mkdirSync(scopes);
-  for (const name of readdirSync(join(source, "scopes"))) if (name !== "step-scope.ts") symlinkSync(join(source, "scopes", name), join(scopes, name));
+  const scopes = join(gate, "scopes"); mkdirSync(scopes, { recursive: true });
+  // A scopes file the oracle fixture's closure already copied (a helper a
+  // census import now reaches) stands as itself; link the rest.
+  for (const name of readdirSync(join(source, "scopes"))) if (name !== "step-scope.ts" && !existsSync(join(scopes, name))) symlinkSync(join(source, "scopes", name), join(scopes, name));
   const actual = new URL("./step-scope.ts", import.meta.url).href;
   writeFileSync(join(scopes, "step-scope.ts"), `
 import assert from 'node:assert/strict';

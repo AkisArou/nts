@@ -1,12 +1,14 @@
 // The count step (docs/workflow.md, The machine: "the full check counts
 // them"). Red when a branch is named by no open issue nor docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
-// keeps, or a node test root a stopped runner left (n<pid in base 36>). Each
-// red line names the item and why. It reports; of what it reports, the full
-// check removes three kinds itself (sweep below): what a stopped run left in a
-// tool's scratch root past that root's age, the full check's own pins of
-// commits that are neither main nor verified, and the logs of gates run by
-// hand past three days. Everything else stays a line.
+// keeps, or a node test root a stopped runner left (n<pid in base 36>), or
+// an empty nts slice is bound to no active unit. Each red line names the
+// item and why. It reports; of what it reports, the full check removes
+// four kinds itself (sweep below): what a stopped run left in a tool's
+// scratch root past that root's age, the full check's own pins of commits
+// that are neither main nor verified, the logs of gates run by hand past
+// three days, and an empty nts slice bound to no active unit, stopped by
+// name. Everything else stays a line.
 //
 //   node tooling/full-check/count.ts          the lines, exit 0 green, 1 red, 2 not counted
 //
@@ -41,6 +43,18 @@ import { issueOfBranch } from "../tasks/branch.ts";
 
 export type Pull = { number: number; headRefName: string; baseRefName?: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
+/** One loaded slice of the user manager, as the count judges it. */
+export type Slice = {
+  unit: string;
+  /** Started transiently by a tool, not a structural parent slice systemd holds of its own. */
+  transient: boolean;
+  /** ActiveState is active. */
+  active: boolean;
+  /** Its cgroup holds a process (its own or a descendant's), the kernel's `populated`. */
+  populated: boolean;
+  /** Its `BindsTo` units. */
+  bindsTo: string[];
+};
 export type Unavailable = { error: string };
 const unavailable = (x: unknown): x is Unavailable => typeof x === "object" && x !== null && "error" in x;
 
@@ -66,12 +80,18 @@ export type CountInput = {
   verified: string | null;
   /** The pins the full check's records units record with now (service.ts's recordingPins), by folder name. */
   held?: string[];
+  /** The user manager's loaded slices, or why they could not be read. */
+  slices: Slice[] | Unavailable;
+  /** The names of the user manager's units whose ActiveState is active. */
+  activeUnits: string[];
   now: number;
 };
 
 /** A leftover of a kind the full check removes itself, and why it is one. */
 export type Removable = { path: string; why: string };
-export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[]; removable: Removable[] };
+/** A slice the count found empty and bound to no active unit: the sweep stops it by name. */
+export type Stoppable = { unit: string; why: string };
+export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[]; removable: Removable[]; stoppable: Stoppable[] };
 
 const EXEMPT = new Set(["main", "verified"]);
 const DAY = 86_400_000;
@@ -314,12 +334,33 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
   red.push(...nodeTestRoots(input, context));
 }
 
+/**
+ * An empty nts slice bound to no active unit is a run's leftover (#633): a
+ * slice a tool started transiently (a gate step's, a census's), holding no
+ * process, whose binding -- the unit it stops with -- is gone or never
+ * existed. A populated slice is a run's, a slice bound to an active unit
+ * stops with it, and a structural parent (`nts.slice`, not transient) is
+ * systemd's hierarchy, not a run's. Each leftover is named, and the sweep
+ * stops it by name.
+ */
+function sliceLines(input: CountInput, red: string[], notes: string[], stoppable: Stoppable[]): void {
+  if (unavailable(input.slices)) { notes.push(`not counted: the user manager's slices (${input.slices.error})`); return; }
+  const active = new Set(input.activeUnits);
+  for (const slice of [...input.slices].sort((a, b) => a.unit.localeCompare(b.unit))) {
+    if (!slice.unit.startsWith("nts") || !slice.unit.endsWith(".slice") || !slice.transient || !slice.active || slice.populated) continue;
+    if (slice.bindsTo.some(unit => active.has(unit))) continue;
+    red.push(`slice ${slice.unit}: empty and bound to no active unit; the run that started it is gone`);
+    stoppable.push({ unit: slice.unit, why: "empty and bound to no active unit" });
+  }
+}
+
 export function count(input: CountInput, keep: Record<string, Keep> = readKeep()): CountResult {
-  const red: string[] = [], notes: string[] = [], removable: Removable[] = [];
+  const red: string[] = [], notes: string[] = [], removable: Removable[] = [], stoppable: Stoppable[] = [];
   branchLines(input, red, notes);
   worktreeLines(input, red);
   cacheLines(input, keep, red, removable);
-  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, removable };
+  sliceLines(input, red, notes, stoppable);
+  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, removable, stoppable };
 }
 
 /**
@@ -341,6 +382,71 @@ export function sweep(removable: readonly Removable[], cache: string): string[] 
       return `swept ${shown}: ${why}`;
     } catch (error) {
       return `kept ${shown}: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
+}
+
+const CGROUP = "/sys/fs/cgroup";
+/** Whether a cgroup holds a process, the kernel's own answer; a group already gone holds none. */
+function populated(group: string): boolean {
+  try {
+    const value = /^populated ([01])$/m.exec(readFileSync(join(CGROUP, group, "cgroup.events"), "utf8"))?.[1];
+    if (value === undefined) throw new Error(`slice cgroup ${group} has no populated answer`);
+    return value === "1";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+type Shown = { loaded: boolean; transient: boolean; active: boolean; bindsTo: string[]; group: string };
+/** `systemctl show` for slices, by unit: one call, its blocks parsed. A unit the manager does not hold reads LoadState other than loaded. */
+function showSlices(units: string[]): Map<string, Shown> {
+  const shown = new Map<string, Shown>();
+  if (!units.length) return shown;
+  const result = spawnSync("systemctl", ["--user", "show", ...units, "--property=Id,LoadState,ActiveState,Transient,BindsTo,ControlGroup"], { encoding: "utf8", maxBuffer: 1 << 26 });
+  if (result.error || result.status !== 0) throw new Error(`systemctl show: ${result.error?.message ?? result.stderr.trim() ?? `exit ${result.status}`}`);
+  for (const block of result.stdout.split("\n\n")) {
+    const fields = new Map(block.split("\n").filter(Boolean).map(line => { const at = line.indexOf("="); return [line.slice(0, at), line.slice(at + 1)] as const; }));
+    const id = fields.get("Id");
+    if (!id) continue;
+    shown.set(id, {
+      loaded: fields.get("LoadState") === "loaded",
+      transient: fields.get("Transient") === "yes",
+      active: fields.get("ActiveState") === "active",
+      bindsTo: (fields.get("BindsTo") ?? "").split(" ").filter(Boolean),
+      group: fields.get("ControlGroup") ?? "",
+    });
+  }
+  return shown;
+}
+
+const isActive = (unit: string) => spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout?.trim() === "active";
+
+/**
+ * Stop the slices the count found stoppable, by name and nothing else:
+ * each is read again first -- a slice populated since the count, or bound
+ * to a unit active now, is a live run's and is kept. Returns a line per
+ * slice, stopped or kept with the reason.
+ */
+export function stopSlices(stoppable: readonly Stoppable[]): string[] {
+  return stoppable.map(({ unit, why }) => {
+    try {
+      if (!/^nts[a-zA-Z0-9_.:@-]*\.slice$/.test(unit)) throw new Error("not an nts slice the count names");
+      const shown = showSlices([unit]).get(unit);
+      if (!shown?.loaded) return `stopped ${unit}: ${why}; already gone`;
+      // Inactive first: a slice collected since the count reads loaded and
+      // not transient under `show`, which loads it by name to answer.
+      if (!shown.active) return `stopped ${unit}: ${why}; already inactive`;
+      if (!shown.transient) return `kept ${unit}: not a transient slice a tool started`;
+      if (populated(shown.group)) return `kept ${unit}: holds a process again`;
+      const bound = shown.bindsTo.find(target => isActive(target));
+      if (bound) return `kept ${unit}: bound to ${bound}, which is active`;
+      const stopped = spawnSync("systemctl", ["--user", "stop", unit], { encoding: "utf8", timeout: 120_000 });
+      if (stopped.error || stopped.status !== 0) throw new Error(`systemctl stop: ${stopped.error?.message ?? stopped.stderr.trim() ?? `exit ${stopped.status}`}`);
+      return `stopped ${unit}: ${why}`;
+    } catch (error) {
+      return `kept ${unit}: ${error instanceof Error ? error.message : String(error)}`;
     }
   });
 }
@@ -367,6 +473,26 @@ export function parseWorktrees(porcelain: string): Worktree[] {
   });
 }
 
+/** The user manager's slices and its active units' names, or why they could not be read. */
+function readSlices(repo: string): { slices: Slice[]; activeUnits: string[] } | Unavailable {
+  try {
+    const listed = read("systemctl", ["--user", "list-units", "--all", "--type=slice", "--output=json"], repo);
+    if (!listed.ok) return { error: listed.error };
+    const units = read("systemctl", ["--user", "list-units", "--all", "--output=json"], repo);
+    if (!units.ok) return { error: units.error };
+    const activeUnits = (JSON.parse(units.out) as { unit: string; active: string }[]).filter(unit => unit.active === "active").map(unit => unit.unit);
+    const candidates = (JSON.parse(listed.out) as { unit: string }[]).map(slice => slice.unit).filter(unit => unit.startsWith("nts"));
+    const shown = showSlices(candidates);
+    const slices: Slice[] = candidates.flatMap(unit => {
+      const slice = shown.get(unit);
+      return slice?.loaded ? [{ unit, transient: slice.transient, active: slice.active, populated: slice.group ? populated(slice.group) : false, bindsTo: slice.bindsTo }] : [];
+    });
+    return { slices, activeUnits };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export function gather(repo: string, cache = join(homedir(), ".cache"), now = Date.now()): CountInput {
   const git = (args: string[]) => {
     const r = read("git", args, repo);
@@ -377,6 +503,7 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const remote = read("git", ["ls-remote", "--heads", "origin"], repo);
   const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
+  const slices = readSlices(repo);
   return {
     plan: git(["show", "main:docs/plan.md"]),
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),
@@ -389,6 +516,8 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
     root: git(["rev-parse", "--show-toplevel"]).trim(),
     main: sha("main"),
     verified: sha("verified"),
+    slices: unavailable(slices) ? slices : slices.slices,
+    activeUnits: unavailable(slices) ? [] : slices.activeUnits,
     now,
   };
 }

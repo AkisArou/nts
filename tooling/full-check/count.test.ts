@@ -8,7 +8,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, uti
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { count, parseWorktrees, planNames, readKeep, sweep, writerNames, type CountInput, type Keep } from "./count.ts";
+import { count, parseWorktrees, planNames, readKeep, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import { spawnTest, waitFor } from "../gate/test-wait.ts";
+import { bindsToProperties } from "../gate/scopes/bound-slice.ts";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
@@ -140,6 +145,16 @@ function input(t: TestContext, overrides: Partial<CountInput> = {}): CountInput 
     root: overrides.root ?? rootFixture(t),
     main: MAIN,
     verified: VERIFIED,
+    // Slices within the rules: a run's populated aggregate, its empty
+    // worker bound to it, the hierarchy's structural parents, and another
+    // tool's transient slice.
+    slices: [
+      { unit: "ntscensusrunp1xaaaa.slice", transient: true, active: true, populated: true, bindsTo: ["run-step.scope"] },
+      { unit: "ntscensusrunp1xaaaa-w0.slice", transient: true, active: true, populated: false, bindsTo: ["ntscensusrunp1xaaaa.slice"] },
+      { unit: "nts.slice", transient: false, active: true, populated: false, bindsTo: [] },
+      { unit: "app-example.slice", transient: true, active: true, populated: false, bindsTo: [] },
+    ],
+    activeUnits: ["run-step.scope", "ntscensusrunp1xaaaa.slice", "ntscensusrunp1xaaaa-w0.slice", "nts.slice", "app-example.slice"],
     now: NOW,
     ...overrides,
   };
@@ -215,7 +230,7 @@ test("a machine within the rules is green; one the count could not read is not",
     cache, local: ["main", "coordinator/pending-records"], remote: ["main", "verified"], pulls: [],
     worktrees: [{ path: "/home/u/Projects/nts", branch: "refs/heads/main" }, { path: join(cache, "nts-pool/1"), head: MAIN }],
   };
-  assert.deepEqual(count(input(t, clean), KEEP), { verdict: "PASS", red: [], notes: [], removable: [] });
+  assert.deepEqual(count(input(t, clean), KEEP), { verdict: "PASS", red: [], notes: [], removable: [], stoppable: [] });
   const blind = count(input(t, { ...clean, remote: { error: "network unreachable" }, pulls: { error: "gh: not logged in" }, issues: { error: "gh: not logged in" } }), KEEP);
   assert.equal(blind.verdict, "INSTRUMENT");
   assert.deepEqual(blind.notes, [
@@ -223,6 +238,76 @@ test("a machine within the rules is green; one the count could not read is not",
     "not counted: GitHub's open pull requests (gh: not logged in), so no branch is named by one",
     "not counted: GitHub's open issues (gh: not logged in), so no branch is named by one",
   ]);
+});
+
+test("the count names an empty nts slice bound to no active unit, and only that", t => {
+  const cache = mkdtempSync(join(tmpdir(), "full-check-cache-"));
+  t.after(() => rmSync(cache, { recursive: true, force: true }));
+  mkdirSync(join(cache, "nts-pool/1"), { recursive: true });
+  const clean: Partial<CountInput> = {
+    cache, local: ["main", "coordinator/pending-records"], remote: ["main", "verified"], pulls: [],
+    worktrees: [{ path: "/home/u/Projects/nts", branch: "refs/heads/main" }],
+  };
+  const left: Slice = { unit: "ntscensusleftp2xbbbb.slice", transient: true, active: true, populated: false, bindsTo: [] };
+  const judged = (slices: Slice[], activeUnits: string[] = []) => count(input(t, { ...clean, slices, activeUnits }), KEEP);
+  const lines = (result: ReturnType<typeof count>) => result.red.filter(line => line.startsWith("slice "));
+
+  const unbound = judged([left]);
+  assert.deepEqual(lines(unbound), [`slice ${left.unit}: empty and bound to no active unit; the run that started it is gone`]);
+  assert.deepEqual(unbound.stoppable, [{ unit: left.unit, why: "empty and bound to no active unit" }]);
+
+  // Bound to a unit that is no longer active: as unbound.
+  assert.deepEqual(lines(judged([{ ...left, bindsTo: ["gone.scope"] }], [])), lines(unbound));
+  // Bound to a live unit: it stops with that unit, not the sweep's.
+  assert.deepEqual(lines(judged([{ ...left, bindsTo: ["live.scope"] }], ["live.scope"])), []);
+  // Populated, inactive, structural (not transient) and another tool's: not a leftover.
+  assert.deepEqual(lines(judged([{ ...left, populated: true }])), []);
+  assert.deepEqual(lines(judged([{ ...left, active: false }])), []);
+  assert.deepEqual(lines(judged([{ ...left, unit: "nts.slice", transient: false }])), []);
+  assert.deepEqual(lines(judged([{ ...left, unit: "app-example.slice" }])), []);
+
+  const blind = judged([], []);
+  assert.equal(blind.verdict, "PASS");
+  const unread = count(input(t, { ...clean, slices: { error: "no user bus" } }), KEEP);
+  assert.equal(unread.verdict, "INSTRUMENT");
+  assert.deepEqual(unread.notes, ["not counted: the user manager's slices (no user bus)"]);
+});
+
+test("the sweep stops an empty unbound slice by name, and keeps a populated one and one bound to a live unit", async t => {
+  const id = randomUUID().slice(0, 8);
+  const empty = `ntscount${id}empty.slice`, held = `ntscount${id}held.slice`, bound = `ntscount${id}bound.slice`, scope = `ntscount${id}.scope`;
+  const ctl = (...args: string[]) => spawnTest("systemctl", ["--user", ...args], { encoding: "utf8" });
+  const stop = (unit: string) => { try { ctl("stop", unit); } catch { /* already gone */ } };
+  t.after(() => { stop(scope); stop(bound); stop(held); stop(empty); });
+  const startSlice = (unit: string, bindsTo?: string) => {
+    const binds = bindsToProperties(bindsTo);
+    const started = spawnTest("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
+      "StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(3 + binds.length / 4),
+      "Description", "s", "nts count sweep test", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0"], { encoding: "utf8" });
+    assert.equal(started.status, 0, started.stderr);
+    assert.equal(ctl("start", unit).status, 0);
+  };
+  startSlice(empty);
+  startSlice(held);
+  const sleeper = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", `--unit=${scope}`, `--slice=${held}`, "sleep", "60"], { stdio: "ignore" });
+  t.after(() => sleeper.kill("SIGKILL"));
+  const group = ctl("show", held, "--property=ControlGroup", "--value").stdout.trim();
+  await waitFor("the held slice populated by its scope", () => /^populated 1$/m.test(readFileSync(`/sys/fs/cgroup${group}/cgroup.events`, "utf8")));
+  startSlice(bound, scope);
+
+  const why = "empty and bound to no active unit";
+  const lines = stopSlices([{ unit: empty, why }, { unit: held, why }, { unit: bound, why }]);
+  assert.deepEqual(lines, [
+    `stopped ${empty}: ${why}`,
+    `kept ${held}: holds a process again`,
+    `kept ${bound}: bound to ${scope}, which is active`,
+  ]);
+  // Unloaded reads from the unit list, not `show`: showing a collected
+  // slice loads it again by name to answer.
+  const listed = () => (JSON.parse(ctl("list-units", "--all", "--type=slice", "--output=json").stdout) as { unit: string }[]).map(u => u.unit);
+  await waitFor("the stopped slice unloaded", () => !listed().includes(empty));
+  assert.ok(listed().includes(held));
+  assert.ok(listed().includes(bound));
 });
 
 test("git's worktree listing is read with its detached, branch and prunable entries", () => {
@@ -250,7 +335,7 @@ test("keep.json is well formed, and a writer is matched by any of the ways the t
   assert.throws(() => readKeep(bad), /nts-x\/y has an unknown kind tidy/);
 });
 
-test("the count lists the three kinds of leftover the full check removes itself, and only those", t => {
+test("the count lists the kinds of folder leftover the full check removes itself, and only those", t => {
   const cache = cacheFixture(t), at = (path: string, ageDays: number) => { const when = new Date(NOW - ageDays * DAY); utimesSync(join(cache, path), when, when); };
   const pin = (sha: string, by: string) => {
     mkdirSync(join(cache, "nts-pins", sha));

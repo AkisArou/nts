@@ -8,6 +8,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { newToolingSlice } from "../tooling-slice.ts";
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
+import { bindsToProperties, ownUnit } from "./bound-slice.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -30,10 +31,11 @@ export type StepLimits = { max: number };
 function startSlice(slice: string, boundTo: string, limits?: StepLimits): string {
   let created = false;
   const memory = limits ? ["MemoryMax", "t", String(limits.max), "MemorySwapMax", "t", "0"] : [];
+  const binds = bindsToProperties(boundTo);
   try {
     checked("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
-      "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", String(5 + memory.length / 3), "Description", "s", "nts owned gate step",
-      "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "BindsTo", "as", "1", boundTo, "After", "as", "1", boundTo, ...memory, "0"]);
+      "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", String(3 + memory.length / 3 + binds.length / 4), "Description", "s", "nts owned gate step",
+      "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, ...memory, "0"]);
     created = true;
     control("start", slice); // Join StartTransientUnit's queued job.
     const group = control("show", slice, "--property=ControlGroup", "--value");
@@ -236,8 +238,8 @@ export class GateScopes {
     mkdirSync(this.directory, { recursive: true });
     this.slice = newToolingSlice(false, env);
     this.owner = ownerFile ? claimRunOwner(ownerFile, this.slice, reapPreviousRoot) : undefined;
-    const owner = readFileSync("/proc/self/cgroup", "utf8").trim().split("/").at(-1)!;
-    if (!/^[a-zA-Z0-9_.:@-]+\.(?:scope|service)$/.test(owner)) throw new Error("gate lacks a named systemd owner");
+    const owner = ownUnit();
+    if (!owner) throw new Error("gate lacks a named systemd owner");
     this.group = startSlice(this.slice, owner);
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     this.owner?.complete({ group: this.group, device: String(identity.dev), inode: String(identity.ino) });

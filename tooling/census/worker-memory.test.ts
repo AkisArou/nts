@@ -746,3 +746,41 @@ console.log(JSON.stringify({ own, effective, status: killed.status, cause, group
   try { assert.notEqual(readFileSync(join(CGROUP, fixture.group, "memory.max"), "utf8").trim(), "max"); }
   finally { fixture.close(); }
 });
+
+// #633: slices bound to the unit their process runs in stop with it. The
+// census below never closes its run: it is killed, its unit stopped, and
+// none of its slices may stay loaded.
+test("a census killed inside its unit leaves none of its slices once that unit stops", { timeout: TEST_HANG_MS }, async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const unit = `nts-test-633-killed-${process.pid}-${Math.floor(Math.random() * 1e9)}.service`;
+  const ready = join(directory, "ready.json");
+  const ctl = (...args: string[]) => spawnTest("systemctl", ["--user", ...args], { encoding: "utf8" });
+  const show = (name: string, property: string) => ctl("show", name, `--property=${property}`, "--value").stdout.trim();
+  let slices: string[] = [];
+  t.after(() => {
+    for (const name of [unit, ...slices]) { try { ctl("stop", name); } catch { /* already gone */ } }
+  });
+  const census = `import { writeFileSync } from "node:fs";
+const { MemoryRun } = await import(${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});
+const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "killed633" });
+const worker = run.worker(0, 64 * 2 ** 20);
+writeFileSync(${JSON.stringify(ready)}, JSON.stringify({ slice: run.slice, worker: worker.slice }));
+setInterval(() => {}, 60_000);`;
+  const started = spawnTest("systemd-run", ["--user", `--unit=${unit}`, "--collect", "--quiet",
+    "-p", "LimitCORE=0", process.execPath, "--input-type=module", "-e", census], { encoding: "utf8" }, "the killed census's unit");
+  assert.equal(started.status, 0, started.stderr);
+  await waitFor("the census's slices named in its ready file", () => existsSync(ready));
+  const named = JSON.parse(readFileSync(ready, "utf8")) as { slice: string; worker: string };
+  slices = [named.slice, named.worker];
+  assert.equal(show(named.slice, "BindsTo"), unit, "the aggregate binds to the unit its process runs in");
+  assert.equal(show(named.worker, "BindsTo"), named.slice, "a worker binds to its aggregate");
+  ctl("kill", "--signal=SIGKILL", unit);
+  ctl("stop", unit);
+  // Unloaded reads from the unit list, not `show`: showing a collected
+  // slice loads it again by name to answer.
+  const listed = () => (JSON.parse(ctl("list-units", "--all", "--type=slice", "--output=json").stdout) as { unit: string }[]).map(u => u.unit);
+  for (const slice of slices) {
+    await waitFor(`${slice} unloaded with its unit`, () => !listed().includes(slice));
+  }
+});
