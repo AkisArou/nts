@@ -855,6 +855,8 @@ pub(super) fn least_lengths(func: &Func, analysis: &Analysis) -> LeastLengths {
     let idom = immediate_dominators(func);
     let dominates = |over: BlockId, under: BlockId| dominated(&idom, over, under);
     let mut arrays: FxHashMap<ValueId, Grown> = FxHashMap::default();
+    // Asked of every allocated array, so the arrays' readers are read once.
+    let readers = super::ArrayReaders::new();
     for (index, op) in func.values.iter().enumerate() {
         let OpKind::ArrayNew { length, .. } = op.kind else {
             continue;
@@ -864,7 +866,7 @@ pub(super) fn least_lengths(func: &Func, analysis: &Analysis) -> LeastLengths {
         if allocated.is_bottom() || !allocated.lo.is_finite() || allocated.lo < 0.0 {
             continue;
         }
-        if only_grows_here(func, array) {
+        if only_grows_here(func, &readers, array) {
             arrays.insert(
                 array,
                 Grown {
@@ -966,11 +968,14 @@ fn pushed_array(kind: &OpKind) -> Option<ValueId> {
 
 /// Whether every use of `array` leaves its length to this function, and none
 /// shortens it. See [`LeastLengths`].
-fn only_grows_here(func: &Func, array: ValueId) -> bool {
-    !super::carried_by_an_edge(func, array)
-        && func.values.iter().all(|op| {
-            pushed_array(&op.kind) == Some(array)
-                || super::use_keeps_the_array_here(array, &op.kind)
+///
+/// Asked of the array's own readers: a value that does not read it keeps it
+/// by the shared escape test's first clause, and a `push` of it reads it.
+fn only_grows_here(func: &Func, readers: &super::ArrayReaders, array: ValueId) -> bool {
+    !readers.carried(func, array)
+        && readers.readers(func, array).iter().all(|reader| {
+            let kind = &func.values[reader.0 as usize].kind;
+            pushed_array(kind) == Some(array) || super::use_keeps_the_array_here(array, kind)
         })
 }
 

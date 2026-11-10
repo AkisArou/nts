@@ -15,6 +15,8 @@ pub(super) struct Reads {
 
 impl Reads {
     pub(super) fn analyze(func: &Func) -> Self {
+        // Asked of every array read here, so the arrays' readers are read once.
+        let readers = super::ArrayReaders::new();
         let Accesses {
             reads,
             stores,
@@ -22,7 +24,9 @@ impl Reads {
         } = Accesses::collect(func);
         let reads: Vec<_> = reads
             .into_iter()
-            .filter(|(array, _)| local_writers(func, *array) && stores.contains_key(array))
+            .filter(|(array, _)| {
+                local_writers(func, &readers, *array) && stores.contains_key(array)
+            })
             .collect();
         let mut initialized = FxHashSet::default();
         if reads.is_empty() {
@@ -97,7 +101,7 @@ impl Reads {
                     dominates(fill.exit, block)
                         && ((finite_range && range.hi < fill.length)
                             || (!checked
-                                && super::allocated_length_is_exact(func, array, true)
+                                && super::allocated_length_is_exact(func, &readers, array, true)
                                 && allocated_length(func, &analysis, array) == Some(fill.length)))
                 }) {
                     initialized.insert(read);
@@ -230,14 +234,13 @@ fn stores_every_iteration(
 
 /// A checker element type and a previous store cannot close an alias that may
 /// delete a slot or shrink the array. Reuse the existing confinement predicate.
-fn local_writers(func: &Func, array: ValueId) -> bool {
+///
+/// Asked of the array's own readers: a value that does not read it keeps it by
+/// the shared escape test's first clause.
+fn local_writers(func: &Func, readers: &super::ArrayReaders, array: ValueId) -> bool {
     matches!(func.value(array).kind, OpKind::ArrayNew { .. })
-        && func
-            .values
-            .iter()
-            .all(|op| super::use_keeps_the_array_here(array, &op.kind))
-        && !func
-            .blocks
-            .iter()
-            .any(|block| super::verify::terminator_operands(&block.terminator).contains(&array))
+        && readers.readers(func, array).iter().all(|reader| {
+            super::use_keeps_the_array_here(array, &func.values[reader.0 as usize].kind)
+        })
+        && !readers.read_by_a_terminator(func, array)
 }

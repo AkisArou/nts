@@ -4522,8 +4522,17 @@ fn store_names_a_slot_that_exists(func: &Func, array: ValueId, index: ValueId) -
 /// backends, since this function was written). So an array a block argument
 /// carries is handed on like any other ([`carried_by_an_edge`]); a `return`
 /// still is not, having nothing after it to be wrong about.
+///
+/// **Asked of the array's own readers** ([`ArrayReaders`]): a value that does
+/// not read the array keeps its length by the whitelist's first clause, so only
+/// the values that name it can take the claim away.
 #[must_use]
-pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) -> bool {
+pub fn allocated_length_is_exact(
+    func: &Func,
+    readers: &ArrayReaders,
+    array: ValueId,
+    growable: bool,
+) -> bool {
     if !matches!(func.values[array.0 as usize].kind, OpKind::ArrayNew { .. }) {
         return false;
     }
@@ -4535,11 +4544,105 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         // all.
         return true;
     }
-    !carried_by_an_edge(func, array)
-        && func
-            .values
-            .iter()
-            .all(|op| use_keeps_the_allocated_length(func, array, &op.kind))
+    !readers.carried(func, array)
+        && readers.readers(func, array).iter().all(|reader| {
+            use_keeps_the_allocated_length(func, array, &func.values[reader.0 as usize].kind)
+        })
+}
+
+/// The arrays one function allocates, each with the values whose operations
+/// read it, and the arrays a jump or branch passes on: what
+/// [`allocated_length_is_exact`] needs, read from the function at its first
+/// question and kept for the rest of a pass over that function.
+///
+/// The question used to walk every value of the function for each array it
+/// was asked about, and its callers ask it per access: a function's arrays
+/// times its values, which kept jetstream-ai-astar compiling past ten CPU
+/// minutes. Which values *name* an array is all this records, and no pass that
+/// asks changes it while it asks -- the bounds pass clears `checked` flags
+/// between questions, and each question reads its readers' kinds as they are
+/// then -- so the answers stay the ones the walk gave. One per function: it
+/// answers for the function it was first asked about.
+#[derive(Debug, Default)]
+pub struct ArrayReaders(std::cell::OnceCell<ReaderIndex>);
+
+#[derive(Debug)]
+struct ReaderIndex {
+    /// Each allocated array's readers, among every value of the function (as
+    /// the whitelist is asked of every value, placed or not).
+    readers: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// The allocated arrays an edge passes to a block parameter
+    /// ([`carried_by_an_edge`]).
+    carried: rustc_hash::FxHashSet<ValueId>,
+    /// The allocated arrays any terminator reads: an edge's argument, a
+    /// branch's condition or a `return`.
+    by_terminator: rustc_hash::FxHashSet<ValueId>,
+}
+
+impl ArrayReaders {
+    /// For one function, read from it when first asked.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn of(&self, func: &Func) -> &ReaderIndex {
+        self.0.get_or_init(|| {
+            let allocated = |value: ValueId| {
+                matches!(func.values[value.0 as usize].kind, OpKind::ArrayNew { .. })
+            };
+            let mut readers: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
+                rustc_hash::FxHashMap::default();
+            for (at, op) in func.values.iter().enumerate() {
+                let reader = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+                verify::reads(&op.kind).each(|value| {
+                    if allocated(value) {
+                        let read = readers.entry(value).or_default();
+                        if read.last() != Some(&reader) {
+                            read.push(reader);
+                        }
+                    }
+                });
+            }
+            let carried = func
+                .blocks
+                .iter()
+                .flat_map(|block| {
+                    edge_arguments(&block.terminator)
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                })
+                .filter(|value| allocated(*value))
+                .collect();
+            let by_terminator = func
+                .blocks
+                .iter()
+                .flat_map(|block| verify::terminator_operands(&block.terminator))
+                .filter(|value| allocated(*value))
+                .collect();
+            ReaderIndex {
+                readers,
+                carried,
+                by_terminator,
+            }
+        })
+    }
+
+    /// The values of `func` whose operations read the allocated `array`.
+    pub(super) fn readers(&self, func: &Func, array: ValueId) -> &[ValueId] {
+        self.of(func).readers.get(&array).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether an edge passes the allocated `array` to a block parameter.
+    pub(super) fn carried(&self, func: &Func, array: ValueId) -> bool {
+        self.of(func).carried.contains(&array)
+    }
+
+    /// Whether any terminator of `func` reads the allocated `array`.
+    pub(super) fn read_by_a_terminator(&self, func: &Func, array: ValueId) -> bool {
+        self.of(func).by_terminator.contains(&array)
+    }
 }
 
 /// Whether a jump or branch passes `value` to a block parameter: an alias whose
@@ -9608,6 +9711,7 @@ mod tests {
         assert!(!arrays_can_grow(&quiet));
         assert!(allocated_length_is_exact(
             &quiet.funcs[0],
+            &ArrayReaders::new(),
             ValueId(1),
             false
         ));
@@ -9619,6 +9723,7 @@ mod tests {
         assert!(arrays_can_grow(&growing));
         assert!(!allocated_length_is_exact(
             &growing.funcs[0],
+            &ArrayReaders::new(),
             ValueId(1),
             true
         ));
@@ -9641,6 +9746,7 @@ mod tests {
         assert!(arrays_can_grow(&captured));
         assert!(!allocated_length_is_exact(
             &captured.funcs[0],
+            &ArrayReaders::new(),
             ValueId(1),
             true
         ));
@@ -9649,6 +9755,7 @@ mod tests {
         assert!(arrays_can_grow(&read_only));
         assert!(allocated_length_is_exact(
             &read_only.funcs[0],
+            &ArrayReaders::new(),
             ValueId(1),
             true
         ));

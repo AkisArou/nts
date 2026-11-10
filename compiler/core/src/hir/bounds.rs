@@ -79,6 +79,9 @@ fn buffers_can_move(program: &Program) -> bool {
 pub fn eliminate_checks(func: &mut Func, analysis: &Analysis, lengths: &ProgramLengths) -> usize {
     let mut removed = 0;
     let least = super::loops::least_lengths(func, analysis);
+    // Read once. Clearing a `checked` flag below changes no value's operands,
+    // and each question reads the readers' kinds as they are then.
+    let readers = super::ArrayReaders::new();
     for access in checked_accesses(func, analysis.growable()) {
         let Access {
             at,
@@ -92,6 +95,7 @@ pub fn eliminate_checks(func: &mut Func, analysis: &Analysis, lengths: &ProgramL
             analysis,
             lengths,
             &least,
+            &readers,
             at,
             array,
             index,
@@ -239,6 +243,10 @@ pub fn prove_stores_cannot_grow(
     let lengths = ProgramLengths::of(program, &analyses);
     let mut proven = Vec::new();
     for (at, (func, analysis)) in program.funcs.iter().zip(&analyses).enumerate() {
+        // Once per function, at the first store that asks: each is a walk over
+        // it, and nothing here changes it.
+        let least = std::cell::OnceCell::new();
+        let readers = super::ArrayReaders::new();
         for access in checked_accesses(func, false) {
             if !super::store_may_grow(func, &func.values[access.value.0 as usize].kind) {
                 continue;
@@ -247,7 +255,8 @@ pub fn prove_stores_cannot_grow(
                 func,
                 analysis,
                 &lengths,
-                &super::loops::least_lengths(func, analysis),
+                least.get_or_init(|| super::loops::least_lengths(func, analysis)),
+                &readers,
                 access.at,
                 access.array,
                 access.index,
@@ -275,6 +284,7 @@ fn provably_in_bounds(
     analysis: &Analysis,
     lengths: &ProgramLengths,
     least: &super::loops::LeastLengths,
+    readers: &super::ArrayReaders,
     at: BlockId,
     array: ValueId,
     index: ValueId,
@@ -297,7 +307,7 @@ fn provably_in_bounds(
     // container's *shape* says, and what the program proved about a length it
     // read for itself. `BOTTOM` from the first means "nothing structural to
     // say" rather than an empty set, so it is not narrowed into.
-    let structural = length_facts(func, analysis, lengths, least, at, array);
+    let structural = length_facts(func, analysis, lengths, least, readers, at, array);
     let computed = computed_length(func, analysis, at, array);
     let length = if structural.is_bottom() {
         computed
@@ -315,7 +325,7 @@ fn provably_in_bounds(
     let growable = analysis.growable();
     guards_hold
         && analysis.guarded_by(at, index, |candidate| {
-            names_the_length_of(func, growable, array, candidate)
+            names_the_length_of(func, readers, growable, array, candidate)
         })
 }
 
@@ -461,7 +471,13 @@ fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
     }
 }
 
-fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: ValueId) -> bool {
+fn names_the_length_of(
+    func: &Func,
+    readers: &super::ArrayReaders,
+    growable: bool,
+    array: ValueId,
+    candidate: ValueId,
+) -> bool {
     let candidate = widened_from(func, candidate);
     if let OpKind::Length(of) = func.values[candidate.0 as usize].kind
         && same_array(func, of, array)
@@ -486,7 +502,7 @@ fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: V
     matches!(
         func.values[array.0 as usize].kind,
         OpKind::ArrayNew { length, .. } if length == candidate
-    ) && super::allocated_length_is_exact(func, array, growable)
+    ) && super::allocated_length_is_exact(func, readers, array, growable)
 }
 
 /// The value a length was converted from, where the conversion cannot change
@@ -553,6 +569,7 @@ fn length_facts(
     analysis: &Analysis,
     lengths: &ProgramLengths,
     least: &super::loops::LeastLengths,
+    readers: &super::ArrayReaders,
     at: BlockId,
     array: ValueId,
 ) -> Facts {
@@ -569,7 +586,7 @@ fn length_facts(
             _ => Facts::BOTTOM,
         },
         OpKind::ArrayNew { length, .. }
-            if super::allocated_length_is_exact(func, array, analysis.growable()) =>
+            if super::allocated_length_is_exact(func, readers, array, analysis.growable()) =>
         {
             analysis.get_at(at, *length)
         }

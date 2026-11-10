@@ -445,6 +445,7 @@ fn value_readers(
 #[allow(clippy::too_many_lines)] // One dominator walk owns all query-use rules.
 fn analysis_query_inputs(
     func: &Func,
+    readers: &super::ArrayReaders,
     growable: bool,
     work: &mut WorkCounts,
 ) -> Vec<rustc_hash::FxHashSet<ValueId>> {
@@ -548,7 +549,7 @@ fn analysis_query_inputs(
             match &func.values[array.0 as usize].kind {
                 OpKind::ArrayNew { length, .. }
                     if *exact_allocations.entry(array).or_insert_with(|| {
-                        super::allocated_length_is_exact(func, array, growable)
+                        super::allocated_length_is_exact(func, readers, array, growable)
                     }) =>
                 {
                     if queried[index].insert(*length) {
@@ -1050,9 +1051,11 @@ fn solve_with_limits(
     widen_after: u32,
 ) -> (Analysis, u32) {
     let tuples = local_tuples(func);
+    // Read once: every `.length` transfer asks it, every round.
+    let arrays = super::ArrayReaders::new();
     let mut work_counts = WorkCounts::default();
     let parameter_positions = parameter_positions(func, &mut work_counts);
-    let query_uses = analysis_query_inputs(func, context.whole.growable, &mut work_counts);
+    let query_uses = analysis_query_inputs(func, &arrays, context.whole.growable, &mut work_counts);
     let liveness = super::liveness::analyze_with_additional_uses(func, &query_uses)
         .expect("complete flow liveness");
     let live_in: Vec<_> = func
@@ -1187,7 +1190,7 @@ fn solve_with_limits(
         // nor a global value changed.
         transfer_block(
             func,
-            (context, &tuples),
+            (context, &tuples, &arrays),
             block,
             &refinements_now,
             &mut values,
@@ -1231,6 +1234,7 @@ fn solve_with_limits(
         func,
         context,
         &tuples,
+        &arrays,
         widen_after,
         &order,
         &incoming,
@@ -1286,6 +1290,7 @@ fn assert_one_full_sweep_is_stable(
     func: &Func,
     context: &Context,
     tuples: &LocalTuples,
+    readers: &super::ArrayReaders,
     widen_after: u32,
     order: &[BlockId],
     incoming: &[Vec<(BlockId, usize)>],
@@ -1345,7 +1350,7 @@ fn assert_one_full_sweep_is_stable(
         checked_entry[index] = Some(refinements.clone());
         transfer_block(
             func,
-            (context, tuples),
+            (context, tuples, readers),
             *block,
             &refinements,
             &mut checked_values,
@@ -2025,7 +2030,7 @@ fn written_field(context: &Context, object: &super::HirType, field: u32) -> Fact
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn transfer_op(
     func: &Func,
-    context: &Context,
+    (context, readers): (&Context, &super::ArrayReaders),
     op: &super::Op,
     refinements: &Refinements,
     facts: &mut FactView<'_>,
@@ -2104,7 +2109,12 @@ fn transfer_op(
                 // call may come back longer, and the object does not move so
                 // every reference sees the new length.
                 OpKind::ArrayNew { length, .. }
-                    if super::allocated_length_is_exact(func, *array, context.whole.growable) =>
+                    if super::allocated_length_is_exact(
+                        func,
+                        readers,
+                        *array,
+                        context.whole.growable,
+                    ) =>
                 {
                     facts.get(refinements, *length).narrow(bound)
                 }
@@ -2286,7 +2296,7 @@ fn transfer_op(
 )]
 fn transfer_block(
     func: &Func,
-    (context, tuples): (&Context, &LocalTuples),
+    (context, tuples, readers): (&Context, &LocalTuples, &super::ArrayReaders),
     block: BlockId,
     refinements: &Refinements,
     values: &mut [Facts],
@@ -2337,7 +2347,7 @@ fn transfer_block(
             let mut facts = FactView::new(values, result);
             match local_tuple_read(tuples, &op.kind, &local, &mut facts) {
                 Some(stored) => stored,
-                None => transfer_op(func, context, op, &local, &mut facts),
+                None => transfer_op(func, (context, readers), op, &local, &mut facts),
             }
         };
         // Monotone: a value's fact only grows as more paths reach it, so joining
@@ -3407,7 +3417,8 @@ mod tests {
     fn repeated_checked_reads_expand_each_strings_lengths_once() {
         let body = repeated_checked_string_queries(32, 32);
         let mut work = WorkCounts::default();
-        let queried = analysis_query_inputs(&body, false, &mut work);
+        let queried =
+            analysis_query_inputs(&body, &crate::hir::ArrayReaders::new(), false, &mut work);
         assert_eq!(queried[0].len(), 32);
         assert_eq!(work.query_length_entries, 32);
     }
@@ -3416,7 +3427,8 @@ mod tests {
     fn repeated_checked_reads_with_one_length_expand_one_entry() {
         let body = repeated_checked_string_queries(1, 32);
         let mut work = WorkCounts::default();
-        let queried = analysis_query_inputs(&body, false, &mut work);
+        let queried =
+            analysis_query_inputs(&body, &crate::hir::ArrayReaders::new(), false, &mut work);
         assert_eq!(queried[0].len(), 1);
         assert_eq!(work.query_length_entries, 1);
     }
@@ -3488,7 +3500,12 @@ mod tests {
             2,
         );
         body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
-        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        let queried = analysis_query_inputs(
+            &body,
+            &crate::hir::ArrayReaders::new(),
+            false,
+            &mut WorkCounts::default(),
+        );
         assert!(queried[3].is_empty());
     }
 
@@ -3539,7 +3556,12 @@ mod tests {
             1,
         );
         body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
-        let query_uses = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        let query_uses = analysis_query_inputs(
+            &body,
+            &crate::hir::ArrayReaders::new(),
+            false,
+            &mut WorkCounts::default(),
+        );
         assert!(query_uses[1].contains(&ValueId(1)));
         let liveness = super::super::liveness::analyze_with_additional_uses(&body, &query_uses)
             .expect("query-use liveness is complete");
@@ -3660,7 +3682,12 @@ mod tests {
             )],
             0,
         );
-        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        let queried = analysis_query_inputs(
+            &body,
+            &crate::hir::ArrayReaders::new(),
+            false,
+            &mut WorkCounts::default(),
+        );
         assert!(queried[0].contains(&ValueId(0)));
     }
 
@@ -3701,7 +3728,12 @@ mod tests {
             )],
             1,
         );
-        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        let queried = analysis_query_inputs(
+            &body,
+            &crate::hir::ArrayReaders::new(),
+            false,
+            &mut WorkCounts::default(),
+        );
         assert!(queried[0].contains(&ValueId(2)));
     }
 
@@ -4273,7 +4305,11 @@ mod tests {
 
         transfer_block(
             &body,
-            (&context, &local_tuples(&body)),
+            (
+                &context,
+                &local_tuples(&body),
+                &crate::hir::ArrayReaders::new(),
+            ),
             BlockId(2),
             &refinements,
             &mut values,
@@ -4326,7 +4362,11 @@ mod tests {
         result = TransferResult::default();
         transfer_block(
             &body,
-            (&context, &local_tuples(&body)),
+            (
+                &context,
+                &local_tuples(&body),
+                &crate::hir::ArrayReaders::new(),
+            ),
             BlockId(2),
             &refinements,
             &mut values,
