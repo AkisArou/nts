@@ -13,8 +13,8 @@
 // an incremental build is a chain of crates and reaches about a third of its
 // eight slots. Measured only by a full gate, whose walls stretch with its
 // contention, it is what its row in the step table grants, or what it was
-// seen to reach when that is more -- `tooling` holds one slot and runs its
-// test files side by side. The selection costs
+// seen to reach when that is more -- `tests` holds eight slots, and each of
+// its test binaries runs threads of its own. The selection costs
 //
 //   build + max(work / slots, the longest step)
 //

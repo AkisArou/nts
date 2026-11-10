@@ -4,6 +4,7 @@
 # on a run you have checked is healthy. Last written at 7adb331620df.
 # Source run: 7adb331620df-1792833313369/summary.json (2026-10-24, green; on-device skip accepted).
 # typescript-c, typescript-llvm, typescript-jvm: recorded 2026-11-06 by run.mjs on those three steps alone (green), NTS_BIN = the e0395d27506b pin, nothing else running.
+# tooling: dd693564a80f-1794274632206/summary.json (2026-11-10, the landing check's green run of dd693564a80f, once its longest test files ran side by side).
 build	0.1	0.1	8
 clippy	0.3	0.2	6
 format	2.6	2.4	1
@@ -31,7 +32,7 @@ assembles	1061.0	1079.2	8
 c-compiles	44.6	54.7	8
 types	1370.5	183.8	8
 jvm-verifies	1470.6	1804.1	8
-tooling	35.3	46.6	1
+tooling	117.1	1625.6	1
 primitives	0.0	0.0	1
 tests	219.1	3253.8	8
 corpus	3.4	26.2	6

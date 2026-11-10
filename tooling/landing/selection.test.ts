@@ -152,10 +152,9 @@ test("a landing step whose prerequisite all.sh does not define is refused, never
 });
 
 test("a step's seconds are its CPU over its granted width, or its measured parallelism when more", () => {
-  const tooling = rows.get("tooling")!; // one slot; its runner starts test files side by side
-  assert.equal(stepSeconds(measured(849), tooling, budget), 849);
-  assert.ok(Math.abs(stepSeconds(measured(849, 394), tooling, budget) - 394) < 1e-9);
-  const tests = rows.get("tests")!; // eight slots
+  const tests = rows.get("tests")!; // eight slots; each test binary runs threads of its own
+  assert.equal(stepSeconds(measured(4800), tests, budget), 600);
+  assert.ok(Math.abs(stepSeconds(measured(4800, 300), tests, budget) - 300) < 1e-9, "sixteen cores reached on eight slots");
   assert.equal(stepSeconds(measured(4800, 2000), tests, budget), 600, "a contended run does not narrow the granted width");
   assert.equal(stepSeconds(measured(100, 1), tests, budget), 100 / 24, "never wider than the run");
   const frontends = { ...budget, frontends: 2 };
