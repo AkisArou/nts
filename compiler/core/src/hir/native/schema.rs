@@ -664,12 +664,18 @@ pub(crate) fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -
 
 /// Every class a class declaration extends, nearest first, by
 /// [`base_class`] steps. `None` when the chain leads back to a class
-/// already in it: such a chain's ancestry is unknown -- a checker
-/// error a captured snapshot can still carry -- and a caller must
-/// not read it as the empty chain, so each one fails closed
-/// (`docs/architecture.md`: a cut-off ancestry walk is unknown, not
-/// empty). Each class is visited at most once, so the walk ends by
-/// construction, with no cap.
+/// already in it: such a chain's ancestry is unknown, not the empty
+/// chain (`docs/architecture.md`). No captured program can carry
+/// one into lowering: a looping `extends` is a checker error
+/// (TS2506, in every spelling probed for #497: direct, indirect,
+/// cross-file, ambient and namespace-qualified), and every lowering
+/// entry refuses a snapshot with checker errors before it lowers
+/// (the CLI's `emission::snapshot_diagnostics` in `Input::open` and
+/// `typechecked_snapshot` for the inspection dumps, and the
+/// differential's and bench's captures). The `None` guards a
+/// malformed or hand-built snapshot, where each caller takes the
+/// conservative answer (not a native class). Each class is visited
+/// at most once, so the walk ends by construction, with no cap.
 fn ancestry(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<Vec<NodeId>> {
     let mut seen = rustc_hash::FxHashSet::default();
     seen.insert(declaration);
