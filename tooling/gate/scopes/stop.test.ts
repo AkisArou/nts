@@ -180,7 +180,7 @@ fi
     const bin = join(own, "bin"); mkdirSync(bin);
     writeFileSync(join(bin, "systemd-run"), `#!${process.execPath}
 const {spawnSync}=require('node:child_process'),args=process.argv.slice(2);
-if(args.some(arg=>arg.startsWith('--unit=')&&arg.endsWith('-step.scope')))process.exit(1);
+if(args.some(arg=>/^--unit=nts-s[a-z0-9]{8}[.]scope$/.test(arg)))process.exit(1);
 const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.status??1);
 `, { mode: 0o755 });
     launcher.PATH = `${bin}:${launcher.PATH}`;

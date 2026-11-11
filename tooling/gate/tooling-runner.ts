@@ -10,7 +10,7 @@ import {availableParallelism,homedir} from "node:os";
 import {join,relative} from "node:path";
 import {randomUUID} from "node:crypto";
 import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
-import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
+import {checkedUnitName,newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
 import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 
@@ -184,7 +184,7 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   const boundary=supervisorWorkerBoundary();
   const before=boundary?memoryEvents(boundary.group,true).oom:0;
   const parent=boundary?{...process.env,NTS_TOOLING_SLICE:boundary.slice}:process.env;
-  const slice=newToolingSlice(options.fixture,parent),unit=`${slice.slice(0,-6)}-files`;
+  const slice=newToolingSlice(options.fixture,parent),unit=checkedUnitName(`${slice.slice(0,-6)}-f.scope`).slice(0,-6);
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
   const directory=mkdtempSync(join(temporary,"tooling-report-")),complete=join(directory,"complete.json"),nonce=randomUUID();
   const request=readToolingRequest({files,idleMs:options.idleMs,execArgv:options.execArgv,complete,nonce});
@@ -232,7 +232,7 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     if(args[0]==="--worker") {
       if(args[1]===undefined)throw new ToolingInstrumentError("tooling-setup","missing tooling worker request");
       const request=readToolingRequest(JSON.parse(args[1])),slice=toolingSlice();
-      if(!slice||!readFileSync("/proc/self/cgroup","utf8").includes(`/${slice}/${slice.slice(0,-6)}-files.scope`))throw new ToolingInstrumentError("tooling-setup","tooling worker is outside its owned slice/scope");
+      if(!slice||!readFileSync("/proc/self/cgroup","utf8").includes(`/${slice}/${slice.slice(0,-6)}-f.scope`))throw new ToolingInstrumentError("tooling-setup","tooling worker is outside its owned slice/scope");
       // Only the supervising worker owns the public step-result capability.
       // Expected negative controls in test children must never overwrite it.
       const resultEnv={NTS_GATE_STEP_RESULT:process.env.NTS_GATE_STEP_RESULT,NTS_GATE_STEP:process.env.NTS_GATE_STEP,NTS_GATE_STEP_ATTEMPT:process.env.NTS_GATE_STEP_ATTEMPT};

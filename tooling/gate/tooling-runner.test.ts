@@ -9,18 +9,55 @@ import {PassThrough} from "node:stream";
 import {randomUUID} from "node:crypto";
 import {waitFor,spawnTest} from "./test-wait.ts";
 import {completedTestFailure,readToolingCompletion,readToolingRequest,ToolingTestOwners,runScopedTooling,toolingTimesReport} from "./tooling-runner.ts";
-import {readStepInstrument} from "./step-result.ts";
-import {newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix} from "./tooling-slice.ts";
+import {readStepInstrument,ToolingInstrumentError} from "./step-result.ts";
+import {checkedUnitName,childSlice,newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix,unitComponent} from "./tooling-slice.ts";
 
 test("tooling slice names preserve nesting and cannot name unrelated units",()=>{
   const parent=newToolingSlice(true,{}),env={NTS_TOOLING_SLICE:parent};
   const child=newToolingSlice(true,env);
-  assert.ok(child.startsWith(parent.slice(0,-6)+"-test"));
+  assert.ok(child.startsWith(parent.slice(0,-6)+"-t"));
   assert.equal(toolingSlice({NTS_TOOLING_SLICE:child}),child);
   assert.deepEqual(toolingSliceArgs(env),[`--slice=${parent}`]);
   assert.equal(toolingSlicePrefix("ntscensuscontrol",env),parent.slice(0,-6)+"-ntscensuscontrol");
   assert.equal(toolingSlicePrefix("ntscensuscontrol",{}),"ntscensuscontrol");
   assert.throws(()=>stopToolingSlice("app.slice"),/invalid tooling slice/);
+});
+
+test("full-check worker names fit twice their physical nesting depth",()=>{
+  let parent=newToolingSlice(false,{});
+  // Full check, run, step, tooling file, inner step, census and nested case.
+  const ancestry=["r","r","w","r","r","r","w","c","w0","c","w0"] as const;
+  for(let repetition=0;repetition<2;repetition++){
+    for(const role of ancestry){
+      const before=parent;
+      parent=childSlice(parent,role==="r"||role==="c"?unitComponent(role):role);
+      assert.ok(parent.startsWith(before.slice(0,-6)+"-"));
+      assert.ok(Buffer.byteLength(parent)<=255);
+    }
+    if(repetition===0)assert.ok(Buffer.byteLength(parent)<128,parent);
+  }
+  assert.equal(Buffer.byteLength(parent),179);
+});
+
+test("tooling naming accepts existing receipts and compact children of older launchers",()=>{
+  const legacy=`nts-test-tooling-${"1".repeat(32)}-run${"2".repeat(32)}-workers.slice`;
+  assert.equal(toolingSlice({NTS_TOOLING_SLICE:legacy}),legacy);
+  const child=newToolingSlice(true,{NTS_TOOLING_SLICE:legacy});
+  assert.ok(child.startsWith(legacy.slice(0,-6)+"-t"));
+  assert.equal(toolingSlice({NTS_TOOLING_SLICE:child}),child);
+  assert.throws(()=>toolingSlice({NTS_TOOLING_SLICE:"nts-r12345678-unrelated.slice"}),/invalid tooling slice/);
+});
+
+test("unit-name budget exhaustion is a named setup instrument before manager entry",()=>{
+  assert.equal(checkedUnitName("a".repeat(249)+".scope").length,255);
+  const exhausted=(error:unknown)=>error instanceof ToolingInstrumentError
+    &&error.kind==="tooling-setup"&&/unit-name budget exhausted.*255-byte limit/.test(error.message);
+  assert.throws(()=>checkedUnitName("a".repeat(250)+".scope"),exhausted);
+  assert.throws(()=>checkedUnitName(String.fromCodePoint(0xe9).repeat(125)+".scope"),exhausted);
+  let parent=newToolingSlice(false,{});
+  for(let level=0;level<23;level++)parent=newToolingSlice(false,{NTS_TOOLING_SLICE:parent});
+  assert.equal(Buffer.byteLength(parent),249);
+  assert.throws(()=>newToolingSlice(false,{NTS_TOOLING_SLICE:parent}),exhausted);
 });
 
 test("a hung fixture's service and census scopes leave with its slice while a sibling stays active",async t=>{

@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
-import { toolingSlice, toolingSlicePrefix } from "../gate/tooling-slice.ts";
+import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-process.ts";
 
@@ -206,8 +206,8 @@ export class MemoryRun {
     // nested gates retain room for their worker slices under systemd's limit.
     const suffix = `c${randomUUID().replaceAll("-", "").slice(0, 16)}`;
     this.#description = `nts census resident cap ${id}`;
-    this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix("nts" + suffix);
-    this.slice = `${this.prefix}.slice`;
+    this.slice = childSlice(boundary?.slice ?? toolingSlice(), unitComponent("c"));
+    this.prefix = this.slice.slice(0, -6);
     this.directory = join(homedir(), ".cache/nts/worker-memory", "nts" + suffix);
     mkdirSync(this.directory, { recursive: true });
     try {
@@ -263,7 +263,7 @@ export class MemoryRun {
     if (this.#closed) throw new Error("resident run is closed");
     const limit = bytes === 0 ? this.budgetBytes : Math.min(integer(bytes, "resident worker budget"), this.budgetBytes);
     if (!/^[a-zA-Z0-9]+$/.test(String(index))) throw new Error("invalid resident worker index");
-    const slice = `${this.prefix}-w${this.#workers.length.toString(36)}.slice`;
+    const slice = childSlice(this.slice, `w${this.#workers.length.toString(36)}`);
     // A worker slice binds to its run's aggregate, as a step slice binds
     // to its run's root: stopping the aggregate stops every worker.
     const group = this.#slice(slice, limit, this.slice, this.group);
@@ -320,7 +320,7 @@ export class MemoryWorker {
   scope(command: string, args: readonly string[], environment: NodeJS.ProcessEnv = process.env): MemoryScope {
     if (this.#closed) throw new Error("resident worker is closed");
     // Scope names do not encode ancestry. The explicit --slice owns it.
-    const unit = `ntscensus${randomUUID().replaceAll("-", "")}.scope`;
+    const unit = checkedUnitName(`nts-${unitComponent("c")}.scope`);
     const ready = join(this.run.directory, `${unit}.ready`);
     const scope = {
       unit, ready,

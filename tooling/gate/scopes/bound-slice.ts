@@ -5,6 +5,7 @@
 // a census's slices bound to nothing and a census killed mid-run left them
 // loaded for ever.
 import { readFileSync } from "node:fs";
+import { childSlice } from "../tooling-slice.ts";
 
 /**
  * The user-manager unit this process runs in, from its cgroup: the last
@@ -33,5 +34,5 @@ export function bindsToProperties(unit: string | undefined): string[] {
 
 /** The retained worker boundary is a sibling of the step's supervisor. */
 export function stepWorkersSlice(stepSlice: string): string {
-  return stepSlice.slice(0, -6) + "-workers.slice";
+  return childSlice(stepSlice, "w");
 }

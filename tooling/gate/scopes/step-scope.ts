@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
-import { newToolingSlice } from "../tooling-slice.ts";
+import { checkedUnitName, childSlice, newToolingSlice, unitComponent } from "../tooling-slice.ts";
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
@@ -153,10 +153,10 @@ export class StepScope {
   private held: StepLimits;
   constructor(root: GateScopes, limits: StepLimits) {
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
-    this.unit = `${this.slice.slice(0, -6)}-step.scope`;
-    this.group = startSlice(this.slice, root.slice);
-    this.supervisorSlice = this.slice.slice(0, -6) + "-supervisor.slice";
+    this.unit = checkedUnitName(`nts-${unitComponent("s")}.scope`);
+    this.supervisorSlice = childSlice(this.slice, "s");
     this.workerSlice = stepWorkersSlice(this.slice);
+    this.group = startSlice(this.slice, root.slice);
     this.entryPath = join(root.directory, `step-entry-${this.nonce}.json`);
     try {
       this.supervisorGroup = startSlice(this.supervisorSlice, this.slice, limits);
