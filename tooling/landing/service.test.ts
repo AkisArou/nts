@@ -29,7 +29,8 @@ function selection(steps: string[]): Selection {
 
 function service(t: TestContext, overrides: Partial<Config> = {}) {
   const s = scratchRepo(t, "landing-service");
-  const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env });
+  // A fixed disk reading: the host's free disk must not decide whether a fixture's tree can be made.
+  const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env }, undefined, { freeBytes: () => 1000 * 2 ** 30 });
   pool.init(2);
   const logs: string[] = [], checked: string[] = [];
   const config: Config = {
