@@ -18,7 +18,7 @@ function fixture(t:Parameters<typeof fixtureEnvironment>[0]){
 const [ready,release]=process.argv.slice(1);
 const opened=new Promise(resolve=>{const observer=watch(${JSON.stringify(root)},()=>{if(existsSync(release)){observer.close();resolve();}});});
 writeFileSync(ready,'ready');await opened;process.stdout.write('complete');`;
-  return {root,ready,release,env,body,frame:()=>readStepInstrument(env.NTS_GATE_STEP_RESULT,'integrity','controlled')};
+  return {root,ready,release,env,body,frame:()=>readStepInstrument(join(root,'result.json'),'integrity','controlled')};
 }
 async function ready(f:ReturnType<typeof fixture>,running:Promise<unknown>){
   let stopped=false;void running.finally(()=>{stopped=true;}).catch(()=>{});
