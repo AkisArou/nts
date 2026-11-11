@@ -4,7 +4,7 @@
 // of each kind, and the command, which prints and writes nothing.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -221,6 +221,10 @@ function conformanceTree(t: { after(fn: () => void): void }): string {
     { path: "test/language/a.js", outcome: "pass", detail: "" }, { path: "test/language/b.js", outcome: "fail", detail: "nts: uncaught Test262Error: #1" }]);
   test262("c", "annexb", "test/annexB", [{ path: "test/annexB/c.js", outcome: "pass", detail: "" }]);
   test262("llvm", "language", "test/language", [{ path: "test/language/a.js", outcome: "pass", detail: "" }]);
+  // The cases themselves, whose front matter says who judges each: b.js is a parse negative, which only the frontend decides.
+  put("third_party/test262/test/language/a.js", "/*---\nfeatures: []\n---*/\nassert.sameValue(1, 1);\n");
+  put("third_party/test262/test/language/b.js", "/*---\nnegative:\n  type: SyntaxError\n  phase: parse\n---*/\n$DONOTEVALUATE();\nvar a\\u0061;\n");
+  put("third_party/test262/test/annexB/c.js", "/*---\nnegative:\n  phase: runtime\n  type: Test262Error\n---*/\nthrow new Test262Error();\n");
   for (const name of ["recorded", "new"]) put(`tests/typescript/family/${name}.ts`, "/*---\nfeatures: []\n---*/\nassert.sameValue(1, 1);\n");
   for (const name of ["recorded", "new"]) put(`benchmarks/cases/${name}/case.ts`, "export function run(): number { return 1; }\n");
   put("tests/programs/recorded/tsconfig.json", '{"files":["src/main.ts"]}\n');
@@ -253,13 +257,14 @@ test("the conformance summary counts each backend's records by outcome, with wha
     scopes: { compile: { cases: 1, outcomes } }, pending: 1 });
   assert.deepEqual(summary.backends, {
     c: {
-      test262: { cases: 3, outcomes: { fail: 1, pass: 2 }, slices: {
+      test262: { cases: 3, outcomes: { fail: 1, pass: 2 }, runtime: { cases: 2, outcomes: { pass: 2 } }, frontend: { cases: 1, outcomes: { fail: 1 } }, slices: {
         annexb: slice("c", "annexb", "test/annexB", { pass: 1 }), language: slice("c", "language", "test/language", { fail: 1, pass: 1 }) } },
       typescript: typescript("c", { pass: 1 }),
       benchmarks: benchmarks("c", { pass: 1 }),
     },
     llvm: {
-      test262: { cases: 1, outcomes: { pass: 1 }, slices: { language: slice("llvm", "language", "test/language", { pass: 1 }) } },
+      test262: { cases: 1, outcomes: { pass: 1 }, runtime: { cases: 1, outcomes: { pass: 1 } }, frontend: { cases: 0, outcomes: {} },
+        slices: { language: slice("llvm", "language", "test/language", { pass: 1 }) } },
       typescript: typescript("llvm", { refused: 1 }),
       benchmarks: benchmarks("llvm", { refused: 1 }),
     },
@@ -271,6 +276,13 @@ test("the conformance summary counts each backend's records by outcome, with wha
       dex: { file: DEX_RECORD, cases: 2, outcomes: { "build-failure": 1, pass: 1 }, pending: 1 },
     },
   });
+});
+
+test("without the test262 checkout, test262's records keep their totals and no split of who judges them", t => {
+  const root = conformanceTree(t);
+  rmSync(join(root, "third_party/test262"), { recursive: true });
+  const { c } = conformanceSummary(root).backends;
+  assert.deepEqual([c?.test262?.cases, c?.test262?.outcomes, "runtime" in (c?.test262 ?? {}), "frontend" in (c?.test262 ?? {})], [3, { fail: 1, pass: 2 }, false, false]);
 });
 
 test("a record filed under another backend's name, or one that does not parse, is an error, not a summary", t => {

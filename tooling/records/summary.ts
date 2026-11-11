@@ -81,8 +81,12 @@
 //   backends  { <backend>: { <record>: ... } }; a record a backend lacks is absent
 //     test262        results/test262/<backend>/<slice>.tsv, the cases of each
 //                    test262 directory that ran to a verdict:
-//                    { cases, outcomes,
+//                    { cases, outcomes, runtime, frontend,
 //                      slices: { <slice>: { file, under, commit, compiler, harness, cases, outcomes } } }
+//                    runtime and frontend ({ cases, outcomes }) split the cases a
+//                    backend runs from the parse, early and resolution negatives
+//                    the frontend judges once, on C; both are absent without the
+//                    test262 checkout
 //     typescript     results/typescript/<backend>/cases.tsv, every TypeScript conformance case:
 //                    { file, version, commit, compiler, harness, under, cases, outcomes, pending }
 //     benchmarks     results/benchmarks/<backend>/outcomes.tsv, what each benchmark compiles to:
@@ -120,6 +124,7 @@ import { DEX_RECORD, recordedOutcomes } from "../android/dex-record.ts";
 import { compileRecordPath, parseBenchmarkRecord } from "../bench/outcomes.ts";
 import { BENCH_AGREE_BACKENDS, parseRunRecord, runsRecord } from "../bench/run-outcomes.ts";
 import { BACKENDS as BACKEND_COLUMNS, COLUMNS, COMPARATORS, readRuns, results, type Backend as BackendColumn } from "../bench/run-record.ts";
+import { negativePhaseOf } from "../census/project.ts";
 import { parseTest262Record } from "../census/test262-record.ts";
 import { parseTypeScriptRecord } from "../census/typescript-record.ts";
 import { findPending } from "./record-pending.ts";
@@ -198,7 +203,7 @@ function tally(kinds: readonly string[]): Record<string, number> {
   return count;
 }
 
-function test262(root: string, backend: Backend) {
+function test262(root: string, backend: Backend, judge: Judge | undefined) {
   const directory = `results/test262/${backend}`;
   if (!existsSync(join(root, directory))) return undefined;
   const slices = readdirSync(join(root, directory)).filter(name => name.endsWith(".tsv")).sort().map(name => {
@@ -206,14 +211,55 @@ function test262(root: string, backend: Backend) {
     assert.equal(header.backend, backend, `${file} records the ${header.backend} backend`);
     return { slice: name.slice(0, -".tsv".length), file, header, rows };
   });
-  const outcomes = slices.flatMap(({ rows }) => rows.map(row => row.outcome));
+  const rows = slices.flatMap(({ rows }) => rows);
+  const outcomes = rows.map(row => row.outcome);
   return {
     cases: outcomes.length,
     outcomes: tally(outcomes),
+    ...(judge && judgedBy(judge, rows)),
     slices: Object.fromEntries(slices.map(({ slice, file, header, rows }) => [slice, {
       file, under: header.under, commit: header.commit, compiler: header.compiler, harness: header.harness,
       cases: rows.length, outcomes: tally(rows.map(row => row.outcome)),
     }])),
+  };
+}
+
+const TEST262 = "third_party/test262";
+
+/**
+ * Who judges a test262 case. One whose front matter names a negative phase
+ * other than runtime is judged by the frontend before any backend runs, so the
+ * census runs it on C alone (tooling/census/project.ts, populationOf); every
+ * other case is one a backend runs.
+ */
+type Judge = (path: string) => "runtime" | "frontend";
+
+/**
+ * Each case's judge, read from its front matter once per summary, since every
+ * backend's records name the same cases; undefined without the test262
+ * checkout, where the records keep their totals alone.
+ */
+function test262Judge(root: string): Judge | undefined {
+  if (!existsSync(join(root, TEST262))) return undefined;
+  const judged = new Map<string, "runtime" | "frontend">();
+  return path => {
+    let judge = judged.get(path);
+    if (judge === undefined) {
+      const file = join(root, TEST262, path);
+      assert.ok(existsSync(file), `a test262 record names ${path}, which the checkout at ${TEST262} does not have`);
+      const phase = negativePhaseOf(readFileSync(file, "utf8"));
+      judged.set(path, (judge = phase === undefined || phase === "runtime" ? "runtime" : "frontend"));
+    }
+    return judge;
+  };
+}
+
+function judgedBy(judge: Judge, rows: readonly { path: string; outcome: string }[]) {
+  const outcomes = { runtime: [] as string[], frontend: [] as string[] };
+  for (const row of rows) outcomes[judge(row.path)].push(row.outcome);
+  return {
+    runtime: { cases: outcomes.runtime.length, outcomes: tally(outcomes.runtime) },
+    frontend: { cases: outcomes.frontend.length, outcomes: tally(outcomes.frontend) },
   };
 }
 
@@ -274,12 +320,12 @@ function dex(root: string, backend: Backend, pending: Pending) {
 
 /** Every backend's records, counted by outcome. */
 export function conformanceSummary(root: string) {
-  const pending = pendingByRecord(root);
+  const pending = pendingByRecord(root), judge = test262Judge(root);
   return {
     ...envelope("conformance", root),
     backends: Object.fromEntries(BACKENDS.map(backend => {
       const records = {
-        test262: test262(root, backend),
+        test262: test262(root, backend, judge),
         typescript: typescript(root, backend, pending),
         benchmarks: benchmarks(root, backend, pending),
         benchmarkRuns: benchmarkRuns(root, backend, pending),

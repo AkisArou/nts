@@ -136,6 +136,17 @@ export function featuresOf(source) {
 }
 
 /**
+ * A test262 file's `negative:` phase (`parse`, `resolution` or `runtime`), as
+ * the metadata parser reads the mapping's indented `phase:` key, or
+ * undefined for a case that must complete.
+ */
+export function negativePhaseOf(source: string): string | undefined {
+  const meta = FRONTMATTER.exec(source)?.[1] ?? "";
+  const mapping = /^negative:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m.exec(meta)?.[1];
+  return mapping === undefined ? undefined : /^[ \t]+phase:[ \t]*(\S+)/m.exec(mapping)?.[1];
+}
+
+/**
  * A list-valued front-matter key, in either YAML spelling test262 uses: flow
  * (`key: [a, b]`) or block (`key:` then `- a` lines).
  */

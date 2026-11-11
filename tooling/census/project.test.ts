@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
-import { caseRoot, collectCaseRoots, environment, materialise, workspace } from "./project.ts";
+import { caseRoot, collectCaseRoots, environment, materialise, negativePhaseOf, workspace } from "./project.ts";
 import { parseDiagnostics } from "./attempt262.ts";
 
 function thaw(path) {
@@ -192,4 +192,15 @@ test("an empty population is refused, so a step cannot pass having checked nothi
   const negatives = populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" }, backend: "jvm" });
   assert.match(negatives.refused ?? "", /nothing selected runs on jvm/);
   assert.ok("population" in populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" } }), "on C it runs");
+});
+
+test("a case's negative phase is its negative mapping's own key, in either key order, and absent for a case that must complete", () => {
+  const front = (yaml: string) => `// Copyright\n/*---\n${yaml}---*/\nvar x;\n`;
+  assert.equal(negativePhaseOf(front("esid: sec-x\nnegative:\n  phase: parse\n  type: SyntaxError\nflags: [onlyStrict]\n")), "parse");
+  assert.equal(negativePhaseOf(front("negative:\n    type: ReferenceError\n    phase: resolution\n")), "resolution");
+  assert.equal(negativePhaseOf(front("negative:\n  phase: runtime\n  type: Test262Error\n")), "runtime");
+  // A phase outside the mapping, or the word in a description, is no negative.
+  assert.equal(negativePhaseOf(front("description: >\n  negative: phase: parse\nflags: [raw]\n")), undefined);
+  assert.equal(negativePhaseOf(front("negative:\nphase: parse\n")), undefined);
+  assert.equal(negativePhaseOf("var negative;\n"), undefined);
 });
