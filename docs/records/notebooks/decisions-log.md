@@ -2100,3 +2100,30 @@ workers own complete resource observations. Their setup sends poisoned launcher
 inputs through the environment allowlist before installing resource/cache grants;
 mutable child state remains private to each fixture. The source inventory is
 in `docs/records/tooling-host-tests-698.tsv`.
+
+## Landing verdict reuse (11-11)
+
+The user decided that the full check's core takes the landing service's
+green step verdicts for the exact commit it checked under the same canonical
+environment contract, then executes the remaining obligations. A commit
+without matching evidence receives the complete core. This supersedes the
+earlier prohibition on result reuse. The governing contract is in
+[workflow](../../workflow.md#after-landing-the-full-check).
+
+The receipt preserves the checked tip, actual outcomes and coverage,
+environment identity, producing profile, binary identities and record notices
+before main advances. Combined core results retain provenance and distinguish
+executed CPU from the cost of imported outcomes. The wide part still executes
+its plan on verified, and culprit search consumes the combined observations
+for each actual commit. Failing-step confirmations execute independently.
+
+The coordinator accepted the existing `nts-dev` workspace test verdict for the
+core's development-profile test obligation because both retain overflow checks
+and debug assertions. This equivalence expires when every test route uses one
+named profile. Release artifacts remain tied to the measured commit.
+
+Comparing the live services' environment reports found launcher-dependent PATH
+entries and ordering. The coordinator directed #701 to construct the canonical
+PATH from the shared toolchain-directory resolver and fixed system directories.
+The receipt contract keeps strict PATH equality. Explicit fixture tool inputs
+remain owned by their fixture's source.

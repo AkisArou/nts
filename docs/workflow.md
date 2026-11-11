@@ -199,9 +199,12 @@ The full check is every step the gate has today, in two parts. Both run at
 low priority, and reserve their memory at the full check's priority, below
 landing checks' and agents', so those come first.
 
-- **The core** (all suites on all three backends, about half an hour) runs
-  on the newest `main` back to back, covering everything that landed since
-  its last run.
+- **The core** covers all suites on all three backends on the newest `main`,
+  covering everything that landed since its last run. For the exact commit
+  checked green by the landing service, it takes that landing's complete
+  step verdicts under the same canonical environment contract and executes
+  the remaining core steps. A missing or incompatible receipt executes the
+  complete core.
 - **The wide steps** (integrity, the profile, compile time, addons, interop,
   on-device and the rest, about an hour more) run on the newest `verified`
   commit a few times a day, and every night before the benchmarks.
@@ -215,6 +218,32 @@ landing checks' and agents', so those come first.
   starts, and a controller that restarts finds it by that name: it waits
   while the unit runs, lands what it made once it ends, and starts it once
   more, never beside a running one, when it ended without saying how.
+
+The landing receipt names the checked commit and tree, actual outcomes and
+coverage, environment identity, producer profile and binary identities.
+It is durable before main advances and survives pruning of the original
+logs. Samples and narrowed selections leave the full corresponding step
+owed. The core's own summary combines imported and fresh results, preserving
+their origins and the pending or accepted record notices. Its CPU accounting
+separates newly executed work from the original cost of imported outcomes.
+
+The canonical PATH comes from the shared toolchain-directory resolver and
+the fixed system directories. The gate selects the pinned Node and declared
+toolchain directories before system commands. Launcher-added directories
+are discarded. A required command available only through a launcher's PATH
+is a missing host capability, named by the check.
+
+The landing's `nts-dev` workspace test verdict satisfies the core's test
+obligation while both profiles retain overflow checks and debug assertions.
+The receipt retains the producing profile. Once all test routes use one
+named profile, the contract requires that profile. Fresh consumers and
+records pins prepare the release compiler at their measured commit.
+
+Culprit probes look up evidence for the actual measured commit, including
+any pending reverts applied to it. Imported outcomes are that commit's own
+observations. Fresh confirmation of failing steps still executes those
+steps. The core's wall backstop follows a compatible executed plan, so a
+short reused run cannot supply the allowance for a later complete run.
 
 What follows from a run:
 
@@ -592,9 +621,11 @@ the first node task.
   gated per benchmark row against the noise band; a sanitized,
   reference-counted differential run over the corpus; the compile-time guard
   extended to code generation and link time. Not built yet.
-- **No result caches** (11-10): the full check runs every case it owes and
-  never reuses a verdict from an earlier run
-  ([log](records/notebooks/decisions-log.md#the-compiler-is-made-fast-not-cached-11-10)).
+- **Landing verdict reuse** (11-11): the core accepts complete landing
+  verdicts for the exact checked commit and canonical environment, then
+  executes its remaining obligations. The combined result keeps each
+  outcome's origin. The wide part executes its full plan on verified.
+  ([log](records/notebooks/decisions-log.md#landing-verdict-reuse-11-11)).
 - **Platforms:** Apple and Windows programs may stay unrun when their only
   refusals are platform skips. A red that only affects the JVM is recorded in
   `tooling/conformance/jvm-declines.known` and fixed afterwards.
