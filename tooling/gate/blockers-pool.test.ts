@@ -83,7 +83,7 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   assert.equal(readFileSync(h.trace,"utf8"),"", "no compiler before token admission");
   open=true; pool.grant();
   const result=await ran;
-  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.status,0,result.stdout+result.stderr);
   assert.equal(result.stderr,"");
   assert.equal(result.stdout,names.map(n=>`  guard ok    ${n}\n`).join("")+"\n  3 fixture(s), 3 as expected, 0 needing a person\n");
   const trace=readFileSync(h.trace,"utf8").trim().split("\n").map(s=>JSON.parse(s));
@@ -173,9 +173,9 @@ await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage
   const observations: any[]=[];
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1,observe:(e: any)=>observations.push(e)});
   await pool.start();t.after(()=>pool.close());
-  const result=await h.run(3,{PATH:`${join(h.root,"bin")}:${process.env.PATH}`,
+  const result=await h.run(3,{PATH:`${join(h.root,"bin")}:${fixtureEnvironment(t).PATH}`,
     NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
-  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.status,0,result.stdout+result.stderr);
   assert.equal(observations.filter(e=>e.event==="token.grant").length,4);
   const trace=readFileSync(h.trace,"utf8").trim().split("\n").map(s=>JSON.parse(s));
   assert.equal(trace.filter(e=>e.stage==="integrity").length,1);
