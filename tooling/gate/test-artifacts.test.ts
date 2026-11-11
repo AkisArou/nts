@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -47,7 +48,7 @@ test("the gate tests helper builds at opt-level 1 and replays Cargo's environmen
     }\n`);
     const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
       cwd: root, encoding: "utf8",
-      env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1",
+      env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1",
         CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
         CARGO_PROFILE_DEV_OPT_LEVEL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
     });
@@ -72,14 +73,14 @@ test("the gate tests helper builds and runs in the profile NTS_TEST_PROFILE name
     writeFileSync(join(root, "src/lib.rs"), '#[test] fn profile_build() { assert_eq!(env!("ACTUAL_OPT_LEVEL"), "2"); }\n');
     const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
       cwd: root, encoding: "utf8",
-      env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0",
+      env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0",
         CARGO_PROFILE_DEV_OPT_LEVEL: undefined, NTS_TEST_PROFILE: "landing", NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 1 passed, 0 failed/);
     assert.ok(existsSync(join(root, "target/landing/deps")), "the test binaries were built in the named profile");
     const refused = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], { cwd: root, encoding: "utf8",
-      env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), NTS_TEST_PROFILE: "--release" } });
+      env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), NTS_TEST_PROFILE: "--release" } });
     assert.equal(refused.status, 2);
     assert.match(refused.stdout, /NOT MEASURED: NTS_TEST_PROFILE=--release is not a Cargo profile name/);
   } finally {
@@ -97,7 +98,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
     const cargo = (args: string[], env: Record<string, string> = {}) => {
       const result = spawnSync("cargo", args, {
         cwd: root, encoding: "utf8",
-        env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, CARGO_TERM_COLOR: "never", ...env },
+        env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, CARGO_TERM_COLOR: "never", ...env },
       });
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       return result;

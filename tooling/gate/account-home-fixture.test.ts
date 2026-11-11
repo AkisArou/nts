@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync} from "node:fs";
@@ -62,7 +63,7 @@ for (const kind of ["account", "manager", "outside", "foreign", "selected", "uns
       symlinkSync("/", join(f.selected, ".cache/foreign"));
       assert.notEqual(statSync(join(f.selected, ".cache/foreign/etc")).uid, process.getuid());
     }
-    const env: NodeJS.ProcessEnv = {...process.env, HOME: kind === "empty" ? "" : f.selected};
+    const env: NodeJS.ProcessEnv = {...testEnvironment(), HOME: kind === "empty" ? "" : f.selected};
     for (const name of Object.keys(env)) if (name.startsWith("NTS_") || name.startsWith("NODE_TEST_")) delete env[name];
     if (kind === "unset") delete env.HOME;
     const actual = spawnTest(process.execPath, ["--input-type=module", "-e", actor, JSON.stringify(f), kind], {env, encoding: "utf8"});

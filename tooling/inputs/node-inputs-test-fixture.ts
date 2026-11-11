@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // Small real git/source identities for selector and landing-consumer controls.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -12,7 +13,7 @@ export function fixtureInputs(root:string,release:string):Records{
   writeFileSync(join(node,'lib/control.js'),'module.exports='+JSON.stringify(release)+';\n');
   mkdirSync(join(node,'lib/prefix'),{recursive:true});writeFileSync(join(node,'lib/prefix/inside.js'),'inside\n');writeFileSync(join(node,'lib/prefix.js'),'sibling\n');
   writeFileSync(join(node,'.gitignore'),'target/\n');symlinkSync('control.js',join(node,'lib/control-link.js'));
-  const git=(...args:string[])=>execFileSync('git',['-C',node,...args],{encoding:'utf8'}).trim();
+  const git=(...args:string[])=>execFileSync('git',['-C',node,...args],{env:testEnvironment(),encoding:'utf8'}).trim();
   git('init','-q');git('add','.');git('-c','user.name=Node inputs control','-c','user.email=control@example.invalid','commit','-qm','upstream release');
   writeFileSync(join(node,'package.json'),'{ "type": "commonjs" }\n');
   for(const dep of ['openssl','brotli','zlib','zstd','uv']){

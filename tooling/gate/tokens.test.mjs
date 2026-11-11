@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { waitFor } from "./test-wait.ts";
 // The gate's tokens, end to end: tokenpool.mjs's server with token.sh and
 // tokens.mjs as clients, the same code run.mjs uses.
@@ -32,7 +33,7 @@ async function pool(n, opts = {}) {
 }
 
 function run(cmd, args, env, input, holdInput = false) {
-  const child = spawn(cmd, args, { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(cmd, args, { env: { ...testEnvironment(), ...env }, stdio: ["pipe", "pipe", "pipe"] });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
     let out = "";
@@ -78,7 +79,7 @@ fs.writeFileSync(base+'.end',String(process.hrtime.bigint()));console.log('done 
 
 test("a token comes back when its holder is SIGKILLed", async () => {
   const p = await pool(1);
-  const child = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...process.env, ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  const child = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
   const closed=new Promise(resolve=>child.on("close",resolve));
   await waitFor("the token holder to be granted",()=>p.total===1);
   child.kill("SIGKILL");
@@ -116,7 +117,7 @@ test("outside a gate the command runs; inside one, a runner that is gone is an e
 
 test("a runner that accepted and then died: every waiting worker exits non-zero, none runs", async () => {
   const p = await pool(1);
-  const holder = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...process.env, ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  const holder = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
   await waitFor("the token holder to be granted",()=>p.total===1);
   const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
   await waitFor("three queued token clients",()=>p.waiting.length===3);
@@ -143,7 +144,7 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   const p = await pool(1, { claim: (step) => (step === "long" ? 100 : 1),
     observe: e => { if (e.event === "token.grant" && e.step !== "other") order.push(e.step); },
   });
-  const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...process.env, ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
+  const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...testEnvironment(), ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
   const released = new Promise((r) => holder.on("close", r));
   await waitFor("the token holder to be granted",()=>p.total===1);
   const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => assert.equal(r.status, 0));

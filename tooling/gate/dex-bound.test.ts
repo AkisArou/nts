@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The dex step's compile is bounded per target (tooling/android/dexes.sh, under
 // tooling/gate/case-bound.ts), and a bench case's timeout or decline is judged
 // against its compile record (results/benchmarks/jvm/outcomes.tsv): as recorded
@@ -55,7 +56,7 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
       else { mkdirSync(join(root, "tests/programs", target), { recursive: true }); writeFileSync(join(root, "tests/programs", target, "tsconfig.json"), "{}"); }
     }
     return spawnTest("sh", [join(root, "tooling/android/dexes.sh"), ...(named ? targets.map(target => target.split("/").pop()!) : [])], { cwd: root, encoding: "utf8", env: {
-      ...process.env, PATH: `${join(own, "bin")}:${process.env.PATH}`, NTS_BIN: nts, ANDROID_HOME: join(own, "sdk"), NTS_GATE_JOBS: "1",
+      ...testEnvironment(), PATH: `${join(own, "bin")}:${process.env.PATH}`, NTS_BIN: nts, ANDROID_HOME: join(own, "sdk"), NTS_GATE_JOBS: "1",
       NTS_ART_WORK: join(own, "work"), NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "bound", NTS_GATE_STEP_RESULT: frame, ...extra,
     } });
   };

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // A scratch repository with a local bare origin, and a stand-in gate that
 // reads its verdicts from the commit it measures: a step FAILs at a commit
 // whose tree has `RED/<step>` (or `RED/<step>.<anything>`), is HELD where it
@@ -6,8 +7,8 @@
 // run-record.ts publish and the units background work runs in. Tests only; no
 // network, no systemd, no real gate.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {testScratch} from "../gate/test-scratch.ts";
 import { basename, dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/delta.ts";
@@ -29,21 +30,16 @@ export type Repository = {
   commit(files: Record<string, string | null>, subject: string): string;
 };
 
-export const ENV: NodeJS.ProcessEnv = {
-  ...process.env,
-  GIT_AUTHOR_NAME: "full-check-test", GIT_AUTHOR_EMAIL: "test@example.invalid",
-  GIT_COMMITTER_NAME: "full-check-test", GIT_COMMITTER_EMAIL: "test@example.invalid",
-  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
-};
+
 
 export function repository(t: TestContext): Repository {
-  const root = mkdtempSync(join(tmpdir(), "full-check-"));
+  const root = testScratch(t,"full-check"), env = testEnvironment();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dir = join(root, "repo"), origin = join(root, "origin.git");
   mkdirSync(dir);
-  const git = new Git(dir, ENV);
+  const git = new Git(dir, env);
   git.run(["init", "-q", "-b", "main"]);
-  new Git(root, ENV).run(["init", "-q", "--bare", origin]);
+  new Git(root, env).run(["init", "-q", "--bare", origin]);
   git.run(["remote", "add", "origin", origin]);
   const commit = (files: Record<string, string | null>, subject: string) => {
     for (const [path, text] of Object.entries(files)) {
@@ -81,7 +77,7 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
     run(commit, steps, label): Measurement {
       measured.push({ commit, steps: [...steps], label });
       const tree = repo.layout.tree;
-      if (repo.git.ok(["-C", tree, "rev-parse", "--git-dir"])) new Git(tree, ENV).run(["checkout", "--detach", "-q", "--force", commit]);
+      if (repo.git.ok(["-C", tree, "rev-parse", "--git-dir"])) new Git(tree, repo.git.env).run(["checkout", "--detach", "-q", "--force", commit]);
       else repo.git.run(["worktree", "add", "--detach", "-q", tree, commit]);
       mkdirSync(join(repo.layout.target, "release"), { recursive: true });
       writeFileSync(join(repo.layout.target, "release/nts"), `compiler at ${commit}\n`);
@@ -121,7 +117,7 @@ export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?
     }
     writeFileSync(join(run, "bench.log"), "nts-bench\n");
     if (options.noRecord) return { admitted: true, status: 1 };
-    const git = new Git(tree, ENV);
+    const git = new Git(tree, testEnvironment());
     const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
     mkdirSync(join(tree, RUNS), { recursive: true });
     writeFileSync(join(tree, RUNS, `${id}.json`), `${JSON.stringify({ id, slower: options.slower ?? [] })}\n`);
@@ -151,7 +147,7 @@ export function renderStandIn(tree: string): void {
  * already. Its log ends as the real one's does, with the record's path.
  */
 export const publishEveryRun: Publisher = (tree, record, log) => {
-  const git = new Git(tree, ENV), path = `${RUNS}/${basename(record)}`;
+  const git = new Git(tree, testEnvironment()), path = `${RUNS}/${basename(record)}`;
   mkdirSync(join(tree, RUNS), { recursive: true });
   writeFileSync(join(tree, path), readFileSync(record));
   renderStandIn(tree);
@@ -195,7 +191,7 @@ export function stubQueue(): StubQueue {
 export function checkoutIn(repo: Repository, dir = repo.layout.tree): (commit: string) => void {
   return commit => {
     if (!existsSync(join(dir, ".git"))) { repo.git.run(["worktree", "add", "--detach", "-q", dir, commit]); return; }
-    const tree = new Git(dir, ENV);
+    const tree = new Git(dir, repo.git.env);
     tree.run(["checkout", "--detach", "-q", "--force", commit]);
     tree.run(["clean", "-fdq"]);
   };

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 // Black-box contracts for the Mac/simulator boundary; no VM or SDK required.
 // NTS_TEST_IOS_RUNNER selects the saved old helper for the negative control.
@@ -75,7 +76,7 @@ if (args[1] === "bootstatus") {
     events: () => readFileSync(join(dir, "events"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]),
     run: (args = ["--reachable"], extra: Record<string, string> = {}) => spawnTest("bash", [runner, ...args], {
       encoding: "utf8",
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_CACHE_HOME: dir,
+      env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}`, XDG_CACHE_HOME: dir,
         NTS_APPLE_SSH: "test-mac", NTS_IOS_DEVICE: "Test Phone", TEST_DIR: dir,
         TEST_EVENTS: join(dir, "events"), TEST_MODE: mode, ...extra },
     }),
@@ -199,7 +200,7 @@ test("successful interop retains only the named stage clocks", () => {
     }
     const p = spawnTest("sh", [join(gate, "all.sh"), "--call", "interop"], {
       encoding: "utf8",
-      env: { ...process.env, TMPDIR: join(dir, "tmp"), NTS_INTEROP_PROJECTS: "ios-clock native-control",
+      env: { ...testEnvironment(), TMPDIR: join(dir, "tmp"), NTS_INTEROP_PROJECTS: "ios-clock native-control",
         NTS_INTEROP_LOCAL_LANES: "1", NTS_INTEROP_LOCK: join(dir, "interop.lock"),
         NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_COSTS_DIR: join(dir, "costs") },
     });

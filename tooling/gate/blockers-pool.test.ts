@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { waitFor } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -55,7 +56,7 @@ main().catch(error=>{console.error(error);process.exitCode=1;});
 `, {mode:0o755});
   const run = (jobs: number, extra = {}) => new Promise<{status:number|null;stdout:string;stderr:string}>((resolve, reject) => {
     const child = spawn(process.execPath, [join(root, "tooling/conformance/blockers-check.mjs")], {
-      cwd:root, env:{...process.env, NTS_COMPILER:compiler, NTS_GATE_JOBS:String(jobs), TMPDIR:join(root,"tmp"),
+      cwd:root, env:{...testEnvironment(), NTS_COMPILER:compiler, NTS_GATE_JOBS:String(jobs), TMPDIR:join(root,"tmp"),
         NTS_NAPI_INCLUDE:join(root,"napi"), TRACE:trace, NTS_GATE_TOKENS:"", NTS_GATE_TOKEN_HELD:"", ...extra},
     });
     let stdout="",stderr="";

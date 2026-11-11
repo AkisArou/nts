@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): standalone
 // emission, generated child bootstrap bytes, prepared Node routes, snapshot
 // boundaries and aggregate owners. Shared helpers are in
@@ -145,9 +146,9 @@ test('an unused captured module with a nonlocal file URL does not abort preparat
       'app/unused.mjs':foreign?'import "file://hmm.js";\n':'import "node:path";\n'});
     const entry=join(root,'app/main.mjs'),prepared=await prepareOracle({entry,project:null,
       runtimeRoots:[join(root,'app')],directory:join(root,'prepared'),toolchain});
-    const file=oracleRuntimeFile(prepared,entry),reference=spawnSync(process.execPath,[file],{cwd:root,encoding:'utf8'});
+    const file=oracleRuntimeFile(prepared,entry),reference=spawnSync(process.execPath,[file],{env:testEnvironment(),cwd:root,encoding:'utf8'});
     const actual=spawnSync(process.execPath,[...prepared.args,file],
-      {cwd:root,env:{...process.env,...prepared.env},encoding:'utf8'});
+      {cwd:root,env:{...testEnvironment(),...prepared.env},encoding:'utf8'});
     assert.equal(reference.status,0,reference.stderr);
     assert.equal(actual.status,reference.status,actual.stderr);assert.equal(actual.stdout,reference.stdout);assert.equal(actual.stderr,reference.stderr);
     if(used)assert.match(actual.stdout,/ERR_INVALID_FILE_URL_HOST/);else assert.equal(actual.stdout,'19\n');
@@ -201,7 +202,7 @@ test('prepared Node routes pin positive resolution before live package topology 
 test('prepared Node routes reject a child with different resolution options',async t=>{
   for(const flags of [[],['--conditions=unprobed-condition'],['--preserve-symlinks'],['--preserve-symlinks-main']] as string[][])await t.test(flags.join(' ')||'unchanged control',async ()=>{
     const root=workspace(t,{'src/main.ts':'console.log(19);\n'}),prepared=(await prepare(root));
-    const result=spawnSync(process.execPath,[...prepared.args,...flags,join(root,'src/main.ts')],{cwd:root,env:{...process.env,...prepared.env},encoding:'utf8'});
+    const result=spawnSync(process.execPath,[...prepared.args,...flags,join(root,'src/main.ts')],{cwd:root,env:{...testEnvironment(),...prepared.env},encoding:'utf8'});
     const health=oracleLoaderReady(prepared);
     t.diagnostic(JSON.stringify({flags,status:result.status,stdout:result.stdout,stderr:result.stderr,health}));
     if(flags.length){
@@ -215,7 +216,7 @@ test('prepared Node routes reject a child with different resolution options',asy
 test('prepared file entries retain Node input-type failures while eval imports keep their routes',async t=>{
   for(const flags of [['--input-type=module'],['--input-type','module']])await t.test(flags.join(' '),async()=>{
     const root=workspace(t,{'src/main.ts':'console.log(19);\n'}),prepared=await prepare(root);
-    const file=join(root,'src/main.ts'),env=process.env;
+    const file=join(root,'src/main.ts'),env=testEnvironment();
     const plain=spawnSync(process.execPath,[...flags,file],{encoding:'utf8',env});
     assert.equal(plain.status,1);assert.match(plain.stderr,/ERR_INPUT_TYPE_NOT_ALLOWED/);assert.equal(plain.stdout,'');
     const initial=oracleExecution(prepared),actual=spawnSync(process.execPath,[...initial.args,...flags,file],{encoding:'utf8',env:{...env,...initial.env}});
@@ -296,7 +297,7 @@ test('declaration diagnostics are requested only for an owner that enables decla
     'src/main.ts':"import {Parser} from './types.ts';function plugin(Parent:typeof Parser){return class extends Parent {};}export function create(){return function(Parent:typeof Parser){return plugin(Parent);};}console.log(new (create()(Parser))().label.name);\n",
   },{declaration:false});
   const project=join(root,'tsconfig.json'),{compiler}=verifyToolchain(toolchain);
-  const plain=await activeCommand(compiler,['-p',project,'--noEmit','--pretty','false'],{cwd:root,env:process.env});
+  const plain=await activeCommand(compiler,['-p',project,'--noEmit','--pretty','false'],{cwd:root,env:testEnvironment()});
   assert.equal(plain.status,0,plain.stdout+plain.stderr);
   const prepared=await prepare(root);
   const stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));

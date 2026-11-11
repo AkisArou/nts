@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The landing service end to end, in a scratch repository with a local bare
 // origin and a pool of two trees: queue order, rebase and conflict refusal,
 // fast-forward and push, branch deletion here and on origin, the pool tree
@@ -263,7 +264,7 @@ test("a landing whose tree a process still uses keeps the tree on its branch and
   const f = service(t);
   const a = f.task("fix/a", { "src/a.txt": "a\n" });
   // The task's own tests still run in its tree after it queued.
-  const tests = spawn("cat", [], { cwd: a.tree, stdio: ["pipe", "ignore", "ignore"] });
+  const tests = spawn("cat", [], {env:testEnvironment(), cwd: a.tree, stdio: ["pipe", "ignore", "ignore"] });
   // Ended when its input closes, here or, if an assertion stops the test first, after it.
   t.after(() => { tests.stdin.end(); });
   await once(tests, "spawn");

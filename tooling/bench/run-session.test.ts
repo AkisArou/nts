@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
@@ -69,10 +70,10 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
   try {
     const input = join(root, "raw.json");
     writeFileSync(input, JSON.stringify(fixture()));
-    const header = spawnSync(process.execPath, [script, "header", root], { encoding: "utf8" });
+    const header = spawnSync(process.execPath, [script, "header", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(header.status, 0, header.stderr);
     assert.ok(header.stdout.includes("nts C/node") && header.stdout.includes("nts LLVM/ScriptC"));
-    const row = spawnSync(process.execPath, [script, "row", root, input], { encoding: "utf8" });
+    const row = spawnSync(process.execPath, [script, "row", root, input], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(row.status, 0, row.stderr);
     assert.match(row.stdout, /control\t/);
     assert.match(row.stdout, /1\.000× SHORT/);
@@ -84,7 +85,7 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
     writeFileSync(mutant, changed);
     for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts", "run-journal.ts", "groups.ts"])
       symlinkSync(fileURLToPath(new URL("./" + name, import.meta.url)), join(root, name));
-    const old = spawnSync(process.execPath, [mutant, "header", root], { encoding: "utf8" });
+    const old = spawnSync(process.execPath, [mutant, "header", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(old.status, 1);
     assert.match(old.stderr, /consoleHeader is not defined/);
   } finally {
@@ -108,7 +109,7 @@ test("session conditions have no dependency on the old landing lock probe", t =>
   mkdirSync(bin);
   writeFileSync(join(bin, "flock"), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(invoked)}, 'invoked');process.exit(99);\n`, { mode: 0o755 });
   const result = spawnSync(process.execPath, [script, "conditions", root], {
-    encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+    encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH ?? ""}` },
   });
   assert.equal(result.status, 0, result.stderr);
   const observed = JSON.parse(result.stdout);

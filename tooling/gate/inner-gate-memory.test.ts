@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // An inner gate run is admitted by the memory reading and the memory ledger its
 // test gives it, never the host's memory or the machine's queue. A run waits in
 // the ledger (memory-ledger.ts) until its first block of memory fits, and
@@ -90,14 +91,14 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   // 2.5 GiB available, 2 of them kept for the system: not one block.
   const f = fixture(t), { env, memory } = f.planned("low", 2.5 * 2 ** 20);
   const unit = `nts-test-inner-gate-memory-${randomUUID().slice(0, 8)}`;
-  t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { stdio: "ignore" }); });
+  t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], {env:testEnvironment(), stdio: "ignore" }); });
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
   // Should the run not end on SIGTERM, systemd escalates to SIGKILL after five
   // seconds rather than its default ninety.
   // In the tooling run's slice, so a test stopped before its own cleanup
   // stops the run with it.
   const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
-    `--working-directory=${f.root}`, ...setenv, process.execPath, join(f.gate, "run.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+    `--working-directory=${f.root}`, ...setenv, process.execPath, join(f.gate, "run.mjs")], {env:testEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
   // The event, not a timer: the run says it waits, or it ends.
   const waiting = await new Promise<boolean>(resolve => {
     const seen = (line: string) => { if (WAITING.test(line)) resolve(true); };
@@ -108,10 +109,10 @@ test("an inner gate run whose reading has no room for it waits in its own ledger
   assert.ok(waiting, "the run waits for memory its reading does not show");
   assert.equal(existsSync(f.started), false, "no case started while it waits");
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER).waiting.length, 1, "it waits in its own ledger, not the machine's");
-  const stopped = spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { encoding: "utf8" });
+  const stopped = spawnSync("systemctl", ["--user", "stop", `${unit}.service`], {env:testEnvironment(), encoding: "utf8" });
   assert.equal(stopped.status, 0, stopped.stderr);
   if (child.exitCode === null) await new Promise(resolve => child.on("close", resolve));
-  const state = spawnSync("systemctl", ["--user", "is-active", `${unit}.service`], { encoding: "utf8" }).stdout.trim();
+  const state = spawnSync("systemctl", ["--user", "is-active", `${unit}.service`], {env:testEnvironment(), encoding: "utf8" }).stdout.trim();
   assert.notEqual(state, "active", "nothing of the run outlives its unit");
   assert.equal(existsSync(f.started), false, "the held case never ran");
 });
@@ -131,11 +132,11 @@ test("a holder at an agent's priority starts a gate run that needs more than the
     // 14.5 GiB available of 30.5: the holder's 12 leave 0.5 beside it, less than the run's first block.
     const f = fixture(t), { env, memory } = f.planned("holder", 14.5 * 2 ** 20), ledger = memory.NTS_MEMORY_LEDGER;
     const unit = `nts-test-inner-gate-holder-${randomUUID().slice(0, 8)}`;
-    t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], { stdio: "ignore" }); });
+    t.after(() => { spawnSync("systemctl", ["--user", "stop", `${unit}.service`], {env:testEnvironment(), stdio: "ignore" }); });
     const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([name, value]) => `--setenv=${name}=${value}`);
     const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--pipe", "-p", "LimitCORE=0", "-p", "TimeoutStopSec=5s",
       `--working-directory=${f.root}`, ...setenv, process.execPath, ADMIT, "--bytes", "12G", "--what", "holder", "--",
-      "sh", "-c", command, process.execPath, join(f.gate, "run.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+      "sh", "-c", command, process.execPath, join(f.gate, "run.mjs")], {env:testEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const seen = (line: string) => { output += `${line}\n`; };
     createInterface({ input: child.stdout! }).on("line", seen);

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // A landing's steps (run.ts): the build first, the rest through the gate's own
 // runner, narrowed steps, failing builds and steps, a run inside another gate,
 // and memory pressure run again alone. Shared helpers are in run-fixture.ts.
@@ -62,7 +63,7 @@ test("a failing step refuses the change and names itself", async t => {
 test("a landing run started inside another gate is a run of its own, not that gate's", async t => {
   // The tooling step of an outer gate: its context owns that gate's fail-fast.
   const f = fixture(t), home = f.options([]).env!.HOME!;
-  const outer = gateEnvironment({ ...process.env, HOME: home }, { run: join(home, ".cache/outer-gate"), owned: { NTS_GATE_FAIL_FAST: "1", NTS_GATE_STEPS: "tooling" } }).env;
+  const outer = gateEnvironment({ ...testEnvironment(), HOME: home }, { run: join(home, ".cache/outer-gate"), owned: { NTS_GATE_FAIL_FAST: "1", NTS_GATE_STEPS: "tooling" } }).env;
   assert.ok(outer[ENVIRONMENT_CONTEXT]);
   f.control("outcomes", "fail");
   const ran = await runLanding(f.options(["build", "examples", "outcomes"], { env: { ...outer, HOME: home } }));

@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The gate's census function streams a child still running, keeps its
 // diagnostics and exit status, and checks every directory after a red one.
 import assert from "node:assert/strict";
@@ -24,7 +25,7 @@ if [ "$5" = test/language ];then
 fi
 echo "  census complete: $5; 1/1 attempted; $9 worker(s); 0.1 s elapsed"
 `,{mode:0o755});
-  const child=spawn("sh",[join(root,"census.sh")],{cwd:root,env:{...process.env,PATH:`${bin}:${process.env.PATH}`},stdio:["ignore","pipe","pipe"]});
+  const child=spawn("sh",[join(root,"census.sh")],{cwd:root,env:{...testEnvironment(),PATH:`${bin}:${process.env.PATH}`},stdio:["ignore","pipe","pipe"]});
   let output="";child.stdout.on("data",b=>{output+=b;});child.stderr.on("data",b=>{output+=b;});
   const done=once(child,"close");
   t.after(async()=>{writeFileSync(release,"released");await done;rmSync(root,{recursive:true,force:true});});
@@ -48,7 +49,7 @@ test("the census gives each directory's report a place in the run's folder, and 
   writeFileSync(join(bin,"node"),`#!/bin/sh\nshift\nprintf '%s\\037' "$@" >> ${JSON.stringify(calls)}\nprintf '\\n' >> ${JSON.stringify(calls)}\n`,{mode:0o755});
   const run=async(env:NodeJS.ProcessEnv)=>{
     rmSync(calls,{force:true});
-    const {NTS_GATE_RUN_DIR:_,...ambient}=process.env;
+    const {NTS_GATE_RUN_DIR:_,...ambient}=testEnvironment();
     const child=spawn("sh",[join(root,"census.sh")],{cwd:root,env:{...ambient,PATH:`${bin}:${process.env.PATH}`,...env},stdio:"ignore"});
     assert.deepEqual(await once(child,"close"),[0,null]);
     return readFileSync(calls,"utf8").trim().split("\n").map(line=>line.split("\x1f").slice(-3,-1).join(" "));

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // Shared by the oracle emit test files: their oracle test environment, the
 // toolchain, and the helpers their tests call. Each file closes the
 // executions its tests open (afterEach below). The tests were one file whose
@@ -46,13 +47,13 @@ export function workspace(t:TestContext,files:Record<string,string>,options:Reco
 }
 export function execute(root:string,prepared:Pick<OraclePrepared,"args"|"env">,entry="src/main.ts") {
   return spawnSync(process.execPath,[...prepared.args,"--no-warnings",join(root,entry)],{
-    encoding:"utf8",cwd:root,env:{...process.env,...prepared.env},
+    encoding:"utf8",cwd:root,env:{...testEnvironment(),...prepared.env},
   });
 }
 export function bare(root:string,prepared:OraclePrepared,entry="src/main.ts"){
   const stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));
   const output=join(dirname(prepared.manifest),stored.sources[join(root,entry)]);
-  return spawnSync(process.execPath,['--enable-source-maps','--no-warnings',output],{encoding:'utf8',cwd:root,env:process.env});
+  return spawnSync(process.execPath,['--enable-source-maps','--no-warnings',output],{encoding:'utf8',cwd:root,env:testEnvironment()});
 }
 export async function prepare(root:string,entry="src/main.ts",extra:Partial<OracleOptions>={}) {
   return (await prepareOracle({toolchain,entry:join(root,entry),directory:join(root,"scratch"),...extra}));
@@ -108,7 +109,7 @@ export function diagnostics(text:string,cwd:string){
 }
 
 export async function boundedCompiler(compiler:string,args:string[],cwd:string){
-  const run=await activeCommand(compiler,args,{cwd,env:process.env,idleMs:120_000,cpuBudgetSeconds:120,maxBuffer:32*2**20});
+  const run=await activeCommand(compiler,args,{cwd,env:testEnvironment(),idleMs:120_000,cpuBudgetSeconds:120,maxBuffer:32*2**20});
   if(run.error||run.signal||run.hung||run.runaway)throw Error('oracle batch not measured: '+(run.signal??run.hung??run.runaway??run.error));
   return run;
 }

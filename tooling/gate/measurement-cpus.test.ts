@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The CPUs reserved for measurement (4-5): every gate and heavy job keeps off
 // them, and a measurement waits for them to be quiet.
 //
@@ -46,7 +47,7 @@ echo "100,,cpu_core/$4/" >&2
 `);
     for (const binary of ["javac", "perf"]) chmodSync(join(dir, `bin/${binary}`), 0o755);
     const log = join(dir, "masks");
-    const env = { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, TEST_MASK_LOG: log, NTS_COUNTED_N: "1", NTS_COUNTED_EVENTS: "instructions" };
+    const env = { ...testEnvironment(), PATH: `${dir}/bin:${process.env.PATH}`, TEST_MASK_LOG: log, NTS_COUNTED_N: "1", NTS_COUNTED_EVENTS: "instructions" };
     delete env.NTS_CORES;
     for (const inherited of ["0-3,6-31", "8"]) {
       writeFileSync(log, "");
@@ -112,14 +113,14 @@ test("the real host scope is verified, or the absence is reported before launchi
     const directory=mkdtempSync(join(tmpdir(),"nts-forged-ceiling-"));
     let result;
     try {
-      const clean=Object.fromEntries(Object.entries(process.env).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length));
+      const clean=Object.fromEntries(Object.entries(testEnvironment()).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length));
       result=spawnSync("sh",[PINNED],{env:{...clean,NTS_GATE_RUN_DIR:join(directory,"run"),NTS_GATE_SCOPE_EXPECTED:cpus},encoding:"utf8"});
     } finally {rmSync(directory,{recursive:true,force:true});}
     assert.equal(result.status, 75, result.stderr);
     assert.match(result.stderr, /ceiling is absent/);
     return;
   }
-  const result = spawnSync(launch.command, launch.args, { encoding: "utf8" });
+  const result = spawnSync(launch.command, launch.args, {env:testEnvironment(), encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(cpuSubset(result.stdout.trim(), cpus), true, "an explicit all-CPU child must stay inside the ceiling");
   if (launch.mechanism.startsWith("inherited-cpuset")) assert.equal(verifyCeiling(cpus), true);
@@ -134,7 +135,7 @@ test("a failed actual scope launch is returned once, never retried as a taskset 
     writeFileSync(fake, '#!/bin/sh\necho attempt >> "$TEST_SCOPE_CALLS"\nexit 19\n');
     chmodSync(fake, 0o755);
     const result = spawnSync(process.execPath, [new URL("./affinity.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
-      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TEST_SCOPE_CALLS: calls }, encoding: "utf8",
+      env: { ...testEnvironment(), PATH: `${dir}:${process.env.PATH}`, TEST_SCOPE_CALLS: calls }, encoding: "utf8",
     });
     assert.equal(result.status, 19, result.stderr);
     assert.equal(readFileSync(calls, "utf8"), "attempt\n");
@@ -171,7 +172,7 @@ test("pinned.sh restricts its own entry before invoking git or a build", { skip:
     for (const mask of [inherited, String(eCore)]) {
       writeFileSync(log, "");
       const result = spawnSync("taskset", ["-c", mask, "sh", PINNED], {
-        env: { ...Object.fromEntries(Object.entries(process.env).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length)), PATH: `${dir}:${process.env.PATH}`, NTS_GATE_RUN_DIR:join(dir,"run-"+mask) }, encoding: "utf8",
+        env: { ...Object.fromEntries(Object.entries(testEnvironment()).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length)), PATH: `${dir}:${process.env.PATH}`, NTS_GATE_RUN_DIR:join(dir,"run-"+mask) }, encoding: "utf8",
       });
       assert.notEqual(result.status, 0, "the git stub must prevent any build");
       const lines = readFileSync(log, "utf8").trim().split("\n");

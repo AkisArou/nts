@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -7,7 +8,7 @@ import { test } from "node:test";
 import { cachedEmission, finishLiveness, measure } from "../conformance/c-compiles.mjs";
 import { readStepInstrument } from "./step-result.ts";
 
-const clang = spawnSync("clang", ["--version"]);
+const clang = spawnSync("clang", ["--version"], {env:testEnvironment()});
 
 test("C validation catches a missing descriptor and treats empty output as unmeasured", {
   skip: clang.error ? "clang is required for the C instrument's control" : false,
@@ -16,7 +17,7 @@ test("C validation catches a missing descriptor and treats empty output as unmea
   try {
     const cached = join(dir, "cached");
     mkdirSync(cached);
-    const common = { project: "unused", root: dir, compiler: "unused", env: process.env, work: join(dir, "out"), cached, cc: "clang" };
+    const common = { project: "unused", root: dir, compiler: "unused", env: testEnvironment(), work: join(dir, "out"), cached, cc: "clang" };
     const program = join(cached, "program.c");
     const descriptor = "static const int descriptor = 1;\n";
     const reference = "const int *lookup(void) { return &descriptor; }\n";
@@ -61,7 +62,7 @@ test("a failed or silent emitter cannot pass the C check", async () => {
     chmodSync(compiler, 0o755);
     const common = { project: "fixture", root: dir, compiler, work: join(dir, "out"), cached: null, cc: "clang" };
     for (const status of [0, 1]) {
-      const result = await measure({ ...common, env: { ...process.env, TEST_EMIT_STATUS: String(status) } });
+      const result = await measure({ ...common, env: { ...testEnvironment(), TEST_EMIT_STATUS: String(status) } });
       assert.equal(result.category, "not-measured");
     }
   } finally {
@@ -74,7 +75,7 @@ test("an idle emission stays NOT RUN rather than becoming a C verdict", async ()
   try {
     const compiler=join(dir,"compiler");
     writeFileSync(compiler,"#!/bin/sh\nexec sleep 600\n");chmodSync(compiler,0o755);
-    const env={...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"idle-emission",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
+    const env={...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"idle-emission",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
     const result=await measure({project:"fixture",root:dir,compiler,work:join(dir,"out"),cached:null,cc:"clang",env,activity:{idleMs:2000,pollMs:50}});
     assert.equal(result.category,"hung");
     assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","idle-emission").verdict,"NOT RUN");
@@ -88,7 +89,7 @@ test("completed C rejections stay red when another emission hangs",async()=>{
     const cached=join(dir,"cached"),compiler=join(dir,"compiler");mkdirSync(cached);
     writeFileSync(join(cached,"program.c"),"const int *lookup(void) { return &missing_descriptor; }\n");
     writeFileSync(compiler,"#!/bin/sh\nexec sleep 600\n");chmodSync(compiler,0o755);
-    const env={...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"mixed",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
+    const env={...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"mixed",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
     const common={project:"fixture",root:dir,compiler,work:join(dir,"out"),cc:"clang",env};
     const rejected=await measure({...common,cached});assert.equal(rejected.category,"rejected");
     const hung=await measure({...common,cached:null,activity:{idleMs:1000,pollMs:50}});assert.equal(hung.category,"hung");

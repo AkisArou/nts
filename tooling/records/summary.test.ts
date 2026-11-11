@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The summaries over trees of their own: the benchmark summary against the
 // page the same model renders, full.md as it rendered before the model was
 // shared, the numbers-as-numbers rule, the conformance summary over one record
@@ -301,7 +302,7 @@ function files(root: string): Map<string, string> {
     .map(entry => join(entry.parentPath, entry.name).slice(root.length + 1)).filter(path => !path.startsWith(".git/"))
     .map(path => [path, readFileSync(join(root, path), "utf8")]));
 }
-const command = (...args: string[]) => spawnSync(process.execPath, [SUMMARY, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const command = (...args: string[]) => spawnSync(process.execPath, [SUMMARY, ...args], {env:testEnvironment(), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
 /** A census report of one directory on one backend, its parts adding up as the census's do. */
 function censusReport(backend: string, under: string, pass: number, refused: number, sloppy: number): CensusReport {
@@ -362,7 +363,7 @@ test("without a green wide run that kept a report there is no census part, and a
 test("the command prints one summary, writes nothing, and names the commit of a checkout it reads", t => {
   const root = publish(conformanceTree(t));
   const git = (...args: string[]) => {
-    const done = spawnSync("git", ["-c", "user.name=summary", "-c", "user.email=summary@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
+    const done = spawnSync("git", ["-c", "user.name=summary", "-c", "user.email=summary@example.invalid", "-c", "commit.gpgsign=false", ...args], {env:testEnvironment(), cwd: root, encoding: "utf8" });
     assert.equal(done.status, 0, done.stderr);
     return done.stdout.trim();
   };

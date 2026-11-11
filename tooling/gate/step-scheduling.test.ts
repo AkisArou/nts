@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {moduleClosure} from "./module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
@@ -241,7 +242,7 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
-    spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" });
     if (!inherited) stopToolingSlice(slice);
     removable(own); rmSync(own, { recursive: true, force: true });
   });
@@ -412,7 +413,7 @@ case $1 in
 esac
 `,
     before: (own, memory) => {
-      const env: NodeJS.ProcessEnv = { ...process.env };
+      const env: NodeJS.ProcessEnv = { ...testEnvironment() };
       delete env.NTS_MEMORY_RESERVATION;
       neighbour = spawn(process.execPath, ["--input-type=module", "-e", NEIGHBOUR, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
         pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });
@@ -487,7 +488,7 @@ esac
 `,
     before: (own, memory) => {
       fixture = own;
-      const env: NodeJS.ProcessEnv = { ...process.env };
+      const env: NodeJS.ProcessEnv = { ...testEnvironment() };
       delete env.NTS_MEMORY_RESERVATION;
       landing = spawn(process.execPath, ["--input-type=module", "-e", LANDING, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
         pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });

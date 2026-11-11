@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -19,7 +20,7 @@ test('the differential oracle project has zero pinned TypeScript diagnostics',as
   const {compiler}=verifyToolchain(oracleToolchainLocation());
   const result=await activeCommand(compiler,['--project',project,'--noEmit',
     '--tsBuildInfoFile',join(output,'check.tsbuildinfo'),'--pretty','false'],
-  {cwd:dirname(project),env:process.env,idleMs:120_000,cpuBudgetSeconds:120,maxBuffer:32*2**20});
+  {cwd:dirname(project),env:testEnvironment(),idleMs:120_000,cpuBudgetSeconds:120,maxBuffer:32*2**20});
   assert.equal(result.signal,null,result.stderr);
   assert.ok(!result.error&&!result.hung&&!result.runaway,result.out);
   assert.equal(result.status,0,result.stdout+result.stderr);

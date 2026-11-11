@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { join,resolve } from "node:path";
 import {fileURLToPath} from "node:url";
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,type HostObservationFixture} from "./host-observations.ts";
+import {assignTestValues,testEnvironment} from './test-environment.ts';
 
 export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],string>;
 
@@ -41,13 +42,14 @@ const HANDED = ["NTS_MEMORY_RESERVATION", "NTS_MEMORY_PRIORITY"];
 /** A copy of `env` without what a gate step hands the test it runs. */
 export function withoutHanded(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const own: NodeJS.ProcessEnv = { ...env };
-  for (const name of HANDED) delete own[name];
+  assignTestValues(own,Object.fromEntries(HANDED.map(name=>[name,undefined])));
   return own;
 }
 
 /** `env` for a tool a test starts, with its own reading and ledger under `dir` in place of any reservation the test runs inside. */
-export function ownMemoryEnv(dir: string, env: NodeJS.ProcessEnv = process.env, reading?: Reading): NodeJS.ProcessEnv {
-  return withoutHanded({ ...env, ...ownMemory(dir, reading) });
+export function ownMemoryEnv(dir: string, env: NodeJS.ProcessEnv = testEnvironment(), reading?: Reading): NodeJS.ProcessEnv {
+  const child={...env};assignTestValues(child,ownMemory(dir, reading));
+  return withoutHanded(child);
 }
 
 /** The same for this test process, which runs a job (the census pool) itself: its own reading and ledger under `dir`. */

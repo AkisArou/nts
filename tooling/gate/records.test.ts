@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {mkdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
@@ -21,10 +22,10 @@ test("record numbering preserves named collisions and refuses new or stale allow
 test("the real records step validates benchmark evidence and its rendered table",()=>{
   const root=newTestScratch("records-step");
   const runGit=(...args:string[])=>{
-    const result=spawnSync("git",args,{cwd:root,encoding:"utf8"});
+    const result=spawnSync("git",args,{env:testEnvironment(),cwd:root,encoding:"utf8"});
     assert.equal(result.status,0,result.stderr);return result.stdout;
   };
-  const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{cwd:root,encoding:"utf8"});
+  const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{env:testEnvironment(),cwd:root,encoding:"utf8"});
   try {
     for(const path of ["tooling/gate/all.sh","tooling/gate/records.ts","tooling/bench/run-record.ts","tooling/bench/groups.ts"]) {
       mkdirSync(dirname(join(root,path)),{recursive:true});

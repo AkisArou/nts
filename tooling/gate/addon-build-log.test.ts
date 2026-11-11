@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -23,7 +24,7 @@ test("an opaque addon failure retains complete compiler/linker output and the re
   writeFileSync(join(directory, "tooling/conformance/build.sh"), 'cat stdout\ncat stderr >&2\nexit 23\n');
   const script = join(directory, "judge.sh");
   writeFileSync(script, `set -u\n${source.slice(start, end)}\nundefined_nts() { :; }\nunpinned_of() { :; }\nshaped_names() { echo 1; }\nPUBLISHES_NOTHING=\ncompiler=$1\nverdicts=$2\nout_dir=$2\naddon_logs=$3\njudge http\n[ "$judged" = fail ]\n`);
-  const result = spawnTest("bash", [script, "/bin/true", directory, logs], { cwd: directory, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+  const result = spawnTest("bash", [script, "/bin/true", directory, logs], { cwd: directory, encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}` } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /REGRESSED/);
   assert.match(result.stdout, /no error, Error:, TS or NTS line/);
@@ -31,7 +32,7 @@ test("an opaque addon failure retains complete compiler/linker output and the re
   assert.equal(readFileSync(join(logs, "http.build.status"), "utf8"), "23\n");
   // Earlier output cannot turn a command's nonzero exit into a successful build.
   writeFileSync(join(directory, "stdout"), "47 bytes\n");
-  const partial = spawnTest("bash", [script, "/bin/true", directory, logs], { cwd: directory, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+  const partial = spawnTest("bash", [script, "/bin/true", directory, logs], { cwd: directory, encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}` } });
   assert.equal(partial.status, 0, partial.stdout + partial.stderr);
   assert.match(partial.stdout, /REGRESSED/);
   assert.equal(readFileSync(join(logs, "http.build.status"), "utf8"), "23\n");

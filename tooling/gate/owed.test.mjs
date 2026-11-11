@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // What owed.mjs maps a changed path to, on this tree:
 //
 //   node --test tooling/gate/owed.test.mjs
@@ -113,7 +114,7 @@ test("a quoted runtime/* fixture alias does not make tooling read the Chromium r
 });
 
 test("the real Chromium runtime readers are complete", () => {
-  const listed = spawnSync("git", ["ls-files", "-z", "--", "runtime/chromium"], {encoding:"utf8"});
+  const listed = spawnSync("git", ["ls-files", "-z", "--", "runtime/chromium"], {env:testEnvironment(),encoding:"utf8"});
   assert.equal(listed.status, 0, listed.stderr);
   const paths = listed.stdout.split("\0").filter(Boolean);
   assert.ok(paths.length > 0, "the real Chromium runtime inventory is empty");
@@ -205,7 +206,7 @@ test("a failed Cargo metadata prerequisite is named instead of losing crate reac
   writeFileSync(cargo, "#!/bin/sh\nprintf '%s\\n' 'metadata prerequisite control: offline input unavailable' >&2\nexit 73\n");
   chmodSync(cargo, 0o755);
   const result = spawnSync(process.execPath, [fileURLToPath(new URL("./owed.mjs", import.meta.url)), "--self-test"], {
-    encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}` },
   });
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /cargo metadata --format-version 1 --no-deps --offline/);
@@ -402,7 +403,7 @@ test("backend-only changes run counting checks for the backend they change", () 
 test("every HIR pass owes the counting checks, not just files named for ownership", () => {
   // CFG/liveness, scalarization, cycle classification and callee summaries
   // also change allocation or reference placement. Cover the whole directory.
-  const listed = spawnSync("git", ["ls-files", "--", "compiler/core/src/hir"], { encoding: "utf8" });
+  const listed = spawnSync("git", ["ls-files", "--", "compiler/core/src/hir"], {env:testEnvironment(), encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const paths = listed.stdout.trim().split("\n").filter((p) => p.endsWith(".rs"));
   assert.ok(paths.length > 0);
@@ -819,7 +820,7 @@ test("an unavailable Cargo toolchain grants no scope for compiled inputs or docu
     })));`;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
     encoding: "utf8",
-    env: { ...process.env, RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
+    env: { ...testEnvironment(), RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
   });
   assert.equal(r.status, 0, r.stderr);
   const got = JSON.parse(r.stdout);

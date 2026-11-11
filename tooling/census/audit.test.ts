@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -17,7 +18,7 @@ test("metadata audit reads all authorities and exclusions without a compiler or 
     write("third_party/test262/features.txt", "Feature\n");
     write("third_party/test262/harness/helper.js", "// source\n");
     write("docs/boundary.md", "# Spec\n\n## Boundary\n");
-    const run = () => spawnSync(process.execPath, [path, "--metadata-only"], { cwd: root, env: { ...process.env, PATH: "/no-cargo-here" }, encoding: "utf8" });
+    const run = () => spawnSync(process.execPath, [path, "--metadata-only"], { cwd: root, env: { ...testEnvironment(), PATH: "/no-cargo-here" }, encoding: "utf8" });
     const green = run();
     assert.equal(green.status, 0, green.stdout + green.stderr);
     assert.match(green.stdout, /1 exclusions \(no case selection\)/);

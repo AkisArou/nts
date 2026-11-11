@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
@@ -29,7 +30,7 @@ test("fixed JVM callers retain their actual stock reader coverage", () => {
 
 test("a fixed role lookup does not admit an unregistered key", () => {
   const invoke = (...args: string[]) => spawnSync(process.execPath,
-    ["tooling/jvm/member-name.ts", ...args], {cwd: root, encoding: "utf8"});
+    ["tooling/jvm/member-name.ts", ...args], {env:testEnvironment(),cwd: root, encoding: "utf8"});
   const valid = invoke("MODULE_INIT");
   assert.equal(valid.status, 0, valid.stderr);
   assert.equal(valid.stdout, names.fixed.MODULE_INIT + "\n");

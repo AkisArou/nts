@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The durable landing queue and its owner lock.
 //
 //   node --test tooling/landing/queue.test.ts
@@ -114,7 +115,7 @@ test("one owner holds the lock; a dead owner's lock is taken over", t => {
   assert.equal(existsSync(path), false);
   // A process that held it and exited.
   const child = spawnSync(process.execPath, ["--input-type=module", "-e",
-    `import {acquire} from ${JSON.stringify(new URL("./lock.ts", import.meta.url).href)}; acquire(${JSON.stringify(path)});`]);
+    `import {acquire} from ${JSON.stringify(new URL("./lock.ts", import.meta.url).href)}; acquire(${JSON.stringify(path)});`], {env:testEnvironment()});
   assert.equal(child.status, 0, child.stderr?.toString());
   assert.ok(existsSync(path) && readFileSync(path, "utf8").includes(` ${child.pid} `));
   assert.equal(holder(path), null);

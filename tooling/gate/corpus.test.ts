@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {writeFileSync,readFileSync,rmSync,chmodSync} from 'node:fs';
@@ -26,7 +27,7 @@ function fixture(body:(root:string,suite:string)=>void){
   try{body(root,suite)}finally{rmSync(root,{recursive:true,force:true})}
 }
 function run(root:string,suite:string,mode:string,extra:Record<string,string>={}){
-  return spawnSync(process.execPath,[helper,root,mode],{encoding:'utf8',env:{...process.env,NTS_SUITE_BIN:suite,MOCK_TRACE:join(root,'trace'),...extra}});
+  return spawnSync(process.execPath,[helper,root,mode],{encoding:'utf8',env:{...testEnvironment(),NTS_SUITE_BIN:suite,MOCK_TRACE:join(root,'trace'),...extra}});
 }
 
 test('the gate selects the stable population and a private report',()=>fixture((root,suite)=>{

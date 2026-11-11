@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {readFileSync, writeFileSync} from "node:fs";
@@ -62,7 +63,7 @@ function fixture(t: TestContext, eager: boolean) {
     assert.ok(calls.includes('rebound'));
     console.log('deferred cycle and live bindings passed');
   `);
-  return spawnSync(process.execPath, [join(root, "entry.mjs")], {encoding:"utf8"});
+  return spawnSync(process.execPath, [join(root, "entry.mjs")], {env:testEnvironment(),encoding:"utf8"});
 }
 
 test("ZIP codecs defer parent bindings through the real ESM cycle and retain live imports", t => {

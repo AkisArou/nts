@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -149,7 +150,7 @@ test("concurrent publishers agree on the complete read-only root", async (t) => 
   const base = scratch(t);
   const source = `import {caseRoot,workspace,materialise} from ${JSON.stringify(new URL("./project.ts", import.meta.url).href)}; process.stdout.write(JSON.stringify(caseRoot(d=>{workspace(d);materialise(d,'same input');},{base:process.argv[1]})));`;
   const publish = () => new Promise<any>((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", source, base]);
+    const child = spawn(process.execPath, ["--input-type=module", "-e", source, base], {env:testEnvironment()});
     let output = "", error = "";
     child.stdout.on("data", (bytes) => output += bytes);
     child.stderr.on("data", (bytes) => error += bytes);

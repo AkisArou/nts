@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The census report's one reader and writer: what conformance262.ts --report
 // writes for a whole directory, and what the conformance summary reads.
 import assert from "node:assert/strict";
@@ -54,7 +55,7 @@ test("--report counts a whole directory: a sample, a record's cases or another r
   const scratch = testScratch(t, "census-report-cli"), out = join(scratch, "report.json");
   for (const selection of [["--sample", "3"], ["--recorded", "results/test262/c/harness.tsv"], ["--paths-from", "results/test262/c/harness.tsv"], ["--suite", "typescript"]]) {
     const run = spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--under", "test/harness", "--report", out, ...selection], {
-      cwd: root, encoding: "utf8", env: { ...process.env, NTS_BIN: process.execPath, NTS_CENSUS_DIR: join(scratch, "census") },
+      cwd: root, encoding: "utf8", env: { ...testEnvironment(), NTS_BIN: process.execPath, NTS_CENSUS_DIR: join(scratch, "census") },
     });
     assert.equal(run.status, 2, `${selection.join(" ")}: ${run.stdout}${run.stderr}`);
     assert.match(run.stdout, /--report counts a whole test262 directory/);

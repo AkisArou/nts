@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import {spawnTest} from "./test-wait.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -27,7 +28,7 @@ test("the native checker rejects adding an instrument kind without its dispositi
   const source=readFileSync(new URL("./step-result.ts",import.meta.url),"utf8");
   const policy=source.slice(source.indexOf("export type InstrumentResult"),source.indexOf("export function instrumentPolicy"));
   writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{strict:true,target:"ES2022",module:"ESNext",moduleResolution:"bundler",types:[]},files:["main.ts"]}));
-  const check=text=>{writeFileSync(join(dir,"main.ts"),text);return spawnTest(binary,["frontend",dir,"--checkers","1","--no-acquire"],{cwd:root,encoding:"utf8",env:process.env});};
+  const check=text=>{writeFileSync(join(dir,"main.ts"),text);return spawnTest(binary,["frontend",dir,"--checkers","1","--no-acquire"],{cwd:root,encoding:"utf8",env:testEnvironment()});};
   const good=check(policy);assert.equal(good.status,0,good.stdout+good.stderr);
   const changed=policy.replace('"selector-setup"; step:','"selector-setup" | "unclassified-control"; step:');assert.notEqual(changed,policy);
   const bad=check(changed);assert.equal(bad.status,2,bad.stdout+bad.stderr);assert.match(bad.stdout+bad.stderr,/unclassified-control/);
@@ -87,7 +88,7 @@ test("a selector infrastructure error is typed while a policy error stays an ord
 test("the real selector preload publishes its infrastructure error before the command exits",t=>{
   const directory=testScratch(t,"step-result-preload");
   const path=join(directory,"result.json");
-  const result=spawnTest(process.execPath,["--import",new URL("./step-result.ts",import.meta.url).href,"--input-type=module","-e",`throw Object.assign(new Error('cargo metadata setup control'),{code:'NTS_SELECTION_INFRASTRUCTURE'});`],{encoding:"utf8",env:{...process.env,NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"preload"}});
+  const result=spawnTest(process.execPath,["--import",new URL("./step-result.ts",import.meta.url).href,"--input-type=module","-e",`throw Object.assign(new Error('cargo metadata setup control'),{code:'NTS_SELECTION_INFRASTRUCTURE'});`],{encoding:"utf8",env:{...testEnvironment(),NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"preload"}});
   assert.notEqual(result.status,0);assert.match(result.stderr,/cargo metadata setup control/);
   assert.equal(readStepInstrument(path,"tooling","preload")?.kind,"selector-setup");
 });

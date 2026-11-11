@@ -1,3 +1,4 @@
+import {testEnvironmentHandoff} from './test-environment.ts';
 // A private installation proves which executable a launch selected. Other
 // invocations run the test's real Node; no host installation is created.
 import {mkdirSync,writeFileSync} from "node:fs";
@@ -10,7 +11,7 @@ import {appendFileSync,fstatSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 appendFileSync(${JSON.stringify(log)},JSON.stringify(process.argv.slice(2))+'\\n');
 if(process.argv[2]==='--version')console.log(${JSON.stringify("v"+reported)});
-else {const stdio=['inherit','inherit','inherit'];if(process.argv[2]?.endsWith('/tooling/landing/candidate-environment.ts')){fstatSync(3);stdio.push(3);}if(process.env.NTS_GATE_LOCK_FD==='8'){fstatSync(8);while(stdio.length<8)stdio.push('ignore');stdio.push(8);}const result=spawnSync(${JSON.stringify(process.execPath)},process.argv.slice(2),{env:process.env,stdio});if(result.error)throw result.error;process.exitCode=result.status??1;}
+else {const stdio=['inherit','inherit','inherit'];if(process.argv[2]?.endsWith('/tooling/landing/candidate-environment.ts')){fstatSync(3);stdio.push(3);}if(process.env.NTS_GATE_LOCK_FD==='8'){fstatSync(8);while(stdio.length<8)stdio.push('ignore');stdio.push(8);}const result=spawnSync(${JSON.stringify(process.execPath)},process.argv.slice(2),{env:${testEnvironmentHandoff(["NTS_GATE_LOCK_FD","NTS_GATE_SCOPE_EXPECTED","NTS_GATE_SETUP_ONLY","NTS_MEMORY_RESERVATION","NTS_MEMORY_PRIORITY","NTS_GATE_STEPS","NTS_GATE_TARGET","NTS_GATE_TREE","NTS_CHECKERS","CARGO_TARGET_DIR","CANDIDATE_VERSION"])},stdio});if(result.error)throw result.error;process.exitCode=result.status??1;}
 `,{mode:0o755});
   return node;
 }

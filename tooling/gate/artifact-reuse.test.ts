@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -98,7 +99,7 @@ test("real JDK verification reuses complete output and measures only the verifie
   const java = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "/usr/bin/java";
   const javac = join(dirname(java), "javac"), driver = join(ROOT, "tooling/conformance/JvmVerify.java");
   const run = (cmd: string, args: string[]) => new Promise<any>((done, reject) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] }); let stdout = "", stderr = "";
+    const child = spawn(cmd, args, {env:testEnvironment(), stdio: ["ignore", "pipe", "pipe"] }); let stdout = "", stderr = "";
     child.stdout.on("data", data => stdout += data); child.stderr.on("data", data => stderr += data);
     child.on("error", reject); child.on("close", (status, signal) => done({ status, signal, stdout, stderr }));
   });
@@ -123,8 +124,8 @@ test("different caller environments produce identical emitted bytes, verifier fa
     child.stdout.on("data", data => stdout += data); child.stderr.on("data", data => stderr += data);
     child.on("error", reject); child.on("close", (status, signal) => done({ status, signal, stdout, stderr }));
   });
-  const first = { ...process.env, LANG: "C.UTF-8" }; delete first.NODE_OPTIONS;
-  const second = { ...process.env, LANG: "en_US.UTF-8", NODE_OPTIONS: "--max-old-space-size=8192 --disable-warning=ExperimentalWarning" };
+  const first = { ...testEnvironment(), LANG: "C.UTF-8" }; delete first.NODE_OPTIONS;
+  const second = { ...testEnvironment(), LANG: "en_US.UTF-8", NODE_OPTIONS: "--max-old-space-size=8192 --disable-warning=ExperimentalWarning" };
   const records = [];
   for (const [i, parent] of [first, second].entries()) {
     const out = join(root, `out-${i}`);

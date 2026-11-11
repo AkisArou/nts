@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
@@ -75,7 +76,7 @@ function temp(): string {
   return newTestScratch("bench-record-test");
 }
 function git(root: string, args: string[]): string {
-  const r = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  const r = spawnSync("git", args, {env:testEnvironment(), cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 }
@@ -268,7 +269,7 @@ test("two concurrent producers serialize publication and render the newest compl
     const children = inputs.map((run, index) => {
       const file = join(root, index + ".json");
       writeFileSync(file, JSON.stringify(run));
-      const child = spawn(process.execPath, [script, "publish", root, file, "no-commit"], {
+      const child = spawn(process.execPath, [script, "publish", root, file, "no-commit"], {env:testEnvironment(),
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stderr = "";
@@ -359,9 +360,9 @@ test("the real check CLI detects a one-change renderer drift", () => {
     assert.ok(source.includes("# Benchmark results"));
     writeFileSync(mutant, source.replaceAll("# Benchmark results", "# Drifted benchmark results"));
     writeFileSync(join(root, "groups.ts"), readFileSync(fileURLToPath(new URL("./groups.ts", import.meta.url))));
-    const good = spawnSync(process.execPath, [implementation, "check", root], { encoding: "utf8" });
+    const good = spawnSync(process.execPath, [implementation, "check", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(good.status, 0, good.stderr);
-    const bad = spawnSync(process.execPath, [mutant, "check", root], { encoding: "utf8" });
+    const bad = spawnSync(process.execPath, [mutant, "check", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(bad.status, 1);
     assert.match(bad.stderr, /shared renderer/);
   } finally {

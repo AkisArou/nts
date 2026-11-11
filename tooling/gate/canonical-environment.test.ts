@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "./test-environment.ts";
 import {removable} from "./run-temporary.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
@@ -481,7 +482,7 @@ import { oracleRecipeIdentity } from ${JSON.stringify(new URL("../differential/o
 const child=await reserve({bytes:128*2**20,what:"oracle fixture"},{report:console.log});
 const release=await acquireToken({project:"oracle-progress"},undefined,2*2**30);
 console.log("oracle case entered");
-${oracle==='lost'?`const env={...process.env};delete env[RESERVATION_ENV];
+${oracle==='lost'?`const env={...${testEnvironmentHandoff(["NTS_MEMORY_RESERVATION","NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT"])}};delete env[RESERVATION_ENV];
 const replacement=await reserve({bytes:128*2**20,what:"oracle takes its own",replaces:child.id},{env,report:console.log});
 await new Promise(()=>{watch(process.env.NTS_GATE_RUN_DIR,()=>{});});
 replacement.release();`:''}
@@ -503,7 +504,7 @@ child.release();
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
   const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
-    '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{stdio:['ignore','pipe','pipe']});
+    '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{env:testEnvironment(),stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});

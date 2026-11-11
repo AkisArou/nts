@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The token pool driven through a hold with real token.sh clients; the census
 // feed, which gives way while its job's reservation is outranked, with a real
 // worker process on a pipe; and a run temporary's disk admission.
@@ -76,7 +77,7 @@ test("token pool: a running case finishes through a hold, and the next waits unt
   });
   const addr = await pool.start();
   // Held-token state is cleared: inside the gate this test itself runs under a token.
-  const env = { ...process.env, NTS_GATE_TOKENS: addr, NTS_GATE_STEP: "s", NTS_GATE_TOKEN_HELD: "" };
+  const env = { ...testEnvironment(), NTS_GATE_TOKENS: addr, NTS_GATE_STEP: "s", NTS_GATE_TOKEN_HELD: "" };
   const run = (script: string, delayStart = false) => {
     const command=join(HERE, "token.sh");
     // The first token request arrives after the old 300 ms assumption.
@@ -121,7 +122,7 @@ test("census feed: a delayed running case finishes, the next path waits while th
   const worker = spawn(
     process.execPath,
     ["-e", `require("readline").createInterface({ input: process.stdin }).on("line", (p) => setTimeout(() => console.log(JSON.stringify({ path: p, at: Date.now() })), 1200));`],
-    { stdio: ["pipe", "pipe", "inherit"] },
+    {env:testEnvironment(), stdio: ["pipe", "pipe", "inherit"] },
   );
   let exited = false;
   worker.on("exit", () => { exited = true; });

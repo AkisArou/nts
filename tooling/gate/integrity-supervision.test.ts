@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {chmodSync,existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
@@ -37,7 +38,7 @@ mock.module(${JSON.stringify(ACTIVE)},{namedExports:{...actual,activeCommand:(co
 process.argv=[process.execPath,${JSON.stringify(entry)},"runtime/node/a-completed","runtime/node/b-pending"];
 await import(${JSON.stringify(entry)});
 `;
-    const env:NodeJS.ProcessEnv={...process.env,NTS_BIN:compiler,NTS_INTEGRITY_JOBS:"1",NTS_GATE_COSTS_DIR:join(dir,"costs"),
+    const env:NodeJS.ProcessEnv={...testEnvironment(),NTS_BIN:compiler,NTS_INTEGRITY_JOBS:"1",NTS_GATE_COSTS_DIR:join(dir,"costs"),
       CONTROL_FAILED:failed?"1":"0",CONTROL_BEHAVIOR:behavior,
       NTS_GATE_STEP:"integrity",NTS_GATE_STEP_ATTEMPT:"control",NTS_GATE_STEP_RESULT:frame};
     delete env.NTS_INTEGRITY_KEEP;delete env.NTS_GATE_TOKENS;

@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -17,7 +18,7 @@ test('ELF dependency guard names every owned library and rejects malformed entri
 
 test('a real fake forbidden SONAME fails while an ordinary ELF passes',{skip:process.platform!=='linux'},()=>{
  const dir=newTestScratch('node-deps-elf');
- const run=(args:string[])=>{const result=spawnSync('clang',args,{encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
+ const run=(args:string[])=>{const result=spawnSync('clang',args,{env:testEnvironment(),encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
  try {
   writeFileSync(join(dir,'library.c'),'int owned(void){return 7;}\n');
   writeFileSync(join(dir,'bad.c'),'int owned(void);int main(void){return owned()!=7;}\n');

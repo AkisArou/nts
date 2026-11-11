@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The test262 census and its writer, run for real on the cases each check
 // manipulates, against fixture records of only those cases: a run held to a
 // record lists each case that runs now and has no row as pending, and each
@@ -46,7 +47,7 @@ test("a test262 run held to a record lists the cases it lacks and its fails that
   t.after(() => { removable(scratch); rmSync(scratch, { recursive: true, force: true }); });
   // The writer writes a claim about a commit, so it runs from a clean pin.
   const pinned = publishPin(binary, join(scratch, "pin"), provenanceOf(binary) ?? {
-    sha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim(),
+    sha: execFileSync("git", ["rev-parse", "HEAD"], {env:testEnvironment(), cwd: repository, encoding: "utf8" }).trim(),
     subject: "test fixture copy of the gate compiler", clean: true, applied: null, built_at: new Date().toISOString(),
   });
   const real = readFileSync(join(repository, RECORD), "utf8");
@@ -56,7 +57,7 @@ test("a test262 run held to a record lists the cases it lacks and its fails that
   const recordOf = (contents: string, ...rows: string[]) => [...contents.split("\n").filter(line => line.startsWith("#")), ...rows, ""].join("\n");
   const fixture = join(scratch, "record.tsv"), selection = join(scratch, "selection.tsv");
   const census = (under: string, ...args: string[]) => spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--under", under, "--jobs", "2", ...args],
-    { cwd: repository, encoding: "utf8", env: ownMemoryEnv(join(scratch, "memory"), { ...process.env, NTS_BIN: pinned }) });
+    { cwd: repository, encoding: "utf8", env: ownMemoryEnv(join(scratch, "memory"), { ...testEnvironment(), NTS_BIN: pinned }) });
 
   // One recorded pass with no row, and another recorded as a fail: the two cases selected.
   writeFileSync(selection, `${gone}\n${fixed}\n`);

@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -15,7 +16,7 @@ function scratch(t) {
 test('forced 124 publishes unavailable, while completed nonzero is an actual failure',t=>{
  const dir=scratch(t);
  for(const code of [0,7,124]) {
-  const child=spawnSync(process.execPath,['-e',`process.exit(${code})`]);
+  const child=spawnSync(process.execPath,['-e',`process.exit(${code})`], {env:testEnvironment()});
   assert.equal(child.status,code);assert.equal(child.signal,null);
   const file=join(dir,`result-${code}.json`),env={NTS_GATE_STEP_RESULT:file,NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'native-result-control'};
   const result=publishCases(parseCases(`run\tfixture\t${child.status}\n`),env);
@@ -60,7 +61,7 @@ test('the real native shell captures terminal statuses and publishes only the ag
   for(const code of codes)writeFileSync(join(tree,`runtime/node/control/test/status${code}.c`),'/* forced terminal status */\n');
   const frame=join(tree,'step-result.json'),attempt='shell-'+codes.join('-');
   const child=spawnSync('bash',['tooling/conformance/c-tests.sh'],{
-   cwd:tree,encoding:'utf8',env:{...process.env,PATH:bin+':'+process.env.PATH,TMPDIR:tmp,
+   cwd:tree,encoding:'utf8',env:{...testEnvironment(),PATH:bin+':'+process.env.PATH,TMPDIR:tmp,
     NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:attempt}
   });
   const detail=child.stdout+'\n'+child.stderr;

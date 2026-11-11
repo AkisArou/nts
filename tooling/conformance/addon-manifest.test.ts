@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -47,7 +48,7 @@ test("the arity command distinguishes absent artifacts from a complete empty pub
   const directory = mkdtempSync(join(tmpdir(), "nts-arity-manifest-"));
   const observer = fileURLToPath(new URL("./arity-agreement.mjs", import.meta.url));
   const run = () => spawnSync(process.execPath, [observer, "fixture"], {
-    env: { ...process.env, NTS_ADDON_OUT: directory }, encoding: "utf8",
+    env: { ...testEnvironment(), NTS_ADDON_OUT: directory }, encoding: "utf8",
   });
   try {
     const missing = run();

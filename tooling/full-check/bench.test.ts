@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/bench.test.ts
 //
 // How the benchmarks unit asks for joint memory and CPU admission in its
@@ -15,7 +16,7 @@ import { test, type TestContext } from "node:test";
 import { look, newJob, readOutcome } from "./background.ts";
 import { admission, FULL_MD, measureJob, publishAt, publishRecord, resultsCommit, RUNS, slowerRows, type MeasureJob, type MeasureOutcome } from "./bench.ts";
 import { Git } from "./git.ts";
-import { checkoutIn, ENV, publishEveryRun, repository, stubBench } from "./repository-fixture.ts";
+import { checkoutIn, publishEveryRun, repository, stubBench } from "./repository-fixture.ts";
 import { candidateEnvironmentFixture } from "./run-environment-fixture.ts";
 import { hostEnvironment } from "../gate/canonical-environment.ts";
 import { readLedger } from "../gate/memory-ledger.ts";
@@ -37,10 +38,10 @@ function inUnit(t: TestContext, root: string, body: (unit: string) => string) {
   const memory = ownMemory(join(root, "own-memory"));
   const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
   const setenv = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
-  t.after(() => { spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" }); });
+  t.after(() => { spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" }); });
   const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
     "--property=RuntimeMaxSec=300s", "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31",
-    ...setenv, process.execPath, script], { encoding: "utf8" });
+    ...setenv, process.execPath, script], {env:testEnvironment(), encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
   return memory;
 }
@@ -205,7 +206,7 @@ test("the unit's work keeps the run's record, as nts-bench committed it, in its 
 test("a record is published on main as a results-only commit there; once main has it, there is nothing to publish; anything else fails", t => {
   const repo = repository(t), run = scratch(t, "full-check-publish-");
   const main = repo.commit({ "a.txt": "1\n" }, "main");
-  const tree = join(repo.root, "bench"), git = new Git(tree, ENV), checkout = checkoutIn(repo, tree);
+  const tree = join(repo.root, "bench"), git = new Git(tree, repo.git.env), checkout = checkoutIn(repo, tree);
   const record = join(run, "2026-11-09-run.json"), log = join(run, "publish.log");
   writeFileSync(record, `${JSON.stringify({ slower: ["awfy-list"] })}\n`);
   const published = publishAt(git, main, checkout, at => publishEveryRun(at, record, log));
@@ -220,8 +221,8 @@ test("a record is published on main as a results-only commit there; once main ha
   assert.deepEqual(publishAt(git, published.commit, checkout, () => ({ status: 1, output: "schema: no such column" })), { kind: "failed", why: "exited 1" });
   const stray = publishAt(git, published.commit, checkout, at => {
     writeFileSync(join(at, "stray.txt"), "x\n");
-    new Git(at, ENV).run(["add", "stray.txt"]);
-    new Git(at, ENV).run(["commit", "-q", "-m", "results: retain benchmark run x"]);
+    new Git(at, repo.git.env).run(["add", "stray.txt"]);
+    new Git(at, repo.git.env).run(["commit", "-q", "-m", "results: retain benchmark run x"]);
     return { status: 0, output: "" };
   });
   assert.deepEqual(stray, { kind: "failed", why: "the results commit also changes stray.txt" });

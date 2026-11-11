@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The inner loop's decisions: which crates a change touches, when reference
 // counting is owed, which runtime C is formatted, and which CPUs heavy work
 // may use.
@@ -75,7 +76,7 @@ for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", fa
     const root = newTestScratch("inner-compiler"), tree = join(root, "tree"), bin = join(root, "bin");
     const unit = `nts-test-inner-compiler-${randomUUID()}`, slice = newToolingSlice(true);
     t.after(() => {
-      spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+      spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" });
       stopToolingSlice(slice);
       removable(root); rmSync(root, { recursive: true, force: true });
     });
@@ -115,7 +116,7 @@ const args=process.argv.slice(2),command=args.slice(args.indexOf('--')+1);
 process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1);
 `);
     for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["-c", "user.name=inner-test", "-c", "user.email=inner@example.invalid", "commit", "-qm", "fixture"]]) {
-      const ran = spawnSync("git", args, { cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
+      const ran = spawnSync("git", args, {env:testEnvironment(), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
     }
     const memory = ownMemory(join(root, "memory"));
     const env = gateEnvironment({ ...hostEnvironment(process.env), PATH: bin + ":" + process.env.PATH },
@@ -123,7 +124,7 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
     const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
     const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",
-      ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], { encoding: "utf8" });
+      ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(ran.status, fails ? 1 : 0, ran.stdout + ran.stderr);
     assert.ok(existsSync(calls), ran.stdout + ran.stderr);
     const phases = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);

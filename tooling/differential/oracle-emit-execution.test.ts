@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): captured runtime
 // assets, CommonJS and ESM goals at execution, oracle identity, child event
 // streams and batches. Shared helpers are in oracle-emit-fixture.ts.
@@ -44,7 +45,7 @@ if(process.argv[2]){
   const prepared=(await prepare(root,'src/main.mjs',{project:null,runtimeRoots:[join(root,'src/data.txt')]}));
   for(const key of ['exists','read','opendir','readdir','stat','access']){
     const own=oracleExecution(prepared);
-    const run=spawnSync(process.execPath,[...own.args,join(root,'src/main.mjs'),key],{encoding:'utf8',env:{...process.env,...own.env}});
+    const run=spawnSync(process.execPath,[...own.args,join(root,'src/main.mjs'),key],{encoding:'utf8',env:{...testEnvironment(),...own.env}});
     assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,`true true\ncaptured sibling\n${key==='exists'?'false':'ENOENT'}\n`);
     const health=oracleLoaderReady(own);assert.equal(health.ready,false);
     if(!health.ready)assert.match(health.why,/runtime asset was not captured: .*missing-/);
@@ -96,9 +97,9 @@ test("an owned large module driver preserves stdin and a CommonJS program's own 
   assert.ok(Buffer.byteLength(body)>262144,'the complete driver exceeds Linux single-argument limits');
   const driver=join(owned,'driver.mjs'),plain=join(owned,'plain.mjs');
   writeFileSync(driver,body);writeFileSync(plain,body.replace(source,output));
-  const reference=spawnSync(process.execPath,[plain],{cwd:root,env:process.env,input:'stdin payload',encoding:'utf8'});
+  const reference=spawnSync(process.execPath,[plain],{cwd:root,env:testEnvironment(),input:'stdin payload',encoding:'utf8'});
   assert.equal(reference.status,0,reference.stderr);assert.equal(reference.stdout,'driver true\nprogram false stdin payload\n19\n');
-  const run=(own:OraclePrepared)=>spawnSync(process.execPath,[...own.args,driver],{cwd:root,env:{...process.env,...own.env},input:'stdin payload',encoding:'utf8'});
+  const run=(own:OraclePrepared)=>spawnSync(process.execPath,[...own.args,driver],{cwd:root,env:{...testEnvironment(),...own.env},input:'stdin payload',encoding:'utf8'});
   const absent=oracleExecution(prepared);run(absent);assert.equal(oracleLoaderReady(absent).ready,false);
   const healthy=oracleExecution(prepared,driver),actual=run(healthy);
   assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,reference.stdout);assert.deepEqual(oracleLoaderReady(healthy),{ready:true});
@@ -130,11 +131,11 @@ try{const result=await exists(new URL('./'+(process.argv[2]||'data.txt'),import.
   const index=JSON.parse(readFileSync(join(dirname(prepared.manifest),'source-index.json'),'utf8'));
   const output=join(dirname(prepared.manifest),index.trees[0].root,root.slice(1),'src/main.mjs');
   for(const name of ['data.txt','missing.txt']){
-    const reference=spawnSync(process.execPath,[output,name],{cwd:root,env:process.env,encoding:'utf8'});
+    const reference=spawnSync(process.execPath,[output,name],{cwd:root,env:testEnvironment(),encoding:'utf8'});
     assert.equal(reference.status,0,reference.stderr);
     assert.equal(reference.stdout,`true true true\nfalse false false\nboolean ${name==='data.txt'}\n`);
     const own=oracleExecution(prepared);
-    const run=spawnSync(process.execPath,[...own.args,join(root,'src/main.mjs'),name],{cwd:root,env:{...process.env,...own.env},encoding:'utf8'});
+    const run=spawnSync(process.execPath,[...own.args,join(root,'src/main.mjs'),name],{cwd:root,env:{...testEnvironment(),...own.env},encoding:'utf8'});
     assert.equal(run.status,reference.status,run.stderr);assert.equal(run.stdout,reference.stdout);
     const health=oracleLoaderReady(own);
     if(name==='data.txt')assert.deepEqual(health,{ready:true});
@@ -170,7 +171,7 @@ test("package TS exports retain emitted providers and governed bare CommonJS hol
     const run=execute(root,prepared,entry),health=oracleLoaderReady(prepared);
     if(extension==='cts'){
       const output=resolve(dirname(prepared.manifest),stored.sources[member]);
-      const reference=spawnSync(process.execPath,['-e','console.log(require(process.argv[1]).value)',output],{cwd:root,encoding:'utf8'});
+      const reference=spawnSync(process.execPath,['-e','console.log(require(process.argv[1]).value)',output],{env:testEnvironment(),cwd:root,encoding:'utf8'});
       assert.equal(reference.status,0,reference.stderr);assert.equal(reference.stdout,'19\n');
       assert.equal(health.ready,false);if(!health.ready)assert.match(health.why,/unproved CommonJS route: pkg/);
     }else {assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'19\n');assert.deepEqual(health,{ready:true});}
@@ -202,7 +203,7 @@ test("a rewritten TSX import ignores an unrelated TS sibling",async t=>{
     const extra={roots:[join(root,'src/main.ts'),join(root,'src/value.tsx')]};
     const run=async ()=>{
       const prepared=(await prepare(root,'src/main.ts',extra)),stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));
-      const oracle=execute(root,prepared),bare=spawnSync(process.execPath,['--no-warnings',join(dirname(prepared.manifest),stored.sources[join(root,'src/main.ts')])],{encoding:'utf8',env:process.env});
+      const oracle=execute(root,prepared),bare=spawnSync(process.execPath,['--no-warnings',join(dirname(prepared.manifest),stored.sources[join(root,'src/main.ts')])],{encoding:'utf8',env:testEnvironment()});
       assert.equal(oracle.status,bare.status,oracle.stderr);assert.equal(oracle.stdout,bare.stdout);
       if(jsx==='preserve'){assert.equal(oracle.status,1);assert.match(oracle.stderr,/ERR_UNKNOWN_FILE_EXTENSION/);}
       else{assert.equal(oracle.status,0,oracle.stderr);assert.equal(oracle.stdout,'19\n');}
@@ -391,7 +392,7 @@ fail();
   // The migration comparison runs on Node24. Future Node versions removed
   // that flag; they still owe the exact source-line assertions below.
   if(Number(process.versions.node.split('.')[0])===24){
-    const old=spawnSync(process.execPath,["--experimental-transform-types","--no-warnings",entry],{encoding:"utf8"});
+    const old=spawnSync(process.execPath,["--experimental-transform-types","--no-warnings",entry],{env:testEnvironment(),encoding:"utf8"});
     assert.equal(old.status,1,old.stderr);assert.deepEqual(locations(run.stderr),locations(old.stderr));
   }
   assert.ok(locations(run.stderr).includes(6));assert.ok(locations(run.stderr).includes(8));
@@ -427,7 +428,7 @@ test("a missing or different oracle identity is refused before application code"
   const execution=oracleExecution(altered),changed=execute(root,execution);assert.notEqual(changed.status,0);assert.equal(changed.stdout,"");
   assert.match(changed.stderr,/oracle TypeScript emit identity mismatch/);
   assert.equal(oracleLoaderReady(execution).ready,false);
-  const env={...process.env};delete env.NTS_ORACLE_EMIT_MANIFEST;
+  const env={...testEnvironment()};delete env.NTS_ORACLE_EMIT_MANIFEST;
   const missing=spawnSync(process.execPath,["--import",ORACLE_LOADER,join(root,"src/main.ts")],{encoding:"utf8",env});
   assert.notEqual(missing.status,0);assert.match(missing.stderr,/oracle emit manifest is missing/);
 });
@@ -472,7 +473,7 @@ test("copied oracle assets run outside their source tree with an explicit toolch
   for(const name of [...ORACLE_EXECUTION_FILES,"oracle-emit.ts","oracle-loader.ts","oracle-filesystem.ts","oracle-runtime.ts","oracle-resolution.ts","oracle-assets.ts","oracle-toolchain.json"])
     cpSync(join(REPOSITORY,"tooling/differential",name),join(assets,name));
   const prepared=spawnSync(process.execPath,[join(assets,"oracle-emit.ts"),"--prepare",join(root,"src/main.ts"),join(root,"emitted"),join(root,"tsconfig.json")],{
-    encoding:"utf8",cwd:root,env:{...process.env,NTS_ORACLE_TYPESCRIPT:toolchain},
+    encoding:"utf8",cwd:root,env:{...testEnvironment(),NTS_ORACLE_TYPESCRIPT:toolchain},
   });
   assert.equal(prepared.status,0,prepared.stderr);
   const configured:OraclePrepared=JSON.parse(prepared.stdout);
@@ -535,7 +536,7 @@ test("missing capability and changed package bytes fail before execution",async 
   writeFileSync(join(corrupt,"package.json"),readFileSync(join(corrupt,"package.json"),"utf8")+"\n");
   (await assert.rejects(async ()=>(await prepare(root,"src/main.ts",{toolchain:corrupt})),/root package hash mismatch: expected [a-f0-9]{64}; actual [a-f0-9]{64}/));
   assert.equal(existsSync(join(root,"scratch")),false);
-  const env={...process.env};delete env.NTS_ORACLE_TYPESCRIPT;
+  const env={...testEnvironment()};delete env.NTS_ORACLE_TYPESCRIPT;
   const missing=spawnSync(process.execPath,[join(REPOSITORY,"tooling/differential/oracle-emit.ts"),"--prepare",join(root,"src/main.ts"),join(root,"missing"),join(root,"tsconfig.json")],{encoding:"utf8",env});
   assert.notEqual(missing.status,0);assert.equal(missing.stdout,"");assert.match(missing.stderr,/NTS_ORACLE_TYPESCRIPT is missing/);
 });
@@ -596,7 +597,7 @@ test("one batch preserves eight independent projects and attributes a type error
   for(const root of roots)for(const item of readdirSync(join(root,'emitted')))
     assert.equal(existsSync(join(root,'emitted',item,'manifest.json')),false,'rejected batch publishes no ready member');
   const attributed=await prepareOracles(requests.map((options,i)=>({key:String(i),options})),{
-    directory:join(roots[0]!,'attribution'),toolchain,workers:1,env:process.env,memoryBytes:2*2**30,
+    directory:join(roots[0]!,'attribution'),toolchain,workers:1,env:testEnvironment(),memoryBytes:2*2**30,
   });
   const rejected=attributed['3']!;assert.ok('instrument' in rejected);
   assert.match(rejected.instrument,/TS2322/);
@@ -632,7 +633,7 @@ test("an interrupted compiler leaves its batch unmeasured and singleton attribut
   const root=workspace(t,{"src/main.ts":"console.log(11);\n"});
   const worker=new OracleWorker(join(root,"worker"),toolchain);try{
   await assert.rejects(worker.prepareBatch([{entry:join(root,'src/main.ts'),directory:join(root,'killed')}],async(compiler,args,cwd)=>{
-    const run=await activeCommand('prlimit',['--core=0','--cpu=0:0',compiler,...args],{cwd,env:process.env,cpuBudgetSeconds:120,idleMs:120_000});
+    const run=await activeCommand('prlimit',['--core=0','--cpu=0:0',compiler,...args],{cwd,env:testEnvironment(),cpuBudgetSeconds:120,idleMs:120_000});
     assert.ok(run.signal,'the real native compiler must be stopped');throw Error('oracle batch not measured: '+run.signal);
   }),/not measured: SIG/);
   const good=oracleExecution(await worker.prepare({entry:join(root,'src/main.ts'),directory:join(root,'singleton')}));
@@ -675,7 +676,7 @@ test("nested children cannot overwrite an instrument event, and file executions 
     'src/main.ts':`import {spawnSync} from 'node:child_process';
 const children=process.argv.includes('bad')?['bad','good']:['good'];
 if(process.argv.includes('reverse'))children.reverse();
-for(const name of children){const result=spawnSync(process.execPath,[...process.execArgv,new URL('../'+name+'.mjs',import.meta.url).pathname],{encoding:'utf8',env:process.env});if(result.status!==0)throw Error(result.stderr);}
+for(const name of children){const result=spawnSync(process.execPath,[...process.execArgv,new URL('../'+name+'.mjs',import.meta.url).pathname],{encoding:'utf8',env:${testEnvironmentHandoff()}});if(result.status!==0)throw Error(result.stderr);}
 console.log('completed');
 `,
     'bad.mjs':"try{await import('./unprepared.ts')}catch{}\n",
@@ -686,7 +687,7 @@ console.log('completed');
     const before=oracleExecution(prepared);
     assert.equal(oracleLoaderReady(before).ready,false,'a new file cannot inherit ready');
     const own=oracleExecution(prepared);
-    const result=spawnSync(process.execPath,[...own.args,join(root,'src/main.ts'),...suffix],{encoding:'utf8',env:{...process.env,...own.env}});
+    const result=spawnSync(process.execPath,[...own.args,join(root,'src/main.ts'),...suffix],{encoding:'utf8',env:{...testEnvironment(),...own.env}});
     assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'completed\n');
     return own;
   };

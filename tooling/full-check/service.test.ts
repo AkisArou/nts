@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/service.test.ts
 //
 // The loop over a scratch repository with a local bare origin and a stand-in
@@ -12,7 +13,7 @@ import {spawnSync} from "node:child_process";
 import {chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync} from "node:fs";
 import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
-import {applyEveryRow, assertMessage, checkoutIn, ENV, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
+import {applyEveryRow, assertMessage, checkoutIn, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
 import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
@@ -592,13 +593,13 @@ test("the core runs on each new main while a records unit records, and the rows 
   // The unit recorded in the core's records tree at the run's commit, on that tree's own code, while the gate's tree moved on.
   const spec = fx.units.specs[0]!;
   assert.deepEqual([spec.cwd, spec.command.slice(1, 3)], [repo.layout.records.core, [join(repo.layout.records.core, "tooling/full-check/service.ts"), "--record=core"]]);
-  assert.equal(new Git(repo.layout.records.core, ENV).commit("HEAD"), commit);
-  assert.equal(new Git(repo.layout.tree, ENV).commit("HEAD"), third);
+  assert.equal(new Git(repo.layout.records.core, repo.git.env).commit("HEAD"), commit);
+  assert.equal(new Git(repo.layout.tree, repo.git.env).commit("HEAD"), third);
   await recordAndApply(fx);
   const records = readState(repo.layout.state).core.records!;
   assert.equal(records.commit, commit, "recorded at the run's commit");
   assert.equal(repo.git.run(["rev-parse", `${records.submitted}^`]), third, "applied on the newest main, in the records tree");
-  assert.equal(new Git(repo.layout.records.core, ENV).commit("HEAD"), records.submitted);
+  assert.equal(new Git(repo.layout.records.core, repo.git.env).commit("HEAD"), records.submitted);
   assert.equal(typeof records.job?.ended, "string", "its outcome was read");
 });
 
@@ -781,7 +782,7 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   const measuring = readState(repo.layout.state).benchmarks_due!.measuring!;
   assert.ok(night.units.running(BENCH_UNIT));
   assert.equal(readFileSync(join(measuring.run, "nts-bench"), "utf8"), `nts-bench at ${first}\n`, "with the run's own copy of that build, which the next core run cannot build over");
-  assert.equal(new Git(repo.layout.bench, ENV).commit("HEAD"), first, "in the bench tree, at verified");
+  assert.equal(new Git(repo.layout.bench, repo.git.env).commit("HEAD"), first, "in the bench tree, at verified");
   // Main moves on while it measures.
   const moved = repo.commit({ "b.txt": "2\n" }, "lands while it measures");
   measureIn(night);
@@ -829,7 +830,7 @@ test("a controller that restarts while nts-bench measures adopts its unit by nam
   assert.equal(await cycle(after), "idle");
   assert.equal(after.units.specs.length, 2, "started once more");
   assert.equal(existsSync(join(repo.layout.bench, "half-run.txt")), false);
-  assert.equal(new Git(repo.layout.bench, ENV).commit("HEAD"), first, "at the commit it measures, not the newest verified");
+  assert.equal(new Git(repo.layout.bench, repo.git.env).commit("HEAD"), first, "at the commit it measures, not the newest verified");
   assert.equal(readState(repo.layout.state).benchmarks_due!.measuring!.job!.starts, 2);
   // Gone again: the night is given up as a task.
   after.units.stop(BENCH_UNIT);
@@ -1136,7 +1137,7 @@ test("the stand-in tree is a worktree of the scratch repository", async t => {
   const gate = fakeGate(repo);
   const commit = repo.commit({ "a.txt": "1\n" }, "one");
   gate.run(commit, ["tests"], "check");
-  assert.equal(new Git(repo.layout.tree, ENV).run(["rev-parse", "HEAD"]), commit);
+  assert.equal(new Git(repo.layout.tree, repo.git.env).run(["rev-parse", "HEAD"]), commit);
 });
 
 
@@ -1165,7 +1166,7 @@ test("the controller follows verified with the inputs its new code needs, or sta
   repo.git.run(["checkout", "-q", "--detach", first]);
   const layout = { ...repo.layout, controller: repo.dir }, linked: string[] = [];
   const refuse = (tree: string) => {
-    const at = new Git(tree, ENV).commit("HEAD")!; linked.push(at);
+    const at = new Git(tree, repo.git.env).commit("HEAD")!; linked.push(at);
     if (at === second) throw new Error("dependency-inputs.ts --offline: a package is not in the registry cache");
   };
   // Inputs that cannot be linked keep the code that runs: the tree goes back, its own inputs linked again.
@@ -1173,7 +1174,7 @@ test("the controller follows verified with the inputs its new code needs, or sta
   assert.equal(repo.git.commit("HEAD"), first);
   assert.deepEqual(linked, [second, first]);
   linked.length = 0;
-  assert.equal(followVerified(repo.git, layout, repo.dir, tree => { linked.push(new Git(tree, ENV).commit("HEAD")!); }), true);
+  assert.equal(followVerified(repo.git, layout, repo.dir, tree => { linked.push(new Git(tree, repo.git.env).commit("HEAD")!); }), true);
   assert.equal(repo.git.commit("HEAD"), second);
   assert.deepEqual(linked, [second], "the new code's inputs are linked after its checkout");
   // A service that does not run from the controller never moves it.
@@ -1189,8 +1190,8 @@ test("the controller moves to verified only while no count reads its tree", t =>
   // As the count's service holds it while it counts: flock --shared on the controller's lock.
   mkdirSync(dirname(layout.controllerLock), { recursive: true });
   const count = openSync(layout.controllerLock, "a");
-  assert.equal(spawnSync("flock", ["--shared", "--nonblock", "8"], { stdio: ["ignore", "ignore", "inherit", null, null, null, null, null, count] }).status, 0);
-  const linked: string[] = [], link = (tree: string) => { linked.push(new Git(tree, ENV).commit("HEAD")!); };
+  assert.equal(spawnSync("flock", ["--shared", "--nonblock", "8"], {env:testEnvironment(), stdio: ["ignore", "ignore", "inherit", null, null, null, null, null, count] }).status, 0);
+  const linked: string[] = [], link = (tree: string) => { linked.push(new Git(tree, repo.git.env).commit("HEAD")!); };
   assert.equal(followVerified(repo.git, layout, repo.dir, link), false);
   assert.deepEqual([repo.git.commit("HEAD"), linked], [first, []], "the tree does not move while the count reads it");
   closeSync(count);
@@ -1292,7 +1293,7 @@ test('records use the newly verified environment, in the records tree at the ver
     calls++;
     assert.equal(repo.git.commit('verified'),commit,'verified moves before recording');
     assert.equal(tree,repo.layout.records.core,'the records unit records in the core\'s records tree');
-    assert.equal(new Git(tree,ENV).commit('HEAD'),commit,'recordAt uses that exact tree');
+    assert.equal(new Git(tree,repo.git.env).commit('HEAD'),commit,'recordAt uses that exact tree');
     return recordPending(tree,pin,run,part,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
   }});
   await cycle(fx);

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/count.test.ts
 //
 // The count step over a fixture plan.md, fixture branches and pull requests,
@@ -298,7 +299,7 @@ test("the sweep stops an empty unbound slice by name, and keeps a populated one 
   };
   startSlice(empty);
   startSlice(held);
-  const sleeper = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", `--unit=${scope}`, `--slice=${held}`, "sleep", "60"], { stdio: "ignore" });
+  const sleeper = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", `--unit=${scope}`, `--slice=${held}`, "sleep", "60"], {env:testEnvironment(), stdio: "ignore" });
   t.after(() => sleeper.kill("SIGKILL"));
   const group = ctl("show", held, "--property=ControlGroup", "--value").stdout.trim();
   await waitFor("the held slice populated by its scope", () => /^populated 1$/m.test(readFileSync(`/sys/fs/cgroup${group}/cgroup.events`, "utf8")));

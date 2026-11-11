@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
@@ -159,7 +160,7 @@ try{
 }finally{real.memoryRun().close();}
 `);
   const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", helper], {
-    encoding: "utf8", env: { ...process.env, NTS_GATE_STEP_MEMORY_BYTES: String(768 * 2 ** 20) },
+    encoding: "utf8", env: { ...testEnvironment(), NTS_GATE_STEP_MEMORY_BYTES: String(768 * 2 ** 20) },
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const evidence = JSON.parse(result.stdout) as { terminations: { signal: string; memoryKilled: boolean }[] };

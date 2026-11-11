@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {chmodSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,symlinkSync,unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -47,7 +48,7 @@ process.argv=[process.execPath,target,'--read-program-reference',request];
 await import(pathToFileURL(target).href);
 `);
   const read=(entry:string)=>spawnSync(process.execPath,[wrapper,fileURLToPath(new URL(entry,import.meta.url)),JSON.stringify(request)],
-    {encoding:'utf8',env:{...process.env,NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
+    {encoding:'utf8',env:{...testEnvironment(),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
   const control=read('./oracle-emit.ts');
   assert.notEqual(control.status,0);assert.match(control.stderr,/preparation module imported by result reader/,'the import guard discriminates the old entry');
   const result=read('./oracle-results.ts');
@@ -81,7 +82,7 @@ test('incomplete results and unfinished observations cannot enter the result sto
 test('a generated control selects its authenticated producer project by name',t=>{
   const f=fixture(t);f.publish();
   const command=(subject:string)=>spawnSync(process.execPath,[fileURLToPath(new URL('./oracle-results.ts',import.meta.url)),'--project-subject',subject],
-    {encoding:'utf8',env:{...process.env,NTS_PROGRAM_ORACLE:JSON.stringify(programOracleHandoff(f.directory)),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
+    {encoding:'utf8',env:{...testEnvironment(),NTS_PROGRAM_ORACLE:JSON.stringify(programOracleHandoff(f.directory)),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
   const positive=command(f.value.subject);
   assert.equal(positive.status,0,positive.stderr);assert.equal(positive.stdout,f.project+'\n');
   const absent=command('gate/unknown-control');assert.notEqual(absent.status,0);assert.match(absent.stderr,/no measured project: gate\/unknown-control/);
@@ -95,7 +96,7 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
   assert.equal(typeof argumentsFor,'function','the producer must publish executable reader assets');
   const root:unknown=JSON.parse(readFileSync(join(f.directory,'ready.json'),'utf8'));
   const args=argumentsFor!(root),request={handoff:programOracleHandoff(f.directory),project:f.project,entry:f.entry,driverSha256:'d'.repeat(64)};
-  const run=()=>spawnSync(process.execPath,['--no-experimental-strip-types',...args,'--read-program-reference',JSON.stringify(request)],{encoding:'utf8',env:{...process.env,NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
+  const run=()=>spawnSync(process.execPath,['--no-experimental-strip-types',...args,'--read-program-reference',JSON.stringify(request)],{encoding:'utf8',env:{...testEnvironment(),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
   const positive=run();assert.equal(positive.status,0,positive.stderr);assert.deepEqual(JSON.parse(positive.stdout),f.value);
   const runtime=join(f.directory,'reader/oracle-runtime.mjs');chmodSync(runtime,0o644);writeFileSync(runtime,readFileSync(runtime,'utf8')+'\n// changed reader code\n');
   const changed=run();assert.notEqual(changed.status,0);assert.match(changed.stderr,/program oracle reader bytes changed/);

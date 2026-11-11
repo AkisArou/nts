@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import { spawnTest } from "./test-wait.ts";
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -84,7 +85,7 @@ function run(command: string, args: string[], cwd: string, what: string): string
   const ran = spawnTest(command, args, {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, NTS_CHECKERS: "1" },
+    env: { ...testEnvironment(), NTS_CHECKERS: "1" },
   }, what);
   if (ran.error || ran.signal) {
     throw new Error(`not measured: ${what} ended by ${ran.signal ?? ran.error?.message}`);

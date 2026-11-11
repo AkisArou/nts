@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import * as dependencyOwner from './oracle-dependencies.ts';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
@@ -42,7 +43,7 @@ test('complete package inventories are stable across scratch roots and cover a N
     }
   }
   const before=key(roots[0]);assert.equal(before,key(roots[1]));
-  const probe=(root:string)=>spawnSync(process.execPath,['--input-type=commonjs','-e',"try{console.log(require('pkg'))}catch(error){console.log(error.code)}"],{cwd:root,encoding:'utf8'});
+  const probe=(root:string)=>spawnSync(process.execPath,['--input-type=commonjs','-e',"try{console.log(require('pkg'))}catch(error){console.log(error.code)}"],{env:testEnvironment(),cwd:root,encoding:'utf8'});
   const missing=probe(roots[0]);assert.equal(missing.status,0,missing.stderr);assert.equal(missing.stdout,'MODULE_NOT_FOUND\n');
   writeFileSync(join(roots[0],'node_modules/pkg/index.js'),'module.exports=19;\n');
   const appeared=probe(roots[0]);assert.equal(appeared.status,0,appeared.stderr);assert.equal(appeared.stdout,'19\n');
@@ -62,7 +63,7 @@ function installFixture(t:import('node:test').TestContext){
   });
   cpSync(join(fileURLToPath(new URL('../../',import.meta.url)),'tooling'),join(root,'tooling'),{recursive:true});
   const write=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
-  const git=(...args:string[])=>execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{cwd:root,encoding:'utf8'}).trim();
+  const git=(...args:string[])=>execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{env:testEnvironment(),cwd:root,encoding:'utf8'}).trim();
   write('package.json',JSON.stringify({private:true,type:'module',packageManager:JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json',import.meta.url)),'utf8')).packageManager}));
   write('pnpm-workspace.yaml','packages:\n  - packages/*\n');
   write('pnpm-lock.yaml',"lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\n\nimporters:\n\n  .: {}\n\n  packages/one: {}\n");
@@ -123,7 +124,7 @@ test('adding committed workspace metadata outside the old member paths holds bef
 function canonicalFixture(cap:unknown):NodeJS.ProcessEnv{
   const raw=JSON.stringify(cap),context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT!);
   context.owned.NTS_ORACLE_DEPENDENCIES=raw;context.report.host.NTS_ORACLE_DEPENDENCIES=raw;
-  return {...process.env,NTS_ORACLE_DEPENDENCIES:raw,NTS_GATE_ENV_CONTEXT:JSON.stringify(context)};
+  return {...testEnvironment(),NTS_ORACLE_DEPENDENCIES:raw,NTS_GATE_ENV_CONTEXT:JSON.stringify(context)};
 }
 test('a run dependency seal rejects a same-byte rewrite after the unchanged positive control',async t=>{
   const f=installFixture(t),initial=f.cap('sealed'),environment=canonicalFixture(initial);

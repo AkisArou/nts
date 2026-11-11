@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -25,7 +26,7 @@ function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {
 }
 test("committed paths preserve spaces, Unicode, tabs and line breaks across a rename",t=>{
   const repo=mkdtempSync(join(tmpdir(),"owed-paths-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
-  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const env={...testEnvironment(),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   const before="before space Ɤ\tline\nbreak.ts",after="after space Ɤ\tline\nbreak.ts";
   git("init","-qb","main");writeFileSync(join(repo,before),"export const n=1;\n");git("add","--",before);git("commit","-qm","before");
@@ -85,7 +86,7 @@ test("a successor's project or crate scope is whole even beside narrower current
 test("immutable endpoint selection carries the tip's successor table and rejects undeclared deletion", t => {
   const repo = mkdtempSync(join(tmpdir(), "owed-successors-"));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  const env = { ...testEnvironment(), GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const file = join(repo, "tooling/gate/owed.mjs");
   mkdirSync(dirname(file), { recursive: true });
@@ -111,7 +112,7 @@ test("historical rules receive the same committed changes without modern metadat
   const repo=mkdtempSync(join(tmpdir(),"owed-legacy-"));
   t.after(()=>rmSync(repo,{recursive:true,force:true}));
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});
-  const env={...process.env,GIT_AUTHOR_NAME:"test",GIT_AUTHOR_EMAIL:"test@example.invalid",GIT_COMMITTER_NAME:"test",GIT_COMMITTER_EMAIL:"test@example.invalid"};
+  const env={...testEnvironment(),GIT_AUTHOR_NAME:"test",GIT_AUTHOR_EMAIL:"test@example.invalid",GIT_COMMITTER_NAME:"test",GIT_COMMITTER_EMAIL:"test@example.invalid"};
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   const code=`export const owed=changes=>[{name:"legacy",paths:changes.map(c=>c.path),steps:changes.length?["tests"]:[],arms:[]}];
 export const gateSteps=rules=>rules.flatMap(r=>r.steps);
@@ -129,7 +130,7 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
 test("range registries are private, borrow pinned objects, and disappear after success or failure",t=>{
   const directory=mkdtempSync(join(tmpdir(),"owed-private-registry-")),repo=join(directory,"repo"),report=join(directory,"report.jsonl");
   t.after(()=>rmSync(directory,{recursive:true,force:true}));
-  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const env={...testEnvironment(),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   const policy=`import {execFileSync} from 'node:child_process';
@@ -207,7 +208,7 @@ test("concurrent range preflights collect the same stale pin and only their own 
   });
   await new Promise<void>((done,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",()=>done());});
   const address=server.address();assert.ok(address&&typeof address!=="string");
-  const env={...process.env,HOME:join(directory,"home"),OWED_TEST_BARRIER_PORT:String(address.port),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const env={...testEnvironment(),HOME:join(directory,"home"),OWED_TEST_BARRIER_PORT:String(address.port),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),`
 import {createConnection} from "node:net";
@@ -227,7 +228,7 @@ export const allSteps=()=>["tooling"];
   const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
   const stale=`refs/nts-selector/${process.pid}-0-${boot}-concurrent/base`;
   git("update-ref",stale,base);
-  const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(directory,"bin"),deletions=join(directory,"deletions.jsonl");mkdirSync(bin);
+  const actual=execFileSync("sh",["-c","command -v git"],{env:testEnvironment(),encoding:"utf8"}).trim(),bin=join(directory,"bin"),deletions=join(directory,"deletions.jsonl");mkdirSync(bin);
   writeFileSync(join(bin,"git"),`#!${process.execPath}
 import {spawnSync} from 'node:child_process';import {appendFileSync} from 'node:fs';import {createConnection} from 'node:net';
 const args=process.argv.slice(2),result=spawnSync(${JSON.stringify(actual)},args,{encoding:'utf8'});
@@ -268,7 +269,7 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   const directory = mkdtempSync(join(tmpdir(), "owed-range-test-"));
   const repo = join(directory, basename(directory)+"-repo");
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const env = { ...process.env, GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
+  const env = { ...testEnvironment(), GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
   for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !/GIT_(AUTHOR|COMMITTER)_/.test(key)) delete env[key];
   const git = (...args: string[]) => execFileSync("git", ["-c","core.hooksPath=/dev/null",...args], { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   fixtureRepository(t,repo,env);
@@ -305,11 +306,11 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
 
 test("a failed range worktree creation is identified as infrastructure",t=>{
  const repo=mkdtempSync(join(tmpdir(),"range-machine-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
- const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+ const env={...testEnvironment(),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
  git("init","-qb","main");writeFileSync(join(repo,"base"),"base");git("add","base");git("commit","-qm","base");const base=git("rev-parse","HEAD");
  writeFileSync(join(repo,"next"),"next");git("add","next");git("commit","-qm","next");
- const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(repo,"bin"),attempt=join(repo,"attempt");mkdirSync(bin);
+ const actual=execFileSync("sh",["-c","command -v git"],{env:testEnvironment(),encoding:"utf8"}).trim(),bin=join(repo,"bin"),attempt=join(repo,"attempt");mkdirSync(bin);
  const quote=(s:string)=>"'"+s.replaceAll("'","'\\''")+"'";
  writeFileSync(join(bin,"git"),`#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = add ]; then pwd > ${quote(attempt)}; echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
  const prior=process.env.PATH;t.after(()=>{process.env.PATH=prior;});process.env.PATH=`${bin}:${prior}`;
@@ -322,7 +323,7 @@ test("a failed range worktree creation is identified as infrastructure",t=>{
 test("Cargo infrastructure crosses the endpoint process without becoming a policy refusal", t => {
   const repo = mkdtempSync(join(tmpdir(), "range-cargo-"));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  const env = { ...testEnvironment(), GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const gate = join(repo, "tooling/gate");
   mkdirSync(gate, { recursive: true });
@@ -362,7 +363,7 @@ export const allSteps=()=>["tooling"];
 
 function newPathFixture(t) {
   const repo=mkdtempSync(join(tmpdir(),"owed-new-path-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
-  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const env={...testEnvironment(),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   const write=(path:string,text:string)=>{mkdirSync(join(repo,path,".."),{recursive:true});writeFileSync(join(repo,path),text);};
   write("tooling/gate/all.sh","node tooling/conformance/named-new.ts\n");
@@ -408,7 +409,7 @@ test("transitive imports and rule data both prevent stable-selector narrowing wh
 
 test("the real unchanged selector reaches a newly added census test without a core fallback",async t=>{
   const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));
-  const repo=join(directory,basename(directory)+"-repo"),env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const repo=join(directory,basename(directory)+"-repo"),env={...testEnvironment(),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   t.after(()=>rmSync(directory,{recursive:true,force:true}));
   const git=(...args:string[])=>execFileSync("git",["-c","core.hooksPath=/dev/null",...args],{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   fixtureRepository(t,repo,env);

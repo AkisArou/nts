@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The records run records tests/outcomes through record-pending.ts in a
 // canonical environment of its own, as the full check's records unit runs it.
 // Its oracle dependency capability is unsealed, so the outcomes recorder's
@@ -25,7 +26,7 @@ const FIXTURE="tests/outcomes/a-comparison-of-letters";
 const RECORD=join(FIXTURE,"outcome.json");
 
 function git(root:string,...args:string[]):string{
-  return execFileSync("git",["-C",root,...args],{encoding:"utf8",env:{...process.env,GIT_CONFIG_GLOBAL:"/dev/null",
+  return execFileSync("git",["-C",root,...args],{encoding:"utf8",env:{...testEnvironment(),GIT_CONFIG_GLOBAL:"/dev/null",
     GIT_AUTHOR_NAME:"Records fixture",GIT_AUTHOR_EMAIL:"records-fixture@invalid",GIT_COMMITTER_NAME:"Records fixture",GIT_COMMITTER_EMAIL:"records-fixture@invalid"}}).trim();
 }
 

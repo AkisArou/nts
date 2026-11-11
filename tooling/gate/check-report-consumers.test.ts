@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnTest} from "./test-wait.ts";
 import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
@@ -119,7 +120,7 @@ test("a named program disagreement stays loud and cannot accept another fixture 
   const known = join(root, "tests/programs/typed-array-aliasing");
   mkdirSync(known);writeFileSync(join(known, "tsconfig.json"), "{}");
   const run = (mode: string, name: string, mutation: string) => spawnTest("sh", [join(root, `tooling/gate/${mode}.sh`), name], {
-    cwd: root, encoding: "utf8", env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    cwd: root, encoding: "utf8", env: {...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
   });
   for (const mode of ["gate", "rc"]) {
     const accepted = run(mode, "typed-array-aliasing", "wrong");
@@ -135,7 +136,7 @@ test("declines.sh reads backend-stage fields and keeps runtime declines separate
   const {root, compiler} = sandbox(t);
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/gate/declines.sh")], {
     cwd: root, encoding: "utf8", 
-    env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    env: {...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
   });
   const refused = run("backend-refusal");
   assert.equal(refused.status, 0, refused.stdout + refused.stderr);
@@ -155,7 +156,7 @@ test("agrees-with-c.sh compares structured compiled answers and rejects answer m
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/jvm/agrees-with-c.sh"),
     join(root, "tests/programs/control/tsconfig.json")], {
     cwd: root, encoding: "utf8", 
-    env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    env: {...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
   });
   const control = run("wrong");
   assert.equal(control.status, 0, control.stdout + control.stderr);
@@ -172,7 +173,7 @@ for (const script of ["gate.sh", "rc.sh"]) {
     const run = (mutation = "") => spawnTest(script === "rc.sh" ? "bash" : "sh",
       [join(root, "tooling/gate", script)], {
         cwd: root, encoding: "utf8", 
-        env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation },
+        env: { ...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation },
       });
     const control = run();
     assert.equal(control.status, 0, control.stdout + control.stderr);
@@ -192,7 +193,7 @@ test("bench-agree.sh holds each benchmark to its run record: what reproduces pas
   const header = `# nts-benchmark-runs {"version":1,"backend":"jvm","commit":"${"a".repeat(40)}","compiler":"${"b".repeat(16)}","under":"benchmarks/cases"}\n`;
   const record = (outcome: object) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${header}benchmarks/cases/control\t${JSON.stringify(outcome)}\n`); };
   const run = (mutation = "", ...args: string[]) => spawnTest("sh", [join(root, "tooling/gate/bench-agree.sh"), ...args], { cwd: root, encoding: "utf8",
-    env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation } });
+    env: { ...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation } });
   // No record yet: every benchmark is pending, listed, and not run.
   const pending = run("wrong");
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
@@ -234,7 +235,7 @@ test("gate.sh lists a program with no oracle record as pending, and fails one wi
   const { root, compiler } = sandbox(t);
   mkdirSync(join(root, "tests/programs/second")); writeFileSync(join(root, "tests/programs/second/tsconfig.json"), "{}");
   const run = () => spawnTest("sh", [join(root, "tooling/gate/gate.sh")], { cwd: root, encoding: "utf8",
-    env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "pending" } });
+    env: { ...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "pending" } });
   const pending = run();
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
   assert.match(pending.stdout, /pending: tests\/programs\/control is not recorded in results\/oracle-counts\/tests\/programs\/control\.json yet/);
@@ -254,7 +255,7 @@ test("the npm survey reads diagnostic fields and refuses a broken report", t => 
   ]));
   const run = (mutation: string) => spawnTest(process.execPath, [join(root, "tooling/npm-survey/verdict.ts")], {
     cwd: root, encoding: "utf8", 
-    env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    env: {...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
   });
   for (const [mutation, outcome, code] of [["lowering-refusal", "refused", ""], ["typecheck", "typecheck-failed", "TS2304"]]) {
     const result = run(mutation!); assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -272,7 +273,7 @@ for (const script of ["tooling/sweep/run.sh", "tooling/conformance/web-platform/
   test(`${script} requires structured completed comparisons`, t => {
     const {root, compiler} = sandbox(t);
     const run = (mutation = "") => spawnTest("sh", [join(root, script)], {cwd: root, encoding: "utf8", 
-      env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}});
+      env: {...testEnvironment(), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}});
     const control = run(); assert.equal(control.status, 0, control.stdout + control.stderr);
     for (const mutation of ["unavailable", "legacy-text", "contradiction"]) {
       const result = run(mutation); assert.notEqual(result.status, 0, result.stdout + result.stderr);
@@ -288,7 +289,7 @@ test("the real gate owner holds a hung check and retains a completed failure bef
   writeFileSync(join(bin, "node"), `#!/bin/sh\nexec '${process.execPath}' --experimental-test-module-mocks --import '${preload}' "$@"\n`, {mode: 0o755});
   const resultPath = join(root, "instrument.json");
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/gate/gate.sh")], {cwd: root, encoding: "utf8", 
-    env: {...process.env, PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation,
+    env: {...testEnvironment(), PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation,
       NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "real-owner", NTS_GATE_STEP_RESULT: resultPath}});
   const hung = run("hang-after-output");
   assert.equal(hung.status, 124, hung.stdout + hung.stderr); assert.doesNotMatch(hung.stdout, /^DIS/m);
@@ -308,7 +309,7 @@ test("the actual gate owns typed per-call stops including cleanup after all answ
   const run=(mutation:string)=>{
     rmSync(resultPath,{force:true});
     return spawnTest('sh',[join(root,'tooling/gate/gate.sh'),'control'],{cwd:root,encoding:'utf8',
-      env:{...process.env,NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath}});
+      env:{...testEnvironment(),NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath}});
   };
   for(const mutation of ['supervisor-hung','supervisor-cleanup']) {
     const result=run(mutation);assert.equal(result.status,124,result.stdout+result.stderr);
@@ -331,7 +332,7 @@ test("a check past its compile bound is a recorded timeout, red and named, with 
   mkdirSync(join(root, "tests/programs/spin")); writeFileSync(join(root, "tests/programs/spin/tsconfig.json"), "{}");
   const resultPath = join(root, "instrument.json");
   const result = spawnTest("sh", [join(root, "tooling/gate/gate.sh")], {cwd: root, encoding: "utf8",
-    env: {...process.env, PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "spin",
+    env: {...testEnvironment(), PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "spin",
       NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "compile-bound", NTS_GATE_STEP_RESULT: resultPath}});
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^TIMEOUT  spin \(compile\): .*used its 0\.5 s CPU bound/m);
@@ -348,7 +349,7 @@ test("the real batch owner publishes typed setup and cleanup failures", t => {
       : `const realOs=await import('node:os');const {default:unusedOs,...osNamed}=realOs;mock.module('node:os',{namedExports:{...osNamed,homedir:()=>${JSON.stringify(root)}},defaultExport:{...realOs.default}});const real=await import('node:fs');const {default:unused,...named}=real;mock.module('node:fs',{namedExports:{...named,rmSync:(path,options)=>{if(String(path).includes('/nts-check-consumers/run-'))throw new Error('cleanup control');return real.rmSync(path,options);}},defaultExport:{...real.default}});`;
     writeFileSync(script, `import {mock} from 'node:test';${mutation}\nconst {runBatch}=await import(${JSON.stringify(pathToFileURL(join(root, "tooling/differential/check-consumers.ts")).href)});process.exitCode=await runBatch('programs');\n`);
     return spawnTest(process.execPath, ["--experimental-test-module-mocks", script], {cwd: root, encoding: "utf8", 
-      env: {...process.env, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "", NTS_GATE_STEP: "examples",
+      env: {...testEnvironment(), NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "", NTS_GATE_STEP: "examples",
         NTS_GATE_STEP_ATTEMPT: "lifecycle", NTS_GATE_STEP_RESULT: resultPath}});
   };
   for (const phase of ["setup", "cleanup"] as const) {

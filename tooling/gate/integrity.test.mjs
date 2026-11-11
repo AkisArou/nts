@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
@@ -44,7 +45,7 @@ child.on("close",status=>{
       mkdirSync(arm);
       const commands = join(arm, "commands.jsonl");
       const counters = join(arm, "counters.jsonl");
-      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, NTS_BIN: compiler, LC_ALL: "C", TZ: "Pacific/Kiritimati",
+      const env = { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}`, NTS_BIN: compiler, LC_ALL: "C", TZ: "Pacific/Kiritimati",
         NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: join(arm, "costs"), CONTROL_COMMANDS: commands, CONTROL_COUNTERS: counters };
       delete env.NTS_INTEGRITY_KEEP;
       delete env.NTS_GATE_TOKENS;
@@ -108,7 +109,7 @@ if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 fu
     mkdirSync(costs);
     const heavy = "runtime/node/cost-heavy", light = "runtime/node/cost-light";
     writeFileSync(join(costs, "integrity.json"), JSON.stringify({ [heavy]: 100, [light]: 1 }) + "\n");
-    const env = { ...process.env, NTS_BIN: compiler, LC_ALL: "C", NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: costs, CONTROL_CLOCK: clock };
+    const env = { ...testEnvironment(), NTS_BIN: compiler, LC_ALL: "C", NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: costs, CONTROL_CLOCK: clock };
     delete env.NTS_INTEGRITY_KEEP;
     delete env.NTS_GATE_TOKENS;
     const result = spawnTest(process.execPath, ["--import", preload, "tooling/conformance/integrity.ts", heavy, light], { cwd: ROOT, env, encoding: "utf8" });

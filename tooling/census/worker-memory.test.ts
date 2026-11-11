@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
 import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { constants, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -72,14 +73,14 @@ async function gatePool(n: number) {
  * lower-priority job yield (memory-ledger.ts's `outranked`).
  */
 async function landingBlocker(t: { after(fn: () => void): void }): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...ownMemory };
+  const env: NodeJS.ProcessEnv = { ...testEnvironment(), ...ownMemory };
   delete env.NTS_MEMORY_RESERVATION;
   const held = await reserve({ bytes: 4 * 2 ** 30, what: "another landing's job", priority: "landing" }, { env });
   t.after(() => held.release());
 }
 
 function landingAhead(t: { after(fn: () => void): void }): { withdraw: () => void; ended: Promise<unknown> } {
-  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...process.env, ...ownMemory };
+  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...testEnvironment(), ...ownMemory };
   delete env.NTS_MEMORY_RESERVATION;
   t.after(() => ahead.abort());
   const ended = reserve({ bytes: 4 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
@@ -155,7 +156,7 @@ try {
 } finally { run.close(); }
 console.log(JSON.stringify({ peak, group: run.group }));`;
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",
-    env: { ...process.env, NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
+    env: { ...testEnvironment(), NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
   assert.equal(result.status, 0, result.stderr);
   const { peak, group } = JSON.parse(result.stdout);
   const files = readdirSync(costs); assert.equal(files.length, 1);
@@ -203,7 +204,7 @@ const tools={memoryCapKb:256*1024};
 // Enter the bounded scope before testing a case's short activity limits.
 serialRun(tools);
 assert.ok(inResidentWorker());
-const env={...process.env,NTS_GATE_STEP:'resident-bridge',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:${JSON.stringify(join(directory, "instrument.json"))}};
+const env={...${testEnvironmentHandoff(["NTS_TOOLING_SLICE","NTS_GATE_SCOPE_EXPECTED","NTS_MEMORY_RESERVATION"])},NTS_GATE_STEP:'resident-bridge',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:${JSON.stringify(join(directory, "instrument.json"))}};
 expected={idleMs:real.COMMAND_IDLE_GUARD_MS,pollMs:50,cpuBudgetSeconds:0.1,onActivity(){}};
 await assert.rejects(compileActive(tools,'python3',['-c','while True: pass'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='runaway');
 expected={idleMs:500,pollMs:50,cpuBudgetSeconds:10,onActivity(){}};
@@ -478,7 +479,7 @@ console.log(JSON.stringify({error,reads}));`;
 test("an unavailable user bus refuses to compile instead of running uncapped", () => {
   const module = new URL("./worker-memory.ts", import.meta.url).href;
   const code = `import {compileSync} from ${JSON.stringify(module)}; compileSync({memoryCapKb:65536},"sh",["-c","echo UNCAPPED"],{encoding:"utf8"});`;
-  const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent-nts-user-bus" },});
+  const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", env: { ...testEnvironment(), DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent-nts-user-bus" },});
   assert.notEqual(result.status, 0);
   assert.ok(!result.stdout.includes("UNCAPPED"));
   assert.match(result.stderr, /resident cap: user manager failed/);
@@ -674,7 +675,7 @@ test("an exclusive case exceeding its step aggregate is a named failure, never p
 serialRun({memoryCapKb:1024*1024});
 compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024**2); print(len(held))", "named-budget-case"], {encoding:"utf8"});
 `);
-  const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...process.env,
+  const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...testEnvironment(),
     NTS_GATE_STEP: "outcomes", NTS_GATE_STEP_MEMORY_BYTES: String(128 * 2 ** 20),
     NTS_GATE_STEP_RESULT: join(directory, "instrument.json"), NTS_GATE_STEP_ATTEMPT: directory,
     NTS_CENSUS_POOL_WORKER: "0", NTS_CENSUS_WORKER_GROUP: "", NTS_CENSUS_RUN_GROUP: "" } });
@@ -745,7 +746,7 @@ console.log(JSON.stringify({ own, effective, status: killed.status, cause, group
   workerOutput: killed.stdout, workerError: killed.stderr }));`;
   const launch = slice.command(process.execPath, ["--input-type=module", "-e", census]);
   const ran = spawnTest(launch.command, launch.args, { encoding: "utf8",
-    env: { ...process.env, NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
+    env: { ...testEnvironment(), NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
   const seen = JSON.parse(ran.stdout.trim().split("\n").at(-1)!) as { own: string; effective: number; status: number; cause: string; group: string;
     supervisor: string; workerOutput: string; workerError: string };

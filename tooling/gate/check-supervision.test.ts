@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {writeFileSync} from "node:fs";
 import {join} from "node:path";
@@ -17,7 +18,7 @@ const AGREES = JSON.stringify({version: 1, status: "agrees",
 
 function fixture(t: TestContext) {
   const root = testScratch(t,"check-supervision-run");
-  const env = {...process.env, NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "supervision",
+  const env = {...testEnvironment(), NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "supervision",
     NTS_GATE_STEP_RESULT: join(root, "result.json")};
   return {root, env, frame: () => readStepInstrument(env.NTS_GATE_STEP_RESULT, env.NTS_GATE_STEP, env.NTS_GATE_STEP_ATTEMPT)};
 }

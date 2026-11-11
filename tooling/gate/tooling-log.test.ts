@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -38,7 +39,7 @@ if(JSON.stringify(actual)===JSON.stringify(expected)){
   const script = join(root, "wrapper.sh");
   writeFileSync(script, wrapper + "\ntooling_tests\n");
   const env: NodeJS.ProcessEnv = {
-    ...process.env, PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: join(root, "tmp"),
+    ...testEnvironment(), PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: join(root, "tmp"),
     NTS_GATE_RUN_DIR: runDirectory ? join(root, "run") : "", TEST_FIXTURE: fixture,
     TEST_RUNNER: new URL("./tooling-runner.ts", import.meta.url).href,
     TEST_TOOLING_COMMAND: JSON.stringify(command),

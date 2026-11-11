@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -64,7 +65,7 @@ test("an agent starts in its own unit, lists, and stops by name", async t => {
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const name = `test596-${process.pid}`;
   const unit = agentUnit(name);
-  const env = ownMemoryEnv(join(directory, "memory"), { ...process.env, TMPDIR: directory });
+  const env = ownMemoryEnv(join(directory, "memory"), { ...testEnvironment(), TMPDIR: directory });
   const run = (...args: string[]) => spawnTest(process.execPath, [LAUNCHER, ...args], { encoding: "utf8", env }, `agents ${args[0]}`);
   const ctl = (...args: string[]) => spawnTest("systemctl", ["--user", ...args], { encoding: "utf8" });
   const show = (property: string) => ctl("show", unit, `--property=${property}`, "--value").stdout.trim();

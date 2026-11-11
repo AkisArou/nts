@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {copyFileSync,chmodSync,constants,mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,statSync,writeFileSync,openSync,closeSync} from 'node:fs';
 import {spawn,spawnSync} from 'node:child_process';
@@ -69,8 +70,8 @@ test('a run holder survives the completed preparation helper process group',asyn
   // The fixture wrapper owns and drains its command pipes. The test parent
   // owns no asynchronous program pipes while waiting for that wrapper.
   const activeURL=pathToFileURL(join(here,'../gate/active-command.ts')).href;
-  const wrapper=`import {activeCommand} from ${JSON.stringify(activeURL)};const run=await activeCommand(process.execPath,['--input-type=module','-e',${JSON.stringify(source)}],{cwd:${JSON.stringify(root)},env:process.env,cpuBudgetSeconds:30,idleMs:30000,maxBuffer:2**20});if(run.status!==0)throw Error(run.stderr);console.log(run.stdout);`;
-  const run=spawnSync(process.execPath,['--input-type=module','-e',wrapper],{encoding:'utf8'});
+  const wrapper=`import {activeCommand} from ${JSON.stringify(activeURL)};const run=await activeCommand(process.execPath,['--input-type=module','-e',${JSON.stringify(source)}],{cwd:${JSON.stringify(root)},env:${testEnvironmentHandoff()},cpuBudgetSeconds:30,idleMs:30000,maxBuffer:2**20});if(run.status!==0)throw Error(run.stderr);console.log(run.stdout);`;
+  const run=spawnSync(process.execPath,['--input-type=module','-e',wrapper],{env:testEnvironment(),encoding:'utf8'});
   assert.equal(run.status,0,run.stderr);const session=JSON.parse(run.stdout) as NodeResolutionSession;
   try{checkNodeResolutionSession(session,session.options);const result=await queryNodeResolutions(session,[{specifier:'node:fs',parentURL:import.meta.url,mode:'esm',conditions:session.conditions.esm,importAttributes:{}}]);assert.ok(result.answers[0]!.ok);}
   finally{if(Reflect.get(session,'holder')){try{await close(session);}catch(error){if(!String(error).includes('ENOENT')&&!String(error).includes('ECONNREFUSED'))throw error;}}}
@@ -87,7 +88,7 @@ test('an async resolution batch leaves the parent free to drain a child pipe',as
   writeFileSync(entry,'');writeFileSync(target,'throw new Error("must not evaluate");\n');
   const session=(await startNodeResolutionSession(join(root,'service'),nodeResolutionOptions([])))!;
   try{
-    const child=spawn(process.execPath,['-e',"process.stdout.end('x'.repeat(4*2**20))"],{stdio:['ignore','pipe','pipe']});
+    const child=spawn(process.execPath,['-e',"process.stdout.end('x'.repeat(4*2**20))"],{env:testEnvironment(),stdio:['ignore','pipe','pipe']});
     let bytes=0,errors='';child.stdout.on('data',(chunk:Buffer)=>{bytes+=chunk.length;});child.stderr.on('data',(chunk:Buffer)=>{errors+=chunk.toString('utf8');});
     const drained=new Promise<void>((done,fail)=>{child.once('error',fail);child.once('close',status=>{try{assert.equal(status,0,errors);done();}catch(error){fail(error);}});});
     const query={specifier:'./value.mjs',parentURL:pathToFileURL(entry).href,mode:'esm' as const,conditions:['node','import','module-sync','node-addons'],importAttributes:{}};
@@ -104,13 +105,13 @@ test('replacing a held executable by rename gives the child a different identity
   const root=fixture(t),binary=join(root,'node'),record=join(root,'session.json'),moduleURL=pathToFileURL(join(here,'oracle-resolution.ts')).href;
   copyFileSync(process.execPath,binary,constants.COPYFILE_FICLONE);chmodSync(binary,0o755);
   const start=`import {writeFileSync} from 'node:fs';import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const session=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([]),process.ppid);writeFileSync(${JSON.stringify(record)},JSON.stringify(session));`;
-  const initial=spawnSync(binary,['--input-type=module','-e',start],{encoding:'utf8'});assert.equal(initial.status,0,initial.stderr);
+  const initial=spawnSync(binary,['--input-type=module','-e',start],{env:testEnvironment(),encoding:'utf8'});assert.equal(initial.status,0,initial.stderr);
   const session=JSON.parse(readFileSync(record,'utf8')) as NodeResolutionSession;
   const check=`import {readFileSync} from 'node:fs';import {checkNodeResolutionSession} from ${JSON.stringify(moduleURL)};const session=JSON.parse(readFileSync(${JSON.stringify(record)},'utf8'));try{checkNodeResolutionSession(session,session.options);console.log('healthy');}catch(error){console.log(error.message);process.exitCode=1;}`;
   try{
-    const control=spawnSync(binary,['--input-type=module','-e',check],{encoding:'utf8'});assert.equal(control.status,0,control.stderr);assert.equal(control.stdout,'healthy\n');
+    const control=spawnSync(binary,['--input-type=module','-e',check],{env:testEnvironment(),encoding:'utf8'});assert.equal(control.status,0,control.stderr);assert.equal(control.stdout,'healthy\n');
     assert.throws(()=>{const fd=openSync(binary,'r+');closeSync(fd);},(error:unknown)=>(error as NodeJS.ErrnoException).code==='ETXTBSY','the executing holder prevents changing its inode bytes');
     renameSync(binary,binary+'.held');copyFileSync(process.execPath,binary,constants.COPYFILE_FICLONE);chmodSync(binary,0o755);
-    const changed=spawnSync(binary,['--input-type=module','-e',check],{encoding:'utf8'});assert.equal(changed.status,1,changed.stderr);assert.match(changed.stdout,/oracle Node executable holder changed/);
+    const changed=spawnSync(binary,['--input-type=module','-e',check],{env:testEnvironment(),encoding:'utf8'});assert.equal(changed.status,1,changed.stderr);assert.match(changed.stdout,/oracle Node executable holder changed/);
   }finally{await close(session);}
 });

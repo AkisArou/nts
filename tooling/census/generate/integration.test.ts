@@ -1,3 +1,4 @@
+import {testEnvironment} from "../../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -212,7 +213,7 @@ export function evaluate(request: Request) {
 `);
   const run = testProcessResult(spawnSync(process.execPath, [fileURLToPath(new URL("./main.ts", import.meta.url)),
     "--reduce", directory, "--oracle", oraclePath, "--out", out, "--max-candidates", "0"],
-  { encoding: "utf8", timeout: TEST_HANG_MS }), "the reduce command");
+  {env:testEnvironment(), encoding: "utf8", timeout: TEST_HANG_MS }), "the reduce command");
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}\n${run.error?.message ?? ""}`);
   assert.match(run.stdout, /program hash: [0-9a-f]{64}/);
   assert.equal(readFileSync(join(directory, "src", "main.ts"), "utf8"), written.source);

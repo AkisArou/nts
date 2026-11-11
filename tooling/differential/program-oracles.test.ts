@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -129,7 +130,7 @@ test('the generated JVM sweep is a producer-owned program with unchanged source'
   const api=producer as typeof producer & {sweepOracleTask?:(directory:string)=>ProgramOracleTask};
   assert.equal(typeof api.sweepOracleTask,'function','the generated JVM control must join the producer population');
   const task=api.sweepOracleTask!(root);
-  const plain=spawnSync(process.execPath,[join(REPOSITORY,'tooling/sweep/sweep.mjs')],{encoding:'utf8'});
+  const plain=spawnSync(process.execPath,[join(REPOSITORY,'tooling/sweep/sweep.mjs')],{env:testEnvironment(),encoding:'utf8'});
   assert.equal(plain.status,0,plain.stderr);
   assert.equal(task.subject,'gate/jvm-sweep');assert.equal(task.mode,'calls');assert.equal(task.program,false);
   assert.equal(readFileSync(task.entry,'utf8'),plain.stdout);

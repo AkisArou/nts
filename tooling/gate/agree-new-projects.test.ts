@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
@@ -13,7 +14,7 @@ import { gateEnvironment } from "./canonical-environment.ts";
 function fixture(t:{after(fn:()=>void):void}) {
   const directory=testScratch(t, "agree-new-project-case");
   const root=join(directory,"repo"),home=join(directory,"home");mkdirSync(root);mkdirSync(home);
-  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
+  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(testEnvironment()).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
   // agree.mjs reserves its workers' memory in a ledger of this fixture's own.
   Object.assign(env,ownMemory(join(directory,"memory")),{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});
@@ -52,7 +53,7 @@ function fixture(t:{after(fn:()=>void):void}) {
     writeFileSync(path,`#!${process.execPath}
 if(process.argv[2]==="--help"){console.log("  check        compile, run, and compare against node (--json)");process.exit(0);}
 // The check a child that captures oracle dependencies makes of its environment, logged when a test asks.
-if(process.env.TEST_CONTEXT_LOG){const held=require("node:child_process").spawnSync(process.execPath,[process.env.TEST_CONTEXT_CHECK],{env:process.env,encoding:"utf8"});require("node:fs").appendFileSync(process.env.TEST_CONTEXT_LOG,(held.status===0?"held":"refused: "+held.stderr.trim().split("\\n").filter(Boolean).pop())+"\\n");}
+if(process.env.TEST_CONTEXT_LOG){const held=require("node:child_process").spawnSync(process.execPath,[process.env.TEST_CONTEXT_CHECK],{env:${testEnvironmentHandoff(["TEST_CONTEXT_LOG","TEST_CONTEXT_CHECK","NTS_MEMORY_RESERVATION"])},encoding:"utf8"});require("node:fs").appendFileSync(process.env.TEST_CONTEXT_LOG,(held.status===0?"held":"refused: "+held.stderr.trim().split("\\n").filter(Boolean).pop())+"\\n");}
 if(!process.argv.includes("--json"))throw new Error("test double requires structured checks");
 const role=${JSON.stringify(role)},name=process.argv[3].split("/")[2];
 const mode=(role==="before"?process.env[name==="new-fixture"?"TEST_NEW_BEFORE":"TEST_EXISTING_BEFORE"]:process.env[name==="new-fixture"?"TEST_NEW_AFTER":"TEST_EXISTING_AFTER"]??process.env.TEST_AFTER)??(role==="before"&&name==="new-fixture"?"population":"agree");

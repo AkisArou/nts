@@ -1,3 +1,4 @@
+import {testEnvironmentHandoff} from '../test-environment.ts';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -89,7 +90,7 @@ import {activeCommand} from ${JSON.stringify(new URL("../active-command.ts", imp
 import {MemoryRun,compileSync,compileActive,closeMemoryRun} from ${JSON.stringify(new URL("../../census/worker-memory.ts", import.meta.url).href)};
 import {runCaseBound} from ${JSON.stringify(new URL("../case-bound.ts", import.meta.url).href)};
 import {runIntegrityListing} from ${JSON.stringify(new URL("../../conformance/integrity-command.ts", import.meta.url).href)};
-const probe=${JSON.stringify(probe)}, args=["-e",probe], options={cwd:process.cwd(),env:process.env};
+const probe=${JSON.stringify(probe)}, args=["-e",probe], options={cwd:process.cwd(),env:${testEnvironmentHandoff(["NTS_TOOLING_SLICE","NTS_GATE_SCOPE_EXPECTED","NTS_MEMORY_RESERVATION"])}};
 const rows=[];
 const active=await activeCommand(process.execPath,args,options);
 if(active.status!==0)throw Error(active.stderr);
@@ -101,7 +102,7 @@ const compiled=await compileActive({memoryCapKb:256*1024},process.execPath,args,
 if(compiled.status!==0)throw Error(compiled.stderr);
 rows.push({kind:"active compile",...JSON.parse(compiled.stdout)});
 let caseOutput="";
-const status=await runCaseBound({command:process.execPath,args,cpuSeconds:30,idleMs:30000},process.env,
+const status=await runCaseBound({command:process.execPath,args,cpuSeconds:30,idleMs:30000},${testEnvironmentHandoff(["NTS_TOOLING_SLICE","NTS_GATE_SCOPE_EXPECTED","NTS_MEMORY_RESERVATION"])},
   {out:text=>{caseOutput+=text;},err:text=>{process.stderr.write(text);}});
 if(status!==0)throw Error("case command exited "+status);
 rows.push({kind:"shell case",...JSON.parse(caseOutput)});

@@ -2,6 +2,7 @@
 // prove that a child started, completed, released a token, or produced output.
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { setTimeout as poll } from "node:timers/promises";
+import {testEnvironment} from './test-environment.ts';
 
 export const TEST_HANG_MS = 5 * 60_000;
 
@@ -34,5 +35,5 @@ export function spawnTest(
   options: Omit<SpawnSyncOptionsWithStringEncoding, "timeout">,
   what = [command, ...args.slice(0, 2)].join(" "),
 ): SpawnSyncReturns<string> {
-  return testProcessResult(spawnSync(command, args, { ...options, timeout: TEST_HANG_MS }), what);
+  return testProcessResult(spawnSync(command, args, {env:testEnvironment(), ...options, timeout: TEST_HANG_MS }), what);
 }

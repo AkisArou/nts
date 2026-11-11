@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
 import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
@@ -12,7 +13,7 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 
 function fixture(t) {
   const root=testScratch(t,"active-command-case");
-  return {root,env:{...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
+  return {root,env:{...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
 }
 
 function processHasExited(pid:number,readStat=()=>readFileSync(`/proc/${pid}/stat`,"utf8")):boolean {
@@ -85,7 +86,7 @@ test("a group with a busy thread is reported as busy, without CPU progress",()=>
 
 test("every thread's state counts: this test's own thread is busy, a sleeping child's are not",async()=>{
   assert.equal(threadsBusy(process.pid),true,"the thread reading its own state is running");
-  const child=spawn(process.execPath,["-e","Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{stdio:"ignore"});
+  const child=spawn(process.execPath,["-e","Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{env:testEnvironment(),stdio:"ignore"});
   let closed=false;child.on("close",()=>{closed=true;});
   try{
     await waitFor("every thread of a sleeping child asleep",()=>!threadsBusy(child.pid!),{stopped:()=>closed?"the sleeping child exited":undefined});
@@ -135,9 +136,9 @@ test("a case its memory cap holds in the kernel past its idle guard is never tak
   // with no CPU progress. Held there for three times its idle guard, then
   // let go, it completes, and nothing calls it hung.
   const {root,env}=fixture(t),unit=`nts-test-memory-held-${randomUUID().slice(0,8)}`;
-  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{stdio:"ignore"});});
-  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
-  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{encoding:"utf8"});return r.stdout.trim();};
+  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{env:testEnvironment(),stdio:"ignore"});});
+  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{env:testEnvironment(),encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{env:testEnvironment(),encoding:"utf8"});return r.stdout.trim();};
   // How long the case goes without CPU progress while held, sampled as an
   // idle guard reading CPU alone would see it; once that is three idle
   // guards, its cap is lifted.
@@ -214,7 +215,7 @@ test("nested supervisors forward observed busy/output progress while idle childr
   const helper=join(root,"nested.ts");
   const supervisor=new URL("./active-command.ts",import.meta.url).href;
   writeFileSync(helper,`import {activeCommand} from ${JSON.stringify(supervisor)};
-const mode=process.argv[2],env={...process.env};delete env.NTS_GATE_STEP_RESULT;
+const mode=process.argv[2],env={...${testEnvironmentHandoff(["NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])}};delete env.NTS_GATE_STEP_RESULT;
 const body=mode==='busy'?'const start=process.cpuUsage();while(process.cpuUsage(start).user+process.cpuUsage(start).system<1200000){}':mode==='output'?'import os,time\\nfor _ in range(16): os.write(1,b".");time.sleep(0.12)':'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)';
 const result=await activeCommand(mode==='output'?'python3':process.execPath,mode==='output'?['-c',body]:['-e',body],{
 cwd:process.cwd(),env,idleMs:500,pollMs:mode==='output'?5000:50,

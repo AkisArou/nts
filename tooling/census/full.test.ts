@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import {gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT} from "../gate/canonical-environment.ts";
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
 import {spawnTest} from "../gate/test-wait.ts";
@@ -17,7 +18,7 @@ import {ownMemory} from "../gate/test-memory.ts";
 test("missing full-run environment refuses before setup", t => {
   const home = testScratch(t, "full-run-missing-env");
   const result = spawnTest(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
-    env: { ...process.env, HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
+    env: { ...testEnvironment(), HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
     encoding: "utf8",
   });
   assert.equal(result.status, 2, result.stdout + result.stderr);
@@ -33,7 +34,7 @@ function fixture(t: { after(fn: () => void): void }) {
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   mkdirSync(join(root, "tooling/inputs"), { recursive: true });
   mkdirSync(join(root, "results"), { recursive: true });
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
+  const env = Object.fromEntries(Object.entries(testEnvironment()).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
   Object.assign(env, {
     GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
     GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
@@ -122,7 +123,7 @@ test("candidate setup consumes a sealed sha and cannot write main's records or f
   assert.equal(env.NTS_GATE_RUN_DIR, plan.run);
   const result = spawnTest("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env, encoding: "utf8",});
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
+  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], {env:testEnvironment(), cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
   assert.equal(readFileSync(join(plan.tree, "results/setup-marker"), "utf8"), "CANDIDATE");
   assert.equal(readFileSync(join(f.root, "results/marker"), "utf8"), "main record\n");
   assert.equal(readFileSync(join(f.home, "runs/latest"), "utf8"), "main's last full run\n");

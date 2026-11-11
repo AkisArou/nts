@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // A case's bound under the shared supervisor: its compile past its own-CPU
 // bound timed out, which is an outcome and never published as a hold; past the
 // group's budget, or silent, it measured nothing (active-command.ts,
@@ -21,7 +22,7 @@ const spinningChild = [process.execPath, ["-e", "require('node:child_process').s
 function frame(t: { after: (fn: () => void) => void }) {
   const dir = testScratch(t, "case-bound");
   const path = join(dir, "result.json");
-  return { path, env: { ...process.env, NTS_GATE_STEP_RESULT: path, NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "one" },
+  return { path, env: { ...testEnvironment(), NTS_GATE_STEP_RESULT: path, NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "one" },
     read: () => existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as { kind: string; verdict: string } : null };
 }
 

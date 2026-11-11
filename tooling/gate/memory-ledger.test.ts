@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // The machine's memory ledger: its rule and its queue as functions, then
 // `reserve` through real files, the real lock and real owner processes, with
 // memory read from NTS_MEMINFO files written here, and admit.ts as a command.
@@ -167,7 +168,7 @@ test("a lost nonblocking resource claim leaves neither an admission nor a queued
 
 /** A live process to own a reservation, stopped by its own handle. */
 function ownerProcess(t: TestContext): ChildProcess & { pid: number } {
-  const child = spawn("cat", [], { stdio: ["pipe", "ignore", "ignore"] });
+  const child = spawn("cat", [], {env:testEnvironment(), stdio: ["pipe", "ignore", "ignore"] });
   t.after(async () => {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, "exit");
@@ -423,7 +424,7 @@ test("releasing a reservation withdraws its growth, and a growth whose reservati
  * reservation nor the run's priority.
  */
 function admitEnv(f: Fixture, extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  return { ...withoutHanded({ ...process.env, ...f.env }), ...extra };
+  return { ...withoutHanded({ ...testEnvironment(), ...f.env }), ...extra };
 }
 const admit = (f: Fixture, args: string[], extra?: Readonly<Record<string, string>>) =>
   spawnTest(process.execPath, [ADMIT, ...args], { encoding: "utf8", env: admitEnv(f, extra) }, `admit.ts ${args.join(" ")}`);
@@ -482,7 +483,7 @@ process.stdout.write(lock ? "held\\n" : "busy\\n");
 if (lock) { process.stdin.on("end", () => { lock.release(); process.stdout.write("released\\n"); }); process.stdin.resume(); }`;
 
 function holder(t: TestContext, dir: string) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", HOLD, LEDGER, dir], { stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", HOLD, LEDGER, dir], {env:testEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
   let out = "", err = "";
   child.stdout.setEncoding("utf8").on("data", (data: string) => { out += data; });
   child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
@@ -1148,7 +1149,7 @@ test("work is ranked for the OOM killer by priority, a landing's last to go and 
   const ranked = (priority: string, start?: number) => Number(spawnSync(process.execPath, ["--input-type=module", "-e",
     `import { readFileSync, writeFileSync } from "node:fs";${start === undefined ? "" : ` writeFileSync("/proc/self/oom_score_adj", "${start}");`}
 const { rankForOom } = await import(${JSON.stringify(ledger)}); rankForOom(${JSON.stringify(priority)}); process.stdout.write(readFileSync("/proc/self/oom_score_adj", "utf8"));`],
-  { encoding: "utf8" }).stdout);
+  {env:testEnvironment(), encoding: "utf8" }).stdout);
   for (const priority of PRIORITIES) assert.equal(ranked(priority), Math.max(inherited, OOM_SCORE[priority]), priority);
   // Above its priority's score already, it stays: an unprivileged process cannot lower its own.
   assert.equal(ranked("landing", 900), 900);

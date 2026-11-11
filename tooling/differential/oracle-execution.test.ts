@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
@@ -17,17 +18,17 @@ test('the recorder and native launcher share the stated population policy',()=>{
 });
 test('virtual reservation alone does not exhaust the oracle resident scope',async()=>{
   const source=`const m=new WebAssembly.Memory({initial:1,maximum:65536}); const fs=await import('node:fs'); console.log(fs.readFileSync('/proc/self/status','utf8').match(/^VmSize:\\s+(\\d+)/m)[1]); console.log(m.buffer.byteLength);`;
-  const result=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'--input-type=module','-e',source],{source:'benchmarks/cases/private/case.ts',env:process.env});
+  const result=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'--input-type=module','-e',source],{source:'benchmarks/cases/private/case.ts',env:testEnvironment()});
   assert.equal(result.run.status,0,result.run.stderr);assert.equal(result.budget,undefined);
   assert.ok(Number(result.run.stdout.split('\n')[0])*1024>2*2**30,'more than 2 GiB is reserved virtually');
   assert.ok(result.residentPeakBytes<2*2**30);
 });
 test('only an observed CPU or own resident bound is a case budget',async()=>{
-  const timed=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','for(;;){}'],{source:'private',env:process.env,limits:{cpuSeconds:0.1,residentBytes:2*2**30}});
+  const timed=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','for(;;){}'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:0.1,residentBytes:2*2**30}});
   assert.equal(timed.budget?.outcome,'timeout');assert.equal(timed.budget?.bound,0.1);
-  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(Buffer.alloc(16*1024*1024,1));'],{source:'private',env:process.env,limits:{cpuSeconds:15,residentBytes:128*2**20}});
+  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(Buffer.alloc(16*1024*1024,1));'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:15,residentBytes:128*2**20}});
   assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,128*2**20);
-  const stopped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e',"process.kill(process.pid,'SIGABRT')"],{source:'private',env:process.env});
+  const stopped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e',"process.kill(process.pid,'SIGABRT')"],{source:'private',env:testEnvironment()});
   assert.equal(stopped.budget,undefined,'an unproven signal is never a resident hit');
 });
 
@@ -52,7 +53,7 @@ test('the node an oracle command runs is found past the wrappers that start it',
 const HEAP_LIMIT="process.stdout.write(String(require('node:v8').getHeapStatistics().heap_size_limit))";
 // Large arrays reach the heap limit in a second, where small objects take several.
 const FILL_HEAP='const held=[];for(;;)held.push(new Array(1<<17).fill(1.5));';
-const UNSET=(()=>{const env={...process.env};delete env.NODE_OPTIONS;return env;})();
+const UNSET=(()=>{const env={...testEnvironment()};delete env.NODE_OPTIONS;return env;})();
 test("an oracle child's heap limit is the policy's in its scope, whatever NODE_OPTIONS it inherits",async()=>{
   for(const options of [undefined,'--max-old-space-size=8192 --max-semi-space-size=64','--max_old_space_size=8192']){
     const env=options===undefined?UNSET:{...UNSET,NODE_OPTIONS:options};
@@ -81,7 +82,7 @@ test('an oracle child is refused without the policy\'s heap flags, with another 
 });
 test("a run V8 stops at its heap limit is held to the policy's heap, never to the resident scope it did not fill",async()=>{
   // Started as the native differential starts it, past a wrapper, in the policy's own scope.
-  const stopped=await runOracleCommand('prlimit',['--core=0',process.execPath,...ORACLE_HEAP_FLAGS,'-e',FILL_HEAP],{source:'private',env:process.env});
+  const stopped=await runOracleCommand('prlimit',['--core=0',process.execPath,...ORACLE_HEAP_FLAGS,'-e',FILL_HEAP],{source:'private',env:testEnvironment()});
   assert.equal(stopped.run.signal,'SIGABRT');
   assert.ok(stopped.residentPeakBytes<policy.residentBytes,'the resident scope was never full');
   assert.ok(stopped.budget,'no budget: '+stopped.run.stderr);
@@ -89,12 +90,12 @@ test("a run V8 stops at its heap limit is held to the policy's heap, never to th
   assert.deepEqual(budget,{phase:'execute',outcome:'memory-cap',bound:policy.heapBytes,signal:'SIGABRT'});
   assert.match(reason,new RegExp(`^oracle memory-cap: private stopped at V8's ${policy.heapBytes} byte JavaScript heap limit, the oracle execution policy's: FATAL ERROR: .*heap limit.* - JavaScript heap out of memory$`));
   // The control differs in one thing: a scope smaller than the heap, so the kernel stops the run at the resident bound first.
-  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e',FILL_HEAP],{source:'private',env:process.env,limits:{cpuSeconds:15,residentBytes:512*2**20}});
+  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e',FILL_HEAP],{source:'private',env:testEnvironment(),limits:{cpuSeconds:15,residentBytes:512*2**20}});
   assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,512*2**20);
 });
 
 test('the shared execution transports stdout and stderr byte for byte',async()=>{
-  const value=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','process.stdout.write(Buffer.from([0,255,128]));process.stderr.write(Buffer.from([254,0]));'],{source:'tests/programs/private/main.ts',env:process.env});
+  const value=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','process.stdout.write(Buffer.from([0,255,128]));process.stderr.write(Buffer.from([254,0]));'],{source:'tests/programs/private/main.ts',env:testEnvironment()});
   assert.equal(value.run.status,0);assert.equal(value.stdoutHex,'00ff80');assert.equal(value.stderrHex,'fe00');
 });
 
@@ -103,7 +104,7 @@ test('the shared execution transports stdout and stderr byte for byte',async()=>
 function planner(t:{after(fn:()=>void):void},interpreter:string,body:string){
   const root=testScratch(t,'oracle-planner'),file=join(root,'oracle-plan'),result=join(root,'result.json');
   writeFileSync(file,`#!${interpreter}\n${body}\n`,{mode:0o755});
-  return {file,env:{...process.env,NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'oracle-planner-control',NTS_GATE_STEP_ATTEMPT:'control'},
+  return {file,env:{...testEnvironment(),NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'oracle-planner-control',NTS_GATE_STEP_ATTEMPT:'control'},
     published:()=>existsSync(result)?(JSON.parse(readFileSync(result,'utf8')) as {kind:string}).kind:null};
 }
 test('the planner is held as a case compile is: its CPU bound, and the shared activity guard',()=>{

@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The actual axis and runner, with one small compiled C addon. Only the build
 // command is a fixture: context, dependency preparation and both test arms run.
 import assert from "node:assert/strict";
@@ -26,7 +27,7 @@ function fixture(t: TestContext) {
   const out = join(root, "runtime/node/subject/addons");
   const write = (name: string, text: string) => { const path = join(root, name); mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); };
   t.after(() => {
-    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" });
     if (!inherited) stopToolingSlice(slice);
     removable(root); rmSync(root, { recursive: true, force: true });
   });

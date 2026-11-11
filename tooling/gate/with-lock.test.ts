@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "./test-environment.ts";
 // Joint CPU/memory admission (with-lock.sh): waiting for either holds neither,
 // and the payload runs inside the single reservation granted with its mutex.
 //
@@ -37,7 +38,7 @@ function fixture(t: TestContext, availableKiB = 20 * GiB_KIB) {
   // A test inside a gate step runs inside the step's reservation: these runs have their own.
   const env = { ...gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env, NTS_MEASUREMENT_LOCK: lock };
   t.after(() => {
-    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" });
     removable(root); rmSync(root, { recursive: true, force: true });
   });
   const unitArgs = (command: string[], extra: NodeJS.ProcessEnv = {}) => {
@@ -73,11 +74,11 @@ test("a session waits for its memory in the ledger without holding the lock: ano
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
   writeFileSync(join(f.memory.NTS_GATE_COSTS_DIR, "steps.json"), JSON.stringify({ version: 3, steps: {}, jobs: { "perf-waiting": { unit: "worker", peaks: [2 ** 30] } } }));
   const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-waiting", "sh", "-c", `: > ${JSON.stringify(first)}`]);
-  const session = spawn("systemd-run", args, { stdio: ["ignore", "ignore", "pipe"] });
+  const session = spawn("systemd-run", args, {env:testEnvironment(), stdio: ["ignore", "ignore", "pipe"] });
   let err = "";
   session.stderr!.setEncoding("utf8").on("data", (data: string) => { err += data; });
   const closed = once(session, "close") as Promise<[number | null, NodeJS.Signals | null]>;
-  t.after(async () => { if (session.exitCode === null && session.signalCode === null) { spawnSync("systemctl", ["--user", "stop", args.find(arg => arg.startsWith("--unit="))!.slice(7)], { stdio: "ignore" }); await closed; } });
+  t.after(async () => { if (session.exitCode === null && session.signalCode === null) { spawnSync("systemctl", ["--user", "stop", args.find(arg => arg.startsWith("--unit="))!.slice(7)], {env:testEnvironment(), stdio: "ignore" }); await closed; } });
   const ended = () => session.exitCode !== null || session.signalCode !== null ? `the session exited ${session.exitCode ?? session.signalCode}: ${err}` : undefined;
   await waitFor("the session to wait in the ledger", () => existsSync(waiting) && readdirSync(waiting).some(name => name.endsWith(".json")), { stopped: ended });
   assert.match(readLedger(f.memory.NTS_MEMORY_LEDGER).waiting[0]?.what ?? "", /^measurement perf-waiting: sh -c /);
@@ -136,7 +137,7 @@ test("a CPU waiter holds no memory promise, so ordinary work uses all room; canc
   const f = fixture(t), ran = join(f.root, "ran");
   mkdirSync(f.lock); writeFileSync(join(f.lock, "pid"), String(process.pid));
   const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-held", "touch", ran]);
-  const child = spawn("systemd-run", args, { stdio: "ignore" }), done = once(child, "close");
+  const child = spawn("systemd-run", args, {env:testEnvironment(), stdio: "ignore" }), done = once(child, "close");
   const tickets = measurementQueue(f.lock, f.memory.NTS_MEMORY_LEDGER);
   await waitFor("CPU ticket", () => existsSync(tickets) && readdirSync(tickets).some(name => name.endsWith(".json")),
     { stopped: () => child.exitCode !== null ? `unit exited ${child.exitCode}` : undefined });
@@ -144,7 +145,7 @@ test("a CPU waiter holds no memory promise, so ordinary work uses all room; canc
   const ordinary = await reserve({ bytes: 17 * 2 ** 30, what: "ordinary work behind a CPU waiter" }, { env: f.memory });
   ordinary.release();
   assert.equal(existsSync(ran), false);
-  spawnSync("systemctl", ["--user", "stop", args.find(arg => arg.startsWith("--unit="))!.slice(7)], { stdio: "ignore" });
+  spawnSync("systemctl", ["--user", "stop", args.find(arg => arg.startsWith("--unit="))!.slice(7)], {env:testEnvironment(), stdio: "ignore" });
   await done;
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] });
   unlinkSync(join(f.lock, "pid")); rmdirSync(f.lock);
@@ -160,7 +161,7 @@ test("CPU tickets retain arrival order within ledger priority", async t => {
   for (const [name, priority] of entries) {
     const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-order", process.execPath, "-e",
       "require('node:fs').appendFileSync(process.argv[1],process.argv[2]+'\\n')", order, name], { NTS_MEMORY_PRIORITY: priority });
-    const child = spawn("systemd-run", args, { stdio: "ignore" }); children.push(once(child, "close"));
+    const child = spawn("systemd-run", args, {env:testEnvironment(), stdio: "ignore" }); children.push(once(child, "close"));
     const tickets = measurementQueue(f.lock, f.memory.NTS_MEMORY_LEDGER);
     await waitFor(`ticket ${name}`, () => existsSync(tickets) && readdirSync(tickets).filter(name => name.endsWith(".json")).length === children.length,
       { stopped: () => child.exitCode !== null ? `unit exited ${child.exitCode}` : undefined });
@@ -175,10 +176,10 @@ test("a full ledger leaves the CPU mutex available to a landing, then admits the
   const f = fixture(t), marker = join(f.root, "holder"), ran = join(f.root, "ran");
   const holderArgs = f.unitArgs([process.execPath, ADMIT, "--bytes", "18G", "--", process.execPath, "-e",
     "const fs=require('node:fs');fs.writeFileSync(process.argv[1],'held');fs.watch(process.argv[1],()=>{});", marker]);
-  const holder = spawn("systemd-run", holderArgs, { stdio: "ignore" }), holderDone = once(holder, "close");
+  const holder = spawn("systemd-run", holderArgs, {env:testEnvironment(), stdio: "ignore" }), holderDone = once(holder, "close");
   await waitFor("full ledger holder", () => existsSync(marker), { stopped: () => holder.exitCode !== null ? `holder ended ${holder.exitCode}` : undefined });
   const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-full", "touch", ran]);
-  const child = spawn("systemd-run", args, { stdio: "ignore" }), done = once(child, "close");
+  const child = spawn("systemd-run", args, {env:testEnvironment(), stdio: "ignore" }), done = once(child, "close");
   await waitFor("memory wait behind full ledger", () => readLedger(f.memory.NTS_MEMORY_LEDGER).waiting.length === 1,
     { stopped: () => child.exitCode !== null ? `measurement ended ${child.exitCode}` : undefined });
   assert.equal(existsSync(f.lock), false);
@@ -186,7 +187,7 @@ test("a full ledger leaves the CPU mutex available to a landing, then admits the
   assert.equal(landing.status, 0, landing.stderr);
   assert.equal(existsSync(ran), false);
   assert.equal(existsSync(f.lock), false);
-  spawnSync("systemctl", ["--user", "stop", holderArgs.find(arg => arg.startsWith("--unit="))!.slice(7)], { stdio: "ignore" });
+  spawnSync("systemctl", ["--user", "stop", holderArgs.find(arg => arg.startsWith("--unit="))!.slice(7)], {env:testEnvironment(), stdio: "ignore" });
   await holderDone;
   assert.deepEqual(await done, [0, null]);
   assert.equal(existsSync(ran), true);
@@ -197,7 +198,7 @@ test("a genuinely nested measurement borrows its ancestor's reservation without 
   const body = `const {reserve} = await import(process.argv[1]);
 const {spawnSync} = await import('node:child_process');
 const held = await reserve({bytes:2**20,what:'parent job'});
-const run = spawnSync('sh',[process.argv[2],'--no-quiet-wait',process.execPath,'--input-type=module','-e',process.argv[3],process.argv[1]], {env:{...process.env,...held.env},encoding:'utf8'});
+const run = spawnSync('sh',[process.argv[2],'--no-quiet-wait',process.execPath,'--input-type=module','-e',process.argv[3],process.argv[1]], {env:{...${testEnvironmentHandoff()},...held.env},encoding:'utf8'});
 held.release(); process.stdout.write(run.stdout);process.stderr.write(run.stderr);process.exit(run.status??1);`;
   const ran = spawnTest("systemd-run", f.unitArgs([process.execPath, "--input-type=module", "-e", body, LEDGER, WITH_LOCK, CASES]), { encoding: "utf8" });
   assert.equal(ran.status, 0, ran.stderr);

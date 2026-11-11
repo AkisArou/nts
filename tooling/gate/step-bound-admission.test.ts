@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // A real tokened step waits past its execution allowance without spending
 // it. The control holds a token forever and still reaches its own bound.
 import assert from "node:assert/strict";
@@ -28,7 +29,7 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   const inherited=toolingSlice(),slice=inherited??newToolingSlice(true),unit=`nts-test-bound-admission-${randomUUID()}`;
   let cancel:AbortController|undefined,holder:Reservation|undefined;
   t.after(()=>{
-    cancel?.abort();holder?.release();spawnSync("systemctl",["--user","stop",unit],{stdio:"ignore"});
+    cancel?.abort();holder?.release();spawnSync("systemctl",["--user","stop",unit],{env:testEnvironment(),stdio:"ignore"});
     if(!inherited)stopToolingSlice(slice);
     removable(own);rmSync(own,{recursive:true,force:true});
   });
@@ -39,7 +40,7 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   const table=join(gate,"step-table.mjs");
   writeFileSync(table,readFileSync(table,"utf8").replace(`name: "${STEP}", bound: 3600`,`name: "${STEP}", bound: 3`));
   assert.match(readFileSync(table,"utf8"),/name: "test262-census-c", bound: 3,/);
-  const listed=spawnSync("sh",[join(SOURCE,"tooling/gate/all.sh"),"--list"],{encoding:"utf8"});
+  const listed=spawnSync("sh",[join(SOURCE,"tooling/gate/all.sh"),"--list"],{env:testEnvironment(),encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
   writeFileSync(join(gate,"all.sh"),`#!/bin/sh
 if [ "$1" = --list ];then
@@ -106,7 +107,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   const child=spawn("systemd-run",["--user",`--unit=${unit}`,`--slice=${slice}`,"--collect","--quiet","--wait","--pipe",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=180s","-p","TimeoutStopSec=5s",
     `--working-directory=${root}`,...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>`--setenv=${key}=${value}`),
-    process.execPath,join(gate,"entry.mjs")],{stdio:["ignore","pipe","pipe"]});
+    process.execPath,join(gate,"entry.mjs")],{env:testEnvironment(),stdio:["ignore","pipe","pipe"]});
   let output="";child.stdout.on("data",b=>{output+=b;});child.stderr.on("data",b=>{output+=b;});
   const done=once(child,"close"),stopped=()=>child.exitCode!==null||child.signalCode!==null?`runner exited ${child.exitCode??child.signalCode}: ${output}`:undefined;
   const observation=():Observation|undefined=>existsSync(observed)?JSON.parse(readFileSync(observed,"utf8")):undefined;

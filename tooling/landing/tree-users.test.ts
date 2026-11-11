@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 // The processes that use a tree, read from /proc: by their working directory,
 // their executable or an open file; never the process that asks, never one
 // outside the tree.
@@ -18,8 +19,8 @@ import { describeUsers, treeUsers } from "./tree-users.ts";
  * the `cat`, which keeps it open.
  */
 async function waiting(binary: string, cwd: string, open?: string) {
-  const child = open === undefined ? spawn(binary, [], { cwd, stdio: ["pipe", "pipe", "ignore"] })
-    : spawn("sh", ["-c", 'exec 3<"$1"; echo open; exec cat', "sh", open], { cwd, stdio: ["pipe", "pipe", "ignore"] });
+  const child = open === undefined ? spawn(binary, [], {env:testEnvironment(), cwd, stdio: ["pipe", "pipe", "ignore"] })
+    : spawn("sh", ["-c", 'exec 3<"$1"; echo open; exec cat', "sh", open], {env:testEnvironment(), cwd, stdio: ["pipe", "pipe", "ignore"] });
   await once(child, "spawn");
   if (open !== undefined) await once(child.stdout, "data");
   return { pid: child.pid!, end: async () => { child.stdin.end(); await once(child, "exit"); } };

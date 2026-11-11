@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import type { CheckCounts, CheckReport } from "../differential/check-report-types.ts";
 type MeasuredReport = Omit<CheckReport, "status" | "version" | "counts" | "oracle"> & {
   status: string; version: number; counts: CheckCounts; oracle: NonNullable<CheckReport["oracle"]>;
@@ -148,7 +149,7 @@ test("only an old compiler capability chooses legacy text decoding", () => {
 
 test("the decoder CLI rejects an unknown consumer before invoking a compiler", () => {
   const result = spawnSync(process.execPath, [fileURLToPath(new URL("../differential/check-report.ts", import.meta.url)),
-    "consume", "unknown", "/no/compiler/should/be/invoked", "/unused/project"], { encoding: "utf8", env: {...process.env, NTS_GATE_STEP_RESULT: ""} });
+    "consume", "unknown", "/no/compiler/should/be/invoked", "/unused/project"], { encoding: "utf8", env: {...testEnvironment(), NTS_GATE_STEP_RESULT: ""} });
   assert.equal(result.status, 124);
   assert.match(result.stderr, /check NOT MEASURED: unknown check consumer/);
 });

@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): prepared
 // resolution invalidation, package mains, authored and governed CommonJS, the
 // runtime emit target and its syntax controls. Shared helpers are in
@@ -44,11 +45,11 @@ test('a failed absolute request outside captured roots remains an instrument hol
   const entry=join(app,'main.cjs');
   writeFileSync(entry,"try{console.log(require(require('node:path').resolve(__dirname,'../outside/value.cjs')));}catch(error){console.log(error.code);}\n");
   writeFileSync(join(outside,'value.cjs'),'module.exports=19;\n');
-  const expected=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+  const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
   assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,'19\n');
   for(const captured of [true,false]){
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captured?[app,outside]:[app],toolchain,directory:join(root,captured?'control':'subject')}));
-    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     if(captured){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,expected.stdout);assert.deepEqual(oracleLoaderReady(execution),{ready:true});}
     else assert.equal(oracleLoaderReady(execution).ready,false,'an omitted outside module must not become an ordinary missing-module verdict');
   }
@@ -63,11 +64,11 @@ test('a captured package alias retains its external main ownership boundary',asy
   writeFileSync(join(app,'pkg/package.json'),JSON.stringify({main:'../../outside/value.cjs'}));
   writeFileSync(join(outside,'value.cjs'),'module.exports=19;\n');
   symlinkSync('pkg',join(app,'alias'));
-  const entry=join(app,'main.cjs'),plain=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+  const entry=join(app,'main.cjs'),plain=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
   assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
   for(const captureOutside of [true,false]){
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captureOutside?[app,outside]:[app],toolchain,directory:join(root,captureOutside?'control':'subject')}));
-    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     t.diagnostic(JSON.stringify({captureOutside,plain:{status:plain.status,stdout:plain.stdout,stderr:plain.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health}));
     if(captureOutside){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,plain.stdout);assert.deepEqual(health,{ready:true});}
     else assert.equal(health.ready,false,'a package alias must retain the ownership boundary of its main target');
@@ -84,10 +85,10 @@ test('main edges preserve logical directory depth with one canonical package own
     symlinkSync(deepPackage?'nested/pkg':'pkg',join(app,'alias'));symlinkSync(deepPackage?'pkg':'../pkg',join(app,'nested/alias'));
     const entry=join(app,'main.cjs'),requests=[deepPackage?'./nested/pkg':'./pkg','./alias','./nested/alias'];
     writeFileSync(entry,'for(const request of '+JSON.stringify(requests)+'){try{console.log(require(require("node:path").resolve(__dirname,request)));}catch(error){console.log(error.code);}}\n');
-    const expected=spawnSync(process.execPath,[entry],{encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,deepPackage?'23\n19\n23\n':'19\n19\n23\n');
+    const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,deepPackage?'23\n19\n23\n':'19\n19\n23\n');
     for(const captureOutside of [true,false]){
       const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captureOutside?[app,outside]:[app],toolchain,directory:join(own,captureOutside?'control':'subject')})),execution=oracleExecution(prepared);
-      const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+      const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
       t.diagnostic(JSON.stringify({deepPackage,captureOutside,plain:{status:expected.status,stdout:expected.stdout,stderr:expected.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health}));
       if(captureOutside){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,expected.stdout);assert.deepEqual(health,{ready:true});}
       else assert.equal(health.ready,false,'logical main escape must not receive an ordinary missing verdict');
@@ -103,10 +104,10 @@ test('an uncaptured main target cannot select a captured package fallback',async
   writeFileSync(entry,"console.log(require(require('node:path').resolve(__dirname,'./pkg')));\n");
   writeFileSync(join(app,'pkg/package.json'),JSON.stringify({main:'../../outside/value.cjs'}));
   writeFileSync(join(app,'pkg/index.js'),'module.exports=23;\n');writeFileSync(join(outside,'value.cjs'),'module.exports=19;\n');
-  const plain=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
+  const plain=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
   for(const captureOutside of [true,false]){
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captureOutside?[app,outside]:[app],toolchain,directory:join(root,captureOutside?'control':'subject')}));
-    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     t.diagnostic(JSON.stringify({captureOutside,plain:{status:plain.status,stdout:plain.stdout,stderr:plain.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health}));
     if(captureOutside){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,plain.stdout);assert.deepEqual(health,{ready:true});}
     else assert.equal(health.ready,false,'a successful fallback cannot hide its unobserved main-target lookup');
@@ -120,11 +121,11 @@ test('a package main escape needs complete captured target authority for an ordi
   const entry=join(app,'main.cjs'),target=join(outside,'value.cjs');
   writeFileSync(entry,"try{console.log(require(require('node:path').resolve(__dirname,'./pkg')));}catch(error){console.log(error.code);}\n");
   writeFileSync(join(pkg,'package.json'),JSON.stringify({main:'../../outside/value.cjs'}));
-  const expected=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+  const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
   assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,'MODULE_NOT_FOUND\n');
   for(const captured of [true,false])await t.test(captured?'captured missing target':'uncaptured missing target',async ()=>{
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captured?[app,outside]:[app],toolchain,directory:join(root,captured?'control':'subject')}));
-    const run=()=>{const execution=oracleExecution(prepared);return {execution,actual:spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}})};};
+    const run=()=>{const execution=oracleExecution(prepared);return {execution,actual:spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}})};};
     const first=run();assert.equal(first.actual.status,0,first.actual.stderr);
     t.diagnostic(JSON.stringify({captured,plainNode:{status:expected.status,stdout:expected.stdout},actual:{status:first.actual.status,stdout:first.actual.stdout},health:oracleLoaderReady(first.execution)}));
     if(captured){
@@ -157,7 +158,7 @@ test('shared imports publish one owner and computed requests cannot borrow an un
     const bareOwners=owners.map((item:OracleRuntimeRoute)=>{
       const url=pathToFileURL(join(dirname(prepared.manifest),item.execution)).href;
       const code="try{console.log(await(await import("+JSON.stringify(url)+")).run());}catch(error){console.log(error.code);}";
-      const plain=spawnSync(process.execPath,['--input-type=module','--eval',code],{cwd:root,encoding:'utf8'});
+      const plain=spawnSync(process.execPath,['--input-type=module','--eval',code],{env:testEnvironment(),cwd:root,encoding:'utf8'});
       assert.equal(plain.status,0,plain.stderr);return {group:item.group,stdout:plain.stdout,stderr:plain.stderr};
     });
     assert.deepEqual(bareOwners.map((item:{stdout:string})=>item.stdout),complete?['19\n']:['ERR_MODULE_NOT_FOUND\n']);
@@ -181,13 +182,13 @@ test('Node resolution failures inside a captured application retain their ordina
   writeFileSync(member,'module.exports=19;\n');
   for(const missing of [false,true]){
     if(missing)rmSync(member);
-    const expected=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+    const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
     assert.equal(expected.status,0,expected.stderr);
     assert.equal(expected.stdout,missing?'MODULE_NOT_FOUND\n':'19\n');
     t.diagnostic(JSON.stringify({missing,plainNode:{status:expected.status,stdout:expected.stdout,stderr:expected.stderr}}));
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,missing?'subject':'control')}));
     const execution=oracleExecution(prepared),captured=oracleRuntimeFile(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,0,actual.stderr);
     assert.equal(actual.stdout,expected.stdout,'a captured missing module must preserve Node error fields');
     assert.deepEqual(oracleLoaderReady(execution),{ready:true});
@@ -199,12 +200,12 @@ test('a covered Node resolution exception keeps its exact object identity',async
   const app=join(root,'app');mkdirSync(app);const entry=join(app,'main.cjs'),witness=join(root,'witness.mjs');
   writeFileSync(witness,"import {registerHooks} from 'node:module';registerHooks({resolve(specifier,context,next){try{return next(specifier,context);}catch(error){if(specifier.endsWith('/missing.cjs'))globalThis[Symbol.for('node-resolution-error')]=error;throw error;}}});\n");
   writeFileSync(entry,"try{require(require('node:path').resolve(__dirname,'./missing.cjs'));}catch(error){console.log(error===globalThis[Symbol.for('node-resolution-error')],error.code);}\n");
-  const expected=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,entry],{encoding:'utf8'});
+  const expected=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,entry],{env:testEnvironment(),encoding:'utf8'});
   assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,'true MODULE_NOT_FOUND\n');
   const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],preloads:[witnessOwner(root,witness)],toolchain,directory:join(root,'scratch')})),execution=oracleExecution(prepared);
   // The observation hook precedes the oracle, so it sees Node's exception
   // before the oracle receives it, rather than observing a later wrapper.
-  const actual=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,...execution.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...process.env,...execution.env}});
+  const actual=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,...execution.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...testEnvironment(),...execution.env}});
   assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,expected.stdout);assert.deepEqual(oracleLoaderReady(execution),{ready:true});
 });
 
@@ -215,7 +216,7 @@ test('same-worker package metadata follows fresh captured bytes at the same orig
   writeFileSync(entry,"try{require(require('node:path').resolve(__dirname,'./pkg'));}catch(error){console.log(error.code);}\n");
   worker=new OracleWorker(join(root,'worker'),toolchain);
   const run=(prepared:OraclePrepared)=>{
-    const own=oracleExecution(prepared),actual=spawnSync(process.execPath,[...own.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...process.env,...own.env}});
+    const own=oracleExecution(prepared),actual=spawnSync(process.execPath,[...own.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...testEnvironment(),...own.env}});
     return {actual,health:oracleLoaderReady(own)};
   };
   const manifests:string[]=[];
@@ -246,11 +247,11 @@ test('captured main metadata matches Node for string, non-string and invalid fie
     {text:'{"main":',main:null,stdout:'ERR_INVALID_PACKAGE_CONFIG\n'}];
   for(const [at,item] of cases.entries()){
     writeFileSync(join(pkg,'package.json'),item.text);
-    const expected=spawnSync(process.execPath,['--no-warnings',entry],{encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,item.stdout);
+    const expected=spawnSync(process.execPath,['--no-warnings',entry],{env:testEnvironment(),encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);assert.equal(expected.stdout,item.stdout);
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,'prepared')})),own=oracleExecution(prepared);
     const index=JSON.parse(readFileSync(join(dirname(prepared.manifest),'source-index.json'),'utf8')),fact=index.trees[0].coverage.packages.find((fact:{directory:string})=>fact.directory===pkg);
     assert.equal(fact.main,item.main);assert.equal(fact.valid,at!==cases.length-1);
-    const actual=spawnSync(process.execPath,[...own.args,'--no-warnings',oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...process.env,...own.env}});
+    const actual=spawnSync(process.execPath,[...own.args,'--no-warnings',oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...testEnvironment(),...own.env}});
     t.diagnostic(JSON.stringify({at,packageJson:item.text,plain:{status:expected.status,stdout:expected.stdout,stderr:expected.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr}}));
     assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,expected.stdout);assert.equal(actual.stderr,expected.stderr);assert.deepEqual(oracleLoaderReady(own),{ready:true});
   }
@@ -264,13 +265,13 @@ test('a package.json directory remains a runtime asset rather than package metad
   writeFileSync(entry,"const fs=require('node:fs');console.log(JSON.stringify(fs.readdirSync(__dirname+'/assets',{withFileTypes:true}).map(item=>[item.name,item.isDirectory()])));\n");
   for(const directory of [false,true]){
     if(directory)mkdirSync(join(assets,'package.json'));
-    const expected=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+    const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
     assert.equal(expected.status,0,expected.stderr);
     assert.equal(expected.stdout,directory?'[["package.json",true]]\n':'[]\n');
     t.diagnostic(JSON.stringify({directory,plainNode:{status:expected.status,stdout:expected.stdout,stderr:expected.stderr}}));
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,directory?'subject':'control')}));
     const execution=oracleExecution(prepared),captured=oracleRuntimeFile(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,0,actual.stderr);
     assert.deepEqual(oracleLoaderReady(execution),{ready:true});
     assert.equal(actual.stdout,expected.stdout,'a directory named package.json must retain its literal kind without becoming a scope file');
@@ -285,11 +286,11 @@ test('runtime directory capture preserves dangling entries instead of deciding a
   writeFileSync(entry,"const fs=require('node:fs');console.log(JSON.stringify(fs.readdirSync(__dirname).sort()));\n");
   for(const dangling of [false,true]){
     if(dangling)symlinkSync('missing.txt',join(app,'dangling'));
-    const expected=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});
+    const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});
     assert.equal(expected.status,0,expected.stderr);
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,dangling?'subject':'control')}));
     const execution=oracleExecution(prepared),captured=oracleRuntimeFile(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,captured],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,0,actual.stderr);
     assert.deepEqual(oracleLoaderReady(execution),{ready:true});
     assert.equal(actual.stdout,expected.stdout,'a dangling entry must not silently disappear from the captured directory');
@@ -302,9 +303,9 @@ test('literal internal link cycles retain Node errors and dangling-target appear
   const entry=join(app,'main.cjs');
   writeFileSync(entry,"const fs=require('node:fs');for(const name of ['self','a','dangling']){console.log(name,fs.readlinkSync(__dirname+'/'+name));try{fs.statSync(__dirname+'/'+name)}catch(e){console.log(e.code)}}\n");
   symlinkSync('self',join(app,'self'));symlinkSync('b',join(app,'a'));symlinkSync('a',join(app,'b'));symlinkSync('missing',join(app,'dangling'));
-  const expected=spawnSync(process.execPath,[entry],{encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);
+  const expected=spawnSync(process.execPath,[entry],{env:testEnvironment(),encoding:'utf8'});assert.equal(expected.status,0,expected.stderr);
   const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,'scratch')}));
-  const run=()=>{const own=oracleExecution(prepared);return {own,result:spawnSync(process.execPath,[...own.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...process.env,...own.env}})};};
+  const run=()=>{const own=oracleExecution(prepared);return {own,result:spawnSync(process.execPath,[...own.args,oracleRuntimeFile(prepared,entry)],{encoding:'utf8',env:{...testEnvironment(),...own.env}})};};
   const first=run();assert.equal(first.result.status,0,first.result.stderr);assert.equal(first.result.stdout,expected.stdout);assert.deepEqual(oracleLoaderReady(first.own),{ready:true});
   writeFileSync(join(app,'missing'),'appeared');const changed=run();assert.equal(changed.result.status,0,changed.result.stderr);assert.equal(changed.result.stdout,expected.stdout);assert.deepEqual(oracleLoaderReady(changed.own),{ready:true});
   const final=oracleOwner.finishOracleSnapshot(prepared);assert.equal(final.ready,false,'an appearing original link target invalidates the parent snapshot');
@@ -324,11 +325,11 @@ test('authored CommonJS keeps Node lookup paths outside capture',async t=>{
   writeFileSync(entry,"console.log(require('./pkg'));\n");
   writeFileSync(join(app,'pkg/package.json'),JSON.stringify({main:'../../outside/value.cjs'}));
   writeFileSync(join(app,'pkg/index.js'),'module.exports=23;\n');writeFileSync(join(outside,'value.cjs'),'module.exports=19;\n');
-  const plain=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
+  const plain=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
   const executions:OraclePrepared[]=[];
   for(const captureOutside of [true,false]){
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captureOutside?[app,outside]:[app],toolchain,directory:join(root,captureOutside?'control':'subject')})),execution=authoredExecution(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     t.diagnostic(JSON.stringify({scope:'authored CommonJS / plain node (outside capture)',captureOutside,plain:{status:plain.status,stdout:plain.stdout,stderr:plain.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health:oracleLoaderReady(execution)}));
     assert.equal(actual.status,plain.status,actual.stderr);assert.equal(actual.stdout,plain.stdout);assert.deepEqual(oracleLoaderReady(execution),{ready:true});
     executions.push(execution);
@@ -356,7 +357,7 @@ test('a direct emitted CommonJS output retains its provider role through a plain
       'src/value.cjs':'module.exports=23;\n',
     },{module:'nodenext',moduleResolution:'nodenext'}),entry=join(root,'src/main.cjs');
     const prepared=(await prepareOracle({entry,project:null,preloads:[{entry:join(root,'src/provider.cts'),project:join(root,'tsconfig.json')}],runtimeRoots:[join(root,'src')],toolchain,directory:join(root,'prepared')})),execution=authoredExecution(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     assert.equal(actual.status,0,actual.stderr);
     if(!relative){assert.equal(actual.stdout,'19\n');assert.deepEqual(health,{ready:true});}
     else {assert.equal(health.ready,false,'a direct emitted .cjs URL cannot become authored JavaScript');if(!health.ready)assert.match(health.why,/unproved CommonJS route/);}
@@ -367,7 +368,7 @@ test('authored CommonJS transitions keep TypeScript providers governed',async t=
   for(const preparedProvider of [true,false]){
     const root=workspace(t,{'src/main.cjs':"try{console.log(require('./provider.ts').value);}catch(error){console.log(error.code);}\n",'src/provider.ts':'export const value:number=19;\n'}),entry=join(root,'src/main.cjs');
     const prepared=(await prepareOracle({entry,project:null,preloads:preparedProvider?[{entry:join(root,'src/provider.ts'),project:join(root,'tsconfig.json')}]:[],runtimeRoots:[join(root,'src')],toolchain,directory:join(root,preparedProvider?'control':'subject')})),execution=authoredExecution(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     if(preparedProvider){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'19\n');assert.deepEqual(oracleLoaderReady(execution),{ready:true});}
     else {const health=oracleLoaderReady(execution);assert.equal(health.ready,false,'plain CommonJS does not grant a TypeScript provider permission');if(!health.ready)assert.match(health.why,/TypeScript import was not prepared/);}
   }
@@ -379,9 +380,9 @@ test('authored CommonJS admits its literal ESM closure and holds an unobserved c
   const app=join(root,'app');mkdirSync(app);const entry=join(app,'main.cjs');
   writeFileSync(entry,"try{console.log(require("+(literal?"'../outside.mjs'":"process.argv[2]")+").value);}catch(error){console.log(error.code);}\n");
   writeFileSync(join(root,'outside.mjs'),'export const value=19;\n');
-  const plain=spawnSync(process.execPath,[entry,'../outside.mjs'],{cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
+  const plain=spawnSync(process.execPath,[entry,'../outside.mjs'],{env:testEnvironment(),cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,'19\n');
   const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,'prepared')})),execution=authoredExecution(prepared,entry);
-  const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),'../outside.mjs'],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+  const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),'../outside.mjs'],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
   if(literal){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'19\n');assert.deepEqual(oracleLoaderReady(execution),{ready:true});}
   else {assert.notEqual(actual.stdout,'19\n');assert.equal(oracleLoaderReady(execution).ready,false,'an authored CommonJS parent cannot exempt unobserved ESM code from ownership');}
   });
@@ -394,7 +395,7 @@ test('non-file ESM transitions hold before either authored or emitted code can r
     const root=workspace(t,{'src/main.ts':body,'src/main.cjs':"(async()=>{const request='data:text/javascript,globalThis.scopeLeak=19';try{await import(request);}catch{}console.log(globalThis.scopeLeak??0);})();\n"});
     const entry=join(root,authored?'src/main.cjs':'src/main.ts'),prepared=authored?(await prepareOracle({entry,project:null,runtimeRoots:[join(root,'src')],toolchain,directory:join(root,'prepared')})):(await prepare(root));
     const execution=authored?authoredExecution(prepared,entry):oracleExecution(prepared);
-    const actual=spawnSync(process.execPath,[...execution.args,authored?oracleRuntimeFile(prepared,entry):entry],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,authored?oracleRuntimeFile(prepared,entry):entry],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'0\n','unowned data URL code must not execute');
     const health=oracleLoaderReady(execution);assert.equal(health.ready,false);if(!health.ready)assert.match(health.why,/module URL has no captured owner|resolution context was not captured: data:.*; unproved ESM package name/);
   }
@@ -409,7 +410,7 @@ test('authored scope records grant neither a changed manifest nor foreign input 
     if(mutation==='input')record.inputs[0].sha256='0'.repeat(64);
     if(mutation==='foreign')record.inputs[0].path=join(root,'foreign.cjs');
     writeFileSync(file,JSON.stringify(record)+'\n');
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     if(mutation==='none'){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'19\n');assert.deepEqual(oracleLoaderReady(execution),{ready:true});}
     else {assert.equal(actual.stdout,'');assert.equal(oracleLoaderReady(execution).ready,false,'invalid scope qualification must hold before code');}
   }
@@ -424,9 +425,9 @@ test('plain authored callers retain distinct public CommonJS search contexts',as
     const change=changed?(synthetic?"shadow.paths=[require('node:path').resolve(__dirname,'../alternate/node_modules')];":"module.paths=[require('node:path').resolve(__dirname,'../alternate/node_modules')];"):'';
     const calls=synthetic?"const first=require('sample');delete require.cache[require.resolve('sample')];console.log(first,shadow.require('sample'));":"const fresh=createRequire(__filename);console.log(require(require.resolve('sample')),fresh(fresh.resolve('sample')));";
     writeFileSync(entry,setup+change+calls+'\n');
-    const plain=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,changed?(synthetic?'19 23\n':'23 19\n'):'19 19\n');
+    const plain=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);assert.equal(plain.stdout,changed?(synthetic?'19 23\n':'23 19\n'):'19 19\n');
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,'prepared')})),execution=authoredExecution(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,plain.status,actual.stderr);assert.equal(actual.stdout,plain.stdout);assert.deepEqual(oracleLoaderReady(execution),{ready:true});
   }
 });
@@ -441,7 +442,7 @@ test('a program cannot qualify a governed ESM parent as an authored CommonJS wra
   writeFileSync(entry,`(async()=>{const {pathToFileURL}=require('node:url');const loader=await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)));if(process.argv[2]==='spoof'&&typeof loader.oracleAuthoredCommonJS==='function')loader.oracleAuthoredCommonJS(require('node:path').join(__dirname,'provider.mjs'),__filename);try{await import('./provider.mjs');}catch{}console.log(globalThis.scopeOutside??0);})();\n`);
   const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[app],toolchain,directory:join(root,'prepared')}));
   for(const spoof of [false,true]){
-    const execution=authoredExecution(prepared,entry),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),spoof?'spoof':'control'],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}});
+    const execution=authoredExecution(prepared,entry),actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),spoof?'spoof':'control'],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     t.diagnostic(JSON.stringify({spoof,status:actual.status,stdout:actual.stdout,stderr:actual.stderr,health:oracleLoaderReady(execution)}));
     assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'0\n','a governed provider cannot manufacture a plain CommonJS parent');assert.equal(oracleLoaderReady(execution).ready,false);
   }
@@ -451,7 +452,7 @@ test('a query or fragment cannot create another bootstrap authority',async t=>{
   for(const suffix of ['?copy','#copy']){
     const root=workspace(t,{'src/main.cjs':`(async()=>{const {pathToFileURL}=require('node:url');try{await import(new URL('./assets/oracle-loader.ts${suffix}',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)));}catch{}console.log('done');})();\n`}),entry=join(root,'src/main.cjs');
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[join(root,'src')],toolchain,directory:join(root,'prepared')})),execution=authoredExecution(prepared,entry);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'done\n');assert.equal(oracleLoaderReady(execution).ready,false,'a second bootstrap identity must hold before its code');
   }
 });
@@ -464,9 +465,9 @@ test('governed absolute CommonJS holds when public extension keys expand its dom
   const project=join(root,'src/tsconfig.json');writeFileSync(project,JSON.stringify({extends:'../tsconfig.json',files:['main.cts'],include:[]}));
   const prepared=(await prepare(root,'src/main.cts',{project,runtimeRoots:[join(root,'src/pkg')]}));
   for(const changed of [false,true]){
-    const mode=changed?'changed':'default',reference=spawnSync(process.execPath,[join(root,'src/reference.cjs'),mode],{cwd:root,encoding:'utf8'});
+    const mode=changed?'changed':'default',reference=spawnSync(process.execPath,[join(root,'src/reference.cjs'),mode],{env:testEnvironment(),cwd:root,encoding:'utf8'});
     assert.equal(reference.status,0,reference.stderr);assert.equal(reference.stdout,changed?'19\n':'23\n');
-    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,join(root,'src/main.cts'),mode],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,join(root,'src/main.cts'),mode],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     t.diagnostic(JSON.stringify({changed,reference:{status:reference.status,stdout:reference.stdout,stderr:reference.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health}));
     if(!changed){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,reference.stdout);assert.deepEqual(health,{ready:true});}
     else {assert.equal(health.ready,false,'a changed extension domain must hold before Node can choose a guessed fallback');if(!health.ready)assert.match(health.why,/CommonJS extension domain/);}
@@ -481,10 +482,10 @@ test('governed ESM proves the package domain before a successful main fallback',
   writeFileSync(join(app,'package.json'),'{"type":"module"}');
   writeFileSync(join(app,'node_modules/pkg/package.json'),JSON.stringify({main:'../../../outside/value.cjs'}));
   writeFileSync(join(app,'node_modules/pkg/index.js'),'module.exports=23;\n');writeFileSync(join(outside,'value.cjs'),'module.exports=19;\n');
-  const reference=spawnSync(process.execPath,[entry],{cwd:app,encoding:'utf8'});assert.equal(reference.status,0,reference.stderr);assert.equal(reference.stdout,'19\n');
+  const reference=spawnSync(process.execPath,[entry],{env:testEnvironment(),cwd:app,encoding:'utf8'});assert.equal(reference.status,0,reference.stderr);assert.equal(reference.stdout,'19\n');
   for(const captureOutside of [true,false]){
     const prepared=(await prepareOracle({entry,project:null,runtimeRoots:captureOutside?[app,outside]:[app],toolchain,directory:join(root,captureOutside?'control':'subject')})),execution=oracleExecution(prepared);
-    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     t.diagnostic(JSON.stringify({captureOutside,reference:{status:reference.status,stdout:reference.stdout,stderr:reference.stderr},actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},health}));
     if(captureOutside){assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,reference.stdout);assert.deepEqual(health,{ready:true});}
     else assert.equal(health.ready,false,'a successful owned fallback cannot turn an unobserved ESM main candidate into absence');
@@ -495,7 +496,7 @@ test('governed ESM proves the package domain before a successful main fallback',
 test('program code without an authenticated driver cannot obtain a wrapper capability',async t=>{
   const root=workspace(t,{'src/main.cjs':"(async()=>{const assert=require('node:assert/strict');const {pathToFileURL}=require('node:url');const api=await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)));assert.equal(typeof api.oracleHarnessCapability,'function');assert.throws(()=>api.oracleHarnessCapability(),/unavailable or already consumed/);console.log('denied');})();\n"}),entry=join(root,'src/main.cjs');
   const prepared=(await prepareOracle({entry,project:null,runtimeRoots:[join(root,'src')],toolchain,directory:join(root,'prepared')})),execution=authoredExecution(prepared,entry);
-  const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+  const actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry)],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
   assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'denied\n');const health=oracleLoaderReady(execution);assert.equal(health.ready,false);if(!health.ready)assert.match(health.why,/harness capability is unavailable or already consumed/);
 });
 
@@ -542,9 +543,9 @@ test('owned execution descriptors close after success, holds, failed launch and 
     assert.equal(readdirSync('/proc/self/fd').length,before+1);
     try{
       if(mode===3)throw Error('owned descriptor error control');
-      if(mode===2){const run=spawnSync(join(root,'missing-node'),[]);assert.ok(run.error);continue;}
+      if(mode===2){const run=spawnSync(join(root,'missing-node'),[], {env:testEnvironment()});assert.ok(run.error);continue;}
       const raw=mode===0?JSON.stringify({version:1,status:'ready'})+'\n':'{';
-      const run=spawnSync(process.execPath,['-e','require("node:fs").writeFileSync(process.argv[1],process.argv[2])',execution.loaderState,raw]);
+      const run=spawnSync(process.execPath,['-e','require("node:fs").writeFileSync(process.argv[1],process.argv[2])',execution.loaderState,raw], {env:testEnvironment()});
       assert.equal(run.status,0,run.stderr?.toString());assert.equal(oracleLoaderReady(execution).ready,mode===0);
     }catch(error){assert.equal(mode,3);assert.equal(String(error),'Error: owned descriptor error control');}
     finally{closeOracleExecution(execution);}
@@ -563,7 +564,7 @@ test('a successful Node result still needs an exact captured owner after domain 
     const witness=join(root,changed?'redirect.mjs':'control.mjs');
     writeFileSync(witness,"import {registerHooks} from 'node:module';registerHooks({resolve(specifier,context,next){const result=next(specifier,context);return "+changed+"&&specifier.endsWith('/value.mjs')?{...result,url:"+JSON.stringify(pathToFileURL(outside).href)+"}:result;}});\n");
     const prepared=(await prepareOracle({entry:join(root,'src/main.ts'),project,runtimeRoots:[join(root,'src/value.mjs')],preloads:[witnessOwner(root,witness)],directory:join(root,changed?'subject':'control'),toolchain})),execution=oracleExecution(prepared);
-    const run=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,...execution.args,join(root,'src/main.ts')],{encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const run=spawnSync(process.execPath,['--import',pathToFileURL(witness).href,...execution.args,join(root,'src/main.ts')],{encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     if(!changed){assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'19\n');assert.deepEqual(health,{ready:true});}
     else {assert.equal(health.ready,false);assert.equal(existsSync(marker),false,'the unowned result must hold before its code runs');}
   }
@@ -597,8 +598,8 @@ test('governed lookups revalidate queried package bytes, link text and file kind
       const entry=join(app,'main.mjs');
       writeFileSync(entry,"import {chmodSync,writeFileSync,unlinkSync,symlinkSync} from 'node:fs';const request="+JSON.stringify(request)+";console.log('bootstrap');if(process.argv[2]==='change'){"+change+"}try{console.log((await import(request)).default);}catch(error){console.log(error.message);}\n");
       const prepared=(await prepareOracle({entry,project:null,runtimeRoots:mutation==='package'?[app,join(app,'node_modules/pkg')]:[app],toolchain,directory:join(root,'prepared')})),execution=oracleExecution(prepared);
-      const args=changed?['change']:[],actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),...args],{cwd:app,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
-      const reference=spawnSync(process.execPath,[entry,...args],{cwd:app,encoding:'utf8'});
+      const args=changed?['change']:[],actual=spawnSync(process.execPath,[...execution.args,oracleRuntimeFile(prepared,entry),...args],{cwd:app,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
+      const reference=spawnSync(process.execPath,[entry,...args],{env:testEnvironment(),cwd:app,encoding:'utf8'});
       t.diagnostic(JSON.stringify({mutation,changed,actual:{status:actual.status,stdout:actual.stdout,stderr:actual.stderr},reference:{status:reference.status,stdout:reference.stdout,stderr:reference.stderr},health}));
       assert.equal(actual.status,0,actual.stderr);assert.equal(reference.status,0,reference.stderr);
       assert.ok(actual.stdout.startsWith('bootstrap\n'),'the application must run after a successful bootstrap before mutating the query');
@@ -735,7 +736,7 @@ test('plain Node entry qualification follows only captured corpus aliases',async
     const execution=oracleExecution(prepared,driver,[source]);
     const handoff=JSON.parse(readFileSync(join(dirname(execution.loaderState),'plain-node-inputs.json'),'utf8'));
     assert.deepEqual(handoff.inputs,[{path:file,sha256:stored.inputs[file]}]);
-    const run=spawnSync(process.execPath,[...execution.args,driver],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const run=spawnSync(process.execPath,[...execution.args,driver],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
     assert.equal(run.status,0,run.stderr);assert.deepEqual(oracleLoaderReady(execution),{ready:true});
   }
 });
@@ -760,7 +761,7 @@ test('the exact pinned bootstrap URL keeps its identity when imported again',asy
   assert.ok(bootstrap.startsWith('data:text/javascript,'));
   for(const mode of ['once','duplicate-preload','repeat-import','changed-url'] as const)await t.test(mode,()=>{
     const execution=oracleExecution(prepared),args=[...execution.args,...(mode==='duplicate-preload'?['--import',bootstrap]:[]),join(root,'src/main.ts'),...(mode==='repeat-import'?[bootstrap]:mode==='changed-url'?[bootstrap+'#unowned']:[])];
-    const actual=spawnSync(process.execPath,args,{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}}),health=oracleLoaderReady(execution);
+    const actual=spawnSync(process.execPath,args,{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}}),health=oracleLoaderReady(execution);
     t.diagnostic(JSON.stringify({mode,status:actual.status,stdout:actual.stdout,stderr:actual.stderr,health}));
     assert.equal(actual.status,0,actual.stderr);
     if(mode==='changed-url'){
@@ -783,7 +784,7 @@ if(process.argv[3]==='child'){
 }else{
   for(const code of [1,2,0]){
     const env=handle.child(source,source);
-    const result=spawnSync(process.execPath,[...process.execArgv,process.argv[1],source,'child',String(code)],{encoding:'utf8',env:{...process.env,...env}});
+    const result=spawnSync(process.execPath,[...process.execArgv,process.argv[1],source,'child',String(code)],{encoding:'utf8',env:{...${testEnvironmentHandoff()},...env}});
     if(result.status!==code)throw Error(JSON.stringify({code,status:result.status,signal:result.signal,stderr:result.stderr,error:result.error?.message}));
     console.log(result.status);
   }
@@ -792,7 +793,7 @@ if(process.argv[3]==='child'){
     'case.cjs':"process.exit(Number(process.argv.at(-1)));\n",
   });
   const entry=join(root,'tooling/driver.mjs'),source=join(root,'case.cjs'),prepared=(await prepareOracle({entry,project:null,runtimeRoots:[root],toolchain,directory:join(root,'prepared')})),driver=oracleRuntimeFile(prepared,entry),execution=oracleExecution(prepared,driver,[source]);
-  const actual=spawnSync(process.execPath,[...execution.args,driver,source],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+  const actual=spawnSync(process.execPath,[...execution.args,driver,source],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
   assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'1\n2\n0\n');
   const rows=readFileSync(execution.loaderState,'utf8').trim().split('\n').map(line=>JSON.parse(line) as {status:string;execution?:string});
   const starts=rows.filter(row=>row.status==='child-start').map(row=>row.execution),ready=rows.filter(row=>row.status==='child-ready').map(row=>row.execution);

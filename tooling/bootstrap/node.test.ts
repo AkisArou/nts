@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -25,7 +26,7 @@ test('release checksum lookup is an exact unique filename match',()=>{
 test('verified acquisition publishes atomically and reuse is offline',async()=>{
  const dir=scratch(),version='26.13.0',root=join(dir,'root'),source=join(dir,'node-v'+version);
  mkdirSync(root);writeFileSync(join(root,'.tool-versions'),'nodejs '+version+'\n');tree(source,version);
- const archive=join(dir,'source.tar.xz');execFileSync('tar',['-cJf',archive,'-C',dir,'node-v'+version]);const bytes=readFileSync(archive);
+ const archive=join(dir,'source.tar.xz');execFileSync('tar',['-cJf',archive,'-C',dir,'node-v'+version], {env:testEnvironment()});const bytes=readFileSync(archive);
  const server=createServer((req,res)=>{if(req.url?.endsWith('SHASUMS256.txt'))res.end(digest(bytes)+'  node-v'+version+'.tar.xz\n');else res.end(bytes);});
  await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));
  const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;

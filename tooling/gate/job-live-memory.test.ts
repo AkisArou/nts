@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // First-run job accounting, through the real CLI in owned units. The watcher
 // publishes its observed peak, which is the event releasing the held command.
 import assert from "node:assert/strict";
@@ -25,7 +26,7 @@ function fixture(t: TestContext) {
   const memory = ownMemory(join(root, "memory"), { availableKiB: 2.5 * 2 ** 20, totalKiB: 32 * 2 ** 20,resident:{kind:"live"} });
   const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
   t.after(() => {
-    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], {env:testEnvironment(), stdio: "ignore" });
     removable(root); rmSync(root, { recursive: true, force: true });
   });
   const start = (body: string, args: string[] = []) => {
@@ -33,7 +34,7 @@ function fixture(t: TestContext) {
     const setenv = Object.entries(env).filter((pair): pair is [string, string] => pair[1] !== undefined).map(([key, value]) => `--setenv=${key}=${value}`);
     const child = spawn("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet", "--wait", "--pipe",
       "--property=LimitCORE=0", "--property=Nice=19", "--property=CPUAffinity=0-3 6-31", "--property=TimeoutStopSec=5s", "--property=RuntimeMaxSec=300s",
-      ...setenv, process.execPath, ADMIT, "--key", "perf-count", "--", process.execPath, "-e", body, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+      ...setenv, process.execPath, ADMIT, "--key", "perf-count", "--", process.execPath, "-e", body, ...args], {env:testEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
     let out = "", err = "";
     child.stdout.setEncoding("utf8").on("data", data => { out += data; }); child.stderr.setEncoding("utf8").on("data", data => { err += data; });
     return { done: once(child, "close"), ended: () => child.exitCode !== null ? `unit exited ${child.exitCode}: ${err}` : undefined,

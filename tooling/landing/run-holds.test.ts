@@ -1,3 +1,4 @@
+import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
 // What holds a landing (run.ts): memory it waits for in the ledger, a tree
 // without history, pressure that never clears, a hung or stuck step at the
 // ceiling, a gate that cannot say what its steps need, and pending lines as
@@ -29,7 +30,7 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   const sized = jobSizing({ key: "landing-build", units: workers }, f.memory);
   assert.equal(sized.basis, "measured");
   const asked = gib(sized.bytes).replace(".", "\\.");
-  const env: NodeJS.ProcessEnv = { ...process.env, ...f.memory };
+  const env: NodeJS.ProcessEnv = { ...testEnvironment(), ...f.memory };
   delete env.NTS_MEMORY_RESERVATION;
   const holder = spawn(process.execPath, [fileURLToPath(new URL("../gate/admit.ts", import.meta.url)), "--bytes", "56G", "--priority", "landing", "--what", "holder", "--",
     process.execPath, "--input-type=module", "-e", HOLDER, f.memory.NTS_MEMORY_LEDGER], { env, stdio: "ignore" });
@@ -75,9 +76,9 @@ test("a --here run at the agent priority yields its unused reservation to a serv
     `import {runLanding} from ${JSON.stringify(new URL("./run.ts", import.meta.url).href)};` +
     `import {writeFileSync} from "node:fs";` +
     `const ran=await runLanding({tree:${JSON.stringify(here.tree)},target:${JSON.stringify(here.target)},run:${JSON.stringify(here.run)},commit:${JSON.stringify(commit)},steps:["build"],priority:"agent",` +
-    `env:{...process.env,HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
+    `env:{...${testEnvironmentHandoff()},HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
     `writeFileSync(${JSON.stringify(hereResult)},JSON.stringify({state:ran.state}));`],
-    { env: { ...process.env }, stdio: ["ignore", "ignore", "pipe"] });
+    { env: { ...testEnvironment() }, stdio: ["ignore", "ignore", "pipe"] });
   let childStderr = "";
   child.stderr.setEncoding("utf8").on("data", (data: string) => { childStderr += data; });
   const childEnded = once(child, "exit");

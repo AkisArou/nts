@@ -214,6 +214,7 @@ export type EnvironmentReport = {
   experiments: { name: string; value: string }[];
 };
 type Context = { report: EnvironmentReport; owned: Record<string, string>; temporary:RunTemporary;resolutionOwner?:{pid:number;birth:string} };
+export type {Context as GateEnvironmentContext};
 export type GateEnvironment = { env: NodeJS.ProcessEnv; report: EnvironmentReport; temporary:RunTemporary };
 
 /** The runner binds telemetry ownership before launching a step. Children

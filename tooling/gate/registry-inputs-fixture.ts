@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 // A real registry, tarball, pnpm store and committed candidate for preparation
 // controls. The registry is closed before the frozen tree is prepared.
 import assert from "node:assert/strict";
@@ -29,7 +30,7 @@ export function command(program: string, args: string[], cwd: string, input?: Bu
     return withPackageManager(cwd,{},async manager=>({status:0,stdout:await manager.run(args),stderr:""}));
   }
   return new Promise((resolve, reject) => {
-    const env={...process.env,...overrides};
+    const env={...testEnvironment(),...overrides};
     for(const key of ["NTS_GATE_STEP","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT"])delete env[key];
     const child = spawn(program, args, { cwd, env: { ...env, CI: "true", NO_COLOR: "1",
       HTTP_PROXY: "", HTTPS_PROXY: "", ALL_PROXY: "", NO_PROXY: "127.0.0.1" }, stdio: "pipe" });

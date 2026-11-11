@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { hostEnvironment } from "../gate/canonical-environment.ts";
 import { appliedIn, DELTA_FILE } from "../records/delta.ts";
 import { applyAt, applyRecords, recordAt, recordsMessage } from "./records.ts";
-import { checkoutIn, ENV, repository } from "./repository-fixture.ts";
+import { checkoutIn, repository } from "./repository-fixture.ts";
 import { candidateEnvironmentFixture } from "./run-environment-fixture.ts";
 import { Git } from "./git.ts";
 
@@ -35,7 +35,7 @@ test("a delta is applied in the tree set up at main, and what it wrote under the
   const repo = repository(t);
   const recorded = repo.commit({ "results/a.tsv": "a\n" }, "recorded here");
   repo.git.run(["worktree", "add", "--detach", "-q", repo.layout.tree, recorded]);
-  const tree = new Git(repo.layout.tree, ENV);
+  const tree = new Git(repo.layout.tree, repo.git.env);
   // The recorder's own writes, left in the tree at the commit it recorded at.
   writeFileSync(join(repo.layout.tree, "results/a.tsv"), "a\nrecorded\n");
   const main = repo.commit({ "results/a.tsv": "a\nmain's own\n", "b.txt": "b\n" }, "main moved on");
@@ -59,7 +59,7 @@ test("an apply that fails commits nothing, and one that applies nothing has noth
   const repo = repository(t);
   const earlier = repo.commit({ "results/a.tsv": "0\n" }, "earlier"), main = repo.commit({ "results/a.tsv": "a\n" }, "main");
   repo.git.run(["worktree", "add", "--detach", "-q", repo.layout.tree, main]);
-  const tree = new Git(repo.layout.tree, ENV), message = () => "records\n";
+  const tree = new Git(repo.layout.tree, repo.git.env), message = () => "records\n";
   const failed = applyAt(tree, main, checkoutIn(repo), dir => { writeFileSync(join(dir, "results/a.tsv"), "half\n"); return { status: 1, output: "malformed records delta" }; }, message);
   assert.deepEqual([failed.kind, failed.status], ["failed", 1]);
   assert.deepEqual(applyAt(tree, main, checkoutIn(repo), () => ({ status: 0, output: "" }), message), { kind: "none", refused: [], output: "", status: 0 },

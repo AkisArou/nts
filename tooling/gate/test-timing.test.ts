@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { test } from "node:test";
@@ -37,7 +38,7 @@ test("a reviewed site cannot bless a different file or an additional timer", () 
 });
 
 test("a late real event crosses the former sleeps without deciding by elapsed time", async () => {
-  const worker = spawn(process.execPath, ["-e", "setTimeout(()=>console.log('ready'),1200)"], {stdio:["ignore","pipe","pipe"]});
+  const worker = spawn(process.execPath, ["-e", "setTimeout(()=>console.log('ready'),1200)"], {env:testEnvironment(),stdio:["ignore","pipe","pipe"]});
   let output="",closed=false;
   worker.stdout.on("data",chunk=>{output+=chunk;});
   const done=new Promise<number|null>(resolve=>worker.on("close",status=>{closed=true;resolve(status);}));
@@ -54,7 +55,7 @@ test("a hung wait and an early child exit name the event that was not measured",
 });
 
 test("a process guard expiry is reported as hung rather than an ordinary child verdict", () => {
-  const failed = spawnSync(process.execPath,["-e","process.exit(7)"],{encoding:"utf8"});
+  const failed = spawnSync(process.execPath,["-e","process.exit(7)"],{env:testEnvironment(),encoding:"utf8"});
   assert.equal(testProcessResult(failed,"intentional failure").status,7);
   const error=Object.assign(new Error("spawnSync ETIMEDOUT"),{code:"ETIMEDOUT"});
   assert.throws(()=>testProcessResult({...failed,status:null,error},"a named fixture"),/test hung waiting for a named fixture/);

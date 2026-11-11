@@ -1,3 +1,4 @@
+import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import { spawn,spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -35,9 +36,9 @@ else owner.cleanup();
   const temporary=join(root,'tmp');mkdirSync(temporary);
   if(mode==='SIGTERM'){
     const unit=toolingSlicePrefix('census-cleanup-'+randomUUID());
-    t.after(()=>spawnSync('systemctl',['--user','stop',unit],{stdio:'ignore'}));
+    t.after(()=>spawnSync('systemctl',['--user','stop',unit],{env:testEnvironment(),stdio:'ignore'}));
     const child=spawn('systemd-run',['--user','--wait','--pipe','--collect',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0',
-      '--setenv=TMPDIR='+temporary,'taskset','-c','0-3,6-31',process.execPath,helper],{stdio:['pipe','pipe','pipe']});
+      '--setenv=TMPDIR='+temporary,'taskset','-c','0-3,6-31',process.execPath,helper],{env:testEnvironment(),stdio:['pipe','pipe','pipe']});
     let output='';child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
     const ended=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
     await waitFor('census scratch ready',()=>existsSync(ready));
@@ -45,7 +46,7 @@ else owner.cleanup();
     assert.equal(killed.status,0,killed.stderr);
     assert.equal(await ended,143,output);
   }else{
-    const result=spawnTest(process.execPath,[helper],{encoding:'utf8',env:{...process.env,TMPDIR:temporary,NTS_CENSUS_DIR:undefined}});
+    const result=spawnTest(process.execPath,[helper],{encoding:'utf8',env:{...testEnvironment(),TMPDIR:temporary,NTS_CENSUS_DIR:undefined}});
     assert.equal(result.status,mode==='success'?0:1,result.stderr);
     if(mode==='exception')assert.match(result.stderr,/intentional census exception/);
   }

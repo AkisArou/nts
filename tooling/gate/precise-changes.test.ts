@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -9,7 +10,7 @@ const change = (path: string, before: string, after: string) => ({ path, before,
 const steps = (path: string, before: string, after: string) => gateSteps(owed([change(path, before, after)]));
 
 test("documentation and notebook records owe only declared tree checks", () => {
-  const listed = spawnSync(process.execPath, ["tooling/gate/run.mjs", "--tree-only"], { encoding: "utf8" });
+  const listed = spawnSync(process.execPath, ["tooling/gate/run.mjs", "--tree-only"], {env:testEnvironment(), encoding: "utf8" });
   assert.equal(listed.status, 0);
   for (const path of ["docs/architecture.md", "docs/records/notebooks/new.md", "AGENTS.md", "CLAUDE.md", "README.md"]) {
     const got = gateSteps(owed([{ path, added: true }]));

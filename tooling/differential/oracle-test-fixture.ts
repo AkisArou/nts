@@ -2,6 +2,7 @@
 import {rmSync} from 'node:fs';
 import {newTestScratch,testScratch} from '../gate/test-scratch.ts';
 import {ownMemoryEnv} from '../gate/test-memory.ts';
+import {testEnvironment} from '../gate/test-environment.ts';
 
 import {after} from 'node:test';
 import {ENVIRONMENT_CONTEXT, gateEnvironment, oracleToolchainLocation, sealOracleRun, type GateEnvironment} from '../gate/canonical-environment.ts';
@@ -38,7 +39,7 @@ async function ownOracleTestEnvironment():Promise<void>{
   };
   finish=cleanup;
   try{
-    planned=gateEnvironment(process.env,{run:root,standalone:true});
+    planned=gateEnvironment(testEnvironment(),{run:root,standalone:true});
     planned=await sealOracleRun(planned);
     for(const name of Object.keys(process.env))delete process.env[name];
     Object.assign(process.env,planned.env);

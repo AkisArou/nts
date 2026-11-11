@@ -1,3 +1,4 @@
+import {testEnvironment} from "./test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -82,7 +83,7 @@ test('a missing sampler observation fails its job and still releases the owned l
 
 test('the fixture CLI supplies every shared environment field and gate classification follows that list',t=>{
   const root=testScratch(t,'host-observations-cli');
-  const result=spawnSync(process.execPath,[new URL('./test-memory.ts',import.meta.url).pathname,root],{encoding:'utf8'});
+  const result=spawnSync(process.execPath,[new URL('./test-memory.ts',import.meta.url).pathname,root],{env:testEnvironment(),encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
   const value=JSON.parse(result.stdout);
   assert.equal(value.version,1);
