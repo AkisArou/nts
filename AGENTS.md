@@ -298,10 +298,10 @@ then a guard once fixed), `tests/memory/`.
   `LimitCORE=0` for a unit. On 2026-10-27 the gate's deliberate crashes made
   2,669 dumps in an hour (4 GB). systemd-coredump, which no mask excludes, ran
   at 40% on CPU 5, so measurement could not start.
-- For a before-and-after comparison, count first: `nts-bench --count [case
-  ...]` (or `--count --group <name>`) prints each row's instruction counts
-  per column on any CPU outside 4–5, with no measurement lock, so agents
-  count in parallel. A count is enough evidence when the change is in code
+- For a before-and-after comparison of benchmark rows, count first:
+  `nts-bench --count [case ...]` (or `--count --group <name>`) prints each
+  row's instruction counts per column on any CPU outside 4–5, with no
+  measurement lock, so agents count in parallel. A count is enough evidence when the change is in code
   generation or front-end work and the count moves past the band the header
   states; a timed row under the lock is needed when the claim is about
   wall time itself — scheduling, layout, cache or branch effects a count
@@ -309,7 +309,8 @@ then a guard once fixed), `tests/memory/`.
 - Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a
   commit, under
   `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;
-  an instruction count uses its stable key:
+  an instruction count of any other command (a compile, a probe), which
+  states no noise band of its own, uses its stable key:
   `tooling/gate/with-lock.sh --wait --key perf-count taskset -c 4 <command>`.
   The wrapper takes the CPU lock and the session's memory together under
   its key; waiting for either, including quiet CPUs, holds neither. Tickets
