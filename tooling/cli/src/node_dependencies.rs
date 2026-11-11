@@ -90,47 +90,6 @@ fn cache_from_environment(read: impl Fn(&str) -> Option<std::ffi::OsString>) -> 
         .join("nts/node-deps"))
 }
 
-#[cfg(test)]
-mod cache_tests {
-    use super::cache_from_environment;
-    use std::{ffi::OsString, path::PathBuf};
-
-    #[test]
-    fn missing_fixture_cache_never_reads_production_paths() {
-        let error = cache_from_environment(|name| match name {
-            "NTS_NODE_DEPS_CACHE" => None,
-            "NTS_TEST_ENVIRONMENT" => Some(OsString::from("1")),
-            _ => panic!("production environment read: {name}"),
-        })
-        .unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "fixture cache capability missing: NTS_NODE_DEPS_CACHE"
-        );
-    }
-
-    #[test]
-    fn declared_cache_never_reads_production_paths() {
-        let cache = cache_from_environment(|name| match name {
-            "NTS_NODE_DEPS_CACHE" => Some(OsString::from("/declared/cache")),
-            _ => panic!("production environment read: {name}"),
-        })
-        .unwrap();
-        assert_eq!(cache, PathBuf::from("/declared/cache"));
-    }
-
-    #[test]
-    fn production_keeps_its_xdg_cache() {
-        let cache = cache_from_environment(|name| match name {
-            "XDG_CACHE_HOME" => Some(OsString::from("/production/cache")),
-            "HOME" => panic!("XDG cache needs no HOME"),
-            _ => None,
-        })
-        .unwrap();
-        assert_eq!(cache, PathBuf::from("/production/cache/nts/node-deps"));
-    }
-}
-
 fn plan_for_target(target: &nts_build::config::Target) -> Result<&'static node_deps::Recipe> {
     let arch = target.arch.as_deref().unwrap_or(super::host_arch());
     let triple = match target.os.as_str() {
@@ -258,4 +217,45 @@ pub(super) fn merge(artifacts: &Artifacts, archive: &Utf8Path) -> Result<()> {
     std::fs::copy(directory.join("combined.a"), archive)?;
     std::fs::remove_dir_all(directory)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::cache_from_environment;
+    use std::{ffi::OsString, path::PathBuf};
+
+    #[test]
+    fn missing_fixture_cache_never_reads_production_paths() {
+        let error = cache_from_environment(|name| match name {
+            "NTS_NODE_DEPS_CACHE" => None,
+            "NTS_TEST_ENVIRONMENT" => Some(OsString::from("1")),
+            _ => panic!("production environment read: {name}"),
+        })
+        .expect_err("a fixture must declare its native dependency cache");
+        assert_eq!(
+            error.to_string(),
+            "fixture cache capability missing: NTS_NODE_DEPS_CACHE"
+        );
+    }
+
+    #[test]
+    fn declared_cache_never_reads_production_paths() {
+        let cache = cache_from_environment(|name| match name {
+            "NTS_NODE_DEPS_CACHE" => Some(OsString::from("/declared/cache")),
+            _ => panic!("production environment read: {name}"),
+        })
+        .expect("the declared cache must resolve");
+        assert_eq!(cache, PathBuf::from("/declared/cache"));
+    }
+
+    #[test]
+    fn production_keeps_its_xdg_cache() {
+        let cache = cache_from_environment(|name| match name {
+            "XDG_CACHE_HOME" => Some(OsString::from("/production/cache")),
+            "HOME" => panic!("XDG cache needs no HOME"),
+            _ => None,
+        })
+        .expect("the production XDG cache must resolve");
+        assert_eq!(cache, PathBuf::from("/production/cache/nts/node-deps"));
+    }
 }
