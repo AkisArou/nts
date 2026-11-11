@@ -4,10 +4,10 @@ import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {ENVIRONMENT_CONTEXT,gateEnvironment} from './canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT,gateEnvironment,ownedCacheEnvironment} from './canonical-environment.ts';
 import {ownMemory,ownMemoryEnv} from './test-memory.ts';
 import {fixtureEnvironment,testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
-import {contentCacheEnvironment} from './cache-environment.ts';
+import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation,contentCacheEnvironment} from './cache-environment.ts';
 import {testScratch} from './test-scratch.ts';
 
 test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
@@ -80,4 +80,23 @@ test('generated CommonJS and ESM shims forward only named fixture handoffs',()=>
     assert.equal(actual.FIXTURE_READY,'owned');assert.equal(actual.NTS_MEMORY_RESERVATION,'explicit-reservation');
     assert.equal(actual.UNRELATED_POISON,undefined);assert.equal(actual.HOME,env.HOME);
   }
+});
+
+test('every absent fixture cache fails by name before its production resolver',()=>{
+  const complete=testEnvironment();
+  for(const name of CONTENT_CACHE_ENVIRONMENT){
+    const partial={...complete};delete partial[name];let calls=0;
+    const production=()=>{calls++;throw Error('production resolver must not run');};
+    assert.throws(()=>cacheLocation(name,partial,production),{code:'NTS_FIXTURE_CACHE_MISSING',message:'fixture cache capability missing: '+name});
+    assert.equal(calls,0,name);
+    assert.equal(contentCacheEnvironment(partial)[name],undefined,'nesting must not restore '+name);
+    if(name==='NODE_COMPILE_CACHE'){
+      assert.throws(()=>ownedCacheEnvironment(partial,{temporary:'/does-not-exist'}),/fixture cache capability missing: NODE_COMPILE_CACHE/);
+    }else{
+      const nested=testEnvironment({},partial);assert.equal(nested[name],undefined,name);
+      assert.equal(nested[FIXTURE_ENVIRONMENT],'1');
+    }
+    assert.equal(cacheLocation(name,complete,production),complete[name]);assert.equal(calls,0);
+  }
+  let calls=0;assert.equal(cacheLocation('example',{},()=>{calls++;return '/production/cache';}),'/production/cache');assert.equal(calls,1);
 });

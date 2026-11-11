@@ -4,7 +4,7 @@ import {userInfo} from "node:os";
 import {testScratch} from "../gate/test-scratch.ts";
 import {dirname, join, relative} from "node:path";
 import {test} from "node:test";
-import {NODE_COMPILE_CACHE_ROOT} from "../gate/canonical-environment.ts";
+import {nodeCompileCacheRoot} from "../gate/canonical-environment.ts";
 import {acquire} from "../landing/lock.ts";
 import * as retention from "./node-cache-retention.ts";
 
@@ -19,7 +19,7 @@ function prune(options: Options): Result {
 }
 function fixture(t: { after(fn: () => void): void }) {
   const dir=testScratch(t,"node-cache-retention"),home=join(dir,"home");
-  const root = join(home, relative(userInfo().homedir, NODE_COMPILE_CACHE_ROOT)); mkdirSync(root, { recursive: true });
+  const root = join(home, relative(userInfo().homedir, nodeCompileCacheRoot())); mkdirSync(root, { recursive: true });
   const file = (name: string, bytes: string, accessDays: number, writeDays = accessDays) => {
     const path = join(root, name); mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, bytes);
     utimesSync(path, new Date(NOW - accessDays * DAY), new Date(NOW - writeDays * DAY)); return path;

@@ -3,7 +3,7 @@
 import { lstatSync, readdirSync, realpathSync, unlinkSync, type Stats } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { NODE_COMPILE_CACHE_ROOT } from "../gate/canonical-environment.ts";
+import { nodeCompileCacheRoot } from "../gate/canonical-environment.ts";
 import { acquire, type Lock } from "../landing/lock.ts";
 
 export const NODE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -21,10 +21,11 @@ const same = (a: Stats, b: Stats): boolean => a.dev === b.dev && a.ino === b.ino
   && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && a.atimeMs === b.atimeMs;
 
 export function pruneNodeCompileCache(options: Options = {}): NodeCacheRetention {
+  const authority = nodeCompileCacheRoot();
   const home = options.home ?? userInfo().homedir;
   // Fixture homes relocate the one exported authority; there is no second
   // spelling of its suffix and tests never collect the user's shared cache.
-  const root = resolve(home, relative(userInfo().homedir, NODE_COMPILE_CACHE_ROOT));
+  const root = resolve(home, relative(userInfo().homedir, authority));
   const result: NodeCacheRetention = { root, state: "complete", removed: 0, removedBytes: 0,
     kept: 0, keptBytes: 0, changed: 0, skipped: 0, errors: [] };
   const now = options.now ?? Date.now(), maxBytes = options.maxBytes ?? NODE_CACHE_MAX_BYTES;

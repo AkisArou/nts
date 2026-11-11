@@ -7,7 +7,7 @@ import {ENVIRONMENT_CONTEXT,FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary,type Ga
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {assertRunTemporary,removable} from './run-temporary.ts';
 import {toolchainDirectories} from './toolchain.ts';
-import {CONTENT_CACHE_ENVIRONMENT,contentCacheEnvironment} from './cache-environment.ts';
+import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,contentCacheEnvironment} from './cache-environment.ts';
 
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
@@ -47,8 +47,8 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
     XDG_DATA_HOME:join(root,'data'),XDG_STATE_HOME:join(root,'state'),
     GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_SYSTEM:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',
     GIT_AUTHOR_NAME:'Fixture',GIT_AUTHOR_EMAIL:'fixture@invalid',GIT_COMMITTER_NAME:'Fixture',GIT_COMMITTER_EMAIL:'fixture@invalid'});
-  const grants:NodeJS.ProcessEnv=contentCacheEnvironment();
-  if(context)for(const name of CONTENT_CACHE_ENVIRONMENT)if(context.owned[name]!==undefined)grants[name]=context.owned[name];
+  const grants:NodeJS.ProcessEnv={...contentCacheEnvironment(source),[FIXTURE_ENVIRONMENT]:'1'};
+  if(context&&source[FIXTURE_ENVIRONMENT]===undefined)for(const name of CONTENT_CACHE_ENVIRONMENT)if(context.owned[name]!==undefined)grants[name]=context.owned[name];
   for(const name of HANDOFF){
     const value=context?context.owned[name]:source[name];
     if(value!==undefined)grants[name]=value;
@@ -107,6 +107,6 @@ export function assignTestValues(env:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv):
  * expression works in both CommonJS and ESM without loading another runtime. */
 export function testEnvironmentHandoff(names:readonly string[]=[]):string {
   const allowed=[...new Set([...HOST_CAPABILITIES,...Object.keys(FIXED_AMBIENT),...WRITABLE,...HANDOFF,
-    ...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,ENVIRONMENT_CONTEXT,'NTS_GATE_RUN_DIR',...names])];
+    ...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,ENVIRONMENT_CONTEXT,'NTS_GATE_RUN_DIR',...names])];
   return `Object.fromEntries(${JSON.stringify(allowed)}.filter(name=>process.env[name]!==undefined).map(name=>[name,process.env[name]]))`;
 }

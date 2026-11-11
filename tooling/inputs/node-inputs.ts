@@ -8,6 +8,7 @@ import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {nodePin,verifySource} from '../bootstrap/node.ts';
+import {cacheLocation} from '../gate/cache-capabilities.mjs';
 
 export type Identity={commit:string;tree:string;archive:string;sourceRecord:string};
 export type Records={version:1;releases:Record<string,Identity>};
@@ -16,7 +17,7 @@ type Inventory=Record<string,Entry>;
 type Manifest={version:1;release:string;identity:Identity;node:Inventory;source:Inventory};
 const sha=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 const git=(root:string,...args:string[])=>execFileSync('git',['-C',root,...args],{encoding:'utf8',maxBuffer:32<<20}).trim();
-export const inputCache=()=>process.env.NTS_NODE_INPUTS_CACHE??join(homedir(),'.cache/nts-node-inputs');
+export const inputCache=()=>cacheLocation('NTS_NODE_INPUTS_CACHE',process.env,()=>join(homedir(),'.cache/nts-node-inputs'));
 export function records():Records{return JSON.parse(readFileSync(new URL('./node-inputs.json',import.meta.url),'utf8'));}
 function expected(release:string,table:Records):Identity{
   const row=table.releases[release];

@@ -387,7 +387,10 @@ locked session on CPU 4 and keep the wall-time floor below.
   directories precede version-manager shims that consult HOME. Shared
   content-addressed caches are explicit named capabilities from
   `tooling/gate/cache-environment.ts`, including native dependencies, pinned Node inputs, C
-  objects, case roots and JVM CDS; they are never discovered through the
+  objects, case roots, JVM CDS and Node compile caches. A fixture marker travels
+  with the declared bundle. Nested fixtures inherit only declared caches; a
+  missing cache fails by name before its production resolver runs. Node compile
+  caches resolve lazily. Caches are never discovered through the
   fixture's private HOME. A fixture testing cache behavior declares its own
   cache capability. A generated shim declares any additional protocol fields
   or descriptors it forwards.

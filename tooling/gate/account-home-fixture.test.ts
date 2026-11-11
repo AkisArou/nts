@@ -27,7 +27,7 @@ function fixture(t: TestContext) {
 
 const actor = `
 import assert from 'node:assert/strict';
-import {ownedCacheEnvironment,NODE_COMPILE_CACHE_ROOT} from ${JSON.stringify(new URL("./canonical-environment.ts", import.meta.url).href)};
+import {ownedCacheEnvironment,nodeCompileCacheRoot} from ${JSON.stringify(new URL("./canonical-environment.ts", import.meta.url).href)};
 import {captureRunTemporary,assertRunTemporary} from ${JSON.stringify(new URL("./run-temporary.ts", import.meta.url).href)};
 import {withPackageManager} from ${JSON.stringify(new URL("../inputs/package-manager.ts", import.meta.url).href)};
 import {pruneNodeCompileCache} from ${JSON.stringify(new URL("../full-check/node-cache-retention.ts", import.meta.url).href)};
@@ -42,17 +42,17 @@ if(kind==='outside'||kind==='foreign'){
 }else if(kind==='selected'){
   const temporary=join(f.selected,'.cache/run/tmp');assert.equal(ownedCacheEnvironment(process.env,{temporary}).TMPDIR,temporary);
 }else if(kind==='pruner'){
-  assert.equal(NODE_COMPILE_CACHE_ROOT,expected);
+  assert.equal(nodeCompileCacheRoot(),expected);
   // Keep even the obsolete ambient-HOME relative calculation inside this
   // private tree; this control must never collect the real shared cache.
   const home=join(f.root,'private-retention-home','a','b','c','d','e','f','g','h'),data=pruneNodeCompileCache({home});
   assert.equal(data.root,join(home,'.cache/nts/node-compile-cache/v1'));assert.equal(data.state,'missing');
 }else{
   const storage=ownedCacheEnvironment(process.env,{temporary:f.temporary});
-  assert.equal(storage.TMPDIR,f.temporary);assert.equal(storage.NODE_COMPILE_CACHE,expected);assert.equal(NODE_COMPILE_CACHE_ROOT,expected);
+  assert.equal(storage.TMPDIR,f.temporary);assert.equal(storage.NODE_COMPILE_CACHE,expected);assert.equal(nodeCompileCacheRoot(),expected);
   assertRunTemporary(captureRunTemporary(join(f.root,'run')),process.env.HOME??'');
 }
-console.log(JSON.stringify({kind,account:f.account,selected:process.env.HOME??null,root:NODE_COMPILE_CACHE_ROOT}));
+console.log(JSON.stringify({kind,account:f.account,selected:process.env.HOME??null,root:nodeCompileCacheRoot()}));
 `;
 
 for (const kind of ["account", "manager", "outside", "foreign", "selected", "unset", "empty", "pruner"] as const) {

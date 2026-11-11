@@ -2071,3 +2071,9 @@ Isolation does not imply cold caches. An early per-child environment produced
 separately from private mutable state, so native dependencies, pinned Node inputs, C objects, case
 roots and JVM CDS retain their shared inputs. #702 separately owns making the
 native archive's identity and bytes independent of extraction paths.
+
+#697 also makes fixture cache lookup strict: a missing declared cache fails by
+name before a production account-home resolver can run. The fixture marker
+travels with the cache bundle; nested fixtures inherit only its declared
+entries. Node compile cache resolution is lazy, so importing an owner cannot
+read the account's cache behind a fixture's private HOME.

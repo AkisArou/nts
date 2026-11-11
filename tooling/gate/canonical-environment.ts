@@ -12,7 +12,7 @@ import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differ
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
-import {CONTENT_CACHE_ENVIRONMENT} from './cache-environment.ts';
+import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation} from './cache-environment.ts';
 
 export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 export const HOST_CAPABILITIES = [
@@ -68,7 +68,7 @@ const INFRASTRUCTURE = new Set([
   "NTS_GATE_LOCK_FD", "NTS_GATE_SCOPE_EXPECTED",
 ]);
 const EXPERIMENTS = new Set([
-  ...CONTENT_CACHE_ENVIRONMENT,
+  ...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,
   ...EXTRA_POLICY, "NTS_GATE_STEPS", "NTS_GATE_SLOTS", "NTS_GATE_JOBS", "NTS_JOBS",
   "NTS_GATE_FRONTENDS", "NTS_GATE_FAIL_FAST", "NTS_GATE_ACCEPT_SKIP", "NTS_GATE_TIME_STRICT", "NTS_GATE_RECORD_TIMES",
   // The landing check's ceiling on step bounds (step-bound.ts), owned by it.
@@ -87,11 +87,14 @@ const EXPERIMENTS = new Set([
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
-export const NODE_COMPILE_CACHE_ROOT=join(userInfo().homedir,".cache/nts/node-compile-cache/v1");
+export function nodeCompileCacheRoot(env:NodeJS.ProcessEnv=process.env):string{
+  return cacheLocation('NODE_COMPILE_CACHE',env[FIXTURE_ENVIRONMENT]!==undefined?env:{},()=>join(userInfo().homedir,'.cache/nts/node-compile-cache/v1'));
+}
 
 /** Storage is owned by the caller's lifetime; shell cache overrides choose neither path. */
 export function ownedCacheEnvironment(launcher:NodeJS.ProcessEnv,options:{temporary:string}):{TMPDIR:string;NODE_COMPILE_CACHE:string} {
   try {
+    const cache=nodeCompileCacheRoot(launcher);
     const temporary=options.temporary,home=hostEnvironment(launcher).HOME!;
     const under=(root:string,path:string)=>{const part=relative(root,path);return part!==""&&part!==".."&&!part.startsWith("../")&&!isAbsolute(part);};
     const roots=[join(userInfo().homedir,".cache"),join(home,".cache")];
@@ -106,7 +109,7 @@ export function ownedCacheEnvironment(launcher:NodeJS.ProcessEnv,options:{tempor
       assertRunTemporary(context.temporary,home);
       if(launcher.TMPDIR!==context.temporary.path)throw new Error("canonical TMPDIR differs from its registered temporary");
     }
-    return {TMPDIR:temporary,NODE_COMPILE_CACHE:NODE_COMPILE_CACHE_ROOT};
+    return {TMPDIR:temporary,NODE_COMPILE_CACHE:cache};
   }catch(error){throw new Error(`owned Node cache temporary: ${(error as Error).message}`);}
 }
 
@@ -300,7 +303,7 @@ export function gateEnvironment(
   // /tmp is a small tmpfs. Neither a launcher nor an experiment owns these paths.
   const storage=ownedCacheEnvironment(launcher,{temporary:temporary.path});
   Object.assign(env,storage);
-  owned.NODE_COMPILE_CACHE=NODE_COMPILE_CACHE_ROOT;
+  owned.NODE_COMPILE_CACHE=storage.NODE_COMPILE_CACHE;
   env.XDG_CACHE_HOME = join(host.HOME!, ".cache");
   ambient.TMPDIR = storage.TMPDIR;
   ambient.NODE_COMPILE_CACHE=storage.NODE_COMPILE_CACHE;

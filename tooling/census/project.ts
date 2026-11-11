@@ -1,3 +1,4 @@
+import {cacheLocation} from '../gate/cache-capabilities.mjs';
 // The scratch project a Test262 file is compiled in, in one place.
 //
 // Two instruments need it — `test262.ts`, which compiles and records why a
@@ -361,7 +362,7 @@ const ROOT_FORMAT = "nts-case-root-v1";
 const HOUR = 3600_000;
 
 function rootsBase(base?) {
-  return resolve(base ?? process.env.NTS_CENSUS_CASE_ROOTS ?? join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "nts/case-roots"));
+  return resolve(base ?? cacheLocation('NTS_CENSUS_CASE_ROOTS',process.env,()=>join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "nts/case-roots")));
 }
 
 function canonicalFlags(flags) {

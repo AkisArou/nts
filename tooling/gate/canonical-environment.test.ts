@@ -1,3 +1,4 @@
+import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 import {removable} from "./run-temporary.ts";
 import assert from "node:assert/strict";
@@ -23,18 +24,18 @@ import {ownMemory} from "./test-memory.ts";
 import {readLedger,reserve} from "./memory-ledger.ts";
 
 
-type CacheAuthority={NODE_COMPILE_CACHE_ROOT?:string;ownedCacheEnvironment?:(launcher:NodeJS.ProcessEnv,options:{temporary:string})=>{TMPDIR:string;NODE_COMPILE_CACHE:string}};
+type CacheAuthority={nodeCompileCacheRoot?:(env?:NodeJS.ProcessEnv)=>string;ownedCacheEnvironment?:(launcher:NodeJS.ProcessEnv,options:{temporary:string})=>{TMPDIR:string;NODE_COMPILE_CACHE:string}};
 function cacheAuthority(){
   const authority=canonicalEnvironment as typeof canonicalEnvironment&CacheAuthority;
   assert.equal(typeof authority.ownedCacheEnvironment,"function","owned Node cache storage requires its shared authority");
   assert.ok(authority.ownedCacheEnvironment);
-  return {environment:authority.ownedCacheEnvironment,root:authority.NODE_COMPILE_CACHE_ROOT};
+  return {environment:authority.ownedCacheEnvironment,root:authority.nodeCompileCacheRoot?.({})};
 }
 
 test("owned Node cache storage retains its temporary and ignores a shell cache override",t=>{
   const {run,base}=fixture(t),authority=cacheAuthority();
   assert.equal(authority.root,join(userInfo().homedir,".cache/nts/node-compile-cache/v1"));
-  assert.deepEqual(authority.environment({...base,TMPDIR:"/tmp",NODE_COMPILE_CACHE:"/tmp/shell-cache"},{temporary:run}),
+  assert.deepEqual(authority.environment({...base,[FIXTURE_ENVIRONMENT]:undefined,TMPDIR:"/tmp",NODE_COMPILE_CACHE:"/tmp/shell-cache"},{temporary:run}),
     {TMPDIR:run,NODE_COMPILE_CACHE:authority.root});
 });
 
@@ -59,7 +60,7 @@ test("owned Node cache storage preserves a validated canonical temporary",t=>{
 
 test("canonical Node cache storage has one owned root across nested runs",t=>{
   const {run,base}=fixture(t),expected=join(userInfo().homedir,".cache/nts/node-compile-cache/v1");
-  const parent=gateEnvironment({...base,NODE_COMPILE_CACHE:"/tmp/shell-cache"},{run});
+  const parent=gateEnvironment({...base,[FIXTURE_ENVIRONMENT]:undefined,NODE_COMPILE_CACHE:"/tmp/shell-cache"},{run});
   assert.equal(parent.env.NODE_COMPILE_CACHE,expected);
   assert.equal(parent.report.ambient.NODE_COMPILE_CACHE,expected);
   const child=gateEnvironment({...parent.env,NODE_COMPILE_CACHE:"/tmp/child-cache"},{run:join(run,"child")});

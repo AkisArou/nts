@@ -1,4 +1,5 @@
 import { VM_FLAGS, vmToolFlags } from "./vm-flags.ts";
+import {cacheLocation} from '../gate/cache-capabilities.mjs';
 // How one program `emit-jvm` wrote is run, the way a runner of thousands of
 // them wants it run: `nts.rt.NtsMain` over its classes, started from a
 // class-data archive of the runtime jar.
@@ -75,7 +76,7 @@ const archives = new Map<string, string | null>();
 type Built = string | null | "busy";
 
 function cacheRoot(): string {
-  return process.env.NTS_JVM_CDS_DIR ?? join(homedir(), ".cache", "nts", "jvm-cds");
+  return cacheLocation('NTS_JVM_CDS_DIR',process.env,()=>join(homedir(), ".cache", "nts", "jvm-cds"));
 }
 
 /** The directory holding the archive for the runtime jar at `jar`, made if absent. */

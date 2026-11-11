@@ -3,10 +3,11 @@ import {spawnSync} from 'node:child_process';
 import {mkdirSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
+import {cacheLocation} from '../gate/cache-capabilities.mjs';
 
 const prepared = new Map();
 export function bundledDependencies(compiler, libraries=['uv'], driver=['clang']) {
-  const cache=process.env.NTS_NODE_DEPS_CACHE??join(process.env.XDG_CACHE_HOME??join(homedir(),'.cache'),'nts/node-deps');
+  const cache=cacheLocation('NTS_NODE_DEPS_CACHE',process.env,()=>join(process.env.XDG_CACHE_HOME??join(homedir(),'.cache'),'nts/node-deps'));
   const key=JSON.stringify([resolve(compiler),libraries,driver,cache]);
   if(prepared.has(key))return prepared.get(key);
   if(process.platform!=='linux'||process.arch!=='x64')throw Error('bundled Node dependencies currently support Linux x86-64 only');

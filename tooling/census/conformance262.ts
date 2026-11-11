@@ -1,3 +1,4 @@
+import {cacheLocation} from '../gate/cache-capabilities.mjs';
 // Every Test262 case under a directory, each given one of five outcomes, with
 // every non-pass attributed to a named cause. A conformance run.
 //
@@ -266,7 +267,7 @@ ownTemporary(SCRATCH);
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.ts`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
-const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
+const OBJECT_CACHE = cacheLocation('NTS_CENSUS_OBJECT_CACHE',process.env,()=>join(homedir(), ".cache/nts/c-objects"));
 /**
  * What the machine was doing, from `/proc/meminfo` and the load average --
  * taken at the start and the end, and printed with the result.
