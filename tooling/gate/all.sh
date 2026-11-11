@@ -1976,7 +1976,10 @@ test262_llvm() {
 # only the ones every repeat agrees on, from a machine that was not degraded
 # (tooling/records/record-pending.ts's test262 kind): a flaky pass raises no
 # record. A fail row it adds is named in a task line, because a case that went
-# from refused to failing may be a soundness loss.
+# from refused to failing may be a soundness loss. Each directory's totals, the
+# cases refused, not attempted or left without a verdict beside the ones that
+# ran, go to a report in the run's folder (census-report.ts), which the
+# conformance summary reads from the full check's last green wide run.
 test262_census() {
   backend=$1
   if [ ! -d third_party/test262/.git ]; then
@@ -1989,11 +1992,14 @@ test262_census() {
   for pair in test/language:language test/built-ins:builtins test/annexB:annexb test/staging:staging test/harness:harness; do
     under=${pair%%:*}
     record=results/test262/$backend/${pair##*:}.tsv
+    # In the run's folder when there is one: a run by hand keeps no report.
+    report=""
+    [ -z "${NTS_GATE_RUN_DIR:-}" ] || report="$NTS_GATE_RUN_DIR/test262-census/$backend/${pair##*:}.json"
     echo "  $under on $backend, whole, against $record:"
     # Stream the census, including its admission, worker count and progress.
     # A stopped directory must leave the work it reached visible in the log.
     if NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
-      --backend "$backend" --under "$under" --check "$record" --jobs "$cap" 2>&1; then
+      --backend "$backend" --under "$under" --check "$record" --jobs "$cap" ${report:+--report "$report"} 2>&1; then
       status=0
     else
       status=$?

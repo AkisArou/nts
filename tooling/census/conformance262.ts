@@ -145,6 +145,7 @@ import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } fr
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
   serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, TYPESCRIPT_RECORD_VERSION } from "./typescript-record.ts";
 import { mergeTest262Record, parseTest262Record, serializeTest262Record } from "./test262-record.ts";
+import { CENSUS_OUTCOMES, CENSUS_REPORT_VERSION, writeCensusReport } from "./census-report.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, improvedLine, pendingLine } from "../records/pending.ts";
 import { selectTypescript, typescriptOracleIdentity } from "./suites/typescript.ts";
@@ -192,6 +193,8 @@ const resume = argv.includes("--resume");
 // for isolating materialization differences. Native capture is fresh either way.
 const FRESH = argv.includes("--fresh");
 const jsonFile = flag("--json", null);
+// The whole run's totals, for the full check to keep (census-report.ts).
+const reportFile = flag("--report", null);
 const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
 const recordedFile = flag("--recorded", null);
@@ -239,6 +242,12 @@ if (recordPendingFile && (sample > 0 || pathsFrom.length > 0 || recordFile || re
   cannotMeasure(TYPESCRIPT
     ? "--record-pending runs the whole TypeScript selection against its own record, with no other selection or record flag"
     : "test262's --record-pending measures exactly the cases a census listed (--case <path>, repeated) against its own record, with no other selection or record flag");
+}
+// **A report is the whole directory's.** Its denominator is the selection, so
+// a sample, a record's or a list's cases, or another record's paths would
+// count a part as the whole.
+if (reportFile && (TYPESCRIPT || sample > 0 || recordedFile || recordPendingFile || pathsFrom.length > 0 || casesNamed.length > 0)) {
+  cannotMeasure("--report counts a whole test262 directory: no --suite typescript, --sample, --recorded, --record-pending, --paths-from or --case");
 }
 if (casesNamed.length > 0 && !(recordPendingFile && !TYPESCRIPT)) cannotMeasure("--case names the cases test262's --record-pending measures, and nothing else");
 if (!Number.isInteger(repeats) || repeats < 1 || (repeats > 1 && !(recordPendingFile && !TYPESCRIPT))) {
@@ -857,7 +866,7 @@ cleanupScratch();
 
 // --- tallies -------------------------------------------------------------------
 
-const OUTCOMES = ["pass", "fail", "refused", "unsupported", "no-verdict"];
+const OUTCOMES = CENSUS_OUTCOMES;
 const objectTally = { hit: 0, miss: 0 };
 for (const row of rows.values()) {
   objectTally.hit += row.objects?.hit ?? 0;
@@ -889,6 +898,8 @@ const rankSole = count(
   refused.filter((c) => new Set(c.roots.map(causeKey)).size === 1),
   (c) => c.cause,
 );
+/** Why an unsupported case was not attempted: its harness cause, with several missing includes as one. */
+const unattemptedCause = (c) => c.cause.startsWith("include:") && c.cause.includes("+") ? "include:(several)" : c.cause;
 const family = (c) => {
   if (c.cause.startsWith("negative:")) return "negative test, rejected by no evidence code";
   const code = c.roots[0]?.code ?? "";
@@ -1175,7 +1186,7 @@ say(
 for (const a of overrideAudit.filter((x) => x.faults.length > 0)) say(`    OVERRIDE AUDIT FAILURE: ${a.code} -- ${a.faults.join("; ")}`);
 say();
 say(`  not attempted, by harness cause (${tally.unsupported} case(s)):`);
-for (const [cause, n] of count(cases.filter((c) => c.outcome === "unsupported"), (c) => c.cause.startsWith("include:") && c.cause.includes("+") ? "include:(several)" : c.cause).slice(0, sites)) {
+for (const [cause, n] of count(cases.filter((c) => c.outcome === "unsupported"), unattemptedCause).slice(0, sites)) {
   say(`    ${String(n).padStart(6)}  ${cause}`);
 }
 say();
@@ -1272,5 +1283,15 @@ if (jsonFile) {
     // a pass from buckets -- rerun.ts once called such a FIX "WORSE".
     outcomes: Object.fromEntries(cases.filter((c) => c.outcome).map((c) => [c.record.path, { outcome: c.outcome, cause: c.cause ?? null }])),
   }, null, 2));
+}
+if (reportFile) {
+  writeCensusReport(reportFile, {
+    version: CENSUS_REPORT_VERSION, under, backend: BACKEND, pin, compiler: FINGERPRINT, commit: recordCommit(), harness: HARNESS_HASH, degraded,
+    selected: records.length, cases: population.length, attempted: toAttempt.length,
+    outcomes: Object.fromEntries(CENSUS_OUTCOMES.map((o) => [o, tally[o]])),
+    inScope: { cases: inScope.length, pass: inScopePass }, excluded: excludedCases.length, negativesAccepted,
+    notAttempted: Object.fromEntries(count(cases.filter((c) => c.outcome === "unsupported"), unattemptedCause)),
+    refused: Object.fromEntries(count(refused, family)),
+  });
 }
 exitAfterOutput(problems.length === 0 ? 0 : 1);

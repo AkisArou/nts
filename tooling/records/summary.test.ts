@@ -13,6 +13,7 @@ import { DEX_RECORD, written as dexRecord } from "../android/dex-record.ts";
 import { compileRecordPath, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { runsRecord, serializeRunRecord } from "../bench/run-outcomes.ts";
 import { BACKENDS, COLUMNS, COMPARATORS, POLICY, publishRun, renderFull, results, sealRun, type Cell, type RunRecord } from "../bench/run-record.ts";
+import { censusReportPath, writeCensusReport, type CensusReport } from "../census/census-report.ts";
 import { serializeTest262Record } from "../census/test262-record.ts";
 import { serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
 import { testScratch } from "../gate/test-scratch.ts";
@@ -302,6 +303,62 @@ function files(root: string): Map<string, string> {
 }
 const command = (...args: string[]) => spawnSync(process.execPath, [SUMMARY, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
+/** A census report of one directory on one backend, its parts adding up as the census's do. */
+function censusReport(backend: string, under: string, pass: number, refused: number, sloppy: number): CensusReport {
+  return {
+    version: 1, under, backend, pin: "1".repeat(40), compiler, commit, harness, degraded: backend === "llvm",
+    selected: pass + refused + sloppy + 1, cases: pass + refused + sloppy + (backend === "c" ? 1 : 0), attempted: pass + refused + (backend === "c" ? 1 : 0),
+    outcomes: { pass, fail: backend === "c" ? 1 : 0, refused, unsupported: sloppy, "no-verdict": 0 },
+    inScope: { cases: pass + refused + (backend === "c" ? 1 : 0), pass }, excluded: sloppy, negativesAccepted: backend === "c" ? 1 : 0,
+    notAttempted: sloppy ? { "scope:initial-lane:no-strict": sloppy } : {}, refused: refused ? { "lowering (NTS1xxx)": refused } : {},
+  };
+}
+
+/** The full check's state, its last green wide run at `run`, as tooling/full-check/state.ts writes it. */
+function fullCheckState(t: { after(fn: () => void): void }, run: string | null): string {
+  const file = join(testScratch(t, "summary-full-check"), "state.json");
+  const green = { commit: "6".repeat(40), run, verdict: "green", at: "2026-11-11T03:00:01.023Z", failed: [], listed: { pending: 0, accepted: 0 } };
+  writeFileSync(file, JSON.stringify({ version: 1, core: {}, wide: run ? { last_run: green, last_green: green } : {}, culprits: [], probes: [], tasks: [] }));
+  return file;
+}
+
+test("the whole suite is the census reports of the full check's last green wide run, with the directories none covers", t => {
+  const root = conformanceTree(t), run = testScratch(t, "summary-wide-run");
+  // A directory no census runs, counted as the inventory counts: a module's fixture is no test.
+  for (const name of ["d.js", "e.js", "f_FIXTURE.js"]) mkdirSync(join(root, "third_party/test262/test/intl402"), { recursive: true }), writeFileSync(join(root, "third_party/test262/test/intl402", name), "");
+  const reports = { c: { language: censusReport("c", "test/language", 2, 5, 3), annexb: censusReport("c", "test/annexB", 1, 0, 4) }, llvm: { language: censusReport("llvm", "test/language", 1, 5, 3) } };
+  for (const [backend, slices] of Object.entries(reports)) for (const [slice, report] of Object.entries(slices)) writeCensusReport(censusReportPath(run, backend, slice), report);
+  const { census } = conformanceSummary(root, { fullCheck: fullCheckState(t, run) });
+  assert.deepEqual(census, {
+    run, commit: "6".repeat(40), at: "2026-11-11T03:00:01.023Z",
+    backends: {
+      c: {
+        selected: 17, cases: 17, attempted: 10, outcomes: { pass: 3, fail: 2, refused: 5, unsupported: 7, "no-verdict": 0 },
+        inScope: { cases: 10, pass: 3 }, excluded: 7, negativesAccepted: 2,
+        notAttempted: { "scope:initial-lane:no-strict": 7 }, refused: { "lowering (NTS1xxx)": 5 }, degraded: false,
+        slices: { language: { file: censusReportPath(run, "c", "language"), ...reports.c.language }, annexb: { file: censusReportPath(run, "c", "annexb"), ...reports.c.annexb } },
+      },
+      llvm: {
+        selected: 10, cases: 9, attempted: 6, outcomes: { pass: 1, fail: 0, refused: 5, unsupported: 3, "no-verdict": 0 },
+        inScope: { cases: 6, pass: 1 }, excluded: 3, negativesAccepted: 0,
+        notAttempted: { "scope:initial-lane:no-strict": 3 }, refused: { "lowering (NTS1xxx)": 5 }, degraded: true,
+        slices: { language: { file: censusReportPath(run, "llvm", "language"), ...reports.llvm.language } },
+      },
+    },
+    unmeasured: { "test/intl402": 2 },
+  });
+});
+
+test("without a green wide run that kept a report there is no census part, and a report of another directory is an error", t => {
+  const root = conformanceTree(t), run = testScratch(t, "summary-wide-run");
+  assert.ok(!("census" in conformanceSummary(root)), "a caller that names no full check reads only the tree");
+  assert.ok(!("census" in conformanceSummary(root, { fullCheck: fullCheckState(t, null) })), "no green wide run");
+  assert.ok(!("census" in conformanceSummary(root, { fullCheck: fullCheckState(t, run) })), "a green wide run with no report");
+  assert.ok(!("census" in conformanceSummary(root, { fullCheck: join(run, "absent.json") })), "no full-check state at all");
+  writeCensusReport(censusReportPath(run, "jvm", "harness"), censusReport("jvm", "test/staging", 1, 1, 1));
+  assert.throws(() => conformanceSummary(root, { fullCheck: fullCheckState(t, run) }), /jvm\/harness\.json reports test\/staging on jvm/);
+});
+
 test("the command prints one summary, writes nothing, and names the commit of a checkout it reads", t => {
   const root = publish(conformanceTree(t));
   const git = (...args: string[]) => {
@@ -312,7 +369,7 @@ test("the command prints one summary, writes nothing, and names the commit of a 
   git("init", "-q"); git("add", "."); git("commit", "-qm", "records");
   const head = git("rev-parse", "HEAD"), before = files(root);
   for (const [kind, expected] of [["benchmarks", benchmarkSummary(root)], ["conformance", conformanceSummary(root)]] as const) {
-    const printed = command(kind, "--root", root);
+    const printed = command(kind, "--root", root, "--full-check", join(testScratch(t, "summary-no-full-check"), "state.json"));
     assert.equal(printed.status, 0, printed.stderr);
     assert.equal(printed.stderr, "");
     // The same summary, but for when it was read.
@@ -322,7 +379,9 @@ test("the command prints one summary, writes nothing, and names the commit of a 
     assert.equal(summary.read.commit, head);
   }
   assert.deepEqual(files(root), before, "a summary wrote into the tree it read");
-  for (const args of [[], ["records"], ["benchmarks", "--root"], ["conformance", "extra"]]) assert.equal(command(...args).status, 2, args.join(" "));
+  for (const args of [[], ["records"], ["benchmarks", "--root"], ["conformance", "extra"], ["conformance", "--full-check"], ["conformance", "--root", root, "--root", root]]) {
+    assert.equal(command(...args).status, 2, args.join(" "));
+  }
   const backend = "jvm";
   writeFileSync(join(root, `results/typescript/${backend}/cases.tsv`), "not a record\n");
   const failed = command("conformance", "--root", root);

@@ -76,7 +76,21 @@
 // ## conformance
 //
 // The records each backend is held to, counted by outcome: what the gate's
-// record steps check and the full check's recorders write.
+// record steps check and the full check's recorders write; and the whole
+// test262 suite, as the full check's census last measured it.
+//
+//   census    the census reports of the full check's last green wide run
+//             (tooling/census/census-report.ts), read from the state file
+//             --full-check names, the full check's own by default; absent
+//             when that run kept no report:
+//             { run, commit, at,
+//               backends: { <backend>: { selected, cases, attempted, outcomes,
+//                 inScope, excluded, negativesAccepted, notAttempted, refused,
+//                 degraded, slices: { <slice>: { file, ...its report } } } },
+//               unmeasured: { <directory>: <files> } }
+//             a backend's totals are its directories' together; unmeasured
+//             are the checkout's test262 directories no report covers
+//             (test/intl402, ECMA-402), with their file counts
 //
 //   backends  { <backend>: { <record>: ... } }; a record a backend lacks is absent
 //     test262        results/test262/<backend>/<slice>.tsv, the cases of each
@@ -127,7 +141,9 @@ import { BACKENDS as BACKEND_COLUMNS, COLUMNS, COMPARATORS, readRuns, results, t
 import { negativePhaseOf } from "../census/project.ts";
 import { parseTest262Record } from "../census/test262-record.ts";
 import { parseTypeScriptRecord } from "../census/typescript-record.ts";
-import { findPending } from "./record-pending.ts";
+import { CENSUS_OUTCOMES, censusReportPath, parseCensusReport, type CensusReport } from "../census/census-report.ts";
+import { layout, readState } from "../full-check/state.ts";
+import { findPending, TEST262_SLICES } from "./record-pending.ts";
 
 export const VERSION = 1;
 export const KINDS = ["benchmarks", "conformance"] as const;
@@ -318,11 +334,70 @@ function dex(root: string, backend: Backend, pending: Pending) {
   return { file: DEX_RECORD, cases: rows.length, outcomes: tally(rows.map(row => row.outcome.kind)), pending: pending.get(DEX_RECORD) ?? 0 };
 }
 
-/** Every backend's records, counted by outcome. */
-export function conformanceSummary(root: string) {
+/** Count by count, the sum of several tallies: a key one lacks counts nothing there. */
+function summed(tallies: readonly Readonly<Record<string, number>>[]): Record<string, number> {
+  const total: Record<string, number> = {};
+  for (const counts of tallies) for (const [key, n] of Object.entries(counts)) total[key] = (total[key] ?? 0) + n;
+  return Object.fromEntries(Object.entries(total).sort(([a, m], [b, n]) => n - m || a.localeCompare(b)));
+}
+
+/** How many test262 files a directory holds, as the inventory counts them: every `.js` but a `_FIXTURE.js` module dependency. */
+function test262Files(directory: string): number {
+  return readdirSync(directory, { withFileTypes: true, recursive: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(".js") && !entry.name.endsWith("_FIXTURE.js")).length;
+}
+
+/**
+ * The whole test262 suite as the full check last measured it: the census
+ * reports of its last green wide run (census-report.ts), each backend's by
+ * directory and together, and the checkout's test262 directories that no
+ * report covers, by their file count. Undefined without a green wide run that
+ * kept a report.
+ */
+function census(root: string, fullCheck: string) {
+  const green = readState(fullCheck).wide.last_green;
+  if (!green) return undefined;
+  const reports = BACKENDS.flatMap(backend => Object.entries(TEST262_SLICES).flatMap(([slice, under]) => {
+    const file = censusReportPath(green.run, backend, slice);
+    if (!existsSync(file)) return [];
+    const report = parseCensusReport(readFileSync(file, "utf8"), file);
+    assert.deepEqual([report.backend, report.under], [backend, under], `${file} reports ${report.under} on ${report.backend}`);
+    return [{ backend, slice, file, report }];
+  }));
+  if (reports.length === 0) return undefined;
+  const totals = (of: readonly CensusReport[]) => ({
+    selected: of.reduce((n, r) => n + r.selected, 0), cases: of.reduce((n, r) => n + r.cases, 0), attempted: of.reduce((n, r) => n + r.attempted, 0),
+    outcomes: Object.fromEntries(CENSUS_OUTCOMES.map(o => [o, of.reduce((n, r) => n + r.outcomes[o], 0)])),
+    inScope: { cases: of.reduce((n, r) => n + r.inScope.cases, 0), pass: of.reduce((n, r) => n + r.inScope.pass, 0) },
+    excluded: of.reduce((n, r) => n + r.excluded, 0), negativesAccepted: of.reduce((n, r) => n + r.negativesAccepted, 0),
+    notAttempted: summed(of.map(r => r.notAttempted)), refused: summed(of.map(r => r.refused)), degraded: of.some(r => r.degraded),
+  });
+  const measured = new Set(reports.map(({ report }) => report.under)), tests = join(root, TEST262, "test");
+  const unmeasured = !existsSync(tests) ? {} : Object.fromEntries(readdirSync(tests, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !measured.has(`test/${entry.name}`)).map(entry => entry.name).sort()
+    .map(name => [`test/${name}`, test262Files(join(tests, name))]));
+  return {
+    run: green.run, commit: green.commit, at: green.at,
+    backends: Object.fromEntries(BACKENDS.flatMap(backend => {
+      const own = reports.filter(one => one.backend === backend);
+      return own.length === 0 ? [] : [[backend, { ...totals(own.map(one => one.report)), slices: Object.fromEntries(own.map(({ slice, file, report }) => [slice, { file, ...report }])) }]];
+    })),
+    unmeasured,
+  };
+}
+
+/**
+ * Every backend's records, counted by outcome, and the whole suite as the
+ * full check's census last measured it when `fullCheck` names its state
+ * file (tooling/full-check/state.ts): the command reads the full check's own,
+ * and a caller that names none reads only the tree.
+ */
+export function conformanceSummary(root: string, { fullCheck }: { fullCheck?: string } = {}) {
   const pending = pendingByRecord(root), judge = test262Judge(root);
+  const whole = fullCheck === undefined ? undefined : census(root, fullCheck);
   return {
     ...envelope("conformance", root),
+    ...(whole && { census: whole }),
     backends: Object.fromEntries(BACKENDS.map(backend => {
       const records = {
         test262: test262(root, backend, judge),
@@ -336,19 +411,25 @@ export function conformanceSummary(root: string) {
   };
 }
 
-export function summary(kind: Kind, root: string) {
-  return kind === "benchmarks" ? benchmarkSummary(root) : conformanceSummary(root);
+export function summary(kind: Kind, root: string, options: { fullCheck?: string } = {}) {
+  return kind === "benchmarks" ? benchmarkSummary(root) : conformanceSummary(root, options);
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const [kind, ...rest] = process.argv.slice(2), at = rest.indexOf("--root");
-  const root = at === -1 ? fileURLToPath(new URL("../..", import.meta.url)) : rest[at + 1];
-  const extra = at === -1 ? rest : rest.filter((_, index) => index !== at && index !== at + 1);
-  if (!(KINDS as readonly (string | undefined)[]).includes(kind) || !root || extra.length) {
-    console.error(`usage: node tooling/records/summary.ts ${KINDS.join("|")} [--root <tree>]`);
+  const [kind, ...rest] = process.argv.slice(2), options = new Map<string, string | undefined>();
+  let unknown = false;
+  for (let k = 0; k < rest.length; k += 2) {
+    if (!["--root", "--full-check"].includes(rest[k]!) || options.has(rest[k]!)) unknown = true;
+    options.set(rest[k]!, rest[k + 1]);
+  }
+  const root = options.has("--root") ? options.get("--root") : fileURLToPath(new URL("../..", import.meta.url));
+  // The full check's own state, unless another is named: the census's whole-suite reports are in its last green wide run.
+  const fullCheck = options.has("--full-check") ? options.get("--full-check") : layout().state;
+  if (!(KINDS as readonly (string | undefined)[]).includes(kind) || !root || !fullCheck || unknown) {
+    console.error(`usage: node tooling/records/summary.ts ${KINDS.join("|")} [--root <tree>] [--full-check <state.json>]`);
     process.exitCode = 2;
   } else {
-    try { process.stdout.write(JSON.stringify(summary(kind as Kind, resolve(root)), null, 2) + "\n"); }
+    try { process.stdout.write(JSON.stringify(summary(kind as Kind, resolve(root), { fullCheck: resolve(fullCheck) }), null, 2) + "\n"); }
     catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
   }
 }

@@ -216,6 +216,34 @@ where they are read. The header names the compiler's fingerprint, the commit
   naming C's record, and its own previous record as well, so that cases it
   passes and C refuses are kept.
 
+## Reports
+
+A record holds the cases that ran; a report holds the whole directory.
+`--report <file>` writes one from a whole run of a directory
+(`tooling/census/census-report.ts`). It counts:
+
+- the cases selected, and the part this backend runs: off C, the parse and
+  resolution negatives are left to C;
+- the cases attempted, and the five outcomes;
+- the in-scope and excluded cases, and the accepted negatives;
+- the unsupported cases, by the cause that kept each from running (`noStrict`
+  and `raw` are scope, `$262` and a missing include are the harness);
+- the refused cases, by the family of their first root.
+
+`--report` refuses a sample, a record's or a list's cases, `--paths-from` and
+the TypeScript suite, since a part would be counted as the whole.
+
+A report is a measurement, never a floor: nothing holds a run to it, its
+counts move with every compiler change, and its no-verdict count moves with
+the machine's load (`degraded` names a run that saw swap traffic or little
+free memory). So reports are not committed. The census steps write one per
+backend and directory into their run's folder
+(`test262-census/<backend>/<slice>.json`), and the full check always keeps the
+folder of its last green wide run. `tooling/records/summary.ts conformance`
+reads that run's reports through the full check's state, and counts from the
+checkout the directories that no report covers: `test/intl402`, which no
+census runs yet.
+
 ## What the gate holds
 
 The first five rows are core steps. The census steps run in the full check's
@@ -228,7 +256,7 @@ wide part.
 | `test262-builtins-cases` | C, `test/built-ins`: the same |
 | `test262-rest-cases` | C, `test/annexB`, `test/staging` and `test/harness`: the same, each against its own record |
 | `test262-llvm`, `test262-jvm` | that backend's five records, each held to itself |
-| `test262-census-c`, `-llvm`, `-jvm` | every directory run whole on that backend and held to its records; each case that runs now, and each recorded fail that passes, is listed |
+| `test262-census-c`, `-llvm`, `-jvm` | every directory run whole on that backend and held to its records; each case that runs now, and each recorded fail that passes, is listed, and each directory's report is kept in the run's folder |
 
 The record is the ratchet on every backend, so there is no floor: every
 recorded pass must still pass, so the record's pass rows are the floor.

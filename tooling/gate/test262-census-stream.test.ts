@@ -36,3 +36,25 @@ echo "  census complete: $5; 1/1 attempted; $9 worker(s); 0.1 s elapsed"
   assert.match(output,/not held to their records on c: test\/language/);
   assert.deepEqual(readFileSync(calls,"utf8").trim().split("\n"),["test/language c 8","test/built-ins c 8","test/annexB c 8","test/staging c 8","test/harness c 8"]);
 });
+
+test("the census gives each directory's report a place in the run's folder, and a run by hand keeps none",async t=>{
+  const root=newTestScratch("census-report-path"),bin=join(root,"bin"),calls=join(root,"calls");
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  mkdirSync(bin);mkdirSync(join(root,"third_party/test262/.git"),{recursive:true});
+  const fn=readFileSync(new URL("./all.sh",import.meta.url),"utf8").match(/^test262_census\(\) \{\n[\s\S]*?^\}/m)?.[0];
+  assert.ok(fn);
+  writeFileSync(join(root,"census.sh"),`set -eu\njobs=24\n${fn}\ntest262_census llvm\n`);
+  // Each argument as it arrives, so a path with a space in it must come as one.
+  writeFileSync(join(bin,"node"),`#!/bin/sh\nshift\nprintf '%s\\037' "$@" >> ${JSON.stringify(calls)}\nprintf '\\n' >> ${JSON.stringify(calls)}\n`,{mode:0o755});
+  const run=async(env:NodeJS.ProcessEnv)=>{
+    rmSync(calls,{force:true});
+    const {NTS_GATE_RUN_DIR:_,...ambient}=process.env;
+    const child=spawn("sh",[join(root,"census.sh")],{cwd:root,env:{...ambient,PATH:`${bin}:${process.env.PATH}`,...env},stdio:"ignore"});
+    assert.deepEqual(await once(child,"close"),[0,null]);
+    return readFileSync(calls,"utf8").trim().split("\n").map(line=>line.split("\x1f").slice(-3,-1).join(" "));
+  };
+  const folder=join(root,"run folder");
+  assert.deepEqual(await run({NTS_GATE_RUN_DIR:folder}),["language","builtins","annexb","staging","harness"]
+    .map(slice=>`--report ${folder}/test262-census/llvm/${slice}.json`));
+  assert.deepEqual((await run({})).map(args=>args.split(" ")[0]),["--jobs","--jobs","--jobs","--jobs","--jobs"]);
+});
