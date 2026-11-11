@@ -1062,7 +1062,7 @@ pub(super) fn collect_hierarchy(
 /// `None` for anything else, which is the answer `super(…)` needs: a provided base's
 /// constructor is emitted inline and cannot throw, so recording nothing for it is
 /// right, while a program base's own entry is what its `throw` reaches through. See
-/// the `super` arm in [`walk_one_declaration`](super::walk_one_declaration).
+/// the `super` arm in [`walk_one_declaration`](super::raising_reachability::walk_one_declaration).
 pub(super) fn declared_base_class(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
