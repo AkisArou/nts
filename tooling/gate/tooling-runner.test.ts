@@ -278,7 +278,7 @@ const withIdle=process.argv[2]==='idle';
   const expression="const fileOf=(data:TestActivity)=>owners.file(data);";
   assert.ok(original.includes(expression));
   const altered=original.replace(expression,"const fileOf=(data:TestActivity)=>typeof data.file==='string'?resolve(data.file):undefined;")
-    .replace(/from (["'])\.\/([^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL("./"+name,import.meta.url).href));
+    .replace(/from (["'])(\.{1,2}\/[^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL(name,import.meta.url).href));
   const mutant=join(directory,"source-location-runner.ts"),mutantProbe=join(directory,"mutant-probe.mjs");
   writeFileSync(mutant,altered);writeFileSync(mutantProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
   const changed=spawnTest(process.execPath,[mutantProbe,"active"],{encoding:"utf8",env},"source-location ownership mutant");
@@ -328,7 +328,7 @@ console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting
   const handler='events.on("test:complete",data=>{';assert.ok(source.includes(handler));
   const mutant=join(directory,"ordered-runner.ts"),changedProbe=join(directory,"ordered-probe.mjs");
   const changed=source.replace(handler,'events.on("test:pass",data=>{')
-    .replace(/from (["'])\.\/([^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL("./"+name,import.meta.url).href));
+    .replace(/from (["'])(\.{1,2}\/[^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL(name,import.meta.url).href));
   writeFileSync(mutant,changed);
   writeFileSync(changedProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
   rmSync(closed);rmSync(release);

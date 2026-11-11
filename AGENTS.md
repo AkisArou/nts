@@ -266,7 +266,7 @@ then a guard once fixed), `tests/memory/`.
   until the command ends, and records its peak for the next time; `node
   tooling/gate/admit.ts --status` shows who holds what, who waits, and what
   was sized unmeasured or held more than it reserved. Nothing holds a job to
-  its reservation: a gate step's slice bounds only a runaway, and if the
+  its reservation: a gate step's separate supervisor and worker boundaries bound only runaways, and if the
   machine itself runs out, the kernel kills the full check's work first,
   then agents' (admit.ts ranks yours), and a landing's last. Still `nice -n
   19` and one heavy job of yours at a time.

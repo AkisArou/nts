@@ -3,7 +3,6 @@ import {COMPILE_WORK_PROFILE} from "../gate/compile-counter.ts";
 import {activeCommand,commandMemoryFailure,CommandNotMeasuredError} from "../gate/active-command.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {checkFailurePolicy,reportCheckFailure} from "../differential/check-report.ts";
-import {commandWorker} from "../census/worker-memory.ts";
 import type {ChildProcessWithoutNullStreams} from "node:child_process";
 
 export type ListingResult={stdout:string;stderr:string;status?:number|null;signal?:string|null;
@@ -16,29 +15,15 @@ export async function runIntegrityListing(command:string,args:readonly string[],
   const {counterFile,...supervision}=options;
   const env={...options.env};delete env.NTS_GATE_STEP_RESULT;
   if(!counterFile)return activeCommand(command,args,{...supervision,env});
-  let worker:ReturnType<typeof commandWorker>;
-  let counted:ReturnType<typeof spawnCounted>;
-  try{
-    counted=spawnCounted(command,args,{cwd:options.cwd,env,counterFile,cpu:undefined,
-      prepare:(program:string,arguments_:string[],environment:NodeJS.ProcessEnv)=>{
-        worker=commandWorker(program,arguments_,environment);
-        return worker?{command:"systemd-run",args:worker.scope.argv,env:worker.scope.env}:undefined;
-      }});
-  }catch(error){worker?.close();throw error;}
+  const counted=spawnCounted(command,args,{cwd:options.cwd,env,counterFile,cpu:undefined});
   const child=counted.child as ChildProcessWithoutNullStreams;
   return new Promise(resolve=>{
     let stdout="",stderr="";
     child.stdout.on("data",(chunk:Buffer|string)=>{stdout+=chunk;});
     child.stderr.on("data",(chunk:Buffer|string)=>{stderr+=chunk;});
+    child.on("error",error=>{resolve({error,stdout,stderr});});
     child.on("close",(status,signal)=>{
-      counted.measurement.then(counters=>{
-        try{
-          let memory;
-          try{memory=worker?.observation();}
-          finally{worker?.close();}
-          resolve({...counters,work_profile:COMPILE_WORK_PROFILE,status,signal,stdout,stderr,...(memory?{memory}:{})});
-        }catch(error){resolve({status,signal,stdout,stderr,error});}
-      });
+      counted.measurement.then(counters=>resolve({...counters,work_profile:COMPILE_WORK_PROFILE,status,signal,stdout,stderr}));
     });
   });
 }

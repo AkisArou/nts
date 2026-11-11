@@ -10,7 +10,7 @@ export function newToolingSlice(fixture = false, env: NodeJS.ProcessEnv = proces
 
 export function toolingSlice(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const slice = env.NTS_TOOLING_SLICE;
-  if (slice !== undefined && !/^nts-(?:test-)?tooling-[a-f0-9]{32}(?:-(?:test|run)[a-f0-9]{32})*\.slice$/.test(slice)) throw new Error("invalid tooling slice");
+  if (slice !== undefined && !/^nts-(?:test-)?tooling-[a-f0-9]{32}(?:-(?:test|run)[a-f0-9]{32}|-workers)*\.slice$/.test(slice)) throw new Error("invalid tooling slice");
   return slice;
 }
 

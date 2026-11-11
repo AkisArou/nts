@@ -2002,3 +2002,24 @@ Every case supervisor retains its own clocks. Fixed steps retain their wall
 bounds, and a landing's ceiling independently bounds wall time including
 waits. Step summaries and logs separate execution and admission waits; the
 census streams progress and reports its worker count and directory time.
+
+## Worker supervisors outside case pressure (11-11)
+
+A retained accounting root holds sibling supervisor and worker subtrees. Each
+subtree has the step's dynamic runaway bound. The worker subtree's cap excludes
+the supervisor, which survives to record the kernel's result. Each case scope
+sets OOMPolicy=kill and verifies memory.oom.group=1 before executing work, so a
+native command and its child processes form one OOM victim group.
+
+Census pools, oracle preparation and execution, and compiler case workers share
+MemoryRun's scope entry. Plain active commands and instruction counters use the
+same resource boundary. Resource setup surrounds perf, preserving counts from
+the measured command's exec. Activity observation lives in a separate leaf
+module, so prebounded compiler invocations can reuse it without another scope.
+Tooling-test workers enter the retained worker subtree while their collector
+remains outside its cap. The accounting root still owns memory sampling,
+priority, dynamic grant updates, drain proof and cancellation.
+
+The old shared cap killed a pressure worker and then its supervisor before the
+victim's anonymous pages had drained. A higher victim score cannot protect a
+supervisor that remains in that OOM domain. The kernel hierarchy now excludes it.

@@ -425,15 +425,21 @@ export function serialRun(tools: CompilerTools): void {
   process.exit(result.status ?? 1);
 }
 
+/** The owned worker subtree available to a supervisor outside its cap. */
+export function supervisorWorkerBoundary() {
+  const boundary = cappingSlice();
+  if (!boundary) return;
+  const current = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
+  return current.startsWith(boundary.group + "/") ? undefined : boundary;
+}
+
 let commandOrdinal = 0;
 
 /** Plain commands launched by a step supervisor use the same worker boundary
  * as resident pools. An explicit resident launch already owns its scope. */
 export function commandWorker(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env) {
-  const boundary = cappingSlice();
+  const boundary = supervisorWorkerBoundary();
   if (!boundary) return;
-  const current = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
-  if (current.startsWith(boundary.group + "/")) return;
   const resident = env.NTS_CENSUS_WORKER_GROUP;
   if (command === "systemd-run" && resident?.startsWith(boundary.group + "/") &&
       args.includes("--slice=" + basename(resident))) {

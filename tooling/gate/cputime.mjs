@@ -1,4 +1,5 @@
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import { commandWorker } from "../census/worker-memory.ts";
 // The CPU time a child process spends itself, sampled from /proc while it
 // runs: `utime + stime` of the process (every thread of it), not of the
 // children it starts. The native frontend runs in this process, so its CPU
@@ -154,16 +155,19 @@ export function instructionsWork() {
  * every nonzero status (including timeout's 124/137) invalidates the count.
  * The raw file belongs to the caller's run and is never deleted here.
  */
-export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, events = [], cpu, prepare, ...options }) {
+export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, events = [], cpu, ...options }) {
   if (!counterFile) throw new Error("a retained counterFile is required");
   mkdirSync(dirname(counterFile), { recursive: true });
   const launch = countedLaunch(command,args,{timeoutMs,events,cpu});
   const argsWithCounter = [...launch.args, "-o", counterFile, "--", ...launch.target];
   // Resource ownership wraps perf, so the retained count still begins at the
   // measured command's exec and excludes cgroup setup.
-  const prepared = prepare?.(launch.command, argsWithCounter, options.env);
-  const child = spawn(prepared?.command ?? launch.command, prepared?.args ?? argsWithCounter,
-    { ...options, env: { ...(prepared?.env ?? options.env ?? process.env), ...FIXED_AMBIENT } });
+  const worker = commandWorker(launch.command, argsWithCounter, options.env);
+  let child;
+  try {
+    child = spawn(worker ? "systemd-run" : launch.command, worker?.scope.argv ?? argsWithCounter,
+      { ...options, env: { ...(worker?.scope.env ?? options.env ?? process.env), ...FIXED_AMBIENT } });
+  } catch (error) { worker?.close(); throw error; }
   const measurement = new Promise((resolve) => {
     let launchError;
     child.on("error", (error) => { launchError = error.message; });
@@ -176,7 +180,14 @@ export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, 
         try { row.metrics = parseUserEvents(raw,launch.events); row.counter_cpu = cpu; }
         catch (error) { metricError = error.message; }
       }
-      row.counter_error = launchError ?? metricError ?? (signal ? `counter run ended by ${signal}` : status !== 0 ? `counter run exited ${status}` : counterProblem(row));
+      let boundaryError;
+      try {
+        try {
+          const memory = worker?.observation();
+          if (memory) row.memory = memory;
+        } finally { worker?.close(); }
+      } catch (error) { boundaryError = `counter worker boundary: ${String(error)}`; }
+      row.counter_error = launchError ?? boundaryError ?? metricError ?? (signal ? `counter run ended by ${signal}` : status !== 0 ? `counter run exited ${status}` : counterProblem(row));
       resolve(row);
     });
   });

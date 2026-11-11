@@ -12,6 +12,7 @@ import {randomUUID} from "node:crypto";
 import {publishHung,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
 import {gateCommand} from "./affinity.ts";
+import {supervisorWorkerBoundary} from "../census/worker-memory.ts";
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -180,14 +181,16 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
 export async function runScopedTooling(files:string[],options:{idleMs?:number;execArgv?:string[];fixture?:boolean;output?:NodeJS.WritableStream;onScope?:(slice:string,unit:string,stopped:()=>string|undefined)=>void|Promise<void>}={}):Promise<ToolingResult&{slice:string}> {
-  const slice=newToolingSlice(options.fixture),unit=`${slice.slice(0,-6)}-files`;
+  const boundary=supervisorWorkerBoundary();
+  const parent=boundary?{...process.env,NTS_TOOLING_SLICE:boundary.slice}:process.env;
+  const slice=newToolingSlice(options.fixture,parent),unit=`${slice.slice(0,-6)}-files`;
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
   const directory=mkdtempSync(join(temporary,"tooling-report-")),complete=join(directory,"complete.json"),nonce=randomUUID();
   const request=readToolingRequest({files,idleMs:options.idleMs,execArgv:options.execArgv,complete,nonce});
   const command=gateCommand(process.execPath,[fileURLToPath(import.meta.url),"--worker",JSON.stringify(request)]);
   const env:NodeJS.ProcessEnv={...process.env,NTS_TOOLING_SLICE:slice};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
-  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,command.command,...command.args],{
+  const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",command.command,...command.args],{
     env,stdio:["ignore","pipe","pipe"],
   });
   const output=options.output??process.stdout;

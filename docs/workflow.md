@@ -433,14 +433,21 @@ the first node task.
   first and asks the ledger only for the rest, so a holder whose child needs
   memory never waits for itself
   ([log](records/notebooks/decisions-log.md#a-reservation-made-inside-another-jobs-draws-on-it-first-11-10)).
-- **Memory limits guard against runaways only** (11-10): a step's slice has
-  only a MemoryMax, about twice what the step was measured to hold and never
+- **Memory limits guard against runaways only**: a step's supervisor and
+  workers have separate sibling boundaries, each with only a MemoryMax, about twice what the step was measured to hold and never
   below its grant and a margin, with no MemoryHigh and no swap, so nothing
   throttles a step to its grant; grants are the ledger's accounting, grown
   from the sampled charge; a step killed at its bound is memory pressure,
   never a FAIL; and if the machine itself runs out, the kernel kills the full
   check's work first, then agents', and a landing's last
   ([log](records/notebooks/decisions-log.md#memory-limits-guard-against-runaways-only-11-10)).
+- **Worker pressure preserves its supervisor**: the retained step root accounts
+  for both sibling subtrees. A worker group has `memory.oom.group` enabled,
+  so its process family is killed together. The supervisor stays outside
+  the workers' cap and records the outcome. Active commands, instruction
+  counters and tooling-test workers use the same worker boundary
+  ([log](records/notebooks/decisions-log.md#worker-supervisors-outside-case-pressure-11-11)).
+
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit
