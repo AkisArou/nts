@@ -197,6 +197,7 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",
     ...ownMemory(join(own, "memory")), CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
+    ...(control.launcherFailure ? { PATH: launcher.PATH } : {}),
   } });
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);

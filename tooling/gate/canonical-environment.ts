@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
-import { dirname,join, relative, resolve, isAbsolute } from "node:path";
+import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
 import {assertRunTemporary,captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
@@ -13,6 +13,7 @@ import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differ
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation} from './cache-environment.ts';
+import {toolchainDirectories} from './toolchain.ts';
 
 export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 export const HOST_CAPABILITIES = [
@@ -29,6 +30,7 @@ export const FIXED_AMBIENT: Readonly<Record<string, string>> = {
   LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", FORCE_COLOR: "0", TERM: "dumb",
   GIT_OPTIONAL_LOCKS: "0",
 };
+const SYSTEM_TOOL_DIRECTORIES = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"];
 export const UNSET_AMBIENT = [
   "RAYON_NUM_THREADS",
   "LANGUAGE", "NODE_OPTIONS", "NODE_PATH", "NODE_ICU_DATA", "NODE_PENDING_DEPRECATION",
@@ -242,7 +244,7 @@ function strings(values: NodeJS.ProcessEnv): Record<string, string> {
 /** `owned` is supplied by the runner's code, never copied wholesale from a launcher. */
 export function gateEnvironment(
   launcher: NodeJS.ProcessEnv,
-  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone"; oracleRoot?: string },
+  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone"; oracleRoot?: string; node?: string },
 ): GateEnvironment {
   const inherited = launcher[ENVIRONMENT_CONTEXT];
   let prior: Context | undefined;
@@ -268,6 +270,12 @@ export function gateEnvironment(
   }
   const legacy = selected === "today" || prior?.report.experiments.some(e => e.name === ENVIRONMENT_EXPERIMENT && e.value === "today");
   const host = hostEnvironment(launcher);
+  // The enclosing context retains its resolved tools and source-owned fixture
+  // overrides. A fresh canonical run resolves its selected Node and declared
+  // toolchains ahead of the fixed system directories.
+  if (!legacy && owned.PATH === undefined) {
+    owned.PATH = [...new Set([...toolchainDirectories(options.node ?? process.execPath, host), ...SYSTEM_TOOL_DIRECTORIES])].join(delimiter);
+  }
   delete host.NTS_ORACLE_DEPENDENCIES;delete owned.NTS_ORACLE_DEPENDENCIES;
   const toolingRoot=realpathSync(options.oracleRoot??resolve(dirname(fileURLToPath(import.meta.url)),"../.."));
   const inheritedDependencies=prior?.owned.NTS_ORACLE_DEPENDENCIES;
@@ -314,7 +322,7 @@ export function gateEnvironment(
   const retained = new Set<string>([...HOST_CAPABILITIES, ...Object.keys(owned), ENVIRONMENT_CONTEXT]);
   const dropped = [...new Set([...(prior?.report.dropped ?? []), ...Object.keys(launcher).filter(name =>
     !retained.has(name) && launcher[name] !== env[name]
-  )])].sort();
+  ), ...(launcher.PATH !== env.PATH ? ["PATH"] : [])])].sort();
   if(options.oracleAdmissionContext!==undefined&&options.oracleAdmissionContext!=="gate"&&options.oracleAdmissionContext!=="standalone")throw new Error("invalid oracle admission context");
   const admissionKind=options.oracleAdmissionContext??inheritedCapability?.admission.kind??"standalone";
   // An inherited capability keeps its capture root. Only an explicit caller
@@ -324,7 +332,7 @@ export function gateEnvironment(
   // intact while the candidate independently captures and seals its own root.
   const capture=join(temporary.path,"oracle-dependencies",...(foreignRoot?["source-"+createHash("sha256").update(toolingRoot).digest("hex")]:[]));
   const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify(dependencyCapability(toolingRoot,capture,admission)):undefined);
+    JSON.stringify(dependencyCapability(toolingRoot,capture,admission,null,env)):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,

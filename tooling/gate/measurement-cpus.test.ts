@@ -3,7 +3,7 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // them, and a measurement waits for them to be quiet.
 //
 //   node --test tooling/gate/measurement-cpus.test.ts
-import {launcherPolicyNames} from "./canonical-environment.ts";
+import {gateEnvironment,hostEnvironment,launcherPolicyNames} from "./canonical-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -171,8 +171,12 @@ test("pinned.sh restricts its own entry before invoking git or a build", { skip:
     assert.ok(eCore !== undefined);
     for (const mask of [inherited, String(eCore)]) {
       writeFileSync(log, "");
+      const run = join(dir, "run-" + mask);
+      // Resolve the fixture's input identity before installing its Git stub.
+      const planned = gateEnvironment(hostEnvironment(testEnvironment()), { run });
+      const env = gateEnvironment(planned.env, { run, owned: { PATH: `${dir}:${planned.env.PATH}` } }).env;
       const result = spawnSync("taskset", ["-c", mask, "sh", PINNED], {
-        env: { ...Object.fromEntries(Object.entries(testEnvironment()).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length)), PATH: `${dir}:${process.env.PATH}`, NTS_GATE_RUN_DIR:join(dir,"run-"+mask) }, encoding: "utf8",
+        env, encoding: "utf8",
       });
       assert.notEqual(result.status, 0, "the git stub must prevent any build");
       const lines = readFileSync(log, "utf8").trim().split("\n");

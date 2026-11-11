@@ -203,6 +203,9 @@ const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
 let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate", oracleRoot: ROOT });
 env = normalized.env;
+// In-process provisioning resolves tools through the run's canonical PATH too.
+if (env.PATH === undefined) delete process.env.PATH;
+else process.env.PATH = env.PATH;
 // What the run's own process reserves before its steps -- the oracle
 // dependency capture -- runs inside the reservation the run was started
 // inside, which counts this process; the run's own reservation draws on it

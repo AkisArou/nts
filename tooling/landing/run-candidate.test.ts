@@ -4,7 +4,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {chmodSync,copyFileSync,existsSync,readFileSync,unlinkSync,writeFileSync} from "node:fs";
+import {chmodSync,copyFileSync,existsSync,mkdirSync,readFileSync,unlinkSync,writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {join,dirname,resolve} from "node:path";
 import {ENVIRONMENT_CONTEXT,gateEnvironment,hostEnvironment,sealOracleRun} from "../gate/canonical-environment.ts";
@@ -13,6 +13,27 @@ import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
 import {candidateCommand} from "./candidate-environment.ts";
 import {GATE,fixture} from './run-fixture.ts';
+
+test("a runner's in-process provisioning ignores a launcher-supplied Git", t => {
+  const f = fixture(t), options = f.options([]), bin = join(f.own, "launcher-tools");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "git"), "#!/bin/sh\nprintf launcher-git\n", { mode: 0o755 });
+  mkdirSync(join(f.target, PROFILE), { recursive: true });
+  writeFileSync(join(f.target, PROFILE, "nts"), "#!/bin/sh\n", { mode: 0o755 });
+  f.control("rustfmt", "pass");
+  const planned = gateEnvironment(launcherEnvironment(options.env), {
+    run: f.run, oracleRoot: f.tree, oracleAdmissionContext: "gate",
+    owned: { ...options.owned, NTS_BIN: join(f.target, PROFILE, "nts"), CARGO_TARGET_DIR: f.target },
+  });
+  const result = spawnSync(process.execPath, [join(f.tree, "tooling/gate/run.mjs"), "rustfmt"], {
+    cwd: f.tree, env: { ...planned.env, PATH: bin + ":" + planned.env.PATH }, encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
+  assert.equal(summary.environment.canonical, true);
+  assert.equal(summary.identities.commit, options.commit);
+  assert.equal(summary.steps[0].verdict, "PASS");
+});
 
 test("a landing launches the candidate's pinned Node and forwards it to the build and child commands",async t=>{
   const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed"),log=join(f.own,"node-launches.jsonl");

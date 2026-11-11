@@ -119,8 +119,8 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
       const ran = spawnSync("git", args, {env:fixtureEnvironment(t), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
     }
     const memory = ownMemory(join(root, "memory"));
-    const env = gateEnvironment({ ...hostEnvironment(process.env), PATH: bin + ":" + process.env.PATH },
-      { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice }, standalone: true }).env;
+    const env = gateEnvironment(hostEnvironment(process.env),
+      { run: join(root, "run"), owned: { ...memory, NTS_TOOLING_SLICE: slice, PATH: bin + ":" + process.env.PATH }, standalone: true }).env;
     const setenv = Object.entries(env).filter((entry): entry is [string,string] => entry[1] !== undefined).map(([key,value]) => `--setenv=${key}=${value}`);
     const ran = spawnSync("systemd-run", ["--user", ...toolingSliceArgs(env), `--unit=${unit}`, "--collect", "--wait", "--pipe", "--quiet",
       "--property=RuntimeMaxSec=300s", "--property=Nice=19", "--property=LimitCORE=0", "--property=CPUAffinity=0-3 6-31",

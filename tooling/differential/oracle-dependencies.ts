@@ -33,11 +33,12 @@ const CAPTURE_DISK_BYTES=2**30;
 // The capability's tree owns its layout, including trees older or newer than
 // this launcher. Walk its declarations afresh before authenticating the bytes.
 function producerIdentity(source:string){return hash(JSON.stringify(moduleClosure(['tooling/differential/oracle-dependencies.ts'],{sourceRoot:source}).map(file=>[file,hash(readFileSync(join(source,file)))])));}
-export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null):DependencyCapability{
+export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env):DependencyCapability{
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input
   // projection below determines the source image, never HEAD's whole tree.
-  return {version:1,source,sourceRevision:git(source,'rev-parse','HEAD'),lockfileSha256:hash(readFileSync(join(source,'pnpm-lock.yaml'))),
+  const sourceRevision=execFileSync('git',['rev-parse','HEAD'],{cwd:source,env,encoding:'utf8'}).trim();
+  return {version:1,source,sourceRevision,lockfileSha256:hash(readFileSync(join(source,'pnpm-lock.yaml'))),
     helperSha256:hash(readFileSync(fileURLToPath(import.meta.url))),producerSha256:producerIdentity(source),directory:resolve(directory),admission,ownerStep};
 }
 export function dependencyInventory(root:string):Entry[]{

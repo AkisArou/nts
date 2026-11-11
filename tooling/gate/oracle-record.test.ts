@@ -321,7 +321,7 @@ process.exit(1);
 `);
   writeFileSync(join(bin,"cargo"),`#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(check)}\n`);chmodSync(join(bin,"cargo"),0o755);
   // The context the full check's records unit runs in: canonical, its oracle dependencies unsealed.
-  const planned=gateEnvironment({PATH:`${bin}:${process.env.PATH}`,HOME:home},{run:join(home,".cache/gate-run"),owned:ownMemory(join(dir,"memory"))});
+  const planned=gateEnvironment({HOME:home},{run:join(home,".cache/gate-run"),owned:{...ownMemory(join(dir,"memory")),PATH:`${bin}:${process.env.PATH}`}});
   const repository=fileURLToPath(new URL("../../",import.meta.url));
   const fixture=readdirSync(join(repository,"tests/programs")).sort().find(name=>existsSync(join(repository,"tests/programs",name,"tsconfig.json")))!;
   const result=spawnTest(process.execPath,[join(repository,"tooling/differential/record-oracles.ts"),`tests/programs/${fixture}`],{cwd:repository,env:planned.env,encoding:"utf8"});
