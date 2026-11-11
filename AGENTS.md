@@ -198,6 +198,14 @@ against main's pinned compiler, building the tests in the incremental
 on 2026-10-22, where the release build took about 40 beside a gate. The gate
 still builds release; this is so the gate is not where you find out.
 
+**Every tooling module is checked strictly by the gate.** `tooling/tsconfig.json`
+owns all tooling TypeScript and the remaining `.mjs` modules with `checkJs`.
+New modules have zero diagnostics; existing per-module counts may only fall.
+`node tooling/gate/tooling-types.ts --record` writes improvements to the record;
+never edit counts by hand or suppress module checking. On 2026-11-11, most
+tooling modules had no strict gate route while a base config's default glob
+made them appear covered, and unchecked code accumulated thousands of diagnostics.
+
 ## Fixtures
 
 The corpora are the specification: `tests/programs/` (compiled and compared with

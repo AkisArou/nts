@@ -102,7 +102,7 @@ export const SELECTOR_POLICY_DATA = [
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
 
-export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host"];
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
 /**
@@ -205,6 +205,7 @@ export const LANDING = {
   doctests: { form: "as-is" },
   tooling: { form: "as-is" },
   "test-host": { form: "tree" },
+  "tooling-types": { form: "tree" },
   // The pin, the inventory and the features audit: seconds, and what a change
   // to a feature's classification owes for what it classified.
   test262: { form: "as-is" },
@@ -346,6 +347,7 @@ export const ASKS = {
   reformat: ["hygiene", "no whitespace-only diffs"],
   tooling: ["valid", "do the gate's own tools pass their tests (tokens, owed)"],
   "test-host": ["hygiene", "do tooling tests and their dependencies obey host observation ownership"],
+  "tooling-types": ["hygiene", "does every tooling module keep or lower its strict diagnostic count"],
 };
 
 /** The comparisons a lowering change owes, each with the question only it answers. */
@@ -1106,7 +1108,7 @@ function nodeHarness(path) {
 }
 
 /** Ordinary changes retain the compiled checks and cheap tree invariants. */
-const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host"], arms: [] };
+const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host", "tooling-types"], arms: [] };
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
@@ -1790,7 +1792,7 @@ export function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 11).join(" ") !== "build clippy tests rustfmt old-paths test-host program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 12).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;

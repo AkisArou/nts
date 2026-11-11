@@ -2127,3 +2127,16 @@ entries and ordering. The coordinator directed #701 to construct the canonical
 PATH from the shared toolchain-directory resolver and fixed system directories.
 The receipt contract keeps strict PATH equality. Explicit fixture tool inputs
 remain owned by their fixture's source.
+
+## One strict project for all tooling (11-12)
+
+The tooling gate checks one project containing every tooling `.ts` and `.mjs`
+module, with strict flags, `allowJs` and `checkJs`. It validates both flags and
+file coverage. The root fixture base's inherited default glob had nominally
+covered tooling without any gate route checking that project. The base now
+excludes its own tooling subtree; parser controls also prove child fixtures
+keep discovering their sources. A tool-written per-module diagnostic record
+may only fall, so cleanup can proceed by directory while every new module is
+checked at once. Diagnostics in imported compiler and runtime sources remain
+with their own projects. Governs [the machine](../../workflow.md#the-machine);
+implemented by #711 under #710.

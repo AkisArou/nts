@@ -10,5 +10,6 @@
     "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["${configDir}/tooling/**/*", "${configDir}/node_modules/**/*"]
 }

@@ -352,6 +352,17 @@ locked session on CPU 4 and keep the wall-time floor below.
 
 ## The machine
 
+Every `.ts` and `.mjs` module under `tooling/` belongs to the single strict
+project `tooling/tsconfig.json`. The gate's `tooling-types` step validates its
+strict settings and compares its file list with the modules on disk before
+checking them. New modules start without diagnostics. The remaining legacy
+diagnostics are recorded per module in `results/tooling-types/diagnostics.json`;
+counts may only fall. `node tooling/gate/tooling-types.ts --record` writes those
+improvements and refuses a rise. The fixture base excludes its own tooling
+subtree, while each child fixture still discovers its own sources. Imported
+compiler and runtime sources retain their own projects and diagnostic policy.
+
+
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
   `main`, warm first: its build folder is kept, so the build is incremental
   rather than cold. When every tree is held, the pool grows by one, unless
@@ -466,6 +477,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **One strict project checks every tooling module:** the gate validates the
+  project flags and complete module inventory, and a tool-written per-module
+  diagnostic ceiling accepts improvements while refusing increases
+  ([log](records/notebooks/decisions-log.md#one-strict-project-for-all-tooling-11-12)).
 
 - **Step budgets count execution and expose admission waits**: an elastic
   step with no active case suspends its execution budget only for the

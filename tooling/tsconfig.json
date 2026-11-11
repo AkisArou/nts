@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "..",
+    "allowJs": true,
+    "checkJs": true,
+    "noCheck": false,
+    "composite": false,
+    "noEmit": true,
+    "tsBuildInfoFile": "../target/tooling-types.tsbuildinfo"
+  },
+  "include": ["**/*.ts", "**/*.mjs"],
+  "exclude": ["**/node_modules/**"]
+}
