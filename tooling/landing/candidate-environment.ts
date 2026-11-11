@@ -12,10 +12,11 @@ type LaunchRequest=CandidateCommand&{treeLock?:boolean};
 class CandidateEnvironmentContractError extends Error {}
 
 /** The caller supplies the already verified candidate Node, never PATH's node. */
-export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv,options:{output?:number;treeLock?:number}={}){
+export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv,options:{output?:number;treeLock?:number;supervisor?:readonly [string,...string[]]}={}){
   const output=options.output??'pipe',stdio:StdioOptions=['pipe',output,output,'pipe'];
   if(options.treeLock!==undefined)stdio.push('ignore','ignore','ignore','ignore',options.treeLock);
-  const result=spawnSync(node,[fileURLToPath(new URL('./candidate-environment.ts',import.meta.url))],{
+  const [program,...args]=[...(options.supervisor??[]),node,fileURLToPath(import.meta.url)];
+  const result=spawnSync(program!,args,{
     cwd:request.tree,env:options.treeLock!==undefined?{...env,NTS_GATE_LOCK_FD:'8'}:env,
     input:JSON.stringify({...request,treeLock:options.treeLock!==undefined}),encoding:'utf8',maxBuffer:1<<30,
     stdio,

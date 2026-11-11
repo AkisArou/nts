@@ -50,7 +50,7 @@ function startSlice(slice: string, boundTo: string, limits?: StepLimits): string
   }
 }
 
-function populated(group: string): 0 | 1 {
+export function populated(group: string): 0 | 1 {
   const value = /^populated ([01])$/m.exec(readFileSync(`${CGROUP}${group}/cgroup.events`, "utf8"))?.[1];
   if (value === undefined) throw new Error("step cgroup lacks a populated answer");
   return value === "0" ? 0 : 1;

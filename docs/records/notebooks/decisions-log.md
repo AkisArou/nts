@@ -2023,3 +2023,19 @@ priority, dynamic grant updates, drain proof and cancellation.
 The old shared cap killed a pressure worker and then its supervisor before the
 victim's anonymous pages had drained. A higher victim score cannot protect a
 supervisor that remains in that OOM domain. The kernel hierarchy now excludes it.
+
+## Full-check wall backstop (11-11)
+
+The full check's measured command has a controller-owned wall ceiling, including
+when it runs a historical runner. It is three times the last canonical green
+run's measured wall with a fifteen-minute floor. Where that evidence is absent,
+the longest requested step's measured wall supplies the baseline. The command
+and its detached tooling units share an owned slice. Expiry stops that slice and
+writes a named hold that overrides any premature summary. Known admission waits
+continue to leave a tokened step's execution allowance intact.
+
+A priority recheck reached the scheduler before oracle setup completed, released
+the run's reservation against its empty startup queue, and allowed setup to
+resume into workers whose tokens could no longer obtain memory. Scheduling now
+starts after setup and token initialization. Loss of a live run's reservation
+stops and names its unfinished work.

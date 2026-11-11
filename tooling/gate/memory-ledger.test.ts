@@ -435,6 +435,7 @@ test("a child started inside a reservation runs in it at once and asks for nothi
   const before = f.decisions.length;
   const child = await f.ask({ bytes: 2 * GiB, what: "child" }, { env: { ...f.env, ...parent.env } });
   assert.deepEqual([child.inherited, child.id, child.env], [true, parent.id, parent.env]);
+  assert.equal(child.active(), true);
   assert.equal(f.decisions.length, before, "no decision was made: nothing was asked");
   await child.grow(3 * GiB);
   await child.shrink(GiB);
@@ -453,9 +454,10 @@ test("a child started inside a reservation runs in it at once and asks for nothi
 
   // Once the parent's reservation has ended, a child asks for its own.
   parent.release();
+  assert.deepEqual([parent.active(), child.active()], [false, false]);
   f.memory(20);
   const orphan = await f.ask({ bytes: 2 * GiB, what: "orphan" }, { env: { ...f.env, ...parent.env } });
-  assert.equal(orphan.inherited, false);
+  assert.deepEqual([orphan.inherited, orphan.active()], [false, true]);
   assert.notEqual(orphan.id, parent.id);
   assert.ok(f.lines.includes(`memory: orphan was started inside reservation ${parent.id}, which has ended; it asks for its own`), f.lines.join("\n"));
   orphan.release();
@@ -1001,6 +1003,7 @@ test("a request that takes over a reservation ends it as it is admitted, under t
   const run = await f.ask({ bytes: 14 * GiB, what: "gate run", priority: "landing", replaces: build.id });
   assert.deepEqual([f.of("gate run").at(-1)?.pendingBytes, f.of("gate run").at(-1)?.roomBytes], [0, 18 * GiB]);
   assert.deepEqual(readLedger(f.dir).admitted.map(entry => entry.what), ["gate run"], "the build's reservation ended as the run was admitted");
+  assert.deepEqual([build.active(), run.active()], [false, true]);
   assert.ok(f.lines.includes("memory: gate run took over build's reservation of 12.0 GiB"), f.lines.join("\n"));
   // The agent's request never had room: 6 while the build held its 12, 4 now.
   const seen = f.of("agent").length;

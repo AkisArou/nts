@@ -19,7 +19,7 @@ import {
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 import {ownMemory} from "./test-memory.ts";
-import {readLedger} from "./memory-ledger.ts";
+import {readLedger,reserve} from "./memory-ledger.ts";
 
 
 type CacheAuthority={NODE_COMPILE_CACHE_ROOT?:string;ownedCacheEnvironment?:(launcher:NodeJS.ProcessEnv,options:{temporary:string})=>{TMPDIR:string;NODE_COMPILE_CACHE:string}};
@@ -442,15 +442,20 @@ fi
  * in a unit of its own inside the tooling run's slice -- stopped with that
  * slice, and with this test, however the test itself ends.
  */
-function startupRunner(t:{after(fn:()=>void):void},availableKiB:number){
+function startupRunner(t:{after(fn:()=>void):void},availableKiB:number,oracle?:"priority"|"lost"){
   const {run,base}=fixture(t),root=join(run,'repo'),gate=join(root,'tooling/gate');
   mkdirSync(gate,{recursive:true});
   const source=new URL('./',import.meta.url).pathname;
+  const looked=join(run,'schedule-looked');
   for(const file of moduleClosure(['tooling/gate/run.mjs'])){
     const target=join(root,file),original=join(source,'../..',file);
     mkdirSync(dirname(target),{recursive:true});
-    if(file==='tooling/gate/run.mjs')writeFileSync(target,readFileSync(original));
-    else copyFileSync(original,target);
+    if(file==='tooling/gate/run.mjs'&&oracle==='priority'){
+      const text=readFileSync(original,'utf8'),callback='outrankedLook = null; schedule();';
+      assert.ok(text.includes(callback));
+      // Observe the real priority timer reaching schedule, while capture waits.
+      writeFileSync(target,text.replace(callback,callback+` writeFileSync(${JSON.stringify(looked)}, "looked");`));
+    }else copyFileSync(original,target);
   }
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,'times.tsv'),join(gate,'times.tsv'));
@@ -462,27 +467,85 @@ cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else
-echo launched > step-launched
+${oracle?`exec ${JSON.stringify(process.execPath)} "${gate}/oracle.mjs"`:'echo launched > step-launched'}
 fi
+`);
+  if(oracle)writeFileSync(join(gate,'oracle.mjs'),`
+import { watch } from "node:fs";
+import { join } from "node:path";
+import { reserve, RESERVATION_ENV } from ${JSON.stringify(new URL("./memory-ledger.ts",import.meta.url).href)};
+import { acquireToken } from ${JSON.stringify(new URL("./tokens.mjs",import.meta.url).href)};
+import { createProgramOracleResults } from ${JSON.stringify(new URL("../differential/oracle-results.ts",import.meta.url).href)};
+import { programOracleDirectory } from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};
+import { oracleRecipeIdentity } from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};
+const child=await reserve({bytes:128*2**20,what:"oracle fixture"},{report:console.log});
+const release=await acquireToken({project:"oracle-progress"},undefined,2*2**30);
+console.log("oracle case entered");
+${oracle==='lost'?`const env={...process.env};delete env[RESERVATION_ENV];
+const replacement=await reserve({bytes:128*2**20,what:"oracle takes its own",replaces:child.id},{env,report:console.log});
+await new Promise(()=>{watch(process.env.NTS_GATE_RUN_DIR,()=>{});});
+replacement.release();`:''}
+createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();
+release();
+child.release();
 `);
   const memory=ownMemory(join(run,'memory'),{availableKiB,totalKiB:64_000_000});
   // This arm waits for a measured capture's forecast. An unknown capture
   // asks only for its live margin and would fit beside the runner.
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
-  writeFileSync(join(memory.NTS_GATE_COSTS_DIR,'steps.json'),JSON.stringify({version:3,steps:{},jobs:{
+  writeFileSync(join(memory.NTS_GATE_COSTS_DIR,'steps.json'),JSON.stringify({version:3,steps:oracle?{'program-oracles':{memory:{unit:'token',peaks:[Math.floor(2*2**30/1.25)]}}}:{},jobs:{
     'oracle-dependency-capture':{unit:'worker',peaks:[Math.floor(2*2**30/1.25)]},
   }})+'\n');
-  const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
+  const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{
+    NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target'),
+    ...(oracle==='priority'?{NTS_MEMORY_PRIORITY:'full-check'}:{}),
+  }});
   const unit='nts-startup-wait-'+run.split('/').pop()!+'.service';
-  const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
+  const child=spawn('systemd-run',['--user',...toolingSliceArgs(),'--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','Nice=19','-p','RuntimeMaxSec=120s','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
   child.on('exit',(code,signal)=>{terminal={code,signal};});
-  return {root,directory,memory,unit,child,output:()=>output,terminal:()=>terminal};
+  return {root,directory,memory,looked,unit,child,output:()=>output,terminal:()=>terminal};
 }
+test("a priority recheck during oracle capture leaves the run live for its first token",async t=>{
+  const f=startupRunner(t,4*2**20,"priority");
+  const stopped=()=>f.terminal()?f.output():undefined;
+  await waitFor("the oracle capture to wait for memory",()=>readLedger(f.memory.NTS_MEMORY_LEDGER).waiting.some(row=>row.what==="oracle dependency capture"),{stopped});
+  const controller=new AbortController();
+  const pressure=reserve({bytes:2*2**30,priority:"landing",what:"startup priority control"},{env:f.memory,signal:controller.signal})
+    .catch(error=>{if(!controller.signal.aborted)throw error;});
+  t.after(async()=>{controller.abort();(await pressure)?.release();});
+  await waitFor("the priority recheck to reach the scheduler",()=>existsSync(f.looked),{stopped});
+  const before=readLedger(f.memory.NTS_MEMORY_LEDGER);
+  const earlySummary=existsSync(join(f.directory,"summary.json"));
+  controller.abort();
+  (await pressure)?.release();
+  ownMemory(dirname(f.memory.NTS_MEMINFO),{availableKiB:32*2**20,totalKiB:64_000_000});
+  const log=join(f.directory,"program-oracles.log");
+  await waitFor("the oracle step to start or the run to finish",()=>existsSync(log)||!!f.terminal());
+  assert.equal(earlySummary,false,"the gate summarized before sealing and left no reservation for its oracle step");
+  assert.equal(before.admitted.filter(row=>row.what.startsWith("gate run ")).length,1);
+  await waitFor("the oracle run to finish",()=>!!f.terminal());
+  assert.equal(f.terminal()!.code,0,f.output()+readFileSync(log,"utf8"));
+  assert.match(readFileSync(log,"utf8"),/oracle case entered/);
+  assert.doesNotMatch(readFileSync(log,"utf8"),/reservation .* has ended/);
+  assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
+});
+
+test("a running oracle step reports the loss of its gate reservation and drains",async t=>{
+  const f=startupRunner(t,32*2**20,"lost");
+  await waitFor("the oracle run to finish",()=>!!f.terminal());
+  assert.equal(f.terminal()!.code,1,f.output());
+  const summary=JSON.parse(readFileSync(join(f.directory,"summary.json"),"utf8")),row=summary.steps[0];
+  assert.match(summary.interrupted,/gate run reservation .* ended while the run was active/);
+  assert.deepEqual([row.name,row.verdict,row.scope.populated],["program-oracles","NOT RUN",0]);
+  assert.match(row.reason,/gate run reservation .* ended while the run was active/);
+  assert.match(readFileSync(row.log,"utf8"),/oracle case entered/);
+});
+
 /** What a unit's processes have used of the CPU, in seconds, as systemd counts it; NaN once the unit has gone. */
 const cpuSeconds=(unit:string)=>Number(spawnTest('systemctl',['--user','show',unit,'-p','CPUUsageNSec','--value'],{encoding:'utf8'}).stdout.trim()||NaN)/1e9;
 

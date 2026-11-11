@@ -961,6 +961,11 @@ function sampleStep(r) {
 const memoryClock = setInterval(watchMemory, SAMPLE_MS);
 memoryClock.unref();
 function watchMemory() {
+  if (stopping || summaryWritten) return;
+  if (reservation && !reservation.active()) {
+    stop(`memory: gate run reservation ${reservation.id} ended while the run was active`);
+    return;
+  }
   const yielding = reservation !== null && outranked();
   for (const [name, r] of running) {
     if (r.draining) continue;
@@ -1112,7 +1117,9 @@ function adjustMemory() {
 }
 
 function schedule() {
-  if (stopping) return;
+  // A priority recheck can fire while the oracle seal is being captured.
+  // The empty queue during startup does not mean that every step has drained.
+  if (preparing || stopping || summaryWritten) return;
   const yielding = outranked();
   let progressed = true;
   while (progressed) {
@@ -1442,6 +1449,7 @@ function done() {
   // Every step has drained, so the run's memory goes back to the ledger now.
   growth?.controller.abort();
   reservation?.release();
+  tok.close();
   clearTimeout(outrankedLook);
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
   try { scopes?.close(); }
@@ -1685,6 +1693,11 @@ if (!setupFailure && !stopping) {
   try { normalized = await sealOracleRun(normalized,startupAbort.signal); env = normalized.env; }
   catch (error) { dependencySealFailure = error; }
 }
+if (!stopping && !setupFailure && !dependencySealFailure) {
+  tokenAddr = await tok.start();
+  if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
+  pending = order(plan);
+}
 preparing = false;
 process.stdout.write(
   `gate: ${plan.length} step(s), ${SLOTS} slots, memory from the ledger at ${PRIORITY} priority, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
@@ -1705,8 +1718,5 @@ if (stopping) {
   for (const name of plan) finish(name,disposition.verdict,reason,{instrument:{kind,reason}});
   done();
 } else {
-  tokenAddr = await tok.start();
-  if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
-  pending = order(plan);
   schedule();
 }

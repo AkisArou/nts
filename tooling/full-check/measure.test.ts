@@ -7,9 +7,14 @@
 import assert from "node:assert/strict";
 import { chmodSync,existsSync,mkdirSync,mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { test } from "node:test";
-import { pinnedGate, readSummary, verdictOf } from "./measure.ts";
+import { fullCheckCeiling, pinnedGate, readSummary, verdictOf } from "./measure.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
+import { spawnTest } from "../gate/test-wait.ts";
+import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "../gate/tooling-slice.ts";
 import {layout} from "./state.ts";
 import {scratchRepo} from "../landing/scratch-repo.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
@@ -35,6 +40,37 @@ const steps = [
   { name: "rc", verdict: "INSTRUMENT", reason: "memory pre-check" },
   { name: "llvm", verdict: "NOT RUN", reason: "build failed" },
 ];
+
+test("the full check sizes its backstop from the last canonical green wall",t=>{
+  const baseline="build\t800\t1000\t1\ntests\t1200\t4000\t8\n";
+  const run=summary(t,{wall_s:1820.1,verdict:"green",identities:{commit:COMMIT},environment:{canonical:true}});
+  const previous={commit:COMMIT,run,verdict:"green" as const,at:"",failed:[]};
+  assert.equal(fullCheckCeiling(previous,["build","tests"],baseline),5461);
+  assert.equal(fullCheckCeiling({...previous,commit:"f".repeat(40)},["build","tests"],baseline),3600);
+  assert.equal(fullCheckCeiling(undefined,["build"],baseline),2400);
+  assert.equal(fullCheckCeiling(undefined,["format"],baseline),900);
+});
+
+test("a full-check wall ceiling stops an older command and holds even a green summary",t=>{
+  const run=newTestScratch("full-check-wall-ceiling"),slice=newToolingSlice(true),unit=`nts-test-full-check-wall-${randomUUID()}`;
+  t.after(()=>{
+    spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});
+    stopToolingSlice(slice);
+    rmSync(run,{recursive:true,force:true});
+  });
+  writeFileSync(join(run,"summary.json"),JSON.stringify({
+    identities:{commit:COMMIT},environment:{canonical:true},steps:[{name:"program-oracles",verdict:"PASS"}],
+  }));
+  const measure=fileURLToPath(new URL("./measure-command.ts",import.meta.url));
+  const result=spawnTest("systemd-run",["--user",`--unit=${unit}`,...toolingSliceArgs(),"--collect","--quiet","--pipe","--wait",
+    "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=30s",
+    process.execPath,measure,"3",run,slice,"tail","-f","/dev/null"],{encoding:"utf8"});
+  assert.equal(result.status,124,result.stdout+result.stderr);
+  assert.deepEqual(readSummary(run,COMMIT,["program-oracles"]),{
+    steps:{"program-oracles":"HELD"},
+    reasons:{"program-oracles":"full check run exceeded its wall ceiling of 3 s"},
+  });
+});
 
 test("the full check launches each measured commit with its pin, including historical commits",t=>{
   const repo=scratchRepo(t,"full-check-toolchain"),paths=layout(repo.dir),installations=join(repo.dir,"installed"),log=join(repo.dir,"node-launches.jsonl");
