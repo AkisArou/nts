@@ -30,6 +30,7 @@
 // recorded case that got better (tooling/records/pending.ts), are listed as
 // information: the full check writes those rows.
 import { removable } from "../gate/run-temporary.ts";
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
@@ -46,14 +47,18 @@ import { candidateCommand } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
+import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 
 export const PROFILE = "nts-dev";
+type BinaryIdentities = Record<string, string | null>;
 export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
   cpu?: number; wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number };
+  binaries?: BinaryIdentities;
 };
-export type Ran = { state: "green" | "red" | "held"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number };
+export type Ran = { state: "green" | "red" | "held"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
+  contract?: VerdictContract; binaries?: BinaryIdentities };
 export type RunOptions = {
   tree: string; target: string; run: string; commit: string;
   /** The landing steps, as all.sh names them; `build` is the compiler's build. */
@@ -99,8 +104,18 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
   const { tree, target, run } = options;
   mkdirSync(run, { recursive: true });
   const results: StepResult[] = [];
+  let contract: VerdictContract | undefined;
+  let probeContract: (() => VerdictContract | undefined) | undefined;
   const finish = (state: Ran["state"], message: string): Ran => {
-    const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (Date.now() - started) / 1000 };
+    const completed = state === "green" && contract ? probeContract?.() : undefined;
+    if (state === "green" && contract && completed?.identity !== contract.identity) {
+      appendFileSync(join(run, "verdict-contract.log"), "landing verdict contract changed or became unavailable during the check\n");
+      contract = undefined;
+    }
+    const binaries = results.find(row => row.name === "build")?.binaries ??
+      results.find(row => row.binaries)?.binaries ?? {};
+    const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (Date.now() - started) / 1000,
+      ...(state === "green" && contract ? { contract, binaries } : {}) };
     writeFileSync(join(run, "landing.json"), JSON.stringify(ran, null, 2) + "\n");
     return ran;
   };
@@ -120,6 +135,25 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     ...(options.ceiling !== undefined ? { NTS_GATE_STEP_CEILING_S: String(options.ceiling) } : {}),
     ...options.owned,
   };
+  probeContract = () => {
+    const helper = join(tree, "tooling/gate/verdict-contract.ts");
+    if (!existsSync(helper)) return undefined;
+    const file = join(run, "verdict-contract.json");
+    try {
+      const result = candidateCommand(selected.node, {
+        tree, run: join(run, "contract"), owned, discardTemporary: true,
+        command: [selected.node, helper, file],
+      }, launcher);
+      if (result.error || result.signal || result.status !== 0) throw Error(result.error?.message ?? result.signal ?? result.stderr);
+      const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+      if (!validContract(value)) throw Error("candidate wrote an invalid verdict contract");
+      return value;
+    } catch (error) {
+      appendFileSync(join(run, "verdict-contract.log"), String(error) + "\n");
+      return undefined;
+    }
+  };
+  contract = probeContract();
   const rest = options.steps.filter(step => step !== "build");
   let environment: string | null;
   try { environment = rest.length ? gateEnvironmentError(tree, rest, options.interop ?? null, launcher) : null; }
@@ -216,10 +250,18 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
   const measured = { ...(cpu !== undefined ? { cpu } : {}), ...(wall !== undefined ? { wall } : {}), log };
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
   if (r.error || r.signal) return { name: "build", verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
-  return r.status === 0 ? { name: "build", verdict: "PASS", ...measured } : { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
+  if (r.status !== 0) return { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };
+  const binaries = Object.fromEntries(["nts", "nts-suite"].map(name => {
+    let hash: string | null = null;
+    try { hash = createHash("sha256").update(readFileSync(join(options.target, PROFILE, name))).digest("hex"); }
+    catch { /* A fixture's build may provide only one executable. */ }
+    return [name, hash];
+  }));
+  return { name: "build", verdict: "PASS", ...measured, binaries };
 }
 
-type Summary = { identities?: { commit?: string | null }; interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
+type Summary = { identities?: { commit?: string | null; nts?: { sha256?: string | null }; nts_suite?: { sha256?: string | null } };
+  interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
 function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): { rows: StepResult[] } | { held: string } {
   mkdirSync(dir, { recursive: true });
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
@@ -234,7 +276,10 @@ function runSteps(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv
   if (summary.environment?.canonical !== true) return { held: "the run's environment was not canonical" };
   const rows = summary.steps.filter(row => steps.includes(row.name));
   for (const step of steps) if (!rows.some(row => row.name === step)) rows.push({ name: step, verdict: "NOT RUN", reason: "the runner did not report it" });
-  return { rows: rows.map(row => ({ ...row, ...(row.log ? {} : { log: join(dir, `${row.name}.log`) }) })) };
+  const binaries = summary.identities?.nts ? {
+    nts: summary.identities.nts.sha256 ?? null, "nts-suite": summary.identities.nts_suite?.sha256 ?? null,
+  } : undefined;
+  return { rows: rows.map(row => ({ ...row, ...(row.log ? {} : { log: join(dir, `${row.name}.log`) }), ...(binaries ? { binaries } : {}) })) };
 }
 
 /**

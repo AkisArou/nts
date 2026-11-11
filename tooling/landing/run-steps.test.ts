@@ -4,7 +4,8 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // and memory pressure run again alone. Shared helpers are in run-fixture.ts.
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {existsSync,readFileSync} from "node:fs";
+import {existsSync,readFileSync,writeFileSync} from "node:fs";
+import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT,gateEnvironment} from "../gate/canonical-environment.ts";
 import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
@@ -31,6 +32,21 @@ test("the compiler builds first in nts-dev, and the steps drive it through the g
   assert.equal(summary.environment.canonical, true);
   assert.equal(summary.memory.priority, "landing", "the runner's reservation waits at the landing check's priority");
   assert.ok(existsSync(join(f.run, "landing.json")));
+});
+
+test("pinned binary identities survive a step relinking the original target", async t => {
+  const f = fixture(t), script = join(f.tree, "tooling/gate/all.sh");
+  const original = readFileSync(script, "utf8");
+  assert.ok(original.includes("pass) echo"));
+  writeFileSync(script, original.replace("pass) echo",
+    `pass) printf changed > "$CARGO_TARGET_DIR/${PROFILE}/nts"; echo`));
+  const ran = await runLanding(f.options(["build", "rustfmt"]));
+  assert.equal(ran.state, "green", ran.message);
+  const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
+  const changed = createHash("sha256").update(readFileSync(join(f.target, PROFILE, "nts"))).digest("hex");
+  assert.notEqual(summary.identities.nts.sha256, changed);
+  assert.equal(ran.steps.find(step => step.name === "rustfmt")?.binaries?.nts, summary.identities.nts.sha256);
+  assert.equal(ran.steps.find(step => step.name === "build")?.binaries?.nts, summary.identities.nts.sha256);
 });
 
 test("a step the rules narrowed runs narrowed: the touched crates' doc tests", async t => {

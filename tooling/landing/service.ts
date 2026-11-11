@@ -24,7 +24,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
-import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingIssue, pushedMain, pushMain, rebaseOnto, revParse, type BranchOutcome, type Git } from "./git.ts";
+import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingIssue, pushedMain, pushMain, rebaseOnto, revParse, treeOf, type BranchOutcome, type Git } from "./git.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
@@ -35,6 +35,7 @@ import { costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, 
 import { durableRecord } from "../gate/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
 import { linkTree } from "../inputs/linker.ts";
+import { writeLandingVerdict } from "./verdict.ts";
 
 export const KEEP_DAYS = 3;
 
@@ -169,6 +170,12 @@ export async function landOne(config: Config, queue: Queue, entry: Checking): Pr
     if (ran.state === "red") return queue.answer(entry, { state: "refused", ...facts, message: `red: ${ran.message}` });
     if (ran.state === "held") return queue.answer(entry, { state: "held", ...facts, message: `held: ${ran.message}` });
     if (queue.withdrawRequested(entry.id)) return queue.answer(entry, { state: "withdrawn", ...facts, message: "withdrawn while it was checked: green, and not landed" });
+    try {
+      const receipt = writeLandingVerdict(config.home, {
+        commit: tip, tree: treeOf(g, tip), submission: entry.sha, landing: entry.id, base, selected, ran,
+      });
+      if (!receipt) config.log(`landing verdict ${short(tip)}: no portable contract; the core will execute its requested steps`);
+    } catch (error) { config.log(`landing verdict ${short(tip)} could not be recorded: ${String(error)}`); }
     queue.update({ phase: "landing" });
     queue.setStatus({ state: "landing", id: entry.id, sha: entry.sha, run, message: `main ${short(base)} -> ${short(tip)}` });
     const advanced = advanceMain(g, base, tip);

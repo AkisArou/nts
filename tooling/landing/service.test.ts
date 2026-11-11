@@ -13,6 +13,8 @@ import { test, type TestContext } from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import assert from "node:assert/strict";
+import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
+import { verdictPath, type LandingVerdict } from "./verdict.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "./pool.ts";
@@ -330,4 +332,31 @@ test("a change from an issue's branch lands saying Fixes #N, and one from a bran
   assert.equal(f.s.git(["log", "-1", "--format=%B", ro.tip!]), "task fix/b");
   assert.equal(f.s.git(["branch", "--list", "42-a-task"]), "", "the task's branch is deleted: everything on it landed");
   assert.equal(f.s.git(["ls-remote", "--heads", "origin", "42-a-task"]), "");
+});
+
+test("the checked tip's portable receipt is durable before main is published and pool cleanup starts", async t => {
+  const f = service(t), originalRun = f.config.runSteps, originalRelease = f.pool.release.bind(f.pool);
+  f.config.runSteps = async options => {
+    const ran = await originalRun(options);
+    mkdirSync(ran.run, { recursive: true });
+    for (const step of ran.steps) writeFileSync(join(ran.run, step.name + ".log"), "");
+    return { ...ran, contract: fixtureContract() };
+  };
+  let observed = false;
+  f.pool.release = (...args) => {
+    const checked = f.checked.at(-1)!;
+    assert.equal(f.main(), checked);
+    const receipt = JSON.parse(readFileSync(verdictPath(f.config.home, checked), "utf8")) as LandingVerdict;
+    assert.equal(receipt.commit, checked);
+    assert.deepEqual(receipt.steps.map(step => step.outcome.name), ["build", "tests", "rustfmt"]);
+    assert.deepEqual(receipt.deferred.map(step => step.step), ["integrity"]);
+    observed = true;
+    return originalRelease(...args);
+  };
+  const task = f.task("42-portable-verdict", { "src/new.txt": "checked\n" });
+  f.submit("42-portable-verdict", task.sha);
+  assert.equal((await drain(f.config)).answered[0]!.state, "landed");
+  assert.equal(observed, true);
+  assert.notEqual(f.checked[0], task.sha);
+  assert.equal(existsSync(verdictPath(f.config.home, task.sha)), false);
 });

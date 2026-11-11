@@ -31,6 +31,9 @@ export function sharedCheckout(cwd = process.cwd()): string {
 export function revParse(git: Git, rev: string): string {
   return checked(git, ["rev-parse", "--verify", "--end-of-options", `${rev}^{commit}`]);
 }
+export function treeOf(git: Git, rev: string): string {
+  return checked(git, ["rev-parse", "--verify", "--end-of-options", `${rev}^{tree}`]);
+}
 export function isAncestor(git: Git, ancestor: string, of: string): boolean {
   const r = run(git, ["merge-base", "--is-ancestor", ancestor, of]);
   if (r.status > 1) throw new GitError(`git merge-base --is-ancestor: ${r.stderr}`);
