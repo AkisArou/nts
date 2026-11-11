@@ -26,6 +26,7 @@
 //! would not print alike, which is printed cannot be told from the descriptor,
 //! so the layout refuses rather than print one type's text for another's value.
 
+use super::{Lowered, printed};
 use std::collections::BTreeMap;
 
 use nts_diagnostics::Location;
@@ -631,4 +632,11 @@ fn is_a_class(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, ty: TypeId) ->
                 .flags
                 .contains(nts_semantic_schema::SymbolFlags::CLASS)
         })
+}
+
+/// Resolve possible printer polls only after descriptor selection has seen
+/// the actual program. Repeated as the refusal cascade removes callbacks;
+/// before suspension and optimization can move or renumber recorded values.
+pub(in crate::hir) fn settle_printer_checks(lowered: &mut Lowered) {
+    printed::settle_checks(&mut lowered.program, &mut lowered.arrivals.printer_checks);
 }

@@ -126,6 +126,7 @@ use self::parameters::{
 };
 use self::places::Place;
 use self::primitive_conversion::NumberHint;
+pub(super) use self::printed::settle_printer_checks;
 use self::property_presence::{AddedKeys, Declares, PRESENCE_INDEX, added_keys, presence_keys};
 use self::provided_errors::provided_error_identities;
 use self::raising_copies::{
@@ -420,13 +421,6 @@ impl Lowered {
     pub fn is_complete(&self) -> bool {
         self.diagnostics.is_empty()
     }
-}
-
-/// Resolve possible printer polls only after descriptor selection has seen
-/// the actual program. Repeated as the refusal cascade removes callbacks;
-/// before suspension and optimization can move or renumber recorded values.
-pub(super) fn settle_printer_checks(lowered: &mut Lowered) {
-    printed::settle_checks(&mut lowered.program, &mut lowered.arrivals.printer_checks);
 }
 
 // Observe actual element clones, so the guard also detects a clone introduced
