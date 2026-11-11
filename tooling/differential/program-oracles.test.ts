@@ -16,6 +16,31 @@ import {newTestScratch} from '../gate/test-scratch.ts';
 import {ownMemory} from '../gate/test-memory.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 
+function plannerShim(target:string,calls:string):string{
+  return `#!/usr/bin/env node
+import {appendFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {ToolingInstrumentError} from ${JSON.stringify(new URL('../gate/step-result.ts',import.meta.url).href)};
+appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
+const target=${JSON.stringify(target)},result=spawnSync(target,process.argv.slice(2),{stdio:'inherit'});
+if(result.error)throw new ToolingInstrumentError('tooling-setup','cannot start oracle planner '+target+': '+result.error.message);
+if(result.signal)throw new ToolingInstrumentError('tooling-setup','oracle planner '+target+' stopped by '+result.signal);
+process.exitCode=result.status??1;
+`;
+}
+
+for(const kind of ['missing','signal'] as const)test('the planner shim retains the '+kind+' binary diagnostic as a named instrument',t=>{
+  const root=newTestScratch('planner-shim');t.after(()=>removeOracleSnapshot(root));
+  const target=join(root,'planner-'+kind),shim=join(root,'oracle-plan'),calls=join(root,'calls');
+  if(kind==='signal')writeFileSync(target,'#!/bin/sh\nkill -TERM $$\n',{mode:0o755});
+  writeFileSync(shim,plannerShim(target,calls),{mode:0o755});
+  const result=spawnSync(process.execPath,[shim,'project.json'],{env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.notEqual(result.status,0);assert.match(result.stderr,/ToolingInstrumentError:/);
+  assert.ok(result.stderr.includes(target),result.stderr);
+  assert.match(result.stderr,kind==='missing'?/cannot start oracle planner.*ENOENT/s:/stopped by SIGTERM/);
+  assert.equal(readFileSync(calls,'utf8'),shim+'\n');
+});
+
 test('a recorded budget is retried without treating its missing count as zero',()=>{
   assert.equal(hasOracleWork({kind:'budget'}),true);
   assert.equal(hasOracleWork({kind:'measured',count:4}),true);
@@ -79,13 +104,7 @@ test('program consumers read completed answers from an nts-dev planner after the
   const profile=join(root,'target/nts-dev'),calls=join(root,'planner-calls');mkdirSync(profile,{recursive:true});
   symlinkSync(binary,join(profile,'nts'));
   const planner=join(profile,'oracle-plan');
-  writeFileSync(planner,`#!/usr/bin/env node
-import {appendFileSync} from 'node:fs';
-import {spawnSync} from 'node:child_process';
-appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
-const result=spawnSync(${JSON.stringify(join(dirname(binary),'oracle-plan'))},process.argv.slice(2),{stdio:'inherit'});
-process.exitCode=result.status??1;
-`,{mode:0o755});
+  writeFileSync(planner,plannerShim(join(dirname(binary),'oracle-plan'),calls),{mode:0o755});
   // The producers' pool reserves in a ledger of the run's own, against an
   // ample reading, never the machine's.
   privateRun=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),standalone:true,
