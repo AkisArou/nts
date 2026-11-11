@@ -591,7 +591,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// At **module scope** it stays a plain function -- there is one of it for
     /// the whole program and every caller reaches it by name, so a closure
-    /// would be storage for nothing, which is the rule [`reached_by_name`](super::reached_by_name)
+    /// would be storage for nothing, which is the rule [`reached_by_name`](super::capture_discovery::reached_by_name)
     /// states for exactly that case. One that reads its own `this` is a closure
     /// too, taking the call's as a `function` expression does
     /// (`ClosureInfo::reads_this`); it was excluded while neither could.
