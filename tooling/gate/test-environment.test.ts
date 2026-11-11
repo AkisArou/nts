@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {existsSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
@@ -30,6 +30,18 @@ test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
 test('explicit fixture values override the allowlist',()=>{
   const env=testEnvironment({NTS_GATE_SLOTS:'2',NODE_OPTIONS:'--no-warnings',FIXTURE_PROTOCOL:'owned'});
   assert.equal(env.NTS_GATE_SLOTS,'2');assert.equal(env.NODE_OPTIONS,'--no-warnings');assert.equal(env.FIXTURE_PROTOCOL,'owned');
+});
+
+test('declared Node, JDK and rustup directories precede HOME-dependent shims',t=>{
+  const root=testScratch(t,'environment-tools'),shim=join(root,'shims'),jdk=join(root,'jdk'),cargo=join(root,'cargo');
+  for(const directory of [shim,join(jdk,'bin'),join(cargo,'bin')])mkdirSync(directory,{recursive:true});
+  for(const name of ['java','node','cargo'])writeFileSync(join(shim,name),'#!/bin/sh\nexit 126\n',{mode:0o755});
+  writeFileSync(join(jdk,'bin/java'),'#!/bin/sh\necho declared-jdk\n',{mode:0o755});
+  writeFileSync(join(cargo,'bin/cargo'),'#!/bin/sh\necho declared-rustup\n',{mode:0o755});
+  const env=testEnvironment({JAVA_HOME:jdk,JDK_HOME:undefined,CARGO_HOME:cargo},{PATH:shim});
+  for(const [command,args,expected] of [['node',['-p','"declared-node"'],'declared-node'],['java',[],'declared-jdk'],['cargo',[],'declared-rustup']] as const){
+    const result=spawnSync(command,args,{env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.trim(),expected);
+  }
 });
 
 test('a fixture retains canonical compiler and resource capabilities with a nested temporary',t=>{

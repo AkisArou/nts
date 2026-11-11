@@ -8,7 +8,7 @@ import { spawnTest } from "./test-wait.ts";
 import { TOOLING_COLLECTOR_COMMAND } from "./tooling-runner.ts";
 import { testScratch } from "./test-scratch.ts";
 
-const shell = readFileSync(process.env.NTS_TOOLING_LOG_SHELL ?? new URL("./all.sh", import.meta.url), "utf8");
+const shell = readFileSync(new URL("./all.sh", import.meta.url), "utf8");
 const wrapper = /^tooling_tests\(\) \{\n[\s\S]*?^\}/m.exec(shell)?.[0];
 assert.ok(wrapper, "the test exercises all.sh's actual tooling wrapper");
 

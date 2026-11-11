@@ -177,7 +177,7 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
   assert.equal(p.total, 0);
   assert.equal(await withToken(async () => 42), 42);
   // What the tool spawns inherits the guard, so it does not ask again.
-  const child = await run("sh", ["-c", "echo $NTS_GATE_TOKEN_HELD"], {});
+  const child = await run("sh", ["-c", "echo $NTS_GATE_TOKEN_HELD"], {NTS_GATE_TOKEN_HELD:process.env.NTS_GATE_TOKEN_HELD});
   assert.equal(child.out.trim(), "1");
   p.close();
   // And a runner that is gone rejects rather than running untokened.

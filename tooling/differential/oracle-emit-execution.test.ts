@@ -676,7 +676,7 @@ test("nested children cannot overwrite an instrument event, and file executions 
     'src/main.ts':`import {spawnSync} from 'node:child_process';
 const children=process.argv.includes('bad')?['bad','good']:['good'];
 if(process.argv.includes('reverse'))children.reverse();
-for(const name of children){const result=spawnSync(process.execPath,[...process.execArgv,new URL('../'+name+'.mjs',import.meta.url).pathname],{encoding:'utf8',env:${testEnvironmentHandoff()}});if(result.status!==0)throw Error(result.stderr);}
+for(const name of children){const result=spawnSync(process.execPath,[...process.execArgv,new URL('../'+name+'.mjs',import.meta.url).pathname],{encoding:'utf8',env:${testEnvironmentHandoff(["NTS_ORACLE_EMIT_MANIFEST","NTS_ORACLE_EMIT_STATUS","NTS_ORACLE_SNAPSHOT"])}});if(result.status!==0)throw Error(result.stderr);}
 console.log('completed');
 `,
     'bad.mjs':"try{await import('./unprepared.ts')}catch{}\n",

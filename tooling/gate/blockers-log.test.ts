@@ -14,7 +14,7 @@ function harness(t: {after:(fn:()=>void)=>void}) {
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const dir of ["tooling/gate","bin","run","tmp"])mkdirSync(join(root,dir),{recursive:true});
   const shell=join(root,"tooling/gate/all.sh");
-  copyFileSync(process.env.NTS_BLOCKERS_SHELL??join(HERE,"all.sh"),shell);
+  copyFileSync(join(HERE,"all.sh"),shell);
   writeFileSync(join(root,"bin/node"),`#!${process.execPath}
 const fs=require('node:fs');
 async function main(){

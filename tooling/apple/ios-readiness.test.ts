@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { newTestScratch } from "../gate/test-scratch.ts";
 
-const runner = process.env.NTS_TEST_IOS_RUNNER ?? fileURLToPath(new URL("./run-ios.sh", import.meta.url));
+const runner = fileURLToPath(new URL("./run-ios.sh", import.meta.url));
 const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 
 function fixture(mode = "ok", initial = "Shutdown") {
@@ -185,7 +185,7 @@ test("successful interop retains only the named stage clocks", () => {
   ];
   try {
     mkdirSync(gate, { recursive: true });
-    copyFileSync(process.env.NTS_TEST_INTEROP_GATE ?? join(source, "all.sh"), join(gate, "all.sh"));
+    copyFileSync(join(source, "all.sh"), join(gate, "all.sh"));
     for (const name of ["costs.mjs", "token.sh"]) copyFileSync(join(source, name), join(gate, name));
     chmodSync(join(gate, "token.sh"), 0o755);
     for (const name of ["ios-clock", "native-control"]) {

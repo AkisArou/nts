@@ -58,7 +58,7 @@ const budget=mode==='timeout'||mode==='memory-cap';
 const requests=[{key:'case',options:{entry:join(root,'input.ts'),directory:join(root,'emit')}}];
 if(budget)requests.push({key:'next',options:{entry:join(root,'next.ts'),directory:join(root,'following')}});
 const prepare=()=>prepareOracles(requests,{
-  directory:join(root,'preparation'),toolchain:root,workers:1,env:${testEnvironmentHandoff(["NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])},memoryBytes:mode==='memory-cap'?128*2**20:2*2**30});
+  directory:join(root,'preparation'),toolchain:root,workers:1,env:${testEnvironmentHandoff(["NTS_MEMORY_RESERVATION","NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])},memoryBytes:mode==='memory-cap'?128*2**20:2*2**30});
 if(mode==='pressure'){
   await assert.rejects(prepare(),error=>{
     assert.ok(error instanceof PressureError,String(error));
@@ -140,7 +140,7 @@ const {prepareOracles,ORACLE_COMPILE_MEMORY_BYTES}=await import(${JSON.stringify
 const {closeMemoryRun}=await import(${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)});
 try{
   const members=await prepareOracles(['one','two'].map(key=>({key,options:{entry:join(root,key+'.ts'),directory:join(root,mode,key)}})),{
-    directory:join(root,mode,'preparation'),toolchain:root,workers:1,env:${testEnvironmentHandoff(["NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])}});
+    directory:join(root,mode,'preparation'),toolchain:root,workers:1,env:${testEnvironmentHandoff(["NTS_MEMORY_RESERVATION","NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])}});
   assert.ok(members.one.prepared);assert.ok(members.two.prepared);assert.equal(commands,2);
   for(const ordinal of [0,1]){
     const path=join(root,mode,'preparation','request-'+ordinal,'project-0');

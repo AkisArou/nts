@@ -2,14 +2,15 @@
 // policy. Everything writable belongs to this environment's fixture lifetime.
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
-import {join} from 'node:path';
+import {delimiter,join} from 'node:path';
 import {ENVIRONMENT_CONTEXT,FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary,type GateEnvironmentContext} from './canonical-environment.ts';
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {assertRunTemporary,removable} from './run-temporary.ts';
+import {toolchainDirectories} from './toolchain.ts';
 
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
-  'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_GATE_CASE_COSTS_DIR'] as const;
+  'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_GATE_CASE_COSTS_DIR','NTS_CHECKERS'] as const;
 const HOST = new Set<string>(HOST_CAPABILITIES);
 const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TMPDIR','NODE_COMPILE_CACHE',
   'GIT_CONFIG_GLOBAL','GIT_CONFIG_SYSTEM','GIT_CONFIG_NOSYSTEM','GIT_TERMINAL_PROMPT',
@@ -24,7 +25,7 @@ process.once('exit',()=>{
 /** Only allowlisted tools come from the caller. Policy, Git settings and
  * writable directories are supplied here or explicitly by the fixture. */
 export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
-  const env:NodeJS.ProcessEnv={...FIXED_AMBIENT};
+  const env:NodeJS.ProcessEnv={...FIXED_AMBIENT,NTS_CHECKERS:'1'};
   for(const name of HOST_CAPABILITIES)if(name!=='HOME'&&source[name]!==undefined)env[name]=source[name];
   const account=userInfo().homedir;
   env.CARGO_HOME??=join(account,'.cargo');env.RUSTUP_HOME??=join(account,'.rustup');
@@ -63,6 +64,7 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   ownTemporary(root,env);
   env.NTS_GATE_RUN_DIR=root;
   assignTestValues(env,owned);
+  if(owned.PATH===undefined)env.PATH=[...toolchainDirectories(process.execPath,env),...(env.PATH?[env.PATH]:[])].join(delimiter);
   if(context){
     const next=JSON.parse(env[ENVIRONMENT_CONTEXT]!) as GateEnvironmentContext;
     for(const [name,value] of Object.entries(owned)){
