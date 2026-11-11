@@ -2,11 +2,11 @@
   "version": 1,
   "node": "v26.13.0",
   "bun": {
-    "version": "1.4.4-canary.1+3a9ea0043",
-    "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
-    "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c",
-    "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
-    "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21"
+    "version": "1.4.4-canary.1+89452d2ac",
+    "commit": "89452d2ac13773aee8a6d632c4c30074bd1bb4fa",
+    "webkitCommit": "873ab3a426f858450b4bdba51e230f79a8feec85",
+    "path": "pins/bun-89452d2ac13773aee8a6d632c4c30074bd1bb4fa/bun",
+    "sha256": "016caa84e2b1bd3ead0be5d5d961bd6bee3f54c55d2172732311130df66006a1"
   },
   "scriptc": {
     "version": "0.4.5",
