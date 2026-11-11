@@ -11,10 +11,14 @@
 // summary.json the runner keeps.
 //
 // **Memory is the machine's memory ledger's to give** (tooling/gate/
-// memory-ledger.ts), at the landing check's priority, ahead of agents' work
-// and the full check (NTS_MEMORY_PRIORITY). The build waits its turn for what
-// this tree's landing builds held, in a reservation this process holds; the
-// runner's first request takes it over, and the runner holds the steps'.
+// memory-ledger.ts), at the priority the caller names (NTS_MEMORY_PRIORITY):
+// the service's runs at the landing priority, ahead of agents' work and the
+// full check, and an agent's own `--here` pre-check at the agent priority, so
+// a queued landing takes the memory a pre-check reserved but does not use
+// instead of waiting at one priority for the pre-check to finish (#672). The
+// build waits its turn for what this tree's landing builds held, in a
+// reservation this process holds; the runner's first request takes it over,
+// and the runner holds the steps'.
 //
 // **Memory pressure is a wait, never a verdict.** A step the runner reports as
 // an instrument failure of kind memory-pressure runs again, alone, in a run
@@ -41,7 +45,7 @@ import { nodeToolchain } from "../gate/toolchain.ts";
 import { candidateCommand } from "./candidate-environment.ts";
 import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
-import { reserveJob, type Reservation } from "../gate/memory-ledger.ts";
+import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
 
 export const PROFILE = "nts-dev";
 export type StepResult = {
@@ -57,6 +61,8 @@ export type RunOptions = {
   interop?: string | null; doctests?: string | null;
   /** The launcher's environment: only its host capabilities reach a step. */
   env?: NodeJS.ProcessEnv;
+  /** The priority this run reserves memory at: the service's landings by default; `check.ts --here` names an agent's. */
+  priority?: Priority;
   /** Told when memory pressure sends steps back to run again. */
   hold?: (reason: string) => void;
   /** The command that builds the compiler; cargo in `nts-dev` by default. */
@@ -106,7 +112,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
     NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
     CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, ...STANDING_GATE_POLICY,
-    NTS_MEMORY_PRIORITY: "landing",
+    NTS_MEMORY_PRIORITY: options.priority ?? "landing",
     // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
     ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
     ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),

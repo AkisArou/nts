@@ -72,6 +72,8 @@ async function here(root: string, sha: string): Promise<number> {
   const run = join(LANDING_HOME, "runs", `here-${short(sha)}-${Date.now()}`);
   say(`${note}: ${steps.join(" ")} in ${tree}, estimate ~${Math.round(selected.selection.estimate.seconds)} s; logs ${run}`);
   const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
+    // An agent's own pre-check: it yields its unused reservation to a queued landing (#672).
+    priority: "agent",
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
   for (const line of ran.pending) console.log(`  ${line}`);

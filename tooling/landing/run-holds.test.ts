@@ -6,14 +6,14 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
 import {once} from "node:events";
-import {mkdirSync,readFileSync,writeFileSync} from "node:fs";
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {PROFILE,pendingLines,runLanding} from "./run.ts";
 import {gib,jobSizing,readLedger} from "../gate/memory-ledger.ts";
 import {STEPS} from "../gate/step-table.mjs";
 import {peakReservation} from "../gate/step-scheduling.ts";
-import {waitFor} from "../gate/test-wait.ts";
+import {spawnTest,waitFor} from "../gate/test-wait.ts";
 import {fixture,HOLDER} from './run-fixture.ts';
 
 test("memory the run waits for is a hold, never a verdict: the build waits its turn in the ledger, at the landing check's priority, and its gate run takes its reservation over", async t => {
@@ -49,6 +49,57 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   assert.doesNotMatch(gate, /memory: .* drew /, "what it takes over it does not also draw on");
   assert.deepEqual(await ended, [0, null], "the holder ended once the build asked");
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] }, "and nothing of the landing is left in the ledger");
+});
+
+test("a --here run at the agent priority yields its unused reservation to a service run on one ledger", async t => {
+  const here = fixture(t), service = fixture(t);
+  // Both builds reserve what this shared history held, 56 GiB in all: on
+  // the fixture's 61 GiB reading, two such grants cannot both count whole
+  // (61 less the system's 2 GiB floor), so the service run is admitted
+  // only over the part of the --here grant its build is not using.
+  const workers = STEPS.find(row => row.name === "build")!.slots, history = join(here.memory.NTS_GATE_COSTS_DIR, "steps.json");
+  mkdirSync(here.memory.NTS_GATE_COSTS_DIR, { recursive: true });
+  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(56 * 2 ** 30 / workers / 1.25)] } } }) + "\n");
+  const shared = { NTS_GATE_SLOTS: "4", ...here.memory };
+  const entryOf = (path: string) => `import {copyFileSync} from "node:fs";import {join} from "node:path";copyFileSync(join(process.env.NTS_MEMORY_LEDGER,"admitted",process.env.NTS_MEMORY_RESERVATION+".json"),${JSON.stringify(path)});`;
+  const hereEntry = join(here.own, "here-entry.json"), serviceEntry = join(here.own, "service-entry.json");
+  const started = join(here.own, "here-started"), release = join(here.own, "here-release");
+  const holding = `${entryOf(hereEntry)}import {existsSync,watch,writeFileSync} from "node:fs";import {dirname} from "node:path";` +
+    `writeFileSync(${JSON.stringify(started)},"x");await new Promise(resolve=>{const done=()=>{if(existsSync(${JSON.stringify(release)})){watcher.close();resolve();}};const watcher=watch(dirname(${JSON.stringify(release)}),done);done();});`;
+  // The --here run runs in a process of its own: its build is spawned
+  // synchronously by runLanding, so in this process it would freeze the
+  // service run out of its own event loop rather than out of memory.
+  const hereResult = join(here.own, "here-result.json");
+  const commit = spawnTest("git", ["-C", here.tree, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  const child = spawn(process.execPath, ["--input-type=module", "-e",
+    `import {runLanding} from ${JSON.stringify(new URL("./run.ts", import.meta.url).href)};` +
+    `import {writeFileSync} from "node:fs";` +
+    `const ran=await runLanding({tree:${JSON.stringify(here.tree)},target:${JSON.stringify(here.target)},run:${JSON.stringify(here.run)},commit:${JSON.stringify(commit)},steps:["build"],priority:"agent",` +
+    `env:{...process.env,HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
+    `writeFileSync(${JSON.stringify(hereResult)},JSON.stringify({state:ran.state}));`],
+    { env: { ...process.env }, stdio: ["ignore", "ignore", "pipe"] });
+  let childStderr = "";
+  child.stderr.setEncoding("utf8").on("data", (data: string) => { childStderr += data; });
+  const childEnded = once(child, "exit");
+  try {
+    await waitFor("the --here build to hold its reservation", () => existsSync(started),
+      { stopped: () => child.exitCode !== null || child.signalCode !== null ? `the --here run exited ${child.exitCode ?? child.signalCode}: ${childStderr}` : undefined });
+    assert.equal((JSON.parse(readFileSync(hereEntry, "utf8")) as { priority: string }).priority, "agent");
+
+    const serviceRan = await runLanding(service.options(["build"], { owned: shared, build: [process.execPath, "--input-type=module", "-e", entryOf(serviceEntry)] }));
+    assert.equal(serviceRan.state, "green", serviceRan.message);
+    assert.equal((JSON.parse(readFileSync(serviceEntry, "utf8")) as { priority: string }).priority, "landing");
+    assert.equal(child.exitCode, null, "the service run was admitted over the --here run's unused memory, without it ending");
+
+    writeFileSync(release, "x");
+    assert.deepEqual(await childEnded, [0, null], childStderr);
+    assert.equal((JSON.parse(readFileSync(hereResult, "utf8")) as { state: string }).state, "green");
+    assert.deepEqual(readLedger(here.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] });
+  } finally {
+    try { writeFileSync(release, "x"); } catch { /* the fixture is gone */ }
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await childEnded.catch(() => {});
+  }
 });
 
 test("a tree with no history admits its landing build by live use, without guessing a share per cargo job", async t => {
