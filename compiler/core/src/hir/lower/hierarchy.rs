@@ -197,7 +197,7 @@ pub(super) struct Hierarchy {
     /// `Shared::whole_program` on its own clone, because the answer comes from
     /// `raising_copies` and that runs after `collect_hierarchy` -- so the field is
     /// `false` in the hierarchy the module-scope probe uses, which asks nothing of it.
-    /// See [`what_holds_the_gate_off`](super::what_holds_the_gate_off).
+    /// See [`what_holds_the_gate_off`](super::raising_copies::what_holds_the_gate_off).
     pub(super) closures_carry: bool,
     /// Where [`Self::closures_carry`] is off, which closure holds it off and the
     /// call that does: [`Naming::gate_holder`](super::Naming::gate_holder), carried here for the refusal.
