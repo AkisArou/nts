@@ -166,7 +166,7 @@ pub(super) enum ClosureSource {
     ModuleJob { module: usize },
     /// The function `f.bind(r, ...bound)` makes: it holds `f`, `r` and the bound
     /// arguments, and calls `f` with `r` as its `this` and the bound arguments
-    /// before its own. The node is the call. See [`bound_functions`](super::bound_functions).
+    /// before its own. The node is the call. See [`bound_functions`](fn@super::bound_functions).
     Bound,
 }
 
