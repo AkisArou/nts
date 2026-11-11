@@ -100,6 +100,7 @@ export const STEPS = [
   // units its tests start included) used 1,755 CPU s over 116 s, 15 cores. Its
   // files averaged 18 at once, but a file spends part of its wall waiting on
   // what it started, and a slot is a share of a budget sized in cores.
+  { name: "test-host", slots: 1, treeOnly: true, doc: "test dependencies obey host observation ownership" },
   { name: "tooling", slots: 15, doc: "the gate's own tools pass their tests", capabilities: ["jvm", "android"] },
   { name: "primitives", slots: 1, treeOnly: true, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, lock: "cargo", after: ["build"], doc: "cargo test --workspace",

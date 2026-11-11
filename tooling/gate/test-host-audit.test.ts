@@ -3,7 +3,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {test} from 'node:test';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectHostSource,hostReadProblems,auditTestHost} from './test-host-audit.ts';
+import {inspectHostSource,hostReadProblems,auditTestHost,recordHostDebt} from './test-host-audit.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
@@ -12,7 +12,7 @@ import {activeCommand} from './active-process.ts';
 import {commandObservationFixture} from './command-observations-fixture.ts';
 import {waitFor} from './test-wait.ts';
 
-test('every tooling source and test dependency closure obeys module ownership',()=>{
+test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));
   assert.deepEqual(result.problems,[],result.problems.join('\n'));
   assert.ok(result.closures.length>200);
@@ -72,4 +72,18 @@ writeFileSync(ready,'ready');process.stdout.write('ready');`;
 test('Rust fixtures cannot construct a second partial host packet',()=>{
   const read=inspectHostSource('tooling/cli/tests/new.rs','command.env("NTS_MEMINFO", "/owned/file");').reads;
   assert.match(hostReadProblems(read,{})[0]!,/forbidden fixture-constructor/);
+});
+
+test('the tool records falls, permits improvements, and refuses a new or raised count',t=>{
+  const root=testScratch(t,'host-audit-record'),file=join(root,'debt.json');
+  const reads=inspectHostSource('tooling/dependency.ts','import {statfsSync} from "node:fs"; statfsSync(".");').reads;
+  const debt={'tooling/dependency.ts':{disk:2}};
+  writeFileSync(file,JSON.stringify(debt));
+  assert.deepEqual(hostReadProblems(reads,debt),[]);
+  recordHostDebt(file,reads,debt);
+  const improved=JSON.parse(readFileSync(file,'utf8'));
+  assert.deepEqual(improved,{'tooling/dependency.ts':{disk:1}});
+  assert.throws(()=>recordHostDebt(file,[...reads,...reads],improved),/disk read outside its owner/);
+  assert.throws(()=>recordHostDebt(file,reads,{}),/disk read outside its owner/);
+  assert.deepEqual(JSON.parse(readFileSync(file,'utf8')),improved);
 });

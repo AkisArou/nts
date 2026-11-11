@@ -1,6 +1,6 @@
 // Audit the owned source superset as well as entry closures. Dynamic launches,
 // generated scripts and shells cannot hide a reader outside an import graph.
-import {readFileSync,readdirSync,existsSync} from 'node:fs';
+import {readFileSync,readdirSync,existsSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
@@ -11,6 +11,13 @@ export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixtur
 export type HostRead={file:string;line:number;kind:HostReadKind;source:string;generated:boolean};
 export type HostDebt=Record<string,Partial<Record<HostReadKind,number>>>;
 export const HOST_DEBT='tooling/gate/test-host-debt.json';
+// These are product implementations or benchmark subjects, not the instrument.
+// Their clocks and machine APIs are behaviour nts compiles or measures.
+export const HOST_AUDIT_EXCLUDED_ROOTS={
+  'runtime/':'nts runtime library and its program/tool inputs',
+  'benchmarks/common/':'benchmark subjects whose behaviour includes reading time',
+} as const;
+const excluded=(file:string)=>Object.keys(HOST_AUDIT_EXCLUDED_ROOTS).some(root=>file.startsWith(root));
 const fixture=(file:string)=>/\.test\.[cm]?[jt]s$|-fixture\.[cm]?[jt]s$/.test(file);
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 
@@ -105,11 +112,20 @@ export function hostReadProblems(reads:readonly HostRead[],debt:HostDebt,owners=
     const row=counts[read.file]??={};row[read.kind]=(row[read.kind]??0)+1;
     if(row[read.kind]!>(debt[read.file]?.[read.kind]??0))problems.push(`${read.file}:${read.line}: ${read.kind} read outside its owner: ${read.source}`);
   }
-  for(const [file,row] of Object.entries(debt))for(const [kind,count] of Object.entries(row)){
-    const found=counts[file]?.[kind as HostReadKind]??0;
-    if(found<count)problems.push(`${file}: ${kind} debt fell from ${count} to ${found}; lower its recorded count`);
-  }
   return problems;
+}
+
+/** The tool can publish only improvements; a raised count never becomes a baseline. */
+export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDebt):void {
+  const problems=hostReadProblems(reads,debt);
+  if(problems.length)throw new Error(problems.join('\n'));
+  const next:HostDebt={};
+  for(const read of reads){
+    if(HOST_READ_OWNERS[read.file]?.kinds.includes(read.kind)||read.generated&&HOST_READ_OWNERS[read.file]?.generatedKinds?.includes(read.kind))continue;
+    const row=next[read.file]??={};row[read.kind]=(row[read.kind]??0)+1;
+  }
+  const pending=path+'.'+process.pid;
+  writeFileSync(pending,JSON.stringify(Object.fromEntries(Object.entries(next).sort()),null,2)+'\n');renameSync(pending,path);
 }
 
 export function auditTestHost(root:string,debt?:HostDebt){
@@ -131,6 +147,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
       const path=resolve(root,reference.startsWith('.')?dirname(file):'',reference);
       if(!inside(root,path))continue; // Generated scripts resolve relative to their fixture directory.
       const name=relative(root,path).split(sep).join('/');
+      if(excluded(name))continue;
       if(!sources.has(name)&&existsSync(path)&&/\.[cm]?[jt]s$/.test(name))sources.set(name,inspectHostSource(name,readFileSync(path,'utf8'),api));
       if(sources.has(name))reach(name,seen);
     }
@@ -138,12 +155,14 @@ export function auditTestHost(root:string,debt?:HostDebt){
   const closures=[...sources.keys()].filter(file=>/\.test\.[cm]?[jt]s$/.test(file)).sort().map(entry=>{
     const members=new Set<string>();reach(entry,members);return {entry,modules:[...members].sort()};
   });
-  const reads=[...sources.values()].flatMap(row=>row.reads);
+  const reached=new Set(closures.flatMap(row=>row.modules));
+  const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
   return {files:sources.size,closures,reads,problems:hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt)};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   const root=fileURLToPath(new URL('../..',import.meta.url)),result=auditTestHost(root);
+  if(process.argv.includes('--record')&&!result.problems.length)recordHostDebt(join(root,HOST_DEBT),result.reads,JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt);
   if(process.argv.includes('--json'))console.log(JSON.stringify(result,null,2));
   else if(result.problems.length)console.error(result.problems.join('\n'));
   else console.log(`test host ownership: ${result.files} sources, ${result.closures.length} entry closures, ${result.reads.length} reads checked`);

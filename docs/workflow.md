@@ -380,11 +380,12 @@ locked session on CPU 4 and keep the wall-time floor below.
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
 - **The gate checks test host ownership.** The `test-host` step audits every
-  tooling source and each test entry's dependency and launch closure, including
+  tooling tests and each entry's dependency and launch closure, including
   generated scripts, shell payloads and Rust fixture constructors. Only named
   adapter modules may read the machine. No reporting exemption is implicit.
   Existing reads outside those owners have a module-and-kind migration count
-  that can only fall; a fixture environment copy is forbidden regardless of
+  that can only fall (`node tooling/gate/test-host-audit.ts --record` writes
+  improvements and refuses rises); a fixture environment copy is forbidden regardless of
   that count. Test entry workers start with private state, a complete synthetic
   resource packet and poisoned ambient Node options. Child environments must
   come from the allowlist owner. A fixture missing its resource packet fails

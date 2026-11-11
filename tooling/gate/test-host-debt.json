@@ -1,39 +1,9 @@
 {
-  "benchmarks/common/bench.mjs": {
-    "clock": 12
-  },
-  "runtime/chromium/embedder/program/check.ts": {
-    "environment": 1
-  },
-  "runtime/ecmascript/tools/icu.ts": {
-    "environment": 1
-  },
-  "runtime/node/buffer/src/blob.ts": {
-    "clock": 1
-  },
-  "runtime/node/fs/src/options.ts": {
-    "clock": 1
-  },
-  "runtime/node/http/src/server.ts": {
-    "clock": 3
-  },
-  "runtime/node/internal/bindings.node.mjs": {
-    "clock": 1
-  },
-  "runtime/node/readline/src/interface.ts": {
-    "clock": 4
-  },
-  "runtime/node/zlib/src/zip/entry.ts": {
-    "clock": 1
-  },
   "tooling/agents/agents.test.ts": {
     "kernel": 1
   },
   "tooling/android/dex-record.ts": {
     "environment": 1
-  },
-  "tooling/apple/build-libuv.sh": {
-    "kernel": 2
   },
   "tooling/bench/build-records.ts": {
     "machine": 1
@@ -46,17 +16,8 @@
   "tooling/bench/layouts-admission.ts": {
     "kernel": 7
   },
-  "tooling/bench/layouts-interval-run.ts": {
-    "clock": 1,
-    "kernel": 1
-  },
   "tooling/bench/layouts-link.ts": {
     "disk": 1
-  },
-  "tooling/bench/layouts-measure.ts": {
-    "kernel": 3,
-    "disk": 1,
-    "environment": 1
   },
   "tooling/bench/layouts-native.ts": {
     "kernel": 2,
@@ -70,40 +31,15 @@
   "tooling/census/conformance262.ts": {
     "clock": 4
   },
-  "tooling/census/contents.ts": {
-    "kernel": 2,
-    "disk": 1,
-    "environment": 1
-  },
   "tooling/census/definitions.ts": {
     "environment": 1,
     "clock": 2
-  },
-  "tooling/census/erased-calls.ts": {
-    "environment": 1
-  },
-  "tooling/census/fixtures/resident-serial.ts": {
-    "kernel": 1
   },
   "tooling/census/fixtures/resident-worker.ts": {
     "kernel": 1
   },
   "tooling/census/full-plan.ts": {
     "clock": 1
-  },
-  "tooling/census/messages.ts": {
-    "environment": 1,
-    "clock": 2
-  },
-  "tooling/census/node-deps-cost.ts": {
-    "environment": 1,
-    "kernel": 2,
-    "clock": 2
-  },
-  "tooling/census/node-deps-target-cost.ts": {
-    "kernel": 3,
-    "clock": 2,
-    "environment": 1
   },
   "tooling/census/node-refusals.ts": {
     "environment": 1
@@ -118,18 +54,7 @@
     "environment": 1,
     "clock": 2
   },
-  "tooling/census/rerun.ts": {
-    "environment": 1
-  },
-  "tooling/census/semantic-codes.ts": {
-    "machine": 1,
-    "environment": 1,
-    "clock": 2
-  },
   "tooling/census/suites/typescript.ts": {
-    "environment": 1
-  },
-  "tooling/census/test262.ts": {
     "environment": 1
   },
   "tooling/census/typescript-oracles.ts": {
@@ -146,40 +71,15 @@
     "kernel": 2,
     "clock": 2
   },
-  "tooling/chromium/app.ts": {
-    "environment": 1
-  },
-  "tooling/chromium/benchmark.ts": {
-    "clock": 3,
-    "kernel": 7
-  },
   "tooling/chromium/browser.ts": {
     "clock": 4
-  },
-  "tooling/chromium/chromium.ts": {
-    "disk": 1,
-    "environment": 1,
-    "kernel": 1
-  },
-  "tooling/chromium/kernel-count.ts": {
-    "kernel": 1,
-    "clock": 2
-  },
-  "tooling/chromium/probe.ts": {
-    "environment": 1
   },
   "tooling/chromium/processes.ts": {
     "kernel": 3
   },
-  "tooling/chromium/profiles.ts": {
-    "kernel": 2
-  },
   "tooling/chromium/smoke.ts": {
     "clock": 2,
     "kernel": 2
-  },
-  "tooling/conformance/agreement.mjs": {
-    "environment": 1
   },
   "tooling/conformance/assembles.ts": {
     "environment": 1,
@@ -188,24 +88,12 @@
   "tooling/conformance/audit.mjs": {
     "environment": 1
   },
-  "tooling/conformance/binding-probe.sh": {
-    "kernel": 1
-  },
-  "tooling/conformance/blocker-reach.mjs": {
-    "environment": 1
-  },
   "tooling/conformance/blockers-check.mjs": {
-    "environment": 2
-  },
-  "tooling/conformance/blockers.mjs": {
     "environment": 2
   },
   "tooling/conformance/c-compiles.mjs": {
     "environment": 1,
     "clock": 4
-  },
-  "tooling/conformance/cascade-reach.mjs": {
-    "environment": 1
   },
   "tooling/conformance/common.mjs": {
     "kernel": 1,
@@ -215,25 +103,7 @@
     "kernel": 1,
     "environment": 1
   },
-  "tooling/conformance/differential-corpora.mjs": {
-    "machine": 4
-  },
-  "tooling/conformance/differential-ts.mjs": {
-    "environment": 1
-  },
-  "tooling/conformance/double-claimed.mjs": {
-    "environment": 1
-  },
-  "tooling/conformance/ecmascript/test262.ts": {
-    "clock": 1
-  },
-  "tooling/conformance/emitted-diff.ts": {
-    "clock": 4
-  },
   "tooling/conformance/expect-ir.ts": {
-    "environment": 1
-  },
-  "tooling/conformance/export-reach.mjs": {
     "environment": 1
   },
   "tooling/conformance/fuzz-runtime.mjs": {
@@ -251,12 +121,6 @@
     "clock": 5,
     "environment": 1
   },
-  "tooling/conformance/last-mile.mjs": {
-    "environment": 1
-  },
-  "tooling/conformance/merged-layouts.mjs": {
-    "environment": 1
-  },
   "tooling/conformance/node-preloads.test.ts": {
     "kernel": 1
   },
@@ -269,39 +133,15 @@
   "tooling/conformance/outcomes-oracle.ts": {
     "environment": 1
   },
-  "tooling/conformance/phantoms.mjs": {
-    "environment": 1
-  },
   "tooling/conformance/pin.ts": {
     "clock": 4,
-    "environment": 1
-  },
-  "tooling/conformance/probe-compare.mjs": {
-    "clock": 2,
-    "machine": 5,
-    "disk": 3
-  },
-  "tooling/conformance/refusal-census.mjs": {
-    "environment": 1
-  },
-  "tooling/conformance/refusal-diff.ts": {
     "environment": 1
   },
   "tooling/conformance/run.mjs": {
     "kernel": 7
   },
-  "tooling/conformance/sweep.mjs": {
-    "environment": 8,
-    "clock": 3
-  },
   "tooling/conformance/types-check.mjs": {
     "environment": 1,
-    "clock": 2
-  },
-  "tooling/conformance/unconditional-expectations.mjs": {
-    "environment": 1
-  },
-  "tooling/conformance/web-platform/json-bench.ts": {
     "clock": 2
   },
   "tooling/differential/agree.mjs": {
@@ -346,10 +186,6 @@
   },
   "tooling/differential/oracle-runtime.ts": {
     "clock": 4,
-    "kernel": 2
-  },
-  "tooling/differential/program-oracle-worker.ts": {
-    "environment": 1,
     "kernel": 2
   },
   "tooling/differential/program-oracles.ts": {
@@ -401,9 +237,6 @@
   "tooling/gate/case-costs.ts": {
     "kernel": 1,
     "clock": 2
-  },
-  "tooling/gate/claim-record.sh": {
-    "kernel": 1
   },
   "tooling/gate/compile-counter-calibrate.ts": {
     "clock": 2
@@ -555,8 +388,5 @@
   },
   "tooling/records/record-pending.ts": {
     "environment": 1
-  },
-  "tooling/windows/build-libuv.sh": {
-    "kernel": 2
   }
 }
