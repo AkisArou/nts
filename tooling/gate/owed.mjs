@@ -204,6 +204,7 @@ export const LANDING = {
   // The form of `tests` a change to a crate's comments owes.
   doctests: { form: "as-is" },
   tooling: { form: "as-is" },
+  "test-host": { form: "tree" },
   // The pin, the inventory and the features audit: seconds, and what a change
   // to a feature's classification owes for what it classified.
   test262: { form: "as-is" },
@@ -344,6 +345,7 @@ export const ASKS = {
   "old-paths": ["hygiene", "does anything sit or point where the corpora used to be"],
   reformat: ["hygiene", "no whitespace-only diffs"],
   tooling: ["valid", "do the gate's own tools pass their tests (tokens, owed)"],
+  "test-host": ["hygiene", "do tooling tests and their dependencies obey host observation ownership"],
 };
 
 /** The comparisons a lowering change owes, each with the question only it answers. */
@@ -361,6 +363,7 @@ const COMPARE = [
  * than dropped.
  */
 export const RULES = [
+  { name: "test host observation ownership", when: p => p.startsWith("tooling/") || /^(compiler|runtime)\/.*\.rs$/.test(p), settled: true, steps: ["test-host"], arms: [] },
   { name: "tooling test collection policy", when: p => p === TOOLING_TEST_EXCLUSIONS, full: true, wide: true, steps: [], arms: [] },
   { name: "owner-emission cost reports", when: p => /^tooling\/gate\/owner-emission-calls(?:\.test)?\.ts$/.test(p), settled: true, steps: ["tooling"], arms: [] },
   { name: "tooling test discovery", when: p => p === "tooling/gate/tooling-discovery.ts", settled: true, steps: ["tooling"], arms: [] },
@@ -1788,7 +1791,7 @@ export function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 10).join(" ") !== "build clippy tests rustfmt old-paths program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 11).join(" ") !== "build clippy tests rustfmt old-paths test-host program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;

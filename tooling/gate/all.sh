@@ -2561,6 +2561,7 @@ tooling_tests() {
   return $status
 }
 step "tooling" tooling_tests
+step "test-host" node tooling/gate/test-host-audit.ts
 step "integrity-runtime" integrity_runtime
 step "assembles" assembles
 # HIR and identical cached C do not prove the generated C compiles. The addon

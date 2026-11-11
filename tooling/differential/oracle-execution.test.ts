@@ -11,6 +11,7 @@ import {closeMemoryRun} from '../census/worker-memory.ts';
 import {COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,CommandNotMeasuredError} from '../gate/active-command.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {testScratch} from '../gate/test-scratch.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {ORACLE_HEAP_FLAGS,ORACLE_PLANNER_LIMITS,oracleChildProblem,oracleExecutionLimits,oracleNode,runOracleCommand,runOraclePlanner,v8HeapStop} from './oracle-execution.ts';
 import {ORACLE_EXECUTION_POLICY as policy} from './oracle-execution-policy.ts';
@@ -20,9 +21,9 @@ test('the recorder and native launcher share the stated population policy',()=>{
   assert.deepEqual(oracleExecutionLimits('benchmarks/cases/subject/case.ts'),{cpuSeconds:60,residentBytes:2*2**30});
   assert.deepEqual(oracleExecutionLimits('tests/programs/subject/main.ts'),{cpuSeconds:15,residentBytes:2*2**30});
 });
-test('virtual reservation alone does not exhaust the oracle resident scope',async()=>{
+test('virtual reservation alone does not exhaust the oracle resident scope',async t=>{
   const source=`const m=new WebAssembly.Memory({initial:1,maximum:65536}); const fs=await import('node:fs'); console.log(fs.readFileSync('/proc/self/status','utf8').match(/^VmSize:\\s+(\\d+)/m)[1]); console.log(m.buffer.byteLength);`;
-  const result=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'--input-type=module','-e',source],{source:'benchmarks/cases/private/case.ts',env:testEnvironment()});
+  const result=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'--input-type=module','-e',source],{source:'benchmarks/cases/private/case.ts',env:fixtureEnvironment(t,ownMemory(testScratch(t,'oracle-virtual'),{resident:{kind:'live'}}))});
   assert.equal(result.run.status,0,result.run.stderr);assert.equal(result.budget,undefined);
   assert.ok(Number(result.run.stdout.split('\n')[0])*1024>2*2**30,'more than 2 GiB is reserved virtually');
   assert.ok(result.residentPeakBytes<2*2**30);
@@ -41,14 +42,15 @@ mock.module(activeURL,{namedExports:{...real,activeCommand:async(command,args,op
 }}});
 const {runOracleCommand,ORACLE_HEAP_FLAGS}=await import(${JSON.stringify(new URL('./oracle-execution.ts',import.meta.url).href)});
 const {closeMemoryRun}=await import(${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)});
-try{console.log(JSON.stringify(await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','process.exit(127)'],{source:'private',env:process.env,limits:{cpuSeconds:0.1,residentBytes:2*2**30}})));}
+const {testEnvironment}=await import(${JSON.stringify(new URL('../gate/test-environment.ts',import.meta.url).href)});
+try{console.log(JSON.stringify(await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','process.exit(127)'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:0.1,residentBytes:2*2**30}})));}
 finally{closeMemoryRun();}
 `);
   const control=spawnTest(process.execPath,['--experimental-test-module-mocks',script],{encoding:'utf8',env:fixtureEnvironment(t)},'supplied oracle CPU boundary');
   assert.equal(control.status,0,control.stdout+control.stderr);
   const timed=JSON.parse(control.stdout);
   assert.equal(timed.budget?.outcome,'timeout');assert.equal(timed.budget?.bound,0.1);
-  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(Buffer.alloc(16*1024*1024,1));'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:15,residentBytes:128*2**20}});
+  const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(Buffer.alloc(16*1024*1024,1));'],{source:'private',env:fixtureEnvironment(t,ownMemory(join(root,'resident'),{resident:{kind:'live'}})),limits:{cpuSeconds:15,residentBytes:128*2**20}});
   assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,128*2**20);
   const stopped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e',"process.kill(process.pid,'SIGABRT')"],{source:'private',env:testEnvironment()});
   assert.equal(stopped.budget,undefined,'an unproven signal is never a resident hit');

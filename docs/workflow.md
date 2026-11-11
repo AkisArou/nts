@@ -379,6 +379,16 @@ locked session on CPU 4 and keep the wall-time floor below.
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
+- **The gate checks test host ownership.** The `test-host` step audits every
+  tooling source and each test entry's dependency and launch closure, including
+  generated scripts, shell payloads and Rust fixture constructors. Only named
+  adapter modules may read the machine. No reporting exemption is implicit.
+  Existing reads outside those owners have a module-and-kind migration count
+  that can only fall; a fixture environment copy is forbidden regardless of
+  that count. Test entry workers start with private state, a complete synthetic
+  resource packet and poisoned ambient Node options. Child environments must
+  come from the allowlist owner. A fixture missing its resource packet fails
+  before the production adapter can run.
 - **Command supervision consumes observations.** `CommandLiveness` in
   `tooling/gate/command-liveness.ts` decides from output, CPU counters,
   busy/sleep state and monotonic time. `active-process.ts` owns the process
@@ -480,6 +490,8 @@ the first node task.
   ([log](records/notebooks/decisions-log.md#tests-own-their-view-of-the-host-11-11)).
   Command liveness is a pure decision over a complete supplied activity/clock
   capability; kernel group identity and readiness-based wiring stay separate.
+  The gate checks ownership across dependencies and generated launches, and
+  runs tooling entries with strict fixture observations and ambient poison.
 
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket

@@ -1,37 +1,13 @@
 // Test infrastructure: each run owns its complete resource observations,
 // memory ledger and scheduling history. Dependencies and samplers receive
 // the same NTS_HOST_OBSERVATIONS capability through gateEnvironment.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join,resolve } from "node:path";
 import {fileURLToPath} from "node:url";
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,type HostObservationFixture} from "./host-observations.ts";
+import {HOST_OBSERVATION_ENVIRONMENT} from "./host-observations.ts";
 import {assignTestValues,testEnvironment} from './test-environment.ts';
 
-export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],string>;
-
-/**
- * A memory reading, an empty ledger and an empty history under `dir`: by
- * default an ample machine, 61 GiB, all of it available, that pages nothing.
- * Called again, it changes the reading at once, as a reader polling it sees
- * it: whole, never half written.
- */
-export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, resident, clock }:
-  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock']} = {}): OwnMemory {
-  mkdirSync(dir, { recursive: true });
-  const meminfo = join(dir, "meminfo"), vmstat = join(dir, "vmstat");
-  writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
-  renameSync(`${meminfo}.next`, meminfo);
-  writeFileSync(`${vmstat}.next`, "pswpin 0\npswpout 0\n");
-  renameSync(`${vmstat}.next`, vmstat);
-  const capability=join(dir,'host-observations.json');
-  const previous:HostObservationFixture|undefined=existsSync(capability)?JSON.parse(readFileSync(capability,'utf8')):undefined;
-  const observations:HostObservationFixture={version:1,memory:{file:meminfo},paging:{file:vmstat},
-    disk:disk??previous?.disk??{freeBytes:2**40,freeInodes:2**30},
-    resident:resident??previous?.resident??{kind:'fixed',defaultBytes:0},
-    width:previous?.width??{logical:32,available:30},load:previous?.load??[0,0,0],clock:clock??previous?.clock??{kind:'live'}};
-  writeFileSync(capability+'.next',JSON.stringify(observations)+'\n');renameSync(capability+'.next',capability);
-  return { [HOST_OBSERVATIONS]:capability, NTS_MEMINFO: meminfo, NTS_VMSTAT: vmstat, NTS_MEMORY_LEDGER: join(dir, "ledger"), NTS_GATE_COSTS_DIR: join(dir, "costs") };
-}
+import {ownMemory,type OwnMemory} from './test-host-observations.ts';
+export {ownMemory,type OwnMemory} from './test-host-observations.ts';
 
 type Reading = Parameters<typeof ownMemory>[1];
 // What a test's own environment may carry from a gate step it runs in -- the

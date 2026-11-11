@@ -241,7 +241,8 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
       // Expected negative controls in test children must never overwrite it.
       const resultEnv={NTS_GATE_STEP_RESULT:process.env.NTS_GATE_STEP_RESULT,NTS_GATE_STEP:process.env.NTS_GATE_STEP,NTS_GATE_STEP_ATTEMPT:process.env.NTS_GATE_STEP_ATTEMPT};
       delete process.env.NTS_GATE_STEP_RESULT;delete process.env.NTS_GATE_STEP_ATTEMPT;
-      const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:request.execArgv,resultEnv});
+      const bootstrap=fileURLToPath(new URL('./test-host-bootstrap.ts',import.meta.url));
+      const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});
       const pending=`${request.complete}.${process.pid}`;writeFileSync(pending,JSON.stringify({version:2,nonce:request.nonce,...result})+"\n");renameSync(pending,request.complete);
       process.exitCode=result.status;
     } else if(args[0]===TOOLING_COLLECTOR_COMMAND[1]) {

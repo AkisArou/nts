@@ -2089,3 +2089,13 @@ name before a production account-home resolver can run. The fixture marker
 travels with the cache bundle; nested fixtures inherit only its declared
 entries. Node compile cache resolution is lazy, so importing an owner cannot
 read the account's cache behind a fixture's private HOME.
+
+### Test host ownership is checked across dependencies (11-11)
+
+The test-host gate step audits tooling source, generated children, shell
+launches and Rust host-fixture constructors. Machine reads belong to named
+adapter modules. Existing reads outside them are recorded by module and kind
+and may only decrease; fixture environment copying is always forbidden. Test
+workers own complete resource observations and private state, and carry ambient
+poison which an allowlisted child environment removes. The source inventory is
+in `docs/records/tooling-host-tests-698.tsv`.

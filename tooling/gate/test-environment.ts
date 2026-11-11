@@ -4,6 +4,7 @@ import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {delimiter,dirname,join} from 'node:path';
 import {ENVIRONMENT_CONTEXT,FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary,type GateEnvironmentContext} from './canonical-environment.ts';
+import {ownMemory} from './test-host-observations.ts';
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {assertRunTemporary,removable} from './run-temporary.ts';
 import {toolchainDirectories} from './toolchain.ts';
@@ -59,6 +60,7 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   if(context)for(const name of RUN_HANDOFF)if(source[name]!==undefined)grants[name]=source[name];
   // An owned resource capability is forwarded as one complete packet.
   if(source[HOST_OBSERVATIONS])for(const name of HOST_OBSERVATION_ENVIRONMENT)if(source[name]!==undefined)grants[name]=source[name];
+  if(!grants[HOST_OBSERVATIONS])Object.assign(grants,ownMemory(join(root,'observations')));
   Object.assign(env,grants);
   if(context){
     context={...context,owned:Object.fromEntries(Object.entries(grants).filter((entry):entry is [string,string]=>entry[1]!==undefined)),

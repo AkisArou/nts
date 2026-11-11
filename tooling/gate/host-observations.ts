@@ -2,6 +2,7 @@
 // owned view, including observations made by dependencies and child processes.
 import {readFileSync,statfsSync} from 'node:fs';
 import {availableParallelism,cpus,loadavg} from 'node:os';
+import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR'] as const;
@@ -122,6 +123,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
     };
   }
+  if(env[FIXTURE_ENVIRONMENT]!==undefined)throw new HostObservationError('fixture host observation capability missing: '+HOST_OBSERVATIONS);
   // A partial legacy test view must not quietly select the rest of the host.
   if(env.NTS_MEMINFO||env.NTS_VMSTAT)throw new HostObservationError('NTS_MEMINFO/NTS_VMSTAT require an owned HostObservations capability');
   return {
