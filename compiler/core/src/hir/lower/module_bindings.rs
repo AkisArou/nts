@@ -103,7 +103,7 @@ pub(super) struct ModuleScope {
     /// with no layout` on a program the lowering had called clean.
     pub(super) layouts: Vec<Layout>,
     /// Which modules run at startup and which only when `import()` first reaches
-    /// them. See [`module_roles`](super::module_roles).
+    /// them. See [`module_roles`](super::module_evaluation::module_roles).
     pub(super) roles: ModuleRoles,
     /// By module index, for each lazy module: the globals its evaluation keeps --
     /// whether it has run, and what it threw. See [`LazyModule`].
