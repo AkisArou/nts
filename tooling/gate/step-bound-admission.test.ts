@@ -4,16 +4,16 @@ import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {once} from "node:events";
-import {copyFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {copyFileSync,existsSync,mkdirSync,readFileSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test,type TestContext} from "node:test";
-import {setTimeout} from "node:timers/promises";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {gateEnvironment,hostEnvironment} from "./canonical-environment.ts";
 import {readLedger,reserve,type Reservation} from "./memory-ledger.ts";
 import {moduleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";
+import type {BoundWait} from "./step-bound.ts";
 import {ownMemory} from "./test-memory.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {waitFor} from "./test-wait.ts";
@@ -21,6 +21,7 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts"
 
 const SOURCE=fileURLToPath(new URL("../../",import.meta.url));
 const STEP="test262-census-c", GiB=2**30;
+type Observation={now:number;waiting:BoundWait|null;used_s:number;waited_s:Partial<Record<BoundWait,number>>;expired:boolean};
 
 function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   const own=newTestScratch("bound-admission"),root=join(own,"repo"),gate=join(root,"tooling/gate");
@@ -49,13 +50,37 @@ else
 exec ${JSON.stringify(process.execPath)} ${JSON.stringify(join(gate,"payload.mjs"))}
 fi
 `);
-  const ready=join(own,"ready"),go=join(own,"go");
+  const clock=join(own,"clock"),observed=join(own,"observed"),startup=join(own,"startup"),start=join(own,"start");
+  const ready=join(own,"ready"),go=join(own,"go"),entered=join(own,"entered");
+  writeFileSync(clock,"0");
+  // Only this runner reads the controlled clock. Record its actual bound
+  // observations before allowing the test to advance beyond an admission wait.
+  writeFileSync(join(gate,"entry.mjs"),`
+import {readFileSync,renameSync,writeFileSync} from "node:fs";
+import {StepBoundClock} from "./step-bound.ts";
+Object.defineProperty(performance,"now",{value:()=>Number(readFileSync(${JSON.stringify(clock)},"utf8"))});
+const observe=StepBoundClock.prototype.observe;
+StepBoundClock.prototype.observe=function(now,waiting){
+  const result=observe.call(this,now,waiting);
+  writeFileSync(${JSON.stringify(observed+".next")},JSON.stringify({now,waiting:waiting??null,...result}));
+  renameSync(${JSON.stringify(observed+".next")},${JSON.stringify(observed)});
+  return result;
+};
+await import("./run.mjs");
+`);
   writeFileSync(join(gate,"payload.mjs"),`
 import {existsSync,watch,writeFileSync} from "node:fs";
 import {acquireToken} from "./tokens.mjs";
+async function waitForFile(file){
+  if(existsSync(file))return;
+  await new Promise(resolve=>{const check=()=>{if(existsSync(file)){w.close();resolve();}};const w=watch(${JSON.stringify(own)},check);check();});
+}
+writeFileSync(${JSON.stringify(startup)},"startup");
+await waitForFile(${JSON.stringify(start)});
 writeFileSync(${JSON.stringify(ready)},"ready");
-if(!existsSync(${JSON.stringify(go)}))await new Promise(resolve=>{const check=()=>{if(existsSync(${JSON.stringify(go)})){w.close();resolve();}};const w=watch(${JSON.stringify(own)},check);check();});
+await waitForFile(${JSON.stringify(go)});
 const release=await acquireToken({project:"bound-control"});
+writeFileSync(${JSON.stringify(entered)},"entered");
 console.log("case entered");
 ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case complete");'}
 `);
@@ -76,15 +101,28 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   const child=spawn("systemd-run",["--user",`--unit=${unit}`,`--slice=${slice}`,"--collect","--quiet","--wait","--pipe",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=180s","-p","TimeoutStopSec=5s",
     `--working-directory=${root}`,...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>`--setenv=${key}=${value}`),
-    process.execPath,join(gate,"run.mjs")],{stdio:["ignore","pipe","pipe"]});
+    process.execPath,join(gate,"entry.mjs")],{stdio:["ignore","pipe","pipe"]});
   let output="";child.stdout.on("data",b=>{output+=b;});child.stderr.on("data",b=>{output+=b;});
-  const done=once(child,"close"),stopped=()=>child.exitCode!==null?`runner exited ${child.exitCode}: ${output}`:undefined;
-  return {own,run,ready,go,memory,memoryDir,done,stopped,output:()=>output,
+  const done=once(child,"close"),stopped=()=>child.exitCode!==null||child.signalCode!==null?`runner exited ${child.exitCode??child.signalCode}: ${output}`:undefined;
+  const observation=():Observation|undefined=>existsSync(observed)?JSON.parse(readFileSync(observed,"utf8")):undefined;
+  return {own,run,go,entered,memory,memoryDir,done,stopped,observation,output:()=>output,
+    start:async()=>{
+      await waitFor("the paused payload's startup",()=>existsSync(startup),{stopped});
+      await waitFor("the runner's initial bound observation",()=>observation()?.now===0,{stopped});
+      assert.equal(observation()?.used_s,0);
+      writeFileSync(start,"start");
+      await waitFor("the step's feed to start",()=>existsSync(ready),{stopped});
+    },
+    advance:async(now:number)=>{
+      writeFileSync(clock+".next",String(now));renameSync(clock+".next",clock);
+      await waitFor("the runner to observe its advanced clock",()=>observation()?.now===now,{stopped});
+      return observation()!;
+    },
     preempt:async()=>{
       cancel=new AbortController();
       // This fits when the run gives its unused forecast back, but not
       // beside its live use and margin. An impossible request cannot outrank.
-      const pending=reserve({bytes:1.25*GiB,priority:"landing",what:"priority control"},{env:memory,signal:cancel.signal,report:()=>{}})
+      const pending=reserve({bytes:1.25*GiB,priority:"landing",what:"priority control"},{env:memory,signal:cancel.signal,used:()=>0,report:()=>{}})
         .then(value=>{holder=value;},error=>{if(!cancel!.signal.aborted)throw error;});
       await waitFor("the higher priority request to wait",()=>readLedger(memory.NTS_MEMORY_LEDGER).waiting.some(r=>r.what==="priority control"),{stopped});
       return async()=>{cancel!.abort();await pending;holder?.release();};
@@ -93,24 +131,30 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
 
 for(const mode of ["memory","priority"] as const)test(`a census resumes after a ${mode} admission wait past its execution allowance`,async t=>{
   const f=fixture(t,mode);
-  await waitFor("the step's feed to start",()=>existsSync(f.ready),{stopped:f.stopped});
+  await f.start();
   const release=mode==="priority"?await f.preempt():async()=>{};
   writeFileSync(f.go,"go");
-  await waitFor("the gate to block admission",()=>mode==="priority"?/higher priority/.test(f.output()):readLedger(f.memory.NTS_MEMORY_LEDGER).waiting.some(r=>r.grows!==null),{stopped:f.stopped});
-  // Drive a known admission wait past the three-second allowance. Only the
-  // runner's outcome decides the test; elapsed time is not an assertion.
-  await setTimeout(4500);
+  await waitFor("the runner to observe its admission wait",()=>f.observation()?.waiting===mode,{stopped:f.stopped});
+  const elapsed=await f.advance(4500);
+  assert.equal(elapsed.used_s,0);
+  assert.equal(elapsed.waited_s[mode],4.5);
+  assert.equal(elapsed.expired,false);
   await release();ownMemory(f.memoryDir,{availableKiB:16*2**20,totalKiB:16*2**20});
   assert.deepEqual(await f.done,[0,null],f.output());
   const summary=JSON.parse(readFileSync(join(f.run,"summary.json"),"utf8"));
   assert.equal(summary.steps[0].verdict,"PASS",f.output());
-  assert.equal(Object.hasOwn(summary.steps[0].bound_clock.admission_wait_s,mode),true);
+  assert.equal(summary.steps[0].bound_clock.execution_s,0);
+  assert.equal(summary.steps[0].bound_clock.admission_wait_s[mode],4.5);
   assert.match(readFileSync(summary.steps[0].log,"utf8"),/case complete/);
   assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
 });
 
 for(const mode of ["active","ceiling"] as const)test(`${mode==="active"?"a census holding a case":"a waiting census under a landing wall ceiling"} still reaches its bound`,async t=>{
-  const f=fixture(t,mode);writeFileSync(f.go,"go");
+  const f=fixture(t,mode);await f.start();writeFileSync(f.go,"go");
+  await waitFor("the case or its memory wait",()=>mode==="active"?existsSync(f.entered):f.observation()?.waiting==="memory",{stopped:f.stopped});
+  const elapsed=await f.advance(mode==="active"?4000:2000);
+  assert.equal(elapsed.expired,true);
+  assert.equal(elapsed.used_s,mode==="active"?4:0);
   assert.deepEqual(await f.done,[1,null],f.output());
   const row=JSON.parse(readFileSync(join(f.run,"summary.json"),"utf8")).steps[0];
   assert.equal(row.verdict,"INSTRUMENT",f.output());assert.equal(row.instrument.kind,"step-bound");
