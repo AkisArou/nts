@@ -1,20 +1,23 @@
 //! Source identities on the exact corpus materialization that publishes them.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8PathBuf;
 use nts_core::hir::{DispatchRoot, features as identity};
 use nts_frontend_ts::Frontend;
 
 mod common;
 
-fn fixture(case: &str) -> nts_semantic_schema::SemanticSnapshot {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn fixture(
+    case: &str,
+) -> (
+    scratch::StdScratchDir,
+    nts_semantic_schema::SemanticSnapshot,
+) {
     let root = common::repository();
-    let project = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "dispatch-source-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
+    let project = scratch::StdScratchDir::in_std_target("dispatch-source");
     std::fs::create_dir_all(&project).unwrap();
     let materialized = std::process::Command::new("node")
         .current_dir(&root)
@@ -38,12 +41,12 @@ fn fixture(case: &str) -> nts_semantic_schema::SemanticSnapshot {
         .snapshot(&config)
         .expect("actual stock materialization");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    snapshot
+    (project, snapshot)
 }
 
 #[test]
 fn an_iterator_library_root_keeps_its_declaration_identity() {
-    let snapshot =
+    let (_project, snapshot) =
         fixture("tests/typescript/iterator-routes-controls/exit-break-interface-control.ts");
     let prepared = common::prepare(&snapshot).expect("valid prepared HIR");
     let global = snapshot
@@ -133,7 +136,7 @@ fn an_iterator_library_root_keeps_its_declaration_identity() {
 
 #[test]
 fn an_async_generator_publishes_its_owned_resume_once() {
-    let snapshot =
+    let (_project, snapshot) =
         fixture("tests/typescript/proofs/bounds-exception-await-then-async-generator-yield.ts");
     let prepared = common::prepare(&snapshot).expect("valid async-generator HIR");
     let program = &prepared.program;

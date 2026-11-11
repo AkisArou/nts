@@ -1,18 +1,15 @@
 //! Ambient explanation entries are distinct from bodies actually refused.
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
+use camino::Utf8Path;
 use nts_core::hir::{self, Uncompiled, UncompiledKind};
 use nts_frontend_ts::Frontend;
 
-struct Fixture(Utf8PathBuf);
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        drop(std::fs::remove_dir_all(&self.0));
-    }
-}
+struct Fixture(scratch::ScratchDir);
 
 fn prepare(name: &str, source: &str) -> hir::Prepared {
-    let root = Utf8Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("refusal-kind-{name}-{}", std::process::id()));
+    let root = scratch::ScratchDir::in_target(&format!("refusal-kind-{name}"));
     let fixture = Fixture(root);
     std::fs::create_dir_all(&fixture.0).expect("fixture directory");
     std::fs::write(fixture.0.join("main.ts"), source).expect("source");

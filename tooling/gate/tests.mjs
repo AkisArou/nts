@@ -37,6 +37,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
+import { TestScratch } from "./test-scratch.ts";
 import { exitAfterOutput } from "./exit.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -115,14 +116,17 @@ const runOne = (key) =>
   new Promise((done) => {
     const r = keyed.get(key);
     const began = Date.now();
-    const child = spawn(r.argv[0], r.argv.slice(1), { cwd: r.cwd, env: r.env, stdio: ["ignore", "pipe", "pipe"] });
+    const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
+    const child = spawn(r.argv[0], r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
-    child.on("error", (e) => { results.set(key, { status: null, signal: null, error: e.message, out }); done(); });
+    child.on("error", (e) => { out += `error: ${e.message}\n`; });
     child.on("close", (status, signal) => {
       cost[key] = (Date.now() - began) / 1000;
-      results.set(key, { status, signal, out, seconds: cost[key] });
+      const leftovers = scratch.finish();
+      if (leftovers.length) out += `error: test scratch leaked by ${key} (removed):\n${leftovers.join(", ")}\n`;
+      results.set(key, { status: leftovers.length ? 1 : status, signal, out, seconds: cost[key] });
       done();
     });
   });

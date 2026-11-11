@@ -28,7 +28,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
+use camino::Utf8Path;
 
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
@@ -40,9 +43,8 @@ fn write(at: &Utf8Path, text: &str) {
 
 /// A project importing one name from a package that ships no TypeScript, and
 /// calling one `lib.d.ts` global that this compiler does not provide.
-fn fixture(name: &str) -> Utf8PathBuf {
-    let root = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&root);
+fn fixture(name: &str) -> scratch::ScratchDir {
+    let root = scratch::ScratchDir::in_target(name);
 
     write(
         &root.join("node_modules/leftpad/package.json"),

@@ -8,9 +8,9 @@
 // goes with the run. A test run by hand without one uses ~/.cache/nts/tests,
 // never /tmp's tmpfs (AGENTS.md, The machine), and the hourly count names
 // what a stopped test left there.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 export const TEST_SCRATCH_ROOT = join(homedir(), ".cache/nts/tests");
 
@@ -33,4 +33,32 @@ export function testScratch(t: { after(fn: () => void): void }, name: string): s
   const dir = newTestScratch(name);
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
+}
+
+// A test binary owns its namespace. Its guard normally empties it; the parent
+// reports and removes anything a panic, abort or killed child left behind.
+
+
+
+export class TestScratch {
+  readonly path:string;
+  constructor(parent:string,binary:string) {
+    mkdirSync(parent,{recursive:true});
+    this.path=mkdtempSync(join(parent,`${basename(binary).replace(/[^a-zA-Z0-9_-]/g,'_')}-`));
+  }
+  environment(env:NodeJS.ProcessEnv):NodeJS.ProcessEnv {
+    return {...env,NTS_TEST_SCRATCH_ROOT:this.path};
+  }
+  finish():string[] {
+    try {
+      return readdirSync(this.path).sort().map(name=>join(this.path,name));
+    } finally {
+      rmSync(this.path,{recursive:true,force:true});
+    }
+  }
+}
+
+/** Direct compile-time scratch would bypass the runner's private namespace. */
+export function bypassesScratchOwner(source:string):boolean {
+  return /\b(?:option_)?env!\s*\(\s*"CARGO_TARGET_TMPDIR"/.test(source);
 }

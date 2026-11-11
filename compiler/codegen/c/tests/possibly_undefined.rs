@@ -9,7 +9,6 @@ use std::process::Command;
 mod fixture;
 #[path = "../../../test-support/scratch.rs"]
 mod scratch;
-use scratch::ScratchDir;
 
 fn checked(command: &mut Command) {
     let result = command.output().expect("run toolchain");
@@ -35,7 +34,7 @@ fn optional_pairs_preserve_bits_absence_null_and_conditional_ownership() {
         let emitted = nts_codegen_c::emit(&program, NativeAbi::LP64);
         assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
         assert!(emitted.refused.is_empty(), "{:?}", emitted.refused);
-        let scratch = ScratchDir::new(Utf8Path::new(env!("CARGO_TARGET_TMPDIR")), "optional-c");
+        let scratch = scratch::ScratchDir::in_target("optional-c");
         for file in emitted.support_files() {
             let path = scratch.join(file.name);
             if let Some(parent) = path.parent() {

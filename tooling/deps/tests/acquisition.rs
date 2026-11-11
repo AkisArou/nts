@@ -8,6 +8,9 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -30,9 +33,8 @@ fn imports(root: &Utf8Path, names: &[&str]) {
 }
 
 /// A workspace with two packages and four dependencies.
-fn fixture(name: &str) -> Utf8PathBuf {
-    let root = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&root);
+fn fixture(name: &str) -> scratch::ScratchDir {
+    let root = scratch::ScratchDir::in_target(name);
     std::fs::create_dir_all(&root).unwrap();
 
     write(
@@ -369,7 +371,7 @@ fn a_missing_dependency_is_named() {
 /// generated path grows a `../..` per level of accident.
 #[test]
 fn the_nearest_workspace_declaration_wins() {
-    let base = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("nearest");
+    let base = scratch::ScratchDir::in_target("nearest");
     let inner = base.join("outer/inner/packages/app");
     std::fs::create_dir_all(&inner).unwrap();
     std::fs::write(base.join("outer/pnpm-workspace.yaml"), "packages:\n").unwrap();

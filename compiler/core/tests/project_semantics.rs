@@ -1,6 +1,9 @@
 //! Effective options reject only a construct that needs different semantics.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8Path;
 use nts_core::hir::{self, Unprepared};
 use nts_frontend_ts::Frontend;
@@ -82,13 +85,12 @@ fn project_semantics_reach_lowering_and_preparation_without_partial_emission() {
 
 #[test]
 fn ambient_fields_do_not_require_runtime_field_semantics() {
-    let root =
-        camino::Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ambient-project-semantics");
+    let root = scratch::ScratchDir::in_target("ambient-project-semantics");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("main.ts"), "declare class External { x: number; }\nabstract class Abstract { abstract x: number; }\nexport function read(): number { return 7; }\n").unwrap();
     let config = root.join("tsconfig.json");
     std::fs::write(&config, r#"{"compilerOptions":{"target":"ES2017","strict":true,"types":[],"noEmit":true},"files":["main.ts"]}"#).unwrap();
-    let snapshot = Frontend::new(&root)
+    let snapshot = Frontend::new(root.to_path_buf())
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();

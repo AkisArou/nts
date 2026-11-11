@@ -2,17 +2,14 @@
 //! packaged classes and native objects.
 #![cfg(target_os = "linux")]
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-struct Fixture(PathBuf);
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        drop(std::fs::remove_dir_all(&self.0));
-    }
-}
+struct Fixture(scratch::StdScratchDir);
 
 fn artifacts(root: &Path, directory: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
     for entry in std::fs::read_dir(directory).expect("artifact directory") {
@@ -59,11 +56,7 @@ fn compare_builds(partial: bool) {
             return;
         }
     }
-    let fixture = Fixture(Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "deterministic-all-{partial}-{}",
-        std::process::id()
-    )));
-    drop(std::fs::remove_dir_all(&fixture.0));
+    let fixture = Fixture(scratch::StdScratchDir::in_std_target("deterministic-all"));
     // Different depth also changes the relative spelling of SDK include paths.
     let trees = [fixture.0.join("left"), fixture.0.join("much/deeper/right")];
     let mut outputs = Vec::new();

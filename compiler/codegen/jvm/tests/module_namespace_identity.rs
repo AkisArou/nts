@@ -1,6 +1,9 @@
 //! A dynamic import's singleton keeps the imported module's source owner.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8PathBuf;
 use nts_core::hir::{HirType, ManagedType, OpKind, StaticDeclaration, StaticValueKind};
 use nts_frontend_ts::Frontend;
@@ -20,9 +23,8 @@ export function invoke(callback: (n: number) => number): number {
 }
 "#;
 
-fn project(arm: &str, source: &str) -> std::path::PathBuf {
-    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("module-namespace-{}-{arm}", std::process::id()));
+fn project(arm: &str, source: &str) -> scratch::StdScratchDir {
+    let path = scratch::StdScratchDir::in_std_target(&format!("module-namespace-{arm}"));
     std::fs::create_dir_all(path.join("src")).unwrap();
     let fixtures = common::repository().join("tsconfig.fixtures.json");
     std::fs::write(

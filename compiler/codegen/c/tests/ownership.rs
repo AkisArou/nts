@@ -14,6 +14,9 @@
 //! long after the store that caused it.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
@@ -28,8 +31,7 @@ fn counted(name: &str, source: &str) -> String {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = Utf8Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = scratch::ScratchDir::in_target(name);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),

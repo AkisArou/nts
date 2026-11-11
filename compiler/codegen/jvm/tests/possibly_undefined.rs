@@ -53,7 +53,7 @@ fn optional_jvm_values_preserve_every_bit_and_keep_null_distinct() {
     assert_eq!(hir::verify::verify(&program), Ok(()));
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    let dir = scratch::ScratchDir::new(Utf8Path::new(env!("CARGO_TARGET_TMPDIR")), "optional-jvm");
+    let dir = scratch::ScratchDir::in_target("optional-jvm");
     for class in emitted.classes {
         let path = dir.join(class.path());
         std::fs::create_dir_all(path.parent().expect("class parent")).expect("directory");

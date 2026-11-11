@@ -411,6 +411,7 @@ dependencies = [
 name = "nts-codegen-common"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "nts-core",
  "nts-diagnostics",
  "nts-semantic-schema",

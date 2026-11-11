@@ -3,6 +3,9 @@
 //! The isolated control completes before the subject is captured.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8Path;
 use nts_core::hir::{Callee, Func, HirType, ManagedType, OpKind, Program};
 use nts_frontend_ts::Frontend;
@@ -221,16 +224,25 @@ fn print_tables(program: &Program, owners: &[&str], members: &[&str]) {
     }
 }
 
+fn keep_scratch() -> bool {
+    std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1")
+}
+
 fn preserve(program: &Program, name: &str) {
-    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("owned-interface-{name}-{}.txt", std::process::id()));
+    if !keep_scratch() {
+        return;
+    }
+    let scratch = scratch::ScratchDir::in_target(name);
+    let path = scratch.join("program.txt");
     std::fs::write(&path, format!("{program:#?}")).unwrap();
-    println!("complete prepared Program: {}", path.display());
+    println!("complete prepared Program: {path}");
 }
 
 fn preserve_emission(emitted: &nts_codegen_jvm::Emitted, name: &str) {
-    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("owned-interface-{name}-{}", std::process::id()));
+    if !keep_scratch() {
+        return;
+    }
+    let root = scratch::ScratchDir::in_target(name);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(
         root.join("diagnostics.txt"),
@@ -244,7 +256,7 @@ fn preserve_emission(emitted: &nts_codegen_jvm::Emitted, name: &str) {
     }
     println!(
         "actual {name} emitted classes/diagnostics: {}",
-        root.display()
+        root.as_str()
     );
 }
 

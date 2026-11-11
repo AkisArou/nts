@@ -39,7 +39,7 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 // it runs and nothing between steps, and its peak sizes its next run; and it
 // runs niced, off the measurement CPUs 4-5, in that capped scope.
 import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync, chmodSync } from "node:fs";
 import { availableParallelism,homedir } from "node:os";
 import {gateEnvironment,sealOracleRun} from "./canonical-environment.ts";
 import {finishRunTemporary} from "./run-temporary.ts";
@@ -187,6 +187,14 @@ function main(argv: readonly string[]): number {
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
   const nativeFrontend = changed.some((path) => /^(compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
   const after = join(ROOT, "target/nts-dev/nts");
+  const host = /^host: (.+)$/m.exec(text("rustc", ["-vV"]))?.[1];
+  if (!host) throw new Error("rustc names no host triple for the test runner");
+  const runnerVar = `CARGO_TARGET_${host.toUpperCase().replace(/[-.]/g, "_")}_RUNNER`;
+  if (launchEnvironment[runnerVar]) throw new Error(`${runnerVar} is already set`);
+  const runner = join(launchEnvironment.TMPDIR!, "rust-test-runner.sh");
+  const quote = (value:string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+  writeFileSync(runner, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(ROOT,"tooling/gate/rust-test-runner.ts"))} "$@"\n`);
+  chmodSync(runner, 0o755);
   let compilerReady = false;
   const going =
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
@@ -200,7 +208,7 @@ function main(argv: readonly string[]): number {
     }) &&
     // Even --keep-going cannot authorize tests against a failed build's stale binary.
     compilerReady &&
-    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: after })) &&
+    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: after, [runnerVar]: runner })) &&
     // Native vendor integrity and complete reachable graphs over the corpus.
     (!nativeFrontend || step("frontend-tsrs", () => heavy({ key: "inner-frontend-tsrs", what: "native frontend checks", memoryMax: "16G", workers: 4 },
       "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));

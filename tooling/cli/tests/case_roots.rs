@@ -1,5 +1,8 @@
 //! The gate's cargo tests also execute the conformance input-root contracts.
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -56,7 +59,7 @@ fn frontend_load_failure_is_distinct_from_completed_diagnostics() {
 
 #[test]
 fn frontend_reports_effective_strictness_without_imposing_a_policy() {
-    let base = Path::new(env!("CARGO_TARGET_TMPDIR")).join("reported-checker-strictness");
+    let base = scratch::StdScratchDir::in_std_target("reported-checker-strictness");
     for (index, (extends, settings, expected)) in [
         (false, serde_json::json!({}), [true, true, false, false]),
         (false, serde_json::json!({"strict":false}), [false, false, false, false]),
@@ -88,8 +91,7 @@ fn frontend_reports_effective_strictness_without_imposing_a_policy() {
 
 #[test]
 fn compilation_requires_effective_strict_options_and_reports_the_setting_source() {
-    let base = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("strict-compile-policy-{}", std::process::id()));
+    let base = scratch::StdScratchDir::in_std_target("strict-compile-policy");
     std::fs::create_dir_all(&base).expect("strict-policy projects");
     let required = [
         "noImplicitAny",
@@ -176,12 +178,7 @@ export default defineConfig({{ products: {{ value: library.native({{ entry: "./m
 
 fn assert_frontend_capture(text: &str, errors: usize) {
     let repo = repository();
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let base = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("live-case-root-{}-{unique}", std::process::id()));
+    let base = scratch::StdScratchDir::in_std_target("live-case-root");
     let roots = base.join("inputs");
     let script = "import {caseRoot,workspace,materialise} from './tooling/census/project.ts';\n\
                   const result=caseRoot(d=>{workspace(d);materialise(d,process.argv[2]);},{base:process.argv[1]});\n\

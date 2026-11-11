@@ -3,7 +3,10 @@
 //! it does not equate adapters or waive distinct dispatch bodies.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::path::{Path, PathBuf};
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
+use std::path::PathBuf;
 
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
@@ -12,15 +15,8 @@ mod common;
 
 const CASE: &str = "a-throwing-override-escapes-a-try-through-a-base-that-cannot-throw";
 
-fn materialise() -> PathBuf {
-    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "jvm-throwing-dispatch-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
+fn materialise() -> (scratch::StdScratchDir, PathBuf) {
+    let scratch = scratch::StdScratchDir::in_std_target("jvm-throwing-dispatch");
     std::fs::create_dir_all(&scratch).unwrap();
     let materialiser = common::repository().join("tooling/conformance/outcomes-project.ts");
     let script = format!(
@@ -40,7 +36,8 @@ fn materialise() -> PathBuf {
         "materialisation failed: {}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    scratch.join(CASE)
+    let project = scratch.join(CASE);
+    (scratch, project)
 }
 
 fn assert_slot_names(program: &nts_core::hir::Program) -> usize {
@@ -161,7 +158,7 @@ fn assert_missing_slot_fact_conflicts(program: &nts_core::hir::Program) {
 
 #[test]
 fn the_throwing_override_and_its_throwing_base_control_both_emit() {
-    let project = materialise();
+    let (_owner, project) = materialise();
     let config = Utf8Path::from_path(&project).unwrap().join("tsconfig.json");
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)

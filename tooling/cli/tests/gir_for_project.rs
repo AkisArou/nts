@@ -5,23 +5,19 @@
 
 #![cfg(target_os = "linux")]
 
-use std::path::{Path, PathBuf};
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+use std::path::Path;
 use std::process::Command;
 
 const CONTROL: &str = "export function answer(n: number): number { return n + 1; }\n";
 
-struct Project(PathBuf);
+struct Project(scratch::StdScratchDir);
 
 impl Project {
     fn new(name: &str, gir: bool) -> Self {
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("the clock")
-            .as_nanos();
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-            "gir-for-project-{name}-{}-{unique}",
-            std::process::id()
-        ));
+        let root = scratch::StdScratchDir::in_std_target(&format!("gir-for-project-{name}"));
         std::fs::create_dir_all(&root).expect("creating the project");
         let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -56,12 +52,6 @@ impl Project {
             .env("NTS_TYPES_ROOT", self.0.join("store"))
             .output()
             .expect("running the CLI")
-    }
-}
-
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("removing the private project");
     }
 }
 

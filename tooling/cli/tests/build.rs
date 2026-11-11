@@ -11,6 +11,9 @@
 //! lane keeps finding one layer up, and `nts build` exited zero on one for as
 //! long as it took to run `nm` on the result.
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -83,8 +86,8 @@ fn available() -> bool {
     node && tool("clang", "--version") && tool("nm", "--version")
 }
 
-fn fixture(name: &str, config: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+fn fixture(name: &str, config: &str) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
     std::fs::write(src.join("main.ts"), ENTRY).expect("entry");
@@ -1311,8 +1314,7 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
         eprintln!("skipping: the native-uname fixture is not here");
         return;
     }
-    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join("build-witness");
-    drop(std::fs::remove_dir_all(&project));
+    let project = scratch::StdScratchDir::in_std_target("build-witness");
     std::fs::create_dir_all(project.join("src")).expect("creating the fixture");
     std::fs::create_dir_all(project.join("types")).expect("creating types");
     for (from, to) in [
@@ -1384,13 +1386,12 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
 /// header a dependency whose *value* reaches the artifact, which is what a cache
 /// invalidation test needs. A header nothing depends on for its answer cannot
 /// tell a reused object from a recompiled one.
-fn native_fixture(name: &str) -> PathBuf {
+fn native_fixture(name: &str) -> scratch::StdScratchDir {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .expect("the repository root");
-    let project = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    drop(std::fs::remove_dir_all(&project));
+    let project = scratch::StdScratchDir::in_std_target(name);
     for sub in ["src", "native"] {
         std::fs::create_dir_all(project.join(sub)).expect("creating the fixture");
     }
@@ -2820,7 +2821,7 @@ fn a_macos_target_without_a_sysroot_names_the_script() {
         return;
     }
     let project = fixture("build-macos-no-sysroot", MACOS_DYLIB);
-    let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root");
+    let empty = scratch::StdScratchDir::in_std_target("no-apple-root");
     std::fs::create_dir_all(&empty).expect("creating an empty root");
     let run = build_for_apple(&project, &empty);
     assert!(
@@ -2853,7 +2854,7 @@ export default defineConfig({
 });
 "#,
     );
-    let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root-app");
+    let empty = scratch::StdScratchDir::in_std_target("no-apple-root-app");
     std::fs::create_dir_all(&empty).expect("creating an empty root");
     let run = build_for_apple(&project, &empty);
     assert!(
@@ -2891,7 +2892,7 @@ fn a_project_can_be_named_by_directory_config_or_tsconfig() {
     let project = fixture("build-naming", SHARED);
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     for spelling in [
-        project.clone(),
+        project.to_path_buf(),
         project.join("tsconfig.json"),
         project.join("nts.config.ts"),
     ] {
@@ -3202,8 +3203,7 @@ fn the_workspace_fixture_still_builds() {
         skip("tests/workspace to be present");
         return;
     }
-    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("workspace-build");
-    drop(std::fs::remove_dir_all(&out));
+    let out = scratch::StdScratchDir::in_std_target("workspace-build");
 
     let build_app = |app: &str, extra: &[&str], env: &[(&str, String)]| -> Run {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
@@ -3717,7 +3717,7 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
 /// A project whose program calls zlib's `zlibCompileFlags` through a binding
 /// module of its own, `c:zlib`, tagged `@ntsPackage {package}` -- or with no
 /// such tag where `package` is `None`.
-fn binding_fixture(name: &str, config: &str, package: Option<&str>) -> PathBuf {
+fn binding_fixture(name: &str, config: &str, package: Option<&str>) -> scratch::StdScratchDir {
     let project = fixture(name, config);
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -4195,7 +4195,7 @@ fn linux_cross_libc_selects_bundled_plans_and_static_musl_runs() {
     }
 }
 
-fn linux_cross_fixture(libc: &str) -> PathBuf {
+fn linux_cross_fixture(libc: &str) -> scratch::StdScratchDir {
     let config = format!(
         r"
 import {{ app, library, defineConfig, target }} from '@nts/config';
@@ -5589,8 +5589,7 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         skip("node, clang, nm and pkg-config");
         return;
     }
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("bind-gir-demo");
-    drop(std::fs::remove_dir_all(&root));
+    let root = scratch::StdScratchDir::in_std_target("bind-gir-demo");
     gir_library(&root, true);
     let out = root.join("out");
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))

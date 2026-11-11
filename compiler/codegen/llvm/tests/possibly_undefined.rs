@@ -8,7 +8,6 @@ use std::process::Command;
 mod fixture;
 #[path = "../../../test-support/scratch.rs"]
 mod scratch;
-use scratch::ScratchDir;
 
 fn checked(command: &mut Command) {
     let result = command.output().expect("run toolchain");
@@ -34,7 +33,7 @@ fn optional_pairs_preserve_bits_absence_null_and_conditional_ownership() {
         let emitted = nts_codegen_c::emit(&program, NativeAbi::LP64);
         assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
         assert!(emitted.refused.is_empty(), "{:?}", emitted.refused);
-        let scratch = ScratchDir::new(Utf8Path::new(env!("CARGO_TARGET_TMPDIR")), "optional-llvm");
+        let scratch = scratch::ScratchDir::in_target("optional-llvm");
         for file in emitted.support_files() {
             let path = scratch.join(file.name);
             if let Some(parent) = path.parent() {
@@ -105,7 +104,7 @@ fn generated_optional_calls_assemble_on_all_six_native_abis() {
     program
         .public_api
         .retain(|(name, _)| name != "roundtripBigInt");
-    let dir = ScratchDir::new(Utf8Path::new(env!("CARGO_TARGET_TMPDIR")), "optional-cross");
+    let dir = scratch::ScratchDir::in_target("optional-cross");
     for (triple, platform) in [
         ("x86_64-unknown-linux-gnu", Platform::SYSV_X86_64),
         (

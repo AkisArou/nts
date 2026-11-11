@@ -43,7 +43,7 @@ fn test_scratch_with_the_same_label_has_independent_owners() {
     let parent = ScratchDir::new(&root, "separate");
     let first = ScratchDir::new(&parent, "same");
     let second = ScratchDir::new(&parent, "same");
-    assert_ne!(first.as_ref(), second.as_ref());
+    assert_ne!(first.as_std_path(), second.as_std_path());
     drop(first);
     assert!(second.exists());
 }

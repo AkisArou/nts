@@ -2,6 +2,9 @@
 //! concrete implementation ignores its optional argument.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
@@ -47,13 +50,12 @@ fn an_optional_interface_method_uses_the_declared_dispatch_contract() {
         .expect("concrete no-argument return method before inlining");
     assert_eq!(body.params.len(), 1);
     let prepared = hir::prepare(&snapshot).unwrap_or_else(|error| {
-        let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join("optional-interface-arguments.snapshot.txt");
-        std::fs::write(&path, format!("{snapshot:#?}")).unwrap();
-        panic!(
-            "invalid iterator dispatch: {error:?}; snapshot: {}",
-            path.display()
-        );
+        let dir = scratch::ScratchDir::in_target("optional-interface-arguments");
+        let path = dir.join("snapshot.txt");
+        if std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1") {
+            std::fs::write(&path, format!("{snapshot:#?}")).unwrap();
+        }
+        panic!("invalid iterator dispatch: {error:?}; snapshot: {path}");
     });
     assert!(
         prepared.diagnostics.is_empty(),

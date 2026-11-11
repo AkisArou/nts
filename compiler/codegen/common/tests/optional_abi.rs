@@ -1,14 +1,10 @@
 //! Independent clang classification of the optional ABI on every native target.
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+
 use nts_codegen_common::optional::{self, Arch, Passing, Target};
 use nts_core::hir::{HirType, native::NativeAbi};
-use std::{fmt::Write as _, path::PathBuf, process::Command};
-
-struct Scratch(PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use std::{fmt::Write as _, process::Command};
 
 fn split_parameters(text: &str) -> Vec<&str> {
     let mut depth = 0_i32;
@@ -121,16 +117,13 @@ fn every_optional_scalar_abi_matches_clang_on_six_targets() {
             HirType::NativePointer(nts_core::hir::native::Pointee::Void),
         ),
     ];
-    let scratch = Scratch(
-        PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("optional-abi-{}", std::process::id())),
-    );
-    std::fs::create_dir_all(&scratch.0).expect("ABI test directory");
+    let scratch = scratch::ScratchDir::in_target("optional-abi");
+    std::fs::create_dir_all(&scratch).expect("ABI test directory");
     let mut source = String::new();
     for (name, c, _) in &cases {
         writeln!(source,"typedef struct {{ {c} payload; _Bool defined; }} O{name};\nO{name} identity{name}(O{name} x) {{ return x; }}\nO{name} exhausted{name}(long long a,long long b,long long c,long long d,long long e,long long f,O{name} x) {{ if(a+b+c+d+e+f==12345) x.defined=0; return x; }}").expect("source string");
     }
-    let input = scratch.0.join("pairs.c");
+    let input = scratch.join("pairs.c");
     std::fs::write(&input, source).expect("C source");
     for (triple, arch, abi) in [
         ("x86_64-unknown-linux-gnu", Arch::X86_64, NativeAbi::LP64),

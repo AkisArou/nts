@@ -13,13 +13,14 @@
 #![cfg(target_os = "linux")]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::path::{Path, PathBuf};
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+use std::path::Path;
 use std::process::Command;
 
-fn scratch(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("bind-gir-struct-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn scratch(name: &str) -> scratch::StdScratchDir {
+    let dir = scratch::StdScratchDir::in_std_target(&format!("bind-gir-struct-{name}"));
     std::fs::create_dir_all(&dir).expect("scratch directory");
     dir
 }

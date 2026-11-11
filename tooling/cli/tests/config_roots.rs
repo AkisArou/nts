@@ -20,8 +20,11 @@
 //! Skips when node or the frontend is absent -- the config is TypeScript and is
 //! evaluated rather than parsed, so there is nothing to read without both.
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 #[allow(dead_code)]
@@ -74,8 +77,8 @@ fn available() -> bool {
 /// it produces for a user. A fixture that restated the resolved shape would be a
 /// second implementation of the constructors, which is the thing
 /// `nts_build::config` exists to avoid.
-fn fixture(name: &str, config: Option<&str>) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+fn fixture(name: &str, config: Option<&str>) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
     std::fs::write(src.join("main.ts"), ENTRY).expect("writing the entry");

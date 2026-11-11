@@ -1,4 +1,7 @@
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use nts_build::node_deps::{Artifacts, Request};
 use std::{
     os::unix::fs::PermissionsExt as _,
@@ -22,14 +25,8 @@ fn run(command: &mut Command) -> std::process::Output {
     );
     output
 }
-fn directory(name: &str) -> PathBuf {
-    let path =
-        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-{}", std::process::id()));
-    if path.exists() {
-        std::fs::remove_dir_all(&path).expect("old test output");
-    }
-    std::fs::create_dir_all(&path).expect("test directory");
-    path
+fn directory(name: &str) -> scratch::StdScratchDir {
+    scratch::StdScratchDir::in_std_target(name)
 }
 fn artifacts(path: &Path, libraries: &[&str]) -> Artifacts {
     let request = Request {

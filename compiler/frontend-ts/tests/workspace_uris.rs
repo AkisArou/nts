@@ -2,16 +2,18 @@
 //! from outside that directory and sources recorded only for diagnostics.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
+use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{PropertyKey, SemanticSnapshot};
 
-struct Fixture(Utf8PathBuf);
+struct Fixture(scratch::ScratchDir);
 
 impl Fixture {
     fn new(name: &str, helper: &str, options: &str) -> Self {
-        let root = Utf8Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("workspace-uris-{}-{name}", std::process::id()));
+        let root = scratch::ScratchDir::in_target(&format!("workspace-uris-{name}"));
         std::fs::create_dir_all(root.join("app/src")).unwrap();
         std::fs::create_dir_all(root.join("shared")).unwrap();
         std::fs::write(root.join("shared/helper.ts"), helper).unwrap();
@@ -29,18 +31,12 @@ impl Fixture {
         let (cwd, config) = if from_app {
             (self.0.join("app"), Utf8Path::new("tsconfig.json"))
         } else {
-            (self.0.clone(), Utf8Path::new("app/tsconfig.json"))
+            (self.0.to_path_buf(), Utf8Path::new("app/tsconfig.json"))
         };
         Frontend::new(cwd)
             .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(config)
             .unwrap()
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -118,7 +114,7 @@ fn symlinked_project_and_source_paths_have_the_real_projects_uris() {
         links.join("workspace/app/tsconfig.json"),
         links.join("source-link/../tsconfig.json"),
     ] {
-        let linked = Frontend::new(fixture.0.clone())
+        let linked = Frontend::new(fixture.0.to_path_buf())
             .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .unwrap();
@@ -158,7 +154,7 @@ fn diagnostics_keep_real_paths_and_use_project_relative_identities() {
 fn a_missing_config_is_a_path_named_error() {
     let fixture = Fixture::new("missing-config", HELPER, "");
     let config = fixture.0.join("app/missing.json");
-    let error = Frontend::new(fixture.0.clone())
+    let error = Frontend::new(fixture.0.to_path_buf())
         .snapshot(&config)
         .unwrap_err()
         .to_string();

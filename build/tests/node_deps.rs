@@ -1,23 +1,8 @@
 use nts_build::node_deps::{self, Request};
-use std::{path::PathBuf, process::Command};
+#[path = "../../compiler/test-support/scratch.rs"]
+mod scratch;
 
-struct Scratch(PathBuf);
-impl Scratch {
-    fn new(name: &str) -> Self {
-        let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("node-deps-{name}-{}", std::process::id()));
-        if directory.exists() {
-            std::fs::remove_dir_all(&directory).expect("old private fixture");
-        }
-        std::fs::create_dir_all(&directory).expect("fixture directory");
-        Self(directory)
-    }
-}
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use std::{path::PathBuf, process::Command};
 
 #[test]
 fn owned_library_names_cover_elf_macho_and_coff_without_claiming_other_libraries() {
@@ -94,14 +79,14 @@ fn graph_keeps_simd_dependencies_assertions_and_pinned_versions() {
 #[test]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn real_uv_archive_is_static_reused_and_invalidated_by_flags_or_input_changes() {
-    let dir = Scratch::new("uv");
+    let dir = scratch::StdScratchDir::in_std_target("uv");
     let request = Request {
         target: node_deps::recipe().target.clone(),
         compiler: vec!["clang".into()],
         archiver: vec!["llvm-ar".into()],
         flags: vec![],
         libraries: vec!["uv".into()],
-        cache: dir.0.join("cache"),
+        cache: dir.join("cache"),
         jobs: 2,
     };
     let first = node_deps::ensure(&request).expect("first static libuv");
@@ -129,13 +114,13 @@ fn real_uv_archive_is_static_reused_and_invalidated_by_flags_or_input_changes() 
     changed.flags.push("-DNTS_CACHE_CONTROL=1".into());
     let third = node_deps::ensure(&changed).expect("flag cache miss");
     assert_ne!(first.archives, third.archives);
-    let source = dir.0.join("probe.c");
+    let source = dir.join("probe.c");
     std::fs::write(
         &source,
         "#include <uv.h>\nint main(void){return uv_version()==0;}\n",
     )
     .expect("probe");
-    let output = dir.0.join("probe");
+    let output = dir.join("probe");
     let result = Command::new("clang")
         .args(&first.include_flags)
         .arg(&source)
@@ -172,15 +157,15 @@ fn real_uv_archive_is_static_reused_and_invalidated_by_flags_or_input_changes() 
 #[test]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn config_contents_invalidate_both_spellings_and_nested_inputs_refuse() {
-    let dir = Scratch::new("config");
-    let config = dir.0.join("compiler.cfg");
+    let dir = scratch::StdScratchDir::in_std_target("config");
+    let config = dir.join("compiler.cfg");
     let mut request = Request {
         target: node_deps::recipe().target.clone(),
         compiler: vec!["clang".into()],
         archiver: vec!["llvm-ar".into()],
         flags: vec![],
         libraries: vec!["uv".into()],
-        cache: dir.0.join("cache"),
+        cache: dir.join("cache"),
         jobs: 2,
     };
     for joined in [true, false] {
@@ -217,7 +202,7 @@ fn config_contents_invalidate_both_spellings_and_nested_inputs_refuse() {
             .to_string()
             .contains("response files")
     );
-    let implicit = dir.0.join("implicit");
+    let implicit = dir.join("implicit");
     std::fs::create_dir(&implicit).expect("default config search");
     request.flags = vec![
         format!("--config-user-dir={}", implicit.display()),

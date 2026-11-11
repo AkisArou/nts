@@ -276,10 +276,7 @@ fn optional_fields_preserve_components_owners_and_internal_names() {
     assert_eq!(hir::verify::verify(&program), Ok(()));
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    let dir = scratch::ScratchDir::new(
-        Utf8Path::new(env!("CARGO_TARGET_TMPDIR")),
-        "optional-fields",
-    );
+    let dir = scratch::ScratchDir::in_target("optional-fields");
     let mut flags = 0;
     let mut collision_control = 0;
     let facts = nts_codegen_jvm::JvmProgram::new(&program);

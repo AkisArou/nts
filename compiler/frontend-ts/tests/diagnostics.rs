@@ -2,6 +2,9 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_diagnostics::Severity;
 use nts_frontend_ts::Frontend;
@@ -136,7 +139,7 @@ fn a_type_error_in_any_of_the_programs_files_is_reported() {
 /// those facts so only the frontend's measured early-error allowlist adds them.
 #[test]
 fn a_plain_javascript_early_error_is_reported() {
-    let dir = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("plain-js-early-error");
+    let dir = scratch::ScratchDir::in_target("plain-js-early-error");
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -167,7 +170,7 @@ fn a_plain_javascript_early_error_is_reported() {
 
 #[test]
 fn unchecked_javascript_and_plain_javascript_keep_distinct_diagnostic_policies() {
-    let dir = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("js-checking-policy");
+    let dir = scratch::ScratchDir::in_target("js-checking-policy");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.js"),

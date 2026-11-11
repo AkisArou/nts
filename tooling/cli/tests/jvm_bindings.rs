@@ -1,5 +1,8 @@
 //! Declaration contracts survive source edits and select the actual JVM ABI.
-use std::path::{Path, PathBuf};
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+use std::path::Path;
 use std::process::{Command, Output};
 
 fn output(command: &mut Command) -> Output {
@@ -15,9 +18,8 @@ fn success(result: &Output) {
     );
 }
 
-fn project(name: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&root);
+fn project(name: &str) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     std::fs::create_dir_all(&root).expect("project");
     std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","strict":true,"skipLibCheck":true},"include":["*.ts"]}"#).expect("config");
     root

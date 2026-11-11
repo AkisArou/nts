@@ -2,17 +2,16 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 use std::num::NonZeroU16;
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
 fn snapshot(name: &str, source: &str, options: &str, count: u16) -> SemanticSnapshot {
-    let directory = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "diagnostic-scope-{}-{name}-{count}",
-        std::process::id()
-    ));
+    let directory = scratch::ScratchDir::in_target(&format!("diagnostic-scope-{name}"));
     std::fs::create_dir_all(&directory).unwrap();
     let config = directory.join("tsconfig.json");
     std::fs::write(
@@ -21,7 +20,7 @@ fn snapshot(name: &str, source: &str, options: &str, count: u16) -> SemanticSnap
     )
     .unwrap();
     std::fs::write(directory.join("main.ts"), source).unwrap();
-    Frontend::new(directory)
+    Frontend::new(directory.to_path_buf())
         .with_checkers(NonZeroU16::new(count).unwrap())
         .snapshot(&config)
         .unwrap()

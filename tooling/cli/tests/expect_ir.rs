@@ -8,7 +8,10 @@
 //!
 //! Native capture failures fail the test.
 
-use std::path::{Path, PathBuf};
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+use std::path::Path;
 use std::process::Command;
 
 /// A source whose representation facts are known: an integer loop over an
@@ -27,8 +30,8 @@ export function run(rounds: number): number {
 }
 ";
 
-fn fixture(name: &str, facts: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+fn fixture(name: &str, facts: &str) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
     std::fs::write(src.join("main.ts"), format!("{SOURCE}{facts}")).expect("writing the source");

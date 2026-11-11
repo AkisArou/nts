@@ -10,7 +10,10 @@
 //!
 //! Native capture failures fail the test.
 
-use std::path::{Path, PathBuf};
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+use std::path::Path;
 use std::process::Command;
 
 /// closure-merge's shape: two closures of one signature merged into one
@@ -72,8 +75,8 @@ const KEYS: [&str; 29] = [
     "accumulators.budget_exhaustions",
 ];
 
-fn fixture(name: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+fn fixture(name: &str) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
     std::fs::write(src.join("main.ts"), SOURCE).expect("writing the source");

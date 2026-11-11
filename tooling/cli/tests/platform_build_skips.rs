@@ -1,6 +1,9 @@
 //! Missing platform capabilities skip before a product build is requested.
 #![cfg(unix)]
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -12,9 +15,7 @@ fn executable(path: &Path, text: &str) {
 
 #[test]
 fn unavailable_apple_and_windows_capabilities_skip_before_invoking_nts() {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("platform-build-skips-{}", std::process::id()));
-    drop(std::fs::remove_dir_all(&root));
+    let root = scratch::StdScratchDir::in_std_target("platform-build-skips");
     let bin = root.join("bin");
     std::fs::create_dir_all(&bin).expect("tools");
     for tool in ["clang", "ld64.lld", "llvm-objdump", "zig"] {

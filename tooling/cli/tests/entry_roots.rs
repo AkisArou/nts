@@ -16,8 +16,11 @@
 //! lower without it -- and fails rather than skips when it is present, which is
 //! the rule `runtime_jar.rs` states for the JDK.
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 #[allow(dead_code)]
@@ -49,8 +52,8 @@ const NAMES: [&str; 4] = ["published", "diagnostic", "onlyPublished", "onlyDiagn
 /// one test red after a sabotage the change had already fixed -- a failure that
 /// reads as "the fix did not take" and was the harness reading a half-written
 /// file.
-fn fixture(name: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+fn fixture(name: &str) -> scratch::StdScratchDir {
+    let root = scratch::StdScratchDir::in_std_target(name);
     let src = root.join("src");
     std::fs::create_dir_all(&src).expect("creating the fixture");
     std::fs::write(src.join("main.ts"), SOURCE).expect("writing the source");

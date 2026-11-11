@@ -2,12 +2,13 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use camino::Utf8PathBuf;
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+
 use nts_frontend_ts::Frontend;
 
-fn project(name: &str, source: &str) -> (Utf8PathBuf, Frontend) {
-    let root = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&root);
+fn project(name: &str, source: &str) -> (scratch::ScratchDir, Frontend) {
+    let root = scratch::ScratchDir::in_target(name);
     std::fs::create_dir_all(root.join("app")).unwrap();
     std::fs::create_dir_all(root.join("shared")).unwrap();
     std::fs::write(root.join("app/main.ts"), source).unwrap();

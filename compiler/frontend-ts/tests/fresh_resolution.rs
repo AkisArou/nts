@@ -4,7 +4,7 @@
 #[path = "../../test-support/scratch.rs"]
 mod scratch;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 use scratch::ScratchDir;
@@ -15,7 +15,7 @@ fn write(path: &Utf8Path, text: &str) {
 }
 
 fn project(name: &str, source: &str) -> ScratchDir {
-    let root = ScratchDir::new(&Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")), name);
+    let root = scratch::ScratchDir::in_target(name);
     write(
         &root.join("app/tsconfig.json"),
         r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","noEmit":true,"types":[]},"files":["main.ts"]}"#,

@@ -1,20 +1,18 @@
 //! Several emit commands' answers, with one frontend and lowering.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-struct Fixture(PathBuf);
+struct Fixture(scratch::StdScratchDir);
 
 impl Fixture {
     fn new(source: &str) -> Self {
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("multi-emit-{}-{unique}", std::process::id()));
+        let root = scratch::StdScratchDir::in_std_target("multi-emit");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("main.ts"), source).unwrap();
         std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"types":[]},"files":["main.ts"]}"#).unwrap();
@@ -29,12 +27,6 @@ impl Fixture {
             .arg(self.0.join("tsconfig.json"))
             .output()
             .unwrap()
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
