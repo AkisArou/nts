@@ -138,7 +138,11 @@ echo "gate: $sha in $tree"
 # Set up and stop: what this script's own test asks.
 [ -n "${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 cd "$tree"
-CARGO_TARGET_DIR="$target" cargo build --release -q
+if [ -x /usr/bin/time ] && [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
+  /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" env CARGO_TARGET_DIR="$target" cargo build --release -q
+else
+  CARGO_TARGET_DIR="$target" cargo build --release -q
+fi
 NTS_CHECKERS=1 \
 NTS_BIN="$target/release/nts" \
 NTS_SUITE_BIN="$target/release/nts-suite" \

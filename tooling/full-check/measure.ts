@@ -16,6 +16,10 @@ import {candidateCommand} from '../landing/candidate-environment.ts';
 import {launcherEnvironment} from '../landing/run.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {fullOwned} from '../census/full-plan.ts';
+import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
+import { LANDING_HOME } from "../landing/queue.ts";
+import { treeOf } from "../landing/git.ts";
+import { measureWithLanding } from "./landing-verdict.ts";
 
 /**
  * A step's result as the full check reads it: a skip the policy accepts is a
@@ -30,6 +34,7 @@ export type Measurement = {
   steps: Record<string, StepResult>;
   reasons: Record<string, string>;
   verdict: "green" | "red" | "held";
+  reused?: string[];
 };
 
 export function verdictOf(steps: Record<string, StepResult>): Measurement["verdict"] {
@@ -42,6 +47,7 @@ type Summary = {
   wall_s?: number;
   identities?: { commit?: string };
   environment?: { canonical?: boolean };
+  executed?: string[];
   steps?: { name: string; verdict: string; reason?: string; accepted?: boolean }[];
 };
 
@@ -85,7 +91,7 @@ export type Gate = {
   /** Every step the commit's all.sh defines, and the wide ones its owed.mjs names. */
   steps(commit: string): { all: string[]; wide: string[] };
   /** Run `steps` at `commit`; `label` names the run's folder. */
-  run(commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord): Measurement;
+  run(commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord, options?: { reuseLanding?: boolean }): Measurement;
 };
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
@@ -99,6 +105,7 @@ export function fullCheckCeiling(lastGreen: RunRecord | undefined, steps: readon
       const summary = JSON.parse(readFileSync(join(lastGreen.run, "summary.json"), "utf8")) as Summary;
       if (summary.verdict === "green" && summary.environment?.canonical === true &&
           summary.identities?.commit && lastGreen.commit.startsWith(summary.identities.commit) &&
+          (!summary.executed || [...summary.executed].sort().join(" ") === [...steps].sort().join(" ")) &&
           typeof summary.wall_s === "number" && Number.isFinite(summary.wall_s) && summary.wall_s > 0) wall = summary.wall_s;
     } catch { /* There may be no history, or its run has been pruned. */ }
   }
@@ -110,9 +117,9 @@ export function fullCheckCeiling(lastGreen: RunRecord | undefined, steps: readon
 }
 
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
-export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv}={}): Gate {
+export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv;landingHome?:string}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
-  const launch = (commit: string, run: string, steps: readonly string[], ceiling?: number) => {
+  const launch = (commit: string, run: string, steps: readonly string[], ceiling?: number, probeContract = false) => {
     mkdirSync(run, { recursive: true });
     const selected = nodeToolchain(nodePin(controller, commit), options.env ?? process.env, options.nodeInstallations);
     // Hold pinned.sh's existing tree lock through setup, candidate import and
@@ -138,7 +145,16 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         cwd: controller, env: { ...launcher, ...owned, NTS_GATE_SETUP_ONLY: '1' },
         stdio: ['ignore', out, out, 'ignore', 'ignore', 'ignore', 'ignore', 'ignore', lock.fd],
       });
-      if (prepared.status !== 0 || prepared.error || prepared.signal || ceiling === undefined) return prepared;
+      if (prepared.status !== 0 || prepared.error || prepared.signal) return prepared;
+      if (probeContract) {
+        const helper = join(layout.tree, "tooling/gate/verdict-contract.ts");
+        if (!existsSync(helper)) throw Error("candidate has no portable landing verdict contract");
+        return candidateCommand(selected.node, {
+          tree: layout.tree, run, owned, standalone: true, discardTemporary: true,
+          command: [selected.node, helper, join(run, "verdict-contract.json")],
+        }, launcher, { output: out, treeLock: lock.fd });
+      }
+      if (ceiling === undefined) return prepared;
       // A historical runner validates its own slice grammar. Ask that version
       // to construct the boundary, using its canonical environment and Node.
       const namingModule = join(layout.tree, "tooling/gate/tooling-slice.ts");
@@ -165,6 +181,27 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       }, launcher, { output: out, treeLock: lock.fd, supervisor: [selected.node, measure, String(ceiling), run, slice] });
     } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };
+  const measure = (commit: string, steps: readonly string[], label: string, lastGreen?: RunRecord): Measurement => {
+    if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
+    const run = join(layout.runs, `${label}-${commit.slice(0, 12)}-${stamp()}`);
+    log(`measuring ${steps.join(" ")} at ${commit.slice(0, 12)}; logs ${run}`);
+    let result:ReturnType<typeof spawnSync>;
+    try {
+      const file = join(controller, "tooling/gate/times.tsv");
+      const ceiling = fullCheckCeiling(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "");
+      result = launch(commit, run, steps, ceiling);
+    }
+    catch(error) {
+      const reason=String(error);log(reason);
+      return {commit,run,steps:Object.fromEntries(steps.map(step=>[step,"HELD" as const])),reasons:Object.fromEntries(steps.map(step=>[step,reason])),verdict:"held"};
+    }
+    if (result.error) log(`pinned.sh did not start: ${result.error.message}`);
+    const read = result.status === 124 && !existsSync(join(run, MEASUREMENT_HOLD))
+      ? { steps: Object.fromEntries(steps.map(step => [step, "HELD" as const])),
+          reasons: Object.fromEntries(steps.map(step => [step, "full check run exceeded its wall ceiling"])) }
+      : readSummary(run, commit, steps);
+    return { commit, run, ...read, verdict: verdictOf(read.steps) };
+  };
   return {
     // The commit's own lists, read in the tree pinned.sh sets up for it
     // (NTS_GATE_SETUP_ONLY: checked out, inputs linked, nothing built).
@@ -180,26 +217,26 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       rmSync(setup, { recursive: true, force: true });
       return { all: list.stdout.split("\n").filter(Boolean), wide: JSON.parse(wide.stdout) as string[] };
     },
-    run(commit, steps, label, lastGreen) {
-      if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
-      const run = join(layout.runs, `${label}-${commit.slice(0, 12)}-${stamp()}`);
-      log(`measuring ${steps.join(" ")} at ${commit.slice(0, 12)}; logs ${run}`);
-      let result:ReturnType<typeof spawnSync>;
+    run(commit, steps, label, lastGreen, reuse) {
+      if (!reuse?.reuseLanding) return measure(commit, steps, label, lastGreen);
+      const evidenceRun = join(layout.runs, `${label}-evidence-${commit.slice(0, 12)}-${stamp()}`);
+      let contract: VerdictContract, tree: string;
       try {
-        const file = join(controller, "tooling/gate/times.tsv");
-        const ceiling = fullCheckCeiling(lastGreen, steps, existsSync(file) ? readFileSync(file, "utf8") : "");
-        result = launch(commit, run, steps, ceiling);
+        const probe = launch(commit, evidenceRun, [], undefined, true);
+        if (probe.error || probe.signal || probe.status !== 0) throw Error(`candidate contract probe failed; see ${evidenceRun}`);
+        const value: unknown = JSON.parse(readFileSync(join(evidenceRun, "verdict-contract.json"), "utf8"));
+        if (!validContract(value)) throw Error("candidate contract probe wrote an invalid identity");
+        contract = value;
+        tree = treeOf({ root: layout.tree, env: options.env }, commit);
+      } catch (error) {
+        log(`core landing reuse unavailable: ${String(error)}`);
+        return measure(commit, steps, label, lastGreen);
       }
-      catch(error) {
-        const reason=String(error);log(reason);
-        return {commit,run,steps:Object.fromEntries(steps.map(step=>[step,"HELD" as const])),reasons:Object.fromEntries(steps.map(step=>[step,reason])),verdict:"held"};
-      }
-      if (result.error) log(`pinned.sh did not start: ${result.error.message}`);
-      const read = result.status === 124 && !existsSync(join(run, MEASUREMENT_HOLD))
-        ? { steps: Object.fromEntries(steps.map(step => [step, "HELD" as const])),
-            reasons: Object.fromEntries(steps.map(step => [step, "full check run exceeded its wall ceiling"])) }
-        : readSummary(run, commit, steps);
-      return { commit, run, ...read, verdict: verdictOf(read.steps) };
+      return measureWithLanding({
+        home: options.landingHome ?? LANDING_HOME, commit, tree, contract,
+        requested: steps, evidenceRun, lastGreen, log,
+        measure: (execute, previous) => measure(commit, execute, label, previous),
+      });
     },
   };
 }

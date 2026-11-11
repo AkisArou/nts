@@ -211,7 +211,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   }
   const m = doing(fx, state, part, commit, () => {
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
-    return fx.gate.run(commit, steps, part, state[part].last_green);
+    return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core" });
   }, at);
   const failed = steps.filter(step => m.steps[step] === "FAIL");
   const record: RunRecord = { commit, run: m.run, verdict: m.verdict, at, failed };
@@ -402,9 +402,16 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     // found at the commit that added it.
     const present = steps.filter(step => all.includes(step));
     if (!present.length) return result("green", "", []);
-    const m = doing(fx, state, "probe", commit, () => fx.gate.run(commit, present, `${part}-probe`, state[part].last_green));
+    const m = doing(fx, state, "probe", commit, () => fx.gate.run(commit, present, `${part}-probe`, state[part].last_green,
+      { reuseLanding: part === "core" && !fresh }));
     const at = fx.now().toISOString();
     for (const step of present) {
+      // Imported observations are cheap to revalidate against the candidate's
+      // current contract, so they never become an unqualified cached probe.
+      if (m.reused?.includes(step)) {
+        state.probes = state.probes.filter(p => !(p.key === key && p.step === step));
+        continue;
+      }
       const verdict = m.steps[step] === "PASS" ? "green" : m.steps[step] === "FAIL" ? "red" : null;
       if (!verdict) continue;
       state.probes = state.probes.filter(p => !(p.key === key && p.step === step));

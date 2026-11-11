@@ -104,6 +104,9 @@ export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;
   assert.equal(result.verdict,"held");assert.match(result.reasons.tooling!,/asdf install nodejs 99\.3\.0/);
   const invocations=readFileSync(log,"utf8").trim().split("\n").map(line=>JSON.parse(line) as string[]);
   assert.equal(invocations.filter(args=>args.includes("--input-type=module")).length,4,"both pins construct their slice and execute their private binary");
+  const historical = gate.run(old, ["tooling"], "historical-reuse-fallback", undefined, { reuseLanding: true });
+  assert.equal(historical.verdict, "green", JSON.stringify(historical.reasons));
+  assert.deepEqual(historical.steps, { tooling: "PASS" }, "a historical candidate without a portable contract executes the requested check");
 });
 
 test('red full-check runs use the measured environment and release resolution sessions while the controller lives',async t=>{

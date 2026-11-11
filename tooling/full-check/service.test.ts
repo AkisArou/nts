@@ -27,6 +27,9 @@ import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSes
 import {hostEnvironment} from '../gate/canonical-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 import {removable as makeRemovable} from '../gate/run-temporary.ts';
+import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
+import { recordLandingFixture } from "../landing/verdict-fixture.ts";
+import { measureWithLanding } from "./landing-verdict.ts";
 
 type Harness = Effects & {
   lines: string[]; queue: StubQueue; submitted: StubQueue["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[]; units: StubUnits;
@@ -1482,4 +1485,82 @@ test("a records run the controller recorded synchronously before units, cut shor
   assert.equal(await cycle(fx), "core");
   assert.equal(readState(repo.layout.state).core.records?.commit, commit);
   assert.ok(fx.units.running(recordsUnitName("core")));
+});
+
+/** Real receipt validation around the existing deterministic gate fixture. */
+function receiptGate(repo: Repository) {
+  const gate = fakeGate(repo), original = gate.run.bind(gate), home = join(repo.root, "landing-verdicts");
+  const calls: { commit: string; steps: string[]; label: string; reuse: boolean }[] = [];
+  let observations = 0;
+  const record = (commit: string, steps: string[]) => recordLandingFixture(home, commit,
+    repo.git.run(["rev-parse", `${commit}^{tree}`]), steps);
+  gate.run = (commit, steps, label, lastGreen, options) => {
+    calls.push({ commit, steps: [...steps], label, reuse: options?.reuseLanding === true });
+    const measure = (execute: readonly string[]) => {
+      const result = original(commit, execute, label, lastGreen);
+      writeFileSync(join(result.run, "summary.json"), JSON.stringify({
+        identities: { commit }, environment: { canonical: true }, requested: execute,
+        verdict: result.verdict, steps: execute.map(name => ({ name, verdict: result.steps[name], cpu: 1, wall: 1 })),
+      }));
+      return result;
+    };
+    if (!options?.reuseLanding) return measure(steps);
+    return measureWithLanding({
+      home, commit, requested: steps, contract: fixtureContract(), lastGreen,
+      tree: repo.git.run(["rev-parse", `${commit}^{tree}`]),
+      evidenceRun: join(repo.layout.runs, "evidence-" + ++observations), log: () => {}, measure,
+    });
+  };
+  return { gate, record, calls };
+}
+
+test("the controller reuses exact landing passes in core and still executes the whole wide part", async t => {
+  const repo = repository(t), first = repo.commit({ "a.txt": "first\n" }, "first");
+  const f = receiptGate(repo);
+  f.record(first, ["build", "tests", "integrity"]);
+  const morning = harness(repo, f.gate, { now: new Date(2026, 10, 6, 9, 0) });
+  assert.equal(await cycle(morning), "core");
+  assert.deepEqual(f.gate.measured[0]!.steps, ["build", "typescript-c"]);
+  assert.equal(verified(repo), first);
+  const later = harness(repo, f.gate, { now: new Date(2026, 10, 6, 10, 30) });
+  assert.equal(await cycle(later), "wide");
+  assert.deepEqual(f.gate.measured.at(-1)!.steps, ["integrity"]);
+  assert.equal(f.calls.at(-1)!.reuse, false);
+});
+
+test("a new controller without a matching checked-tip receipt executes the complete core", async t => {
+  const repo = repository(t), first = repo.commit({ "a.txt": "first\n" }, "first"), f = receiptGate(repo);
+  f.record(first, ["build", "tests"]);
+  assert.equal(await cycle(harness(repo, f.gate)), "core");
+  const next = repo.commit({ "a.txt": "next\n" }, "a different checked tree");
+  assert.equal(await cycle(harness(repo, f.gate)), "core");
+  assert.equal(f.gate.measured.at(-1)!.commit, next);
+  assert.deepEqual(f.gate.measured.at(-1)!.steps, ["build", "tests", "typescript-c"]);
+  assert.equal(verified(repo), next);
+});
+
+test("culprit search consumes reused passes as the measured commit's observation and confirms failures freshly", async t => {
+  const repo = repository(t), good = repo.commit({ "src.txt": "base\n" }, "good"), f = receiptGate(repo);
+  f.record(good, ["build", "tests", "typescript-c"]);
+  const fx = harness(repo, f.gate);
+  await cycle(fx);
+  const { a, b, c, d } = redHistory(repo);
+  f.record(a, ["build", "tests", "typescript-c"]);
+  for (const commit of [b, c, d]) f.record(commit, ["build", "tests"]);
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.deepEqual(state.culprits.map(finding => finding.commit), [b]);
+  assert.equal(verified(repo), good);
+  assert.ok(f.calls.some(call => call.label === "core-probe" && call.commit === a && call.reuse));
+  assert.equal(f.gate.measured.some(call => call.label === "core-probe" && call.commit === a), false);
+  assert.ok(f.calls.some(call => call.label === "core-probe" && call.commit === d && !call.reuse));
+  assert.ok(f.calls.some(call => call.label === "core-probe" && call.commit === good && !call.reuse));
+  assert.ok(f.calls.some(call => call.label === "core-probe" && call.commit === b && !call.reuse));
+  assert.equal(state.probes.some(probe => probe.key.includes(a) && probe.step === "typescript-c"), false);
+  const e = repo.commit({ "e.txt": "e\n" }, "while the revert waits");
+  f.record(e, ["build", "tests"]);
+  await cycle(harness(repo, f.gate));
+  assert.equal(readState(repo.layout.state).culprits.length, 1);
+  assert.ok(f.calls.some(call => call.label === "core-probe" &&
+    repo.git.subject(call.commit).startsWith("full check: ") && call.commit !== e));
 });
