@@ -11,6 +11,7 @@ import {hostObservations} from './host-observations.ts';
 import {activeCommand} from './active-process.ts';
 import {commandObservationFixture} from './command-observations-fixture.ts';
 import {waitFor} from './test-wait.ts';
+import {poisonedTestEnvironment} from './test-host-bootstrap.ts';
 
 test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));
@@ -72,6 +73,13 @@ writeFileSync(ready,'ready');process.stdout.write('ready');`;
 test('Rust fixtures cannot construct a second partial host packet',()=>{
   const read=inspectHostSource('tooling/cli/tests/new.rs','command.env("NTS_MEMINFO", "/owned/file");').reads;
   assert.match(hostReadProblems(read,{})[0]!,/forbidden fixture-constructor/);
+});
+
+test('poisoned launcher state is removed before strict worker grants are installed',()=>{
+  const environment=poisonedTestEnvironment();
+  for(const name of ['NODE_OPTIONS','NODE_PATH','NTS_UNDECLARED_TEST_ENVIRONMENT'])assert.equal(environment[name],undefined,name);
+  assert.notEqual(environment.HOME,'/unowned/test-home');
+  assert.equal(hostObservations(environment).disk('/missing').freeBytes,2**40);
 });
 
 test('the tool records falls, permits improvements, and refuses a new or raised count',t=>{

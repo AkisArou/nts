@@ -6,6 +6,7 @@ export const HOST_READ_OWNERS: Readonly<Record<string,{reason:string;kinds:reado
   'tooling/gate/active-process.ts':{reason:'Command observations and process-group birth identity; fixture observations replace the entire sampler.',kinds:['kernel']},
   'tooling/gate/measurement.ts':{reason:'MeasurementIO owns CPU quietness observations; controls supply the complete IO.',kinds:['kernel','clock']},
   'tooling/gate/canonical-environment.ts':{reason:'Canonical environment construction and named production capabilities.',kinds:['environment','clock']},
+  'tooling/gate/test-host-bootstrap.ts':{reason:'Adversarial launcher input goes through the allowlist before grants enter a test worker.',kinds:['environment']},
   'tooling/gate/test-environment.ts':{reason:'Fixture allowlist, private state and named handoffs.',kinds:['environment']},
   'tooling/gate/cache-capabilities.ts':{reason:'A named cache grant is required before any production resolver.',kinds:[]},
   'tooling/gate/cache-environment.ts':{reason:'Production account cache locations; fixture nesting copies declared names only.',kinds:[]},

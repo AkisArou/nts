@@ -1,7 +1,7 @@
 // Test infrastructure: each run owns its complete resource observations,
 // memory ledger and scheduling history. Dependencies and samplers receive
 // the same NTS_HOST_OBSERVATIONS capability through gateEnvironment.
-import { join,resolve } from "node:path";
+import { resolve } from "node:path";
 import {fileURLToPath} from "node:url";
 import {HOST_OBSERVATION_ENVIRONMENT} from "./host-observations.ts";
 import {assignTestValues,testEnvironment} from './test-environment.ts';

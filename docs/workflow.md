@@ -386,8 +386,9 @@ locked session on CPU 4 and keep the wall-time floor below.
   Existing reads outside those owners have a module-and-kind migration count
   that can only fall (`node tooling/gate/test-host-audit.ts --record` writes
   improvements and refuses rises); a fixture environment copy is forbidden regardless of
-  that count. Test entry workers start with private state, a complete synthetic
-  resource packet and poisoned ambient Node options. Child environments must
+  that count. Test entry workers start with a complete synthetic
+  resource packet. Poisoned launcher inputs pass through the allowlist before
+  grants enter the worker; canonical execution flags keep their identity. Child environments must
   come from the allowlist owner. A fixture missing its resource packet fails
   before the production adapter can run.
 - **Command supervision consumes observations.** `CommandLiveness` in

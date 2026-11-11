@@ -2096,6 +2096,7 @@ The test-host gate step audits tooling source, generated children, shell
 launches and Rust host-fixture constructors. Machine reads belong to named
 adapter modules. Existing reads outside them are recorded by module and kind
 and may only decrease; fixture environment copying is always forbidden. Test
-workers own complete resource observations and private state, and carry ambient
-poison which an allowlisted child environment removes. The source inventory is
+workers own complete resource observations. Their setup sends poisoned launcher
+inputs through the environment allowlist before installing resource/cache grants;
+mutable child state remains private to each fixture. The source inventory is
 in `docs/records/tooling-host-tests-698.tsv`.

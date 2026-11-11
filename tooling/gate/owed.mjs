@@ -102,7 +102,7 @@ export const SELECTOR_POLICY_DATA = [
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
 
-export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
 /**
@@ -363,7 +363,6 @@ const COMPARE = [
  * than dropped.
  */
 export const RULES = [
-  { name: "test host observation ownership", when: p => p.startsWith("tooling/") || /^(compiler|runtime)\/.*\.rs$/.test(p), settled: true, steps: ["test-host"], arms: [] },
   { name: "tooling test collection policy", when: p => p === TOOLING_TEST_EXCLUSIONS, full: true, wide: true, steps: [], arms: [] },
   { name: "owner-emission cost reports", when: p => /^tooling\/gate\/owner-emission-calls(?:\.test)?\.ts$/.test(p), settled: true, steps: ["tooling"], arms: [] },
   { name: "tooling test discovery", when: p => p === "tooling/gate/tooling-discovery.ts", settled: true, steps: ["tooling"], arms: [] },
@@ -1106,8 +1105,8 @@ function nodeHarness(path) {
   return NODE_HARNESS.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
 }
 
-/** Every change, whatever it touched: the gate's first two steps. */
-const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths"], arms: [] };
+/** Ordinary changes retain the compiled checks and cheap tree invariants. */
+const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host"], arms: [] };
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is

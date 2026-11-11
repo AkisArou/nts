@@ -15,9 +15,25 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 import * as policy from "./owed.mjs";
+import {auditTestHost} from "./test-host-audit.ts";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
+
+test('an unplaced path owes the full gate whether or not the host audit reaches it',t=>{
+  const root=mkdtempSync(join(tmpdir(),'nts-host-closure-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  for(const directory of ['tooling/conformance','compiler','runtime'])mkdirSync(join(root,directory),{recursive:true});
+  const paths=['unplaced-audited.ts','unplaced-outside-audit.ts'].map(name=>['tooling','conformance',name].join('/'));
+  for(const path of paths)writeFileSync(join(root,path),'export const value=1;');
+  writeFileSync(join(root,'tooling/entry.test.ts'),"import './conformance/unplaced-audited.ts';");
+  const audit=auditTestHost(root,{}),members=audit.closures[0].modules;
+  assert.ok(members.includes(paths[0]));assert.ok(!members.includes(paths[1]));
+  for(const path of paths){
+    const rules=owed([{path,added:true}]);
+    assert.ok(rules.some(rule=>rule.full),path+' retains the unknown-path obligation');
+    assert.ok(gateSteps(rules).includes('test-host'),path+' also owes the supplemental audit');
+  }
+});
 
 test('each program consumer owes one shared producer before native execution',()=>{
   for(const step of ['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree']){
@@ -151,7 +167,7 @@ test("the offline Node migration inventory owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node migration work-list inventory"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "tests", "tooling"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "test-host", "tests", "tooling"], path);
     for (const step of ["addons", "profile", "integrity", "bench-agree", "interop"])
       assert.ok(!gateSteps(rules).includes(step), `${path} does not execute ${step}`);
   }
@@ -163,7 +179,7 @@ test("the offline Node transcription proof owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node transcription proof"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "tests", "tooling"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "test-host", "tests", "tooling"], path);
   }
   assert.ok(owed([{path:"tooling/conformance/unplaced-transcription.mjs",added:true}]).some(rule => rule.full));
 });
@@ -277,7 +293,7 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
 });
 
 test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {
-  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit"]);
+  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host"]);
   for (const path of ["results/benchmarks/cells.tsv","results/typed-release/cells.tsv","results/suite/corpus.md","results/a-new-tool/measurements.json"]) {
     const got=stepsFor(path);
     assert.ok(got.length>0);
@@ -575,12 +591,12 @@ test("the host project retains conservative quoted-basename reader reach",()=>{
   // this path's explicit rule never removes those additive obligations.
   assert.deepEqual([...stepsFor('tooling/conformance/tsconfig.json')].sort(),[
     'assembles','blockers','build','c-compiles','clippy','compile-time','compile-time-rc','definitions',
-    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','program-oracles','rustfmt','tests','tooling','types',
+    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','types',
   ]);
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
-  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','program-oracles','rustfmt','tests','tooling']);
+  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {
@@ -648,7 +664,7 @@ test("the landing check owes its own tests, not the full gate", () => {
   owes("tooling/landing/queue.test.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });
 });
 
-test("every step has one landing form, and the tree checks are the nine", () => {
+test("every step has one landing form, and the tree checks are the ten", () => {
   const { LANDING, landingTableProblem } = policy;
   assert.equal(landingTableProblem(LANDING, allSteps()), null);
   const { tests: _tests, ...missing } = LANDING;

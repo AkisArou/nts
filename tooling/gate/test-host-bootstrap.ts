@@ -1,16 +1,26 @@
-// Loaded before a test entry. The process owns a complete synthetic resource
-// view and private state; a raw environment copy carries a deliberately invalid
-// Node option. Declared tool/cache capabilities survive through the owner only.
-import {testEnvironment} from './test-environment.ts';
-export function installTestHost():void {
-  const environment=testEnvironment();
-  for(const name of ['NODE_TEST_CONTEXT','NODE_CHANNEL_FD','NODE_CHANNEL_SERIALIZATION_MODE']){
-    if(process.env[name]!==undefined)environment[name]=process.env[name];
-  }
-  process.env=environment;
-  process.env.NTS_UNDECLARED_TEST_ENVIRONMENT='poison: ambient environment copied';
-  process.env.NODE_OPTIONS='--nts-undeclared-test-environment';
+// The launcher is poisoned before the allowlist owner sees it. Test entries
+// receive strict resource/cache grants; HOME and execution-policy identity stay
+// with their canonical parent. Mutable child state still belongs to each fixture.
+import {assignTestValues,testEnvironment} from './test-environment.ts';
+import {HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
+import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+export function poisonedTestEnvironment(source:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+  return testEnvironment({}, {...source,HOME:'/unowned/test-home',NODE_OPTIONS:'--nts-undeclared-test-environment',
+    NODE_PATH:'/unowned/modules',NTS_UNDECLARED_TEST_ENVIRONMENT:'poison: ambient environment copied'});
 }
-// node --test loads --import in its parent too. Poison only the entry workers,
-// after Node has created their protocol, never the process that forks them.
+export function installTestHost():void {
+  const environment=poisonedTestEnvironment();
+  const grants:NodeJS.ProcessEnv={NTS_MEMORY_RESERVATION:undefined,NTS_MEMORY_PRIORITY:undefined};
+  for(const name of [...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT])grants[name]=environment[name];
+  assignTestValues(process.env,grants);
+  // This preload is test instrumentation, never an oracle execution option.
+  // Preserve every caller-supplied flag; remove only our exact import pair.
+  process.execArgv=process.execArgv.filter((flag,index,all)=>{
+    const isBootstrap=(value:string|undefined)=>value!==undefined&&pathToFileURL(resolve(value)).href===import.meta.url;
+    return !(flag==='--import'&&isBootstrap(all[index+1])||index>0&&all[index-1]==='--import'&&isBootstrap(flag));
+  });
+}
+// node --test also preloads in the parent which forks its entry workers.
 if(process.env.NODE_TEST_CONTEXT)installTestHost();
