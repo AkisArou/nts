@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -64,13 +64,13 @@ test("the command line links a tree and refuses a use it does not know", t => {
   const root = testScratch(t, "linker");
   const dir = tree(root, "cli", { "tooling/inputs/link.sh": RECORDS });
   const cli = fileURLToPath(new URL("./linker.ts", import.meta.url));
-  const ok = spawnSync(process.execPath, [cli, "gate", "/shared", dir], {env:testEnvironment(), encoding: "utf8" });
+  const ok = spawnSync(process.execPath, [cli, "gate", "/shared", dir], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(linked(dir), `gate /shared ${dir}`);
-  const bad = spawnSync(process.execPath, [cli, "lane", "/shared", dir], {env:testEnvironment(), encoding: "utf8" });
+  const bad = spawnSync(process.execPath, [cli, "lane", "/shared", dir], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /usage: node tooling\/inputs\/linker\.ts gate\|work/);
-  const missing = spawnSync(process.execPath, [cli, "gate", "/shared", join(root, "absent")], {env:testEnvironment(), encoding: "utf8" });
+  const missing = spawnSync(process.execPath, [cli, "gate", "/shared", join(root, "absent")], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /linker: .*absent has no input linker/);
 });
@@ -79,7 +79,7 @@ test("the command line exits with the linker's own status, its output passed thr
   const root = testScratch(t, "linker");
   const dir = tree(root, "refusing", { "tooling/inputs/link.sh": 'echo "candidate input is missing" >&2; exit 23\n' });
   const cli = fileURLToPath(new URL("./linker.ts", import.meta.url));
-  const result = spawnSync(process.execPath, [cli, "gate", "/shared", dir], {env:testEnvironment(), encoding: "utf8" });
+  const result = spawnSync(process.execPath, [cli, "gate", "/shared", dir], {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(result.status, 23, result.stderr);
   assert.match(result.stderr, /candidate input is missing/);
 });

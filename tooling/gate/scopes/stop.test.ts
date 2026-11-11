@@ -1,4 +1,4 @@
-import {testEnvironment} from "../test-environment.ts";
+import {fixtureEnvironment} from "../test-environment.ts";
 import assert from "node:assert/strict";
 import {moduleClosure} from "../module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../../differential/oracle-workspace-fixture.ts";
@@ -174,7 +174,7 @@ else
 fi
 `);
   // The mutation must never reach a capability inherited from the outer test run.
-  const launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...testEnvironment() };
+  const launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...fixtureEnvironment(t) };
   launcher.HOME = home;
   if (missing) delete launcher[missing];
   if (control.launcherFailure) {

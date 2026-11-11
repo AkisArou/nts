@@ -1,4 +1,4 @@
-import {testEnvironment,testEnvironmentHandoff} from "./test-environment.ts";
+import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
 import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
@@ -13,7 +13,7 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 
 function fixture(t) {
   const root=testScratch(t,"active-command-case");
-  return {root,env:{...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
+  return {root,env:{...fixtureEnvironment(t),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
 }
 
 function processHasExited(pid:number,readStat=()=>readFileSync(`/proc/${pid}/stat`,"utf8")):boolean {
@@ -136,9 +136,9 @@ test("a case its memory cap holds in the kernel past its idle guard is never tak
   // with no CPU progress. Held there for three times its idle guard, then
   // let go, it completes, and nothing calls it hung.
   const {root,env}=fixture(t),unit=`nts-test-memory-held-${randomUUID().slice(0,8)}`;
-  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{env:testEnvironment(),stdio:"ignore"});});
-  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{env:testEnvironment(),encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
-  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{env:testEnvironment(),encoding:"utf8"});return r.stdout.trim();};
+  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{env:fixtureEnvironment(t),stdio:"ignore"});});
+  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{env:fixtureEnvironment(t),encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{env:fixtureEnvironment(t),encoding:"utf8"});return r.stdout.trim();};
   // How long the case goes without CPU progress while held, sampled as an
   // idle guard reading CPU alone would see it; once that is three idle
   // guards, its cap is lifted.

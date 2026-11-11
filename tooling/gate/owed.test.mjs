@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // What owed.mjs maps a changed path to, on this tree:
 //
 //   node --test tooling/gate/owed.test.mjs
@@ -206,7 +206,7 @@ test("a failed Cargo metadata prerequisite is named instead of losing crate reac
   writeFileSync(cargo, "#!/bin/sh\nprintf '%s\\n' 'metadata prerequisite control: offline input unavailable' >&2\nexit 73\n");
   chmodSync(cargo, 0o755);
   const result = spawnSync(process.execPath, [fileURLToPath(new URL("./owed.mjs", import.meta.url)), "--self-test"], {
-    encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH}` },
+    encoding: "utf8", env: { ...fixtureEnvironment(t), PATH: `${bin}:${process.env.PATH}` },
   });
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /cargo metadata --format-version 1 --no-deps --offline/);

@@ -2,11 +2,12 @@
 // policy. Everything writable belongs to this environment's fixture lifetime.
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
-import {delimiter,join} from 'node:path';
+import {delimiter,dirname,join} from 'node:path';
 import {ENVIRONMENT_CONTEXT,FIXED_AMBIENT,HOST_CAPABILITIES,ownTemporary,type GateEnvironmentContext} from './canonical-environment.ts';
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {assertRunTemporary,removable} from './run-temporary.ts';
 import {toolchainDirectories} from './toolchain.ts';
+import {CONTENT_CACHE_ENVIRONMENT,contentCacheEnvironment} from './cache-environment.ts';
 
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
@@ -16,6 +17,8 @@ const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG
   'GIT_CONFIG_GLOBAL','GIT_CONFIG_SYSTEM','GIT_CONFIG_NOSYSTEM','GIT_TERMINAL_PROMPT',
   'GIT_AUTHOR_NAME','GIT_AUTHOR_EMAIL','GIT_COMMITTER_NAME','GIT_COMMITTER_EMAIL'] as const;
 const roots=new Set<string>();
+type Fixture={after(fn:()=>void):void};
+const fixtures=new WeakMap<Fixture,NodeJS.ProcessEnv>();
 process.once('exit',()=>{
   for(const root of roots)try{
     if(existsSync(root)){removable(root);rmSync(root,{recursive:true,force:true});}
@@ -44,7 +47,8 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
     XDG_DATA_HOME:join(root,'data'),XDG_STATE_HOME:join(root,'state'),
     GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_SYSTEM:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',
     GIT_AUTHOR_NAME:'Fixture',GIT_AUTHOR_EMAIL:'fixture@invalid',GIT_COMMITTER_NAME:'Fixture',GIT_COMMITTER_EMAIL:'fixture@invalid'});
-  const grants:NodeJS.ProcessEnv={};
+  const grants:NodeJS.ProcessEnv=contentCacheEnvironment();
+  if(context)for(const name of CONTENT_CACHE_ENVIRONMENT)if(context.owned[name]!==undefined)grants[name]=context.owned[name];
   for(const name of HANDOFF){
     const value=context?context.owned[name]:source[name];
     if(value!==undefined)grants[name]=value;
@@ -78,6 +82,17 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   return env;
 }
 
+/** Private mutable state belongs to one fixture, reused by its children. */
+export function fixtureEnvironment(fixture:Fixture,owned:NodeJS.ProcessEnv={}):NodeJS.ProcessEnv{
+  let base=fixtures.get(fixture);
+  if(!base){
+    base=testEnvironment();fixtures.set(fixture,base);
+    const root=dirname(base.HOME!);
+    fixture.after(()=>{if(existsSync(root)){removable(root);rmSync(root,{recursive:true,force:true});}roots.delete(root);});
+  }
+  const env={...base};assignTestValues(env,owned);return env;
+}
+
 /** Fixture overrides and revocations reach both the process and the canonical
  * handoff, so a later gateEnvironment cannot revive an ended reservation. */
 export function assignTestValues(env:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv):void {
@@ -96,6 +111,6 @@ export function assignTestValues(env:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv):
  * expression works in both CommonJS and ESM without loading another runtime. */
 export function testEnvironmentHandoff(names:readonly string[]=[]):string {
   const allowed=[...new Set([...HOST_CAPABILITIES,...Object.keys(FIXED_AMBIENT),...WRITABLE,...HANDOFF,
-    ...HOST_OBSERVATION_ENVIRONMENT,ENVIRONMENT_CONTEXT,'NTS_GATE_RUN_DIR',...names])];
+    ...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,ENVIRONMENT_CONTEXT,'NTS_GATE_RUN_DIR',...names])];
   return `Object.fromEntries(${JSON.stringify(allowed)}.filter(name=>process.env[name]!==undefined).map(name=>[name,process.env[name]]))`;
 }

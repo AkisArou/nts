@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 // The summaries over trees of their own: the benchmark summary against the
 // page the same model renders, full.md as it rendered before the model was
 // shared, the numbers-as-numbers rule, the conformance summary over one record
@@ -363,7 +363,7 @@ test("without a green wide run that kept a report there is no census part, and a
 test("the command prints one summary, writes nothing, and names the commit of a checkout it reads", t => {
   const root = publish(conformanceTree(t));
   const git = (...args: string[]) => {
-    const done = spawnSync("git", ["-c", "user.name=summary", "-c", "user.email=summary@example.invalid", "-c", "commit.gpgsign=false", ...args], {env:testEnvironment(), cwd: root, encoding: "utf8" });
+    const done = spawnSync("git", ["-c", "user.name=summary", "-c", "user.email=summary@example.invalid", "-c", "commit.gpgsign=false", ...args], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" });
     assert.equal(done.status, 0, done.stderr);
     return done.stdout.trim();
   };

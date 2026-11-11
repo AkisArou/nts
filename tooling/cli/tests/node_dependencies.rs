@@ -240,7 +240,10 @@ export default defineConfig({products:{
         .current_dir(&dir)
         .env("PATH", path)
         .env("CPATH", dir.join("poison/include"))
+        .env("NTS_NODE_DEPS_CACHE", dir.join("declared-native-cache"))
         .env("XDG_CACHE_HOME", dir.join("cache")));
+    assert!(dir.join("declared-native-cache/archives").is_dir());
+    assert!(!dir.join("cache/nts/node-deps").exists());
     for product in ["viaC", "viaLlvm"] {
         let output = dir.join(format!(".nts/build/{product}/linux-gnu-x86_64"));
         let executable = output.join(product);

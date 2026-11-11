@@ -1,4 +1,4 @@
-import {testEnvironment} from './test-environment.ts';
+import {fixtureEnvironment} from './test-environment.ts';
 import { launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
@@ -19,7 +19,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const tree = join(directory, "gate-tree");
     mkdirSync(join(root, "tooling/gate"), { recursive: true });
     mkdirSync(join(root, "tooling/inputs"), { recursive: true });
-    const env = Object.fromEntries(Object.entries(testEnvironment()).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
+    const env = Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
     Object.assign(env, {
       GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
       GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",

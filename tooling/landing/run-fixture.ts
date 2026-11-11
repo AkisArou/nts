@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Running a landing's steps: the build first, the rest through the gate's own
 // runner, both admitted by the memory ledger, memory pressure retried, pending
 // lines collected. Its tests are run-candidate, run-steps and run-holds:
@@ -44,7 +44,7 @@ export function fixture(t: TestContext) {
   oracleWorkspaceFixture(t,tree);
   writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
-  const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], {env:testEnvironment(), encoding: "utf8" }).trim();
+  const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], {env:fixtureEnvironment(t), encoding: "utf8" }).trim();
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh
 controls=${JSON.stringify(controls)}
 if [ "$1" = --list ]; then
@@ -76,7 +76,7 @@ fi
 exec node "$(dirname "$0")/run.mjs" "$@"
 `);
   chmodSync(join(gate, "all.sh"), 0o755);
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: tree, encoding: "utf8", env: { ...testEnvironment(), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: tree, encoding: "utf8", env: { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
   const commit = git("rev-parse", "HEAD");
   const memory = ownMemory(join(own, "memory"));
   const build = join(own, "build.sh");
@@ -84,7 +84,7 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   chmodSync(build, 0o755);
   const control = (step: string, what: string) => writeFileSync(join(controls, step), what);
   const options = (steps: string[], extra: Partial<RunOptions> = {}): RunOptions => ({
-    tree, target, run, commit, steps, build: [build], env: { ...testEnvironment(), HOME: home },
+    tree, target, run, commit, steps, build: [build], env: { ...fixtureEnvironment(t), HOME: home },
     owned: { NTS_GATE_SLOTS: "4", ...memory }, ...extra,
   });
   return { own, tree, target, run, controls, control, options, memory, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };

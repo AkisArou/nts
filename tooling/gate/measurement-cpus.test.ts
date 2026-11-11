@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // The CPUs reserved for measurement (4-5): every gate and heavy job keeps off
 // them, and a measurement waits for them to be quiet.
 //
@@ -113,14 +113,14 @@ test("the real host scope is verified, or the absence is reported before launchi
     const directory=mkdtempSync(join(tmpdir(),"nts-forged-ceiling-"));
     let result;
     try {
-      const clean=Object.fromEntries(Object.entries(testEnvironment()).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length));
+      const clean=Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([name,value])=>!name.startsWith("NTS_") && !launcherPolicyNames({[name]:value}).length));
       result=spawnSync("sh",[PINNED],{env:{...clean,NTS_GATE_RUN_DIR:join(directory,"run"),NTS_GATE_SCOPE_EXPECTED:cpus},encoding:"utf8"});
     } finally {rmSync(directory,{recursive:true,force:true});}
     assert.equal(result.status, 75, result.stderr);
     assert.match(result.stderr, /ceiling is absent/);
     return;
   }
-  const result = spawnSync(launch.command, launch.args, {env:testEnvironment(), encoding: "utf8" });
+  const result = spawnSync(launch.command, launch.args, {env:fixtureEnvironment(t), encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(cpuSubset(result.stdout.trim(), cpus), true, "an explicit all-CPU child must stay inside the ceiling");
   if (launch.mechanism.startsWith("inherited-cpuset")) assert.equal(verifyCeiling(cpus), true);

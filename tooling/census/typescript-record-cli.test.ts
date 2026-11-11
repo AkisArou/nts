@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Exercise the real consumer with versioned saved observations. No source case
 // or checked-in record is mutated; the compiler still runs its own self-checks.
 import assert from "node:assert/strict";
@@ -64,7 +64,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const fixturePaths = ["control", "subject"].map(name => `${familyPath}/${name}.ts`);
   for (const path of fixturePaths) writeFileSync(join(fixture, path), "assert.sameValue(1 + 1, 2);\n");
   const git = (args: string[], cwd = fixture) => {
-    const result = spawnSync("git", args, {env:testEnvironment(), cwd, encoding: "utf8" });
+    const result = spawnSync("git", args, {env:fixtureEnvironment(t), cwd, encoding: "utf8" });
     assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
   };
   git(["init", "--quiet"]); git(["config", "user.name", "Fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
@@ -100,7 +100,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: ownMemoryEnv(lowMemory?starved:memory, { ...testEnvironment(), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
+        env: ownMemoryEnv(lowMemory?starved:memory, { ...fixtureEnvironment(t), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
           NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile },
           lowMemory?{availableKiB:0,totalKiB:2**20}:undefined) });
   }
@@ -192,9 +192,9 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   symlinkSync(join(sourceRoot,'runtime'),join(copied,'runtime'),'dir');
   // The real report records its consumer repository's HEAD. Bind the actual
   // copied files in this isolated fixture, without borrowing the author's Git.
-  execFileSync('git',['init','--quiet',copied], {env:testEnvironment()});
-  execFileSync('git',['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime'], {env:testEnvironment()});
-  execFileSync('git',['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs'], {env:testEnvironment()});
+  execFileSync('git',['init','--quiet',copied], {env:fixtureEnvironment(t)});
+  execFileSync('git',['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime'], {env:fixtureEnvironment(t)});
+  execFileSync('git',['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs'], {env:fixtureEnvironment(t)});
   const unchangedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
   assert.equal(unchangedAdapter.status,0,unchangedAdapter.stdout+unchangedAdapter.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,'utf8')).oracleIdentity,sourceOracle);
@@ -267,7 +267,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--under", under, mode, file, "--jobs", "1", "--rows", rows, "--resume", ...extra],
       { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: { ...testEnvironment(), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "writer") } });
+        env: { ...fixtureEnvironment(t), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "writer") } });
   }
   const written = run("--record", output, observed);
   assert.equal(written.status, 0, written.stdout + written.stderr);
@@ -305,7 +305,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   for (const [writer, file] of [["--record", join(scratch, "must-not-publish.tsv")], ["--record-pending", partial]]) {
     const unpinned = spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--under", under,
       writer, file], { cwd: root, encoding: "utf8",
-      env: { ...testEnvironment(), NTS_BIN: join(bare, "nts"), NTS_CENSUS_DIR: join(scratch, "negative") } });
+      env: { ...fixtureEnvironment(t), NTS_BIN: join(bare, "nts"), NTS_CENSUS_DIR: join(scratch, "negative") } });
     assert.equal(unpinned.status, 2, unpinned.stdout + unpinned.stderr);
     assert.match(unpinned.stdout, /not a pin/);
   }

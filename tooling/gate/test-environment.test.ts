@@ -6,7 +6,8 @@ import {join} from 'node:path';
 import {test} from 'node:test';
 import {ENVIRONMENT_CONTEXT,gateEnvironment} from './canonical-environment.ts';
 import {ownMemory,ownMemoryEnv} from './test-memory.ts';
-import {testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
+import {fixtureEnvironment,testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
+import {contentCacheEnvironment} from './cache-environment.ts';
 import {testScratch} from './test-scratch.ts';
 
 test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
@@ -30,6 +31,17 @@ test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
 test('explicit fixture values override the allowlist',()=>{
   const env=testEnvironment({NTS_GATE_SLOTS:'2',NODE_OPTIONS:'--no-warnings',FIXTURE_PROTOCOL:'owned'});
   assert.equal(env.NTS_GATE_SLOTS,'2');assert.equal(env.NODE_OPTIONS,'--no-warnings');assert.equal(env.FIXTURE_PROTOCOL,'owned');
+});
+
+test('mutable state has one fixture lifetime and shared caches are named capabilities',()=>{
+  const cleanups:(()=>void)[]=[],fixture={after:(fn:()=>void)=>{cleanups.push(fn);}};
+  const first=fixtureEnvironment(fixture),second=fixtureEnvironment(fixture),other=testEnvironment();
+  assert.equal(first.HOME,second.HOME);assert.equal(first.TMPDIR,second.TMPDIR);assert.notEqual(first.HOME,other.HOME);
+  for(const [name,path] of Object.entries(contentCacheEnvironment())){
+    assert.equal(first[name],path);assert.equal(other[name],path);assert.ok(!path.startsWith(first.HOME!));
+  }
+  first.FIXTURE_LOCAL='changed';assert.equal(second.FIXTURE_LOCAL,undefined,'each child receives its own map');
+  for(const cleanup of cleanups)cleanup();assert.equal(existsSync(first.HOME!),false);
 });
 
 test('declared Node, JDK and rustup directories precede HOME-dependent shims',t=>{

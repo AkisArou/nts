@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {spawnTest} from "./test-wait.ts";
@@ -14,7 +14,7 @@ function fixture(t: { after(fn: () => void): void }, oldUnrecorded = false) {
   const directory = testScratch(t, "oracle-bridge-run");
   const root = join(directory, "repo"), cache = join(directory, "cache"); mkdirSync(root);
   const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
-  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Bridge test", "-c", "user.email=bridge@example.invalid", ...args], {env:testEnvironment(), cwd: root, encoding: "utf8" }).trim();
+  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Bridge test", "-c", "user.email=bridge@example.invalid", ...args], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }).trim();
   const source = "tests/programs/example/src/main.ts";
   put(source, "export function work(n: number): number { return 1; }\n");
   put("tests/programs/example/tsconfig.json", '{"files":["src/main.ts"]}');
@@ -63,7 +63,7 @@ test("a private view preserves working inputs and is deleted after comparison", 
   const view = join(snapshot.root, "results/oracle-counts.json");
   try {
     assert.equal(snapshot.legacy, true); assert.notEqual(snapshot.root, f.root);
-    const viewCommon=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{env:testEnvironment(),cwd:snapshot.root,encoding:"utf8"}).trim();
+    const viewCommon=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{env:fixtureEnvironment(t),cwd:snapshot.root,encoding:"utf8"}).trim();
     assert.notEqual(viewCommon,f.git("rev-parse","--path-format=absolute","--git-common-dir"),"the view must own Git metadata");
     assert.equal(f.git("worktree","list","--porcelain"),registry,"the source registry must stay unchanged");
     assert.deepEqual(JSON.parse(readFileSync(view, "utf8")), f.table);

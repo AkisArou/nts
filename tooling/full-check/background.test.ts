@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/background.test.ts
 //
 // The full check's background work: a job's outcome, written whole and read
@@ -87,7 +87,7 @@ test("an outcome that cannot be read is lost, and not started again: the work en
 /** A unit of the user manager this test owns: its name is unique, and it is stopped by that name when the test ends. */
 function ownedUnit(t: TestContext, what: string): string {
   const name = `nts-test-background-${what}-${randomUUID().slice(0, 8)}`;
-  t.after(() => { spawnSync("systemctl", ["--user", "stop", `${name}.service`], {env:testEnvironment(), stdio: "ignore" }); });
+  t.after(() => { spawnSync("systemctl", ["--user", "stop", `${name}.service`], {env:fixtureEnvironment(t), stdio: "ignore" }); });
   return name;
 }
 
@@ -123,7 +123,7 @@ test("a real unit that runs on is running, refuses a second of its name, and onc
   assert.equal(units.running(name), true);
   assert.deepEqual(look(job, units, LATER), { state: "running" });
   assert.match(start(units, spec, job, () => {}) ?? "", /systemd-run exited 1/, "never a second unit of one name");
-  assert.equal(spawnSync("systemctl", ["--user", "stop", `${name}.service`], {env:testEnvironment()}).status, 0);
+  assert.equal(spawnSync("systemctl", ["--user", "stop", `${name}.service`], {env:fixtureEnvironment(t)}).status, 0);
   await waitFor(`${name} to be gone`, () => !units.running(name));
   assert.deepEqual(look(job, units, LATER), { state: "lost", why: `${name} is gone and wrote no outcome`, again: true });
   assert.equal(units.running(`nts-test-background-never-${randomUUID().slice(0, 8)}`), false, "a name no unit has is not running");

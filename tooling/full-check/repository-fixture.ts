@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 // A scratch repository with a local bare origin, and a stand-in gate that
 // reads its verdicts from the commit it measures: a step FAILs at a commit
 // whose tree has `RED/<step>` (or `RED/<step>.<anything>`), is HELD where it
@@ -33,7 +33,7 @@ export type Repository = {
 
 
 export function repository(t: TestContext): Repository {
-  const root = testScratch(t,"full-check"), env = testEnvironment();
+  const root = testScratch(t,"full-check"), env = fixtureEnvironment(t);
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dir = join(root, "repo"), origin = join(root, "origin.git");
   mkdirSync(dir);

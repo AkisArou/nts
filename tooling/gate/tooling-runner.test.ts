@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
@@ -68,10 +68,10 @@ test("a hung fixture's service and census scopes leave with its slice while a si
   const sibling=newToolingSlice(true),siblingUnit=`nts-test-tooling-sibling-${randomUUID().slice(0,8)}`;
   let ownedSlice:string|undefined;
   t.after(()=>{if(ownedSlice)stopToolingSlice(ownedSlice);stopToolingSlice(sibling);rmSync(directory,{recursive:true,force:true});});
-  const systemctl=(...args:string[])=>spawnSync("systemctl",["--user",...args],{env:testEnvironment(),encoding:"utf8"});
+  const systemctl=(...args:string[])=>spawnSync("systemctl",["--user",...args],{env:fixtureEnvironment(t),encoding:"utf8"});
   const fifo=join(directory,"hold"),state=join(directory,"ready.json"),file=join(directory,"subject.test.mjs");
-  const made=spawnSync("mkfifo",[fifo],{env:testEnvironment(),encoding:"utf8"});assert.equal(made.status,0,made.stderr);
-  const started=spawnSync("systemd-run",["--user","--quiet","--collect",...toolingSliceArgs({NTS_TOOLING_SLICE:sibling}),`--unit=${siblingUnit}`,"--property=LimitCORE=0","/usr/bin/taskset","-c","0-3,6-31","/usr/bin/cat",fifo],{env:testEnvironment(),encoding:"utf8"});
+  const made=spawnSync("mkfifo",[fifo],{env:fixtureEnvironment(t),encoding:"utf8"});assert.equal(made.status,0,made.stderr);
+  const started=spawnSync("systemd-run",["--user","--quiet","--collect",...toolingSliceArgs({NTS_TOOLING_SLICE:sibling}),`--unit=${siblingUnit}`,"--property=LimitCORE=0","/usr/bin/taskset","-c","0-3,6-31","/usr/bin/cat",fifo],{env:fixtureEnvironment(t),encoding:"utf8"});
   assert.equal(started.status,0,started.stderr);
   const helper=new URL("./tooling-slice.ts",import.meta.url).href,memory=new URL("../census/worker-memory.ts",import.meta.url).href,waiting=new URL("./test-wait.ts",import.meta.url).href;
   const service=`nts-test-tooling-subject-${randomUUID().slice(0,8)}`;
@@ -302,7 +302,7 @@ const withIdle=process.argv[2]==='idle';
   console.log(JSON.stringify({withIdle,now,progress,...result}));
 }
 `);
-  const env:NodeJS.ProcessEnv={...testEnvironment()};
+  const env:NodeJS.ProcessEnv={...fixtureEnvironment(t)};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
   const rows=[];let transcript="";
   for(const arg of ["active","idle"]){
@@ -358,7 +358,7 @@ const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instru
 const {times:_times,...outcome}=result;
 console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting,reportedShort:transcript.includes('short second')}));
 `);
-  const env:NodeJS.ProcessEnv={...testEnvironment()};
+  const env:NodeJS.ProcessEnv={...fixtureEnvironment(t)};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
   const actual=spawnTest(process.execPath,[probe],{encoding:"utf8",env},"long-first short-second activity probe");
   assert.equal(actual.status,0,actual.stderr);

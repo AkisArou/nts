@@ -1,4 +1,4 @@
-import {testEnvironment,testEnvironmentHandoff} from "../test-environment.ts";
+import {testEnvironmentHandoff,fixtureEnvironment} from "../test-environment.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -29,7 +29,7 @@ for (const beforeCheckout of [false, true]) test(`the next runner reaps a dead r
   t.after(() => {
     if (existsSync(info)) {
       const { slice } = JSON.parse(readFileSync(info, "utf8")) as { slice: string };
-      const stopped = spawnSync("systemctl", ["--user", "stop", slice], {env:testEnvironment(), encoding: "utf8" });
+      const stopped = spawnSync("systemctl", ["--user", "stop", slice], {env:fixtureEnvironment(t), encoding: "utf8" });
       assert.equal(stopped.status, 0, stopped.stderr);
     }
     rmSync(own, { recursive: true, force: true });
@@ -40,7 +40,7 @@ const owner=new GateScopes(process.env,${JSON.stringify(receipt)}),step=owner.st
 const command=step.command(process.execPath,['-e',${JSON.stringify(`const fs=require('node:fs');fs.watch(${JSON.stringify(own)},()=>{});fs.writeFileSync(${JSON.stringify(ready)},'ready');`)}]);
 spawn(command.command,command.args,{detached:true,stdio:'ignore',env:{...${testEnvironmentHandoff()},NTS_TOOLING_SLICE:step.slice}}).unref();
 writeFileSync(${JSON.stringify(info)},JSON.stringify({slice:owner.slice,group:owner.group}));`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", code], {env:testEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
   let stderr = ""; child.stderr.on("data", part => { stderr += part; });
   const status = await new Promise<number | null>((resolve, reject) => { child.on("error", reject); child.on("close", resolve); });
   assert.equal(status, 0, stderr);

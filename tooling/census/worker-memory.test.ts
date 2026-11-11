@@ -1,4 +1,4 @@
-import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
+import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { constants, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -73,14 +73,14 @@ async function gatePool(n: number) {
  * lower-priority job yield (memory-ledger.ts's `outranked`).
  */
 async function landingBlocker(t: { after(fn: () => void): void }): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...testEnvironment(), ...ownMemory };
+  const env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t), ...ownMemory };
   delete env.NTS_MEMORY_RESERVATION;
   const held = await reserve({ bytes: 4 * 2 ** 30, what: "another landing's job", priority: "landing" }, { env });
   t.after(() => held.release());
 }
 
 function landingAhead(t: { after(fn: () => void): void }): { withdraw: () => void; ended: Promise<unknown> } {
-  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...testEnvironment(), ...ownMemory };
+  const ahead = new AbortController(), env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t), ...ownMemory };
   delete env.NTS_MEMORY_RESERVATION;
   t.after(() => ahead.abort());
   const ended = reserve({ bytes: 4 * 2 ** 30, what: "landing", priority: "landing" }, { env, signal: ahead.signal, everyMs: 50 });
@@ -156,7 +156,7 @@ try {
 } finally { run.close(); }
 console.log(JSON.stringify({ peak, group: run.group }));`;
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",
-    env: { ...testEnvironment(), NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
+    env: { ...fixtureEnvironment(t), NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
   assert.equal(result.status, 0, result.stderr);
   const { peak, group } = JSON.parse(result.stdout);
   const files = readdirSync(costs); assert.equal(files.length, 1);
@@ -675,7 +675,7 @@ test("an exclusive case exceeding its step aggregate is a named failure, never p
 serialRun({memoryCapKb:1024*1024});
 compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024**2); print(len(held))", "named-budget-case"], {encoding:"utf8"});
 `);
-  const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...testEnvironment(),
+  const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...fixtureEnvironment(t),
     NTS_GATE_STEP: "outcomes", NTS_GATE_STEP_MEMORY_BYTES: String(128 * 2 ** 20),
     NTS_GATE_STEP_RESULT: join(directory, "instrument.json"), NTS_GATE_STEP_ATTEMPT: directory,
     NTS_CENSUS_POOL_WORKER: "0", NTS_CENSUS_WORKER_GROUP: "", NTS_CENSUS_RUN_GROUP: "" } });
@@ -746,7 +746,7 @@ console.log(JSON.stringify({ own, effective, status: killed.status, cause, group
   workerOutput: killed.stdout, workerError: killed.stderr }));`;
   const launch = slice.command(process.execPath, ["--input-type=module", "-e", census]);
   const ran = spawnTest(launch.command, launch.args, { encoding: "utf8",
-    env: { ...testEnvironment(), NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
+    env: { ...fixtureEnvironment(t), NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
   const seen = JSON.parse(ran.stdout.trim().split("\n").at(-1)!) as { own: string; effective: number; status: number; cause: string; group: string;
     supervisor: string; workerOutput: string; workerError: string };

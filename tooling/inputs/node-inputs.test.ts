@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,readlinkSync,realpathSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
@@ -42,7 +42,7 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   const shared=join(root,'shared');mkdirSync(shared);
   for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
     const result=spawnSync('sh',[join(from,'tooling/inputs/link.sh'),'work',shared,to],{encoding:'utf8',
-      env:{...testEnvironment(),HOME:home,PATH:dirname(process.execPath)+':'+process.env.PATH}});
+      env:{...fixtureEnvironment(t),HOME:home,PATH:dirname(process.execPath)+':'+process.env.PATH}});
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(realpathSync(join(to,'third_party/node-inputs')),pairPath(release,table.releases[release]!,cache));
     assert.equal(readFileSync(join(to,'dependency-provisioned'),'utf8'),'yes');
@@ -75,7 +75,7 @@ test('linking either Node version leaves a real candidate checkout clean',t=>{
   for(const [source,name] of [[old,'clean26'],[next,'clean27']] as const){
     const tree=join(root,name);candidate(source,tree);
     writeFileSync(join(tree,'.gitignore'),readFileSync(new URL('../../.gitignore',import.meta.url)));
-    const git=(...args:string[])=>execFileSync('git',args,{env:testEnvironment(),cwd:tree,encoding:'utf8'}).trim();
+    const git=(...args:string[])=>execFileSync('git',args,{env:fixtureEnvironment(t),cwd:tree,encoding:'utf8'}).trim();
     git('init','-q');git('add','.tool-versions','.gitignore','build/node-deps/recipes.json');
     git('-c','user.name=Node input control','-c','user.email=node-input-control@invalid','commit','-qm','candidate inputs');
     assert.equal(git('status','--porcelain'),'');link(tree,cache,table);

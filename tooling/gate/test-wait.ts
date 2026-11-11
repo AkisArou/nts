@@ -35,5 +35,5 @@ export function spawnTest(
   options: Omit<SpawnSyncOptionsWithStringEncoding, "timeout">,
   what = [command, ...args.slice(0, 2)].join(" "),
 ): SpawnSyncReturns<string> {
-  return testProcessResult(spawnSync(command, args, {env:testEnvironment(), ...options, timeout: TEST_HANG_MS }), what);
+  return testProcessResult(spawnSync(command, args, {...options,env:options.env??testEnvironment(),timeout: TEST_HANG_MS}), what);
 }

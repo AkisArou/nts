@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/service.test.ts
 //
 // The loop over a scratch repository with a local bare origin and a stand-in
@@ -1190,7 +1190,7 @@ test("the controller moves to verified only while no count reads its tree", t =>
   // As the count's service holds it while it counts: flock --shared on the controller's lock.
   mkdirSync(dirname(layout.controllerLock), { recursive: true });
   const count = openSync(layout.controllerLock, "a");
-  assert.equal(spawnSync("flock", ["--shared", "--nonblock", "8"], {env:testEnvironment(), stdio: ["ignore", "ignore", "inherit", null, null, null, null, null, count] }).status, 0);
+  assert.equal(spawnSync("flock", ["--shared", "--nonblock", "8"], {env:fixtureEnvironment(t), stdio: ["ignore", "ignore", "inherit", null, null, null, null, null, count] }).status, 0);
   const linked: string[] = [], link = (tree: string) => { linked.push(new Git(tree, repo.git.env).commit("HEAD")!); };
   assert.equal(followVerified(repo.git, layout, repo.dir, link), false);
   assert.deepEqual([repo.git.commit("HEAD"), linked], [first, []], "the tree does not move while the count reads it");

@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): diagnostic
 // attribution and owner membership, source and project maps, output inventory,
 // and module goals. Shared helpers are in oracle-emit-fixture.ts.
@@ -164,7 +164,7 @@ test("the actual outcome consumer's preload roots emit and retain exception repo
   const prepared=oracleExecution((await prepare(root,'src/main.ts',{preloads:[...OUTCOME_ORACLE_PRELOADS],sourceAssets:outcomeSourceAssets()})));
   const stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));
   for(const entry of OUTCOME_ORACLE_PRELOADS)assert.ok(stored.sources[entry],'ordinary host project owns the actual consumer preload');
-  const run=spawnSync(process.execPath,[...prepared.args,...OUTCOME_ORACLE_PRELOADS.flatMap(file=>['--import',file]),join(root,'src/main.ts')],{encoding:'utf8',cwd:root,env:{...testEnvironment(),...prepared.env}});
+  const run=spawnSync(process.execPath,[...prepared.args,...OUTCOME_ORACLE_PRELOADS.flatMap(file=>['--import',file]),join(root,'src/main.ts')],{encoding:'utf8',cwd:root,env:{...fixtureEnvironment(t),...prepared.env}});
   assert.equal(run.status,1);assert.equal(run.stdout,'');assert.equal(run.stderr,'nts: uncaught RangeError: owner control\n');
   assert.deepEqual(oracleLoaderReady(prepared),{ready:true});
 });
@@ -213,7 +213,7 @@ test("project map shapes keep diagnostic parity and stock Node stack presentatio
         // maps or constructs a runtime tree. This is an independent reference.
         // The shared raw-output cache is outside the owner's package scope.
         writeFileSync(join(dirname(stockFile!),'package.json'),readFileSync(join(root,'package.json')));
-        stock=spawnSync(process.execPath,['--enable-source-maps','--no-warnings',stockFile!],{encoding:'utf8',cwd:root,env:testEnvironment()});
+        stock=spawnSync(process.execPath,['--enable-source-maps','--no-warnings',stockFile!],{encoding:'utf8',cwd:root,env:fixtureEnvironment(t)});
         return actual;
       });
       assert.ok(actual);assert.equal(reference.status,0,name+reference.stdout+reference.stderr);assert.equal(actual.status,0,name+actual.stdout+actual.stderr);
@@ -250,7 +250,7 @@ test('raw owner output preserves module and untyped CommonJS package formats',as
         const file=record.outputs.find((output:EmittedFile)=>output.sourceFileName===join(root,'src/main.ts')&&output.path.endsWith('.js')).path;
         writeFileSync(join(dirname(file),'package.json'),readFileSync(packageFile));
         assert.equal(readFileSync(join(dirname(file),'package.json'),'utf8'),packageBytes);
-        stock=spawnSync(process.execPath,['--enable-source-maps','--no-warnings',file],{cwd:root,env:testEnvironment(),encoding:'utf8'});
+        stock=spawnSync(process.execPath,['--enable-source-maps','--no-warnings',file],{cwd:root,env:fixtureEnvironment(t),encoding:'utf8'});
         return result;
       });
       assert.ok(stock);assert.equal(stock.status,0,String(stock.stderr));assert.equal(JSON.parse(String(stock.stdout)).commonjs,!module);
@@ -343,7 +343,7 @@ test('one application tree owns runtime code, data and relative links independen
   assert.equal(index.trees.filter((tree:{root:string})=>tree.root==='tree/application').length,1);
   const run=(prepared:OraclePrepared)=>{
     const execution=oracleExecution(prepared),args=[entry,...['case.cjs','data.txt','link'].map(file=>join(alias,file))].map(file=>oracleRuntimeFile(prepared,file));
-    const actual=spawnSync(process.execPath,[...execution.args,...args],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
+    const actual=spawnSync(process.execPath,[...execution.args,...args],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...execution.env}});
     return {actual,health:oracleLoaderReady(execution)};
   };
   const first=run(prepared);assert.equal(first.actual.status,0,first.actual.stderr);assert.equal(first.actual.stdout,'19\ncaptured\ndata.txt\n');assert.deepEqual(first.health,{ready:true});
@@ -356,7 +356,7 @@ test('one application tree owns runtime code, data and relative links independen
   const captured=[entry,...['case.cjs','data.txt','link'].map(file=>join(alias,file))].map(file=>oracleRuntimeFile(fresh,file));
   chmodSync(dirname(captured[3]!),0o700);
   rmSync(captured[3]!);symlinkSync(join(suite,'data.txt'),captured[3]!);
-  const escaped=oracleExecution(fresh),outside=spawnSync(process.execPath,[...escaped.args,...captured],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...escaped.env}});
+  const escaped=oracleExecution(fresh),outside=spawnSync(process.execPath,[...escaped.args,...captured],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...escaped.env}});
   const escapedHealth=oracleLoaderReady(escaped);assert.equal(escapedHealth.ready,false,'a copied link cannot be redirected to an origin inode');
   if(!escapedHealth.ready)assert.match(escapedHealth.why,/filesystem (readlink|runtimeKind) changed/);
   assert.equal(outside.stdout,'23\ncaptured\n','earlier validated reads complete, but the changed link is never returned');
@@ -384,7 +384,7 @@ try{await import(target.href);}catch{}
 console.log('application');\n`});
   const prepared=(await prepare(root));
   const run=(name?:string)=>{
-    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,join(root,'src/main.ts'),...(name?[name]:[])],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...execution.env}});
+    const execution=oracleExecution(prepared),actual=spawnSync(process.execPath,[...execution.args,join(root,'src/main.ts'),...(name?[name]:[])],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...execution.env}});
     return {actual,health:oracleLoaderReady(execution)};
   };
   const healthy=run();assert.equal(healthy.actual.status,0,healthy.actual.stderr);assert.equal(healthy.actual.stdout,'application\n');assert.deepEqual(healthy.health,{ready:true});
@@ -455,7 +455,7 @@ test("Preserve type-only imports keep the emitted JavaScript goal",async t=>{
     const manifest=JSON.parse(readFileSync(prepared.manifest,'utf8'));
     const output=join(dirname(prepared.manifest),manifest.sources[join(root,'src/main.ts')]);
     const oracle=execute(root,prepared);
-    const bare=spawnSync(process.execPath,['--no-warnings',output],{cwd:root,env:testEnvironment(),encoding:'utf8'});
+    const bare=spawnSync(process.execPath,['--no-warnings',output],{cwd:root,env:fixtureEnvironment(t),encoding:'utf8'});
     assert.equal(bare.status,0,bare.stderr);assert.equal(oracle.status,0,oracle.stderr);
     return {oracle:oracle.stdout,bare:bare.stdout};
   };

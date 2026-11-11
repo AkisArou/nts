@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): owner runtime
 // capture, shared owner reuse and invalidation, run seals, runtime bindings,
 // output ownership and declared inputs. Shared helpers are in
@@ -36,7 +36,7 @@ test('owner runtime capture follows imports without visiting unrelated package t
   assert.equal(Object.keys(manifest.inputs).some(file=>file.startsWith(join(root,'unrelated')+'/')||file.startsWith(join(root,'foreign')+'/')),false);
   assert.equal(manifest.observations.some((fact:HostObservation)=>fact.path.startsWith(join(root,'unrelated')+'/')),false,'no traversal of an unrelated package tree');
   const execution=oracleExecution(prepared),subject=spawnSync(process.execPath,[...execution.args,join(root,'src/main.ts'),'../unrelated/poison.mjs'],
-    {cwd:root,env:{...testEnvironment(),...execution.env},encoding:'utf8'});
+    {cwd:root,env:{...fixtureEnvironment(t),...execution.env},encoding:'utf8'});
   assert.equal(subject.status,0,subject.stderr);assert.equal(subject.stdout,'19\ncaught\n');
   const health=oracleLoaderReady(execution);assert.equal(health.ready,false,'an omitted subtree remains unknown');
   if(!health.ready)assert.match(health.why,/resolution context was not captured/);
@@ -314,7 +314,7 @@ test('runtime binding injection follows producer source identity for emitted mod
     const imported=runtime?'@nts/runtime/node/async_hooks/src/main.ts':'./unrelated.ts';
     const root=workspace(t,{'src/main.ts':`import ${JSON.stringify(imported)};console.log(typeof Reflect.get(globalThis,'nts_promise_hook_install'));\n`,'src/unrelated.ts':'export const value=19;\n'}, {paths:{'@nts/runtime/*':[join(REPOSITORY,'runtime/*')]}});
     const prepared=(await prepare(root,'src/main.ts',{preloads:[...OUTCOME_ORACLE_PRELOADS],sourceAssets:outcomeSourceAssets()}));
-    const run=spawnSync(process.execPath,[...prepared.args,'--no-warnings',...OUTCOME_ORACLE_PRELOADS.flatMap(file=>['--import',file]),join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...testEnvironment(),...prepared.env}});
+    const run=spawnSync(process.execPath,[...prepared.args,'--no-warnings',...OUTCOME_ORACLE_PRELOADS.flatMap(file=>['--import',file]),join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...prepared.env}});
     assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,(runtime?'function':'undefined')+'\n');
     assert.deepEqual(oracleLoaderReady(prepared),{ready:true});
   }
@@ -392,8 +392,8 @@ test('checking intent never becomes the bytes of an imported config JSON module'
     cpSync(join(root,'tsconfig.json'),join(root,'data.json'));
     const reference=join(root,'reference'),compiler=verifyToolchain(toolchain).compiler;
     const args=['--project',join(root,'tsconfig.json'),'--noEmit','false','--emitDeclarationOnly','false','--rewriteRelativeImportExtensions','true','--outDir',reference,'--rootDir',root,'--pretty','false'];
-    const emitted=spawnSync(compiler,args,{env:testEnvironment(),cwd:root,encoding:'utf8'});assert.equal(emitted.status,0,emitted.stdout+emitted.stderr);
-    const stock=spawnSync(process.execPath,[join(reference,'src/main.mjs')],{env:testEnvironment(),cwd:root,encoding:'utf8'});
+    const emitted=spawnSync(compiler,args,{env:fixtureEnvironment(t),cwd:root,encoding:'utf8'});assert.equal(emitted.status,0,emitted.stdout+emitted.stderr);
+    const stock=spawnSync(process.execPath,[join(reference,'src/main.mjs')],{env:fixtureEnvironment(t),cwd:root,encoding:'utf8'});
     t.diagnostic(JSON.stringify({kind:'stock-config-json',self,compiler,args,emit:{status:emitted.status,stdout:emitted.stdout,stderr:emitted.stderr},run:{status:stock.status,stdout:stock.stdout,stderr:stock.stderr}}));
     assert.equal(stock.status,0,String(stock.stderr));assert.equal(stock.stdout,'false\n');
     if(!self){

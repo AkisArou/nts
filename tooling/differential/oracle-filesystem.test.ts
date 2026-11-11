@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,type ResolutionDomainRecord} from './oracle-filesystem.ts';
@@ -300,7 +300,7 @@ test('generated Node sensitivity covers every admitted lookup domain',t=>{
       return {recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:[root],excluded:[],aliases,files:capturedFiles,directories,packages,absent:[],scopeAbsent:[],moduleAbsent:[]};
     };
     const record=inventory(),proof=new OracleResolutionDomain(record).prove({nodeMajor,mode,specifier,parent,...(direct?{direct}:{}),extensions:['.js','.json','.node']});
-    const run=()=>{const result=spawnSync(process.execPath,['--no-warnings',parent],{env:testEnvironment(),cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(result.signal,null);return result.stdout;};
+    const run=()=>{const result=spawnSync(process.execPath,['--no-warnings',parent],{env:fixtureEnvironment(t),cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(result.signal,null);return result.stdout;};
     const before=run();if(layout==='file-url-cjs')assert.equal(JSON.parse(before).code,'MODULE_NOT_FOUND');else assert.equal(before,'{"value":19}\n',layout+' needs a real clean Node control');
     // This superset is intentionally independent of the helper's recipe:
     // all bounded ancestors, one/two node_modules levels, package metadata,

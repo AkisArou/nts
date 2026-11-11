@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
@@ -71,7 +71,7 @@ test("the compile CLI records one compile at a time and four at once alike, chec
   }
   writeFileSync(join(root, "benchmarks/cases/root-coverage/unimported.ts"), "export const sibling = 1;\n");
   const git = (args: string[]) => {
-    const result = spawnSync("git", args, {env:testEnvironment(), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
+    const result = spawnSync("git", args, {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
   };
   git(["init", "--quiet", "--initial-branch=main"]); git(["config", "user.name", "Fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
   git(["add", "benchmarks", "tsconfig.fixtures.json"]); git(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "benchmark recorder fixture"]);
@@ -102,7 +102,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const memory = ownMemory(memoryDirectory, ample);
   const first = join(scratch, "first"), second = join(scratch, "second");
   const environment = (env: NodeJS.ProcessEnv, bin = pinned): NodeJS.ProcessEnv => {
-    const selected = { ...withoutHanded(testEnvironment()), NTS_BIN: bin, ...memory, TMPDIR: scratch, BENCH_SHELL_ONLY: "must be dropped", NTS_RC_NAIVE: "1", ...env };
+    const selected = { ...withoutHanded(fixtureEnvironment(t)), NTS_BIN: bin, ...memory, TMPDIR: scratch, BENCH_SHELL_ONLY: "must be dropped", NTS_RC_NAIVE: "1", ...env };
     delete selected.NTS_GATE_STEP_RESULT; // A planted stop belongs to this fixture, never the outer tooling step.
     delete selected[ENVIRONMENT_CONTEXT]; delete selected.NTS_GATE_RUN_DIR;
     return selected;
@@ -333,7 +333,7 @@ test("the records job reserves per lane: four lanes ask four times what one does
   const { COMPILE_CAP_BYTES, recordsJob } = await import("./build-records.ts");
   const { jobSizing } = await import("../gate/memory-ledger.ts");
   const { historyFile, writeCostHistory } = await import("../gate/step-scheduling.ts");
-  const env = { ...withoutHanded(testEnvironment()), ...ownMemory(join(testScratch(t, "benchmark-record-sizing"), "memory")) };
+  const env = { ...withoutHanded(fixtureEnvironment(t)), ...ownMemory(join(testScratch(t, "benchmark-record-sizing"), "memory")) };
   assert.equal(writeCostHistory(historyFile(env), { jobs: [{ key: "bench-compile-records", peak: 2 ** 30 }] }), undefined);
   const one = jobSizing(recordsJob(1, "one lane"), env), four = jobSizing(recordsJob(4, "four lanes"), env);
   assert.equal(one.basis, "measured");

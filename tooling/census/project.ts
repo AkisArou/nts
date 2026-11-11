@@ -361,7 +361,7 @@ const ROOT_FORMAT = "nts-case-root-v1";
 const HOUR = 3600_000;
 
 function rootsBase(base?) {
-  return resolve(base ?? join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "nts/case-roots"));
+  return resolve(base ?? process.env.NTS_CENSUS_CASE_ROOTS ?? join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "nts/case-roots"));
 }
 
 function canonicalFlags(flags) {

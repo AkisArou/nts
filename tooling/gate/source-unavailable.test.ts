@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {execFileSync} from "node:child_process";
@@ -14,12 +14,12 @@ test("backend policy separates named unavailable populations from defects and pa
   for(const name of ["control","calls"]){const dir=join(root,"tests/programs",name);mkdirSync(dir,{recursive:true});writeFileSync(join(dir,"tsconfig.json"),"{}");}
   const diff=join(root,"tooling/differential");mkdirSync(diff,{recursive:true});
   writeFileSync(join(diff,"agree.mjs"),`import {copyFileSync} from 'node:fs';const out=process.argv.find(arg=>arg.startsWith('--verdicts=')).slice('--verdicts='.length);copyFileSync(process.env.SOURCE_VERDICTS,out);`);
-  execFileSync("git",["init","--quiet"],{env:testEnvironment(),cwd:root});execFileSync("git",["add","."],{env:testEnvironment(),cwd:root});
+  execFileSync("git",["init","--quiet"],{env:fixtureEnvironment(t),cwd:root});execFileSync("git",["add","."],{env:fixtureEnvironment(t),cwd:root});
   const source=readFileSync(new URL("./all.sh",import.meta.url),"utf8"),start=source.indexOf("backend_examples() {"),end=source.indexOf("\n}\n",start)+2;
   assert.ok(start>=0&&end>start,"the production backend policy is present");
   const script=join(root,"policy.sh"),rows=join(root,"verdicts.txt");
   writeFileSync(script,`#!/bin/sh\nset -eu\nroot=${JSON.stringify(root)}\njobs=1\ncd "$root"\n${source.slice(start,end)}\nbackend_examples 1 control exact 23\n`);
-  const run=(lines:string[])=>{writeFileSync(rows,lines.join("\n")+"\n");return spawnTest("sh",[script],{cwd:root,encoding:"utf8",env:{...testEnvironment(),SOURCE_VERDICTS:rows,NTS_BIN:"/not-executed"}});};
+  const run=(lines:string[])=>{writeFileSync(rows,lines.join("\n")+"\n");return spawnTest("sh",[script],{cwd:root,encoding:"utf8",env:{...fixtureEnvironment(t),SOURCE_VERDICTS:rows,NTS_BIN:"/not-executed"}});};
   const accepted=run(["ok control","unavailable calls\t29 calls without compiled bindings; 29 Node calls measured"]);
   assert.equal(accepted.status,0,accepted.stdout+accepted.stderr);
   assert.match(accepted.stdout,/1 of 1 examples agree/);assert.match(accepted.stdout,/1 Node populations measured without compiled bindings/);

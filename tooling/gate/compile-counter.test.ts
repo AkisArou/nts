@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import {FIXED_AMBIENT} from "./canonical-environment.ts";
 import assert from "node:assert/strict";
 import {chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
@@ -150,7 +150,7 @@ test("a pending module's calibration adds its row in place, every other row and 
 test("the recorder rejects a module the tree does not have before creating a run", t => {
   const root = testScratch(t, "counter-selection"), out = join(root, "not-created");
   const result = spawnTest(process.execPath, [fileURLToPath(new URL("compile-counter-calibrate.ts", import.meta.url)),
-    "--module", "runtime/node/not-a-module", "--run-dir", out], { encoding: "utf8", env: ownMemoryEnv(join(root, "memory"), { ...testEnvironment(), NTS_BIN: process.execPath }) });
+    "--module", "runtime/node/not-a-module", "--run-dir", out], { encoding: "utf8", env: ownMemoryEnv(join(root, "memory"), { ...fixtureEnvironment(t), NTS_BIN: process.execPath }) });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unknown compile-time module: runtime\/node\/not-a-module/);
   assert.equal(existsSync(out), false);
@@ -174,7 +174,7 @@ test("the real tripwire fails missed and legacy readings and stale rows, and lis
   const check = (row: object) => {
     writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify(row));
     return spawnTest(process.execPath, [join(gate, "compile-time.mjs")], { encoding: "utf8", env: {
-      ...testEnvironment(), NTS_BIN: process.execPath, NTS_COMPILE_TIMES_FROM: kept, NTS_GATE_RUN_DIR: join(root, "run"),
+      ...fixtureEnvironment(t), NTS_BIN: process.execPath, NTS_COMPILE_TIMES_FROM: kept, NTS_GATE_RUN_DIR: join(root, "run"),
     } });
   };
   assert.equal(check(valid).status, 0);
@@ -270,7 +270,7 @@ if(args[1]==="--prepared"&&process.env.NTS_COUNTER_TEST_ENDING==="signal")proces
     const kept = join(dir, ending);
     const frame = join(dir, `${ending}-instrument.json`);
     const result = spawnTest(process.execPath, [fileURLToPath(new URL("../conformance/integrity.ts", import.meta.url)), "runtime/node/counter-test"], {
-      encoding: "utf8", env: { ...testEnvironment(), NTS_BIN: nts, NTS_INTEGRITY_KEEP: kept, NTS_COUNTER_TEST_ENDING: ending,
+      encoding: "utf8", env: { ...fixtureEnvironment(t), NTS_BIN: nts, NTS_INTEGRITY_KEEP: kept, NTS_COUNTER_TEST_ENDING: ending,
         NTS_GATE_COSTS_DIR: join(dir, "costs"), NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_CASE_COSTS_DIR: "", NTS_GATE_RUN_DIR: dir, NTS_GATE_STEP: "integrity", NTS_GATE_STEP_ATTEMPT: "counter-control", NTS_GATE_STEP_RESULT: frame },
     });
     const row = JSON.parse(readFileSync(join(kept, "runtime_node_counter-test.json"), "utf8"));
@@ -372,7 +372,7 @@ require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({a
   writeFileSync(join(results, "compile-times.tsv"), table);
   writeFileSync(join(results, "compile-times-rc.tsv"), `# arm: rc\n${table}`);
   const check = (arm: string) => spawnTest(process.execPath, [join(gate, "compile-time.mjs"), "--arm", arm], {
-    encoding: "utf8", env: { ...testEnvironment(), NTS_BIN: nts, NTS_COMPILE_TIMES_FROM: kept,
+    encoding: "utf8", env: { ...fixtureEnvironment(t), NTS_BIN: nts, NTS_COMPILE_TIMES_FROM: kept,
       NTS_GATE_RUN_DIR: join(root, "run"), LC_ALL: "C", TZ: "Pacific/Kiritimati", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_TOKENS: "" },
   });
   assert.equal(check("nogc").status, 0);

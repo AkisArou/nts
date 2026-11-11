@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
@@ -104,7 +104,7 @@ test('the shared execution transports stdout and stderr byte for byte',async()=>
 function planner(t:{after(fn:()=>void):void},interpreter:string,body:string){
   const root=testScratch(t,'oracle-planner'),file=join(root,'oracle-plan'),result=join(root,'result.json');
   writeFileSync(file,`#!${interpreter}\n${body}\n`,{mode:0o755});
-  return {file,env:{...testEnvironment(),NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'oracle-planner-control',NTS_GATE_STEP_ATTEMPT:'control'},
+  return {file,env:{...fixtureEnvironment(t),NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'oracle-planner-control',NTS_GATE_STEP_ATTEMPT:'control'},
     published:()=>existsSync(result)?(JSON.parse(readFileSync(result,'utf8')) as {kind:string}).kind:null};
 }
 test('the planner is held as a case compile is: its CPU bound, and the shared activity guard',()=>{

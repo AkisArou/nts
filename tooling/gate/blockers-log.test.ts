@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import { waitFor } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -36,7 +36,7 @@ main().catch(e=>{console.error(e);process.exitCode=1;});
   const run=(text: string,status=0,pause=false,runDirectory=true)=>{
     writeFileSync(output,text);
     const child=spawn("sh",[shell,"--call","blockers"],{cwd:root,
-      env:{...testEnvironment(),PATH:`${join(root,"bin")}:${process.env.PATH}`,TMPDIR:join(root,"tmp"),
+      env:{...fixtureEnvironment(t),PATH:`${join(root,"bin")}:${process.env.PATH}`,TMPDIR:join(root,"tmp"),
         NTS_GATE_RUN_DIR:runDirectory?join(root,"run"):"",STUB_OUTPUT:output,STUB_STATUS:String(status),STUB_RELEASE:release,STUB_PAUSE:pause?"1":"0"}});
     let stdout="",stderr="",closed=false;
     child.stdout.setEncoding("utf8").on("data",s=>{stdout+=s;});

@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
@@ -109,7 +109,7 @@ test("session conditions have no dependency on the old landing lock probe", t =>
   mkdirSync(bin);
   writeFileSync(join(bin, "flock"), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(invoked)}, 'invoked');process.exit(99);\n`, { mode: 0o755 });
   const result = spawnSync(process.execPath, [script, "conditions", root], {
-    encoding: "utf8", env: { ...testEnvironment(), PATH: `${bin}:${process.env.PATH ?? ""}` },
+    encoding: "utf8", env: { ...fixtureEnvironment(t), PATH: `${bin}:${process.env.PATH ?? ""}` },
   });
   assert.equal(result.status, 0, result.stderr);
   const observed = JSON.parse(result.stdout);

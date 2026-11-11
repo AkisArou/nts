@@ -52,7 +52,10 @@ pub(super) fn for_build(
         return Ok(None);
     }
     let plan = plan_for_target(target)?;
-    let cache = std::env::var_os("XDG_CACHE_HOME")
+    let cache = if let Some(cache) = std::env::var_os("NTS_NODE_DEPS_CACHE") {
+        PathBuf::from(cache)
+    } else {
+        std::env::var_os("XDG_CACHE_HOME")
         .map_or_else(
             || {
                 std::env::var_os("HOME")
@@ -61,7 +64,8 @@ pub(super) fn for_build(
             },
             |path| Ok(PathBuf::from(path)),
         )?
-        .join("nts/node-deps");
+        .join("nts/node-deps")
+    };
     let mut flags = tools.cpu.clone();
     if tools.lto {
         flags.extend(super::lto_flags());

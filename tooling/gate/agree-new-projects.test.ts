@@ -1,4 +1,4 @@
-import {testEnvironment,testEnvironmentHandoff} from './test-environment.ts';
+import {testEnvironmentHandoff,fixtureEnvironment} from './test-environment.ts';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
@@ -14,7 +14,7 @@ import { gateEnvironment } from "./canonical-environment.ts";
 function fixture(t:{after(fn:()=>void):void}) {
   const directory=testScratch(t, "agree-new-project-case");
   const root=join(directory,"repo"),home=join(directory,"home");mkdirSync(root);mkdirSync(home);
-  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(testEnvironment()).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
+  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
   // agree.mjs reserves its workers' memory in a ledger of this fixture's own.
   Object.assign(env,ownMemory(join(directory,"memory")),{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});

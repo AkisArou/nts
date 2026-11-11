@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {fixtureEnvironment} from "./test-environment.ts";
 import { after, test } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -216,7 +216,7 @@ test("an oracle stopped at V8's heap limit is a memory-cap budget at that limit,
   // In the policy's own scope, whatever NODE_OPTIONS the shell has: the heap flags decide the limit.
   await recordAll(arm.root,arm.output,async(p,evidence,identity)=>{
     const dir=join(evidence,identity);mkdirSync(dir,{recursive:true});
-    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(new Array(1<<17).fill(1.5));'],{source:p.source,env:testEnvironment()});
+    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(new Array(1<<17).fill(1.5));'],{source:p.source,env:fixtureEnvironment(t)});
     return assert.fail('a run past its heap limit was measured');
   });
   const [row]=JSON.parse(readFileSync(arm.output,'utf8')).rows;
@@ -237,7 +237,7 @@ test('an oracle run that measured nothing keeps the end of its stderr, in whole 
   const said=Array.from({length:400},(_,line)=>`line ${line} of what the child said`).join('\n')+'\n';
   await assert.rejects(recordAll(arm.root,arm.output,async(p,evidence,identity)=>{
     const dir=join(evidence,identity);mkdirSync(dir,{recursive:true});
-    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e',`process.stderr.write(${JSON.stringify(said)});process.exitCode=3;`],{source:p.source,env:testEnvironment()});
+    await runOracleArm(dir,0,process.execPath,[...ORACLE_HEAP_FLAGS,'-e',`process.stderr.write(${JSON.stringify(said)});process.exitCode=3;`],{source:p.source,env:fixtureEnvironment(t)});
     return assert.fail('a failed run was measured');
   }),/recording incomplete/);
   const [finding]=arm.summary().findings;

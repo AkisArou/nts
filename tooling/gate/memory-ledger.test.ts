@@ -1,4 +1,4 @@
-import {testEnvironment} from "./test-environment.ts";
+import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // The machine's memory ledger: its rule and its queue as functions, then
 // `reserve` through real files, the real lock and real owner processes, with
 // memory read from NTS_MEMINFO files written here, and admit.ts as a command.
@@ -168,7 +168,7 @@ test("a lost nonblocking resource claim leaves neither an admission nor a queued
 
 /** A live process to own a reservation, stopped by its own handle. */
 function ownerProcess(t: TestContext): ChildProcess & { pid: number } {
-  const child = spawn("cat", [], {env:testEnvironment(), stdio: ["pipe", "ignore", "ignore"] });
+  const child = spawn("cat", [], {env:fixtureEnvironment(t), stdio: ["pipe", "ignore", "ignore"] });
   t.after(async () => {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, "exit");
@@ -483,7 +483,7 @@ process.stdout.write(lock ? "held\\n" : "busy\\n");
 if (lock) { process.stdin.on("end", () => { lock.release(); process.stdout.write("released\\n"); }); process.stdin.resume(); }`;
 
 function holder(t: TestContext, dir: string) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", HOLD, LEDGER, dir], {env:testEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", HOLD, LEDGER, dir], {env:fixtureEnvironment(t), stdio: ["pipe", "pipe", "pipe"] });
   let out = "", err = "";
   child.stdout.setEncoding("utf8").on("data", (data: string) => { out += data; });
   child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });

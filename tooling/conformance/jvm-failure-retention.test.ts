@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -110,7 +110,7 @@ test("two concurrent collectors serialize and remove each expired entry once", a
   // The full gate runs the verifier beside tooling. Reproduce that live
   // legacy owner explicitly so this guard cannot depend on machine timing.
   const verifier = spawn(process.execPath, ["-e", "process.stdout.write('ready');process.stdin.resume()", "jvm-verifies.ts"],
-    {env:testEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
+    {env:fixtureEnvironment(t), stdio: ["pipe", "pipe", "pipe"] });
   t.after(async () => { const closed = once(verifier, "close"); verifier.stdin.end(); await closed; });
   const ready = await once(verifier.stdout, "data");
   assert.equal(String(ready[0]), "ready");
@@ -123,7 +123,7 @@ test("two concurrent collectors serialize and remove each expired entry once", a
   entry(folder, 2, "two", NOW - 20 * DAY);
   const collect = () => new Promise<{ removed: number }>((done, reject) => {
     const child = spawn("flock", ["--exclusive", join(base, ".retention.lock"), process.execPath,
-      fileURLToPath(new URL("./jvm-failure-retention.ts", import.meta.url)), "--prune", base, String(NOW), String(process.pid)], {env:testEnvironment()});
+      fileURLToPath(new URL("./jvm-failure-retention.ts", import.meta.url)), "--prune", base, String(NOW), String(process.pid)], {env:fixtureEnvironment(t)});
     let stdout = "", stderr = "";
     child.stdout.on("data", data => { stdout += data; });
     child.stderr.on("data", data => { stderr += data; });

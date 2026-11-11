@@ -1,4 +1,4 @@
-import {testEnvironment,testEnvironmentHandoff} from "../gate/test-environment.ts";
+import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
@@ -95,7 +95,7 @@ assert.ok(!calls[0].args.some(arg=>String(arg).startsWith('--as=')),'virtual spa
 }
 `);
     const run=spawnTest(process.execPath,['--experimental-test-module-mocks',script],{
-      encoding:'utf8',env:ownMemoryEnv(join(root,'memory'),{...testEnvironment(),...(mode==='pressure'?{NTS_GATE_STEP_MEMORY_BYTES:String(128*2**20)}:{}),NTS_GATE_TOKEN_HELD:undefined,NTS_GATE_STEP:'oracle-control',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:join(root,'result.json')}),cwd:root,
+      encoding:'utf8',env:ownMemoryEnv(join(root,'memory'),{...fixtureEnvironment(t),...(mode==='pressure'?{NTS_GATE_STEP_MEMORY_BYTES:String(128*2**20)}:{}),NTS_GATE_TOKEN_HELD:undefined,NTS_GATE_STEP:'oracle-control',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:join(root,'result.json')}),cwd:root,
     },`oracle ${mode} compiler control`);
     assert.equal(run.status,0,run.stdout+run.stderr);
     if(mode==='virtual')assert.match(readFileSync(join(root,'preparation/request-0/project-0/stdout'),'utf8'),/reserved 8589934592/);

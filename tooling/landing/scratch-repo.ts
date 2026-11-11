@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // A scratch repository for the landing check's tests: a local bare `origin`,
 // a clone with main checked out (the shared checkout), and git configured
 // only by the test, so a person's global config cannot change what runs.
@@ -19,7 +19,7 @@ export type Scratch = {
 export function scratchRepo(t: TestContext, name = "landing"): Scratch {
   const dir = testScratch(t,name);
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const env: NodeJS.ProcessEnv = { ...testEnvironment(), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0",
+  const env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0",
     GIT_AUTHOR_NAME: "Agent", GIT_AUTHOR_EMAIL: "agent@example.invalid", GIT_COMMITTER_NAME: "Landing", GIT_COMMITTER_EMAIL: "landing@example.invalid" };
   for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"]) delete env[name];
   const git = (args: readonly string[], cwd = root) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();

@@ -1,4 +1,4 @@
-import {testEnvironment} from "../gate/test-environment.ts";
+import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The worktree pool, elastic: take (reusing a warm tree, else growing while
 // the disk allows), give back, discard, release after landing, the upkeep that
 // removes idle trees, and status.
@@ -195,7 +195,7 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
   const a = p.take("fix/a");
   const tip = s.commit({ "src/a.txt": "the task's change\n" }, "the task's change", a.path);
   // An agent's test, or a person's shell, with its working directory in the tree.
-  const shell = spawn("cat", [], {env:testEnvironment(), cwd: join(a.path, "src"), stdio: ["pipe", "ignore", "ignore"] });
+  const shell = spawn("cat", [], {env:fixtureEnvironment(t), cwd: join(a.path, "src"), stdio: ["pipe", "ignore", "ignore"] });
   // Ended when its input closes, here or, if an assertion stops the test first, after it.
   t.after(() => { shell.stdin.end(); });
   await once(shell, "spawn");
@@ -225,7 +225,7 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
 test("a landed branch that moves on is its task's again: its mark goes and its tree stays held", async t => {
   const { s, p } = pool(t);
   const a = p.take("fix/a");
-  const shell = spawn("cat", [], {env:testEnvironment(), cwd: a.path, stdio: ["pipe", "ignore", "ignore"] });
+  const shell = spawn("cat", [], {env:fixtureEnvironment(t), cwd: a.path, stdio: ["pipe", "ignore", "ignore"] });
   await once(shell, "spawn");
   try {
     assert.equal(p.release("fix/a", a.head).state, "kept");
