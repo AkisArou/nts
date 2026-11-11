@@ -251,17 +251,18 @@ test("the real tripwire fails missed and legacy readings and stale rows, and lis
 test("a complete listing followed by a wrapped signal remains not measured", { skip: instructionsWork() ?? false }, t => {
   const dir = testScratch(t, "counter-listing");
   const nts = join(dir, "nts");
-  writeFileSync(nts, `#!/bin/sh
-if [ "$1" = hir ]; then
-cat <<'HIR'
-func module#init() -> void {
+  writeFileSync(nts, `#!/usr/bin/env node
+const args=process.argv.slice(2),started=process.cpuUsage();
+// A successful arm supplies positive waited-command CPU even when perf rounds
+// its footer to milliseconds. The negative arm still ends by its own signal.
+while(process.cpuUsage(started).user+process.cpuUsage(started).system<20_000){}
+if(args[0]==="hir")process.stdout.write(\`func module#init() -> void {
 b0:
   return
 }
 1 function(s), 0 construct(s) refused
-HIR
-fi
-if [ "$2" = --prepared ] && [ "$NTS_COUNTER_TEST_ENDING" = signal ]; then kill -TERM $$; fi
+\`);
+if(args[1]==="--prepared"&&process.env.NTS_COUNTER_TEST_ENDING==="signal")process.kill(process.pid,"SIGTERM");
 `);
   chmodSync(nts, 0o755);
   for (const ending of ["ok", "signal"]) {
