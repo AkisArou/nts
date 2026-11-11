@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { testScratch } from "./test-scratch.ts";
 import { written, type DexOutcome } from "../android/dex-record.ts";
 import { spawnTest } from "./test-wait.ts";
+import { copyModuleClosure } from "./module-closure-fixture.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -26,9 +27,7 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   copyFileSync(join(ROOT, "runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
-  for (const path of ["tooling/gate/case-bound.ts", "tooling/gate/active-command.ts", "tooling/gate/step-result.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"]) {
-    copyFileSync(join(ROOT, path), join(root, path));
-  }
+  copyModuleClosure(["tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);
   // What the record's parser imports, as it is.
   for (const path of ["tooling/bench/outcomes.ts", "tooling/records", "tooling/census", "tooling/conformance"]) {
     if (!existsSync(join(root, path))) symlinkSync(join(ROOT, path), join(root, path));

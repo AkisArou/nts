@@ -192,6 +192,7 @@ export class MemoryRun {
   /** The step's sibling worker boundary, when it supplies the aggregate's cap. */
   #outer: string | undefined;
   #parentCap: string | undefined;
+  #description: string;
   constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) }: { budgetBytes?: number; id?: string } = {}) {
     // A budget of its own -- a caller's, as a capture's or a test's -- is its
     // aggregate's own cap wherever it runs; the step's budget (the default)
@@ -201,10 +202,13 @@ export class MemoryRun {
     this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     const boundary = cappingSlice();
     this.#parentCap = boundary?.group;
-    const suffix = `ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`;
+    // Slice names encode their ancestry. Keep labels in the description so
+    // nested gates retain room for their worker slices under systemd's limit.
+    const suffix = `ntsc${randomUUID().replaceAll("-", "")}`;
+    this.#description = `nts census resident cap ${id}`;
     this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix(suffix);
     this.slice = `${this.prefix}.slice`;
-    this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
+    this.directory = join(homedir(), ".cache/nts/worker-memory", suffix);
     mkdirSync(this.directory, { recursive: true });
     try {
       // The step's worker boundary follows its grant. Its supervisor is
@@ -225,7 +229,7 @@ export class MemoryRun {
     try {
       const cap = bytes === null ? [] : ["MemoryMax", "t", String(bytes)];
       const binds = bindsToProperties(boundTo);
-      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + binds.length / 4), "Description", "s", `nts census resident cap ${this.prefix}`, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
+      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", String(4 + cap.length / 3 + binds.length / 4), "Description", "s", this.#description, ...cap, "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, "0");
       // StartTransientUnit returns a queued job, not an active slice. Join
       // that job before reading ControlGroup or any kernel memory controls.
       systemctl("start", unit);
@@ -258,8 +262,8 @@ export class MemoryRun {
   worker(index: string | number, bytes: number) {
     if (this.#closed) throw new Error("resident run is closed");
     const limit = bytes === 0 ? this.budgetBytes : Math.min(integer(bytes, "resident worker budget"), this.budgetBytes);
-    const slice = `${this.prefix}-w${index}.slice`;
     if (!/^[a-zA-Z0-9]+$/.test(String(index))) throw new Error("invalid resident worker index");
+    const slice = `${this.prefix}-w${this.#workers.length.toString(36)}.slice`;
     // A worker slice binds to its run's aggregate, as a step slice binds
     // to its run's root: stopping the aggregate stops every worker.
     const group = this.#slice(slice, limit, this.slice, this.group);
@@ -306,7 +310,6 @@ export class MemoryWorker {
   readonly slice: string;
   readonly group: string;
   readonly bytes: number;
-  #generation = 0;
   #closed = false;
   #scopes = new Set<MemoryScope>();
   constructor(run: MemoryRun, slice: string, group: string, bytes: number) {
@@ -316,7 +319,8 @@ export class MemoryWorker {
   counters(): MemoryCounters { return events(this.group); }
   scope(command: string, args: readonly string[], environment: NodeJS.ProcessEnv = process.env): MemoryScope {
     if (this.#closed) throw new Error("resident worker is closed");
-    const unit = `${this.slice.slice(0, -6)}-g${this.#generation++}.scope`;
+    // Scope names do not encode ancestry. The explicit --slice owns it.
+    const unit = `ntscensus${randomUUID().replaceAll("-", "")}.scope`;
     const ready = join(this.run.directory, `${unit}.ready`);
     const scope = {
       unit, ready,
