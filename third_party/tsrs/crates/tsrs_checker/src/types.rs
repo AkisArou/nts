@@ -60,12 +60,6 @@ impl<K: 'static, V: 'static> Default for GoMap<K, V> {
 }
 
 impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
-    #[inline]
-    pub fn new_empty() -> Self {
-        let m = GoMap::default();
-        m.make();
-        m
-    }
     /// Go `m = make(map[K]V)`.
     #[inline]
     pub(crate) fn make(&self) {
@@ -98,10 +92,7 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
         let m = self.0.get()?;
         tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key).cloned())
     }
-    #[inline]
-    pub fn has(&self, key: &K) -> bool {
-        self.0.get().is_some_and(|m| tsrs_core::sharedgraph::with_ref(&m, |m| m.contains_key(key)))
-    }
+
     /// Go `m[k] = v`. Creates the map if it is nil (Go would panic; faithful code always `make`s first).
     #[inline]
     pub(crate) fn set(&self, key: K, value: V) {
@@ -113,46 +104,7 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
         };
         m.borrow_mut().insert(key, value);
     }
-    #[inline]
-    pub fn delete(&self, key: &K) {
-        if let Some(m) = self.for_write() {
-            m.borrow_mut().remove(key);
-        }
-    }
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, FxHashMap::len))
-    }
 
-    pub fn is_empty(&self) -> bool {
-        self.0.get().is_none_or(|m| tsrs_core::sharedgraph::with_ref(&m, FxHashMap::is_empty))
-    }
-    #[inline]
-    pub fn clear(&self) {
-        if let Some(m) = self.for_write() {
-            m.borrow_mut().clear();
-        }
-    }
-    /// Go `clear(m)` for a map that is cleared after every use (a pooled scratch map). Clearing touches every
-    /// bucket, so a table that one large use grew would make every later small use pay for its capacity; such
-    /// a table is reallocated at the size of its last use instead. Unobservable: the map is empty either way.
-    #[inline]
-    pub fn clear_scratch(&self) {
-        if let Some(m) = self.for_write() {
-            let mut m = m.borrow_mut();
-            let len = m.len();
-            if m.capacity() > 64 && m.capacity() > 4 * len {
-                *m = FxHashMap::with_capacity_and_hasher(len, rustc_hash::FxBuildHasher);
-            } else {
-                m.clear();
-            }
-        }
-    }
-    /// The shared table (Go map value), for aliasing assignments `a.m = b.m`.
-    #[inline]
-    pub fn get_ref(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> {
-        self.0.get()
-    }
     #[inline]
     pub(crate) fn set_ref(&self, m: Option<P<RefCell<FxHashMap<K, V>>>>) {
         self.0.set(m);
@@ -162,15 +114,6 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
     pub(crate) fn assign(&self, m: FxHashMap<K, V>) {
         let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
         self.0.set(Some(P::new_in(scratch, RefCell::new(m))));
-    }
-    /// Snapshot of the entries (Go `for k, v := range m`).
-    #[inline]
-    pub fn entries(&self) -> Vec<(K, V)> {
-        self.0.get().map_or_else(Vec::new, |m| {
-            tsrs_core::sharedgraph::with_ref(&m, |m| {
-                m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-            })
-        })
     }
 }
 
@@ -454,7 +397,7 @@ impl ValueSymbolLinks {
     }
 
     #[inline]
-    pub(crate) fn target(&self) -> Option<P<Symbol>> {
+    pub fn target(&self) -> Option<P<Symbol>> {
         match self.mode() {
             // SAFETY: in plain mode `first` is an erased `P<Symbol>` or nil.
             LinksMode::Plain => unsafe { restore(self.first.get()) },
@@ -463,7 +406,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn set_target(&self, target: Option<P<Symbol>>) {
+    pub fn set_target(&self, target: Option<P<Symbol>>) {
         match self.mode() {
             LinksMode::Plain => self.first.set(erase(target)),
             LinksMode::Synthetic if target.is_none() => {}
@@ -471,7 +414,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn mapper(&self) -> Option<P<TypeMapper>> {
+    pub fn mapper(&self) -> Option<P<TypeMapper>> {
         match self.mode() {
             // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
             LinksMode::Plain => unsafe { restore_bits(self.second.get()) },
@@ -480,7 +423,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
+    pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
         if let Some(m) = mapper {
             escape_mapper(m); // a symbol link outlives the call that made the mapper
         }
@@ -491,7 +434,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn containing_type(&self) -> Option<P<Type>> {
+    pub fn containing_type(&self) -> Option<P<Type>> {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `first` is an erased `P<Type>` or nil.
@@ -500,7 +443,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn set_containing_type(&self, t: Option<P<Type>>) {
+    pub fn set_containing_type(&self, t: Option<P<Type>>) {
         if t.is_none() && self.mode() == LinksMode::Plain {
             return;
         }
@@ -511,7 +454,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn name_type(&self) -> Option<P<Type>> {
+    pub fn name_type(&self) -> Option<P<Type>> {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
@@ -520,7 +463,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn set_name_type(&self, t: Option<P<Type>>) {
+    pub fn set_name_type(&self, t: Option<P<Type>>) {
         if t.is_none() && self.mode() == LinksMode::Plain {
             return;
         }
@@ -531,14 +474,14 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub(crate) fn write_type(&self) -> Option<P<Type>> {
+    pub fn write_type(&self) -> Option<P<Type>> {
         match self.mode() {
             LinksMode::Tail => self.tail().write_type.get(),
             _ => None,
         }
     }
     #[inline]
-    pub(crate) fn set_write_type(&self, t: Option<P<Type>>) {
+    pub fn set_write_type(&self, t: Option<P<Type>>) {
         if t.is_some() || self.mode() == LinksMode::Tail {
             self.tail_for_write().write_type.set(t);
         }
@@ -610,7 +553,6 @@ pub struct TypeAliasLinks {
     pub(crate) declared_type: Cell<Option<P<Type>>>,
     pub(crate) type_parameters: Cell<&'static [P<Type>]>, // Type parameters of type alias (undefined if non-generic)
     pub(crate) instantiations: GoPackedMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
-    pub is_constructor_declared_property: Cell<bool>,
 }
 
 // Links for declared types (type parameters, class types, interface types, enums)
@@ -782,18 +724,18 @@ pub struct SymbolNodeLinks {
 
 #[derive(Default)]
 pub struct TypeNodeLinks {
-    pub(crate) resolved_type: Cell<Option<P<Type>>>, // Resolved type associated with node
-    outer_type_parameters: Cell<Option<P<ThinSliceCell<P<Type>>>>>, // Outer type parameters of anonymous object type; nil means not computed
+    pub resolved_type: Cell<Option<P<Type>>>, // Resolved type associated with node
+    pub outer_type_parameters: Cell<Option<P<ThinSliceCell<P<Type>>>>>, // Outer type parameters of anonymous object type; nil means not computed
 }
 
 impl TypeNodeLinks {
     #[inline]
-    pub(crate) fn outer_type_parameters(&self) -> Option<&'static [P<Type>]> {
+    pub fn outer_type_parameters(&self) -> Option<&'static [P<Type>]> {
         self.outer_type_parameters.get().map(|types| types.get().get())
     }
 
     #[inline]
-    pub(crate) fn set_outer_type_parameters(&self, types: Option<&'static [P<Type>]>) {
+    pub fn set_outer_type_parameters(&self, types: Option<&'static [P<Type>]>) {
         match types {
             Some(types) => {
                 if let Some(stored) = self.outer_type_parameters.get() {
@@ -856,7 +798,7 @@ pub struct SourceFileLinks {
 
 #[derive(Default)]
 pub struct SignatureLinks {
-    pub(crate) resolved_signature: Cell<Option<P<Signature>>>, // Cached signature of signature node or call expression
+    pub resolved_signature: Cell<Option<P<Signature>>>, // Cached signature of signature node or call expression
     // Go keeps these in separate fields: effects belong to call/binary expressions, while decorator signatures
     // belong to the decorated declarations. Their node kinds never overlap, so they can share one handle.
     effects_or_decorator_signature: Cell<Option<P<Signature>>>,
@@ -1100,7 +1042,7 @@ bitflags! {
         const IsClassInstanceClone = 1 << 26; // Type is a clone of a class instance type
         // Flags that require TypeFlags.Object and ObjectFlags.Reference
         const IdenticalBaseTypeCalculated = 1 << 27; // has had `getSingleBaseForNonAugmentingSubtype` invoked on it already
-        const IdenticalBaseTypeExists = 1 << 28; // has a defined cachedEquivalentBaseType member
+        const IdenticalBaseTypeExists = 1 << 28; // has a defined cachedEquivalentBaseType member (tsrs: the `EquivalentBaseType` entry in `cached_types`; read before the map is probed)
         const FromTypeNode = 1 << 29; // Originates in resolution of AST type node
         // Flags that require TypeFlags.UnionOrIntersection or TypeFlags.Substitution
         const IsGenericTypeComputed = 1 << 22; // IsGenericObjectType flag has been computed
@@ -1120,10 +1062,15 @@ bitflags! {
         // tsrs-only, intersections: shouldNormalizeIntersection memoized (its answer depends only on the constituents).
         const ShouldNormalizeComputed = 1 << 30;
         const ShouldNormalize = 1 << 31;
+        // tsrs-only, unions: every constituent is a string, number, bigint, boolean, enum, symbol, object or
+        // non-primitive kind (no nullable, void, intersection or instantiable constituent), so the union has no
+        // nullability type fact and `get_type_facts_worker` answers those without the walk. Set by
+        // `get_union_type_from_sorted_list` from the constituents (`new_type` drops the bit, see `WeakTypeMemo`).
+        const NonNullableUnion = 1 << 30;
         // tsrs-only, object types: isWeakType memoized; cleared with MembersResolved (`WeakTypeMemo`).
         const IsWeakTypeComputed = 1 << 30;
         const IsWeakType = 1 << 31;
-        const WeakTypeMemo = Self::IsWeakTypeComputed.bits() | Self::IsWeakType.bits(); // also the intersection memo bits: new_type drops them
+        const WeakTypeMemo = Self::IsWeakTypeComputed.bits() | Self::IsWeakType.bits(); // also the intersection memo and union summary bits: new_type drops them
     }
 }
 
@@ -1246,7 +1193,7 @@ impl TypeAliasOptExt for Option<P<TypeAlias>> {
 pub struct Type {
     pub flags: Cell<TypeFlags>,
     pub(crate) object_flags: ObjectFlagsCell,
-    pub(crate) id: TypeId,
+    pub id: TypeId,
     data_tag: TypeDataTag,
     symbol_or_alias: Cell<TypeSymbolWord>,
 }
@@ -1351,13 +1298,13 @@ impl TypeSymbolWord {
 
 /// One arena allocation per type: the header, then the data struct (`repr(C)`: header at offset 0).
 #[repr(C)]
-struct TypeAlloc<T> {
+pub struct TypeAlloc<T> {
     header: Type,
-    data: T,
+    pub data: T,
 }
 
 /// A type data struct, stored after the header of types tagged `TAG`.
-pub(crate) trait TypePayload: Sized + 'static {
+pub trait TypePayload: Sized + 'static {
     const TAG: TypeDataTag;
 }
 
@@ -1451,7 +1398,7 @@ impl TypePayload for ConditionalType {
 impl Type {
     /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
     #[inline]
-    pub(crate) fn alloc<T: TypePayload>(
+    pub fn alloc<T: TypePayload>(
         flags: TypeFlags,
         object_flags: ObjectFlags,
         id: TypeId,
@@ -1549,7 +1496,7 @@ impl Type {
         self.payload()
     }
     #[inline]
-    pub(crate) fn as_unique_es_symbol_type(&self) -> &'static UniqueESSymbolType {
+    pub fn as_unique_es_symbol_type(&self) -> &'static UniqueESSymbolType {
         assert!(
             self.data_tag == TypeDataTag::UniqueESSymbol,
             "as_unique_es_symbol_type: wrong type data"
@@ -1562,7 +1509,7 @@ impl Type {
         self.payload()
     }
     #[inline]
-    pub(crate) fn as_instantiation_expression_type(&self) -> &'static InstantiationExpressionType {
+    pub fn as_instantiation_expression_type(&self) -> &'static InstantiationExpressionType {
         assert!(
             self.data_tag == TypeDataTag::InstantiationExpression,
             "as_instantiation_expression_type: wrong type data"
@@ -1575,7 +1522,7 @@ impl Type {
         self.payload()
     }
     #[inline]
-    pub(crate) fn as_reverse_mapped_type(&self) -> &'static ReverseMappedType {
+    pub fn as_reverse_mapped_type(&self) -> &'static ReverseMappedType {
         assert!(
             self.data_tag == TypeDataTag::ReverseMapped,
             "as_reverse_mapped_type: wrong type data"
@@ -1583,7 +1530,7 @@ impl Type {
         self.payload()
     }
     #[inline]
-    pub(crate) fn as_evolving_array_type(&self) -> &'static EvolvingArrayType {
+    pub fn as_evolving_array_type(&self) -> &'static EvolvingArrayType {
         assert!(
             self.data_tag == TypeDataTag::EvolvingArray,
             "as_evolving_array_type: wrong type data"
@@ -1601,7 +1548,7 @@ impl Type {
         self.payload()
     }
     #[inline]
-    pub(crate) fn as_intersection_type(&self) -> &'static IntersectionType {
+    pub fn as_intersection_type(&self) -> &'static IntersectionType {
         assert!(
             self.data_tag == TypeDataTag::Intersection,
             "as_intersection_type: wrong type data"
@@ -1654,19 +1601,15 @@ impl Type {
     // Casts for embedded struct types. `as_*` panics where Go would return nil; `try_as_*` mirrors Go's nil result.
 
     #[inline]
-    pub fn as_constrained_type(&self) -> &'static ConstrainedType {
-        self.data().as_constrained_type().expect("as_constrained_type: wrong type data")
-    }
-    #[inline]
     pub fn as_structured_type(&self) -> &'static StructuredType {
         self.data().as_structured_type().expect("as_structured_type: wrong type data")
     }
     #[inline]
-    pub(crate) fn as_object_type(&self) -> &'static ObjectType {
+    pub fn as_object_type(&self) -> &'static ObjectType {
         self.data().as_object_type().expect("as_object_type: wrong type data")
     }
     #[inline]
-    pub(crate) fn as_type_reference(&self) -> &'static TypeReference {
+    pub fn as_type_reference(&self) -> &'static TypeReference {
         self.data().as_type_reference().expect("as_type_reference: wrong type data")
     }
     #[inline]
@@ -1680,11 +1623,11 @@ impl Type {
             .expect("as_union_or_intersection_type: wrong type data")
     }
     #[inline]
-    pub(crate) fn try_as_constrained_type(&self) -> Option<&'static ConstrainedType> {
+    pub fn try_as_constrained_type(&self) -> Option<&'static ConstrainedType> {
         self.data().as_constrained_type()
     }
     #[inline]
-    pub(crate) fn try_as_structured_type(&self) -> Option<&'static StructuredType> {
+    pub fn try_as_structured_type(&self) -> Option<&'static StructuredType> {
         self.data().as_structured_type()
     }
     #[inline]
@@ -2513,8 +2456,16 @@ embeds!(TupleType, interface_type, InterfaceType);
 
 impl TupleType {
     #[inline]
+    pub fn min_length(&self) -> usize {
+        self.min_length.get()
+    }
+    #[inline]
     pub fn fixed_length(&self) -> usize {
         self.fixed_length.get()
+    }
+    #[inline]
+    pub fn combined_flags(&self) -> ElementFlags {
+        self.combined_flags.get()
     }
     #[inline]
     pub fn is_readonly(&self) -> bool {
@@ -2885,7 +2836,7 @@ pub struct TypeParameter {
     pub(crate) constraint: OvCell<Option<P<Type>>>,
     pub(crate) target: Cell<Option<P<Type>>>,
     pub(crate) mapper: MapperCell,
-    pub(crate) is_this_type: Cell<bool>,
+    pub is_this_type: Cell<bool>,
     pub(crate) is_distributed: Cell<bool>,
     pub(crate) resolved_default_type: OvCell<Option<P<Type>>>,
     pub(crate) distributed_type: OvCell<Option<P<Type>>>,
@@ -3070,20 +3021,20 @@ bitflags! {
 
 #[derive(Default)]
 pub struct Signature {
-    pub(crate) id: Cell<SignatureId>,
-    pub(crate) flags: Cell<SignatureFlags>,
+    pub id: Cell<SignatureId>,
+    pub flags: Cell<SignatureFlags>,
     pub(crate) min_argument_count: CountCell,
     pub(crate) resolved_min_argument_count: OptionalCountCell,
     pub(crate) declaration: Cell<Option<P<Node>>>,
     pub(crate) parameters: ThinSliceCell<P<Symbol>>,
-    pub(crate) resolved_return_type: OvCell<Option<P<Type>>>,
+    pub resolved_return_type: OvCell<Option<P<Type>>>,
     pub(crate) target: Cell<Option<P<Signature>>>,
     pub(crate) mapper: MapperCell,
     // Type parameters, `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other
     // than the checker's `noTypePredicate` live in a tail allocated on the first non-nil write.
     // `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent. `resolvedTypePredicate ==
     // c.noTypePredicate` (every resolved signature without a predicate) is bit 0 of the same word.
-    rare: SignatureRareWord,
+    pub rare: SignatureRareWord,
 }
 
 #[cfg(target_pointer_width = "64")]
@@ -3093,7 +3044,7 @@ const _: () =
 const _: () = assert!(std::mem::size_of::<Signature>() == 44);
 
 #[derive(Default)]
-struct SignatureRare {
+pub struct SignatureRare {
     type_parameters: OptionThinSliceCell<P<Type>>,
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: OvCell<Option<P<Type>>>,
@@ -3109,7 +3060,7 @@ const _: () = assert!(
 const _: () = assert!(std::mem::size_of::<SignatureRare>() == 24);
 
 /// `Signature`'s tail pointer (8-aligned, null when absent) with the "no type predicate" bit in bit 0.
-struct SignatureRareWord(OvExact<RawWord>);
+pub struct SignatureRareWord(OvExact<RawWord>);
 
 const SIGNATURE_NO_TYPE_PREDICATE: usize = 1;
 
@@ -3122,7 +3073,7 @@ impl Default for SignatureRareWord {
 
 impl SignatureRareWord {
     #[inline]
-    fn tail(&self) -> Option<P<SignatureRare>> {
+    pub fn tail(&self) -> Option<P<SignatureRare>> {
         let p: *const SignatureRare =
             self.0.get().ptr::<SignatureRare>().map_addr(|a| a & !SIGNATURE_NO_TYPE_PREDICATE);
         // SAFETY: a non-null address is a `P<SignatureRare>` stored by `set_tail`.
@@ -3164,11 +3115,11 @@ impl Signature {
         self.type_parameters_option().unwrap_or(&[])
     }
     #[inline]
-    pub(crate) fn type_parameters_option(&self) -> Option<&'static [P<Type>]> {
+    pub fn type_parameters_option(&self) -> Option<&'static [P<Type>]> {
         self.rare.tail()?.type_parameters.get()
     }
     #[inline]
-    pub(crate) fn set_type_parameters(&self, types: Option<&'static [P<Type>]>) {
+    pub fn set_type_parameters(&self, types: Option<&'static [P<Type>]>) {
         if types.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().type_parameters.set(types);
         }
@@ -3193,7 +3144,7 @@ impl Signature {
     }
     /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     #[inline]
-    pub(crate) fn resolved_type_predicate(
+    pub fn resolved_type_predicate(
         &self,
         no_type_predicate: P<TypePredicate>,
     ) -> Option<P<TypePredicate>> {
@@ -3204,7 +3155,7 @@ impl Signature {
     }
     /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     #[inline]
-    pub(crate) fn set_resolved_type_predicate(
+    pub fn set_resolved_type_predicate(
         &self,
         predicate: Option<P<TypePredicate>>,
         no_type_predicate: P<TypePredicate>,
@@ -3221,27 +3172,27 @@ impl Signature {
         self.rare.tail()?.this_parameter.get()
     }
     #[inline]
-    pub(crate) fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
+    pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
         if this_parameter.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().this_parameter.set(this_parameter);
         }
     }
     #[inline]
-    pub(crate) fn isolated_signature_type(&self) -> Option<P<Type>> {
+    pub fn isolated_signature_type(&self) -> Option<P<Type>> {
         self.rare.tail()?.isolated_signature_type.get()
     }
     #[inline]
-    pub(crate) fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
+    pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
         if t.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
     #[inline]
-    pub(crate) fn composite(&self) -> Option<P<CompositeSignature>> {
+    pub fn composite(&self) -> Option<P<CompositeSignature>> {
         self.rare.tail()?.composite.get()
     }
     #[inline]
-    pub(crate) fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
+    pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
         if composite.is_some() || self.rare.tail().is_some() {
             self.rare_for_write().composite.set(composite);
         }
@@ -3308,7 +3259,7 @@ impl TypePredicate {
 #[derive(Default)]
 pub struct IndexInfo {
     pub(crate) key_type: Cell<Option<P<Type>>>,
-    pub(crate) value_type: Cell<Option<P<Type>>>,
+    pub value_type: Cell<Option<P<Type>>>,
     pub(crate) is_readonly: Cell<bool>,
     pub(crate) declaration: Cell<Option<P<Node>>>, // IndexSignatureDeclaration
     pub(crate) index_symbol: Cell<Option<P<Symbol>>>, // Synthetic property symbol for this index signature
@@ -3347,7 +3298,7 @@ impl Ternary {
     pub(crate) const FALSE: Ternary = Ternary(0);
     pub(crate) const UNKNOWN: Ternary = Ternary(1);
     pub(crate) const MAYBE: Ternary = Ternary(3);
-    pub(crate) const TRUE: Ternary = Ternary(-1);
+    pub const TRUE: Ternary = Ternary(-1);
 }
 
 impl std::ops::BitAnd for Ternary {
@@ -3389,320 +3340,27 @@ pub(crate) fn type_comparer(
 
 #[derive(Clone, Copy, Debug)]
 pub struct LanguageFeatureMinimumTargetMap {
-    pub exponentiation: ScriptTarget,
     pub(crate) async_functions: ScriptTarget,
     pub(crate) for_await_of: ScriptTarget,
     pub(crate) async_generators: ScriptTarget,
-    pub async_iteration: ScriptTarget,
     pub(crate) object_spread_rest: ScriptTarget,
-    pub regular_expression_flags_dot_all: ScriptTarget,
-    pub bindingless_catch: ScriptTarget,
-    pub big_int: ScriptTarget,
-    pub nullish_coalesce: ScriptTarget,
-    pub optional_chaining: ScriptTarget,
-    pub logical_assignment: ScriptTarget,
-    pub top_level_await: ScriptTarget,
-    pub class_fields: ScriptTarget,
     pub(crate) private_names_and_class_static_blocks: ScriptTarget,
-    pub regular_expression_flags_has_indices: ScriptTarget,
-    pub shebang_comments: ScriptTarget,
     pub(crate) using_and_await_using: ScriptTarget,
     pub(crate) class_and_class_element_decorators: ScriptTarget,
-    pub regular_expression_flags_unicode_sets: ScriptTarget,
 }
 
 pub(crate) static LANGUAGE_FEATURE_MINIMUM_TARGET: LanguageFeatureMinimumTargetMap =
     LanguageFeatureMinimumTargetMap {
-        exponentiation: ScriptTarget::ES2016,
         async_functions: ScriptTarget::ES2017,
         for_await_of: ScriptTarget::ES2018,
         async_generators: ScriptTarget::ES2018,
-        async_iteration: ScriptTarget::ES2018,
         object_spread_rest: ScriptTarget::ES2018,
-        regular_expression_flags_dot_all: ScriptTarget::ES2018,
-        bindingless_catch: ScriptTarget::ES2019,
-        big_int: ScriptTarget::ES2020,
-        nullish_coalesce: ScriptTarget::ES2020,
-        optional_chaining: ScriptTarget::ES2020,
-        logical_assignment: ScriptTarget::ES2021,
-        top_level_await: ScriptTarget::ES2022,
-        class_fields: ScriptTarget::ES2022,
         private_names_and_class_static_blocks: ScriptTarget::ES2022,
-        regular_expression_flags_has_indices: ScriptTarget::ES2022,
-        shebang_comments: ScriptTarget::ES_NEXT,
         using_and_await_using: ScriptTarget::ES_NEXT,
         class_and_class_element_decorators: ScriptTarget::ES_NEXT,
-        regular_expression_flags_unicode_sets: ScriptTarget::ES_NEXT,
     };
 
 // Aliases for types
-pub type StringLiteralType = Type;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compact_type_node_links_keep_nil_distinct_from_empty() {
-        let t1 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
-        let t2 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
-        let links = TypeNodeLinks::default();
-        links.resolved_type.set(Some(t1));
-        assert!(links.outer_type_parameters().is_none());
-        links.set_outer_type_parameters(None);
-        assert!(links.outer_type_parameters.get().is_none());
-
-        links.set_outer_type_parameters(Some(&[]));
-        assert_eq!(links.outer_type_parameters().unwrap().len(), 0);
-        let header = links.outer_type_parameters.get().unwrap();
-        let list = alloc_vec(vec![t1, t2]);
-        links.set_outer_type_parameters(Some(list));
-        assert_eq!(links.outer_type_parameters.get(), Some(header));
-        assert_eq!(links.outer_type_parameters().unwrap().as_ptr(), list.as_ptr());
-        for _ in 0..1024 {
-            let other = TypeNodeLinks::default();
-            other.set_outer_type_parameters(Some(list));
-        }
-        assert_eq!(links.outer_type_parameters(), Some(list));
-        assert_eq!(links.resolved_type.get(), Some(t1));
-        links.set_outer_type_parameters(None);
-        assert!(links.outer_type_parameters().is_none());
-        assert_eq!(links.resolved_type.get(), Some(t1));
-    }
-
-    #[test]
-    fn compact_signature_extra_keeps_optional_state_independent() {
-        let t1 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
-        let t2 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
-        let no_predicate = P::new(TypePredicate::default());
-        let predicate = P::new(TypePredicate::default());
-        let sig = P::new(Signature::default());
-        sig.flags.set(SignatureFlags::HasRestParameter);
-        sig.resolved_return_type.set(Some(t1));
-        assert!(sig.rare.tail().is_none());
-        assert!(sig.type_parameters_option().is_none());
-        assert_eq!(sig.type_parameters(), []);
-        sig.set_type_parameters(None);
-        sig.set_this_parameter(None);
-        sig.set_composite(None);
-        sig.set_resolved_type_predicate(None, no_predicate);
-        assert!(sig.rare.tail().is_none());
-        sig.set_resolved_type_predicate(Some(no_predicate), no_predicate);
-        assert!(sig.rare.tail().is_none());
-        assert_eq!(sig.resolved_type_predicate(no_predicate), Some(no_predicate));
-        assert_eq!(sig.flags(), SignatureFlags::HasRestParameter);
-        sig.set_resolved_type_predicate(None, no_predicate);
-
-        sig.set_type_parameters(Some(&[]));
-        assert!(sig.type_parameters_option().is_some());
-        let tail = sig.rare.tail().unwrap();
-        let list = alloc_vec(vec![t1, t2]);
-        sig.set_type_parameters(Some(list));
-        assert_eq!(sig.rare.tail(), Some(tail));
-        assert_eq!(sig.type_parameters().as_ptr(), list.as_ptr());
-        let this_parameter = Symbol::new(SymbolFlags::None, "");
-        let composite = P::new(CompositeSignature::default());
-        sig.set_this_parameter(Some(this_parameter));
-        sig.set_composite(Some(composite));
-        sig.set_isolated_signature_type(Some(t2));
-        sig.set_resolved_type_predicate(Some(predicate), no_predicate);
-        assert_eq!(sig.rare.tail(), Some(tail));
-
-        let clone = P::new(Signature::default());
-        clone.set_type_parameters(sig.type_parameters_option());
-        clone.set_this_parameter(sig.this_parameter());
-        clone.set_composite(sig.composite());
-        assert_ne!(clone.rare.tail(), sig.rare.tail());
-        assert_eq!(clone.type_parameters(), list);
-        assert_eq!(clone.this_parameter(), Some(this_parameter));
-        assert_eq!(clone.composite(), Some(composite));
-        assert!(clone.isolated_signature_type().is_none());
-        assert!(clone.resolved_type_predicate(no_predicate).is_none());
-        clone.set_this_parameter(None);
-        assert_eq!(sig.this_parameter(), Some(this_parameter));
-
-        for _ in 0..1024 {
-            let other = P::new(Signature::default());
-            other.set_type_parameters(Some(list));
-            other.set_resolved_type_predicate(Some(predicate), no_predicate);
-        }
-        assert_eq!(sig.rare.tail(), Some(tail));
-        assert_eq!(sig.type_parameters(), list);
-        assert_eq!(sig.isolated_signature_type(), Some(t2));
-        assert_eq!(sig.resolved_type_predicate(no_predicate), Some(predicate));
-        sig.set_type_parameters(None);
-        sig.set_this_parameter(None);
-        sig.set_composite(None);
-        assert_eq!(sig.rare.tail(), Some(tail));
-        assert!(sig.type_parameters_option().is_none());
-        assert_eq!(sig.resolved_return_type.get(), Some(t1));
-        assert_eq!(sig.flags(), SignatureFlags::HasRestParameter);
-    }
-
-    #[test]
-    fn compact_type_payload_casts_survive_arena_growth() {
-        let mut next_id = 1;
-        macro_rules! type_case {
-            ($payload:ty, $cast:ident, $bases:expr) => {{
-                let t = Type::alloc(
-                    TypeFlags::Any,
-                    ObjectFlags::None,
-                    TypeId(next_id),
-                    <$payload>::default(),
-                );
-                next_id += 1;
-                let payload = std::ptr::from_ref(t.$cast()).addr();
-                let expected = std::ptr::from_ref(t.get()).addr()
-                    + std::mem::offset_of!(TypeAlloc<$payload>, data);
-                assert_eq!(payload, expected);
-                assert_eq!(t.data_tag(), <$payload as TypePayload>::TAG);
-                // The kind must not be inferred from mutable semantic flags.
-                t.flags.set(TypeFlags::Never);
-                assert_eq!(std::ptr::from_ref(t.$cast()).addr(), payload);
-                (t, $bases)
-            }};
-        }
-
-        // constrained, structured, object, reference, interface, union/intersection.
-        // Rust keeps structured base constraints in the checker, rather than in the payload.
-        let cases = [
-            type_case!(
-                IntrinsicType,
-                as_intrinsic_type,
-                [false, false, false, false, false, false]
-            ),
-            type_case!(LiteralType, as_literal_type, [false, false, false, false, false, false]),
-            type_case!(
-                UniqueESSymbolType,
-                as_unique_es_symbol_type,
-                [false, false, false, false, false, false]
-            ),
-            type_case!(TypeParameter, as_type_parameter, [true, false, false, false, false, false]),
-            type_case!(IndexType, as_index_type, [true, false, false, false, false, false]),
-            type_case!(
-                IndexedAccessType,
-                as_indexed_access_type,
-                [true, false, false, false, false, false]
-            ),
-            type_case!(
-                TemplateLiteralType,
-                as_template_literal_type,
-                [true, false, false, false, false, false]
-            ),
-            type_case!(
-                StringMappingType,
-                as_string_mapping_type,
-                [true, false, false, false, false, false]
-            ),
-            type_case!(
-                SubstitutionType,
-                as_substitution_type,
-                [true, false, false, false, false, false]
-            ),
-            type_case!(
-                ConditionalType,
-                as_conditional_type,
-                [true, false, false, false, false, false]
-            ),
-            type_case!(ObjectType, as_object_type, [false, true, true, false, false, false]),
-            type_case!(TypeReference, as_type_reference, [false, true, true, true, false, false]),
-            type_case!(InterfaceType, as_interface_type, [false, true, true, true, true, false]),
-            type_case!(TupleType, as_tuple_type, [false, true, true, true, true, false]),
-            type_case!(
-                InstantiationExpressionType,
-                as_instantiation_expression_type,
-                [false, true, true, false, false, false]
-            ),
-            type_case!(MappedType, as_mapped_type, [false, true, true, false, false, false]),
-            type_case!(
-                ReverseMappedType,
-                as_reverse_mapped_type,
-                [false, true, true, false, false, false]
-            ),
-            type_case!(
-                EvolvingArrayType,
-                as_evolving_array_type,
-                [false, true, true, false, false, false]
-            ),
-            type_case!(UnionType, as_union_type, [false, true, false, false, false, true]),
-            type_case!(
-                IntersectionType,
-                as_intersection_type,
-                [false, true, false, false, false, true]
-            ),
-        ];
-        for (t, expected) in cases {
-            assert_eq!(
-                [
-                    t.try_as_constrained_type().is_some(),
-                    t.try_as_structured_type().is_some(),
-                    t.try_as_object_type().is_some(),
-                    t.try_as_type_reference().is_some(),
-                    t.try_as_interface_type().is_some(),
-                    t.try_as_union_or_intersection_type().is_some(),
-                ],
-                expected,
-                "{:?}",
-                t.data_tag()
-            );
-        }
-
-        let first = cases[0].0;
-        let first_payload = std::ptr::from_ref(first.as_intrinsic_type());
-        for _ in 0..1024 {
-            let _ = Type::alloc(
-                TypeFlags::Any,
-                ObjectFlags::None,
-                TypeId(next_id),
-                IntrinsicType::default(),
-            );
-            next_id += 1;
-        }
-        assert_eq!(first.id(), TypeId(1));
-        assert_eq!(std::ptr::from_ref(first.as_intrinsic_type()), first_payload);
-    }
-
-    #[test]
-    fn value_symbol_links_synthetic_mode_keeps_every_field() {
-        let t1 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
-        let t2 =
-            Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
-        let s = Symbol::new(SymbolFlags::Property, "p");
-        let m = new_simple_type_mapper(t1, t2);
-        let fields = |l: &ValueSymbolLinks| {
-            (l.target(), l.mapper(), l.containing_type(), l.name_type(), l.write_type())
-        };
-
-        // A synthetic property: containing and name type in the words of target and mapper, then a target moves them.
-        let l = ValueSymbolLinks::default();
-        l.set_containing_type(Some(t1));
-        l.set_name_type(Some(t2));
-        l.set_target(None);
-        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), None));
-        l.set_write_type(Some(t1));
-        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), Some(t1)));
-        l.set_mapper(Some(m));
-        assert_eq!(fields(&l), (None, Some(m), Some(t1), Some(t2), Some(t1)));
-        l.set_target(Some(s));
-        l.set_containing_type(None);
-        assert_eq!(fields(&l), (Some(s), Some(m), None, Some(t2), Some(t1)));
-
-        // An instantiated symbol keeps containing/name types in the tail.
-        let l = ValueSymbolLinks::default();
-        l.set_target(Some(s));
-        l.set_name_type(Some(t2));
-        l.set_target(None);
-        l.set_containing_type(Some(t1));
-        assert_eq!(fields(&l), (None, None, Some(t1), Some(t2), None));
-        l.set_mapper(Some(m));
-        assert_eq!(fields(&l), (None, Some(m), Some(t1), Some(t2), None));
-    }
-}
 
 // Shared graph: how a fork copies the frozen seed's link records (links.rs `LinkCopy`).
 crate::bitwise_link_copy!(

@@ -1,10 +1,10 @@
-# Generated from oxc-project/tsrs a0db53eabe483062205717f067a49b6ccb3fc868; local patches disclosed in UPSTREAM.json.
+# Generated from oxc-project/tsrs 86de03ae428a956686af29177b50f0fdf4aee059; local patches disclosed in UPSTREAM.json.
 [workspace]
 resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.19.0"
+version = "0.24.0"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ publish = false
 # The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
 # npm/build.mjs (npm version = "<workspace version>-ts<version>") and by CI (conformance testdata checkout).
 # `nightly` is the npm `typescript` package matching `commit` (a nightly or prerelease; its package.json `gitHead`
-# is `commit`, or a later commit that changes nothing under tsc/). Release builds stamp it
+# is exactly `commit`). Published-version and release builds stamp it
 # as TypeScript's version (TSRS_TS_VERSION, crates/tsrs_core/src/version.rs), as the package's own build does, so the
 # tsbuildinfo `version`, `typesVersions` matching and `--version` agree with that tsgo; the release checks both.
 
@@ -23,11 +23,13 @@ commit = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a"
 nightly = "7.1.0-beta"
 
 [workspace.dependencies]
-criterion2 = { version = "3.0.4", default-features = false } # Benchmarking
+criterion2 = { version = "3.0.5", default-features = false } # Benchmarking
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 rustc-hash = "2"
 indexmap = "2"
 hashbrown = { version = "0.17", default-features = false, features = ["inline-more"] }
+smallvec = { version = "1.16", features = ["union"] }
+smallbitvec = "2.6.1"
 bitflags = "2"
 rayon = "1"
 memchr = "2"
@@ -44,6 +46,28 @@ unicode-id-start = "=1.1.2"
 # Pin Unicode 17 behavior; unicode-normalization is the development-only parity oracle.
 icu_normalizer = { version = "=2.3.0", default-features = false, features = ["compiled_data"] }
 unicode-normalization = "=0.1.25"
+# Match criterion2's CodSpeed dependency so both benchmarks link one CodSpeed runtime.
+codspeed = "6.0.0"
+flate2 = "1"
+libc = "0.2"
+regex = "1"
+rustix = { version = "1.1.5", features = ["fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.11"
+similar = "3"
+tar = { version = "0.4", default-features = false }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+xxhash-rust = { version = "0.8", features = ["xxh3", "const_xxh3"] }
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
 tsrs_spanmap = { path = "crates/tsrs_spanmap" }
@@ -75,6 +99,9 @@ tsrs_api_codec = { path = "crates/tsrs_api_codec" }
 tsrs_ipc = { path = "crates/tsrs_ipc" }
 tsrs_contentmapper = { path = "crates/tsrs_contentmapper" }
 tsrs_contentmappertest = { path = "crates/tsrs_contentmappertest" }
+tsrs_execute = { path = "crates/tsrs_execute" }
+tsrs_lint = { path = "crates/tsrs_lint" }
+tsrs_fswatch = { path = "crates/tsrs_fswatch" }
 
 [workspace.lints.rust]
 non_upper_case_globals = "deny"

@@ -132,14 +132,14 @@ impl Checker {
 }
 
 // checker.go:30601
-pub fn is_spread_argument(arg: P<Node>) -> bool {
+pub(crate) fn is_spread_argument(arg: P<Node>) -> bool {
     ast::is_spread_element(arg)
         || ast::is_synthetic_expression(arg) && arg.as_synthetic_expression().is_spread
 }
 
 // Go `node.AsSyntheticExpression().Type.(*Type)`. The Go `any` field holds the checker type as a `&'static P<Type>`;
 // `create_synthetic_expression` is the only writer.
-pub fn synthetic_expression_type(node: P<Node>) -> P<Type> {
+pub(crate) fn synthetic_expression_type(node: P<Node>) -> P<Type> {
     *node
         .as_synthetic_expression()
         .type_
@@ -1119,7 +1119,7 @@ impl Checker {
     // Return the contextual type for a given expression node. During overload resolution, a contextual type may temporarily
     // be "pushed" onto a node using the contextualType property.
     // checker.go:31175
-    pub(crate) fn get_apparent_type_of_contextual_type(
+    pub fn get_apparent_type_of_contextual_type(
         &mut self,
         node: P<Node>,
         context_flags: ContextFlags,
@@ -1562,7 +1562,7 @@ impl Checker {
     }
 
     // checker.go:31467
-    pub(crate) fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
+    pub fn has_type_facts(&mut self, t: P<Type>, mask: TypeFacts) -> bool {
         self.get_type_facts(t, mask) != TypeFacts::None
     }
 
@@ -1646,14 +1646,7 @@ impl Checker {
             }
             return TypeFacts::TrueFacts;
         } else if flags.intersects(TypeFlags::Object) {
-            let possible_facts = if self.strict_null_checks {
-                TypeFacts::EmptyObjectStrictFacts
-                    | TypeFacts::FunctionStrictFacts
-                    | TypeFacts::ObjectStrictFacts
-            } else {
-                TypeFacts::EmptyObjectFacts | TypeFacts::FunctionFacts | TypeFacts::ObjectFacts
-            };
-            if (caller_only_needs & possible_facts) == TypeFacts::None {
+            if (caller_only_needs & self.possible_object_type_facts()) == TypeFacts::None {
                 // If the caller doesn't care about any of the facts that we could possibly produce,
                 // return zero so we can skip resolving members.
                 return TypeFacts::None;
@@ -1691,17 +1684,46 @@ impl Checker {
         } else if flags.intersects(TypeFlags::Never) {
             return TypeFacts::None;
         } else if flags.intersects(TypeFlags::Union) {
-            let mut facts = TypeFacts::None;
-            facts = t.types().iter().fold(facts, |mut facts, &t| {
-                facts |= self.get_type_facts_worker(t, caller_only_needs);
-
-                facts
-            });
-            return facts;
+            // tsrs-only: a union of non-nullable kinds (`ObjectFlags::NonNullableUnion`, set by the union builder)
+            // has none of the nullability facts, and when the caller needs no object fact every constituent would
+            // return a constant without the facts asked for and resolve nothing, so the walk is skipped. The
+            // caller masks the result with `caller_only_needs`, as it does the object case's early return.
+            if t.object_flags().intersects(ObjectFlags::NonNullableUnion)
+                && (caller_only_needs & self.possible_object_type_facts()) == TypeFacts::None
+            {
+                if cfg!(debug_assertions) {
+                    let walked = self.get_union_type_facts(t, caller_only_needs);
+                    assert!(
+                        (walked & caller_only_needs) == TypeFacts::None,
+                        "a union of non-nullable kinds has a fact its summary rules out"
+                    );
+                }
+                return TypeFacts::None;
+            }
+            return self.get_union_type_facts(t, caller_only_needs);
         } else if flags.intersects(TypeFlags::Intersection) {
             return self.get_intersection_type_facts(t, caller_only_needs);
         }
         TypeFacts::UnknownFacts
+    }
+
+    /// The facts `get_type_facts_worker` can return for an object type (Go's `possibleFacts`).
+    #[inline]
+    fn possible_object_type_facts(&self) -> TypeFacts {
+        if self.strict_null_checks {
+            TypeFacts::EmptyObjectStrictFacts
+                | TypeFacts::FunctionStrictFacts
+                | TypeFacts::ObjectStrictFacts
+        } else {
+            TypeFacts::EmptyObjectFacts | TypeFacts::FunctionFacts | TypeFacts::ObjectFacts
+        }
+    }
+
+    /// The union case of `getTypeFactsWorker`: the facts of the constituents, or-ed.
+    fn get_union_type_facts(&mut self, t: P<Type>, caller_only_needs: TypeFacts) -> TypeFacts {
+        t.types().iter().fold(TypeFacts::None, |facts, &t| {
+            facts | self.get_type_facts_worker(t, caller_only_needs)
+        })
     }
 
     // checker.go:31607
@@ -1729,7 +1751,7 @@ impl Checker {
 }
 
 // checker.go:31625
-pub fn is_zero_big_int(t: P<Type>) -> bool {
+pub(crate) fn is_zero_big_int(t: P<Type>) -> bool {
     get_big_int_literal_value(t) == jsnum::PseudoBigInt::default()
 }
 
@@ -1898,7 +1920,7 @@ impl Checker {
     //
     // This is used to reflect the runtime behavior of the `await` keyword.
     // checker.go:31742
-    pub(crate) fn get_awaited_type(&mut self, t: P<Type>) -> Option<P<Type>> {
+    pub fn get_awaited_type(&mut self, t: P<Type>) -> Option<P<Type>> {
         self.get_awaited_type_ex(t, None, None, &[])
     }
 
@@ -2223,7 +2245,7 @@ impl Checker {
         // parameter type 'T extends string | undefined' with a contextual type 'string', we substitute
         // 'string | undefined' to give control flow analysis the opportunity to narrow to type 'string'.
         let substitute_constraints = !check_mode.intersects(CheckMode::Inferential)
-            && self.some_generic_type_with_union_constraint(t)
+            && some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint)
             && (self.is_constraint_position(t, reference)
                 || self.has_contextual_type_with_no_generic_types(reference, check_mode));
         if substitute_constraints {
@@ -2243,7 +2265,8 @@ impl Checker {
         if Self::is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
-        let position_read = self.some_generic_type_with_union_constraint(t);
+        let position_read =
+            some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint);
         let substitute_constraints = position_read
             && (self.is_constraint_position(t, reference)
                 || self.has_contextual_type_with_no_generic_types(reference, CheckMode::Normal));
@@ -2278,34 +2301,6 @@ impl Checker {
                     );
                     self.is_generic_index_type(index_type)
                 })
-    }
-
-    /// tsrs: `someType(t, isGenericTypeWithUnionConstraint)` for the declared type of a reference. The walk asks
-    /// every constituent of a union whether it is instantiable (2.6M constituent calls per check of the
-    /// Compiler-Unions benchmark, nearly all on unions of plain object types). A union whose
-    /// `couldContainTypeVariables` memo is computed and false answers false without the walk: the memo is true
-    /// whenever a constituent is instantiable, except for a non-generic top-level alias, whose constituents cannot
-    /// name a type variable and whose instantiable constituents are therefore pattern literal types, each its own
-    /// base constraint. The memo is read, never computed here (computing it resolves type arguments), like the
-    /// same test in `checker_07.rs`.
-    #[inline]
-    fn some_generic_type_with_union_constraint(&mut self, t: P<Type>) -> bool {
-        if t.flags().intersects(TypeFlags::Union)
-            && t.object_flags_lazy()
-                & (ObjectFlags::CouldContainTypeVariablesComputed
-                    | ObjectFlags::CouldContainTypeVariables)
-                == ObjectFlags::CouldContainTypeVariablesComputed
-        {
-            if cfg!(debug_assertions) {
-                let walked = some_type(self, t, Self::is_generic_type_with_union_constraint);
-                assert!(
-                    !walked,
-                    "a union without type variables has a constituent with a union constraint"
-                );
-            }
-            return false;
-        }
-        some_type(self, t, Self::is_generic_type_with_union_constraint)
     }
 
     // checker.go:32008

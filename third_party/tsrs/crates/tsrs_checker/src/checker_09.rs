@@ -1,4 +1,5 @@
 use crate::*;
+use smallvec::SmallVec;
 use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_diagnostics as diagnostics;
@@ -454,7 +455,7 @@ impl CacheHashKey {
 impl KeyBuilder {
     // checker.go:17713
     #[inline]
-    pub(crate) fn hash(&mut self) -> CacheHashKey {
+    pub fn hash(&mut self) -> CacheHashKey {
         if self.overflow_buffer.is_none() {
             return CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length]);
         }
@@ -493,7 +494,7 @@ impl KeyBuilder {
 
     // checker.go:17727
     #[inline]
-    pub(crate) fn write_byte(&mut self, c: u8) {
+    pub fn write_byte(&mut self, c: u8) {
         if self.inline_length == self.inline_buffer.len() {
             self.spill();
         }
@@ -503,7 +504,7 @@ impl KeyBuilder {
 
     // checker.go:17735
     #[inline]
-    pub(crate) fn write_string(&mut self, s: &str) {
+    pub fn write_string(&mut self, s: &str) {
         if self.inline_length + s.len() > self.inline_buffer.len() {
             self.spill();
             if s.len() > self.inline_buffer.len() {
@@ -518,7 +519,7 @@ impl KeyBuilder {
 
     // checker.go:17746
     #[inline]
-    fn write_uint32(&mut self, v: u32) {
+    pub fn write_uint32(&mut self, v: u32) {
         if self.inline_length + 4 > self.inline_buffer.len() {
             self.spill();
         }
@@ -558,7 +559,7 @@ impl KeyBuilder {
 
     // checker.go:17774
     #[inline]
-    fn write_types(&mut self, types: &[P<Type>]) {
+    pub fn write_types(&mut self, types: &[P<Type>]) {
         self.reserve(8 + 4 * types.len());
         self.write_usize(types.len());
         for &t in types {
@@ -694,14 +695,14 @@ pub fn get_type_list_key(types: &[P<Type>]) -> CacheHashKey {
 }
 
 // checker.go:17842
-pub fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = KeyBuilder::default();
     b.write_alias_arg(alias);
     b.hash()
 }
 
 // checker.go:17848
-pub fn get_union_key(
+pub(crate) fn get_union_key(
     types: &[P<Type>],
     origin: Option<P<Type>>,
     alias: AliasArg<'_>,
@@ -731,7 +732,7 @@ pub fn get_union_key(
 }
 
 // checker.go:17872
-pub fn get_intersection_key(
+pub(crate) fn get_intersection_key(
     types: &[P<Type>],
     flags: IntersectionFlags,
     alias: AliasArg<'_>,
@@ -747,7 +748,7 @@ pub fn get_intersection_key(
 }
 
 // checker.go:17883
-pub fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> CacheHashKey {
+pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> CacheHashKey {
     let mut b = KeyBuilder::default();
     for e in element_infos {
         if e.flags.intersects(ElementFlags::Required) {
@@ -770,7 +771,7 @@ pub fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> Cach
 }
 
 // checker.go:17906
-pub fn get_type_alias_instantiation_key(
+pub(crate) fn get_type_alias_instantiation_key(
     type_arguments: &[P<Type>],
     alias: Option<P<TypeAlias>>,
 ) -> CacheHashKey {
@@ -803,7 +804,7 @@ fn packed_type_list_key(tag: u64, types: &[P<Type>], flag: bool) -> Option<Cache
 
 // checker.go:17910
 #[inline]
-pub fn get_type_instantiation_key(
+pub(crate) fn get_type_instantiation_key(
     type_arguments: &[P<Type>],
     alias: AliasArg<'_>,
     single_signature: bool,
@@ -833,7 +834,7 @@ fn get_type_instantiation_key_hashed(
 }
 
 // checker.go:17920
-pub fn get_indexed_access_key(
+pub(crate) fn get_indexed_access_key(
     object_type: P<Type>,
     index_type: P<Type>,
     access_flags: AccessFlags,
@@ -848,7 +849,7 @@ pub fn get_indexed_access_key(
 }
 
 // checker.go:17929
-pub fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey {
+pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey {
     let mut b = KeyBuilder::default();
     b.write_types(types);
     b.write_byte(b'|');
@@ -864,7 +865,7 @@ pub fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey 
 
 // checker.go:17943
 #[inline]
-pub fn get_conditional_type_key(
+pub(crate) fn get_conditional_type_key(
     type_arguments: &[P<Type>],
     alias: Option<P<TypeAlias>>,
     for_constraint: bool,
@@ -894,7 +895,7 @@ fn get_conditional_type_key_hashed(
 }
 
 // checker.go:17953
-pub fn get_relation_key(
+pub(crate) fn get_relation_key(
     c: &mut Checker,
     source: P<Type>,
     target: P<Type>,
@@ -945,7 +946,7 @@ fn get_relation_key_worker(
 }
 
 // checker.go:17980
-pub fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Type>) -> bool {
+fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Type>) -> bool {
     is_non_deferred_type_reference(t)
         && c.get_type_arguments(t).iter().any(|&t| {
             t.flags().intersects(TypeFlags::TypeParameter)
@@ -2002,7 +2003,7 @@ impl Checker {
     }
 
     // checker.go:18699
-    pub(crate) fn get_widened_type(&mut self, t: P<Type>) -> P<Type> {
+    pub fn get_widened_type(&mut self, t: P<Type>) -> P<Type> {
         self.get_widened_type_with_context(t, None /*context*/)
     }
 
@@ -2744,7 +2745,7 @@ impl Checker {
 
     // checker.go:19231
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_property_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+    pub fn get_property_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
         self.get_property_of_type_ex(
             t, name, false, /*skipObjectFunctionPropertyAugment*/
             false, /*includeTypeOnlyMembers*/
@@ -3001,11 +3002,7 @@ impl Checker {
 
     // Return the type of the given property in the given type, or nil if no such property exists
     // checker.go:19295
-    pub(crate) fn get_type_of_property_of_type(
-        &mut self,
-        t: P<Type>,
-        name: &str,
-    ) -> Option<P<Type>> {
+    pub fn get_type_of_property_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
         let prop = self.get_property_of_type(t, name);
         if let Some(prop) = prop {
             return Some(self.get_type_of_symbol(prop));
@@ -3093,7 +3090,7 @@ impl Checker {
     }
 
     // checker.go:19318
-    pub(crate) fn get_index_infos_of_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
         let t = self.get_reduced_apparent_type(t);
         self.get_index_infos_of_structured_type(t)
     }
@@ -3147,11 +3144,7 @@ impl Checker {
     // Return the index type of the given kind in the given type. Creates synthetic union index types when necessary and
     // maps primitive types and type parameters are to their apparent types.
     // checker.go:19337
-    pub(crate) fn get_index_type_of_type(
-        &mut self,
-        t: P<Type>,
-        key_type: P<Type>,
-    ) -> Option<P<Type>> {
+    pub fn get_index_type_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Type>> {
         let info = self.get_index_info_of_type(t, key_type);
         if let Some(info) = info {
             return info.value_type.get();
@@ -3207,7 +3200,7 @@ impl Checker {
     ) -> Option<P<IndexInfo>> {
         // Index signatures for type 'string' are considered only when no other index signatures apply.
         let mut string_index_info: Option<P<IndexInfo>> = None;
-        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut applicable_infos: SmallVec<[P<IndexInfo>; 4]> = SmallVec::new();
         for &info in index_infos {
             if info.key_type.get() == Some(self.string_type) {
                 string_index_info = Some(info);
@@ -3230,7 +3223,8 @@ impl Checker {
             1 => Some(applicable_infos[0]),
             _ => {
                 let mut is_readonly = true;
-                let mut types: Vec<P<Type>> = Vec::with_capacity(applicable_infos.len());
+                let mut types: SmallVec<[P<Type>; 4]> =
+                    SmallVec::with_capacity(applicable_infos.len());
                 types.extend(applicable_infos.iter().map(|info| {
                     let value_type = info.value_type();
                     is_readonly &= info.is_readonly();
@@ -3439,7 +3433,10 @@ impl Checker {
 }
 
 // checker.go:19499
-pub fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
+pub(crate) fn find_index_info(
+    index_infos: &[P<IndexInfo>],
+    key_type: P<Type>,
+) -> Option<P<IndexInfo>> {
     if let Some(result) = index_infos.iter().find_map(|&info| {
         if info.key_type.get() == Some(key_type) { Some(Some(info)) } else { None }
     }) {
@@ -3482,6 +3479,10 @@ impl Checker {
 /// a table can be dropped from `lazy_member_tables` (resolved in full) while callers still hold it, which an `Rc`
 /// used to cover; the arena keeps it alive instead, and the one-word slices keep it at 80 bytes (an `Rc` box was
 /// 168, rounded up to 192 by mimalloc).
+#[expect(
+    clippy::too_long_first_doc_paragraph,
+    reason = "Public for the integration tests; the comment keeps its upstream wording."
+)]
 pub struct LazyMemberTable {
     mapper: P<TypeMapper>,
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
@@ -3524,7 +3525,7 @@ fn lazy_unaffected_shadow() -> bool {
     *SHADOW.get_or_init(|| std::env::var("TSRS_LAZY_UNAFFECTED").as_deref() == Ok("shadow"))
 }
 
-pub fn may_have_lazy_members(t: P<Type>) -> bool {
+pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
     t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Reference)
         == ObjectFlags::Reference
 }
@@ -4022,7 +4023,7 @@ impl Checker {
 
 impl Checker {
     // checker.go:19508
-    pub(crate) fn get_base_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_base_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
         if !t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Tuple) {
             return &[];
         }
@@ -4252,80 +4253,8 @@ impl Checker {
 }
 
 /// See `Checker::resolved_property_source`.
-pub struct ResolvedPropertySource {
+pub(crate) struct ResolvedPropertySource {
     t: P<Type>,
     members: Option<P<SymbolTable>>,
     epoch: u32,
-}
-
-#[cfg(test)]
-mod key_builder_tests {
-    use super::*;
-
-    fn types(count: usize) -> Vec<P<Type>> {
-        (0..count)
-            .map(|i| {
-                Type::alloc(
-                    TypeFlags::Any,
-                    ObjectFlags::None,
-                    TypeId(u32::try_from(i + 1).unwrap()),
-                    IntrinsicType::default(),
-                )
-            })
-            .collect()
-    }
-
-    #[test]
-    fn type_list_keys_keep_the_go_byte_stream_across_spills() {
-        for count in [0, 1, 46, 47, 256, 4096] {
-            let types = types(count);
-            let prefix = "x".repeat(count);
-            let mut expected = prefix.as_bytes().to_vec();
-            expected.push(17);
-            expected.extend_from_slice(&123u32.to_le_bytes());
-            expected.extend_from_slice(&(count as u64).to_le_bytes());
-            for t in &types {
-                expected.extend_from_slice(&t.id.0.to_le_bytes());
-            }
-            expected.extend_from_slice(b"suffix");
-
-            let mut builder = KeyBuilder::default();
-            builder.write_string(&prefix);
-            builder.write_byte(17);
-            builder.write_uint32(123);
-            builder.write_types(&types);
-            builder.write_string("suffix");
-            let hash = CacheHashKey::hash_128(&expected);
-            assert_eq!(builder.hash(), hash, "type count {count}");
-            assert_eq!(builder.hash(), hash, "repeat hash, type count {count}");
-
-            builder.write_byte(b'!');
-            expected.push(b'!');
-            assert_eq!(builder.hash(), CacheHashKey::hash_128(&expected));
-        }
-    }
-
-    #[test]
-    fn type_list_keys_reserve_before_spilling() {
-        for count in [0, 1, 8, 46, 47, 256, 4096] {
-            let types = types(count);
-            let size = 8 + 4 * count;
-            let mut builder = KeyBuilder::default();
-            builder.write_types(&types);
-            assert_eq!(builder.overflow_buffer.is_some(), size > builder.inline_buffer.len());
-            let pointer = builder.overflow_buffer.as_ref().map(Vec::as_ptr);
-            if let Some(overflow) = &builder.overflow_buffer {
-                assert!(overflow.capacity() >= size, "type count {count}");
-            }
-            let mut expected = Vec::with_capacity(size);
-            expected.extend_from_slice(&(count as u64).to_le_bytes());
-            for t in &types {
-                expected.extend_from_slice(&t.id.0.to_le_bytes());
-            }
-            assert_eq!(builder.hash(), CacheHashKey::hash_128(&expected));
-            assert_eq!(builder.overflow_buffer.as_ref().map(Vec::as_ptr), pointer);
-            assert_eq!(builder.hash(), CacheHashKey::hash_128(&expected));
-            assert_eq!(get_type_list_key(&types), CacheHashKey::hash_128(&expected));
-        }
-    }
 }

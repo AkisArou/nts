@@ -113,6 +113,14 @@ pub fn use_id_blocks() {
     ID_BLOCK_MODE.set(true);
 }
 
+/// Ends `use_id_blocks` on the current thread and drops the rest of its blocks, as the thread's exit would: a reused
+/// checker thread must not hand out ids from a block it took in an earlier group.
+pub fn stop_id_blocks() {
+    ID_BLOCK_MODE.set(false);
+    NODE_ID_BLOCK.set((0, 0));
+    SYMBOL_ID_BLOCK.set((0, 0));
+}
+
 #[inline]
 fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64, u64)>>) -> u64 {
     if !ID_BLOCK_MODE.get() {
@@ -293,17 +301,6 @@ pub fn is_destructuring_assignment(node: P<Node>) -> bool {
         return kind == Kind::ObjectLiteralExpression || kind == Kind::ArrayLiteralExpression;
     }
     false
-}
-
-// utilities.go:140
-pub fn is_object_binding_or_assignment_element(node: P<Node>) -> bool {
-    matches!(
-        node.kind(),
-        Kind::BindingElement
-            | Kind::PropertyAssignment
-            | Kind::ShorthandPropertyAssignment
-            | Kind::SpreadAssignment
-    )
 }
 
 // utilities.go:151
@@ -1132,29 +1129,6 @@ pub fn find_ancestor(
     None
 }
 
-pub fn find_many_ancestors(
-    node: impl Into<Option<P<Node>>>,
-    callbacks: &mut [&mut dyn FnMut(P<Node>) -> bool],
-) -> Vec<Option<P<Node>>> {
-    let mut node = node.into();
-    let mut ancestors: Vec<Option<P<Node>>> = vec![None; callbacks.len()];
-    let mut found = 0;
-    while let Some(n) = node {
-        for (i, callback) in callbacks.iter_mut().enumerate() {
-            if ancestors[i].is_none() && callback(n) {
-                ancestors[i] = Some(n);
-                found += 1;
-                if found == ancestors.len() {
-                    return ancestors;
-                }
-                break;
-            }
-        }
-        node = n.parent();
-    }
-    ancestors
-}
-
 // Walks up the parents of a node to find the ancestor that matches the kind
 pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Option<P<Node>> {
     let mut node = node.into();
@@ -1839,35 +1813,4 @@ pub fn get_assigned_name(node: P<Node>) -> Option<P<Node>> {
 // utilities.go:80 (added for emit)
 pub fn range_is_synthesized(loc: tsrs_core::TextRange) -> bool {
     position_is_synthesized(loc.pos()) || position_is_synthesized(loc.end())
-}
-
-#[cfg(test)]
-mod id_generator_tests {
-    use super::*;
-
-    #[test]
-    fn block_ids_decode_without_colliding_with_ordinary_ids() {
-        let factory = NodeFactory::default();
-        let node = factory.new_token(Kind::EndOfFile);
-        let other_node = factory.new_token(Kind::EndOfFile);
-        let node_generator = NodeIdGenerator::default();
-        let block_node_id = node_generator.get_node_id(node);
-        let ordinary_node_id = get_node_id(other_node);
-        assert!(block_node_id.0 >= BLOCK_ID_OFFSET);
-        assert!(ordinary_node_id.0 < BLOCK_ID_OFFSET);
-        assert_eq!(node_generator.get_node_id(node), block_node_id);
-        assert_eq!(node_generator.get_node_id(other_node), ordinary_node_id);
-        assert_eq!(get_assigned_node_id(node), Some(block_node_id));
-
-        let symbol = Symbol::new(SymbolFlags::None, "");
-        let other_symbol = Symbol::new(SymbolFlags::None, "");
-        let symbol_generator = SymbolIdGenerator::default();
-        let block_symbol_id = symbol_generator.get_symbol_id(symbol);
-        let ordinary_symbol_id = get_symbol_id(other_symbol);
-        assert!(block_symbol_id.0 >= BLOCK_ID_OFFSET);
-        assert!(ordinary_symbol_id.0 < BLOCK_ID_OFFSET);
-        assert_eq!(symbol_generator.get_symbol_id(symbol), block_symbol_id);
-        assert_eq!(symbol_generator.get_symbol_id(other_symbol), ordinary_symbol_id);
-        assert_eq!(get_assigned_symbol_id(symbol), Some(block_symbol_id));
-    }
 }

@@ -141,13 +141,13 @@ impl ExpectedValue for ContentMapperFields {
 #[derive(Clone, Debug, Default)]
 pub struct Expected<T> {
     actual_json_type: &'static str,
-    pub(crate) null: bool,
+    pub null: bool,
     pub valid: bool,
     pub value: T,
 }
 
 impl<T: ExpectedValue> Expected<T> {
-    pub(crate) fn unmarshal_json(&mut self, data: &Json) {
+    pub fn unmarshal_json(&mut self, data: &Json) {
         if matches!(data, Json::Null) {
             *self = Expected {
                 actual_json_type: "null",
@@ -186,7 +186,7 @@ impl<T: ExpectedValue> Expected<T> {
         T::expected_json_type()
     }
 
-    pub(crate) fn actual_json_type(&self) -> &'static str {
+    fn actual_json_type(&self) -> &'static str {
         self.actual_json_type
     }
 }

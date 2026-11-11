@@ -299,8 +299,10 @@ impl Checker {
     fn get_simplified_conditional_type_worker(&mut self, t: P<Type>, writing: bool) -> P<Type> {
         let check_type = t.as_conditional_type().check_type.get().unwrap();
         let extends_type = t.as_conditional_type().extends_type.get().unwrap();
-        let true_type = self.get_true_type_from_conditional_type(t);
-        let false_type = self.get_false_type_from_conditional_type(t);
+        let Some((true_type, false_type)) = self.get_simplification_branch_types(t, check_type)
+        else {
+            return t;
+        };
         // Simplifications for types of the form `T extends U ? T : never` and `T extends U ? never : T`.
         if false_type.flags().intersects(TypeFlags::Never)
             && self.get_actual_type_variable(true_type) == self.get_actual_type_variable(check_type)
@@ -331,6 +333,109 @@ impl Checker {
             }
         }
         t
+    }
+
+    /// The branch types `get_simplified_conditional_type_worker` tests, or `None` when neither simplification can
+    /// apply. Go and the default mode resolve both branches up front. Under `lazy_members` (fast preset only: the
+    /// skipped instantiations lower the counter that places TS2589) the false type comes first and the true type only
+    /// when it can still match. An anonymous or class/interface true type never can; reference, mapped and
+    /// reverse-mapped types can instantiate to `never`, so they are not skipped
+    /// (`testdata/regressions/simplified-conditional-mapped-never`). A literal `: never` false branch keeps Go's
+    /// order of instantiation.
+    fn get_simplification_branch_types(
+        &mut self,
+        t: P<Type>,
+        check_type: P<Type>,
+    ) -> Option<(P<Type>, P<Type>)> {
+        if !self.lazy_members {
+            let true_type = self.get_true_type_from_conditional_type(t);
+            return Some((true_type, self.get_false_type_from_conditional_type(t)));
+        }
+        let d = t.as_conditional_type();
+        let resolved_true = d.resolved_true_type.get();
+        let resolved_false = d.resolved_false_type.get();
+        if let (Some(true_type), Some(false_type)) = (resolved_true, resolved_false) {
+            return Some((true_type, false_type));
+        }
+        let Some(actual_check) = Self::actual_type_variable_without_interning(check_type) else {
+            let true_type = self.get_true_type_from_conditional_type(t);
+            return Some((true_type, self.get_false_type_from_conditional_type(t)));
+        };
+        let node = d.root.get().unwrap().node.get().unwrap().as_conditional_type_node();
+        // Kept so the true type is instantiated from it below without resolving the node again.
+        let mut raw_true = None;
+        if !actual_check.flags().intersects(TypeFlags::Object) {
+            let true_is_object = if let Some(true_type) = resolved_true {
+                true_type.flags().intersects(TypeFlags::Object)
+            } else {
+                let raw = self.get_type_from_type_node(node.true_type);
+                raw_true = Some(raw);
+                raw.flags().intersects(TypeFlags::Object)
+                    && raw
+                        .object_flags()
+                        .intersects(ObjectFlags::Anonymous | ObjectFlags::ClassOrInterface)
+                    && !raw.object_flags().intersects(ObjectFlags::ReverseMapped)
+            };
+            if true_is_object {
+                if resolved_false.is_none() {
+                    self.get_type_from_type_node(node.false_type);
+                }
+                return None;
+            }
+        }
+        if resolved_false.is_none()
+            && ast::skip_type_parentheses(node.false_type).kind() == Kind::NeverKeyword
+        {
+            let true_type = self.get_true_type_from_conditional_type_raw(t, raw_true);
+            return Some((true_type, self.get_false_type_from_conditional_type(t)));
+        }
+        let false_type = self.get_false_type_from_conditional_type(t);
+        if !false_type.flags().intersects(TypeFlags::Never)
+            && let Some(actual_false) = Self::actual_type_variable_without_interning(false_type)
+            && actual_false != actual_check
+        {
+            return None;
+        }
+        Some((self.get_true_type_from_conditional_type_raw(t, raw_true), false_type))
+    }
+
+    /// `get_true_type_from_conditional_type`, reusing the true type node's type when the caller already resolved it.
+    fn get_true_type_from_conditional_type_raw(
+        &mut self,
+        t: P<Type>,
+        raw_true: Option<P<Type>>,
+    ) -> P<Type> {
+        let d = t.as_conditional_type();
+        match (d.resolved_true_type.get(), raw_true) {
+            (Some(true_type), _) => true_type,
+            (None, Some(raw_true)) => {
+                let true_type = self.instantiate_type(raw_true, d.mapper.get());
+                d.resolved_true_type.set(Some(true_type));
+                true_type
+            }
+            (None, None) => self.get_true_type_from_conditional_type(t),
+        }
+    }
+
+    /// `get_actual_type_variable` when it cannot allocate: `None` where it would intern an indexed access over
+    /// substitution types, so a caller that wants to evaluate it earlier than Go does can fall back to Go's order.
+    fn actual_type_variable_without_interning(t: P<Type>) -> Option<P<Type>> {
+        if t.flags().intersects(TypeFlags::Substitution) {
+            return Self::actual_type_variable_without_interning(
+                t.as_substitution_type().base_type.get().unwrap(),
+            );
+        }
+        if t.flags().intersects(TypeFlags::IndexedAccess) {
+            let indexed_access = t.as_indexed_access_type();
+            let object_type = indexed_access.object_type.get().unwrap();
+            let index_type = indexed_access.index_type.get().unwrap();
+            if Self::actual_type_variable_without_interning(object_type) != Some(object_type)
+                || Self::actual_type_variable_without_interning(index_type) != Some(index_type)
+            {
+                return None;
+            }
+        }
+        get_non_distributed_type_parameter(t)
     }
 
     // Invokes union simplification logic to determine if an intersection is considered empty as a union constituent
@@ -429,10 +534,21 @@ impl Checker {
             return None;
         }
         let key = CachedTypeKey { kind: CachedTypeKind::EquivalentBaseType, type_id: t.id };
-        if t.object_flags_lazy().intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
+        let object_flags = t.object_flags_lazy();
+        if object_flags.intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
+            // tsrs-only: `IdenticalBaseTypeExists` is set together with the cache entry below, so a reference
+            // without it has no entry and the map is not probed (nearly every reference the relater normalizes
+            // has no single base, and this is asked of both sides of every relation between references).
+            if !object_flags.intersects(ObjectFlags::IdenticalBaseTypeExists) {
+                debug_assert!(
+                    !self.cached_types.contains_key(&key),
+                    "a cached equivalent base type without IdenticalBaseTypeExists"
+                );
+                return None;
+            }
             return self.cached_types.get(&key).copied();
         }
-        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IdenticalBaseTypeCalculated);
+        t.object_flags.set(object_flags | ObjectFlags::IdenticalBaseTypeCalculated);
         let target = t.target().unwrap();
         if target.object_flags().intersects(ObjectFlags::Class) {
             let base_type_node = get_base_type_node_of_class(target);
@@ -474,6 +590,7 @@ impl Checker {
             );
         }
         self.cached_types.insert(key, instantiated_base);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IdenticalBaseTypeExists);
         Some(instantiated_base)
     }
 
@@ -813,7 +930,7 @@ impl Checker {
 }
 
 // checker.go:28826
-pub fn is_export_or_export_expression(location: P<Node>) -> bool {
+fn is_export_or_export_expression(location: P<Node>) -> bool {
     find_ancestor(location, |n| {
         if let Some(parent) = n.parent() {
             if is_any_export_assignment(parent) {
@@ -829,7 +946,7 @@ pub fn is_export_or_export_expression(location: P<Node>) -> bool {
 }
 
 // checker.go:28841
-pub fn should_mark_identifier_alias_referenced(node: P<Node>) -> bool {
+pub(crate) fn should_mark_identifier_alias_referenced(node: P<Node>) -> bool {
     if let Some(parent) = node.parent() {
         // A property access expression LHS? checkPropertyAccessExpression will handle that.
         if is_property_access_expression(parent) && parent.expression() == Some(node) {
@@ -851,7 +968,7 @@ pub fn should_mark_identifier_alias_referenced(node: P<Node>) -> bool {
 }
 
 // checker.go:28862
-pub fn is_internal_module_import_equals_declaration(node: P<Node>) -> bool {
+pub(crate) fn is_internal_module_import_equals_declaration(node: P<Node>) -> bool {
     node.kind() == Kind::ImportEqualsDeclaration
         && node.as_import_equals_declaration().module_reference.kind()
             != Kind::ExternalModuleReference
@@ -960,7 +1077,7 @@ impl Checker {
 }
 
 // checker.go:28949
-pub fn is_part_of_import_equals_module_reference(location: P<Node>) -> bool {
+fn is_part_of_import_equals_module_reference(location: P<Node>) -> bool {
     let Some(import_equals) = find_ancestor_kind(location, Kind::ImportEqualsDeclaration) else {
         return false;
     };
@@ -1712,7 +1829,7 @@ pub fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
 }
 
 // checker.go:29496
-pub fn get_mapped_type_optionality(t: P<Type>) -> std::cmp::Ordering {
+fn get_mapped_type_optionality(t: P<Type>) -> std::cmp::Ordering {
     let modifiers = get_mapped_type_modifiers(t);
     if modifiers.intersects(MappedTypeModifiers::ExcludeOptional) {
         return std::cmp::Ordering::Less;
@@ -1757,7 +1874,7 @@ impl Checker {
 }
 
 // checker.go:29530
-pub fn is_partial_mapped_type(t: P<Type>) -> bool {
+pub(crate) fn is_partial_mapped_type(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::Mapped)
         && get_mapped_type_modifiers(t).intersects(MappedTypeModifiers::IncludeOptional)
 }
@@ -1822,12 +1939,12 @@ impl Checker {
     }
 
     // checker.go:29576
-    pub(crate) fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.filter_type(t, |c, t| c.has_type_facts(t, TypeFacts::Truthy))
     }
 
     // checker.go:29580
-    pub(crate) fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.map_type(t, |c, t| Some(c.get_definitely_falsy_part_of_type(t))).unwrap()
     }
 
@@ -2062,7 +2179,7 @@ fn add_template_spans(
 }
 
 // checker.go:29731
-pub fn apply_string_mapping(symbol: P<Symbol>, str: &str) -> String {
+pub(crate) fn apply_string_mapping(symbol: P<Symbol>, str: &str) -> String {
     match INTRINSIC_TYPE_KINDS.get(symbol.name()).copied().unwrap_or_default() {
         IntrinsicTypeKind::Uppercase => stringutil::to_upper_js(str),
         IntrinsicTypeKind::Lowercase => stringutil::to_lower_js(str),
@@ -2187,7 +2304,7 @@ impl Checker {
     }
 
     // checker.go:29803
-    pub(crate) fn get_type_of_property_or_index_signature_of_type(
+    pub fn get_type_of_property_or_index_signature_of_type(
         &mut self,
         t: P<Type>,
         name: &str,
@@ -2225,7 +2342,7 @@ impl Checker {
      * @returns the contextual type of an expression.
      */
     // checker.go:29832
-    pub(crate) fn get_contextual_type(
+    pub fn get_contextual_type(
         &mut self,
         node: P<Node>,
         context_flags: ContextFlags,
@@ -2946,7 +3063,7 @@ impl Checker {
     }
 
     // checker.go:30261
-    pub(crate) fn get_contextual_type_for_argument_at_index(
+    pub fn get_contextual_type_for_argument_at_index(
         &mut self,
         call_target: P<Node>,
         arg_index: usize,

@@ -1,0 +1,11 @@
+--- a/crates/tsrs_tsoptions/src/parsinghelpers.rs
++++ b/crates/tsrs_tsoptions/src/parsinghelpers.rs
+@@ -981,7 +981,7 @@ pub fn for_each_compiler_option_value(
+ // with optional awareness of explicitly set null values in the raw JSON.
+ // Fields in the source options will overwrite the corresponding fields in the target options,
+ // including when they are explicitly set to null in the raw configuration (if rawSource is provided).
+-pub(crate) fn merge_compiler_options(
++pub fn merge_compiler_options(
+     target_options: &mut CompilerOptions,
+     source_options: Option<&CompilerOptions>,
+     raw_source: Option<&CompilerOptionsValue>,

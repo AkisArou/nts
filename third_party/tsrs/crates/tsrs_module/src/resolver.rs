@@ -268,13 +268,13 @@ pub struct DefaultResolver<'h> {
     pub(crate) resolution_data: P<ResolutionData>,
     host: &'h dyn ResolutionHost,
     // reportDiagnostic: DiagnosticReporter
-    pub(crate) module_resolution_cache: ModuleResolutionCache,
-    pub(crate) type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
+    pub module_resolution_cache: ModuleResolutionCache,
+    pub type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
 
     // Cached representations for `core.CompilerOptions.paths`, keyed by the
     // path mappings themselves. This does not handle other path patterns such
     // as `typesVersions`.
-    pub(crate) parsed_patterns_for_paths: ParsedPatternsCache,
+    pub parsed_patterns_for_paths: ParsedPatternsCache,
 
     // `get_conditions` per (options, resolution mode), shared by the resolutions that use it.
     conditions_cache: SyncMap<(usize, ResolutionMode), std::sync::Arc<[String]>>,
@@ -375,7 +375,7 @@ impl Tracer {
 }
 
 impl DefaultResolver<'_> {
-    pub(crate) fn resolve_type_reference_directive(
+    fn resolve_type_reference_directive(
         &self,
         type_reference_directive_name: &str,
         containing_file: &str,
@@ -2897,10 +2897,21 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn get_package_json_info(&mut self, package_directory: &str) -> Option<P<InfoCacheEntry>> {
-        let package_json_path = tspath::combine_paths(package_directory, &["package.json"]);
+        // The package.json path in a scratch string: the lookup walks every ancestor directory of a candidate,
+        // and a hit (most lookups) keeps nothing of the path.
+        with_path_buffer(PathBuffer::PackageJson, |package_json_path| {
+            tspath::combine_paths_into(package_json_path, package_directory, &["package.json"]);
+            self.get_package_json_info_at(package_directory, package_json_path)
+        })
+    }
 
+    fn get_package_json_info_at(
+        &mut self,
+        package_directory: &str,
+        package_json_path: &str,
+    ) -> Option<P<InfoCacheEntry>> {
         if let Some(existing) =
-            InfoCache::get(&self.resolver.package_json_info_cache, &package_json_path)
+            InfoCache::get(&self.resolver.package_json_info_cache, package_json_path)
         {
             if existing.contents.is_some() {
                 trace!(
@@ -2921,26 +2932,29 @@ impl<'r> ResolutionState<'r> {
         }
 
         let directory_exists = self.fs().directory_exists(package_directory);
-        if directory_exists && self.fs().file_exists(&package_json_path) {
+        if directory_exists && self.fs().file_exists(package_json_path) {
             // Ignore error
-            let contents = self.fs().read_file(&package_json_path).unwrap_or_default();
+            let contents = self.fs().read_file(package_json_path).unwrap_or_default();
             let parsed = packagejson::parse(&contents);
             trace!(self.tracer, diagnostics::FOUND_PACKAGE_JSON_AT_0, package_json_path);
             let parseable = parsed.is_ok();
-            let result = self.resolver.package_json_info_cache.get_or_insert_with(
-                &package_json_path,
-                || InfoCacheEntry {
-                    package_directory: tsrs_core::alloc_str(package_directory),
-                    directory_exists: true,
-                    contents: Some(P::new(PackageJson::new(parsed.unwrap_or_default(), parseable))),
-                },
-            );
+            let result =
+                self.resolver.package_json_info_cache.get_or_insert_with(package_json_path, || {
+                    InfoCacheEntry {
+                        package_directory: tsrs_core::alloc_str(package_directory),
+                        directory_exists: true,
+                        contents: Some(P::new(PackageJson::new(
+                            parsed.unwrap_or_default(),
+                            parseable,
+                        ))),
+                    }
+                });
             return Some(with_package_directory(result, package_directory));
         }
         if directory_exists {
             trace!(self.tracer, diagnostics::FILE_0_DOES_NOT_EXIST, package_json_path);
         }
-        self.resolver.package_json_info_cache.get_or_insert_with(&package_json_path, || {
+        self.resolver.package_json_info_cache.get_or_insert_with(package_json_path, || {
             InfoCacheEntry {
                 package_directory: tsrs_core::alloc_str(package_directory),
                 directory_exists,
@@ -3149,7 +3163,7 @@ fn get_node_resolution_features(options: &CompilerOptions) -> NodeResolutionFeat
     features
 }
 
-pub fn move_to_next_directory_separator_if_available(
+pub(crate) fn move_to_next_directory_separator_if_available(
     path: &str,
     prev_separator_index: usize,
     is_folder: bool,
@@ -3172,8 +3186,8 @@ pub fn move_to_next_directory_separator_if_available(
 
 #[derive(Debug, Default)]
 pub struct ParsedPatterns {
-    matchable_string_set: Set<String>,
-    patterns: Vec<Pattern>,
+    pub matchable_string_set: Set<String>,
+    pub patterns: Vec<Pattern>,
     // tsrs-only: the positions in `patterns` by the text before the star, and the lengths of those prefixes, longest
     // first. The best match (`find_best_pattern_match`: the longest prefix, then the first pattern) is the first
     // pattern that matches among those whose prefix starts the candidate, tried from the longest prefix: a few
@@ -3183,7 +3197,7 @@ pub struct ParsedPatterns {
 }
 
 impl DefaultResolver<'_> {
-    pub(crate) fn get_parsed_patterns_for_paths(
+    pub fn get_parsed_patterns_for_paths(
         &self,
         compiler_options: &CompilerOptions,
     ) -> P<ParsedPatterns> {
@@ -3286,7 +3300,7 @@ fn normalize_path_for_cjs_resolution(containing_directory: &str, module_name: &s
 // tsrs-only: the last element of `tspath::get_path_components(path, "")` for a path with forward slashes (as
 // `combine_paths` returns it), without building the list (one string per component, on every relative import):
 // the last "/"-separated part after the root, one trailing empty part dropped, or the root when nothing follows it.
-fn last_path_component(path: &str) -> &str {
+pub fn last_path_component(path: &str) -> &str {
     let root_length = tspath::get_root_length(path);
     let rest = &path[root_length..];
     if rest.is_empty() {
@@ -3853,78 +3867,5 @@ impl ResolutionState<'_> {
         }
 
         None
-    }
-}
-
-#[cfg(test)]
-mod last_path_component_test {
-    use super::*;
-
-    #[test]
-    fn matches_the_last_path_component() {
-        for path in [
-            "/",
-            "/a",
-            "/a/",
-            "/a/.",
-            "/a/..",
-            "/a/./",
-            "/a/../",
-            "/a//",
-            "/a/b/c.ts",
-            "/a/b//",
-            "c:/",
-            "c:/x/..",
-            "//server/share/x",
-            "file:///a/b",
-            "a",
-            "a/",
-            "",
-            ".",
-            "..",
-            "./",
-            "/.",
-            "/..",
-        ] {
-            let parts = tspath::get_path_components(path, "");
-            assert_eq!(last_path_component(path), parts[parts.len() - 1], "{path:?}");
-        }
-    }
-}
-
-#[cfg(test)]
-mod match_pattern_or_exact_test {
-    use super::*;
-
-    #[test]
-    fn matches_like_find_best_pattern_match() {
-        let mut paths: OrderedMap<String, Vec<String>> = OrderedMap::default();
-        for key in
-            ["@a/*", "@a/b/*", "@a/b/*.js", "*", "@a/b/c", "@a/*/d", "x*", "@a/b/*", "@a/bc*"]
-        {
-            paths.insert(key.to_string(), vec![]);
-        }
-        let parsed = try_parse_patterns(Some(&paths));
-        for candidate in [
-            "@a/b/c",
-            "@a/b/x",
-            "@a/b/x.js",
-            "@a/q/d",
-            "@a/bcd",
-            "xyz",
-            "zzz",
-            "@a/",
-            "@a",
-            "",
-            "@a/b/",
-        ] {
-            let expected = if parsed.matchable_string_set.m.contains(candidate) {
-                Pattern { text: candidate.to_string(), kind: PatternKind::Exact }
-            } else {
-                tsrs_core::find_best_pattern_match(&parsed.patterns, |p| p, candidate)
-                    .unwrap_or_default()
-            };
-            assert_eq!(match_pattern_or_exact(&parsed, candidate), expected, "{candidate}");
-        }
     }
 }

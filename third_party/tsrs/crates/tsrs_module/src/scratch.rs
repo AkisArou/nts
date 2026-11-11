@@ -4,10 +4,11 @@ use std::cell::Cell;
 pub enum PathBuffer {
     Extension,
     Suffix,
+    PackageJson,
 }
 
 thread_local! {
-    static PATHS: [Cell<String>; 2] = const { [const { Cell::new(String::new()) }; 2] };
+    static PATHS: [Cell<String>; 3] = const { [const { Cell::new(String::new()) }; 3] };
 }
 
 // Like oxc-resolver's scratch paths, keep capacity across requests on each worker. Take the buffer out before
@@ -28,50 +29,4 @@ pub fn with_path_buffer<T>(kind: PathBuffer, f: impl FnOnce(&mut String) -> T) -
         }
         result
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn nested_and_concurrent_paths_do_not_overwrite_each_other() {
-        with_path_buffer(PathBuffer::Extension, |outer| {
-            outer.push_str("/outer/é.ts");
-            with_path_buffer(PathBuffer::Extension, |inner| {
-                assert_eq!(inner, "");
-                inner.push_str("/inner.ts");
-            });
-            std::thread::spawn(|| {
-                with_path_buffer(PathBuffer::Extension, |other| other.push_str("/other.ts"));
-            })
-            .join()
-            .unwrap();
-            assert_eq!(outer, "/outer/é.ts");
-        });
-        with_path_buffer(PathBuffer::Extension, |path| assert_eq!(path, ""));
-    }
-
-    #[test]
-    fn long_paths_and_unwinding_leave_the_buffer_usable() {
-        with_path_buffer(PathBuffer::Suffix, |path| {
-            path.push_str(&"é".repeat(40_000));
-        });
-        with_path_buffer(PathBuffer::Suffix, |path| {
-            assert_eq!(path, "");
-            assert!(path.capacity() <= 64 * 1024);
-        });
-        assert!(
-            std::panic::catch_unwind(|| with_path_buffer(PathBuffer::Suffix, |path| {
-                path.push_str("/abandoned");
-                panic!("host callback");
-            }))
-            .is_err()
-        );
-        with_path_buffer(PathBuffer::Suffix, |path| {
-            assert_eq!(path, "");
-            assert!(path.capacity() <= 64 * 1024);
-            path.push_str("/next.ts");
-        });
-    }
 }

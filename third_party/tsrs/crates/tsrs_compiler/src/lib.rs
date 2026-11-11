@@ -1,28 +1,22 @@
-mod affinity;
+pub mod affinity;
 mod checker_program;
-mod checkerpool;
-#[cfg(test)]
-mod contentmapper_test;
+pub mod checkerpool;
 pub mod diagnosticwriter;
 mod emithost;
 mod emitter;
 mod file_include;
-mod fileloader;
-mod fileregions;
+pub mod fileloader;
+pub mod fileregions;
 mod filesparser;
 mod host;
 mod includeprocessor;
-#[cfg(test)]
-mod modulespecifiers_oracle_test;
 mod processing_diagnostic;
 mod program;
-mod program_emit;
-#[cfg(test)]
-mod program_test;
+pub mod program_emit;
 mod programlike;
 mod programregions;
-mod projectreferencedtsfakinghost;
-mod projectreferencefilemapper;
+pub mod projectreferencedtsfakinghost;
+pub mod projectreferencefilemapper;
 mod projectreferenceparser;
 mod sharedgraph;
 mod splitcheck;
@@ -35,8 +29,8 @@ pub use checkerpool::{
 pub use emitter::EmitOnly;
 pub use file_include::FileIncludeReason;
 pub use fileloader::{
-    DuplicateSourceFile, LibFile, content_mapper_initialization_diagnostic,
-    content_mapper_project_diagnostic, content_mapper_project_error_diagnostic,
+    DuplicateSourceFile, LibFile, content_mapper_project_diagnostic,
+    content_mapper_project_error_diagnostic,
 };
 pub use fileregions::{
     LeafMode, LeafSettings, bind_in_file_regions, enable as enable_file_regions, enable_lazy_dts,

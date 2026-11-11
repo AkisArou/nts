@@ -66,17 +66,31 @@ for (const { owner, body: original } of visitors) {
     const accessor = match[2] !== undefined;
     const impl = (implementations.get(owner) ?? []).join("\n");
     let type: string;
+    let accessPath = field + (accessor ? "()" : ""), viaGetter = accessor;
     if (accessor) {
       const getter = new RegExp(`pub fn ${field}\\(&self\\) -> ([^\\n{]+)`).exec(impl);
-      if (!getter) throw new Error(`no getter type for ${owner}.${field}`);
-      type = getter[1].trim();
+      if (getter) type = getter[1].trim();
+      else {
+        // A crate-visible getter nts cannot call: only the form that reads
+        // through a public base field, whose own getter is public.
+        const inner = new RegExp(`pub\\(crate\\) fn ${field}\\(&self\\) -> ([^\\n{]+) \\{\\s*self\\.(\\w+)\\.${field}\\.get\\(\\)`).exec(impl);
+        if (!inner) throw new Error(`no getter type for ${owner}.${field}`);
+        type = inner[1].trim();
+        accessPath = `${inner[2]}.${field}()`;
+      }
     } else {
       const struct = new RegExp(`pub struct ${owner} \\{`).exec(generated + manual);
       if (!struct) throw new Error(`no struct for ${owner}`);
       const members = block(generated + manual, struct.index + struct[0].length - 1);
-      const member = new RegExp(`pub ${field}: ([^\\n,]+)`).exec(members);
+      const member = new RegExp(`pub(\\(crate\\))? ${field}: ([^\\n,]+)`).exec(members);
       if (!member) throw new Error(`no field type for ${owner}.${field}`);
-      type = member[1].trim();
+      type = member[2].trim();
+      if (member[1]) {
+        // A crate-visible field nts cannot read: only through its public getter.
+        if (!new RegExp(`pub fn ${field}\\(&self\\)`).test((implementations.get(owner) ?? []).join("\n"))) throw new Error(`no getter type for ${owner}.${field}`);
+        accessPath = field + "()";
+        viaGetter = true;
+      }
     }
     const list = /(?:NodeList|ModifierList|\[P<Node>\])/.test(type);
     if (!list && !/^(?:Option<)?P<Node>>?$/.test(type)) throw new Error(`unknown child type ${owner}.${field}: ${type}`);
@@ -84,7 +98,7 @@ for (const { owner, body: original } of visitors) {
     const cardinality = list ? (type.startsWith("Option<") ? "optional-list" : "list") : (type.startsWith("Option<") ? "optional" : "one");
     const variant = owner + field.split("_").filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join("");
     fields.push({ field: field.replace(/_$/, ""), role, cardinality, variant });
-    access.set(variant, field + (accessor && owner !== "SourceFile" ? "()" : ""));
+    access.set(variant, viaGetter && owner !== "SourceFile" ? accessPath : field);
     method.set(variant, /ModifierList/.test(type) ? "modifiers" : /\[P<Node>\]/.test(type) ? "slice" : role);
   }
   if (!fields.length) throw new Error(`native visitor ${owner} has no recognized children`);
@@ -108,7 +122,7 @@ for (const variant of variants) {
   rust += `NodeData::${name}(data) => {\n`;
   if (owner === "JSDocParameterOrPropertyTag") {
     const [tag, name, type, comment] = entry.fields;
-    rust += edge(tag) + "if data.is_name_first {\n" + edge(name, true) + edge(type, true) + "} else {\n" + edge(type, true) + edge(name, true) + "}\n" + edge(comment);
+    rust += edge(tag) + "if data.is_name_first {\n" + edge(name) + edge(type, true) + "} else {\n" + edge(type, true) + edge(name) + "}\n" + edge(comment);
   } else for (const f of entry.fields) rust += edge(f);
   rust += "}\n";
 }

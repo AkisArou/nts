@@ -4,8 +4,8 @@ use std::sync::LazyLock;
 use bitflags::bitflags;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{
-    self as ast, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFactory,
-    NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags,
+    self as ast, CommentRange, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node,
+    NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags,
 };
 use tsrs_core::{
     LanguageVariant, P, ScriptKind, TextRange, alloc_slice, alloc_str, alloc_vec, new_text_range,
@@ -131,6 +131,13 @@ pub struct Parser {
     pub(crate) jsdoc_comments_space: Vec<&'static str>,
     pub(crate) jsdoc_tag_comments_space: Vec<&'static str>,
     pub(crate) jsdoc_tag_comments_parts_space: Vec<P<Node>>,
+    // tsrs-only: the per-node comment ranges, the tags and comment parts of one JSDoc comment and the text of one
+    // `{@link}`, kept between comments like the three above (notes/perf-jsdoc-parser.md). Nested lists inside a tag
+    // (typedef and callback children, template type parameters) build on `node_stack`.
+    pub(crate) jsdoc_comment_ranges_space: Vec<CommentRange>,
+    pub(crate) jsdoc_tags_space: Vec<P<Node>>,
+    pub(crate) jsdoc_comment_parts_space: Vec<P<Node>>,
+    pub(crate) jsdoc_link_text_space: Vec<&'static str>,
     pub(crate) reparse_list: Vec<P<Node>>,
 
     pub(crate) current_parent: Option<P<Node>>,
@@ -152,9 +159,13 @@ pub struct Parser {
 }
 
 pub fn new_parser() -> Parser {
+    new_parser_with(NodeFactory::default())
+}
+
+fn new_parser_with(factory: NodeFactory) -> Parser {
     Parser {
         scanner: Scanner::new(),
-        factory: NodeFactory::default(),
+        factory,
         opts: SourceFileParseOptions::default(),
         source_text: "",
         script_kind: ScriptKind::Unknown,
@@ -177,6 +188,10 @@ pub fn new_parser() -> Parser {
         jsdoc_comments_space: Vec::new(),
         jsdoc_tag_comments_space: Vec::new(),
         jsdoc_tag_comments_parts_space: Vec::new(),
+        jsdoc_comment_ranges_space: Vec::new(),
+        jsdoc_tags_space: Vec::new(),
+        jsdoc_comment_parts_space: Vec::new(),
+        jsdoc_link_text_space: Vec::new(),
         reparse_list: Vec::new(),
         current_parent: None,
         reparsed_clones: Vec::new(),
@@ -184,6 +199,27 @@ pub fn new_parser() -> Parser {
         lazy_dts: false,
         lazy_lists: Vec::new(),
         node_stack: Vec::new(),
+    }
+}
+
+impl Parser {
+    /// tsrs-only: puts this parser back into `new_parser`'s state, keeping its factory handle (the two shared
+    /// counters) and the `JSDoc` scratch buffers, for the per-thread parser behind `parse_jsdoc_for_node`
+    /// (notes/perf-jsdoc-parser.md). Everything else starts fresh, the scanner's number caches included, so nothing
+    /// of the previous file is carried over.
+    pub(crate) fn recycle(&mut self) {
+        let mut fresh = new_parser_with(self.factory.clone());
+        fresh.jsdoc_comments_space = std::mem::take(&mut self.jsdoc_comments_space);
+        fresh.jsdoc_tag_comments_space = std::mem::take(&mut self.jsdoc_tag_comments_space);
+        fresh.jsdoc_tag_comments_parts_space =
+            std::mem::take(&mut self.jsdoc_tag_comments_parts_space);
+        fresh.jsdoc_comment_ranges_space = std::mem::take(&mut self.jsdoc_comment_ranges_space);
+        fresh.jsdoc_tags_space = std::mem::take(&mut self.jsdoc_tags_space);
+        fresh.jsdoc_comment_parts_space = std::mem::take(&mut self.jsdoc_comment_parts_space);
+        fresh.jsdoc_link_text_space = std::mem::take(&mut self.jsdoc_link_text_space);
+        fresh.node_stack = std::mem::take(&mut self.node_stack);
+        fresh.node_stack.clear();
+        *self = fresh;
     }
 }
 
@@ -499,7 +535,7 @@ impl Parser {
     }
 
     /// `initialize_state` for text that already lives in the arena (Go shares the string; no copy).
-    pub(crate) fn initialize_state_static(
+    fn initialize_state_static(
         &mut self,
         opts: SourceFileParseOptions,
         source_text: &'static str,
@@ -510,9 +546,18 @@ impl Parser {
             "ScriptKind must be specified when parsing source file: {}",
             opts.file_name
         );
-
-        self.scanner.reset();
         self.opts = opts;
+        self.initialize_text_state(source_text, script_kind);
+    }
+
+    /// `initialize_state_static` without the parse options, which only `parse_source_file_worker` reads: the lazy
+    /// `JSDoc` parser (`parse_jsdoc_for_node`) parses the comments of an already parsed file.
+    pub(crate) fn initialize_text_state(
+        &mut self,
+        source_text: &'static str,
+        script_kind: ScriptKind,
+    ) {
+        self.scanner.reset();
         self.source_text = source_text;
         self.source_text_index = ast::NO_SOURCE_TEXT;
         self.script_kind = script_kind;
@@ -786,11 +831,11 @@ impl Parser {
         result.node_count.set(self.factory.node_count());
         result.text_count.set(self.factory.text_count());
         result.identifier_count.set(self.identifier_count);
-        result.set_jsdoc_cache(self.create_jsdoc_cache());
-        // For non-JS files, enable lazy JSDoc parsing on demand
+        // For non-JS files, enable lazy JSDoc parsing on demand (before the cache is stored: it picks the map).
         if !self.is_java_script() {
             result.set_has_lazy_jsdoc(true);
         }
+        result.set_jsdoc_cache(self.create_jsdoc_cache());
         self.reparsed_clones.sort_by(|a, b| ast::compare_node_positions(*a, *b));
         result.reparsed_clones.set(alloc_slice(&self.reparsed_clones));
         ast::set_external_module_indicator(&result, self.opts.external_module_indicator_options);

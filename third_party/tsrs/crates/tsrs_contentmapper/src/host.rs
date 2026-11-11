@@ -354,7 +354,7 @@ impl Timings {
     }
 }
 
-// host.go:263
+// host.go:264
 fn operation_timing_since(current: OperationTiming, previous: OperationTiming) -> OperationTiming {
     OperationTiming {
         count: current.count - current.count.min(previous.count),
@@ -557,9 +557,6 @@ impl Error {
     }
 
     // Go `errors.Is(err, ErrProjectUnavailable)`.
-    pub fn is_project_unavailable(&self) -> bool {
-        self.chain().any(|err| matches!(err, Error::ProjectUnavailable))
-    }
 
     // Go `errors.Is(err, sentinel)` for the sentinels of package ipc (io.EOF, ipc.ErrConnClosed,
     // context.DeadlineExceeded).
@@ -625,6 +622,6 @@ impl From<ipc::Error> for Error {
 }
 
 // Go `strconv.Quote`, which fmt's %q verb uses for a string.
-pub fn quote(s: &str) -> String {
+pub(crate) fn quote(s: &str) -> String {
     tsrs_core::gocompat::quote(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::Header)
 }

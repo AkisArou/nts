@@ -27,6 +27,17 @@ pub fn get_jsdoc_comment_ranges(
     text: &'static str,
 ) -> Vec<CommentRange> {
     let mut comment_ranges = comment_ranges.to_vec();
+    append_jsdoc_comment_ranges(&mut comment_ranges, node, text);
+    comment_ranges
+}
+
+/// `get_jsdoc_comment_ranges` into the caller's vector (the parser keeps one between nodes), which it filters as a
+/// whole like the slice `get_jsdoc_comment_ranges` starts from.
+pub fn append_jsdoc_comment_ranges(
+    comment_ranges: &mut Vec<CommentRange>,
+    node: P<Node>,
+    text: &'static str,
+) {
     let node_pos = node.pos().expect_source("parsed nodes have source positions");
     let node_end = node.end().expect_source("parsed nodes have source positions");
     match node.kind() {
@@ -55,7 +66,6 @@ pub fn get_jsdoc_comment_ranges(
             || bytes[(comment_start + 2) as usize] != b'*'
             || bytes[(comment_start + 3) as usize] == b'/')
     });
-    comment_ranges
 }
 
 pub fn is_keyword_or_punctuation(token: Kind) -> bool {

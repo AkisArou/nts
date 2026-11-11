@@ -153,6 +153,13 @@ pub fn has_trailing_directory_separator(path: &str) -> bool {
 //	CombinePaths("/path", "to", "file.ext") === "/path/to/file.ext"
 //	CombinePaths("/path", "/to", "file.ext") === "/to/file.ext"
 pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
+    let mut result = String::new();
+    combine_paths_into(&mut result, first_path, paths);
+    result
+}
+
+/// `combine_paths` appended to `result` (cleared first), for a caller that keeps a scratch string across calls.
+pub fn combine_paths_into(result: &mut String, first_path: &str, paths: &[&str]) {
     // Each absolute path replaces everything before it, so start from the last one without normalizing what it
     // replaces (`first_path` is often the current directory).
     let is_absolute = |p: &str| {
@@ -169,8 +176,8 @@ pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
     // One allocation for the result (a profile of the front end had this function reallocating on every
     // `push_str`): it holds `first`, and a separator and each trailing path at most.
     let first = normalize_slashes_cow(first);
-    let mut result =
-        String::with_capacity(first.len() + paths.iter().map(|p| p.len() + 1).sum::<usize>());
+    result.clear();
+    result.reserve(first.len() + paths.iter().map(|p| p.len() + 1).sum::<usize>());
     result.push_str(&first);
     for &trailing_path in paths {
         if trailing_path.is_empty() {
@@ -182,13 +189,12 @@ pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
             result.clear();
             result.push_str(&trailing_path);
         } else {
-            if !has_trailing_directory_separator(&result) {
+            if !has_trailing_directory_separator(result) {
                 result.push('/');
             }
             result.push_str(&trailing_path);
         }
     }
-    result
 }
 
 pub fn get_path_components(path: &str, current_directory: &str) -> Vec<String> {
@@ -428,7 +434,7 @@ fn reduced_path_components_of_combined(path: &str) -> Vec<&str> {
     reduced
 }
 
-fn reduce_path_components(components: &[String]) -> Vec<String> {
+pub fn reduce_path_components(components: &[String]) -> Vec<String> {
     if components.is_empty() {
         return Vec::new();
     }
@@ -465,14 +471,6 @@ pub fn resolve_path(path: &str, paths: &[&str]) -> String {
     let combined_path =
         if paths.is_empty() { normalize_slashes(path) } else { combine_paths(path, paths) };
     normalize_path(&combined_path)
-}
-
-pub fn resolve_tripleslash_reference(module_name: &str, containing_file: &str) -> String {
-    let base_path = get_directory_path(containing_file);
-    if is_rooted_disk_path(module_name) {
-        return normalize_path(module_name);
-    }
-    normalize_path(&combine_paths(&base_path, &[module_name]))
 }
 
 pub fn get_normalized_path_components(path: &str, current_directory: &str) -> Vec<String> {
@@ -728,7 +726,7 @@ fn dot_segment_at(p: &[u8], start: usize) -> bool {
 
 /// `normalize_path` borrowing from `path` when it is already normal (no backslash, no `.` or `..` segment, no
 /// repeated separator): a file name from the file system usually is.
-fn normalize_path_cow(path: &str) -> std::borrow::Cow<'_, str> {
+pub fn normalize_path_cow(path: &str) -> std::borrow::Cow<'_, str> {
     if !path.as_bytes().contains(&b'\\')
         && let Some(normalized) = simple_normalize_path(path)
     {
@@ -859,10 +857,21 @@ pub fn to_file_name_lower_case(file_name: &str) -> String {
 }
 
 pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: bool) -> Path {
+    // The common case on Linux: an absolute, already normal file name becomes a `Path` with one allocation (the
+    // `Arc`), not a normalized `String` copied into one.
+    Path::from(&*to_path_cow(file_name, base_path, use_case_sensitive_file_names))
+}
+
+/// The text of `to_path`, borrowed from `file_name` when it is the key as it is (absolute and already normal on a
+/// case-sensitive host): a cache lookup by `Path` can hash and compare this without making a `Path`.
+pub fn to_path_cow<'a>(
+    file_name: &'a str,
+    base_path: &str,
+    use_case_sensitive_file_names: bool,
+) -> std::borrow::Cow<'a, str> {
+    use std::borrow::Cow;
     if use_case_sensitive_file_names && is_rooted_disk_path(file_name) {
-        // The common case on Linux: an absolute, already normal file name becomes a `Path` with one allocation
-        // (the `Arc`), not a normalized `String` copied into one.
-        return Path::from(&*normalize_path_cow(file_name));
+        return normalize_path_cow(file_name);
     }
     let mut non_canonicalized_path = if is_rooted_disk_path(file_name) {
         normalize_path(file_name)
@@ -870,17 +879,17 @@ pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: 
         get_normalized_absolute_path(file_name, base_path)
     };
     if super::is_encoded_dynamic_file_name(&non_canonicalized_path) {
-        return Path::new(super::canonical_dynamic_uri_path(&non_canonicalized_path));
+        return Cow::Owned(super::canonical_dynamic_uri_path(&non_canonicalized_path));
     }
     // get_canonical_file_name, reusing the owned string
     if use_case_sensitive_file_names {
-        return Path::new(non_canonicalized_path);
+        return Cow::Owned(non_canonicalized_path);
     }
     if non_canonicalized_path.is_ascii() {
         non_canonicalized_path.make_ascii_lowercase();
-        return Path::new(non_canonicalized_path);
+        return Cow::Owned(non_canonicalized_path);
     }
-    Path::new(to_file_name_lower_case(&non_canonicalized_path))
+    Cow::Owned(to_file_name_lower_case(&non_canonicalized_path))
 }
 
 pub fn remove_trailing_directory_separator(path: &str) -> &str {
@@ -1255,28 +1264,6 @@ pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> Orderin
     a_components.len().cmp(&b_components.len())
 }
 
-pub fn compare_paths_case_sensitive(a: &str, b: &str, current_directory: &str) -> Ordering {
-    compare_paths(
-        a,
-        b,
-        &ComparePathsOptions {
-            use_case_sensitive_file_names: true,
-            current_directory: current_directory.to_string(),
-        },
-    )
-}
-
-pub fn compare_paths_case_insensitive(a: &str, b: &str, current_directory: &str) -> Ordering {
-    compare_paths(
-        a,
-        b,
-        &ComparePathsOptions {
-            use_case_sensitive_file_names: false,
-            current_directory: current_directory.to_string(),
-        },
-    )
-}
-
 pub fn contains_path(parent: &str, child: &str, options: &ComparePathsOptions) -> bool {
     let parent = combine_paths(&options.current_directory, &[parent]);
     let child = combine_paths(&options.current_directory, &[child]);
@@ -1539,7 +1526,3 @@ pub fn compare_number_of_directory_separators(path1: &str, path2: &str) -> Order
         .count()
         .cmp(&memchr::memchr_iter(b'/', path2.as_bytes()).count())
 }
-
-#[cfg(test)]
-#[path = "path_test.rs"]
-mod path_test;

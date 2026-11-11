@@ -6,7 +6,7 @@ use crate::EmitTextWriter;
 
 /// Go `utf8.DecodeLastRuneInString(s)` reduced to "is the last rune white-space-like", the only use Go makes of
 /// `lastWritten` (`RuneError` counts as not white space).
-pub fn last_rune_is_white_space_like(s: &str) -> bool {
+pub(crate) fn last_rune_is_white_space_like(s: &str) -> bool {
     let (ch, _) = stringutil::decode_last_rune(s.as_bytes());
     if ch == 0xFFFD {
         return false;
@@ -61,7 +61,8 @@ impl TextWriter {
     fn write_text(&mut self, s: &str) {
         if !s.is_empty() {
             if self.line_start {
-                self.builder.push_str(&get_indent_string(self.indent, self.indent_size));
+                self.builder
+                    .extend(std::iter::repeat_n(' ', self.indent as usize * self.indent_size));
                 self.line_start = false;
             }
             self.builder.push_str(s);
@@ -121,6 +122,12 @@ impl EmitTextWriter for TextWriter {
 
     fn string(&self) -> String {
         self.builder.clone()
+    }
+
+    fn take_string(&mut self) -> String {
+        let text = std::mem::take(&mut self.builder);
+        self.clear();
+        text
     }
 
     fn get_text_pos(&self) -> u32 {
@@ -229,7 +236,7 @@ pub fn get_default_indent_size() -> usize {
     DEFAULT_INDENT_SIZE
 }
 
-pub fn get_indent_string(indent: u32, indent_size: usize) -> String {
+pub(crate) fn get_indent_string(indent: u32, indent_size: usize) -> String {
     if indent == 0 {
         return String::new();
     }

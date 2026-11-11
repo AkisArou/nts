@@ -29,12 +29,19 @@ use crate::tsconfigparsing::{
     is_network_path_value, validate_json_option_value,
 };
 
+// CLI-only tsrs preset. Keep it out of the upstream compiler/config declarations and serialized compiler options.
+static FAST_OPTION: CommandLineOption = CommandLineOption {
+    name: "fast",
+    kind: CommandLineOptionKind::Boolean,
+    ..CommandLineOption::DEFAULT
+};
+
 impl CommandLineParser {
     pub(crate) fn alternate_mode(&self) -> Option<&'static AlternateModeDiagnostics> {
         self.worker_diagnostics.did_you_mean.alternate_mode.as_ref()
     }
 
-    pub(crate) fn options_declarations(&self) -> &'static [&'static CommandLineOption] {
+    pub fn options_declarations(&self) -> &'static [&'static CommandLineOption] {
         &self.worker_diagnostics.did_you_mean.option_declarations
     }
 
@@ -49,13 +56,13 @@ impl CommandLineParser {
 
 // The Go struct also holds the file system; here it is passed to the methods that read response files.
 pub struct CommandLineParser {
-    pub(crate) worker_diagnostics: &'static ParseCommandLineWorkerDiagnostics,
-    pub(crate) options_map: NameMap,
-    pub(crate) current_directory: String,
-    pub(crate) options: OrderedMap<String, CompilerOptionsValue>,
-    pub(crate) file_names: Vec<String>,
-    pub(crate) errors: Vec<P<Diagnostic>>,
-    pub(crate) response_file_stack: FxHashSet<Path>,
+    pub worker_diagnostics: &'static ParseCommandLineWorkerDiagnostics,
+    pub options_map: NameMap,
+    pub current_directory: String,
+    pub options: OrderedMap<String, CompilerOptionsValue>,
+    pub file_names: Vec<String>,
+    pub errors: Vec<P<Diagnostic>>,
+    pub response_file_stack: FxHashSet<Path>,
 }
 
 pub fn parse_command_line(
@@ -186,7 +193,7 @@ fn parse_command_line_worker(
 }
 
 impl CommandLineParser {
-    pub(crate) fn parse_strings(&mut self, args: &[String], fs: Option<&dyn FS>) {
+    pub fn parse_strings(&mut self, args: &[String], fs: Option<&dyn FS>) {
         let mut i = 0;
         while i < args.len() {
             let s = &args[i];
@@ -200,10 +207,15 @@ impl CommandLineParser {
                 }
                 b'-' => {
                     let input_option_name = get_input_option_name(s);
-                    let opt = self.options_map.get_option_declaration_from_name(
-                        input_option_name,
-                        true, /*allowShort*/
-                    );
+                    let opt = self
+                        .options_map
+                        .get_option_declaration_from_name(
+                            input_option_name,
+                            true, /*allowShort*/
+                        )
+                        .or_else(|| {
+                            input_option_name.eq_ignore_ascii_case("fast").then_some(&FAST_OPTION)
+                        });
                     if let Some(opt) = opt {
                         i = self.parse_option_value(
                             args,
@@ -293,7 +305,7 @@ impl CommandLineParser {
     }
 }
 
-pub fn try_read_file(
+pub(crate) fn try_read_file(
     file_name: &str,
     read_file: impl FnOnce(&str) -> Option<String>,
     mut errors: Vec<P<Diagnostic>>,
@@ -551,7 +563,7 @@ pub fn parse_list_type_option(
     }
 }
 
-pub fn convert_json_option_of_enum_type(
+pub(crate) fn convert_json_option_of_enum_type(
     opt: &'static CommandLineOption,
     value: &str,
     value_expression: Option<P<Node>>,

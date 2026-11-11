@@ -10,12 +10,12 @@ use crate::*;
 
 // TODO: Memoize once per checker to retain threadsafety
 // printer.go:13
-pub fn create_printer_with_defaults(emit_context: P<EmitContext>) -> Printer {
+fn create_printer_with_defaults(emit_context: P<EmitContext>) -> Printer {
     new_printer(PrinterOptions::default(), PrintHandlers::default(), Some(emit_context))
 }
 
 // printer.go:17
-pub fn create_printer_with_remove_comments(emit_context: P<EmitContext>) -> Printer {
+fn create_printer_with_remove_comments(emit_context: P<EmitContext>) -> Printer {
     new_printer(
         PrinterOptions { remove_comments: true, ..Default::default() },
         PrintHandlers::default(),
@@ -24,7 +24,7 @@ pub fn create_printer_with_remove_comments(emit_context: P<EmitContext>) -> Prin
 }
 
 // printer.go:21
-pub fn create_printer_with_remove_comments_omit_trailing_semicolon(
+fn create_printer_with_remove_comments_omit_trailing_semicolon(
     emit_context: P<EmitContext>,
 ) -> Printer {
     new_printer(
@@ -39,7 +39,7 @@ pub fn create_printer_with_remove_comments_omit_trailing_semicolon(
 }
 
 // printer.go:28
-pub fn create_printer_with_remove_comments_omit_trailing_semicolon_never_ascii_escape(
+fn create_printer_with_remove_comments_omit_trailing_semicolon_never_ascii_escape(
     emit_context: P<EmitContext>,
 ) -> Printer {
     new_printer(
@@ -60,6 +60,25 @@ impl Checker {
         self.type_to_string(t, None)
     }
 
+    /// Preserves Go's byte truncation, including a possible incomplete UTF-8 character.
+    pub fn type_to_string_bytes_exported(&mut self, t: P<Type>) -> Vec<u8> {
+        self.type_to_string_ex_with(
+            t,
+            None,
+            TypeFormatFlags::AllowUniqueESSymbolType
+                | TypeFormatFlags::UseAliasDefinedOutsideCurrentScope,
+            None,
+            |result, cut| {
+                let mut bytes = result.into_bytes();
+                if let Some(cut) = cut {
+                    bytes.truncate(cut);
+                    bytes.extend_from_slice(b"...");
+                }
+                bytes
+            },
+        )
+    }
+
     // printer.go:47
     pub(crate) fn type_to_string(
         &mut self,
@@ -77,7 +96,7 @@ impl Checker {
 }
 
 // printer.go:51
-pub fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
+fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
     Flags::from_bits_retain((flags & TypeFormatFlags::NodeBuilderFlagsMask).bits())
 }
 
@@ -101,11 +120,28 @@ impl Checker {
         flags: TypeFormatFlags,
         vc: Option<P<VerbosityContext>>,
     ) -> String {
+        self.type_to_string_ex_with(t, enclosing_declaration, flags, vc, |result, cut| {
+            if let Some(cut) = cut {
+                tsrs_core::utf8::from_utf8_lossy(&result.as_bytes()[..cut]).into_owned() + "..."
+            } else {
+                result
+            }
+        })
+    }
+
+    fn type_to_string_ex_with<R>(
+        &mut self,
+        t: P<Type>,
+        enclosing_declaration: Option<P<Node>>,
+        flags: TypeFormatFlags,
+        vc: Option<P<VerbosityContext>>,
+        finish: impl FnOnce(String, Option<usize>) -> R,
+    ) -> R {
         // Serialization of types can lead to (lazy) resolution of members, which can cause diagnostics that again require
         // serialization of types. This can potentially result in infinite recursion and stack overflows. To prevent that,
         // after a certain number of recursive invocations the function simply returns "?".
         if self.serialization_level >= MAX_SERIALIZATION_LEVEL {
-            return "?".to_string();
+            return finish("?".to_string(), None);
         }
         let mut new_line = "";
         if flags.intersects(TypeFormatFlags::MultilineObjectLiterals) {
@@ -165,11 +201,9 @@ impl Checker {
             if let Some(vc) = vc {
                 vc.truncated.set(true);
             }
-            // Go slices bytes; a cut inside a multi-byte character yields U+FFFD here instead of the raw bytes.
-            let cut = &result.as_bytes()[0..max_length - "...".len()];
-            return tsrs_core::utf8::from_utf8_lossy(cut).into_owned() + "...";
+            return finish(result, Some(max_length - "...".len()));
         }
-        result
+        finish(result, None)
     }
 
     // printer.go:120
@@ -271,17 +305,6 @@ impl Checker {
     // printer.go:179
     pub(crate) fn signature_to_string(&mut self, signature: P<Signature>) -> String {
         self.signature_to_string_ex(signature, None, TypeFormatFlags::None, None)
-    }
-
-    // printer.go:183
-    pub fn signature_to_string_ex_exported(
-        &mut self,
-        signature: P<Signature>,
-        enclosing_declaration: Option<P<Node>>,
-        flags: TypeFormatFlags,
-        vc: Option<P<VerbosityContext>>,
-    ) -> String {
-        self.signature_to_string_ex(signature, enclosing_declaration, flags, vc)
     }
 
     // printer.go:187
@@ -753,14 +776,14 @@ impl Checker {
 }
 
 // symbolaccessibility.go:105
-pub fn has_non_global_augmentation_external_module_symbol(declaration: P<Node>) -> bool {
+pub(crate) fn has_non_global_augmentation_external_module_symbol(declaration: P<Node>) -> bool {
     ast::is_module_with_string_literal_name(declaration)
         || (declaration.kind() == Kind::SourceFile
             && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
 }
 
 // symbolaccessibility.go:109
-pub fn get_qualified_left_meaning(right_meaning: SymbolFlags) -> SymbolFlags {
+pub(crate) fn get_qualified_left_meaning(right_meaning: SymbolFlags) -> SymbolFlags {
     // If we are looking in value space, the parent meaning is value, other wise it is namespace
     if right_meaning == SymbolFlags::Value {
         return SymbolFlags::Value;
@@ -950,7 +973,7 @@ impl Checker {
 }
 
 // symbolaccessibility.go:249
-pub fn has_external_module_symbol(declaration: P<Node>) -> bool {
+fn has_external_module_symbol(declaration: P<Node>) -> bool {
     ast::is_ambient_module(declaration)
         || (declaration.kind() == Kind::SourceFile
             && ast::is_external_or_common_js_module(declaration.as_source_file_p()))
@@ -1354,7 +1377,7 @@ impl Checker {
 // symbolTableID uniquely identifies a symbol table by encoding its source.
 // The high 3 bits encode the kind, and the remaining bits encode the
 // NodeId or SymbolId of the source.
-pub const ST_KIND_SHIFT: u64 = 61;
+const ST_KIND_SHIFT: u64 = 61;
 
 pub const ST_KIND_LOCALS: SymbolTableID = 0 << ST_KIND_SHIFT;
 pub const ST_KIND_EXPORTS: SymbolTableID = 1 << ST_KIND_SHIFT;
@@ -1365,32 +1388,13 @@ pub const ST_KIND_RESOLVED_EXPORTS: SymbolTableID = 4 << ST_KIND_SHIFT; // resol
 // stKindMask extracts the kind bits from a symbolTableID.
 pub const ST_KIND_MASK: SymbolTableID = !((1 << ST_KIND_SHIFT) - 1);
 
-#[cfg(test)]
-mod symbol_table_kind_tests {
-    use super::*;
-
-    #[test]
-    fn mask_extracts_every_table_kind_without_source_id_bits() {
-        let source_id = 0x12345;
-        for kind in [
-            ST_KIND_LOCALS,
-            ST_KIND_EXPORTS,
-            ST_KIND_MEMBERS,
-            ST_KIND_GLOBALS,
-            ST_KIND_RESOLVED_EXPORTS,
-        ] {
-            assert_eq!((kind | source_id) & ST_KIND_MASK, kind);
-        }
-    }
-}
-
 // symbolaccessibility.go:417
-pub fn symbol_table_id_from_locals(node: P<Node>) -> SymbolTableID {
+fn symbol_table_id_from_locals(node: P<Node>) -> SymbolTableID {
     ST_KIND_LOCALS | ast::get_node_id(node).0
 }
 
 // symbolaccessibility.go:421
-pub fn symbol_table_id_from_exports(sym: P<Symbol>) -> SymbolTableID {
+fn symbol_table_id_from_exports(sym: P<Symbol>) -> SymbolTableID {
     ST_KIND_EXPORTS | ast::get_symbol_id(sym).0
 }
 
@@ -1399,17 +1403,17 @@ pub fn symbol_table_id_from_exports(sym: P<Symbol>) -> SymbolTableID {
 // and late-bound members). This is distinct from symbolTableIDFromExports to prevent
 // cache collisions with raw sym.Exports tables passed by someSymbolTableInScope.
 // symbolaccessibility.go:429
-pub fn symbol_table_id_from_resolved_exports(sym: P<Symbol>) -> SymbolTableID {
+fn symbol_table_id_from_resolved_exports(sym: P<Symbol>) -> SymbolTableID {
     ST_KIND_RESOLVED_EXPORTS | ast::get_symbol_id(sym).0
 }
 
 // symbolaccessibility.go:433
-pub fn symbol_table_id_from_members(sym: P<Symbol>) -> SymbolTableID {
+fn symbol_table_id_from_members(sym: P<Symbol>) -> SymbolTableID {
     ST_KIND_MEMBERS | ast::get_symbol_id(sym).0
 }
 
 // symbolaccessibility.go:437
-pub fn symbol_table_id_from_globals() -> SymbolTableID {
+fn symbol_table_id_from_globals() -> SymbolTableID {
     ST_KIND_GLOBALS
 }
 
@@ -1644,7 +1648,7 @@ impl Checker {
 }
 
 // symbolaccessibility.go:612
-pub fn is_umd_export_symbol(symbol: Option<P<Symbol>>) -> bool {
+fn is_umd_export_symbol(symbol: Option<P<Symbol>>) -> bool {
     symbol.is_some_and(|symbol| {
         let declarations = symbol.declarations();
         !declarations.is_empty() && ast::is_namespace_export_declaration(declarations[0])
@@ -1652,7 +1656,7 @@ pub fn is_umd_export_symbol(symbol: Option<P<Symbol>>) -> bool {
 }
 
 // symbolaccessibility.go:616
-pub fn is_namespace_reexport_declaration(node: P<Node>) -> bool {
+fn is_namespace_reexport_declaration(node: P<Node>) -> bool {
     ast::is_namespace_export(node) && node.parent().unwrap().module_specifier().is_some()
 }
 
@@ -1827,7 +1831,7 @@ impl Checker {
 }
 
 // symbolaccessibility.go:728
-pub fn is_property_or_method_declaration_symbol(symbol: P<Symbol>) -> bool {
+fn is_property_or_method_declaration_symbol(symbol: P<Symbol>) -> bool {
     let declarations = symbol.declarations();
     if !declarations.is_empty() {
         if declarations.iter().any(|declaration| {
@@ -2088,7 +2092,7 @@ impl Checker {
 //   type SymbolTrackerImpl (symboltracker.go:8)
 
 // symboltracker.go:14
-pub fn new_symbol_tracker_impl(
+pub(crate) fn new_symbol_tracker_impl(
     context: P<NodeBuilderContext>,
     tracker: Option<&'static dyn SymbolTracker>,
 ) -> P<SymbolTrackerImpl> {
@@ -2295,6 +2299,10 @@ impl ModuleExportIndex {
 /// (target, entry) pairs sorted by target with a stable sort, so each target's entries are adjacent and in table
 /// order. One allocation of 8 bytes per entry instead of a hash map with a `Vec` per target (the index is built in
 /// every checker; most tables are small and most targets have one entry).
+#[expect(
+    clippy::too_long_first_doc_paragraph,
+    reason = "Public for the integration tests; the comment keeps its upstream wording."
+)]
 pub struct ExportsByTarget {
     len: usize,
     entries: Box<[(P<Symbol>, P<Symbol>)]>,

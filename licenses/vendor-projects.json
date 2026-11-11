@@ -75,107 +75,107 @@
     "packages": [
       {
         "name": "tsrs_ast",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_ast/Cargo.toml"
       },
       {
         "name": "tsrs_astnav",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_astnav/Cargo.toml"
       },
       {
         "name": "tsrs_binder",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_binder/Cargo.toml"
       },
       {
         "name": "tsrs_checker",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_checker/Cargo.toml"
       },
       {
         "name": "tsrs_compiler",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_compiler/Cargo.toml"
       },
       {
         "name": "tsrs_contentmapper",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_contentmapper/Cargo.toml"
       },
       {
         "name": "tsrs_core",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_core/Cargo.toml"
       },
       {
         "name": "tsrs_declarations",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_declarations/Cargo.toml"
       },
       {
         "name": "tsrs_diagnostics",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_diagnostics/Cargo.toml"
       },
       {
         "name": "tsrs_ipc",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_ipc/Cargo.toml"
       },
       {
         "name": "tsrs_module",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_module/Cargo.toml"
       },
       {
         "name": "tsrs_modulespecifiers",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_modulespecifiers/Cargo.toml"
       },
       {
         "name": "tsrs_parser",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_parser/Cargo.toml"
       },
       {
         "name": "tsrs_printer",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_printer/Cargo.toml"
       },
       {
         "name": "tsrs_pseudochecker",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_pseudochecker/Cargo.toml"
       },
       {
         "name": "tsrs_scanner",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_scanner/Cargo.toml"
       },
       {
         "name": "tsrs_sourcemap",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_sourcemap/Cargo.toml"
       },
       {
         "name": "tsrs_spanmap",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_spanmap/Cargo.toml"
       },
       {
         "name": "tsrs_transformers",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_transformers/Cargo.toml"
       },
       {
         "name": "tsrs_tsoptions",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_tsoptions/Cargo.toml"
       },
       {
         "name": "tsrs_vfs",
-        "version": "0.19.0",
+        "version": "0.24.0",
         "manifest": "crates/tsrs_vfs/Cargo.toml"
       }
     ],

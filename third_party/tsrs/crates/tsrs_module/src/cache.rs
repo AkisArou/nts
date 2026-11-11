@@ -36,24 +36,6 @@ pub fn mode_aware_cache_get<'a, T>(
     cache.get(&ModeAwareCacheLookup { name, mode })
 }
 
-#[cfg(test)]
-mod tests {
-    use tsrs_core::ModuleKind;
-
-    use super::*;
-
-    #[test]
-    fn mode_aware_cache_get_borrows_name_and_checks_mode() {
-        let mut cache = ModeAwareCache::default();
-        cache.insert(ModeAwareCacheKey { name: "pkg", mode: ModuleKind::ES_NEXT }, 1);
-        cache.insert(ModeAwareCacheKey { name: "pkg", mode: ModuleKind::COMMON_JS }, 2);
-
-        assert_eq!(mode_aware_cache_get(&cache, "pkg", ModuleKind::ES_NEXT), Some(&1));
-        assert_eq!(mode_aware_cache_get(&cache, "pkg", ModuleKind::COMMON_JS), Some(&2));
-        assert_eq!(mode_aware_cache_get(&cache, "other", ModuleKind::ES_NEXT), None);
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ModuleResolutionCacheKey {
     pub(crate) containing_directory: String,
@@ -120,8 +102,7 @@ pub struct ModuleResolutionCache {
 }
 
 impl ModuleResolutionCache {
-    #[cfg(test)]
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.cache.size()
     }
 
@@ -157,8 +138,7 @@ pub struct TypeRefDirectiveResolutionCache {
 }
 
 impl TypeRefDirectiveResolutionCache {
-    #[cfg(test)]
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.cache.size()
     }
 
@@ -185,8 +165,7 @@ pub struct ParsedPatternsCache {
 }
 
 impl ParsedPatternsCache {
-    #[cfg(test)]
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.cache.size()
     }
 
@@ -212,7 +191,7 @@ pub struct ResolutionData {
     pub(crate) package_json_info_cache: P<InfoCache>,
 }
 
-pub fn new_resolution_data(opts: ResolverOptions<'_>) -> P<ResolutionData> {
+pub(crate) fn new_resolution_data(opts: ResolverOptions<'_>) -> P<ResolutionData> {
     let package_json_info_cache = match opts.package_json_cache {
         Some(cache) => cache,
         None => P::new(packagejson::new_info_cache(
@@ -250,11 +229,11 @@ impl ResolutionData {
     }
 }
 
-pub fn get_redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> String {
+pub(crate) fn get_redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> String {
     redirect_config_name(redirect).to_string()
 }
 
-pub fn redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> &str {
+pub(crate) fn redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> &str {
     match redirect {
         None => "",
         Some(redirect) => redirect.config_name(),

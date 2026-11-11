@@ -112,35 +112,35 @@ pub use types::*;
 pub use utilities_types::*;
 
 // Hand-ported function bodies.
-mod checker_01;
+pub mod checker_01;
 pub(crate) use checker_01::*;
 mod checker_02;
-mod checker_03;
+pub(crate) mod checker_03;
 pub(crate) use checker_03::*;
 mod checker_04;
 mod checker_05;
 mod checker_06;
-mod checker_07;
+pub mod checker_07;
 pub(crate) use checker_07::*;
-mod checker_08;
+pub mod checker_08;
 pub(crate) use checker_08::*;
-mod checker_09;
+pub mod checker_09;
 pub(crate) use checker_09::*;
-mod checker_10;
+pub mod checker_10;
 pub(crate) use checker_10::*;
-mod checker_11;
+pub mod checker_11;
 pub(crate) use checker_11::*;
-mod checker_12;
+pub(crate) mod checker_12;
 pub(crate) use checker_12::*;
-mod checker_13;
+pub mod checker_13;
 pub(crate) use checker_13::*;
-mod checker_14;
+pub mod checker_14;
 pub(crate) use checker_14::*;
-mod checker_15;
+pub mod checker_15;
 pub(crate) use checker_15::*;
-mod relater_1;
+pub mod relater_1;
 pub(crate) use relater_1::*;
-mod flow;
+pub(crate) mod flow;
 mod infermemo;
 mod relater_2;
 mod unioncache;
@@ -150,36 +150,36 @@ pub mod basedmap;
 pub mod flowmemo;
 pub mod packedmap;
 pub use packedmap::{GoPackedMap, PackedMap, StringLiteralTypes};
-mod inference;
+pub mod inference;
 pub(crate) use inference::*;
-mod grammarchecks;
+pub(crate) mod grammarchecks;
 pub(crate) use grammarchecks::*;
-mod utilities;
+pub mod utilities;
 pub use utilities::new_diagnostic_for_node;
 pub(crate) use utilities::*;
 mod exports;
 mod jsdoc;
 mod jsx;
-mod printer;
+pub mod printer;
 pub(crate) use printer::*;
 mod nodebuilder;
-mod nodebuilderimpl_1;
+pub mod nodebuilderimpl_1;
 pub(crate) use nodebuilderimpl_1::*;
-mod nodebuilderimpl_2;
+pub(crate) mod nodebuilderimpl_2;
 pub(crate) use nodebuilderimpl_2::*;
-mod emitresolver;
+pub mod emitresolver;
 mod nodebuilderscopes;
 mod nodecopy;
 mod pseudotypenodebuilder;
 pub(crate) use emitresolver::*;
-mod nodebuilder_hover;
+pub(crate) mod nodebuilder_hover;
 pub(crate) use nodebuilder_hover::*;
 mod services;
 pub use tsrs_astnav as astnav;
 
 // Exported Go package-level functions (the baseline writer, the language service and the project system call them).
 pub use checker_09::is_non_deferred_type_reference;
-pub(crate) use checker_14::get_mapped_type_modifiers;
+pub use checker_14::get_mapped_type_modifiers;
 pub use exports::{
     get_declaration_modifier_flags_from_symbol_exported, get_property_name_from_type_exported,
     is_distributed_type_parameter, is_tuple_type_exported, is_tuple_type_target,
@@ -189,9 +189,11 @@ pub use nodebuilder::{new_node_builder, new_node_builder_ex};
 pub use nodebuilderimpl_1::try_get_module_specifier_from_declaration;
 pub(crate) use printer::new_symbol_tracker_impl;
 pub use services::get_resolved_signature_for_signature_help;
+pub(crate) use utilities::{
+    compare_types, is_private_identifier_symbol, new_diagnostic_chain_for_node,
+};
 pub use utilities::{
-    compare_types, create_mode_mismatch_details, create_module_not_found_chain,
-    get_set_accessor_value_parameter, get_single_variable_of_variable_statement,
-    is_external_module_symbol, is_in_type_query, is_known_symbol, is_private_identifier_symbol,
-    is_type_any, new_diagnostic_chain_for_node, skip_alias, value_to_string,
+    create_mode_mismatch_details, create_module_not_found_chain, get_set_accessor_value_parameter,
+    is_external_module_symbol, is_in_type_query, is_known_symbol, is_type_any, skip_alias,
+    value_to_string,
 };

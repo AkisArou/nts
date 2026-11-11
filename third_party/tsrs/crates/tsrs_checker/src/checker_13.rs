@@ -1,4 +1,5 @@
 use crate::*;
+use smallvec::SmallVec;
 use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -8,6 +9,14 @@ use tsrs_diagnostics as diagnostics;
 //   type IntersectionFlags (checker.go:26504)
 //   const (checker.go:26506): IntersectionFlagsNone, IntersectionFlagsNoSupertypeReduction,
 //     IntersectionFlagsNoConstraintReduction
+
+/// The constituent kinds of an `ObjectFlags::NonNullableUnion`: for each, `get_type_facts_worker` returns a constant
+/// without `IsUndefined`, `IsNull` or, under `strictNullChecks`, `EQUndefined`, `EQNull` and `EQUndefinedOrNull`,
+/// and resolves nothing when the caller needs no object fact. Nullable and void types carry those facts; an
+/// intersection or an instantiable type (a template literal or string mapping included) goes through its base
+/// constraint first; `any` and `unknown` have the EQ facts.
+const NON_NULLABLE_KINDS: TypeFlags =
+    TypeFlags::DefinitelyNonNullable.difference(TypeFlags::Instantiable);
 
 // Go formats an `any` diagnostic argument with `%v`.
 fn literal_value_to_string(value: Option<LiteralValue>) -> String {
@@ -214,6 +223,12 @@ impl Checker {
         let flags = precomputed_object_flags
             | Self::get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
+        // tsrs-only: the summary `get_type_facts_worker` reads for the nullability facts, from the final constituent
+        // list (callers pass only part of a source union's flags) and after `new_type` (which drops the bit).
+        let kinds = types.iter().fold(TypeFlags::empty(), |kinds, &t| kinds | t.flags());
+        if NON_NULLABLE_KINDS.contains(kinds) {
+            t.object_flags.set(t.object_flags() | ObjectFlags::NonNullableUnion);
+        }
         t.as_union_type().set_origin(origin);
         t.set_alias(alias.alias());
         if types.len() == 2
@@ -224,11 +239,6 @@ impl Checker {
         }
         self.union_types.insert(key, t);
         t
-    }
-
-    // checker.go:26227
-    pub fn union_types(&self) -> Vec<P<Type>> {
-        self.union_types.values().collect()
     }
 
     // checker.go:26231
@@ -309,7 +319,7 @@ impl Checker {
         }
         // The flattened list is a sequence of ascending runs: a new run starts at an input whose first constituent is
         // below the last one before it.
-        let mut run_starts: Vec<usize> = Vec::new();
+        let mut run_starts: SmallVec<[usize; 4]> = SmallVec::new();
         let mut last_type: Option<P<Type>> = None;
         for &t in source_types {
             if Some(t) != last_type {
@@ -640,10 +650,11 @@ impl Checker {
                         | TypeFlags::Intersection
                         | TypeFlags::InstantiableNonPrimitive,
                 ) {
-                    key_property = self.get_properties_of_type(source).iter().copied().find(|&p| {
-                        let t = self.get_type_of_symbol(p);
-                        is_unit_type(t)
-                    });
+                    key_property = self
+                        .get_properties_of_type(source)
+                        .iter()
+                        .copied()
+                        .find(|&p| self.is_property_of_unit_type(p));
                 }
                 if let Some(key_property) = key_property {
                     let t = self.get_type_of_symbol(key_property);
@@ -1057,34 +1068,34 @@ impl BaseConstraintStack<'_> {
 }
 
 // checker.go:26695
-pub fn is_union_with_undefined(t: P<Type>) -> bool {
+fn is_union_with_undefined(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Union) && t.types()[0].flags().intersects(TypeFlags::Undefined)
 }
 
 // checker.go:26699
-pub fn is_union_with_null(t: P<Type>) -> bool {
+fn is_union_with_null(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Union)
         && (t.types()[0].flags().intersects(TypeFlags::Null)
             || t.types()[1].flags().intersects(TypeFlags::Null))
 }
 
 // checker.go:26703
-pub fn is_intersection_type(t: P<Type>) -> bool {
+fn is_intersection_type(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Intersection)
 }
 
 // checker.go:26707
-pub fn is_primitive_union(t: P<Type>) -> bool {
+fn is_primitive_union(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::PrimitiveUnion)
 }
 
 // checker.go:26711
-pub fn is_not_undefined_type(t: P<Type>) -> bool {
+fn is_not_undefined_type(t: P<Type>) -> bool {
     !t.flags().intersects(TypeFlags::Undefined)
 }
 
 // checker.go:26715
-pub fn is_not_null_type(t: P<Type>) -> bool {
+fn is_not_null_type(t: P<Type>) -> bool {
     !t.flags().intersects(TypeFlags::Null)
 }
 
@@ -1354,7 +1365,7 @@ impl Checker {
 }
 
 // checker.go:26922
-pub fn get_constituent_count(t: P<Type>) -> usize {
+fn get_constituent_count(t: P<Type>) -> usize {
     if !t.flags().intersects(TypeFlags::UnionOrIntersection) || t.alias().is_some() {
         return 1;
     }
@@ -1367,7 +1378,7 @@ pub fn get_constituent_count(t: P<Type>) -> usize {
 }
 
 // checker.go:26932
-pub fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
+fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
     let mut n = 0;
     for &t in types {
         n += get_constituent_count(t);
@@ -1501,7 +1512,7 @@ impl Checker {
 // checker.go:26997
 // The callbacks of these Go free functions receive the checker (PORTING.md callback rule) so that callers never
 // capture `self`; `c` is only passed through.
-pub fn for_each_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>)) {
+pub(crate) fn for_each_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>)) {
     if t.flags().intersects(TypeFlags::Union) {
         for &u in t.types() {
             f(c, u);
@@ -1512,7 +1523,7 @@ pub fn for_each_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker
 }
 
 // checker.go:27007
-pub fn some_type(
+pub(crate) fn some_type(
     c: &mut Checker,
     t: P<Type>,
     mut f: impl FnMut(&mut Checker, P<Type>) -> bool,
@@ -1524,7 +1535,7 @@ pub fn some_type(
 }
 
 // checker.go:27014
-pub fn every_type(
+pub(crate) fn every_type(
     c: &mut Checker,
     t: P<Type>,
     mut f: impl FnMut(&mut Checker, P<Type>) -> bool,
@@ -1536,7 +1547,7 @@ pub fn every_type(
 }
 
 // checker.go:27021
-pub fn every_contained_type(
+pub(crate) fn every_contained_type(
     c: &mut Checker,
     t: P<Type>,
     mut f: impl FnMut(&mut Checker, P<Type>) -> bool,
@@ -1556,7 +1567,8 @@ impl Checker {
     ) -> P<Type> {
         if t.flags().intersects(TypeFlags::Union) {
             let types = t.types();
-            let filtered: Vec<P<Type>> = types.iter().copied().filter(|&u| f(self, u)).collect();
+            let filtered: SmallVec<[P<Type>; 4]> =
+                types.iter().copied().filter(|&u| f(self, u)).collect();
             // core.Same(types, filtered): core.Filter returns its input when nothing was removed.
             if filtered.len() == types.len() {
                 return t;
@@ -1570,7 +1582,7 @@ impl Checker {
                 // Otherwise, if we have exactly one type left in the origin set, return that as the filtered type.
                 // Otherwise, construct a new filtered origin type.
                 let origin_types = origin.types();
-                let origin_filtered: Vec<P<Type>> = origin_types
+                let origin_filtered: SmallVec<[P<Type>; 4]> = origin_types
                     .iter()
                     .copied()
                     .filter(|&u| u.flags().intersects(TypeFlags::Union) || f(self, u))
@@ -1652,7 +1664,7 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
         types.insert(i, t);
         return;
     }
-    let mut bounds: Vec<usize> = Vec::with_capacity(run_starts.len() + 2);
+    let mut bounds: SmallVec<[usize; 4]> = SmallVec::with_capacity(run_starts.len() + 2);
     bounds.push(0);
     bounds.extend_from_slice(run_starts);
     bounds.push(n);
@@ -1660,7 +1672,7 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
     let mut dst: Vec<P<Type>> = Vec::with_capacity(n);
     while bounds.len() > 2 {
         let runs = bounds.len() - 1;
-        let mut next: Vec<usize> = Vec::with_capacity(runs / 2 + 2);
+        let mut next: SmallVec<[usize; 4]> = SmallVec::with_capacity(runs / 2 + 2);
         next.push(0);
         dst.clear();
         let mut j = 0;
@@ -1764,7 +1776,7 @@ fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
 }
 
 // checker.go:27086
-pub fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
+pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
     // tsrs-only (can1357's 628f51ceb): small lists often hold the very type asked for, found without comparing
     // structure; a miss still searches. Only while the binary search would find it too (a total order).
     if types.len() <= 8 && types.contains(&t) && c.program.source_files_complete() {
@@ -1791,11 +1803,10 @@ fn contains_regular_literal_type(
     contains_type(c, types, regular)
 }
 
-/// Whether every type of the sorted, unique `source` is in the sorted, unique `target`, under a total order
-/// (`Program::source_files_complete`). tsrs-only: `contains_type` for each source type binary-searches the target
+/// Whether every type of the sorted, unique `source` is in the sorted, unique `target`. tsrs-only: `contains_type` for each source type binary-searches the target
 /// with `compare_types`; in sorted lists each source type can only be found after the previous one's position, so a
 /// forward scan by identity answers the same with no comparisons. Used when the scan is the cheaper of the two.
-pub fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
+pub(crate) fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
     let mut rest = target;
     !(source.iter().any(|&t| {
         match rest.iter().position(|&u| u == t) {
@@ -1808,7 +1819,7 @@ pub fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
 }
 
 // checker.go:27091
-pub fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Type>>, bool) {
+fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Type>>, bool) {
     if let (i, false) = tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| {
         compare_types(c, Some(probe), Some(t))
     }) {
@@ -1820,7 +1831,7 @@ pub fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Typ
 }
 
 // checker.go:27098
-pub fn count_types(t: P<Type>) -> usize {
+pub(crate) fn count_types(t: P<Type>) -> usize {
     if t.flags().intersects(TypeFlags::Union) {
         return t.types().len();
     } else if t.flags().intersects(TypeFlags::Never) {
@@ -2132,7 +2143,7 @@ impl Checker {
 }
 
 // checker.go:27266
-pub fn is_invalid_computed_property_name(node: P<Node>) -> bool {
+pub(crate) fn is_invalid_computed_property_name(node: P<Node>) -> bool {
     let grand_parent = node.parent().unwrap().parent().unwrap();
     (is_type_literal_node(grand_parent)
         || is_class_like(grand_parent)
@@ -2385,7 +2396,7 @@ impl Checker {
             reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"
         )
     )]
-    pub(crate) fn get_indexed_access_type_or_undefined(
+    pub fn get_indexed_access_type_or_undefined(
         &mut self,
         object_type: P<Type>,
         index_type: P<Type>,
@@ -2516,6 +2527,49 @@ impl Checker {
         result
     }
 
+    /// A literal index into a tuple of required elements is that element's type argument, and `"length"` is the
+    /// arity literal (tsgo-opt `tryFastTupleIndexedAccess`). Any other index returns `None` and takes the slow path
+    /// with its errors. Callers use it only under `lazy_tuples`: unlike the slow path it neither resolves the tuple's
+    /// members nor counts the element instantiation.
+    pub(crate) fn try_fast_tuple_indexed_access(
+        &mut self,
+        object_type: P<Type>,
+        index_type: P<Type>,
+    ) -> Option<P<Type>> {
+        if index_type.flags().intersects(TypeFlags::NumberLiteral) {
+            let Some(LiteralValue::Number(value)) = index_type.as_literal_type().value() else {
+                return None;
+            };
+            let f = value.0;
+            let index = f as usize;
+            #[expect(
+                clippy::float_cmp,
+                reason = "the exact round trip through usize rejects fractions, negatives and NaN"
+            )]
+            if index as f64 == f {
+                let type_arguments = self.get_type_arguments(object_type);
+                if index < type_arguments.len() {
+                    return Some(type_arguments[index]);
+                }
+            }
+        } else if index_type.flags().intersects(TypeFlags::StringLiteral) {
+            let Some(LiteralValue::String(s)) = index_type.as_literal_type().value() else {
+                return None;
+            };
+            if s == "length" {
+                let arity = self.get_type_arguments(object_type).len();
+                return Some(self.get_number_literal_type(Number(arity as f64)));
+            }
+            if let Some(index) = parse_small_tuple_index(s) {
+                let type_arguments = self.get_type_arguments(object_type);
+                if index < type_arguments.len() {
+                    return Some(type_arguments[index]);
+                }
+            }
+        }
+        None
+    }
+
     fn get_indexed_access_type_or_undefined_inner(
         &mut self,
         object_type: P<Type>,
@@ -2528,6 +2582,21 @@ impl Checker {
         let mut access_flags = access_flags;
         if object_type == self.wildcard_type || index_type == self.wildcard_type {
             return Some(self.wildcard_type);
+        }
+        if self.lazy_tuples
+            && access_node.is_none()
+            && alias.is_none()
+            && access_flags.is_empty()
+            && self.compiler_options.no_unchecked_indexed_access != Tristate::True
+            && is_tuple_type(object_type)
+            && !object_type
+                .target_tuple_type()
+                .combined_flags()
+                .intersects(ElementFlags::Optional | ElementFlags::Variable)
+            && let Some(fast) = self.try_fast_tuple_indexed_access(object_type, index_type)
+        {
+            crate::sitecount::hit("tuple literal index", "indexed access");
+            return Some(fast);
         }
         let object_type = self.get_reduced_type(object_type);
         // If the object type has a string index signature and no other members we know that the result will
@@ -3153,7 +3222,7 @@ impl Checker {
 }
 
 // checker.go:27727
-pub fn get_index_node_for_access_expression(access_node: P<Node>) -> Option<P<Node>> {
+fn get_index_node_for_access_expression(access_node: P<Node>) -> Option<P<Node>> {
     match access_node.kind() {
         Kind::ElementAccessExpression => {
             Some(access_node.as_element_access_expression().argument_expression)
@@ -3362,7 +3431,7 @@ impl Checker {
 }
 
 // checker.go:27851
-pub fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: usize) -> bool {
+fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: usize) -> bool {
     every_type(c, index_type, |_, t| {
         if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
             let prop_name = get_property_name_from_type(t);
@@ -3443,7 +3512,7 @@ impl Checker {
     }
 
     // checker.go:27906
-    pub(crate) fn get_base_constraint_of_type(&mut self, t: P<Type>) -> Option<P<Type>> {
+    pub fn get_base_constraint_of_type(&mut self, t: P<Type>) -> Option<P<Type>> {
         if t.flags().intersects(
             TypeFlags::InstantiableNonPrimitive
                 | TypeFlags::UnionOrIntersection
@@ -3841,13 +3910,13 @@ impl Checker {
 }
 
 // checker.go:28134
-pub fn is_const_enum_object_type(t: P<Type>) -> bool {
+pub(crate) fn is_const_enum_object_type(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::Anonymous)
         && t.symbol().is_some_and(is_const_enum_symbol)
 }
 
 // checker.go:28138
-pub fn is_const_enum_symbol(symbol: P<Symbol>) -> bool {
+pub(crate) fn is_const_enum_symbol(symbol: P<Symbol>) -> bool {
     symbol.flags().intersects(SymbolFlags::ConstEnum)
 }
 
@@ -3891,7 +3960,7 @@ impl Checker {
 }
 
 // checker.go:28169
-pub fn compare_types_equal(s: P<Type>, t: P<Type>) -> Ternary {
+pub(crate) fn compare_types_equal(s: P<Type>, t: P<Type>) -> Ternary {
     if s == t {
         return Ternary::TRUE;
     }
@@ -3938,18 +4007,18 @@ impl Checker {
 }
 
 // checker.go:28257
-pub fn has_rest_parameter(signature: P<Node>) -> bool {
+pub(crate) fn has_rest_parameter(signature: P<Node>) -> bool {
     let last = signature.parameters().last().copied();
     last.is_some_and(is_rest_parameter)
 }
 
 // checker.go:28262
-pub fn is_rest_parameter(param: P<Node>) -> bool {
+pub(crate) fn is_rest_parameter(param: P<Node>) -> bool {
     param.as_parameter_declaration().dot_dot_dot_token().is_some()
 }
 
 // checker.go:28266
-pub fn get_name_from_index_info(info: P<IndexInfo>) -> String {
+pub(crate) fn get_name_from_index_info(info: P<IndexInfo>) -> String {
     if let Some(declaration) = info.declaration() {
         return tsrs_scanner::declaration_name_to_string(declaration.parameters()[0].name());
     }
@@ -4010,4 +4079,21 @@ impl Checker {
         }
         false
     }
+}
+
+/// Go's `parseSmallTupleIndex`: a canonical decimal of at most six digits, the only string form of a tuple element
+/// name.
+fn parse_small_tuple_index(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() || bytes.len() > 6 || (bytes.len() > 1 && bytes[0] == b'0') {
+        return None;
+    }
+    let mut n = 0usize;
+    for &b in bytes {
+        if !b.is_ascii_digit() {
+            return None;
+        }
+        n = n * 10 + usize::from(b - b'0');
+    }
+    Some(n)
 }

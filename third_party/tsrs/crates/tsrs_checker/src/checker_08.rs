@@ -88,7 +88,7 @@ impl Checker {
 }
 
 // checker.go:15295
-pub fn get_module_specifier_from_node(node: P<Node>) -> Option<P<Node>> {
+pub(crate) fn get_module_specifier_from_node(node: P<Node>) -> Option<P<Node>> {
     match node.kind() {
         Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => {
             node.module_specifier()
@@ -809,7 +809,7 @@ impl Checker {
 }
 
 // checker.go:15748
-pub fn resolution_extension_is_ts_or_json(ext: &str) -> bool {
+fn resolution_extension_is_ts_or_json(ext: &str) -> bool {
     tspath::extension_is_ts(ext) || ext == tspath::EXTENSION_JSON
 }
 
@@ -1151,7 +1151,7 @@ impl Checker {
 }
 
 // checker.go:15951
-pub fn is_esm_format_import_importing_commonjs_format_file(
+fn is_esm_format_import_importing_commonjs_format_file(
     usage_mode: ModuleKind,
     target_mode: ModuleKind,
 ) -> bool {
@@ -1893,7 +1893,7 @@ impl Checker {
 }
 
 // checker.go:16412
-pub fn is_not_replacable_by_method(decl: P<Node>) -> bool {
+fn is_not_replacable_by_method(decl: P<Node>) -> bool {
     !decl.symbol().unwrap().flags().intersects(SymbolFlags::ReplaceableByMethod)
 }
 
@@ -2362,7 +2362,7 @@ impl Checker {
     }
 
     // checker.go:16720
-    pub(crate) fn get_declaration_of_alias_symbol(symbol: P<Symbol>) -> Option<P<Node>> {
+    pub fn get_declaration_of_alias_symbol(symbol: P<Symbol>) -> Option<P<Node>> {
         symbol.declarations().iter().rev().copied().find(|d| ast::is_alias_symbol_declaration(*d))
     }
 
@@ -3295,7 +3295,7 @@ impl Checker {
 }
 
 // checker.go:17362
-pub fn signature_has_rest_parameter(sig: P<Signature>) -> bool {
+pub(crate) fn signature_has_rest_parameter(sig: P<Signature>) -> bool {
     sig.flags().intersects(SignatureFlags::HasRestParameter)
 }
 
@@ -3325,10 +3325,7 @@ impl Checker {
     }
 
     // checker.go:17383
-    pub(crate) fn get_constraint_of_type_parameter(
-        &mut self,
-        type_parameter: P<Type>,
-    ) -> Option<P<Type>> {
+    pub fn get_constraint_of_type_parameter(&mut self, type_parameter: P<Type>) -> Option<P<Type>> {
         if self.has_non_circular_base_constraint(type_parameter) {
             return self.get_constraint_from_type_parameter(type_parameter);
         }

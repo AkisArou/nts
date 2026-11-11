@@ -110,6 +110,7 @@ All upstream licence alternatives remain in the compiler distribution.
 | serde-transcode | 1.1.1 | MIT/Apache-2.0 | [LICENSE-APACHE](texts/c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08.txt), [LICENSE-MIT](texts/93e6bb3f4225a1dfbc008f562d41bfac0f490f6da22c62b0a645e2c0377e8b06.txt) |
 | serde | 1.0.229 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt), [LICENSE-MIT](texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt) |
 | simdutf8 | 0.1.5 | MIT OR Apache-2.0 | [LICENSE-Apache](texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt), [LICENSE-MIT](texts/1847e0e0698142ed4347c1441a9fa81c8fbddd44b1d8bbcd5e3647f991759d7f.txt) |
+| smallbitvec | 2.6.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/daa94322de7eab889e055932396160395bd8e3af82f56ae8c419d3049111da72.txt) |
 | smallvec | 1.16.4 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/0b28172679e0009b655da42797c03fd163a3379d5cfa67ba1f1655e974a2a1a9.txt) |
 | spin | 0.9.9 | MIT | [LICENSE](texts/6ac8711fb340c62ce0a4ecd463342d3fa0e8e70de697c863a2e1c0c53006003c.txt) |
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/5e05b024f653a5ce199e77cbbbd42fb5553562ec714b819421ed0c3e552a75d7.txt) |

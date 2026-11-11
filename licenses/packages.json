@@ -1134,6 +1134,24 @@
     ]
   },
   {
+    "name": "smallbitvec",
+    "version": "2.6.1",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "checksum": "9b0e903ee191d8f7a8fbf0d712c3a1699d19e04ceba5ad1eb673053c7d938a09",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/servo/smallbitvec",
+    "texts": [
+      {
+        "upstream": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "upstream": "LICENSE-MIT",
+        "sha256": "daa94322de7eab889e055932396160395bd8e3af82f56ae8c419d3049111da72"
+      }
+    ]
+  },
+  {
     "name": "smallvec",
     "version": "1.16.4",
     "source": "registry+https://github.com/rust-lang/crates.io-index",

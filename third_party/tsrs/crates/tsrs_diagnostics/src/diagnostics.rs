@@ -178,14 +178,19 @@ pub fn stringify_args(args: &[&dyn fmt::Display]) -> Vec<String> {
     args.iter().map(std::string::ToString::to_string).collect()
 }
 
-pub fn new_ad_hoc_message(message: &str) -> &'static Message {
-    Box::leak(Box::new(Message {
-        code: -1,
-        category: Category::Error,
-        key: Key("-1"),
-        text: Box::leak(message.to_string().into_boxed_str()),
-        reports_unnecessary: false,
-        elided_in_compatibility_pyramid: false,
-        reports_deprecated: false,
-    }))
+impl Message {
+    /// A message outside the catalog: code -1, an error, the given text. The text is `'static` like the
+    /// catalog's; a caller with run-time text allocates it where the diagnostic that uses it lives
+    /// (`tsrs_ast::new_ad_hoc_message`).
+    pub const fn ad_hoc(text: &'static str) -> Message {
+        Message {
+            code: -1,
+            category: Category::Error,
+            key: Key("-1"),
+            text,
+            reports_unnecessary: false,
+            elided_in_compatibility_pyramid: false,
+            reports_deprecated: false,
+        }
+    }
 }

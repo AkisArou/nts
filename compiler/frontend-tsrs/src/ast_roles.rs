@@ -1175,7 +1175,7 @@ pub(super) fn edges<S: crate::ViewPhase>(node: Node<'_, S>) -> Vec<Edge<'_, S>> 
             edges.child(ChildRole::ConstructorDeclarationType, data.type_());
             edges.child(
                 ChildRole::ConstructorDeclarationFullSignature,
-                data.full_signature(),
+                data.function_like_base.full_signature(),
             );
             edges.child(ChildRole::ConstructorDeclarationBody, data.body());
         }
@@ -2007,7 +2007,7 @@ pub(super) fn edges<S: crate::ViewPhase>(node: Node<'_, S>) -> Vec<Edge<'_, S>> 
                 data.tag_name(),
             );
             if data.is_name_first {
-                edges.child(ChildRole::JSDocParameterOrPropertyTagName, data.name);
+                edges.child(ChildRole::JSDocParameterOrPropertyTagName, data.name());
                 edges.child(
                     ChildRole::JSDocParameterOrPropertyTagTypeExpression,
                     data.type_expression,
@@ -2017,7 +2017,7 @@ pub(super) fn edges<S: crate::ViewPhase>(node: Node<'_, S>) -> Vec<Edge<'_, S>> 
                     ChildRole::JSDocParameterOrPropertyTagTypeExpression,
                     data.type_expression,
                 );
-                edges.child(ChildRole::JSDocParameterOrPropertyTagName, data.name);
+                edges.child(ChildRole::JSDocParameterOrPropertyTagName, data.name());
             }
             edges.list(ListRole::JSDocParameterOrPropertyTagComment, data.comment());
         }

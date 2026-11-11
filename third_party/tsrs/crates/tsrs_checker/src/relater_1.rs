@@ -27,7 +27,7 @@ fn string_args(args: &[String]) -> Vec<&dyn Display> {
 
 // relater.go:94
 // This function exists to constrain the types of values that can be used as recursion IDs.
-pub fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId {
+fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId {
     value.into()
 }
 
@@ -95,7 +95,7 @@ impl Relation {
 
 impl Checker {
     // relater.go:117
-    pub(crate) fn is_type_identical_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
+    pub fn is_type_identical_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
         let relation = self.identity_relation;
         self.is_type_related_to(source, target, relation)
     }
@@ -143,7 +143,7 @@ impl Checker {
     }
 
     // relater.go:149
-    pub(crate) fn is_type_assignable_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
+    pub fn is_type_assignable_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
         let relation = self.assignable_relation;
         self.is_type_related_to(source, target, relation)
     }
@@ -740,7 +740,7 @@ impl Checker {
 }
 
 // relater.go:400
-pub fn create_diagnostic_chain_from_error_chain(
+fn create_diagnostic_chain_from_error_chain(
     chain: Option<P<ErrorChain>>,
     error_node: P<Node>,
     related_info: &[P<Diagnostic>],
@@ -1535,12 +1535,12 @@ impl Checker {
 }
 
 // relater.go:743
-pub fn is_hyphenated_jsx_name(name: &str) -> bool {
+pub(crate) fn is_hyphenated_jsx_name(name: &str) -> bool {
     name.contains('-')
 }
 
 // relater.go:747
-pub fn is_excess_property_check_target(t: P<Type>) -> bool {
+pub(crate) fn is_excess_property_check_target(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Object)
         && !t.object_flags().intersects(ObjectFlags::ObjectLiteralPatternWithComputedProperties)
         || t.flags().intersects(TypeFlags::NonPrimitive)
@@ -1738,7 +1738,7 @@ fn recursion_key(identity: RecursionId) -> u64 {
     reason = "measured: plain #[inline] lets it be outlined (notes/perf-icount-hillclimb.md, round 3)"
 )]
 #[inline(always)]
-pub fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, identity: RecursionId) -> bool {
+fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, identity: RecursionId) -> bool {
     let target = get_recursion_identity_target(c, t);
     if target.flags().intersects(TypeFlags::Intersection) {
         return intersection_has_matching_recursion_identity(c, target, identity);
@@ -1787,7 +1787,7 @@ fn collect_intersection_recursion_keys(c: &mut Checker, target: P<Type>, keys: &
 }
 
 // relater.go:810
-pub fn get_recursion_identity(c: &mut Checker, t: P<Type>) -> RecursionId {
+pub(crate) fn get_recursion_identity(c: &mut Checker, t: P<Type>) -> RecursionId {
     let target = get_recursion_identity_target(c, t);
     get_recursion_identity_from_target(target)
 }
@@ -1800,7 +1800,7 @@ pub fn get_recursion_identity(c: &mut Checker, t: P<Type>) -> RecursionId {
 // each of the mapped type applications will have a unique recursion identity (that of their target object type
 // literal) and thus avoid appearing deeply nested.
 #[inline]
-pub fn get_recursion_identity_target(c: &mut Checker, t: P<Type>) -> P<Type> {
+fn get_recursion_identity_target(c: &mut Checker, t: P<Type>) -> P<Type> {
     // Most types are their own target; the unwrapping is out of line.
     if t.flags().intersects(TypeFlags::IndexedAccess)
         || t.object_flags().contains(ObjectFlags::InstantiatedMapped)
@@ -1844,7 +1844,7 @@ fn get_recursion_identity_target_worker(c: &mut Checker, t: P<Type>) -> P<Type> 
     reason = "measured: #[inline] is ignored here (notes/perf-icount-hillclimb.md, round 3)"
 )]
 #[inline(always)]
-pub fn get_recursion_identity_from_target(t: P<Type>) -> RecursionId {
+fn get_recursion_identity_from_target(t: P<Type>) -> RecursionId {
     // Object and array literals are known not to contain recursive references and don't need a recursion identity.
     if t.flags().intersects(TypeFlags::Object) && !is_object_or_array_literal_type(t) {
         if t.object_flags().intersects(ObjectFlags::Reference)
@@ -2289,7 +2289,7 @@ impl Checker {
 
 // relater.go:1008
 /// tsrs: borrows `properties` when nothing is excluded (nearly always: the set is empty).
-pub fn exclude_properties<'a>(
+pub(crate) fn exclude_properties<'a>(
     properties: &'a [P<Symbol>],
     excluded_properties: &Set<String>,
 ) -> std::borrow::Cow<'a, [P<Symbol>]> {
@@ -2501,7 +2501,7 @@ impl Checker {
 }
 
 // relater.go:1148
-pub fn is_object_or_instantiable_non_primitive(t: P<Type>) -> bool {
+fn is_object_or_instantiable_non_primitive(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Object | TypeFlags::InstantiableNonPrimitive)
 }
 
@@ -2511,14 +2511,57 @@ impl Checker {
         for &t in types {
             if t.flags().intersects(TypeFlags::Object | TypeFlags::InstantiableNonPrimitive) {
                 for p in self.get_properties_of_type(t).iter().copied() {
-                    let prop_type = self.get_type_of_symbol(p);
-                    if is_unit_type(prop_type) {
+                    if self.is_property_of_unit_type(p) {
                         return p.name().to_string();
                     }
                 }
             }
         }
         String::new()
+    }
+
+    // Reports whether a property has a unit type, without resolving the types of methods, which are function types, or
+    // instantiating the type of an instantiated or mapped property when the type it is instantiated from already rules
+    // out a unit type.
+    pub(crate) fn is_property_of_unit_type(&mut self, prop: P<Symbol>) -> bool {
+        // A method is typed as a function type only when none of the flags getTypeOfSymbol checks before it are set
+        if prop.flags().intersection(
+            SymbolFlags::Method
+                | SymbolFlags::Accessor
+                | SymbolFlags::Variable
+                | SymbolFlags::Property,
+        ) == SymbolFlags::Method
+        {
+            return false;
+        }
+        let check_flags = prop.check_flags();
+        if check_flags.intersects(CheckFlags::Instantiated | CheckFlags::Mapped) {
+            let links = self.value_symbol_links.get(prop);
+            if links.resolved_type.get().is_none() {
+                let uninstantiated = if check_flags.intersects(CheckFlags::Instantiated) {
+                    self.get_type_of_symbol(links.target().unwrap())
+                } else {
+                    let mapped_type = links.containing_type().unwrap();
+                    self.get_template_type_from_mapped_type(
+                        mapped_type.as_mapped_type().target.get().unwrap_or(mapped_type),
+                    )
+                };
+                // An object type other than a mapped type or a generic tuple type never instantiates to a unit type or
+                // to never, so neither does a union containing one. A homomorphic mapped type instantiated for a
+                // primitive is that primitive. A generic tuple type has a variadic element, like
+                // [string, ...T, number], and it normalizes to never when that element is instantiated to never. The
+                // tuple then drops out of a union, so with T = never the union [string, ...T, number] | K is just K,
+                // which can be a unit type.
+                if uninstantiated.distributed_iter().any(|t| {
+                    t.flags().intersects(TypeFlags::Object)
+                        && !t.object_flags().intersects(ObjectFlags::Mapped)
+                        && !Self::is_generic_tuple_type(t)
+                }) {
+                    return false;
+                }
+            }
+        }
+        is_unit_type(self.get_type_of_symbol(prop))
     }
 
     // relater.go:1169
@@ -2713,7 +2756,7 @@ impl Checker {
 }
 
 // relater.go:1266
-pub fn is_non_primitive_type(t: P<Type>) -> bool {
+fn is_non_primitive_type(t: P<Type>) -> bool {
     !t.flags().intersects(TypeFlags::Primitive)
 }
 
@@ -4690,7 +4733,7 @@ impl Checker {
 }
 
 // relater.go:2559
-pub fn visibility_to_string(flags: ModifierFlags) -> String {
+pub(crate) fn visibility_to_string(flags: ModifierFlags) -> String {
     if flags == ModifierFlags::Private {
         return "private".to_string();
     }
@@ -4702,7 +4745,7 @@ pub fn visibility_to_string(flags: ModifierFlags) -> String {
 
 /// Whether `a` and `b` are literals of one kind (string, number or bigint, not enum members) with different values:
 /// no relation holds between them in either direction (`is_type_related_to`).
-pub fn are_different_plain_literals(a: P<Type>, b: P<Type>) -> bool {
+pub(crate) fn are_different_plain_literals(a: P<Type>, b: P<Type>) -> bool {
     let flags = a.flags();
     flags == b.flags()
         && matches!(

@@ -221,7 +221,10 @@ fn selected_files_use_the_native_diagnostic_pool() {
             .start_diagnostics(DiagnosticScope::Files(&paths))
             .finish();
         let project = finished.projects().next().expect("program");
-        assert_eq!(project.native.program.checker_count(), 3);
+        assert_eq!(
+            crate::program::native_checker_count(project.native.program),
+            3
+        );
         let visited = checked_files(project);
         assert_eq!(visited.len(), paths.len());
         assert!(

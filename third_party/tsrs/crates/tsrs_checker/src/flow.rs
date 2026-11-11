@@ -99,13 +99,17 @@ impl Checker {
 }
 
 // flow.go:69
-pub fn get_flow_node_of_node(node: P<Node>) -> Option<P<FlowNode>> {
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "Only the public API is re-exported; implementation helpers remain crate-private."
+)]
+pub(crate) fn get_flow_node_of_node(node: P<Node>) -> Option<P<FlowNode>> {
     node.flow_node()
 }
 
 impl Checker {
     // flow.go:77
-    pub(crate) fn get_flow_type_of_reference(
+    pub fn get_flow_type_of_reference(
         &mut self,
         reference: P<Node>,
         declared_type: P<Type>,
@@ -661,7 +665,7 @@ impl Checker {
 }
 
 // flow.go:208
-pub fn get_branch_label_antecedents(
+fn get_branch_label_antecedents(
     flow: P<FlowNode>,
     reduce_labels: &[P<ast::FlowReduceLabelData>],
 ) -> Option<P<FlowList>> {
@@ -2698,7 +2702,7 @@ impl Checker {
 }
 
 // flow.go:1496
-pub fn get_candidate_variable_declaration_initializer(node: P<Node>) -> Option<P<Node>> {
+fn get_candidate_variable_declaration_initializer(node: P<Node>) -> Option<P<Node>> {
     if ast::is_variable_declaration(node)
         && node.type_node().is_none()
         && let Some(initializer) = node.initializer()
@@ -2738,7 +2742,7 @@ impl Checker {
 }
 
 // flow.go:1527
-pub fn is_evolving_array_type_list(types: &[P<Type>]) -> bool {
+fn is_evolving_array_type_list(types: &[P<Type>]) -> bool {
     let mut has_evolving_array_type = false;
     for &t in types {
         if !t.flags().intersects(TypeFlags::Never) {
@@ -3083,7 +3087,7 @@ impl Checker {
     // flow.go:1727
     // Public for lint rules (tsgolint's shim exposes Checker_getAccessedPropertyName).
     /// tsrs: a property access's name is borrowed from the node (the common case, asked per narrowing step).
-    fn get_accessed_property_name(
+    pub fn get_accessed_property_name(
         &mut self,
         access: P<Node>,
     ) -> (std::borrow::Cow<'static, str>, bool) {
@@ -3172,7 +3176,7 @@ impl Checker {
 }
 
 // flow.go:1782
-pub fn try_get_name_from_type(t: P<Type>) -> (String, bool) {
+fn try_get_name_from_type(t: P<Type>) -> (String, bool) {
     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
         return (t.as_unique_es_symbol_type().name.get().to_string(), true);
     } else if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
@@ -3405,7 +3409,7 @@ impl Checker {
 }
 
 // flow.go:1928
-pub fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>) -> bool {
+fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>) -> bool {
     source.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::BooleanLiteral)
         && target.flags().intersects(TypeFlags::Number | TypeFlags::String | TypeFlags::Boolean)
 }
@@ -3630,7 +3634,7 @@ impl Checker {
     }
 
     // flow.go:2107
-    pub(crate) fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
+    pub fn get_property_name_for_known_symbol_name(&mut self, symbol_name: &str) -> String {
         let ctor_type = self.get_global_es_symbol_constructor_symbol_or_nil();
         if let Some(ctor_type) = ctor_type {
             let ctor_symbol_type = self.get_type_of_symbol(ctor_type);
@@ -4039,7 +4043,7 @@ impl Checker {
     }
 
     // flow.go:2389
-    fn get_type_with_default(
+    pub fn get_type_with_default(
         &mut self,
         t: P<Type>,
         default_expression: Option<P<Node>>,
@@ -4056,7 +4060,7 @@ impl Checker {
     // For example, when a variable of type number | string | boolean is assigned a value of type number | boolean,
     // we remove type string.
     // flow.go:2399
-    fn get_assignment_reduced_type(
+    pub fn get_assignment_reduced_type(
         &mut self,
         declared_type: P<Type>,
         assigned_type: P<Type>,

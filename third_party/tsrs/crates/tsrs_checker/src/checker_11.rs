@@ -427,15 +427,15 @@ impl Checker {
 /// `collections.OrderedMap[string, int]` in `somePropertyReducesToNever`).
 #[derive(Default)]
 pub struct NameCounts {
-    lists: Vec<&'static [P<Symbol>]>,
+    pub lists: Vec<&'static [P<Symbol>]>,
     /// (name, name hash, count), in first-occurrence order.
-    entries: Vec<(&'static str, u32, i32)>,
+    pub entries: Vec<(&'static str, u32, i32)>,
     /// Open addressing over `entries`: 0 is empty, otherwise an entry index plus one.
-    table: Vec<u32>,
+    pub table: Vec<u32>,
 }
 
 impl NameCounts {
-    fn count_lists(&mut self, total: usize) {
+    pub fn count_lists(&mut self, total: usize) {
         self.entries.clear();
         let size = (total * 2).max(16).next_power_of_two();
         self.table.clear();
@@ -470,7 +470,7 @@ impl NameCounts {
  * Note that this is not tracked well within the compiler, so the answer may be incorrect.
  */
 // checker.go:22037
-pub fn is_prototype_property(symbol: P<Symbol>) -> bool {
+pub(crate) fn is_prototype_property(symbol: P<Symbol>) -> bool {
     symbol.flags().intersects(SymbolFlags::Method)
         || symbol.check_flags().intersects(CheckFlags::SyntheticMethod)
 }
@@ -547,7 +547,7 @@ impl Checker {
     /// tsrs: the case that returns `t` itself (no flag below and not mapped: most object types) inline; called about
     /// 1.8G times on the 38k-file codebase, where the out-of-line body spent most of its instructions on its frame.
     #[inline]
-    pub(crate) fn get_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+    pub fn get_apparent_type(&mut self, t: P<Type>) -> P<Type> {
         const SLOW: TypeFlags = TypeFlags::Instantiable
             .union(TypeFlags::Intersection)
             .union(TypeFlags::StringLike)
@@ -866,7 +866,7 @@ impl Checker {
 
     // checker.go:22256
     #[inline]
-    pub(crate) fn get_reduced_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+    pub fn get_reduced_apparent_type(&mut self, t: P<Type>) -> P<Type> {
         // An object type other than a mapped type is its own reduced and apparent type (most property lookups).
         if t.flags() == TypeFlags::Object && !t.object_flags().intersects(ObjectFlags::Mapped) {
             return t;
@@ -938,14 +938,14 @@ impl Checker {
 }
 
 // checker.go:22284
-pub fn is_conflicting_private_property(prop: P<Symbol>) -> bool {
+pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool {
     // Return true for a synthetic property with multiple declarations, at least one of which is private.
     prop.value_declaration().is_none() && prop.check_flags().intersects(CheckFlags::ContainsPrivate)
 }
 
 impl Checker {
     // checker.go:22289
-    pub(crate) fn get_type_arguments(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_type_arguments(&mut self, t: P<Type>) -> &'static [P<Type>] {
         let d = t.as_type_reference();
         if d.resolved_type_arguments.get().is_none() {
             let n = d.target.get().unwrap().as_interface_type();
@@ -1408,6 +1408,50 @@ fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHash
 }
 
 impl Checker {
+    /// `T[keyof T & K]` with `T` a tuple of required elements and `K` a literal: the element type, without building
+    /// `keyof <tuple>` and intersecting it (tsgo-opt). Fast preset only (`lazy_tuples`): the skipped instantiations
+    /// would lower the instantiation counter the default mode keeps equal to Go's.
+    fn try_fast_tuple_keyof_indexed_access(
+        &mut self,
+        t: P<Type>,
+        object_type: P<Type>,
+        m: P<TypeMapper>,
+    ) -> Option<P<Type>> {
+        let d = t.as_indexed_access_type();
+        if !d.access_flags.get().is_empty()
+            || !is_tuple_type(object_type)
+            || self.compiler_options.no_unchecked_indexed_access == Tristate::True
+            || object_type
+                .target_tuple_type()
+                .combined_flags()
+                .intersects(ElementFlags::Optional | ElementFlags::Variable)
+        {
+            return None;
+        }
+        let index_type = d.index_type().unwrap();
+        if !index_type.flags().intersects(TypeFlags::Intersection) {
+            return None;
+        }
+        let types = index_type.types();
+        if types.len() != 2 {
+            return None;
+        }
+        let is_keyof_object = |u: P<Type>| {
+            u.flags().intersects(TypeFlags::Index)
+                && u.as_index_type().target.get() == d.object_type()
+                && u.as_index_type().index_flags.get().is_empty()
+        };
+        let key = if is_keyof_object(types[0]) {
+            types[1]
+        } else if is_keyof_object(types[1]) {
+            types[0]
+        } else {
+            return None;
+        };
+        let key_candidate = self.instantiate_type(key, Some(m));
+        self.try_fast_tuple_indexed_access(object_type, key_candidate)
+    }
+
     // checker.go:22551
     fn get_circular_type_names(&mut self) -> Vec<String> {
         let mut type_counts: FxHashMap<P<Type>, usize> = FxHashMap::default();
@@ -1632,6 +1676,12 @@ impl Checker {
             let alias = AliasArg::given_or_pending(alias, pending.as_ref());
             let d = t.as_indexed_access_type();
             let object_type = self.instantiate_type(d.object_type().unwrap(), Some(m));
+            if self.lazy_tuples
+                && let Some(fast) = self.try_fast_tuple_keyof_indexed_access(t, object_type, m)
+            {
+                crate::sitecount::hit("tuple literal index", "keyof T & K");
+                return fast;
+            }
             let index_type = self.instantiate_type(d.index_type().unwrap(), Some(m));
             return self.get_indexed_access_type_ex(
                 object_type,
@@ -2404,7 +2454,7 @@ impl Checker {
 }
 
 // checker.go:23085
-pub fn get_modified_readonly_state(state: bool, modifiers: MappedTypeModifiers) -> bool {
+fn get_modified_readonly_state(state: bool, modifiers: MappedTypeModifiers) -> bool {
     if modifiers.intersects(MappedTypeModifiers::IncludeReadonly) {
         return true;
     } else if modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) {
@@ -2692,7 +2742,7 @@ impl Checker {
     }
 
     // checker.go:23232
-    pub(crate) fn get_type_from_type_node(&mut self, node: P<Node>) -> P<Type> {
+    pub fn get_type_from_type_node(&mut self, node: P<Node>) -> P<Type> {
         let t = self.get_type_from_type_node_worker(node);
         self.get_conditional_flow_type_of_type(t, Some(node))
     }
@@ -2973,7 +3023,7 @@ impl Checker {
 }
 
 // checker.go:23470
-pub fn get_non_distributed_type_parameter(t: P<Type>) -> Option<P<Type>> {
+pub(crate) fn get_non_distributed_type_parameter(t: P<Type>) -> Option<P<Type>> {
     if t.flags().intersects(TypeFlags::TypeParameter) && t.as_type_parameter().is_distributed.get()
     {
         return t.as_type_parameter().constraint.get();
@@ -2982,7 +3032,7 @@ pub fn get_non_distributed_type_parameter(t: P<Type>) -> Option<P<Type>> {
 }
 
 // checker.go:23477
-pub fn is_simple_identifier_type_reference(node: P<Node>) -> bool {
+fn is_simple_identifier_type_reference(node: P<Node>) -> bool {
     is_type_reference_node(node)
         && is_identifier(node.as_type_reference_node().type_name)
         && node.type_argument_list().is_none()
@@ -3151,7 +3201,7 @@ impl Checker {
 }
 
 // checker.go:23600
-pub fn get_symbol_path(symbol: P<Symbol>) -> String {
+fn get_symbol_path(symbol: P<Symbol>) -> String {
     if let Some(parent) = symbol.parent() {
         return get_symbol_path(parent) + "." + symbol.name();
     }
@@ -3613,7 +3663,7 @@ impl TupleNormalizer {
 
 // Return count of starting consecutive tuple elements of the given kind(s)
 // checker.go:23906
-pub fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
+pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
     if let Some(result) = t
         .element_infos()
         .iter()
@@ -3627,14 +3677,14 @@ pub fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> us
 
 // Return count of ending consecutive tuple elements of the given kind(s)
 // checker.go:23916
-pub fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
+pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
     let element_infos = t.element_infos();
 
     element_infos.iter().rev().take_while(|info| info.flags.intersects(flags)).count()
 }
 
 // checker.go:23925
-pub fn get_total_fixed_element_count(t: &'static TupleType) -> usize {
+pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> usize {
     t.fixed_length() + get_end_element_count(t, ElementFlags::Fixed)
 }
 
@@ -3655,7 +3705,7 @@ impl Checker {
     }
 
     // checker.go:23942
-    pub(crate) fn is_array_type(&self, t: P<Type>) -> bool {
+    pub fn is_array_type(&self, t: P<Type>) -> bool {
         t.object_flags().intersects(ObjectFlags::Reference)
             && (t.target() == Some(self.global_array_type)
                 || t.target() == Some(self.global_readonly_array_type))
@@ -3669,52 +3719,7 @@ impl Checker {
 }
 
 // checker.go:23950
-pub fn is_tuple_type(t: P<Type>) -> bool {
+pub(crate) fn is_tuple_type(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::Reference)
         && t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple)
-}
-
-#[cfg(test)]
-mod property_counts_tests {
-    use super::*;
-
-    #[test]
-    fn ordered_counts_reuse_without_leaking_nested_state() {
-        let first = Symbol::new(SymbolFlags::Property, "first");
-        let second = Symbol::new(SymbolFlags::Property, "second");
-        let third = Symbol::new(SymbolFlags::Property, "third");
-
-        let mut outer = NameCounts::default();
-        outer.lists.push(alloc_slice(&[second, first]));
-        outer.lists.push(alloc_slice(&[first, third, second]));
-        outer.count_lists(5);
-        assert_eq!(
-            outer.entries.iter().map(|&(name, _, count)| (name, count)).collect::<Vec<_>>(),
-            [("second", 2), ("first", 2), ("third", 1)]
-        );
-
-        let mut inner = NameCounts::default();
-        inner.lists.push(alloc_slice(&[third, first, third]));
-        inner.count_lists(3);
-        assert_eq!(
-            inner.entries.iter().map(|&(name, _, count)| (name, count)).collect::<Vec<_>>(),
-            [("third", 2), ("first", 1)]
-        );
-        assert_eq!(
-            outer.entries.iter().map(|&(name, _, count)| (name, count)).collect::<Vec<_>>(),
-            [("second", 2), ("first", 2), ("third", 1)]
-        );
-
-        let entries = outer.entries.as_ptr();
-        let table = outer.table.as_ptr();
-        outer.lists.clear();
-        outer.lists.push(alloc_slice(&[first, third]));
-        outer.count_lists(2);
-        assert_eq!(outer.entries.as_ptr(), entries);
-        assert_eq!(outer.table.as_ptr(), table);
-        assert_eq!(
-            outer.entries.iter().map(|&(name, _, count)| (name, count)).collect::<Vec<_>>(),
-            [("first", 1), ("third", 1)]
-        );
-    }
 }

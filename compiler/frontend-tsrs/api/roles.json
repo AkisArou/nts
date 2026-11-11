@@ -1,5 +1,5 @@
 {
-  "upstream": "a0db53eabe483062205717f067a49b6ccb3fc868",
+  "upstream": "86de03ae428a956686af29177b50f0fdf4aee059",
   "rule": "A role belongs to one distinct field of its native node struct. Missing optional child/list => no edge. Present empty list => list edge with zero elements. Required fields always have edges. All edge order is native visitor order, including the runtime JSDoc name/type-expression order.",
   "nodes": [
     {

@@ -30,8 +30,11 @@ tsrs_printer.workspace = true
 tsrs_astnav.workspace = true
 rustc-hash.workspace = true
 hashbrown.workspace = true
+smallvec.workspace = true
+smallbitvec.workspace = true
 bitflags.workspace = true
-xxhash-rust = { version = "0.8", features = ["xxh3", "const_xxh3"] }
+xxhash-rust.workspace = true
 
 [lib]
+test = false
 doctest = false

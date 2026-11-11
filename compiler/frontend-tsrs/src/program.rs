@@ -860,6 +860,17 @@ impl<S: ViewPhase> fmt::Debug for Project<'_, S> {
     }
 }
 
+/// How many checkers the native program's pool holds. Upstream dropped its
+/// direct accessor in 0.24.0; its public parallel iteration visits each
+/// checker once by index, which is that same count read back.
+pub(crate) fn native_checker_count(program: &Program) -> usize {
+    let count = std::sync::atomic::AtomicUsize::new(0);
+    program.for_each_checker_parallel(|index, _| {
+        count.fetch_max(index + 1, std::sync::atomic::Ordering::Relaxed);
+    });
+    count.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl Project<'_, SyntaxPhase> {
     /// Diagnostics of this requested program/config, after capture.
     #[must_use]
@@ -936,7 +947,7 @@ impl<'s, S: ViewPhase> Project<'s, S> {
         if self.native.capture.borrow().is_none() {
             0
         } else if self.native.parallel_capture {
-            self.native.program.checker_count() + 1
+            native_checker_count(self.native.program) + 1
         } else {
             1
         }
@@ -1206,7 +1217,7 @@ mod tests {
             let finished = capture.finish();
             let project = finished.projects().next().expect("requested project");
             assert_eq!(project.checker_count(), 4);
-            assert_eq!(project.native.program.checker_count(), 3);
+            assert_eq!(native_checker_count(project.native.program), 3);
             assert_ne!(
                 project
                     .native
