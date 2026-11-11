@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { cpuList } from "../affinity.ts";
 import { gateEnvironment } from "../canonical-environment.ts";
-import { waitFor } from "../test-wait.ts";
+import { spawnTest, waitFor } from "../test-wait.ts";
 import { GateScopes, type StepScope } from "./step-scope.ts";
 import { newTestScratch } from "../test-scratch.ts";
 import { ownMemory } from "../test-memory.ts";
@@ -71,7 +71,7 @@ await until(${JSON.stringify(release)});
     for (const entry of entries) if (existsSync(entry.metadata)) {
       const { directory } = JSON.parse(readFileSync(entry.metadata, "utf8")) as { directory: string };
       assert.equal(dirname(directory), join(homedir(), ".cache/nts/worker-memory"));
-      assert.ok(basename(directory).startsWith(`${entry.scope.slice.slice(0, -6)}-`));
+      assert.match(basename(directory), /^ntsc[a-f0-9]{16}$/);
       rmSync(directory, { recursive: true, force: true });
     }
     rmSync(own, { recursive: true, force: true });
@@ -84,8 +84,9 @@ test("active, compiled, shell-case and counted commands enter sibling group-OOM 
   const probe = 'const fs=require("node:fs"); const group=fs.readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,""); console.log(JSON.stringify({group,oom:fs.readFileSync("/sys/fs/cgroup"+group+"/memory.oom.group","utf8").trim()}));';
   const script = `
 import {readFileSync} from "node:fs";
+import {spawnSync} from "node:child_process";
 import {activeCommand} from ${JSON.stringify(new URL("../active-command.ts", import.meta.url).href)};
-import {compileSync,compileActive,closeMemoryRun} from ${JSON.stringify(new URL("../../census/worker-memory.ts", import.meta.url).href)};
+import {MemoryRun,compileSync,compileActive,closeMemoryRun} from ${JSON.stringify(new URL("../../census/worker-memory.ts", import.meta.url).href)};
 import {runCaseBound} from ${JSON.stringify(new URL("../case-bound.ts", import.meta.url).href)};
 import {runIntegrityListing} from ${JSON.stringify(new URL("../../conformance/integrity-command.ts", import.meta.url).href)};
 const probe=${JSON.stringify(probe)}, args=["-e",probe], options={cwd:process.cwd(),env:process.env};
@@ -107,6 +108,27 @@ rows.push({kind:"shell case",...JSON.parse(caseOutput)});
 const counted=await runIntegrityListing(process.execPath,args,{...options,counterFile:${JSON.stringify(join(own, "counter.txt"))}});
 if(counted.status!==0||counted.counter_error)throw Error(counted.stderr+" "+counted.counter_error);
 rows.push({kind:"counted",...JSON.parse(counted.stdout)});
+const outer=new MemoryRun({budgetBytes:256*2**20,id:"outer-case"}),worker=outer.worker("nested",128*2**20);
+const nestedSource=${JSON.stringify(`
+import {spawnSync} from "node:child_process";
+import {MemoryRun} from ${JSON.stringify(new URL("../../census/worker-memory.ts", import.meta.url).href)};
+for(const name of Object.keys(process.env))if(name.startsWith("NTS_CENSUS_"))delete process.env[name];
+const inner=new MemoryRun({budgetBytes:256*2**20,id:"nested-case"}),worker=inner.worker(0,256*2**20);
+try {
+  const scope=worker.scope(process.execPath,["-e",${JSON.stringify(probe)}]);
+  const result=spawnSync("systemd-run",scope.argv,{env:scope.env,encoding:"utf8"});
+  if(result.status!==0)throw Error(result.stderr);
+  console.log(JSON.stringify({...JSON.parse(result.stdout),effective:inner.effectiveBudgetBytes()}));
+}finally{inner.close();}
+`)};
+try {
+  const scope=worker.scope(process.execPath,["--input-type=module","-e",nestedSource]);
+  const result=spawnSync("systemd-run",scope.argv,{env:scope.env,encoding:"utf8"});
+  if(result.status!==0)throw Error(result.stderr);
+  const nested=JSON.parse(result.stdout);
+  if(!nested.group.startsWith(worker.group+"/")||nested.effective!==128*2**20)throw Error("nested command escaped its enclosing case cap");
+  rows.push({kind:"nested case",...nested});
+}finally{outer.close();}
 closeMemoryRun();
 console.log(JSON.stringify({supervisor:readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,""),rows}));
 `;
@@ -128,9 +150,40 @@ console.log(JSON.stringify({supervisor:readFileSync("/proc/self/cgroup","utf8").
   assert.deepEqual(result, { status: 0, signal: null }, output);
   const observed = JSON.parse(output.trim().split("\n").at(-1)!) as {supervisor:string;rows:{kind:string;group:string;oom:string}[]};
   assert.ok(observed.supervisor.startsWith(step.supervisorGroup + "/"));
-  assert.equal(observed.rows.length, 5);
+  assert.equal(observed.rows.length, 6);
   for (const row of observed.rows) {
     assert.ok(row.group.startsWith(step.workerGroup + "/"), row.kind + " escaped the worker boundary");
     assert.equal(row.oom, "1", row.kind + " lacks its group-OOM boundary");
   }
+});
+
+test("a tooling collector survives its workers exhausting their step boundary and records pressure", async t => {
+  const own = newTestScratch("collector-worker-pressure"), owner = new GateScopes(process.env);
+  const step = owner.step({ max: 256 * 2 ** 20 }), subject = join(own, "pressure.test.mjs");
+  t.after(async () => { step.kill(); await step.drain(); owner.close(); rmSync(own, { recursive: true, force: true }); });
+  writeFileSync(subject, 'import {test} from "node:test"; test("pressure",()=>{const held=[];for(;;)held.push(Buffer.alloc(16*2**20,1));});');
+  const script = `
+import {readFileSync} from "node:fs";
+import {Writable} from "node:stream";
+import {runScopedTooling} from ${JSON.stringify(new URL("../tooling-runner.ts", import.meta.url).href)};
+import {PressureError} from ${JSON.stringify(new URL("../step-result.ts", import.meta.url).href)};
+try {
+  await runScopedTooling([${JSON.stringify(subject)}],{output:new Writable({write(_chunk,_encoding,done){done();}})});
+  throw Error("the collector accepted an incomplete pressure run");
+} catch(error) {
+  if(!(error instanceof PressureError))throw error;
+  console.log(JSON.stringify({reason:error.message,supervisor:readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,"")}));
+}`;
+  const launch = step.command(process.execPath, ["--input-type=module", "-e", script]);
+  const env = gateEnvironment(process.env, { run: join(own, "run"), owned: {
+    NTS_TOOLING_SLICE: step.slice, NTS_GATE_STEP_MEMORY_BYTES: String(256 * 2 ** 20),
+    ...ownMemory(join(own, "memory")),
+  } }).env;
+  const result = spawnTest(launch.command, launch.args, { env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.signal, null);
+  const observed = JSON.parse(result.stdout.trim()) as {reason:string;supervisor:string};
+  assert.ok(observed.supervisor.startsWith(step.supervisorGroup + "/"));
+  assert.match(observed.reason, /tooling workers exceeded their step's memory bound/);
+  assert.ok(step.memoryEvents().own_oom > 0, "the worker boundary retains its pressure event");
 });

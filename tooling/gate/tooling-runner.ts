@@ -9,10 +9,10 @@ import {mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,writeFileSync} from
 import {availableParallelism,homedir} from "node:os";
 import {join,relative} from "node:path";
 import {randomUUID} from "node:crypto";
-import {publishHung,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
+import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
 import {gateCommand} from "./affinity.ts";
-import {supervisorWorkerBoundary} from "../census/worker-memory.ts";
+import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -182,6 +182,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
 export async function runScopedTooling(files:string[],options:{idleMs?:number;execArgv?:string[];fixture?:boolean;output?:NodeJS.WritableStream;onScope?:(slice:string,unit:string,stopped:()=>string|undefined)=>void|Promise<void>}={}):Promise<ToolingResult&{slice:string}> {
   const boundary=supervisorWorkerBoundary();
+  const before=boundary?memoryEvents(boundary.group,true).oom:0;
   const parent=boundary?{...process.env,NTS_TOOLING_SLICE:boundary.slice}:process.env;
   const slice=newToolingSlice(options.fixture,parent),unit=`${slice.slice(0,-6)}-files`;
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
@@ -208,7 +209,11 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     const [status]=await Promise.all([closed,options.onScope?.(slice,`${unit}.scope`,()=>ended)]);
     let report;
     try { report=JSON.parse(readFileSync(complete,"utf8")); }
-    catch(error) { throw new ToolingInstrumentError("tooling-setup",`tooling worker ended without a completed report (status ${status}, ${slice})`,{cause:error}); }
+    catch(error) {
+      if(boundary&&memoryEvents(boundary.group,true).oom>before)
+        throw new PressureError(`tooling workers exceeded their step's memory bound (${boundary.slice}); their supervisor survived outside it`);
+      throw new ToolingInstrumentError("tooling-setup",`tooling worker ended without a completed report (status ${status}, ${slice})`,{cause:error});
+    }
     const result=readToolingCompletion(report,nonce,status);
     if(status===0)rmSync(directory,{recursive:true,force:true});
     return {...result,slice};
@@ -247,7 +252,11 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
       process.exitCode=reportTimes(await runScopedTooling(args),process.cwd());
     }
   } catch(error) {
-    const instrument=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError("tooling-setup",String(error),{cause:error});
-    publishToolingFailure(instrument);process.stderr.write((instrument.stack??String(instrument))+"\n");process.exitCode=2;
+    if(error instanceof PressureError){publishPressure(error);process.stderr.write(error.message+"\n");}
+    else {
+      const instrument=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError("tooling-setup",String(error),{cause:error});
+      publishToolingFailure(instrument);process.stderr.write((instrument.stack??String(instrument))+"\n");
+    }
+    process.exitCode=2;
   }
 }

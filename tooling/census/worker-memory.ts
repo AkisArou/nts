@@ -204,11 +204,11 @@ export class MemoryRun {
     this.#parentCap = boundary?.group;
     // Slice names encode their ancestry. Keep labels in the description so
     // nested gates retain room for their worker slices under systemd's limit.
-    const suffix = `ntsc${randomUUID().replaceAll("-", "")}`;
+    const suffix = `c${randomUUID().replaceAll("-", "").slice(0, 16)}`;
     this.#description = `nts census resident cap ${id}`;
-    this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix(suffix);
+    this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix("nts" + suffix);
     this.slice = `${this.prefix}.slice`;
-    this.directory = join(homedir(), ".cache/nts/worker-memory", suffix);
+    this.directory = join(homedir(), ".cache/nts/worker-memory", "nts" + suffix);
     mkdirSync(this.directory, { recursive: true });
     try {
       // The step's worker boundary follows its grant. Its supervisor is

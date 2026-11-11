@@ -500,7 +500,7 @@ test("compiles at once in one process each run on a lane of their own, under the
     // In a process of its own, so the run it makes is its alone. The first
     // compile reads the fifo the second writes: neither ends until both run.
     const code = `import {compileActive, memoryRun} from ${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)};
-const tools = {memoryCapKb: 64 * 1024}, cgroup = "cat /proc/self/cgroup", lane = result => /-w(direct\\d+)\\.slice\\//.exec(result.stdout)?.[1];
+const tools = {memoryCapKb: 64 * 1024}, cgroup = "cat /proc/self/cgroup", lane = result => /\\/([^/]+-w[0-9a-z]+)\\.slice\\//.exec(result.stdout)?.[1];
 const run = memoryRun(2 * 64 * 2 ** 20);
 const both = await Promise.all([compileActive(tools, "sh", ["-c", cgroup + "; cat " + ${JSON.stringify(fifo)}]),
   compileActive(tools, "sh", ["-c", cgroup + "; echo both > " + ${JSON.stringify(fifo)}])]);
