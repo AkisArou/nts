@@ -25,6 +25,8 @@ const node = "exit 0; Observed: x=1;";
 
 function tree(t: { after(fn: () => void): void }): string {
   const root = testScratch(t, "record-pending-tree");
+  const home=process.env.HOME;process.env.HOME=join(root,'home');
+  t.after(()=>{if(home===undefined)delete process.env.HOME;else process.env.HOME=home;});
   const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
   for (const name of ["recorded", "new"]) put(`tests/typescript/family/${name}.ts`, "/*---\nfeatures: []\n---*/\nassert.sameValue(1, 1);\n");
   for (const backend of BACKENDS) {
@@ -120,6 +122,19 @@ test("it finds exactly the cases whose records have no row yet", t => {
   assert.deepEqual(findPending(root, "outcomes").map(one => [one.name, one.record]), [["tests/outcomes/new", "tests/outcomes/new/outcome.json"]]);
 });
 
+test('a record fixture cannot observe an improvement hint in another HOME',t=>{
+  const outside=testScratch(t,'record-pending-foreign-home'),fixture='benchmarks/cases/recorded',beforeHome=process.env.HOME;
+  let hint:string;
+  try{process.env.HOME=outside;hint=oracleImprovementPath(fixture);}
+  finally{if(beforeHome===undefined)delete process.env.HOME;else process.env.HOME=beforeHome;}
+  mkdirSync(dirname(hint),{recursive:true});writeFileSync(hint,'{"poisoned":true}');
+  const root=tree(t),ownedHome=process.env.HOME;
+  assert.deepEqual(oracleRefreshes(root),[],'the private fixture ignores foreign mutable state');
+  try{process.env.HOME=outside;assert.throws(()=>oracleRefreshes(root),/invalid or misnamed fixture record/);}
+  finally{process.env.HOME=ownedHome;}
+  assert.equal(readFileSync(hint,'utf8'),' {"poisoned":true}'.trim(),'the foreign hint is retained');
+});
+
 test("it records the pending and improved rows, every other byte as it was, and then has nothing to do", t => {
   const root = tree(t), before = files(root), lines: string[] = [];
   const { run, ran } = recorders(root);
@@ -207,7 +222,6 @@ test("the dex record starts from its pending rows, takes an improvement, and ref
 
 test('budget refreshes need an improvement hint or changed identity, and only a measured count improves them',t=>{
   const root=tree(t),fixture='benchmarks/cases/recorded',source=fixture+'/case.ts',file=recordPath(fixture);
-  const saved=process.env.HOME;process.env.HOME=join(root,'home');t.after(()=>{if(saved===undefined)delete process.env.HOME;else process.env.HOME=saved;});
   const common={source,signature:'b'.repeat(64),keys:{c:'c'.repeat(32)},cases_sha256:'d'.repeat(64),driver_sha256:'e'.repeat(64)};
   const budget={kind:'budget',...common,source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'},revision:oracleBudgetRevision(root,source)};
   const before=JSON.stringify({version:2,fixture,rows:[budget]});writeFileSync(join(root,file),before);
@@ -231,7 +245,6 @@ test('budget refreshes need an improvement hint or changed identity, and only a 
 
 test('a plan budget is refreshed as a budget is: planned on the backends it named, or its identity changed, never over a measured population',t=>{
   const root=tree(t),fixture='benchmarks/cases/recorded',source=fixture+'/case.ts',file=recordPath(fixture);
-  const saved=process.env.HOME;process.env.HOME=join(root,'home');t.after(()=>{if(saved===undefined)delete process.env.HOME;else process.env.HOME=saved;});
   const unplanned={source,backends:['c','llvm'],budget:{version:1,phase:'plan',outcome:'timeout',bound:600,signal:'SIGKILL',reason:'oracle planner timed out'},revision:oracleUnplannedRevision(root,fixture)};
   const record=(rows:object[],plan?:object)=>JSON.stringify({version:2,fixture,rows,...(plan?{unplanned:plan}:{})});
   const before=record([],unplanned);writeFileSync(join(root,file),before);

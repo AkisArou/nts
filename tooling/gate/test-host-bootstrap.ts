@@ -15,6 +15,9 @@ export function installTestHost():void {
   const grants:NodeJS.ProcessEnv={NTS_MEMORY_RESERVATION:undefined,NTS_MEMORY_PRIORITY:undefined};
   for(const name of [...HOST_OBSERVATION_ENVIRONMENT,...CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT])grants[name]=environment[name];
   assignTestValues(process.env,grants);
+  // process.env coerces assignment of undefined to the string 'undefined'.
+  // The context revocation above is done; remove the native variables too.
+  delete process.env.NTS_MEMORY_RESERVATION;delete process.env.NTS_MEMORY_PRIORITY;
   // This preload is test instrumentation, never an oracle execution option.
   // Preserve every caller-supplied flag; remove only our exact import pair.
   process.execArgv=process.execArgv.filter((flag,index,all)=>{
