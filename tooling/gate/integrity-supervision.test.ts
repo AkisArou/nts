@@ -15,26 +15,29 @@ function probe(behavior:string,failed=false,entry=INTEGRITY){
   const dir=newTestScratch("integrity-supervision");
   try{
     const compiler=join(dir,"nts"),frame=join(dir,"instrument.json");
-    writeFileSync(compiler,`#!/usr/bin/env node
-const args=process.argv.slice(2),project=args.at(-1);
-const body=process.env.CONTROL_FAILED==="1"&&project.endsWith("a-completed")?"  %0 = call absent()\\n":"";
-if(args[0]==="hir")process.stdout.write("func control() -> void {\\n"+body+"}\\n\\n1 function(s), nothing refused\\n");
-if(project.endsWith("b-pending")&&args[0]==="hir"&&process.env.CONTROL_BEHAVIOR.startsWith("mixed-")){
-  if((args[1]==="--prepared")===(process.env.CONTROL_BEHAVIOR==="mixed-hang-first"))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
-  else process.kill(process.pid,"SIGTERM");
-}
-if(project.endsWith("b-pending")&&args[0]==="hir"&&args[1]!=="--prepared"){
-  if(["busy","runaway"].includes(process.env.CONTROL_BEHAVIOR)){
-    const start=process.cpuUsage();while(process.cpuUsage(start).user+process.cpuUsage(start).system<600000){}
-  }else if(process.env.CONTROL_BEHAVIOR==="signal")process.kill(process.pid,"SIGTERM");
-  else Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
-}
-`);chmodSync(compiler,0o755);
+    writeFileSync(compiler,'#!/bin/sh\nexit 127\n');chmodSync(compiler,0o755);
     const source=`import {mock} from "node:test";
+import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('./command-observations-fixture.ts',import.meta.url).href)};
 const actual=await import(${JSON.stringify(ACTIVE)});
-mock.module(${JSON.stringify(ACTIVE)},{namedExports:{...actual,activeCommand:(command,args,options)=>
-  process.env.CONTROL_BEHAVIOR==="spawn-error"?Promise.resolve({status:0,signal:null,stdout:"func control() -> void {\\n}\\n1 function(s), nothing refused\\n",stderr:"",out:"",elapsedMs:0,error:new Error("spawn failed after a tempting listing")}):
-  actual.activeCommand(command,args,{...options,idleMs:300,pollMs:10,cpuBudgetSeconds:process.env.CONTROL_BEHAVIOR==="runaway"&&args[0]==="hir"&&args[1]!=="--prepared"&&args.at(-1).endsWith("b-pending")?0.1:5})}});
+mock.module(${JSON.stringify(ACTIVE)},{namedExports:{...actual,activeCommand:async(command,args)=>{
+  const project=args.at(-1),behavior=process.env.CONTROL_BEHAVIOR;
+  const body=process.env.CONTROL_FAILED==='1'&&project.endsWith('a-completed')?'  %0 = call absent()\\n':'';
+  const stdout=args[0]==='hir'?'func control() -> void {\\n'+body+'}\\n\\n1 function(s), nothing refused\\n':'';
+  if(behavior==='spawn-error')return scriptedCommand(command,{},[],{stdout,error:new Error('spawn failed after a tempting listing')});
+  if(project.endsWith('b-pending')&&args[0]==='hir'){
+    if(behavior.startsWith('mixed-')){
+      if((args[1]==='--prepared')!==(behavior==='mixed-hang-first'))return scriptedCommand(command,{},[],{stdout,status:null,signal:'SIGTERM'});
+      return scriptedCommand(command,{idleMs:300},[commandSample(300)],{stdout});
+    }
+    if(args[1]!=='--prepared'){
+      if(behavior==='signal')return scriptedCommand(command,{},[],{stdout,status:null,signal:'SIGTERM'});
+      if(behavior==='busy')return scriptedCommand(command,{idleMs:300},[commandSample(9_000_000,{busy:true})],{stdout});
+      if(behavior==='runaway')return scriptedCommand(command,{idleMs:300,cpuBudgetSeconds:0.1},[commandSample(300,{cpu:10,busy:true})],{stdout});
+      return scriptedCommand(command,{idleMs:300},[commandSample(300)],{stdout});
+    }
+  }
+  return scriptedCommand(command,{},[],{stdout});
+}}});
 process.argv=[process.execPath,${JSON.stringify(entry)},"runtime/node/a-completed","runtime/node/b-pending"];
 await import(${JSON.stringify(entry)});
 `;

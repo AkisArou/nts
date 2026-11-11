@@ -379,6 +379,17 @@ locked session on CPU 4 and keep the wall-time floor below.
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
+- **Command supervision consumes observations.** `CommandLiveness` in
+  `tooling/gate/command-liveness.ts` decides from output, CPU counters,
+  busy/sleep state and monotonic time. `active-process.ts` owns the process
+  group and pipes and supplies one complete `CommandObservations` capability:
+  clock, CPU frequency, initial CPU baseline and activity watch. An injected
+  capability supplies every field; none falls back to the live sampler. Group
+  birth identity remains a live safety check. Decision tests replay fixed
+  sequences without children. Real-process controls prove sampling, pipes and
+  exit wiring behind readiness/release barriers, without asserting how quickly
+  the scheduler runs them. Own-process timeout, group runaway and inactivity
+  retain their distinct outcomes and precedence.
 - **Test children receive an owned environment.** `fixtureEnvironment` in
   `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
   temporary and Git state, reused by its children and removed with the fixture.
@@ -461,6 +472,9 @@ the first node task.
   Test children receive an allowlisted environment with private state per
   fixture; shared content-addressed caches are declared by name
   ([log](records/notebooks/decisions-log.md#tests-own-their-view-of-the-host-11-11)).
+  Command liveness is a pure decision over a complete supplied activity/clock
+  capability; kernel group identity and readiness-based wiring stay separate.
+
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket
   ready to take the CPU mutex enters the memory queue; the ledger decision

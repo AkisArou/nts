@@ -1,3 +1,4 @@
+import {scriptedCommand,commandSample} from './command-observations-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {writeFileSync} from "node:fs";
@@ -90,14 +91,10 @@ test("a real compiler child killed after valid JSON is held", async t => {
 });
 
 test("CPU-active check work can pass beyond a small inactivity guard", async t => {
-  const f = fixture(t), release = join(f.root, "release");
-  const binary = compiler(f, `import {existsSync} from 'node:fs';while(!existsSync(${JSON.stringify(release)})){};process.stdout.write(${JSON.stringify(AGREES)});`);
-  const result = await runConsumer(binary, "/project", "program", {cwd: f.root, env: f.env,
-    idleMs: 1000, pollMs: 50, cpuBudgetSeconds: 10,
-    onActivity(event) { if (event.elapsedMs > 2000) writeFileSync(release, "complete"); },
-  });
-  assert.equal(result.exitCode, 0); assert.equal(result.record.outcome, "agrees");
-  assert.equal(f.frame(), undefined);
+  const f=fixture(t);
+  const run:CheckRunner=async(command,args,options)=>{if(args[0]==='--help')return completed(HELP);assert.equal(options.idleMs,1000);return scriptedCommand(command,options,[commandSample(9_000_000,{busy:true})],{stdout:AGREES});};
+  const result=await runConsumer('/supplied-compiler','/project','program',{cwd:f.root,env:f.env,idleMs:1000,run});
+  assert.equal(result.exitCode,0);assert.equal(result.record.outcome,'agrees');assert.equal(f.frame(),undefined);
 });
 
 test("refusal-only controls observe completed lowering without claiming an oracle comparison", async t => {

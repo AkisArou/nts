@@ -52,12 +52,12 @@ export function parseCaseBound(argv: readonly string[]): CaseBoundArguments {
 
 /** Run one bounded case and say how it ended, as an exit status. */
 export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.ProcessEnv = process.env,
-  write = { out: (text: string) => { process.stdout.write(text); }, err: (text: string) => { process.stderr.write(text); } }): Promise<number> {
+  write = { out: (text: string) => { process.stdout.write(text); }, err: (text: string) => { process.stderr.write(text); } }, run:typeof activeCommand=activeCommand): Promise<number> {
   // The case's own outcome never reaches the step's frame; only a hold does, below.
   const own = { ...env }; delete own.NTS_GATE_STEP_RESULT;
   let result;
   try {
-    result = await activeCommand(bound.command, bound.args, { cwd: process.cwd(), env: own, cpuBudgetSeconds: bound.cpuSeconds, idleMs: bound.idleMs,
+    result = await run(bound.command, bound.args, { cwd: process.cwd(), env: own, cpuBudgetSeconds: bound.cpuSeconds, idleMs: bound.idleMs,
       pollMs: Math.min(COMMAND_ACTIVITY_POLL_MS, bound.idleMs / 4),
       ...(bound.eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds: bound.eachProcessCpuSeconds }),
       ...(bound.ownCpuSeconds === undefined ? {} : { ownCpuSeconds: bound.ownCpuSeconds }) });

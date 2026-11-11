@@ -2,11 +2,12 @@
 import {execFileSync,spawn} from "node:child_process";
 import {readFileSync,readdirSync} from "node:fs";
 import {StringDecoder} from "node:string_decoder";
+import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
+import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
-export const COMMAND_IDLE_GUARD_MS=5*60_000;
+export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
-export const COMMAND_CPU_BUDGET_SECONDS=30*60;
 /** One case's compile: its command's own CPU, not its children's. Far above any
  * healthy case, since the compile-time tripwire guards modules that are only
  * slow; past it the case timed out, which is its recorded outcome. */
@@ -49,6 +50,15 @@ function processAt(pid:number) {
   try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
   catch(error){if(error instanceof Error&&"code" in error&&(error.code==="ENOENT"||error.code==="ESRCH"))return;throw error;}
 }
+function processIdentityAt(pid:number){
+  let text:string;
+  try{text=readFileSync(`/proc/${pid}/stat`,"utf8");}
+  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT'||(error as NodeJS.ErrnoException).code==='ESRCH')return;throw error;}
+  const end=text.lastIndexOf(')');if(end<0)throw Error('invalid process activity record');
+  const fields=text.slice(end+2).trim().split(/\s+/),values=[2,3,19].map(at=>Number(fields[at]));
+  if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw Error('invalid process activity counters');
+  return {group:values[0]!,session:values[1]!,started:values[2]!};
+}
 type ProcessActivity=ReturnType<typeof processActivity>;
 function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessActivity> {
   const records=new Map<number,ProcessActivity>();
@@ -68,7 +78,7 @@ function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessA
   return records;
 }
 
-type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean,processOwn:{pid:number;cpu:number})=>void;broken:(error:unknown)=>void};
+export type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean,processOwn:{pid:number;cpu:number})=>void;broken:(error:unknown)=>void};
 /** One snapshot per tick for every live command; activity stays group-local. */
 export class CommandActivitySampler {
   private readonly watches=new Set<ActivityWatch>();
@@ -112,13 +122,20 @@ export class CommandActivitySampler {
 }
 const activitySampler=new CommandActivitySampler();
 
+/** One complete observation capability; fixtures never merge with a live one. */
+export type CommandObservations={now:()=>number;frequency:number;initialCpu:(pid:number)=>number;watch:(watch:ActivityWatch)=>()=>void};
+export function liveCommandObservations(env:NodeJS.ProcessEnv):CommandObservations{
+  const host=hostObservations(env);
+  return {now:()=>host.now(),frequency:clockTicks(),initialCpu:pid=>processAt(pid)?.cpu??0,watch:watch=>activitySampler.watch(watch)};
+}
+
 export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
 // `ownCpuSeconds` bounds the command's own CPU, its threads and not its
 // children: a case's compile. `eachProcessCpuSeconds` applies the same kind of
 // bound independently to every process in a build session (a driver can wait
 // while its linker spends CPU). Past it the command is stopped and `timeout` says
 // so; nothing is published, because a timeout is the case's outcome, not a hold.
-export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;captureBytes?:boolean;
+export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;captureBytes?:boolean;observations?:CommandObservations;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -127,23 +144,21 @@ export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollM
  */
 export function activeCommand(command:string,args:readonly string[],options:ActiveOptions):Promise<ActiveResult>{
   return new Promise((resolve,reject)=>{
-    const began=performance.now(),idle=options.idleMs??COMMAND_IDLE_GUARD_MS;
-    if(!Number.isFinite(idle)||idle<=0)throw new Error("command idle guard must be positive");
-    const budget=options.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
-    if(!Number.isFinite(budget)||budget<=0)throw new Error("command CPU budget must be positive");
-    const ownBound=options.ownCpuSeconds,processBound=options.eachProcessCpuSeconds;
-    if(processBound!==undefined&&(!Number.isFinite(processBound)||processBound<=0))throw new Error("build process CPU bound must be positive");
-    if(ownBound!==undefined&&(!Number.isFinite(ownBound)||ownBound<=0))throw new Error("command own CPU bound must be positive");
+    validateCommandPolicy(options);
     if(options.maxBuffer!==undefined&&(!Number.isSafeInteger(options.maxBuffer)||options.maxBuffer<1))throw new Error("command capture budget must be a positive integer");
-    let frequency;
-    try{frequency=clockTicks();}catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
+    let observations:CommandObservations,liveness:CommandLiveness;
+    try{
+      observations=options.observations===undefined?liveCommandObservations(options.env):options.observations;
+      if(!observations||typeof observations.now!=='function'||typeof observations.watch!=='function'||typeof observations.initialCpu!=='function')throw Error('command observation capability is incomplete');
+      liveness=new CommandLiveness(command,options,observations.now(),observations.frequency);
+    }catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]});
-    let out="",stdout="",stderr="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,timeout:string|undefined,instrument:ToolingInstrumentError|undefined;
+    let out="",stdout="",stderr="",started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,timeout:string|undefined,instrument:ToolingInstrumentError|undefined;
     let cancelActivity=()=>{};
     const stop=()=>{
       if(!child.pid||child.pid<=1)return;
       // A re-used leader PID can never authorize signalling its new group.
-      const leader=processAt(child.pid);
+      const leader=processIdentityAt(child.pid);
       if(started!==undefined&&leader&&(leader.started!==started||leader.group!==child.pid||leader.session!==child.pid))throw new Error("refusing to stop a changed command group");
       try{process.kill(-child.pid,"SIGKILL");}catch(error){if(!(error instanceof Error)||!("code" in error)||error.code!=="ESRCH")throw error;}
     };
@@ -160,14 +175,14 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
     const stdoutDecoder=new StringDecoder("utf8"),stderrDecoder=new StringDecoder("utf8");
     const output=(part:Buffer,standard:boolean)=>{
       try{
-        last=performance.now();
+        const now=observations.now();liveness.output(now);
         const retained=standard?(stdoutBytes+=part.length):(stderrBytes+=part.length);
         if(options.maxBuffer!==undefined&&retained>options.maxBuffer)throw new Error(`command ${standard?"stdout":"stderr"} exceeded its ${options.maxBuffer} byte capture budget`);
         if(raw)(standard?raw.out:raw.err).push(Buffer.from(part));
         const text=(standard?stdoutDecoder:stderrDecoder).write(part);
         if(standard)stdout+=text;else stderr+=text;
         out+=text;
-        if(part.length)options.onActivity?.({cpu,elapsedMs:last-began,pid:child.pid!});
+        if(part.length)options.onActivity?.({cpu:liveness.cpu,elapsedMs:liveness.elapsed(now),pid:child.pid!});
       }catch(error){broken(error);}
     };
     child.stdout.on("data",part=>output(part,true));
@@ -187,43 +202,33 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
       finishGroup();
       const stdoutTail=stdoutDecoder.end(),stderrTail=stderrDecoder.end();
       stdout+=stdoutTail;stderr+=stderrTail;out+=stdoutTail+stderrTail;
+      let elapsedMs=0;
+      try{elapsedMs=liveness.elapsed(observations.now());}catch(error){
+        instrument=new ToolingInstrumentError("tooling-setup",`cannot observe activity for ${command}: ${String(error)}`);
+        publishToolingFailure(instrument,options.env);
+      }
       if(instrument)reject(instrument);
-      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs:performance.now()-began,
+      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs,
         ...(raw?{stdoutRaw:Buffer.concat(raw.out),stderrRaw:Buffer.concat(raw.err)}:{})});
     });
     if(!child.pid)return; // spawn's error/close events retain their ordinary meaning.
     try{
       // Capture birth identity synchronously, before the event loop can reap a
       // fast child. Descendants can retain this group after its leader exits.
-      const leader=processAt(child.pid);
+      const leader=processIdentityAt(child.pid);
       if(!leader||leader.group!==child.pid||leader.session!==child.pid)throw new Error("spawned command has no owned process group");
-      started=leader.started;cpu=leader.cpu;
-      cancelActivity=activitySampler.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy,processOwn)=>{
+      started=leader.started;liveness.baseline(observations.initialCpu(child.pid));
+      cancelActivity=observations.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy,processOwn)=>{
         try{
-          const now=performance.now();
-          if(ownBound!==undefined&&own/frequency>=ownBound){
-            timeout=`${command} used its ${ownBound} s CPU bound: its own CPU reached ${(own/frequency).toFixed(3)} s`;
+          const now=observations.now(),previous=liveness.cpu;
+          const decision=liveness.sample({now,cpu:measured,own,busy,processOwn});
+          if(decision){
+            if(decision.kind==='timeout')timeout=decision.reason;
+            else if(decision.kind==='runaway'){runaway=decision.reason;publishRunaway(runaway,options.env);}
+            else{hung=decision.reason;publishHung(hung,options.env);}
             cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;
           }
-          if(processBound!==undefined&&processOwn.cpu/frequency>=processBound){
-            timeout=`${command} used its ${processBound} s CPU bound: process ${processOwn.pid} own CPU reached ${(processOwn.cpu/frequency).toFixed(3)} s`;
-            cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;
-          }
-          if(measured/frequency>=budget){
-            runaway=`command NOT RUN (runaway): ${command}; process-group user+sys CPU ${(measured/frequency).toFixed(3)} s reached its ${budget} s budget`;
-            publishRunaway(runaway,options.env);cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;
-          }
-          // Membership/reaping races can lower a sampled group total. Reset
-          // its baseline too, rather than hiding subsequent real CPU work.
-          if(measured!==cpu){cpu=measured;last=now;options.onActivity?.({cpu,elapsedMs:now-began,pid:child.pid!});}
-          // A thread of the group that is running, waiting for a CPU or
-          // waiting on disk is not idle, however long a loaded machine keeps
-          // it there: hung means every thread sleeps with no output and no
-          // CPU progress.
-          else if(busy)last=now;
-          if(now-last<idle)return;
-          hung=`command NOT RUN (hung): ${command}; no output, process-group CPU activity or busy thread for ${idle} ms`;
-          publishHung(hung,options.env);cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();
+          if(previous!==liveness.cpu)options.onActivity?.({cpu:liveness.cpu,elapsedMs:liveness.elapsed(now),pid:child.pid!});
         }catch(error){broken(error);}
       }});
     }catch(error){broken(error);}

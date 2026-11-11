@@ -2057,6 +2057,13 @@ real disk admission. It waited below the disk floor before reaching its fake
 execution clock. The inventory and landing-run evidence are attached to #694;
 #695 is the resource capability slice of that group.
 
+#696 makes command liveness a pure state machine over output, CPU counters,
+busy/sleep state and monotonic time. active-process.ts retains process-group
+and pipe ownership behind one complete observation capability; fixture holes
+never select a live reader. Group birth identity remains a kernel safety
+check. The integrity control that failed under load now replays observations;
+real children prove only sampling and exit wiring behind named barriers.
+
 #697 owns test children's environments through an allowlist. HOME, XDG,
 temporary and Git state belong to each TestContext and are reused by its
 children. Node, JDK and rustup directories are resolved ahead of shims that
