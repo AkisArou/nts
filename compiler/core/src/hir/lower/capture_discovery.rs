@@ -142,7 +142,7 @@ pub(super) enum ClosureSource {
     /// The specification's `NewPromiseResolveThenableJob` for one `then`:
     /// `x.then(resolve, reject)`, run as a microtask. The node is what it
     /// calls -- a class's `then` method, or the function a binding's `then`
-    /// names. See [`Thenable`](super::Thenable).
+    /// names. See [`Thenable`](super::thenable_jobs::Thenable).
     Job {
         /// Which `then` it calls.
         calls: Then,
