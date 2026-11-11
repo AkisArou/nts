@@ -9,7 +9,7 @@ import { command, registryInputsFixture, REGISTRY_FIXTURE_MARKER,
 
 const prepare = (fixture: Awaited<ReturnType<typeof registryInputsFixture>>) => {
   const home=join(fixture.root,"consumer-home");mkdirSync(home,{recursive:true});
-  return command("sh", [fixture.inputs, "work", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,COREPACK_ENABLE_NETWORK:"0"});
+  return command("sh", [fixture.inputs, "work", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,NTS_NODE_INPUTS_CACHE:fixture.nodeInputs,COREPACK_ENABLE_NETWORK:"0"});
 };
 
 test("a frozen candidate gets its new registry dev dependency before main has it", async t => {

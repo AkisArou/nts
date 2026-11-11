@@ -30,7 +30,7 @@ export function command(program: string, args: string[], cwd: string, input?: Bu
     return withPackageManager(cwd,{},async manager=>({status:0,stdout:await manager.run(args),stderr:""}));
   }
   return new Promise((resolve, reject) => {
-    const env={...testEnvironment(),...overrides};
+    const env=testEnvironment(overrides);
     for(const key of ["NTS_GATE_STEP","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT"])delete env[key];
     const child = spawn(program, args, { cwd, env: { ...env, CI: "true", NO_COLOR: "1",
       HTTP_PROXY: "", HTTPS_PROXY: "", ALL_PROXY: "", NO_PROXY: "127.0.0.1" }, stdio: "pipe" });
@@ -67,7 +67,7 @@ export function treeIdentity(root: string): string {
 
 export type RegistryInputsFixture = {
   root: string; main: string; candidate: string; frozen: string; store: string;
-  integrity: string; mainIdentity: string; registryRequests: string[]; inputs:string;
+  integrity: string; mainIdentity: string; registryRequests: string[]; inputs:string; nodeInputs:string;
 };
 
 /** The optional hook is the submission cache-population seam for the fix. */
@@ -83,7 +83,7 @@ export async function registryInputsFixture(t: TestContext,
   } });
   const toolingRoot=fileURLToPath(new URL("../../",import.meta.url));
   const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),linkerDir=join(consumer,"tooling/inputs");
-  acquireNodeInputs(main,join(root,"consumer-home/.cache/nts-node-inputs"),table);
+  const nodeInputs=join(root,"node-inputs");acquireNodeInputs(main,nodeInputs,table);
   copyModuleClosure(["tooling/inputs/dependency-inputs.ts"],consumer);
   copyFileSync(join(toolingRoot,"tooling/inputs/link.sh"),join(linkerDir,"link.sh"));
   // A frozen destination executes its own Node provisioner and catalog.
@@ -153,7 +153,7 @@ export async function registryInputsFixture(t: TestContext,
   await git(candidate, ["add", "pnpm-lock.yaml", "test/new-importer"]);
   await git(candidate, ["commit", "-m", "candidate adds a registry dev dependency in a new importer"]);
   const fixture: RegistryInputsFixture = { root, main, candidate, frozen, store, integrity,
-    mainIdentity, registryRequests, inputs };
+    mainIdentity, registryRequests, inputs, nodeInputs };
   // Seed acquisition is allowed here; preparation below cannot contact even
   // this isolated registry once the submission cache has been populated.
   await populateCache?.(fixture);

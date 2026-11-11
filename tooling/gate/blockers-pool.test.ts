@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import { waitFor } from "./test-wait.ts";
 import assert from "node:assert/strict";
@@ -17,9 +18,7 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const root = mkdtempSync(join(tmpdir(), "nts-blockers-pool-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const path of ["tooling/conformance", "tooling/gate", "tooling/jvm", "runtime/jvm", "napi", "tmp"]) mkdirSync(join(root, path), {recursive:true});
-  for (const path of ["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"]) {
-    copyFileSync(join(HERE, "..", path), join(root, "tooling", path));
-  }
+  copyModuleClosure(["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"].map(path=>"tooling/"+path),root);
   copyFileSync(join(HERE, "../../runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   writeFileSync(join(root, "napi/node_api.h"), "");
   const trace = join(root, "trace.jsonl");
