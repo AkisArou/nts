@@ -154,12 +154,16 @@ export function instructionsWork() {
  * every nonzero status (including timeout's 124/137) invalidates the count.
  * The raw file belongs to the caller's run and is never deleted here.
  */
-export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, events = [], cpu, ...options }) {
+export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, events = [], cpu, prepare, ...options }) {
   if (!counterFile) throw new Error("a retained counterFile is required");
   mkdirSync(dirname(counterFile), { recursive: true });
   const launch = countedLaunch(command,args,{timeoutMs,events,cpu});
-  const child = spawn(launch.command, [...launch.args, "-o", counterFile, "--", ...launch.target],
-    { ...options, env: { ...(options.env ?? process.env), ...FIXED_AMBIENT } });
+  const argsWithCounter = [...launch.args, "-o", counterFile, "--", ...launch.target];
+  // Resource ownership wraps perf, so the retained count still begins at the
+  // measured command's exec and excludes cgroup setup.
+  const prepared = prepare?.(launch.command, argsWithCounter, options.env);
+  const child = spawn(prepared?.command ?? launch.command, prepared?.args ?? argsWithCounter,
+    { ...options, env: { ...(prepared?.env ?? options.env ?? process.env), ...FIXED_AMBIENT } });
   const measurement = new Promise((resolve) => {
     let launchError;
     child.on("error", (error) => { launchError = error.message; });

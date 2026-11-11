@@ -282,7 +282,7 @@ for (const script of ["tooling/sweep/run.sh", "tooling/conformance/web-platform/
 
 test("the real gate owner holds a hung check and retains a completed failure before a hang", t => {
   const {root, compiler} = sandbox(t), bin = join(root, "bin"); mkdirSync(bin);
-  const preload = join(root, "idle-control.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-command.ts")).href;
+  const preload = join(root, "idle-control.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-process.ts")).href;
   writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,idleMs:1000,pollMs:50,cpuBudgetSeconds:10})}});\n`);
   // This wrapper changes only the observer's injected guard in the test.
   writeFileSync(join(bin, "node"), `#!/bin/sh\nexec '${process.execPath}' --experimental-test-module-mocks --import '${preload}' "$@"\n`, {mode: 0o755});
@@ -324,7 +324,7 @@ test("the actual gate owns typed per-call stops including cleanup after all answ
 
 test("a check past its compile bound is a recorded timeout, red and named, with no hold; the next case runs", t => {
   const {root, compiler} = sandbox(t), bin = join(root, "bin"); mkdirSync(bin);
-  const preload = join(root, "compile-bound.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-command.ts")).href;
+  const preload = join(root, "compile-bound.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-process.ts")).href;
   // The real supervisor, with the compile bound it was asked for made small.
   writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,...(options.ownCpuSeconds?{ownCpuSeconds:0.5}:{}),pollMs:50})}});\n`);
   writeFileSync(join(bin, "node"), `#!/bin/sh\nexec '${process.execPath}' --experimental-test-module-mocks --import '${preload}' "$@"\n`, {mode: 0o755});

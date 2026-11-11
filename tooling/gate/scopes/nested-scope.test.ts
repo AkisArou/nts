@@ -9,6 +9,7 @@ import { gateEnvironment } from "../canonical-environment.ts";
 import { waitFor } from "../test-wait.ts";
 import { GateScopes, type StepScope } from "./step-scope.ts";
 import { newTestScratch } from "../test-scratch.ts";
+import { ownMemory } from "../test-memory.ts";
 
 test("nested census scopes belong to one step and another run remains live when it drains", async t => {
   const own = newTestScratch("nested-step-scope-run");
@@ -74,5 +75,62 @@ await until(${JSON.stringify(release)});
       rmSync(directory, { recursive: true, force: true });
     }
     rmSync(own, { recursive: true, force: true });
+  }
+});
+
+test("active, compiled, shell-case and counted commands enter sibling group-OOM worker scopes", async t => {
+  const own = newTestScratch("worker-shape-layout"), owner = new GateScopes(process.env);
+  const step = owner.step({ max: 2 ** 30 });
+  const probe = 'const fs=require("node:fs"); const group=fs.readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,""); console.log(JSON.stringify({group,oom:fs.readFileSync("/sys/fs/cgroup"+group+"/memory.oom.group","utf8").trim()}));';
+  const script = `
+import {readFileSync} from "node:fs";
+import {activeCommand} from ${JSON.stringify(new URL("../active-command.ts", import.meta.url).href)};
+import {compileSync,compileActive,closeMemoryRun} from ${JSON.stringify(new URL("../../census/worker-memory.ts", import.meta.url).href)};
+import {runCaseBound} from ${JSON.stringify(new URL("../case-bound.ts", import.meta.url).href)};
+import {runIntegrityListing} from ${JSON.stringify(new URL("../../conformance/integrity-command.ts", import.meta.url).href)};
+const probe=${JSON.stringify(probe)}, args=["-e",probe], options={cwd:process.cwd(),env:process.env};
+const rows=[];
+const active=await activeCommand(process.execPath,args,options);
+if(active.status!==0)throw Error(active.stderr);
+rows.push({kind:"active",...JSON.parse(active.stdout)});
+const synchronous=compileSync({memoryCapKb:256*1024},process.execPath,args,{...options,encoding:"utf8"});
+if(synchronous.status!==0)throw Error(synchronous.stderr);
+rows.push({kind:"synchronous compile",...JSON.parse(synchronous.stdout)});
+const compiled=await compileActive({memoryCapKb:256*1024},process.execPath,args,options);
+if(compiled.status!==0)throw Error(compiled.stderr);
+rows.push({kind:"active compile",...JSON.parse(compiled.stdout)});
+let caseOutput="";
+const status=await runCaseBound({command:process.execPath,args,cpuSeconds:30,idleMs:30000},process.env,
+  {out:text=>{caseOutput+=text;},err:text=>{process.stderr.write(text);}});
+if(status!==0)throw Error("case command exited "+status);
+rows.push({kind:"shell case",...JSON.parse(caseOutput)});
+const counted=await runIntegrityListing(process.execPath,args,{...options,counterFile:${JSON.stringify(join(own, "counter.txt"))}});
+if(counted.status!==0||counted.counter_error)throw Error(counted.stderr+" "+counted.counter_error);
+rows.push({kind:"counted",...JSON.parse(counted.stdout)});
+closeMemoryRun();
+console.log(JSON.stringify({supervisor:readFileSync("/proc/self/cgroup","utf8").trim().replace(/^0::/,""),rows}));
+`;
+  const launch = step.command(process.execPath, ["--input-type=module", "-e", script]);
+  const env = gateEnvironment(process.env, { run: join(own, "run"), owned: {
+    NTS_TOOLING_SLICE: step.slice, NTS_GATE_STEP_MEMORY_BYTES: String(2 ** 30),
+    ...ownMemory(join(own, "memory")),
+  } }).env;
+  const child = spawn(launch.command, launch.args, { env, stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  child.stdout.on("data", part => { output += part; });
+  child.stderr.on("data", part => { output += part; });
+  const ended = new Promise<{status:number|null;signal:NodeJS.Signals|null}>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (status, signal) => resolve({ status, signal }));
+  });
+  t.after(async () => { step.kill(); await ended; await step.drain(); owner.close(); rmSync(own, { recursive: true, force: true }); });
+  const result = await ended;
+  assert.deepEqual(result, { status: 0, signal: null }, output);
+  const observed = JSON.parse(output.trim().split("\n").at(-1)!) as {supervisor:string;rows:{kind:string;group:string;oom:string}[]};
+  assert.ok(observed.supervisor.startsWith(step.supervisorGroup + "/"));
+  assert.equal(observed.rows.length, 5);
+  for (const row of observed.rows) {
+    assert.ok(row.group.startsWith(step.workerGroup + "/"), row.kind + " escaped the worker boundary");
+    assert.equal(row.oom, "1", row.kind + " lacks its group-OOM boundary");
   }
 });

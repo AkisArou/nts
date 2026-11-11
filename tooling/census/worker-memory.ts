@@ -11,7 +11,7 @@ import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { toolingSlice, toolingSlicePrefix } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
-import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
+import { activeCommand, CommandNotMeasuredError } from "../gate/active-process.ts";
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
@@ -149,6 +149,11 @@ export type MemoryScope = { unit: string; ready: string; argv: string[]; env: No
  * A worker hitting this boundary cannot make the supervisor an OOM victim.
  */
 function cappingSlice(): { slice: string; group: string } | undefined {
+  // A nested worker stays within its enclosing case's cap.
+  if (inResidentWorker()) {
+    const group = process.env.NTS_CENSUS_WORKER_GROUP!;
+    return { slice: basename(group), group };
+  }
   const slice = toolingSlice();
   if (!slice) return undefined;
   const own = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
@@ -160,6 +165,17 @@ function cappingSlice(): { slice: string; group: string } | undefined {
   const max = Number(readFileSync(join(CGROUP, group, "memory.max"), "utf8"));
   if (!Number.isSafeInteger(max) || max < 1 || readFileSync(join(CGROUP, group, "memory.swap.max"), "utf8").trim() !== "0") {
     throw new Error("resident cap: the step's worker boundary lacks a finite swap-free ceiling");
+  }
+  // Canonical tooling children may omit resident process markers. Their
+  // actual kernel ancestry still keeps a nested owner inside its case cap.
+  if (own.startsWith(group + "/")) {
+    const parts = own.split("/");
+    for (let end = parts.length - 1; end > at; end--) {
+      if (!parts[end - 1]?.endsWith(".slice")) continue;
+      const candidate = parts.slice(0, end).join("/");
+      const limit = Number(readFileSync(join(CGROUP, candidate, "memory.max"), "utf8"));
+      if (Number.isSafeInteger(limit) && limit > 0) return { slice: parts[end - 1]!, group: candidate };
+    }
   }
   return { slice: workers, group };
 }
@@ -175,6 +191,7 @@ export class MemoryRun {
   #recordPeak = false;
   /** The step's sibling worker boundary, when it supplies the aggregate's cap. */
   #outer: string | undefined;
+  #parentCap: string | undefined;
   constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) }: { budgetBytes?: number; id?: string } = {}) {
     // A budget of its own -- a caller's, as a capture's or a test's -- is its
     // aggregate's own cap wherever it runs; the step's budget (the default)
@@ -183,6 +200,7 @@ export class MemoryRun {
     this.budgetBytes = integer(budgetBytes ?? Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), "resident run budget");
     this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     const boundary = cappingSlice();
+    this.#parentCap = boundary?.group;
     const suffix = `ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`;
     this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix(suffix);
     this.slice = `${this.prefix}.slice`;
@@ -260,6 +278,11 @@ export class MemoryRun {
     }
     const bytes = Number(readFileSync(join(CGROUP, this.group, "memory.max"), "utf8"));
     if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > this.budgetBytes) throw new Error("resident cap: aggregate ceiling changed outside its reservation");
+    if (this.#parentCap) {
+      const parent = Number(readFileSync(join(CGROUP, this.#parentCap, "memory.max"), "utf8"));
+      if (!Number.isSafeInteger(parent) || parent < 1) throw new Error("resident cap: enclosing worker ceiling changed");
+      return Math.min(bytes, parent);
+    }
     return bytes;
   }
   /** Whether its round has ended: a closed run holds no slice and starts no worker. */
@@ -400,6 +423,40 @@ export function serialRun(tools: CompilerTools): void {
   }
   if (result.error) throw result.error;
   process.exit(result.status ?? 1);
+}
+
+let commandOrdinal = 0;
+
+/** Plain commands launched by a step supervisor use the same worker boundary
+ * as resident pools. An explicit resident launch already owns its scope. */
+export function commandWorker(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env) {
+  const boundary = cappingSlice();
+  if (!boundary) return;
+  const current = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
+  if (current.startsWith(boundary.group + "/")) return;
+  const resident = env.NTS_CENSUS_WORKER_GROUP;
+  if (command === "systemd-run" && resident?.startsWith(boundary.group + "/") &&
+      args.includes("--slice=" + basename(resident))) {
+    const limit = Number(readFileSync(join(CGROUP, resident, "memory.max"), "utf8"));
+    if (!Number.isSafeInteger(limit) || limit < 1 ||
+        readFileSync(join(CGROUP, resident, "memory.swap.max"), "utf8").trim() !== "0") {
+      throw new Error("resident launch lacks its bounded worker slice");
+    }
+    return;
+  }
+  const memory = memoryRun();
+  const worker = memory.worker("command" + commandOrdinal++, memory.budgetBytes);
+  const before = worker.counters(), aggregateBefore = memory.aggregateOoms();
+  const scope = worker.scope(command, [...args], env);
+  return {
+    scope,
+    observation() {
+      if (!worker.ready(scope)) throw new Error("worker command failed before bounded entry");
+      const cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms());
+      return cause ? { cause, limitBytes: worker.bytes } : undefined;
+    },
+    close() { worker.close(); },
+  };
 }
 
 // Both execution APIs share the same cgroup observations and attribution.

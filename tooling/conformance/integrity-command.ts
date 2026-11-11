@@ -1,8 +1,9 @@
 import {spawnCounted} from "../gate/cputime.mjs";
 import {COMPILE_WORK_PROFILE} from "../gate/compile-counter.ts";
-import {activeCommand,CommandNotMeasuredError} from "../gate/active-command.ts";
+import {activeCommand,commandMemoryFailure,CommandNotMeasuredError} from "../gate/active-command.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {checkFailurePolicy,reportCheckFailure} from "../differential/check-report.ts";
+import {commandWorker} from "../census/worker-memory.ts";
 import type {ChildProcessWithoutNullStreams} from "node:child_process";
 
 export type ListingResult={stdout:string;stderr:string;status?:number|null;signal?:string|null;
@@ -15,21 +16,37 @@ export async function runIntegrityListing(command:string,args:readonly string[],
   const {counterFile,...supervision}=options;
   const env={...options.env};delete env.NTS_GATE_STEP_RESULT;
   if(!counterFile)return activeCommand(command,args,{...supervision,env});
-  const counted=spawnCounted(command,args,{cwd:options.cwd,env,counterFile,cpu:undefined});
+  let worker:ReturnType<typeof commandWorker>;
+  let counted:ReturnType<typeof spawnCounted>;
+  try{
+    counted=spawnCounted(command,args,{cwd:options.cwd,env,counterFile,cpu:undefined,
+      prepare:(program:string,arguments_:string[],environment:NodeJS.ProcessEnv)=>{
+        worker=commandWorker(program,arguments_,environment);
+        return worker?{command:"systemd-run",args:worker.scope.argv,env:worker.scope.env}:undefined;
+      }});
+  }catch(error){worker?.close();throw error;}
   const child=counted.child as ChildProcessWithoutNullStreams;
   return new Promise(resolve=>{
     let stdout="",stderr="";
     child.stdout.on("data",(chunk:Buffer|string)=>{stdout+=chunk;});
     child.stderr.on("data",(chunk:Buffer|string)=>{stderr+=chunk;});
-    child.on("error",error=>{resolve({error,stdout,stderr});});
     child.on("close",(status,signal)=>{
-      counted.measurement.then(counters=>resolve({...counters,work_profile:COMPILE_WORK_PROFILE,status,signal,stdout,stderr}));
+      counted.measurement.then(counters=>{
+        try{
+          let memory;
+          try{memory=worker?.observation();}
+          finally{worker?.close();}
+          resolve({...counters,work_profile:COMPILE_WORK_PROFILE,status,signal,stdout,stderr,...(memory?{memory}:{})});
+        }catch(error){resolve({status,signal,stdout,stderr,error});}
+      });
     });
   });
 }
 
 /** Completion precedes parsing, even when a stopped process printed a listing. */
 export function integrityListingFailure(result:ListingResult,label:string,expectedTypecheckFailure=false):unknown{
+  const memoryFailure=commandMemoryFailure(result as Parameters<typeof commandMemoryFailure>[0],label);
+  if(memoryFailure)return memoryFailure;
   if(result.hung||result.runaway)return new CommandNotMeasuredError(result as ConstructorParameters<typeof CommandNotMeasuredError>[0]);
   if(result.error)return result.error;
   if(result.signal||result.counter_error||result.status===null||result.status===undefined||(!expectedTypecheckFailure&&result.status!==0)){

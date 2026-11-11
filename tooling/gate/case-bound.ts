@@ -20,8 +20,8 @@
 import { constants } from "node:os";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { activeCommand, COMMAND_ACTIVITY_POLL_MS, COMMAND_CPU_BUDGET_SECONDS, COMMAND_IDLE_GUARD_MS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
-import { publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentError } from "./step-result.ts";
+import { activeCommand, commandMemoryFailure, COMMAND_ACTIVITY_POLL_MS, COMMAND_CPU_BUDGET_SECONDS, COMMAND_IDLE_GUARD_MS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
+import { CaseBudgetError, publishPressure, publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentError } from "./step-result.ts";
 
 export const CASE_TIMEOUT_EXIT = 125;
 export const CASE_UNMEASURED_EXIT = 124;
@@ -71,6 +71,13 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
   const last=result.stderr || result.stdout;
   const lead=last && !last.endsWith("\n") ? "\n" : "";
   const diagnosticLine=(text:string)=>write.err(`${lead}${text}\n`);
+  const memoryFailure = commandMemoryFailure(result, bound.command);
+  if (memoryFailure) {
+    diagnosticLine(memoryFailure.message);
+    if (memoryFailure instanceof CaseBudgetError) return 128 + constants.signals.SIGKILL;
+    publishPressure(memoryFailure, env);
+    return CASE_UNMEASURED_EXIT;
+  }
   if (result.timeout) { diagnosticLine(`timed out: ${result.timeout}`); return CASE_TIMEOUT_EXIT; }
   if (result.runaway) { publishRunaway(result.runaway, env); diagnosticLine(`not measured: ${result.runaway}`); return CASE_UNMEASURED_EXIT; }
   if (result.hung) { publishHung(result.hung, env); diagnosticLine(`not measured: ${result.hung}`); return CASE_UNMEASURED_EXIT; }

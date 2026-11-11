@@ -189,11 +189,12 @@ test("compiler reserves 32 GiB under a resident cap while executed programs reta
 
 test("resident async compiles retain explicit CPU and inactivity supervision", t => {
   const directory = scratch(); t.after(() => rmSync(directory, {recursive: true, force: true}));
-  const activeModule = new URL("../gate/active-command.ts", import.meta.url).href;
+  const activeModule = new URL("../gate/active-process.ts", import.meta.url).href;
   const memoryModule = new URL("./worker-memory.ts", import.meta.url).href;
   const code = `import assert from 'node:assert/strict';import {mock} from 'node:test';
-const real=await import(${JSON.stringify(activeModule)});let expected;
+const real=await import(${JSON.stringify(activeModule)});let expected;let calls=0;
 mock.module(${JSON.stringify(activeModule)},{namedExports:{...real,activeCommand:(command,args,options)=>{
+ calls++;
  for(const key of ['idleMs','pollMs','cpuBudgetSeconds','onActivity'])assert.equal(options[key],expected[key],key+' was dropped');
  return real.activeCommand(command,args,options);
 }}});
@@ -207,6 +208,7 @@ expected={idleMs:real.COMMAND_IDLE_GUARD_MS,pollMs:50,cpuBudgetSeconds:0.1,onAct
 await assert.rejects(compileActive(tools,'python3',['-c','while True: pass'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='runaway');
 expected={idleMs:500,pollMs:50,cpuBudgetSeconds:10,onActivity(){}};
 await assert.rejects(compileActive(tools,'python3',['-c','import time;time.sleep(3600)'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='hung');
+assert.equal(calls,2,'both compiles reached the injected activity observer');
 console.log('resident bounds retained');`;
   const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "-e", code], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stdout + result.stderr); assert.match(result.stdout, /resident bounds retained/);

@@ -1,9 +1,9 @@
 // Drain both arms as structured file observations before deciding the axis.
 import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from "node:fs";
 import {dirname,join,resolve} from "node:path";
-import {activeCommand,CommandNotMeasuredError} from "../gate/active-command.ts";
+import {activeCommand,commandMemoryFailure,CommandNotMeasuredError} from "../gate/active-command.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import {ToolingInstrumentError,PressureError} from "../gate/step-result.ts";
+import {ToolingInstrumentError,PressureError,CaseBudgetError} from "../gate/step-result.ts";
 import {memoryEvents} from "../census/worker-memory.ts";
 import {reportCheckFailure,checkFailurePolicy} from "../differential/check-report.ts";
 import {AXIS_PREFIX,axisRow,axisFailure,nodeFiles,commandObservation} from "./compiled-axis-rows.mjs";
@@ -33,6 +33,8 @@ async function command(module:string,phase:string,executable:string,args:string[
   const result=await activeCommand(executable,args,{cwd:root,env:environment,maxBuffer:64*1024*1024,
     onActivity:event=>process.stderr.write(`node:${module} ${phase} activity: ${event.cpu} CPU ticks\n`)});
   writeFileSync(join(out,`${module}.${phase}.log`),result.out);
+  const memoryFailure=commandMemoryFailure(result,`${module} ${phase}`);
+  if(memoryFailure)throw memoryFailure;
   const after=memoryEvents(group),aggregateAfter=memoryEvents(dirname(group),true).oom;
   return commandObservation(result,before,after,aggregateBefore,aggregateAfter,`${module} ${phase}`);
 }
@@ -82,8 +84,8 @@ for(const module of modules){
     }
     emit({version:1,module,kind:"files",intact:arms[0],empty:arms[1]});
   }catch(error){
-    const failure=error instanceof CommandNotMeasuredError||error instanceof ToolingInstrumentError||error instanceof PressureError?error:new ToolingInstrumentError("tooling-setup",`${module}: ${String(error)}`);
-    emit({version:1,module,kind:"unmeasured",cause:{kind:failure instanceof PressureError?"memory-pressure":failure.kind,reason:failure.message}});
+    const failure=error instanceof CommandNotMeasuredError||error instanceof ToolingInstrumentError||error instanceof PressureError||error instanceof CaseBudgetError?error:new ToolingInstrumentError("tooling-setup",`${module}: ${String(error)}`);
+    emit({version:1,module,kind:"unmeasured",cause:{kind:failure instanceof PressureError?"memory-pressure":failure instanceof CaseBudgetError?"case-budget":failure.kind,reason:failure.message}});
   }
 }
 process.stdout.write(`\nTOTAL                ${total} real, ${hollow} hollow, ${artifactFailures} artifact failures, ${unmeasured} not measured across ${modules.length} modules\n`);
