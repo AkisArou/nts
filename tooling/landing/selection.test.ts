@@ -218,7 +218,7 @@ test("the rules and the table together: docs, a tool and the compiler's core", (
   const docs = landingSelection({ owed: owes("docs/landing-example.md"), paths: ["docs/landing-example.md"], catalogue, table, inCorpus, rows, cost: fromHistory(), budget });
   assert.ok(docs.landing.every(l => l.form === "tree"), describeSelection(docs));
   const tool = landingSelection({ owed: owes("tooling/landing/queue.ts"), paths: ["tooling/landing/queue.ts"], catalogue, table, inCorpus, rows, cost: fromHistory(), budget });
-  assert.deepEqual(names(tool), ["build", "clippy", "old-paths", "rustfmt", "tests", "tooling"]);
+  assert.deepEqual(names(tool), ["build", "clippy", "old-paths", "rustfmt", "test-host", "tests", "tooling"]);
   // The core reaches the CLI and the suite through the crate graph, which add
   // their seconds-long checks (config, test262); its suites run after landing.
   const core = landingSelection({ owed: owes("compiler/core/src/landing-example.rs"), paths: ["compiler/core/src/landing-example.rs"], catalogue, table, inCorpus, rows, cost: fromHistory(), budget });

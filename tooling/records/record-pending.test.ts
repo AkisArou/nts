@@ -131,8 +131,8 @@ test('a record fixture cannot observe an improvement hint in another HOME',t=>{
   const root=tree(t),ownedHome=process.env.HOME;
   assert.deepEqual(oracleRefreshes(root),[],'the private fixture ignores foreign mutable state');
   try{process.env.HOME=outside;assert.throws(()=>oracleRefreshes(root),/invalid or misnamed fixture record/);}
-  finally{process.env.HOME=ownedHome;}
-  assert.equal(readFileSync(hint,'utf8'),' {"poisoned":true}'.trim(),'the foreign hint is retained');
+  finally{if(ownedHome===undefined)delete process.env.HOME;else process.env.HOME=ownedHome;}
+  assert.equal(readFileSync(hint,'utf8'),'{"poisoned":true}','the foreign hint is retained');
 });
 
 test("it records the pending and improved rows, every other byte as it was, and then has nothing to do", t => {

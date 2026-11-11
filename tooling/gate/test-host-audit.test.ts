@@ -11,7 +11,7 @@ import {hostObservations} from './host-observations.ts';
 import {activeCommand} from './active-process.ts';
 import {commandObservationFixture} from './command-observations-fixture.ts';
 import {waitFor} from './test-wait.ts';
-import {poisonedTestEnvironment} from './test-host-bootstrap.ts';
+import {installTestHost,poisonedTestEnvironment} from './test-host-bootstrap.ts';
 
 test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));
@@ -80,6 +80,19 @@ test('poisoned launcher state is removed before strict worker grants are install
   for(const name of ['NODE_OPTIONS','NODE_PATH','NTS_UNDECLARED_TEST_ENVIRONMENT'])assert.equal(environment[name],undefined,name);
   assert.notEqual(environment.HOME,'/unowned/test-home');
   assert.equal(hostObservations(environment).disk('/missing').freeBytes,2**40);
+});
+
+test('worker setup deletes native reservation variables instead of stringifying undefined',()=>{
+  const names=['NTS_MEMORY_PRIORITY','NTS_MEMORY_RESERVATION'] as const;
+  const saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+  try{
+    process.env.NTS_MEMORY_PRIORITY='agent';
+    process.env.NTS_MEMORY_RESERVATION='00000000-0000-4000-8000-000000000000';
+    installTestHost();
+    for(const name of names)assert.equal(Object.hasOwn(process.env,name),false,name);
+  }finally{
+    for(const name of names){if(saved[name]===undefined)delete process.env[name];else process.env[name]=saved[name];}
+  }
 });
 
 test('the tool records falls, permits improvements, and refuses a new or raised count',t=>{
