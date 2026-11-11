@@ -378,6 +378,7 @@ test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.j
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -504,6 +505,7 @@ test/language/expressions/assignment/dstr/array-elem-nested-obj-invalid.js	fail	
 test/language/expressions/assignment/dstr/array-elem-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-nested-obj.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-const.js	pass	
+test/language/expressions/assignment/dstr/array-elem-put-let.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref-init.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref.js	pass	
@@ -1090,6 +1092,7 @@ test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-not-final-id.j
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/async-generator/dstr/dflt-obj-init-undefined.js	pass	
 test/language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
+test/language/expressions/async-generator/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
@@ -1301,6 +1304,7 @@ test/language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-rest-no
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
+test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js	pass	
@@ -1407,6 +1411,7 @@ test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-fn.j
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -1497,6 +1502,7 @@ test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-fn-na
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -1587,6 +1593,7 @@ test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-init-fn-name-fn.js	pa
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -1677,6 +1684,7 @@ test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-init-fn-name-f
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -3140,6 +3148,7 @@ test/language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pass
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/function/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -3256,6 +3265,7 @@ test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pa
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/generators/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -3583,6 +3593,7 @@ test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-not-fina
 test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-init-undefined.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-throws.js	pass	
+test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-obj-value-null.js	pass	
@@ -3665,6 +3676,7 @@ test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-fn.
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -3755,6 +3767,7 @@ test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-fn.js	p
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/object/dstr/meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -5439,6 +5452,7 @@ test/language/statements/async-generator/dstr/dflt-ary-ptrn-rest-not-final-id.js
 test/language/statements/async-generator/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-init-undefined.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
+test/language/statements/async-generator/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
@@ -5669,6 +5683,7 @@ test/language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-rest-not
 test/language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
+test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js	pass	
@@ -5775,6 +5790,7 @@ test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-fn.js
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -5865,6 +5881,7 @@ test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-fn-nam
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -5955,6 +5972,7 @@ test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-init-fn-name-fn.js	pas
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -6045,6 +6063,7 @@ test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-init-fn-name-fn
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -6465,10 +6484,12 @@ test/language/statements/class/elements/private-field-as-arrow-function.js	pass
 test/language/statements/class/elements/private-field-as-async-arrow-function.js	pass	
 test/language/statements/class/elements/private-field-as-async-function.js	pass	
 test/language/statements/class/elements/private-field-as-function.js	pass	
+test/language/statements/class/elements/private-field-is-not-clobbered-by-computed-property.js	pass	
 test/language/statements/class/elements/private-generator-method-name.js	pass	
 test/language/statements/class/elements/private-getter-access-on-inner-arrow-function.js	fail	nts: uncaught Test262Error: accessed private accessor from an ordinary object
 test/language/statements/class/elements/private-getter-access-on-inner-function.js	fail	nts: uncaught Test262Error: accessed private accessor from an ordinary object
 test/language/statements/class/elements/private-getter-brand-check-super-class.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/elements/private-getter-is-not-clobbered-by-computed-property.js	pass	
 test/language/statements/class/elements/private-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/private-literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/private-method-access-on-inner-arrow-function.js	fail	nts: uncaught Test262Error: accessed private method from an ordinary object
@@ -6479,6 +6500,7 @@ test/language/statements/class/elements/private-method-comparison.js	fail	nts: u
 test/language/statements/class/elements/private-method-is-not-a-own-property.js	pass	
 test/language/statements/class/elements/private-method-is-not-clobbered-by-computed-property.js	pass	
 test/language/statements/class/elements/private-setter-brand-check-super-class.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/elements/private-setter-is-not-clobbered-by-computed-property.js	pass	
 test/language/statements/class/elements/private-static-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-static-async-method-name.js	pass	
 test/language/statements/class/elements/private-static-generator-method-name.js	pass	
@@ -7509,6 +7531,8 @@ test/language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-fn.js	pass
 test/language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-gen.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/for/dstr/const-ary-ptrn-elem-id-iter-complete.js	pass	
+test/language/statements/for/dstr/const-ary-ptrn-elem-id-iter-done.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-elem-obj-id.js	pass	
@@ -7545,6 +7569,8 @@ test/language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-fn.js	pass
 test/language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-gen.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/for/dstr/let-ary-ptrn-elem-id-iter-complete.js	pass	
+test/language/statements/for/dstr/let-ary-ptrn-elem-id-iter-done.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-obj-id.js	pass	
@@ -7581,6 +7607,8 @@ test/language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-fn.js	pass
 test/language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-gen.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/for/dstr/var-ary-ptrn-elem-id-iter-complete.js	pass	
+test/language/statements/for/dstr/var-ary-ptrn-elem-id-iter-done.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-obj-id.js	pass	
@@ -7631,6 +7659,8 @@ test/language/statements/function/S13.2.1_A9_T2.js	pass
 test/language/statements/function/S13.2_A7_T1.js	pass	
 test/language/statements/function/S13.2_A7_T2.js	pass	
 test/language/statements/function/S13_A10.js	pass	
+test/language/statements/function/S13_A19_T1.js	fail	nts: uncaught Test262Error: #2: __decl === 1. Actual: __decl ===function __decl() { [native code] }
+test/language/statements/function/S13_A19_T2.js	fail	nts: uncaught Test262Error: #2: __decl === 1. Actual: __decl ===function __decl() { [native code] }
 test/language/statements/function/S13_A4_T1.js	pass	
 test/language/statements/function/S13_A4_T2.js	pass	
 test/language/statements/function/S13_A7_T3.js	pass	
@@ -7712,6 +7742,7 @@ test/language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pass
 test/language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/function/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -7837,6 +7868,7 @@ test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pas
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/generators/dstr/dflt-obj-ptrn-list-err.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
@@ -8324,6 +8356,8 @@ test/language/types/reference/8.7.2-3-a-2gs.js	pass
 test/language/types/reference/8.7.2-8-s.js	pass	
 test/language/types/reference/S8.7.2_A1_T1.js	pass	
 test/language/types/reference/S8.7.2_A1_T2.js	pass	
+test/language/types/reference/S8.7_A2.js	pass	
+test/language/types/reference/S8.7_A3.js	pass	
 test/language/types/reference/S8.7_A6.js	pass	
 test/language/types/string/S8.4_A1.js	pass	
 test/language/types/string/S8.4_A10.js	pass	
