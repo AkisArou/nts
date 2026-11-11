@@ -21,7 +21,7 @@ Keep `lower` and `lower_with` at their public paths. The driver keeps the sequen
 
 Keep `Lowered`, `Arrivals` and its shared result records, `FuncBuilder`, `Shared`, `ProbeContext`, `Naming`, `PartialBlock`, and the shared `JumpTarget` type. A builder's fields are the private state used by the existing `impl FuncBuilder` blocks throughout the child modules. Its constructors, `finish`, `harvest`, and the common operation, block, type, and call helpers keep that shared state in one place. Specialized records such as `Hierarchy`, `ModuleScope`, `Place`, `Walk`, `Handler`, and `ClosureInfo` travel with their owners. `MODULE_INIT`, the existing `Substitution` re-export, module declarations, and the existing API facades stay here.
 
-The mapped core is 2,045 item lines. `Naming`, `naming`, and `wire_naming` assemble and carry the plans for printers, iterators, parameter entries, initialization, raising, presence, and field order. Their callers use that plan across lowering. Keeping the aggregate in the parent preserves its private fields. New module declarations, imports, and impl wrappers for the split add to that. Most moved bodies belong to files between roughly 500 and 1,700 item lines. The six additions to existing files account for those files' current sizes in the slice table.
+The mapped core is 2,048 item lines. `Naming`, `naming`, and `wire_naming` assemble and carry the plans for printers, iterators, parameter entries, initialization, raising, presence, and field order. Their callers use that plan across lowering. Keeping the aggregate in the parent preserves its private fields. New module declarations, imports, and impl wrappers for the split add to that. Most moved bodies belong to files between roughly 500 and 1,700 item lines. The six additions to existing files account for those files' current sizes in the slice table.
 
 ## Boundaries from the call graph
 
@@ -57,7 +57,7 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 
 | Slice | Destination | Item lines from lower.rs | Existing plus moved | Responsibility |
 | ---: | --- | ---: | ---: | --- |
-| kept | `lower.rs` | 2,045 | 2,045 | Public lowering entry, pipeline order, shared state, operation and block construction, and API facades. |
+| kept | `lower.rs` | 2,048 | 2,048 | Public lowering entry, pipeline order, shared state, operation and block construction, and API facades. |
 | | **Source facts and diagnostics** | | | |
 | 1 | `lower/snapshot_queries.rs` | 762 | 762 | Query snapshot nodes, bindings, source scopes, and source traversal without choosing HIR. |
 | 2 | `lower/diagnostics.rs` | 1,526 | 1,526 | Spell types and refusal causes, attribute diagnostics to declarations, and reconcile the final refused set with emitted bodies. |
@@ -87,7 +87,7 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | 24 | `lower/module_exports.rs` | 693 | 693 | Compute the public surface from the entry roots and publish exports or their refusal. |
 | 25 | `lower/module_evaluation.rs` | 1,242 | 1,242 | Plan module evaluation order and state, probe cut initializers, and lower their evaluation bodies. |
 | 26 | `lower/generic_copies.rs` | 386 | 386 | Enumerate checker-materialized function and class instantiations and their declaration copies. |
-| 27 | `lower/structural_copies.rs` | 882 | 882 | Plan copies of otherwise non-generic bodies from argument storage, including the copy key and retyped symbols. |
+| 27 | `lower/structural_copies.rs` | 879 | 879 | Plan copies of otherwise non-generic bodies from argument storage, including the copy key and retyped symbols. |
 | 28 | `lower/raising_reachability.rs` | 1,062 | 1,062 | Collect the body-level graph of throws, handlers, and potential raising callees. |
 | 29 | `lower/raising_copies.rs` | 1,442 | 1,442 | Choose which bodies and dispatch slots get a raising copy and record the reason an eligible route is held. |
 | 30 | `lower/capture_discovery.rs` | 1,452 | 1,452 | Discover closure identities, captured bindings, and closure variants needed by specialized bodies. |
@@ -188,6 +188,14 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | `parameters_of` at 3,669 | `parameters.rs` | The query supplies declared parameter nodes to calls, interfaces, and parameter binding. |
 | `UniformArguments` at 4,548 | `signature_entries.rs` | The argument routing record moves with its impl and the signature entry rules. |
 | `lower_assertion` at 38,237 | `coercion.rs` | An explicit assertion lowers its operand and delegates to the existing assertion checks. |
+
+### Ownership corrections from section 3
+
+| Baseline item | Destination | Caller or shared responsibility |
+| --- | --- | --- |
+| The `closed_calls`, `erased_calls`, and `generic_values` declarations at 11,133–11,135 | `lower.rs` | The parent owns existing module paths and shared facades. Structural copy planning imports their helpers through those paths. |
+
+Existing documentation links follow their targets into the new modules. A target referenced from another lowering module keeps parent-scoped access, preserving its original `hir::lower` boundary. Rendered labels stay the same.
 
 ## Source inventory
 
@@ -523,9 +531,9 @@ The rows use baseline coordinates and count inclusive source lines. An indented 
 11058–11075    18  structural_copies        lower        fn member_symbols
 11077–11124    48  structural_copies        lower        fn planned_callee
 11126–11131     6  structural_copies        private*     struct PendingCopy
-11133–11133     1  structural_copies        private      mod closed_calls
-11134–11134     1  structural_copies        private      mod erased_calls
-11135–11135     1  structural_copies        private      mod generic_values
+11133–11133     1  lower                    private      mod closed_calls
+11134–11134     1  lower                    private      mod erased_calls
+11135–11135     1  lower                    private      mod generic_values
 11137–11143     7  structural_copies        private*     struct StructuralPlanner
 11145–11232    88  structural_copies        lower        fn structural_instantiations
 11234–11252    19  structural_copies        private*     fn planned_signature
