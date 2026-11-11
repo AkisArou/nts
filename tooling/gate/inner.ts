@@ -1,3 +1,4 @@
+import {hostObservations} from "./host-observations.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
 // machine allows -- the gate's own core commands, not look-alikes.
@@ -116,7 +117,7 @@ const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
 type Phase = { key: string; what: string; memoryMax: string; workers: number };
 
 /** The workers a cargo phase runs: the gate's slots on this machine. */
-const CARGO_WORKERS = defaultSlots(availableParallelism());
+const CARGO_WORKERS = defaultSlots(hostObservations().availableWidth());
 
 /**
  * A heavy command: admitted by the memory ledger for what this phase held

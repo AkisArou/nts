@@ -132,10 +132,11 @@
 // at a lowering or backend refusal the checker had kept out of sight.
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
+import {hostObservations} from "../gate/host-observations.ts";
 import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { availableParallelism, homedir, loadavg } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -185,7 +186,7 @@ const under = flag("--under", TYPESCRIPT ? "tests/typescript" : "test/language")
 // Eight, not a fraction of the cores: memory, not CPU, is what ran out. The
 // frontend is the large process, and eight of them at their ordinary ~100 MB
 // leave room for one case that climbs to the cap.
-const jobs = Number(flag("--jobs", String(Math.min(8, availableParallelism()))));
+const jobs = Number(flag("--jobs", String(Math.min(8, hostObservations().availableWidth()))));
 const sample = Number(flag("--sample", "0")) || 0;
 const rowsFile = flag("--rows", null);
 const resume = argv.includes("--resume");
@@ -278,38 +279,22 @@ const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".ca
  * claim, so it is in the output.
  *
  * The readings are the kernel's, unless the run was given its own
- * (NTS_MEMINFO, NTS_VMSTAT): a test gives its census an ample machine that
+ * (NTS_HOST_OBSERVATIONS): a test gives its census an ample machine that
  * pages nothing (tooling/gate/test-memory.ts), so the host's paging never
  * decides whether its writer writes.
  */
 function machineState() {
-  const info = Object.fromEntries(
-    readFileSync(process.env.NTS_MEMINFO ?? "/proc/meminfo", "utf8")
-      .split("\n")
-      .map((line) => /^(\w+):\s+(\d+)/.exec(line))
-      .filter(Boolean)
-      .map(([, key, kb]) => [key, Number(kb)]),
-  );
-  const gb = (kb) => (kb / 1024 / 1024).toFixed(1);
-  const [one, five] = loadavg();
-  const vm = Object.fromEntries(
-    readFileSync(process.env.NTS_VMSTAT ?? "/proc/vmstat", "utf8")
-      .split("\n")
-      .map((line) => line.split(" "))
-      .filter(([key]) => key === "pswpin" || key === "pswpout")
-      .map(([key, value]) => [key, Number(value)]),
-  );
+  const host=hostObservations(),memory=host.memory(),swap=host.swap(),paging=host.paging();
+  const gb=(bytes:number)=>Number((bytes/2**30).toFixed(1));
+  const [one,five]=host.load();
   return {
-    at: Date.now(),
-    pages_swapped: (vm.pswpin ?? 0) + (vm.pswpout ?? 0),
-    available_gb: Number(gb(info.MemAvailable ?? 0)),
-    swap_used_gb: Number(gb((info.SwapTotal ?? 0) - (info.SwapFree ?? 0))),
-    swap_total_gb: Number(gb(info.SwapTotal ?? 0)),
-    load: [Number(one.toFixed(1)), Number(five.toFixed(1))],
-    cores: availableParallelism(),
+    at:Date.now(),pages_swapped:paging.inputPages+paging.outputPages,
+    available_gb:gb(memory.availableBytes),swap_used_gb:gb(swap.totalBytes-swap.freeBytes),
+    swap_total_gb:gb(swap.totalBytes),load:[Number(one.toFixed(1)),Number(five.toFixed(1))],cores:host.availableWidth(),
   };
 }
 const machineAtStart = machineState();
+const machineStarted=hostObservations().now();
 
 /** The least memory seen while the run was going, sampled at each progress mark. */
 let lowestAvailableGb = machineAtStart.available_gb;
@@ -1115,7 +1100,7 @@ say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
 // for case or they do not. On 2026-09-28 two runs at 502 and 2,458 pages/s
 // (a VM paging back in, 11.6 GB free throughout) agreed on all 30,179 rows. So
 // the warning names the control, rather than leaving a busy box unrecordable.
-const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
+const seconds = Math.max(1, (hostObservations().now() - machineStarted) / 1000);
 const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
 say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB`);
 say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);

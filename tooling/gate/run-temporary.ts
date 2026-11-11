@@ -1,8 +1,9 @@
 // Only registered, closed run/tmp roots are an evictable cache. Logs, published
 // artifacts and other scratch roots are outside this policy.
+import {hostObservations,type HostObservations} from "./host-observations.ts";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,statfsSync,writeFileSync} from "node:fs";
+import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
 import {dirname,join,resolve,relative,isAbsolute} from "node:path";
 
@@ -46,7 +47,7 @@ export function assertRunTemporary(owned:RunTemporary,home:string):void {
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid!==process.getuid?.() || stat.uid!==owned.uid || stat.dev!==owned.dev || stat.ino!==owned.ino || realpathSync(dirname(owned.path))!==owned.parent) throw new Error(`run temporary directory was replaced: ${owned.path}`);
 }
 
-export type PruneOptions={maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number};
+export type PruneOptions={maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number;host?:HostObservations};
 // A run can own read-only captured inputs. Restore directory permissions only
 // after assertRunTemporary() authenticates this exact root; never traverse a link.
 // Names are walked as bytes: one that is not UTF-8, which a test writes on
@@ -101,7 +102,7 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
   }
   entries.sort((a,b)=>a.closed-b.closed || a.file.localeCompare(b.file));
   let total=entries.reduce((sum,entry)=>sum+entry.bytes,0);
-  const free=options.freeBytes ?? (()=>{const stat=statfsSync(directory);return stat.bavail*stat.bsize;});
+  const free=options.freeBytes ?? (()=>(options.host??hostObservations()).disk(directory).freeBytes);
   for (const entry of entries) {
     freeBytes=free();
     if (total<=maxBytes && freeBytes>=minimumFreeBytes) break;

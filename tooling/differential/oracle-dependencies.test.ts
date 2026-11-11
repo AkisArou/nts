@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {test} from 'node:test';
 import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage} from './oracle-dependencies.ts';
-import {ownMemory} from '../gate/test-memory.ts';
+import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 test('dependency protection rejects external inodes before any chmod and private copies leave the origin unchanged',t=>{
@@ -52,6 +52,14 @@ test('complete package inventories are stable across scratch roots and cover a N
 
 function installFixture(t:import('node:test').TestContext){
   const parent=mkdtempSync(join(tmpdir(),'oracle-install-inputs-')),root=join(parent,'source');mkdirSync(root);
+  const memory=ownMemory(join(parent,'memory'));
+  const before=new Map([...Object.keys(memory),'NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY'].map(name=>[name,process.env[name]]));
+  useOwnMemory(join(parent,'memory'));
+  const writable=(path:string)=>{const info=lstatSync(path);if(info.isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}};
+  t.after(()=>{
+    for(const [name,value] of before){if(value===undefined)delete process.env[name];else process.env[name]=value;}
+    writable(parent);rmSync(parent,{recursive:true,force:true});
+  });
   cpSync(join(fileURLToPath(new URL('../../',import.meta.url)),'tooling'),join(root,'tooling'),{recursive:true});
   const write=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
   const git=(...args:string[])=>execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{cwd:root,encoding:'utf8'}).trim();
@@ -62,8 +70,6 @@ function installFixture(t:import('node:test').TestContext){
   write('docs/outside.md','outside input control\n');git('init','--quiet');git('add','--','.');git('commit','--quiet','-m','Bind install input fixture');
   const parentCapability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES!),admission=parentCapability.admission;
   const cap=(name:string)=>dependencyCapability(root,join(parent,'capture-'+name,'tmp','dependencies'),admission,parentCapability.ownerStep??null);
-  const writable=(path:string)=>{const info=lstatSync(path);if(info.isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}};
-  t.after(()=>{writable(parent);rmSync(parent,{recursive:true,force:true});});
   return {root,parent,write,git,cap};
 }
 

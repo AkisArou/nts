@@ -127,6 +127,7 @@
 // the peak goes to that history when the reservation ends. An entry says
 // which of its keys were sized without a measurement of their own
 // (`unmeasured`), and which have held more than they reserved (`over`).
+import {hostObservations,hostObservationEnvironment,HostObservationError,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
@@ -184,7 +185,6 @@ const CGROUP_ROOT = "/sys/fs/cgroup";
 const POLL_MS = 1000;
 const LOCK_RETRY_MS = 20;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const KIB = 1024;
 
 const UNITS: Readonly<Record<string, number>> = { "": 1, k: 2 ** 10, m: 2 ** 20, g: 2 ** 30, t: 2 ** 40 };
 
@@ -206,23 +206,11 @@ export const gib = (bytes: number) => bytes >= 2 ** 30 || bytes <= -(2 ** 30) ? 
 export type Meminfo = { availableBytes: number; totalBytes: number };
 
 /** MemAvailable and MemTotal from /proc/meminfo's format, or null without both. */
-export function parseMeminfo(text: string): Meminfo | null {
-  const kib = (name: string) => new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(text)?.[1];
-  const available = kib("MemAvailable"), total = kib("MemTotal");
-  return available === undefined || total === undefined ? null : { availableBytes: Number(available) * KIB, totalBytes: Number(total) * KIB };
-}
+export const parseMeminfo = parseMemory;
 
-function readMeminfo(path: string): Meminfo {
-  const meminfo = parseMeminfo(readFileSync(path, "utf8"));
-  if (meminfo === null) throw new Error(`${path} names no MemAvailable and MemTotal`);
-  return meminfo;
-}
-
-const meminfoPath = (env: NodeJS.ProcessEnv) => env.NTS_MEMINFO ?? "/proc/meminfo";
-
-/** The reading decisions are made by: the file NTS_MEMINFO names in `env`, else the kernel's. */
-export function machineMemory(env: NodeJS.ProcessEnv = process.env): Meminfo {
-  return readMeminfo(meminfoPath(env));
+/** The complete resource view this run owns, or the live adapter. */
+export function machineMemory(env:NodeJS.ProcessEnv=process.env):Meminfo {
+  return hostObservations(env).memory();
 }
 
 /**
@@ -236,20 +224,8 @@ export function neverFits(bytes: number, totalBytes: number, asks: string): stri
 }
 
 /** What a process maps that no other job can have: its anonymous and shared memory, from /proc/<pid>/status. */
-export function processCharge(status: string): number {
-  const kib = (name: string) => Number(new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(status)?.[1] ?? 0);
-  return (kib("RssAnon") + kib("RssShmem")) * KIB;
-}
-
-/** What a cgroup holds that no other job can have: memory.current less the file pages and reclaimable slab MemAvailable counts as available. */
-export function cgroupCharge(current: string, stat: string): number {
-  const field = (name: string) => {
-    const value = new RegExp(`^${name} (\\d+)$`, "m").exec(stat)?.[1];
-    if (value === undefined) throw new Error(`memory.stat has no ${name}`);
-    return Number(value);
-  };
-  return Math.max(0, Number(current.trim()) - field("active_file") - field("inactive_file") - field("slab_reclaimable"));
-}
+export const processCharge = parseProcessCharge;
+export const cgroupCharge = parseCgroupCharge;
 
 type Stat = { state: string; ppid: number; start: string };
 
@@ -359,18 +335,18 @@ function ownCgroup(pid: number): CgroupRef | null {
   return ownedBy(pid, members, processTable()) ? { path, inode: inodeOf(CGROUP_ROOT + path) } : null;
 }
 
-function readCgroupCharge(ref: CgroupRef): number {
+function readCgroupCharge(ref: CgroupRef, host:HostObservations): number {
   const dir = CGROUP_ROOT + ref.path;
   try {
     // Another cgroup by the same name: the job's own has gone, and what is
     // gone is charged nothing, which leaves its whole reservation pending.
     if (inodeOf(dir) !== ref.inode) return 0;
-    return cgroupCharge(readFileSync(join(dir, "memory.current"), "utf8"), readFileSync(join(dir, "memory.stat"), "utf8"));
+    return host.cgroupCharge(ref.path);
   } catch (error) { if (gone(error)) return 0; throw error; }
 }
 
-function readProcessCharge(pid: number): number {
-  try { return processCharge(readFileSync(`/proc/${pid}/status`, "utf8")); }
+function readProcessCharge(pid: number, host:HostObservations): number {
+  try { return host.processCharge(pid); }
   catch (error) { if (gone(error)) return 0; throw error; }
 }
 
@@ -382,17 +358,17 @@ const NONE: ReadonlySet<number> = new Set();
  * job's to count -- the watcher of its peak, in the job's cgroup; what a
  * reservation drawn on this one measures itself -- are not counted.
  */
-function measured(entry: LedgerEntry, table: () => Table, exclude: ReadonlySet<number> = NONE): number {
+function measured(entry: LedgerEntry, table: () => Table, exclude: ReadonlySet<number> = NONE, host:HostObservations=hostObservations()): number {
   const { tree, cgroup } = entry.measure;
   let bytes = 0;
   let inside: ReadonlySet<number> = NONE;
   if (cgroup !== null) {
-    bytes += readCgroupCharge(cgroup);
+    bytes += readCgroupCharge(cgroup, host);
     const members = tree || exclude.size ? cgroupMembers(cgroup.path) : [];
     if (tree) inside = new Set(members);
-    for (const pid of members) if (exclude.has(pid)) bytes -= readProcessCharge(pid);
+    for (const pid of members) if (exclude.has(pid)) bytes -= readProcessCharge(pid, host);
   }
-  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid) && !exclude.has(pid)) bytes += readProcessCharge(pid);
+  if (tree) for (const pid of processTree(entry.owner.pid, table())) if (!inside.has(pid) && !exclude.has(pid)) bytes += readProcessCharge(pid, host);
   return Math.max(0, bytes);
 }
 
@@ -627,7 +603,7 @@ export type JointAdmission = {
 };
 
 export type ReserveOptions = {
-  /** Read for RESERVATION_ENV, LEDGER_ENV and NTS_MEMINFO; process.env unless given. */
+  /** Read for RESERVATION_ENV, LEDGER_ENV and NTS_HOST_OBSERVATIONS; process.env unless given. */
   env?: NodeJS.ProcessEnv;
   /** The ledger's directory; else LEDGER_ENV, else LEDGER_DIR. */
   dir?: string;
@@ -839,7 +815,7 @@ function measureFor(owner: ProcessIdentity, cgroup: string | undefined): Measure
 }
 
 type Context = {
-  dir: string; meminfo: string; every: number;
+  dir: string; host: HostObservations; every: number;
   report: (line: string) => void; observe: (decision: Decision) => void;
   used: (entry: LedgerEntry, table: () => Table, exclude: ReadonlySet<number>) => number;
 };
@@ -950,7 +926,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   if (registered && !listed) report(`memory: ${self.what}'s ${requestFor(self)} left the ledger while it waited; it asks again, at the back of the queue`);
   if (!listed) self.seq = 1 + Math.max(0, ...waiting.map(entry => entry.seq));
 
-  const { availableBytes } = readMeminfo(context.meminfo);
+  const { availableBytes } = context.host.memory();
   let table: Table | undefined;
   const read = () => table ??= processTable();
   const accounts = accountsOf(admitted, (entry, exclude) => context.used(entry, read, exclude), read);
@@ -1064,11 +1040,11 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
       const { decision } = outcome;
       if (decision.admitted) {
         admitted();
-        return { decision, waitedMs: waitedFrom === undefined ? null : Date.now() - waitedFrom };
+        return { decision, waitedMs: waitedFrom === undefined ? null : context.host.now() - waitedFrom };
       }
       context.observe(decision);
       if (waitedFrom === undefined) {
-        waitedFrom = Date.now();
+        waitedFrom = context.host.now();
         context.report(`memory: ${self.what} ${waits()} (${self.priority}): ${gib(decision.availableBytes)} available, `
           + `${gib(decision.pendingBytes)} of it promised to running jobs, ${gib(SYSTEM_FLOOR_BYTES)} kept for the system`
           + (decision.ahead ? `; ${decision.ahead} ahead of it in the queue` : "")
@@ -1103,7 +1079,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (released) throw new Error(`memory: ${self.what}'s reservation has been released, so it cannot grow`);
       if (self.liveUse) return; // No forecast: live accounting follows its use instead.
       if (growing !== null) throw new Error(`memory: ${self.what} already waits to grow; it grows by one request at a time`);
-      const never = neverFits(bytes + more, readMeminfo(context.meminfo).totalBytes, `${self.what} asks to grow by ${gib(more)} to ${gib(bytes + more)}`);
+      const never = neverFits(bytes + more, context.host.memory().totalBytes, `${self.what} asks to grow by ${gib(more)} to ${gib(bytes + more)}`);
       if (never !== null) throw new RangeError(never);
       const waiter = processIdentity(process.pid);
       if (waiter === null) throw new Error("this process has no identity in /proc");
@@ -1189,8 +1165,8 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   const pid = request.owner?.pid ?? process.pid;
   const owner = pid === process.pid ? waiter : processIdentity(pid);
   if (owner === null) throw new Error(`memory: ${what}'s owner, pid ${pid}, is not running`);
-  const meminfo = meminfoPath(env);
-  const never = neverFits(bytes, readMeminfo(meminfo).totalBytes, `${what} asks ${gib(bytes)}`);
+  const host = hostObservations(env);
+  const never = neverFits(bytes, host.memory().totalBytes, `${what} asks ${gib(bytes)}`);
   if (never !== null) throw new RangeError(never);
   const unmeasured = [...new Set(request.unmeasured ?? [])];
   if (!keyList(unmeasured)) throw new TypeError(`memory: ${what}'s unmeasured keys are not step or job keys: ${unmeasured.join(", ")}`);
@@ -1209,8 +1185,8 @@ export async function reserve(request: ReserveRequest, options: ReserveOptions =
   };
   const used = options.used;
   const context: Context = {
-    dir, meminfo, report, every: options.everyMs ?? POLL_MS, observe: options.observe ?? (() => {}),
-    used: used ? entry => used(entry) : measured,
+    dir, host, report, every: options.everyMs ?? POLL_MS, observe: options.observe ?? (() => {}),
+    used: used ? entry => used(entry) : (entry, table, exclude) => measured(entry, table, exclude, host),
   };
   const { decision, waitedMs } = await wait(context, self, options.signal, () => `waits for ${gib(bytes)}`, undefined, options.joint);
   const reservation = holding(self, context);
@@ -1280,9 +1256,9 @@ export const WATCH_MS = POLL_MS;
  * the history is observation-only.
  */
 export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units"> & { key: string },
-  report: (line: string) => void): void {
+  report: (line: string) => void, env:NodeJS.ProcessEnv=process.env): void {
   const started = spawnSync("setsid", ["-f", process.execPath, fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, String(job.units)],
-    { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } });
+    { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostObservationEnvironment(env) } });
   if (started.status !== 0) report(`memory: ${job.key}'s peak goes unmeasured: its watcher did not start (${started.error?.message ?? `setsid ended ${started.status ?? started.signal}`})`);
 }
 
@@ -1292,25 +1268,25 @@ export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: 
  * process is sampled all the same. `stop` ends it, and returns the most the
  * reservation's measure held, its own last sample included.
  */
-function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string): { stop(): number } {
+function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string, env:NodeJS.ProcessEnv): { stop(): number } {
   const shared = new SharedArrayBuffer(8), cell = new BigInt64Array(shared);
-  let worker: Worker | null = null;
+  let worker: Worker | null = null, fixtureFailure:Error|undefined;
   try {
-    worker = new Worker(WATCHER, { workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared } });
+    worker = new Worker(WATCHER, { workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, observations:hostObservationEnvironment(env) } });
     worker.unref();
     // A sampler that fails leaves the job less measured, never stopped.
-    worker.on("error", () => {});
-  } catch { worker = null; }
+    worker.on("error", error => {if(error instanceof Error && error.name==="HostObservationError")fixtureFailure=error;});
+  } catch(error) { if(error instanceof HostObservationError)throw error;worker = null; }
   return {
     stop() {
       let last = 0;
       try {
         const entry = admittedEntry(reservation.ledger, reservation.id);
-        if (entry !== null) last = entryUsage(entry);
-      } catch { /* the last sample is missed */ }
-      void worker?.terminate();
-      worker = null;
-      return Math.max(last, Number(Atomics.load(cell, 0)));
+        if (entry !== null) last = entryUsage(entry,{env});
+        if(fixtureFailure)throw fixtureFailure;
+        return Math.max(last, Number(Atomics.load(cell, 0)));
+      } catch(error) { if(error instanceof HostObservationError || (error as Error).name==="HostObservationError")throw error;return Number(Atomics.load(cell,0)); }
+      finally {void worker?.terminate();worker=null;}
     },
   };
 }
@@ -1340,7 +1316,8 @@ export async function reserveJob(request: JobRequest,
   const held = await reserve({ bytes: sizing.bytes, what: request.what, priority: priorityOf(env), liveUse: sizing.basis === "live", unmeasured: sizing.basis === "measured" ? [] : [request.key] },
     { env, signal: options.signal, report });
   if (held.inherited) return held;
-  const sampler = samplePeak(held, request.key);
+  let sampler:ReturnType<typeof samplePeak>;
+  try{sampler=samplePeak(held,request.key,env);}catch(error){held.release();throw error;}
   // What the environment named before, so that the release leaves it so: a
   // ledger the job was already given stays its ledger.
   const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
@@ -1351,13 +1328,16 @@ export async function reserveJob(request: JobRequest,
     if (released) return;
     released = true;
     process.off("exit", release);
-    const peak = sampler.stop();
-    held.release();
-    for (const [name, value] of Object.entries(held.env)) {
-      if (env[name] !== value) continue;
-      const was = before.get(name);
-      if (was === undefined) delete env[name];
-      else env[name] = was;
+    let peak:number;
+    try{peak=sampler.stop();}
+    finally {
+      held.release();
+      for (const [name, value] of Object.entries(held.env)) {
+        if (env[name] !== value) continue;
+        const was = before.get(name);
+        if (was === undefined) delete env[name];
+        else env[name] = was;
+      }
     }
     if (peak <= 0) return;
     const warning = writeCostHistory(sizing.history, { jobs: [{ key: request.key, peak: Math.ceil(peak / sizing.units) }] });
@@ -1390,8 +1370,8 @@ export function admittedEntry(dir: string, id: string): LedgerEntry | null {
  * is not the job's, is not counted. A reservation drawn on this one counts
  * here too: this is what the job held, as its history learns it.
  */
-export function entryUsage(entry: LedgerEntry, options: { exclude?: number } = {}): number {
-  return measured(entry, processTable, options.exclude === undefined ? NONE : new Set([options.exclude]));
+export function entryUsage(entry: LedgerEntry, options: { exclude?: number; env?:NodeJS.ProcessEnv } = {}): number {
+  return measured(entry, processTable, options.exclude === undefined ? NONE : new Set([options.exclude]), hostObservations(options.env));
 }
 
 /** The ledger as a status reader prints it: kind "memory", in `check.ts status --json`'s envelope. */
@@ -1432,7 +1412,7 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
   const now = Date.now();
   // A dead entry is dropped by the next decision, so it uses and promises nothing.
   const live = new Map(view.admitted.filter(entry => entry.live).map(entry => [entry.id, entry]));
-  const accounts = accountsOf(live, (entry, exclude) => measured(entry, read, exclude), read);
+  const accounts = accountsOf(live, (entry, exclude) => measured(entry, read, exclude, hostObservations(env)), read);
   const admitted = view.admitted.map(entry => {
     const account = accounts.get(entry.id) ?? { used: 0, lent: 0, drawn: 0 };
     const on = entry.live ? drawnOn(entry, live) : undefined;

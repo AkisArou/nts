@@ -12,6 +12,7 @@ import {GateResource} from '../gate/gate-resource.ts';
 import {managerPin,withPackageManager} from '../inputs/package-manager.ts';
 import {activeCommand} from '../gate/active-command.ts';
 import {TemporaryAdmission,type TemporaryAdmissionContext} from '../gate/admission.ts';
+import {hostObservations} from '../gate/host-observations.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
@@ -159,7 +160,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
   checked(capability);
   const ledger=join(capability.admission.kind==='gate'?capability.admission.temporary.parent:capability.directory,'oracle-dependency-calls.jsonl');
   capability={...capability,directory:join(capability.directory,'node-'+process.versions.node)};
-  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES});
+  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES,host:hostObservations(env)});
   mkdirSync(capability.directory,{recursive:true});
   const recordCall=(mode:'cold'|'hit'|'held')=>appendFileSync(ledger,JSON.stringify({version:1,step:capability.ownerStep,nodeVersion:process.versions.node,directory:capability.directory,mode,wallMs:performance.now()-callStart,...counts})+'\n');
   let lock:GateResource|null;

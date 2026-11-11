@@ -215,6 +215,8 @@ type MemoryFixture = {
   availableKiB: number;
   /** The machine's size, 32 GiB unless given. */
   totalKiB?: number;
+  /** Only kernel wiring controls opt into actual resident sampling. */
+  liveResident?:boolean;
   /** Values the launcher's code owns beyond the fixture's. */
   owned?: Record<string, string>;
   /** The run's place in the ledger's queue, as its launcher's code gives it. */
@@ -235,7 +237,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -287,7 +289,7 @@ else
   exec sh "$(dirname "$0")/payload.sh" "$2" ${JSON.stringify(own)}
 fi
 `);
-  const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB });
+  const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB,resident:liveResident?{kind:"live"}:{kind:"fixed",defaultBytes:2**20} });
   const history = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
   writeFileSync(history, JSON.stringify({ version: 3, jobs: {}, steps: Object.fromEntries(Object.entries(rows).flatMap(([name, row]) => row.reserve === undefined ? []
@@ -378,14 +380,14 @@ esac
 // first step says so, and gives them back once the run waits to grow behind it.
 const NEIGHBOUR = `import { existsSync, readdirSync, readFileSync, watch } from "node:fs";
 import { join } from "node:path";
-const [ledger, meminfo, own, module] = process.argv.slice(1);
+const [ledger, observations, own, module] = process.argv.slice(1);
 const { reserve } = await import(module);
 const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
 const growing = () => readdirSync(join(ledger, "waiting")).some(name => {
   try { return name.endsWith(".json") && JSON.parse(readFileSync(join(ledger, "waiting", name), "utf8")).grows !== null; } catch { return false; }
 });
 await until(own, () => existsSync(join(own, "ask")));
-const held = await reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 });
+const held = await reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 });
 await until(join(ledger, "waiting"), growing);
 held.release();
 `;
@@ -412,7 +414,7 @@ esac
     before: (own, memory) => {
       const env: NodeJS.ProcessEnv = { ...process.env };
       delete env.NTS_MEMORY_RESERVATION;
-      neighbour = spawn(process.execPath, ["--input-type=module", "-e", NEIGHBOUR, memory.NTS_MEMORY_LEDGER, memory.NTS_MEMINFO, own,
+      neighbour = spawn(process.execPath, ["--input-type=module", "-e", NEIGHBOUR, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
         pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });
     },
   });
@@ -431,7 +433,7 @@ esac
 // other job ends. It says how its request went, and gives the memory back.
 const LANDING = `import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
-const [ledger, meminfo, own, module] = process.argv.slice(1);
+const [ledger, observations, own, module] = process.argv.slice(1);
 const { reserve } = await import(module);
 const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
 const admitted = join(ledger, "admitted");
@@ -439,7 +441,7 @@ mkdirSync(admitted, { recursive: true });
 const run = test => () => readdirSync(admitted).some(name => {
   try { const entry = JSON.parse(readFileSync(join(admitted, name), "utf8")); return entry.what.startsWith("gate run ") && test(entry.bytes); } catch { return false; }
 });
-const options = { env: { NTS_MEMINFO: meminfo, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 };
+const options = { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 };
 await until(admitted, run(bytes => bytes >= 4 * 2 ** 30));
 const other = await reserve({ bytes: 3.5 * 2 ** 30, what: "another landing job", priority: "landing" }, options);
 const lines = [];
@@ -487,7 +489,7 @@ esac
       fixture = own;
       const env: NodeJS.ProcessEnv = { ...process.env };
       delete env.NTS_MEMORY_RESERVATION;
-      landing = spawn(process.execPath, ["--input-type=module", "-e", LANDING, memory.NTS_MEMORY_LEDGER, memory.NTS_MEMINFO, own,
+      landing = spawn(process.execPath, ["--input-type=module", "-e", LANDING, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
         pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });
     },
   });
@@ -511,7 +513,7 @@ test("a step's charged peak sizes its next run, and a step that held more than i
   // never measured here, reserves the largest of its kind, and copies the
   // run's ledger entry while the run holds it.
   const { result, summary, step, output, history, canonical } = memoryRun(t, {
-    steps: "format records", availableKiB: 16 * 2 ** 20,
+    liveResident:true, steps: "format records", availableKiB: 16 * 2 ** 20,
     rows: { format: { slots: 1, reserve: 0.125, bound: 120 }, records: { slots: 1, after: ["format"], bound: 120 } },
     times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
     payload: `
@@ -552,7 +554,7 @@ test("a narrow census step with no history passes a case that needs more than it
   // fits a worker's own 1 GiB cap: the census aggregate is never below that
   // cap, so the case passes here as in a tree whose history knew it.
   const { result, summary, step, output } = memoryRun(t, {
-    steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
+    liveResident:true, steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
     acknowledgeCharge: 700 * MiB,
     rows: { format: { slots: 1, bound: 300 } },
     owned: { NTS_CENSUS_MEMORY_CAP_KB: String(2 ** 20) },
@@ -624,10 +626,11 @@ test("a step that fills past its grant, under its runaway bound, is never thrott
   // the full check's unit (500) the run keeps 500.
   const inherited = Number(readFileSync("/proc/self/oom_score_adj", "utf8"));
   const { result, summary, step, output } = memoryRun(t, {
-    steps: "format", availableKiB: 16 * 2 ** 20,
+    liveResident:true, acknowledgeCharge:GiB, steps: "format", availableKiB: 16 * 2 ** 20,
     rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
     times: "format\t100\t20\t1\n",
-    payload: `\ncase $1 in\n  format) echo "oom_score_adj $(cat /proc/self/oom_score_adj)"; ${fill(1, 1)} ;;\nesac\n`,
+    before:own=>{assert.equal(spawnTest("mkfifo",[join(own,"charge-observed")],{encoding:"utf8"}).status,0);},
+    payload: `\ncase $1 in\n  format) echo "oom_score_adj $(cat /proc/self/oom_score_adj)"; exec node -e 'const fs=require("node:fs"),held=Buffer.alloc(2**30,1);fs.readFileSync(process.argv[1]);console.log(held.length)' "$2/charge-observed" ;;\nesac\n`,
   });
   assert.equal(result.status, 0, output);
   const format = step("format");
@@ -645,7 +648,7 @@ test("a step past its runaway bound is killed there and held as memory pressure,
   // so no step's bound is above it. format fills 2 GiB at once and the
   // kernel kills it at its bound.
   const { result, summary, step, output } = memoryRun(t, {
-    steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
+    liveResident:true, steps: "format", availableKiB: 3 * 2 ** 20, totalKiB: 3 * 2 ** 20,
     rows: { format: { slots: 1, reserve: 0.25, bound: 120 } },
     times: "format\t100\t20\t1\n",
     payload: `\ncase $1 in\n  format) ${fill(2, 1)} ;;\nesac\n`,

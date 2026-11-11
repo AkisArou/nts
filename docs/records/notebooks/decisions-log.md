@@ -2039,3 +2039,20 @@ the run's reservation against its empty startup queue, and allowed setup to
 resume into workers whose tokens could no longer obtain memory. Scheduling now
 starts after setup and token initialization. Loss of a live run's reservation
 stops and names its unfinished work.
+
+
+## Tests own their view of the host (11-11)
+
+The resource contract lives in [workflow](../../workflow.md#the-machine) and
+AGENTS.md. #695 introduces one complete HostObservations capability for each
+fixture, propagated through gateEnvironment to dependencies, child processes
+and peak samplers. It supplies disk space and inodes, memory, paging, resident
+charge, machine width, load and a monotonic clock. Missing observations fail by
+name instead of selecting the live host. Production uses the live adapter;
+pure decisions receive observations, while kernel wiring controls explicitly
+select live sampling and wait on readiness in their own units.
+
+The priority-admission control's synthetic memory did not cover oracle startup's
+real disk admission. It waited below the disk floor before reaching its fake
+execution clock. The inventory and landing-run evidence are attached to #694;
+#695 is the resource capability slice of that group.

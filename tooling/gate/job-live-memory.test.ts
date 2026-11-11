@@ -22,7 +22,7 @@ const MiB = 2 ** 20;
 
 function fixture(t: TestContext) {
   const root = newTestScratch("job-live-memory"), units: string[] = [];
-  const memory = ownMemory(join(root, "memory"), { availableKiB: 2.5 * 2 ** 20, totalKiB: 32 * 2 ** 20 });
+  const memory = ownMemory(join(root, "memory"), { availableKiB: 2.5 * 2 ** 20, totalKiB: 32 * 2 ** 20,resident:{kind:"live"} });
   const env = gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env;
   t.after(() => {
     for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });

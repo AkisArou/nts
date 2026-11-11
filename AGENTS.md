@@ -70,16 +70,23 @@ checker is compiled into nts, and every tree shares the object store.
   manager, which ended the session and every agent, tmux pane and gate with
   it. A pattern matches other agents' processes and your own shell the same
   way.
-- **A test that starts a real gate runner gives that run its own memory
-  reading, its own memory ledger, its own scheduling history and its own
-  unit.** Pass `tooling/gate/test-memory.ts`'s `ownMemory` (`NTS_MEMINFO`,
+- **A test that starts a real gate runner gives that run its own host
+  observations, memory ledger, scheduling history and unit.** Pass
+  `tooling/gate/test-memory.ts`'s `ownMemory` (`NTS_HOST_OBSERVATIONS`,
   `NTS_MEMORY_LEDGER` and `NTS_GATE_COSTS_DIR`) through `gateEnvironment`'s
-  owned values, so neither the host's free memory, the machine's ledger nor
-  the tree's measured peaks decide the result, and run
-  it under `systemd-run --user --unit=<name> --collect`, so a runner that outlives its
-  test is stopped by name. On 2026-11-07 an inner run waited silently for
-  host memory inside a gate run, and an orphaned runner spun a core in the
-  tmux pane's own cgroup.
+  owned values. The complete `HostObservations` capability supplies disk
+  bytes and inodes, memory, paging, resident charge, machine width, load and
+  a monotonic clock to the runner, its dependencies and its samplers. A
+  missing observation fails by name; it never falls back to the host. Pure
+  decision tests supply observations; kernel wiring controls explicitly
+  select live sampling and wait for readiness. Run the runner under
+  `systemd-run --user --unit=<name> --collect`, so a runner that outlives its
+  test is stopped by name. Neither the machine's resources and queue nor the
+  tree's measured peaks decide a fixture's result.
+  On 2026-11-07 an inner run waited silently for host memory inside a gate
+  run, and an orphaned runner spun a core in the tmux pane's own cgroup. On
+  2026-11-11 a fixture with owned memory still waited on the real disk's floor
+  through oracle capture, and failed 4 of 29 landings.
 
 ## Landing
 

@@ -10,6 +10,7 @@ import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,Cas
 import {assertRunTemporary,captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
+import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
 
 export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
@@ -80,7 +81,7 @@ const EXPERIMENTS = new Set([
   // (step-scheduling.ts). A test gives its inner runs owned ones, so the
   // host's memory, the machine's queue and the tree's peaks never decide it;
   // set by a launcher, any of them makes the run an experiment.
-  "NTS_MEMINFO", "NTS_VMSTAT", "NTS_MEMORY_LEDGER", "NTS_GATE_COSTS_DIR",
+  ...HOST_OBSERVATION_ENVIRONMENT,
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
@@ -291,7 +292,7 @@ export function gateEnvironment(
   }
   Object.assign(env, owned);
   if(oracle)env.NTS_ORACLE_TYPESCRIPT=oracle;else delete env.NTS_ORACLE_TYPESCRIPT;
-  if (!prior) pruneRunTemporaries(host.HOME!);
+  if (!prior) pruneRunTemporaries(host.HOME!,{host:hostObservations(env)});
   const temporary=captureRunTemporary(options.run,prior?.temporary);
   // /tmp is a small tmpfs. Neither a launcher nor an experiment owns these paths.
   const storage=ownedCacheEnvironment(launcher,{temporary:temporary.path});
@@ -389,7 +390,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     // Setup-only success and failures before run.mjs still own a temporary
     // root. Normal row completion already records its lifecycle in summary.
     if (!existsSync(join(run,"summary.json"))) {
-      const outcome=finishRunTemporary(planned.temporary,planned.env.HOME!,result.status===0 && !result.signal && !result.error);
+      const outcome=finishRunTemporary(planned.temporary,planned.env.HOME!,result.status===0 && !result.signal && !result.error,{host:hostObservations(planned.env)});
       process.stderr.write(`gate tmp: ${outcome.state}: ${outcome.path}\n`);
     }
     if (result.error) throw result.error;

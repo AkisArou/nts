@@ -56,9 +56,14 @@ fi
   // Only this runner reads the controlled clock. Record its actual bound
   // observations before allowing the test to advance beyond an admission wait.
   writeFileSync(join(gate,"entry.mjs"),`
-import {readFileSync,renameSync,writeFileSync} from "node:fs";
+import fs,{readFileSync,renameSync,writeFileSync} from "node:fs";
+import {syncBuiltinESMExports} from "node:module";
+// Fail at the hidden read itself, even when this real host has ample room.
+const read=fs.readFileSync;
+fs.readFileSync=(path,...args)=>{if(/^\\/proc\\/(meminfo|vmstat)$/.test(String(path)))throw Error("fixture reached host "+path);return read(path,...args);};
+fs.statfsSync=()=>{throw Error("fixture reached host disk");};
+syncBuiltinESMExports();
 import {StepBoundClock} from "./step-bound.ts";
-Object.defineProperty(performance,"now",{value:()=>Number(readFileSync(${JSON.stringify(clock)},"utf8"))});
 const observe=StepBoundClock.prototype.observe;
 StepBoundClock.prototype.observe=function(now,waiting){
   const result=observe.call(this,now,waiting);
@@ -88,7 +93,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   // remain alive while holding its token, so keep a filesystem watcher.
   if(mode==="active")writeFileSync(join(gate,"payload.mjs"),readFileSync(join(gate,"payload.mjs"),"utf8").replace('await new Promise(()=>{});',`await new Promise(()=>{watch(${JSON.stringify(own)},()=>{});});`));
   oracleWorkspaceFixture(t,root);
-  const memoryDir=join(own,"memory"),memory=ownMemory(memoryDir,{availableKiB:mode==="active"?16*2**20:3.25*2**20,totalKiB:16*2**20});
+  const memoryDir=join(own,"memory"),memory=ownMemory(memoryDir,{availableKiB:mode==="active"?16*2**20:3.25*2**20,totalKiB:16*2**20,clock:{kind:"file",file:clock}});
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
   writeFileSync(join(memory.NTS_GATE_COSTS_DIR,"steps.json"),JSON.stringify({version:3,steps:{[STEP]:{memory:{unit:"token",peaks:[Math.floor(2*GiB/1.25)]}}},
     jobs:{"oracle-dependency-capture":{unit:"worker",peaks:[1]}}}));

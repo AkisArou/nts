@@ -366,6 +366,19 @@ locked session on CPU 4 and keep the wall-time floor below.
   Everything else the count only reports.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
+- **Resource observations belong to the run.** `HostObservations`
+  (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
+  admission, oracle dependency capture, temporary pruning, the memory ledger,
+  step scheduling and the census's degraded-machine decision. Production
+  uses the live adapter. A fixture supplies one complete capability through
+  `gateEnvironment`'s owned `NTS_HOST_OBSERVATIONS`, together with its own
+  memory ledger and scheduling history (`ownMemory` in
+  `tooling/gate/test-memory.ts`). Children and peak samplers retain the same
+  capability. It supplies disk bytes and inodes, machine memory and paging,
+  process and cgroup resident charge, machine width, load and a monotonic
+  clock. A missing observation is a named failure; no field falls back to the
+  host. Pure decisions use supplied observations. A kernel wiring control
+  explicitly selects live sampling and waits for readiness in its own unit.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
   priority; a process is stopped by its systemd unit, never by a PID found
   in `ps`.
@@ -423,8 +436,14 @@ the first node task.
   peak in one queue, in priority order (the landing check, agents' work, the
   full check); a gate run holds one reservation that grows and shrinks with
   its steps; a job yields while one of higher priority waits; and no tool
-  waits for the host's free memory itself
+  waits for the host's free memory itself. Resource reads go through the
+  run's `HostObservations` capability, including dependencies and samplers
   ([log](records/notebooks/decisions-log.md#one-memory-ledger-for-the-machine-11-09)).
+- **Tests own their view of the host**: one complete resource capability
+  reaches admission, dependency startup, the ledger, scheduling and census
+  reporting. Omission fails by name. Decision fixtures supply observations;
+  kernel wiring controls opt into live sampling and use readiness barriers
+  ([log](records/notebooks/decisions-log.md#tests-own-their-view-of-the-host-11-11)).
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket
   ready to take the CPU mutex enters the memory queue; the ledger decision

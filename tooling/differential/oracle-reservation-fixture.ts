@@ -30,7 +30,7 @@ try{
   // The run reserves against an ample reading and a ledger of its own. Its
   // tests step reads a machine with no memory at all: a preparation that asked
   // for any would be refused at once.
-  const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_MEMINFO;
+  const memory=ownMemory(join(own,'memory')),low=ownMemory(join(own,'pressure'),{availableKiB:0,totalKiB:2**20}).NTS_HOST_OBSERVATIONS;
   const fake=join(own,'nts');writeFileSync(fake,'#!/bin/sh\nexit 0\n',{mode:0o755});
   const names=execFileSync('sh',[join(SOURCE,'tooling/gate/all.sh'),'--list'],{encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
@@ -41,7 +41,7 @@ cat <<'NTS_STEPS'
 ${names}
 NTS_STEPS
 elif [ "$2" = tests ]; then
-  export NTS_MEMINFO=${quote(low)}
+  export NTS_HOST_OBSERVATIONS=${quote(low)}
   # No held token either: the reservation is the step's, not the token's.
   unset NTS_GATE_TOKEN_HELD
   exec ${quote(resolve(library))} --exact source_contracts::tests::unavailable_bindings_do_not_compare_unexecuted_module_output --nocapture

@@ -91,6 +91,7 @@
 //   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
 //                         unless the launcher's code owns another, as a test does)
 
+import {hostObservations,HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
 import {RESERVATION_PER_PEAK, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
@@ -102,13 +103,13 @@ import {
   appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
   readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
-import {cpus, homedir} from "node:os";
+import {homedir} from "node:os";
 import {dirname, join, resolve, relative, isAbsolute, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
-import {cgroupCharge, gib, machineMemory, priorityOf, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
+import {gib, machineMemory, priorityOf, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
 import {workerCapBytes} from "../census/worker-memory.ts";
 import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
 import {defaultSlots, frontendBudget} from "./budget.ts";
@@ -213,7 +214,8 @@ reportEnvironment(normalized.report);
 // last built into ./target (the-gate-drives-target-release-nts).
 const ntsBin = resolve(env.NTS_BIN ?? join(target, "release/nts"));
 const suiteBin = resolve(env.NTS_SUITE_BIN ?? join(dirname(ntsBin), "nts-suite"));
-const cores = cpus().length;
+const host = hostObservations(env);
+const cores = host.machineWidth();
 const intEnv = (name, fallback) => {
   const v = env[name];
   if (v === undefined || v === "") return fallback;
@@ -945,12 +947,11 @@ function wantMemory() {
 
 // What a step's slice holds now, on the ledger's own basis.
 function chargeOf(scope) {
-  const dir = join("/sys/fs/cgroup", scope.group);
-  return cgroupCharge(readFileSync(join(dir, "memory.current"), "utf8"), readFileSync(join(dir, "memory.stat"), "utf8"));
+  return host.cgroupCharge(scope.group);
 }
 function sampleStep(r) {
   try { r.charge = chargeOf(r.scope); r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge); }
-  catch { /* the slice went as it was read: nothing of it runs any more */ }
+  catch(error) { if(error instanceof HostObservationError)throw error; /* the slice went as it was read */ }
 }
 // Every SAMPLE_MS: each running step's charge; a step whose charge nears its
 // grant, or passed it, wants more -- a quarter of its grant, at least 64 MiB,
@@ -1036,7 +1037,7 @@ function lookAgain() {
 }
 
 function observeStepBounds() {
-  const u = used(), now = performance.now();
+  const u = used(), now = host.now();
   for (const r of running.values()) r.observeBound?.(now, u);
 }
 
@@ -1213,7 +1214,7 @@ function start(step, slots, rider = false) {
   // log stays, and it is neither a pass nor a red verdict about the change.
   // Killed again until it exits: a kill reaches only what its scope holds.
   let boundTimer;
-  const boundStarted = performance.now(), boundClock = new StepBoundClock(bound.seconds, boundStarted, STEP_CEILING);
+  const boundStarted = host.now(), boundClock = new StepBoundClock(bound.seconds, boundStarted, STEP_CEILING);
   let boundState = boundClock.observe(boundStarted), boundFailure;
   owned.observeBound = (now, u) => {
     const waiting = stepBoundWait({ elastic, held: tokensOf(step.name, owned), outranked: outrankedNow,
@@ -1231,7 +1232,7 @@ function start(step, slots, rider = false) {
   };
   const checkBound = () => {
     outranked();
-    owned.observeBound(performance.now(), used());
+    owned.observeBound(host.now(), used());
     if (boundState.expired) {
       boundFailure = boundState.used_s < bound.seconds && STEP_CEILING !== undefined
         ? `step exceeded the landing wall ceiling of ${STEP_CEILING} s` : stepBoundReason(bound.seconds);
@@ -1252,7 +1253,7 @@ function start(step, slots, rider = false) {
     completed = true;
     clearTimeout(boundTimer);
     delete owned.observeBound;
-    boundState = boundClock.observe(performance.now());
+    boundState = boundClock.observe(host.now());
     // A last sample, of whatever of the step still runs: a step shorter than
     // the sampling interval is measured by it.
     sampleStep(owned);
@@ -1481,7 +1482,7 @@ function done() {
   const setupLog=join(RUN_DIR,"oracle-setup.log");
   try { if(!existsSync(setupLog))writeFileSync(setupLog,"");oracleSetup=captureCost(null,setupLog); }
   catch(error){oracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
-  const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted)
+  const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted,{host})
     : {path:env.TMPDIR,state:"kept: rows still running"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
   const wall = (Date.now() - startedAt) / 1000;

@@ -2,7 +2,8 @@
 // none while its job's memory reservation is outranked; and a run temporary's
 // disk admission. Memory itself is the memory ledger's (memory-ledger.ts): a
 // job reserves it once, and no case reads the host's.
-import { existsSync, realpathSync, statfsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import {hostObservations,type HostObservations} from "./host-observations.ts";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
@@ -15,7 +16,7 @@ export type TemporaryAdmissionSnapshot = {
   diskFloorBytes: number; reservedBytes: number; requiredFreeBytes: number; admitted: boolean;
 };
 type TemporaryAdmissionOptions = {
-  path: string; context: TemporaryAdmissionContext; reservedBytes: number; readFreeBytes?: () => number;
+  path: string; context: TemporaryAdmissionContext; reservedBytes: number; readFreeBytes?: () => number; host?:HostObservations;
 };
 
 /** One policy for an allocation into a run's registered temporary space:
@@ -50,7 +51,7 @@ export class TemporaryAdmission {
   check(): TemporaryAdmissionSnapshot {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
-    const freeBytes = (this.#options.readFreeBytes ?? (() => { const stat = statfsSync(path); return stat.bavail * stat.bsize; }))();
+    const freeBytes = (this.#options.readFreeBytes ?? (() => (this.#options.host??hostObservations()).disk(path).freeBytes))();
     if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
     const requiredFreeBytes = diskFloorBytes + reservedBytes;

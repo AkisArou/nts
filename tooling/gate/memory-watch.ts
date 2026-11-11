@@ -25,6 +25,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { isMainThread, workerData } from "node:worker_threads";
 import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
+import {HostObservationError} from "./host-observations.ts";
 import { KEY, writeCostHistory } from "./step-scheduling.ts";
 
 /**
@@ -32,18 +33,18 @@ import { KEY, writeCostHistory } from "./step-scheduling.ts";
  * held; `seen` is told each new most. `exclude` is a process in the measure
  * that is not the job's.
  */
-export async function watchReservation(ledger: string, id: string, key: string, options: { exclude?: number; seen?: (bytes: number) => void; signal?: AbortSignal } = {}): Promise<number> {
+export async function watchReservation(ledger: string, id: string, key: string, options: { exclude?: number; seen?: (bytes: number) => void; signal?: AbortSignal; env?:NodeJS.ProcessEnv } = {}): Promise<number> {
   let peak = 0, over = false;
   for (;;) {
     const entry = admittedEntry(ledger, id);
     if (entry === null) return peak;
     try {
-      const held = entryUsage(entry, { exclude: options.exclude });
+      const held = entryUsage(entry, { exclude: options.exclude,env:options.env });
       if (held > peak) {
         peak = held; options.seen?.(peak);
         if (entry.liveUse) await noteSampledPeak(ledger, id, peak);
       }
-    } catch { /* one sample missed: a process or cgroup went as it was read */ }
+    } catch(error) { if(error instanceof HostObservationError)throw error; /* one sample missed: a process or cgroup went as it was read */ }
     if (!entry.liveUse && !over && peak > entry.bytes) {
       over = true;
       try { await noteOver(ledger, id, key); } catch { /* the entry says less; the history still learns the peak */ }
@@ -54,9 +55,9 @@ export async function watchReservation(ledger: string, id: string, key: string, 
 }
 
 if (!isMainThread) {
-  const { ledger, id, key, peak } = workerData as { ledger: string; id: string; key: string; peak: SharedArrayBuffer };
+  const { ledger, id, key, peak,observations } = workerData as { ledger: string; id: string; key: string; peak: SharedArrayBuffer;observations:NodeJS.ProcessEnv };
   const cell = new BigInt64Array(peak);
-  await watchReservation(ledger, id, key, { seen: bytes => Atomics.store(cell, 0, BigInt(bytes)) });
+  await watchReservation(ledger, id, key, { env:observations,seen: bytes => Atomics.store(cell, 0, BigInt(bytes)) });
 } else if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [ledger, id, history, key, workers] = process.argv.slice(2);
   const units = Number(workers);
