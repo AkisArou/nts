@@ -19,8 +19,8 @@
   "overrides": [
     {
       "code": "TS1005",
-      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
-      "reason": "Pinned checker parser gaps on valid JavaScript: Unicode 16/17 identifier characters exceed its Unicode 15.1 tables, and `in` in a for-of/for-await-of destructuring initializer. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 611 negative files draw TS1005. The two added start-escaped paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch. Earlier for-await entries date to 2026-09-29.",
+      "checker_pin": "tsrs:86de03ae428a956686af29177b50f0fdf4aee059/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840/patch:merge-compiler-options-visible:fbb196a40bbcd454d124bc9d6291e2fdb7634aba0f5f666816a2605e2419e40e",
+      "reason": "Pinned checker parser gaps on valid JavaScript: Unicode 16/17 identifier characters exceed its Unicode 15.1 tables, and `in` in a for-of/for-await-of destructuring initializer. Re-audited 2026-11-11 on tsrs 86de03ae (0.24.0, #687): every listed positive still draws TS1005 checked alone, and a whole test/language run (22,127 attempted) drew it from no unlisted positive; 423 recorded negatives have it as first root. The two added start-escaped paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch. Earlier for-await entries date to 2026-09-29.",
       "positives": [
         "test/language/identifiers/part-unicode-16.0.0-escaped.js",
         "test/language/identifiers/part-unicode-17.0.0-escaped.js",
@@ -33,8 +33,8 @@
     },
     {
       "code": "TS1109",
-      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
-      "reason": "Pinned checker parser gaps on valid JavaScript: `await` is rejected as a top-level script identifier, and `new import.meta()` is rejected at parse rather than throwing TypeError at runtime. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 415 negative files draw TS1109; both positive paths remain unchanged. The module-goal entry dates to 2026-10-02.",
+      "checker_pin": "tsrs:86de03ae428a956686af29177b50f0fdf4aee059/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840/patch:merge-compiler-options-visible:fbb196a40bbcd454d124bc9d6291e2fdb7634aba0f5f666816a2605e2419e40e",
+      "reason": "Pinned checker parser gaps on valid JavaScript: `await` is rejected as a top-level script identifier, and `new import.meta()` is rejected at parse rather than throwing TypeError at runtime. Re-audited 2026-11-11 on tsrs 86de03ae (0.24.0, #687): both listed positives still draw TS1109 checked alone, and a whole test/language run (22,127 attempted) drew it from no unlisted positive; 303 recorded negatives have it as first root. The module-goal entry dates to 2026-10-02.",
       "positives": [
         "test/language/expressions/await/await-BindingIdentifier-in-global.js",
         "test/language/expressions/import.meta/import-meta-is-an-ordinary-object.js"
@@ -42,8 +42,8 @@
     },
     {
       "code": "TS1127",
-      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
-      "reason": "Pinned checker identifier tables implement Unicode 15.1 and reject identifier characters added in Unicode 16/17. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 93 negative files draw TS1127. The four added start-escaped/start-class paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch.",
+      "checker_pin": "tsrs:86de03ae428a956686af29177b50f0fdf4aee059/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840/patch:merge-compiler-options-visible:fbb196a40bbcd454d124bc9d6291e2fdb7634aba0f5f666816a2605e2419e40e",
+      "reason": "Pinned checker identifier tables implement Unicode 15.1 and reject identifier characters added in Unicode 16/17. Re-audited 2026-11-11 on tsrs 86de03ae (0.24.0, #687): every listed positive still draws TS1127 checked alone, and a whole test/language run (22,127 attempted) drew it from no unlisted positive; 90 recorded negatives have it as first root. The four added start-escaped/start-class paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch.",
       "positives": [
         "test/language/identifiers/part-unicode-16.0.0.js",
         "test/language/identifiers/part-unicode-16.0.0-class-escaped.js",
