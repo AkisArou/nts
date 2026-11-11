@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { closeSync, openSync } from "node:fs";
 import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
@@ -159,13 +160,119 @@ export function parseMeasurement(
     return absent("INVALID", "Checksum disagreement; no timing accepted", { ...receipt, expected });
   return { ns: Number(m[1]), checksum: m[2] };
 }
+/** Counted runs (--count): fixed work under perf's FIFO bracket, off the
+ * measurement CPUs and without the lock. The bracket protocol is the common
+ * drivers' own (bench.mjs), spawned here as the layouts adapters spawn it. */
+const COUNTING = process.env.NTS_BENCH_COUNT === "1";
+const COUNT_CPU = process.env.NTS_BENCH_COUNT_CPU ?? "";
+const COUNT_OUT = process.env.NTS_BENCH_COUNT_OUT ?? "";
+type Counted = { calibration: Json; counted: Json; instructions: number; receipts: Receipt[] };
+async function executeCounted(
+  program: string,
+  args: string[],
+  cwd: string,
+  label: string,
+): Promise<Counted> {
+  assert.match(COUNT_CPU, /^\d+$/, "counted runs name their CPU");
+  assert.ok(COUNT_OUT, "counted runs name their output directory");
+  const clean = (extra: Record<string, string>) => {
+    const env = { ...process.env };
+    delete env.NTS_BENCH_STARTUP;
+    for (const key of Object.keys(env)) if (key.startsWith("NTS_BENCH_COUNT_")) delete env[key];
+    return { ...env, ...extra };
+  };
+  const run = (command: string[], env: Record<string, string>) =>
+    new Promise<Receipt>((done, reject) => {
+      const startedAt = new Date().toISOString(), began = process.hrtime.bigint(), before = cpu5();
+      let stdout = "", stderr = "";
+      const child = spawn(command[0], command.slice(1), { cwd, env: clean(env), stdio: ["ignore", "pipe", "pipe"] });
+      child.stdout.on("data", (b) => (stdout += b));
+      child.stderr.on("data", (b) => (stderr += b));
+      child.on("error", reject);
+      child.on("close", (status, signal) => done({
+        command, cwd, startedAt, finishedAt: new Date().toISOString(), status, signal,
+        stdout, stderr, wallNanoseconds: Number(process.hrtime.bigint() - began), cpu5: delta(before, cpu5()),
+      }));
+    });
+  const json = (receipt: Receipt): Record<string, Json> => {
+    assert.equal(receipt.status, 0, `counted run failed: ${receipt.stderr.trim()}`);
+    const line = receipt.stdout.trim().split("\n").at(-1);
+    assert.ok(line, "counted run printed nothing");
+    return JSON.parse(line);
+  };
+  const receipts: Receipt[] = [];
+  const calibrationReceipt = await run(
+    ["timeout", "--kill-after=10s", "180s", "prlimit", "--cpu=120:125", "--core=0:0", "--", "taskset", "-c", COUNT_CPU, program, ...args],
+    { NTS_BENCH_COUNT_MODE: "calibrate" },
+  );
+  receipts.push(calibrationReceipt);
+  const calibration = json(calibrationReceipt) as { checksum?: unknown; reps?: unknown; warmup?: unknown };
+  assert.ok(typeof calibration.checksum === "string" && Number.isSafeInteger(calibration.reps) && Number(calibration.reps) >= 1
+    && Number.isSafeInteger(calibration.warmup) && Number(calibration.warmup) >= 0, "calibration named no fixed work");
+
+  const folder = join(COUNT_OUT, "count", label);
+  mkdirSync(folder, { recursive: true });
+  const ctl = join(folder, "control"), ack = join(folder, "ack"), csv = join(folder, "perf.csv");
+  for (const fifo of [ctl, ack]) try { rmSync(fifo); } catch {}
+  const made = spawnSync("mkfifo", [ctl, ack], { encoding: "utf8" });
+  assert.equal(made.status, 0, "mkfifo: " + made.stderr);
+  const held = [openSync(ctl, "r+"), openSync(ack, "r+")];
+  try {
+    const countedReceipt = await run(
+      ["timeout", "-k", "5", "120", "perf", "stat", "-D", "-1", "--control", `fifo:${ctl},${ack}`, "-x,", "-o", csv,
+        "-e", "cpu_core/instructions/u", "--", "taskset", "-c", COUNT_CPU, program, ...args],
+      {
+        NTS_BENCH_COUNT_MODE: "count",
+        NTS_BENCH_COUNT_N: String(calibration.reps),
+        NTS_BENCH_COUNT_WARMUP: String(calibration.warmup),
+        NTS_BENCH_COUNT_CONTROL: ctl,
+        NTS_BENCH_COUNT_ACK: ack,
+      },
+    );
+    receipts.push(countedReceipt);
+    const counted = json(countedReceipt) as { checksum?: unknown; n?: unknown; warmup?: unknown };
+    assert.equal(counted.checksum, calibration.checksum, "counted checksum disagrees with calibration");
+    assert.equal(counted.n, calibration.reps, "counted run did not run the calibrated work");
+    assert.equal(counted.warmup, calibration.warmup, "counted run did not run the calibrated warmup");
+    const rows = readFileSync(csv, "utf8").split("\n").map((line) => line.split(",").map((x) => x.trim()))
+      .filter((fields) => fields[2]?.includes("/instructions/"));
+    const active = rows.filter((fields) => fields[0] !== "<not counted>");
+    assert.ok(active.length === 1 && /^\d+$/.test(active[0][0]) && Number(active[0][4]) >= 99,
+      "instructions must run on one pinned PMU");
+    return { calibration: calibration as Json, counted: counted as Json, instructions: Number(active[0][0]), receipts };
+  } finally {
+    held.forEach(closeSync);
+  }
+}
 async function measure(
   program: string,
   args: string[],
   cwd: string,
   expected: string | null,
   build: Receipt | null,
+  countedLabel = "host",
 ): Promise<Cell> {
+  if (COUNTING) {
+    try {
+      const { calibration, counted, instructions, receipts } = await executeCounted(program, args, cwd, countedLabel);
+      const value = counted as { checksum: string; nsPerOp: number; n: number };
+      if (expected !== null && value.checksum !== expected)
+        return absent("INVALID", "Checksum disagreement; no count accepted", { calibration, counted, build: build as unknown as Json });
+      return {
+        status: "OK",
+        nanoseconds: value.nsPerOp,
+        spread: 1,
+        checksum: value.checksum,
+        verified: true,
+        reason: null,
+        instructions,
+        counted_reps: value.n,
+        details: { attempts: receipts as unknown as Json, build: build as unknown as Json, calibration, counted },
+      };
+    } catch (error) {
+      return absent("INVALID", error instanceof Error ? error.message : String(error), { build: build as unknown as Json });
+    }
+  }
   const attempts: Receipt[] = [],
     numbers: { ns: number; checksum: string }[] = [];
   for (let i = 0; i < 5; i++) {
@@ -263,10 +370,10 @@ export async function hostColumns(
   if (process.env.NTS_BENCH_LANES)
     for (const column of ["Bun JIT", "Bun AOT", "ScriptC"] as const)
       cells[column] = absent("NOT_RUN", "Filtered native run requests the node oracle only");
-  cells.node = await measure(process.execPath, [entry, ...input], root, null, null);
+  cells.node = await measure(process.execPath, [entry, ...input], root, null, null, `${name}-node`);
   const expected = cells.node.status === "OK" ? cells.node.checksum : null;
   if (pins.bun && !process.env.NTS_BENCH_LANES) {
-    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null);
+    cells["Bun JIT"] = await measure(pins.bun, [entry, ...input], root, expected, null, `${name}-bun-jit`);
     const binary = join(directory, "bun-aot"),
       build = await execute(
         pins.bun,
@@ -276,7 +383,7 @@ export async function hostColumns(
       );
     cells["Bun AOT"] =
       build.status === 0 && !build.timeout
-        ? await measure(binary, input, root, expected, build)
+        ? await measure(binary, input, root, expected, build, `${name}-bun-aot`)
         : buildFailure(build);
   }
   if (pins.scriptc && !process.env.NTS_BENCH_LANES) {
@@ -337,6 +444,7 @@ export async function hostColumns(
         root,
         expected,
         build,
+        `${name}-scriptc`,
       );
     else if (
       report?.success === false &&

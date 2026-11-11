@@ -45,6 +45,10 @@ export type Cell = {
   verified: boolean;
   reason: string | null;
   details: Json;
+  /** Counted runs only (--count): user instructions inside the bracket. */
+  instructions?: number | null;
+  /** Counted runs only (--count): the fixed repetitions that bracket counted. */
+  counted_reps?: number | null;
 };
 export type Verdict = {
   kind: "WON" | "SHORT" | "TIE" | "LOSS" | "UNAVAILABLE" | "NOT_COMPARABLE";

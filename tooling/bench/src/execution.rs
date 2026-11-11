@@ -129,6 +129,156 @@ impl Column {
     }
 }
 
+/// One counted run: the child's output and the user instructions perf
+/// counted inside its enable/disable bracket.
+pub(super) struct Counted {
+    pub(super) output: std::process::Output,
+    pub(super) instructions: u64,
+}
+
+/// The CPU a counted run pins to: any allowed CPU outside the measurement
+/// pair 4–5, preferring a performance core (the `cpu_core` PMU the count
+/// names). Instruction counts need no quiet core, so counted runs never
+/// take the measurement lock.
+pub(super) fn count_cpu() -> Result<u32> {
+    let status = std::fs::read_to_string("/proc/self/status")
+        .context("reading inherited affinity for counted runs")?;
+    let allowed = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .context("/proc/self/status names no inherited CPU set")?;
+    let mut cpus = Vec::new();
+    for part in allowed.trim().split(',') {
+        match part.split_once('-') {
+            Some((lo, hi)) => {
+                let lo: u32 = lo.trim().parse().context("CPU list")?;
+                let hi: u32 = hi.trim().parse().context("CPU list")?;
+                cpus.extend(lo..=hi);
+            }
+            None => cpus.push(part.trim().parse::<u32>().context("CPU list")?),
+        }
+    }
+    let free: Vec<u32> = cpus
+        .into_iter()
+        .filter(|cpu| ![4, 5].contains(cpu))
+        .collect();
+    free.iter()
+        .copied()
+        .find(|cpu| *cpu < 16)
+        .or_else(|| free.first().copied())
+        .context("no CPU outside the measurement pair 4-5 is allowed")
+}
+
+/// Raw counted instructions in perf's CSV: the one active PMU's row, fully
+/// run. An inactive hybrid sibling reads `<not counted>` at 0% and is not
+/// a zero.
+fn counted_instructions(csv: &str) -> Result<u64> {
+    let mut active: Vec<u64> = Vec::new();
+    for line in csv.lines() {
+        let fields: Vec<&str> = line.split(',').map(str::trim).collect();
+        if fields.len() < 5 || !fields[2].contains("/instructions/") {
+            continue;
+        }
+        if fields[0] == "<not counted>" {
+            ensure!(
+                fields[4].parse::<f64>().is_ok_and(|percent| percent == 0.0),
+                "instructions counter did not run"
+            );
+            continue;
+        }
+        let percent: f64 = fields[4].parse().context("counter running percentage")?;
+        ensure!(
+            (99.0..=100.0).contains(&percent),
+            "instructions counter was multiplexed"
+        );
+        active.push(fields[0].parse().context("instructions counter value")?);
+    }
+    ensure!(active.len() == 1, "instructions must run on one pinned PMU");
+    Ok(active[0])
+}
+
+/// Run `command` pinned to `cpu`, counting user instructions inside the
+/// perf FIFO bracket the common drivers open (`--control`): the counted
+/// driver's enable/disable owns the window, so startup and warmup stay
+/// outside the count. The FIFOs are held open here so neither perf nor
+/// the driver blocks opening its end.
+pub(super) fn spawn_counted(
+    command: &std::process::Command,
+    cpu: u32,
+    dir: &std::path::Path,
+) -> Result<Counted> {
+    std::fs::create_dir_all(dir).context("creating the counted run directory")?;
+    let control = dir.join("control");
+    let acknowledgement = dir.join("ack");
+    let perf_csv = dir.join("perf.csv");
+    for fifo in [&control, &acknowledgement] {
+        // A previous counted run's FIFOs are this run's to replace.
+        let _ = std::fs::remove_file(fifo);
+        let made = std::process::Command::new("mkfifo")
+            .arg(fifo)
+            .status()
+            .context("making perf control FIFOs")?;
+        ensure!(made.success(), "mkfifo failed for {}", fifo.display());
+    }
+    let held: Vec<std::fs::File> = [&control, &acknowledgement]
+        .iter()
+        .map(|fifo| {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(fifo)
+                .context("holding perf control FIFOs open")
+        })
+        .collect::<Result<_>>()?;
+
+    let event = if cpu < 16 {
+        "cpu_core/instructions/u"
+    } else {
+        "instructions:u"
+    };
+    let mut perf = std::process::Command::new("timeout");
+    perf.args([
+        "-k",
+        "5",
+        "120",
+        "perf",
+        "stat",
+        "-D",
+        "-1",
+        "--control",
+        &format!("fifo:{},{}", control.display(), acknowledgement.display()),
+        "-x,",
+        "-o",
+    ])
+    .arg(&perf_csv)
+    .args(["-e", event, "--", "taskset", "-c"])
+    .arg(cpu.to_string())
+    .arg(command.get_program())
+    .args(command.get_args())
+    .env("NTS_BENCH_COUNT_CONTROL", &control)
+    .env("NTS_BENCH_COUNT_ACK", &acknowledgement);
+    for (key, value) in command.get_envs() {
+        match value {
+            Some(value) => {
+                perf.env(key, value);
+            }
+            None => {
+                perf.env_remove(key);
+            }
+        }
+    }
+    if let Some(dir) = command.get_current_dir() {
+        perf.current_dir(dir);
+    }
+    let output = perf.output().context("running a counted benchmark")?;
+    drop(held);
+    let csv = std::fs::read_to_string(&perf_csv).context("reading perf's counted output")?;
+    Ok(Counted {
+        instructions: counted_instructions(&csv)?,
+        output,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,6 +352,21 @@ mod tests {
                 stderr: "nts: refused\n".to_owned(),
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn counted_instructions_read_the_one_active_pmu() -> Result<()> {
+        let csv = "<not counted>,,cpu_atom/instructions/u,0,0.00,,\n319719383,,cpu_core/instructions/u,20645101,100.00,,\n";
+        assert_eq!(counted_instructions(csv)?, 319_719_383);
+        assert!(counted_instructions("5,,cpu_core/instructions/u,10,50.00,,\n").is_err());
+        assert!(counted_instructions("no counters here\n").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn the_count_cpu_is_never_a_measurement_cpu() -> Result<()> {
+        assert!(![4, 5].contains(&count_cpu()?));
         Ok(())
     }
 }

@@ -43,6 +43,21 @@ The index must be clean; only the new record and generated page are staged.
 imports use explicit one-way adapters in `legacy-record.ts`; unknown facts remain
 null and pre-correction invalid timings stay invalid.
 
+# Counting mode
+
+`nts-bench --count [case ...]` (or `--count --group <name>`) counts instead
+of timing: each common driver (native, Java, JS) calibrates its own fixed
+repetition count once, then runs exactly that work inside perf's
+enable/disable bracket, pinned to one CPU outside the measurement pair
+4–5. The printed cell is instructions per op (the bracketed total over the
+fixed repetitions), beside a stated noise band — two runs of an unchanged
+build agree inside it, the native columns bit for bit. No measurement lock
+is taken and no run record is published, so counted runs proceed in
+parallel; a timed row still comes from a locked session on CPU 4. The
+checksum agreement a timed row keeps is kept here too: calibration and
+the counted run must print the same checksum, and every column must agree
+with node, before any count prints.
+
 # Optional C++ reference libraries
 
 A case may put library names in `ref.link` beside `ref.cpp`, in link order:

@@ -2,20 +2,23 @@ use anyhow::{Result, bail};
 
 pub(super) const USAGE: &str = "Usage: nts-bench [--root <tree>] [case ...]
        nts-bench [--root <tree>] --group <name>
+       nts-bench [--root <tree>] --count [case ...]
        nts-bench [--root <tree>] --render [run.json]
        nts-bench --help
 
 With no case names, measures every benchmark case. Explicit case names select
 only those rows. `--group <name>` measures exactly the rows the foundation
-page naming that group declares. --render renders a saved run without
-measuring workloads.";
+page naming that group declares, and combines with `--count`. --count prints
+each selected row's instruction counts per column instead of timing it: fixed
+work counted on any CPU outside 4-5, with no measurement lock. --render
+renders a saved run without measuring workloads.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Command {
     Help,
     Measure(Vec<String>),
     Render(Option<String>),
-    Count,
+    Count(Vec<String>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -66,24 +69,32 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
                 let path = path.then(|| args.next().expect("peeked render path"));
                 set_command(&mut command, Command::Render(path))?;
             }
-            "--count" | "--count-prepare" => set_command(&mut command, Command::Count)?,
+            "--count" | "--count-prepare" => set_command(&mut command, Command::Count(vec![]))?,
             value if value.starts_with('-') => bail!("unknown option `{value}`"),
             _ => cases.push(arg),
         }
     }
-    if command.is_some() && !cases.is_empty() {
-        bail!("case names cannot be combined with --help, --render or --count");
+    if matches!(command, Some(Command::Help | Command::Render(_))) && !cases.is_empty() {
+        bail!("case names cannot be combined with --help or --render");
     }
-    if group.is_some() && (command.is_some() || !cases.is_empty()) {
+    if group.is_some()
+        && (matches!(command, Some(Command::Help | Command::Render(_))) || !cases.is_empty())
+    {
         bail!(
-            "`--group` selects its rows on its own; it cannot be combined with case names, --help, --render or --count"
+            "`--group` selects its rows on its own; it cannot be combined with case names, --help or --render"
         );
+    }
+    if matches!(command, Some(Command::Count(_))) && journal.is_some() {
+        bail!("`--count` records no run to journal");
     }
     Ok(Arguments {
         root,
         journal,
         group,
-        command: command.unwrap_or(Command::Measure(cases)),
+        command: match command {
+            Some(Command::Count(_)) => Command::Count(cases),
+            command => command.unwrap_or(Command::Measure(cases)),
+        },
     })
 }
 
@@ -165,10 +176,31 @@ mod tests {
             &["--group", "maps", "fib"],
             &["fib", "--group", "maps"],
             &["--group", "maps", "--render"],
-            &["--group", "maps", "--count"],
             &["--group", "maps", "--help"],
         ] {
             assert!(parse(argv(case)).is_err(), "{case:?}");
         }
+    }
+
+    #[test]
+    fn count_takes_case_names_and_combines_with_a_group() {
+        assert_eq!(
+            parse(argv(&["--count"]))
+                .expect("valid benchmark arguments")
+                .command,
+            Command::Count(vec![])
+        );
+        let args = parse(argv(&["--count", "fib", "loop"])).expect("valid benchmark arguments");
+        assert_eq!(
+            args.command,
+            Command::Count(vec!["fib".into(), "loop".into()])
+        );
+        let grouped =
+            parse(argv(&["--count", "--group", "maps"])).expect("valid benchmark arguments");
+        assert_eq!(grouped.group.as_deref(), Some("maps"));
+        assert_eq!(grouped.command, Command::Count(vec![]));
+        assert!(parse(argv(&["--count", "--journal", "run.log"])).is_err());
+        assert!(parse(argv(&["--count", "--count"])).is_err());
+        assert!(parse(argv(&["--count", "--render"])).is_err());
     }
 }

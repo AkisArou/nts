@@ -29,7 +29,7 @@
 //! only measures time rewards a backend for computing the wrong answer quickly,
 //! which is the easiest possible way to win.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
@@ -57,6 +57,12 @@ struct Measured {
     /// so this pass may have timed its first tier (`Bench.settle`).
     #[serde(default)]
     warm_capped: bool,
+    /// User instructions inside the counted bracket, `--count` only.
+    #[serde(default)]
+    instructions: Option<u64>,
+    /// The fixed repetitions that bracket counted.
+    #[serde(default)]
+    counted_reps: Option<u64>,
 }
 
 /// Which translation unit, if any, the compiler contributes to a variant.
@@ -320,22 +326,22 @@ fn run() -> Result<()> {
     }
     validate_lanes()?;
     let root = repository_root(args.root.as_deref())?;
-    if args.command == cli::Command::Count {
-        bail!("the Wasm backend is being rebuilt on Binaryen; see docs/targets/wasm.md");
-    }
+    let counting_run = matches!(args.command, cli::Command::Count(_));
     let requested = match args.command {
         cli::Command::Render(path) => {
             let path = path.map_or_else(|| run_file(&root), Utf8PathBuf::from);
             return render(&root, &path);
         }
-        cli::Command::Measure(cases) => match &args.group {
+        cli::Command::Measure(cases) | cli::Command::Count(cases) => match &args.group {
             Some(group) => results::group_cases(&root, group)?,
             None => cases,
         },
-        cli::Command::Help | cli::Command::Count => unreachable!("handled before setup"),
+        cli::Command::Help => unreachable!("handled before setup"),
     };
     let cases = selected_cases(&root, &requested)?;
-    if let Some(warning) = reserved_core_busy("before this run started") {
+    // A counting run takes no measurement lock and never touches the
+    // reserved cores: its counts are fixed work on any other CPU.
+    if !counting_run && let Some(warning) = reserved_core_busy("before this run started") {
         return Err(NotAdmitted(warning).into());
     }
 
@@ -351,6 +357,14 @@ fn run() -> Result<()> {
     for file in nts_codegen_c::support_files(nts_codegen_c::UnicodeNeeds::ALL) {
         file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
+    }
+
+    if counting_run {
+        let counting = Counting {
+            cpu: execution::count_cpu()?,
+            out: out.clone(),
+        };
+        return count_cases(&root, &out, &cases, &counting);
     }
 
     println!("{}", results::command(&root, "header", &[])?);
@@ -372,6 +386,94 @@ fn run() -> Result<()> {
         .transpose()?;
     let (run, rows) = measure_cases(&root, &out, &cases, metadata, requested, lanes, journal)?;
     finish(&root, &run, &rows, &cases)
+}
+
+/// Instructions per counted op, rounded to the nearest whole instruction.
+fn per_op(instructions: u64, reps: u64) -> u64 {
+    (instructions + reps / 2) / reps
+}
+
+/// The columns a counted row prints, in the table's order: index into a
+/// case's variant results where the column is one, else its host cell.
+fn count_cell(measured: &Measurements, at: Option<usize>, host: Option<&str>) -> String {
+    let cell: Option<&Measured> = match (at, host) {
+        (Some(at), _) => measured.results.get(at).and_then(Option::as_ref),
+        (None, Some("node")) => measured.node.as_ref(),
+        (None, Some("Bun JIT")) => measured.bun.as_ref(),
+        _ => None,
+    };
+    if let Some(cell) = cell
+        && let (Some(instructions), Some(reps)) = (cell.instructions, cell.counted_reps)
+        && reps > 0
+    {
+        return per_op(instructions, reps).to_string();
+    }
+    if let Some(host) = host
+        && at.is_none()
+        && let Some(hosts) = &measured.hosts
+    {
+        let cell = &hosts["cells"][host];
+        if cell["status"] == "OK"
+            && let (Some(instructions), Some(reps)) =
+                (cell["instructions"].as_u64(), cell["counted_reps"].as_u64())
+            && reps > 0
+        {
+            return per_op(instructions, reps).to_string();
+        }
+    }
+    "--".to_owned()
+}
+
+/// Count every selected case and print its row: fixed work per column,
+/// counted off the measurement CPUs with no lock and no run record. A
+/// counted row keeps the timed row's validity bar — every column must
+/// agree on the checksum before any count is printed.
+fn count_cases(
+    root: &Utf8Path,
+    out: &Utf8Path,
+    cases: &[Utf8PathBuf],
+    counting: &Counting,
+) -> Result<()> {
+    println!(
+        "instructions per op, counted on CPU {} (outside the measurement pair 4-5), no lock",
+        counting.cpu
+    );
+    println!(
+        "noise band: two runs of an unchanged build agree within ±{COUNT_NOISE_PERCENT}%; a move inside it is no change"
+    );
+    println!("case\tnts C\tnts LLVM\tnts JVM\tC++\tJava\tnode\tBun JIT\tBun AOT\tScriptC");
+    let lanes = wanted_lanes();
+    let mut failed: Vec<String> = Vec::new();
+    let mut row_failures = std::collections::BTreeMap::new();
+    for case in cases {
+        let name = case.file_name().unwrap_or("?");
+        let computed = run_case(root, case, out, Some(counting));
+        let Some(measured) = accept_build(name, computed, &mut row_failures, &mut failed)? else {
+            continue;
+        };
+        if accept_result(
+            &measured.shown,
+            assemble(&measured, lanes.is_some()),
+            &mut failed,
+        )
+        .is_none()
+        {
+            continue;
+        }
+        let cells = [
+            count_cell(&measured, Some(0), None),
+            count_cell(&measured, Some(3), None),
+            count_cell(&measured, Some(4), None),
+            count_cell(&measured, Some(2), None),
+            count_cell(&measured, Some(5), None),
+            count_cell(&measured, None, Some("node")),
+            count_cell(&measured, None, Some("Bun JIT")),
+            count_cell(&measured, None, Some("Bun AOT")),
+            count_cell(&measured, None, Some("ScriptC")),
+        ];
+        println!("{}\t{}", measured.shown, cells.join("\t").as_str());
+    }
+    require_valid_rows(&failed)
 }
 
 /// Complete cases in order; the journal retains each validated prefix while
@@ -406,7 +508,7 @@ fn measure_cases(
         // them again, which is the point of saving them.
         let before = results::conditions(root)?;
         let sibling = reserved::read().ok();
-        let computed = run_case(root, case, out);
+        let computed = run_case(root, case, out, None);
         let late = early.is_none().then(|| sibling_busy(sibling)).flatten();
         disturbance_note(name, late.as_deref());
         if early.is_some() || late.is_some() {
@@ -598,7 +700,12 @@ fn reaches_unicode(source: &str) -> bool {
     source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
 }
 
-fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurements> {
+fn run_case(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    counting: Option<&Counting>,
+) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case_tsconfig(case, out, name)?;
 
@@ -690,8 +797,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
         &rendered,
         emission,
         &workload,
+        counting,
     )?;
-    let hosts = measure_hosts(root, case, out, name, &workload)?;
+    let hosts = measure_hosts(root, case, out, name, &workload, counting)?;
     let node = results::host_measured(&hosts, "node")?;
     let bun = results::host_measured(&hosts, "Bun JIT")?;
     Ok(Measurements {
@@ -752,6 +860,7 @@ fn variants(
     rendered: &Utf8Path,
     emission: Emission<'_>,
     workload: &workload::Workload,
+    counting: Option<&Counting>,
 ) -> Result<(Vec<Option<Measured>>, Absences)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
@@ -829,7 +938,9 @@ fn variants(
             // program has no classes, which empties the column and leaves the
             // row -- the same bargain the LLVM column keeps.
             Generated::Jvm => {
-                let run = jvm_case(root, case, out, name, tsconfig, provider, workload);
+                let run = jvm_case(
+                    root, case, out, name, tsconfig, provider, workload, counting,
+                );
                 match observe(run, Generated::Jvm, &mut outcomes) {
                     Ok(measured) => {
                         if measured.is_none() {
@@ -846,7 +957,7 @@ fn variants(
                 continue;
             }
             Generated::JavaReference => {
-                results.push(java_cell(root, case, out, name)?);
+                results.push(java_cell(root, case, out, name, counting)?);
                 continue;
             }
             Generated::Specialized => c.push(specialized.to_owned()),
@@ -858,8 +969,14 @@ fn variants(
             }
             Generated::None => {}
         }
-        let built = compile(root, &cpp, &c, &binary, defines, &libraries)
-            .and_then(|()| measure(&mut std::process::Command::new(&binary)));
+        let built = compile(root, &cpp, &c, &binary, defines, &libraries).and_then(|()| {
+            measure_or_count(
+                &mut std::process::Command::new(&binary),
+                counting,
+                name,
+                variant.label,
+            )
+        });
         results.push(observe(built, variant.generated, &mut outcomes)?);
     }
     Ok((
@@ -1189,6 +1306,7 @@ fn measure_hosts(
     out: &Utf8Path,
     name: &str,
     workload: &workload::Workload,
+    counting: Option<&Counting>,
 ) -> Result<serde_json::Value> {
     let harness = node_harness(case, out, name, workload)?;
     let input: Vec<_> = workload
@@ -1197,11 +1315,19 @@ fn measure_hosts(
         .map(workload::Numeric::input)
         .into_iter()
         .collect();
-    let output = std::process::Command::new("node")
+    let mut command = std::process::Command::new("node");
+    command
         .arg(root.join("tooling/bench/host-columns.ts"))
         .args([root.as_str(), name, harness.as_str(), out.as_str()])
         .args(input)
-        .current_dir(root)
+        .current_dir(root);
+    if let Some(counting) = counting {
+        command
+            .env("NTS_BENCH_COUNT", "1")
+            .env("NTS_BENCH_COUNT_CPU", counting.cpu.to_string())
+            .env("NTS_BENCH_COUNT_OUT", counting.out.as_str());
+    }
+    let output = command
         .output()
         .context("running the standing comparators")?;
     if output.status.code() == Some(2) {
@@ -1473,8 +1599,9 @@ fn java_cell(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
+    counting: Option<&Counting>,
 ) -> Result<Option<Measured>> {
-    match java_reference(root, case, out, name) {
+    match java_reference(root, case, out, name, counting) {
         Ok(measured) => Ok(measured),
         Err(error) if error.is::<build::Timeout>() || error.is::<build::NotMeasured>() => {
             Err(error)
@@ -1566,6 +1693,10 @@ fn native_driver(
 
 /// One case through the JVM backend: classes, the runtime jar, a generated
 /// driver, and `java`.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the paths and choices one case builds from, like variants above"
+)]
 fn jvm_case(
     root: &Utf8Path,
     case: &Utf8Path,
@@ -1574,6 +1705,7 @@ fn jvm_case(
     tsconfig: &Utf8Path,
     provider: hir::Memory,
     workload: &workload::Workload,
+    counting: Option<&Counting>,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -1654,7 +1786,7 @@ fn jvm_case(
             std::fs::read_to_string(&supplied).with_context(|| format!("reading {supplied}"))?;
         let driver_path = dir.join("Case.java");
         std::fs::write(&driver_path, text)?;
-        return run_driver(root, &dir, &jar, &driver_path);
+        return run_driver(root, &dir, &jar, &driver_path, counting, name);
     };
     // The driver, from the workload the C shim already declares. Every input is
     // a `volatile` field for the reason the C shim makes them `volatile`: a
@@ -1712,7 +1844,7 @@ fn jvm_case(
     let driver_path = dir.join("Case.java");
     std::fs::write(&driver_path, driver)?;
 
-    run_driver(root, &dir, &jar, &driver_path)
+    run_driver(root, &dir, &jar, &driver_path, counting, name)
 }
 
 /// Compile a driver against the emitted classes and time it.
@@ -1725,6 +1857,8 @@ fn run_driver(
     dir: &Utf8Path,
     jar: &Utf8Path,
     driver_path: &Utf8Path,
+    counting: Option<&Counting>,
+    name: &str,
 ) -> Result<Measured> {
     let javac = java_tool("javac");
     let built = build::output(
@@ -1743,7 +1877,7 @@ fn run_driver(
     }
 
     let java = java_tool("java");
-    measure(
+    measure_or_count(
         nts_codegen_jvm::toolchain::command(java)
             // Explicit rather than ergonomic: the default collector changes with
             // the host, and a column that changes meaning with the machine is
@@ -1752,6 +1886,9 @@ fn run_driver(
             .arg("-cp")
             .arg(format!("{dir}:{jar}"))
             .arg("Case"),
+        counting,
+        name,
+        "nts (jvm)",
     )
 }
 
@@ -1781,6 +1918,7 @@ fn handwritten_java(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
+    counting: Option<&Counting>,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -1835,12 +1973,15 @@ fn handwritten_java(
         bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
     }
 
-    measure(
+    measure_or_count(
         nts_codegen_jvm::toolchain::command(java_tool("java"))
             .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m"])
             .arg("-cp")
             .arg(&classpath)
             .arg("Case"),
+        counting,
+        name,
+        "Java",
     )
 }
 
@@ -1892,11 +2033,12 @@ fn java_reference(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
+    counting: Option<&Counting>,
 ) -> Result<Option<Measured>> {
     if !case.join("ref.java").exists() {
         return Ok(None);
     }
-    handwritten_java(root, case, out, name).map(Some)
+    handwritten_java(root, case, out, name, counting).map(Some)
 }
 
 fn collect_java(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>) -> Result<()> {
@@ -2292,6 +2434,13 @@ fn compile(
 /// enough to see the good one.
 const RUNS: usize = 5;
 
+/// The agreement two counted runs of an unchanged build stay inside, stated
+/// beside every counted row: bracketed instruction counts of fixed work vary
+/// only with background JIT and runtime threads inside the bracket (Bun JIT
+/// measured 1.85% apart on fib when this was written; the native columns
+/// were bit-identical).
+const COUNT_NOISE_PERCENT: u32 = 3;
+
 /// The CPUs a timed run is allowed on, or `None` to leave it to the scheduler.
 ///
 /// # Two arms of one comparison, measured on different hardware
@@ -2427,6 +2576,111 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
         1.0
     };
     Ok(best)
+}
+
+/// How `--count` reaches a column: the CPU it pins to (never a measurement
+/// CPU, and no measurement lock is taken) and where each counted run's
+/// perf FIFOs and CSV live, under the bench build directory.
+struct Counting {
+    cpu: u32,
+    out: Utf8PathBuf,
+}
+
+/// The one JSON line a driver in a counting mode prints.
+fn driver_json(output: &std::process::Output) -> Result<serde_json::Value> {
+    if !output.status.success() {
+        return Err(execution::Outcome::of(output)?.into());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let line = text
+        .lines()
+        .next_back()
+        .context("no counting output on stdout")?;
+    serde_json::from_str(line).context("counting output was not one JSON line")
+}
+
+/// Count fixed work instead of timing it: calibrate the driver's own
+/// repetition count once, then run exactly that work inside perf's bracket.
+/// The checksum both stages print must agree, as in a timed row.
+fn count(
+    command: &mut std::process::Command,
+    counting: &Counting,
+    name: &str,
+    column: &str,
+) -> Result<Measured> {
+    command.env("NTS_BENCH_COUNT_MODE", "calibrate");
+    let calibration = {
+        let mut pinned = confine(command, &counting.cpu.to_string());
+        let output = pinned.output().context("calibrating a counted benchmark")?;
+        driver_json(&output)?
+    };
+    let field = |key: &str| {
+        calibration
+            .get(key)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    };
+    let reps = field("reps")
+        .as_u64()
+        .context("calibration named no reps")?;
+    let warmup = field("warmup")
+        .as_u64()
+        .context("calibration named no warmup")?;
+    let checksum = field("checksum")
+        .as_str()
+        .context("calibration named no checksum")?
+        .to_owned();
+
+    command
+        .env("NTS_BENCH_COUNT_MODE", "count")
+        .env("NTS_BENCH_COUNT_N", reps.to_string())
+        .env("NTS_BENCH_COUNT_WARMUP", warmup.to_string());
+    let label: String = column
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let counted = execution::spawn_counted(
+        command,
+        counting.cpu,
+        counting
+            .out
+            .join(format!("count/{name}-{label}"))
+            .as_std_path(),
+    )?;
+    let value = driver_json(&counted.output)?;
+    ensure!(
+        value.get("checksum").and_then(serde_json::Value::as_str) == Some(checksum.as_str()),
+        "counted checksum disagrees with calibration"
+    );
+    ensure!(
+        value.get("n").and_then(serde_json::Value::as_u64) == Some(reps)
+            && value.get("warmup").and_then(serde_json::Value::as_u64) == Some(warmup),
+        "counted run did not run the calibrated work"
+    );
+    Ok(Measured {
+        ns_per_op: value
+            .get("nsPerOp")
+            .and_then(serde_json::Value::as_f64)
+            .context("counted run named no nsPerOp")?,
+        checksum,
+        spread: 1.0,
+        warm_capped: false,
+        instructions: Some(counted.instructions),
+        counted_reps: Some(reps),
+    })
+}
+
+/// Time a command, or count it when this run is a counting run.
+fn measure_or_count(
+    command: &mut std::process::Command,
+    counting: Option<&Counting>,
+    name: &str,
+    column: &str,
+) -> Result<Measured> {
+    match counting {
+        Some(counting) => count(command, counting, name, column),
+        None => measure(command),
+    }
 }
 
 /// A run whose passes disagree by more than this has something to say about
@@ -2619,6 +2873,8 @@ fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
         // than one pass.
         spread: 1.0,
         warm_capped,
+        instructions: None,
+        counted_reps: None,
     })
 }
 
@@ -2796,6 +3052,8 @@ mod tests {
             checksum: "3ff0000000000000".to_owned(),
             spread: 1.0,
             warm_capped: false,
+            instructions: None,
+            counted_reps: None,
         }
     }
 

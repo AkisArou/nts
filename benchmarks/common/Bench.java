@@ -34,6 +34,21 @@ public final class Bench {
             allocated(work);
             return;
         }
+        // Counting mode (tooling/bench/README.md is the spec), spelled exactly
+        // as bench.mjs and main.cpp spell it. The timed path below is the
+        // original code shape on purpose; counting branches before it.
+        String countMode = System.getenv("NTS_BENCH_COUNT_MODE");
+        if (countMode != null) {
+            double counted = work.run();
+            if (countMode.equals("calibrate")) {
+                calibrate(work, counted);
+            } else if (countMode.equals("count")) {
+                count(work, counted);
+            } else {
+                throw new AssertionError("unknown NTS_BENCH_COUNT_MODE: " + countMode);
+            }
+            return;
+        }
         // One call before anything: it takes the checksum, loads the classes and
         // runs every `<clinit>`, so none of that lands inside a timed region.
         double checksum = work.run();
@@ -104,6 +119,110 @@ public final class Bench {
         // disagreement it caused itself.
         long bits = Double.doubleToRawLongBits(checksum);
         System.out.printf("%.4f %016x%s%n", best, bits, settled ? "" : " warm-capped");
+    }
+
+    // The one loop counting mode warms up and counts, spelled once so warmup
+    // tiers up the very loop the counter then brackets.
+    private static double runLoop(Work work, long reps) {
+        double sink = 0;
+        for (long i = 0; i < reps; i++) {
+            sink += work.run();
+        }
+        return sink;
+    }
+
+    private static String bits(double value) {
+        return String.format("%016x", Double.doubleToRawLongBits(value));
+    }
+
+    private static void calibrate(Work work, double checksum) {
+        // The timed path's warmup bounds: 20,000 calls or 300 ms, then settle.
+        long started = System.nanoTime();
+        long until = started + 300_000_000L;
+        long warmed = 0;
+        while (warmed < 20000 && System.nanoTime() < until) {
+            work.run();
+            warmed++;
+        }
+        settle(work, started);
+        long reps = 1;
+        long elapsed = 0;
+        double sink = 0;
+        for (;;) {
+            long began = System.nanoTime();
+            sink += runLoop(work, reps);
+            elapsed = System.nanoTime() - began;
+            if (elapsed >= 20_000_000L || reps >= 50_000_000L) {
+                break;
+            }
+            reps = Math.min(reps * 2, 50_000_000L);
+        }
+        if (Double.isNaN(sink)) {
+            throw new AssertionError("unreachable");
+        }
+        System.err.println("NTS_BENCH_SINK " + bits(sink));
+        System.out.printf("{\"checksum\":\"%s\",\"warmup\":%d,\"nsPerOp\":%s,\"reps\":%d}%n",
+            bits(checksum), warmed, Double.toString((double) elapsed / (double) reps), reps);
+    }
+
+    private static void perfCommand(java.io.OutputStream control, java.io.InputStream acknowledgement, String value)
+        throws java.io.IOException {
+        control.write((value + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        control.flush();
+        StringBuilder message = new StringBuilder();
+        for (;;) {
+            int next = acknowledgement.read();
+            if (next < 0) {
+                throw new AssertionError("perf control acknowledgement missing");
+            }
+            if (next == 0) {
+                continue; // perf appends a NUL after ack\n
+            }
+            message.append((char) next);
+            if (next == '\n') {
+                break;
+            }
+        }
+        if (!message.toString().equals("ack\n")) {
+            throw new AssertionError("unexpected perf acknowledgement: " + message);
+        }
+    }
+
+    private static void count(Work work, double checksum) {
+        long n;
+        long warmed;
+        try {
+            n = Long.parseLong(System.getenv("NTS_BENCH_COUNT_N"));
+            warmed = Long.parseLong(System.getenv("NTS_BENCH_COUNT_WARMUP"));
+        } catch (RuntimeException bad) {
+            throw new AssertionError("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
+        }
+        if (n < 1 || warmed < 0) {
+            throw new AssertionError("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
+        }
+        // Warm up the loop being counted, outside the bracket, then let the
+        // JIT go quiet as the timed path does before it measures.
+        runLoop(work, warmed);
+        settle(work, System.nanoTime());
+        double sink;
+        long elapsed;
+        try (
+            java.io.OutputStream control = new java.io.FileOutputStream(System.getenv("NTS_BENCH_COUNT_CONTROL"));
+            java.io.InputStream acknowledgement = new java.io.FileInputStream(System.getenv("NTS_BENCH_COUNT_ACK"))
+        ) {
+            perfCommand(control, acknowledgement, "enable");
+            long began = System.nanoTime();
+            sink = runLoop(work, n);
+            elapsed = System.nanoTime() - began;
+            perfCommand(control, acknowledgement, "disable");
+        } catch (java.io.IOException failed) {
+            throw new AssertionError("perf control acknowledgement missing", failed);
+        }
+        if (Double.isNaN(sink)) {
+            throw new AssertionError("unreachable");
+        }
+        System.out.printf("{\"checksum\":\"%s\",\"warmup\":%d,\"n\":%d,\"elapsedNs\":%d,\"nsPerOp\":%s,\"sink\":%s}%n",
+            bits(checksum), warmed, n, elapsed, Double.toString((double) elapsed / (double) n), Double.toString(sink));
     }
 
     /** How long the JIT must add no compilation time for warm-up to be over. */

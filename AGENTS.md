@@ -298,6 +298,14 @@ then a guard once fixed), `tests/memory/`.
   `LimitCORE=0` for a unit. On 2026-10-27 the gate's deliberate crashes made
   2,669 dumps in an hour (4 GB). systemd-coredump, which no mask excludes, ran
   at 40% on CPU 5, so measurement could not start.
+- For a before-and-after comparison, count first: `nts-bench --count [case
+  ...]` (or `--count --group <name>`) prints each row's instruction counts
+  per column on any CPU outside 4–5, with no measurement lock, so agents
+  count in parallel. A count is enough evidence when the change is in code
+  generation or front-end work and the count moves past the band the header
+  states; a timed row under the lock is needed when the claim is about
+  wall time itself — scheduling, layout, cache or branch effects a count
+  cannot see, or a benchmark row's standing against the bar.
 - Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a
   commit, under
   `tooling/gate/with-lock.sh --wait --key bench-session target/release/nts-bench`;

@@ -282,6 +282,15 @@ beaten). A row no page names is listed as ungrouped. A foundation task's
 review covers its whole group, not one row: a part that speeds one row and
 slows another in its group is seen in the same sitting.
 
+**Counting compares before and after without the lock.**
+`nts-bench --count [case ...]` (also `--count --group <name>`) prints each
+selected row's instruction counts per column: the drivers' own fixed work,
+calibrated once and counted inside perf's bracket on any CPU outside 4–5.
+It takes no measurement lock and publishes no run record, so agents count
+in parallel. Two runs of an unchanged build agree within the band the
+header states; a move inside it is no change. Timed rows still come from a
+locked session on CPU 4 and keep the wall-time floor below.
+
 - **A measurement waits for CPU 4 with its sibling 5 idle, and for nothing
   else.** Gates, landing checks and agents' work run on the other CPUs and
   never hold it; every row records the machine's load and free memory beside

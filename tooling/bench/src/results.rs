@@ -79,7 +79,7 @@ pub(super) fn host_measured(
     if cell["status"] != "OK" {
         return Ok(None);
     }
-    let value = serde_json::json!({"ns_per_op":cell["nanoseconds"],"checksum":cell["checksum"],"spread":cell["spread"],"warm_capped":false});
+    let value = serde_json::json!({"ns_per_op":cell["nanoseconds"],"checksum":cell["checksum"],"spread":cell["spread"],"warm_capped":false,"instructions":cell["instructions"],"counted_reps":cell["counted_reps"]});
     Ok(Some(
         serde_json::from_value(value).context("invalid host observation")?,
     ))
