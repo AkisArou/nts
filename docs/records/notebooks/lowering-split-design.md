@@ -156,11 +156,11 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | 88 | `lower/foreign_values.rs` | 1,180 | 1,180 | Marshal native strings, handles, records, and Foundation collection values in both directions. |
 | 89 | `lower/foreign_results.rs` | 798 | 798 | Decode foreign failure channels, output slots, and returned references into the caller's result. |
 | 90 | `lower/foreign_callbacks.rs` | 832 | 832 | Bridge closures into callbacks and emit the conversions their signatures request. |
-| 91 | `lower/objc_dispatch.rs` | 1,384 | 1,384 | Select and emit Objective-C message and property dispatch, including optional selectors and class receivers. |
-| 92 | `lower/objc_class.rs` | 1,044 | 1,044 | Register Objective-C classes, lower their methods and constructors, and emit their instance state. |
+| 91 | `lower/objc_dispatch.rs` | 1,405 | 1,405 | Select and emit Objective-C message and property dispatch, including optional selectors and class receivers. |
+| 92 | `lower/objc_class.rs` | 1,012 | 1,012 | Register Objective-C classes, lower their methods and constructors, and emit their instance state. |
 | 93 | `lower/gobject_class.rs` | 1,384 | 1,384 | Register GObject classes and emit their constructors, vfunc entries, and signal calls. |
 | 94 | `lower/gobject_templates.rs` | 621 | 621 | Read GObject template and property declarations and emit their callback/accessor bodies. |
-| 95 | `lower/com_class.rs` | 579 | 579 | Register COM classes and lower their constructor, activation, member, and super routes. |
+| 95 | `lower/com_class.rs` | 590 | 590 | Register COM classes and lower their constructor, activation, member, and super routes. |
 | | **Test module** | | | |
 | 96 | `lower/tests.rs` | 794 | 794 | Preserve the existing inline test module as lower/tests.rs under the same module path. |
 
@@ -203,6 +203,13 @@ Existing documentation links follow their targets into the new modules. A target
 | --- | --- | --- |
 | `Step` at 22,496 | `loop_flow.rs` | `end_loop` consumes the latch action for source and synthesized loops. The record stays in the parent until that owner moves in section 5. |
 | `method_takes` at 50,021 | `accessors.rs` | Delegated setter resolution and property-place selection share the predicate for a setter's argument. |
+
+### Ownership corrections from section 8
+
+| Baseline item | Destination | Caller or shared responsibility |
+| --- | --- | --- |
+| `ObjcDispatch` and `ObjcArm` at 12,635 and 12,649 | `objc_dispatch.rs` | `objc_dispatch`, `dispatch_objc_call`, and `objc_arm` build and consume the dispatch descriptors. Existing implementation tests read the dispatch arms through lower-scoped access. |
+| `ComEntry` at 12,658 | `com_class.rs` | `lower_com_member` constructs the composable Windows Runtime override descriptor, and the retained builder stores it. |
 
 ## Source inventory
 
@@ -573,9 +580,9 @@ The rows use baseline coordinates and count inclusive source lines. An indented 
 12501–12614   114  body_entries             lower        fn lower_object_literal_members
 12616–12625    10  objc_class               lower*       struct ObjcConstruct
 12627–12633     7  objc_class               lower*       struct ObjcEntry
-12635–12647    13  objc_class               lower*       struct ObjcDispatch
-12649–12656     8  objc_class               lower*       struct ObjcArm
-12658–12668    11  objc_class               lower*       struct ComEntry
+12635–12647    13  objc_dispatch            lower*       struct ObjcDispatch
+12649–12656     8  objc_dispatch            lower*       struct ObjcArm
+12658–12668    11  com_class                lower*       struct ComEntry
 12670–12674     5  objc_class               private*     fn objc_selector
 12676–12735    60  objc_class               lower        fn register_objc_class
 12737–12769    33  class_members            lower        fn member_copy
