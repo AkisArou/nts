@@ -2,8 +2,8 @@
 // them nor turn each child into a cold build of the same content-addressed input.
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
-import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.mjs';
-export {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation} from './cache-capabilities.mjs';
+import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
+export {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation} from './cache-capabilities.ts';
 
 export function contentCacheEnvironment(env:NodeJS.ProcessEnv=process.env):Partial<Record<(typeof CONTENT_CACHE_ENVIRONMENT)[number],string>>{
   if(env[FIXTURE_ENVIRONMENT]!==undefined)return Object.fromEntries(CONTENT_CACHE_ENVIRONMENT.flatMap(name=>env[name]===undefined?[]:[[name,env[name]!] ]));

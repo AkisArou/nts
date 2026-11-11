@@ -1,5 +1,5 @@
 import { VM_FLAGS, vmToolFlags } from "./vm-flags.ts";
-import {cacheLocation} from '../gate/cache-capabilities.mjs';
+import {cacheLocation} from '../gate/cache-capabilities.ts';
 // How one program `emit-jvm` wrote is run, the way a runner of thousands of
 // them wants it run: `nts.rt.NtsMain` over its classes, started from a
 // class-data archive of the runtime jar.

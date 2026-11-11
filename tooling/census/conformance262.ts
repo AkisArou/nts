@@ -1,4 +1,4 @@
-import {cacheLocation} from '../gate/cache-capabilities.mjs';
+import {cacheLocation} from '../gate/cache-capabilities.ts';
 // Every Test262 case under a directory, each given one of five outcomes, with
 // every non-pass attributed to a named cause. A conformance run.
 //

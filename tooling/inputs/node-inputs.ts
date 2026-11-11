@@ -8,7 +8,7 @@ import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {nodePin,verifySource} from '../bootstrap/node.ts';
-import {cacheLocation} from '../gate/cache-capabilities.mjs';
+import {cacheLocation} from '../gate/cache-capabilities.ts';
 
 export type Identity={commit:string;tree:string;archive:string;sourceRecord:string};
 export type Records={version:1;releases:Record<string,Identity>};

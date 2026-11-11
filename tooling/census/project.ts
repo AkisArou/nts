@@ -1,4 +1,4 @@
-import {cacheLocation} from '../gate/cache-capabilities.mjs';
+import {cacheLocation} from '../gate/cache-capabilities.ts';
 // The scratch project a Test262 file is compiled in, in one place.
 //
 // Two instruments need it — `test262.ts`, which compiles and records why a

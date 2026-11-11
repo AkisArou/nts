@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdirSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {cacheLocation} from '../gate/cache-capabilities.mjs';
+import {cacheLocation} from '../gate/cache-capabilities.ts';
 
 const prepared = new Map();
 export function bundledDependencies(compiler, libraries=['uv'], driver=['clang']) {
