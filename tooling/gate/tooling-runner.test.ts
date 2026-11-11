@@ -28,6 +28,7 @@ test("full-check worker names fit twice their physical nesting depth",()=>{
   // Full check, run, step, tooling file, inner step, census and nested case.
   const ancestry=["r","r","w","r","r","r","w","c","w0","c","w0"] as const;
   for(let repetition=0;repetition<2;repetition++){
+    if(repetition===1)parent=childSlice(parent,unitComponent("r"));
     for(const role of ancestry){
       const before=parent;
       parent=childSlice(parent,role==="r"||role==="c"?unitComponent(role):role);
@@ -36,7 +37,8 @@ test("full-check worker names fit twice their physical nesting depth",()=>{
     }
     if(repetition===0)assert.ok(Buffer.byteLength(parent)<128,parent);
   }
-  assert.equal(Buffer.byteLength(parent),179);
+  assert.equal(Buffer.byteLength(parent),189);
+  assert.equal(parent.split("-").length-1,24);
 });
 
 test("tooling naming accepts existing receipts and compact children of older launchers",()=>{

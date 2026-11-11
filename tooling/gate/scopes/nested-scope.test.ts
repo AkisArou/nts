@@ -155,6 +155,9 @@ console.log(JSON.stringify({supervisor:readFileSync("/proc/self/cgroup","utf8").
     assert.ok(row.group.startsWith(step.workerGroup + "/"), row.kind + " escaped the worker boundary");
     assert.equal(row.oom, "1", row.kind + " lacks its group-OOM boundary");
   }
+  const deepest = observed.rows.at(-1)!.group.split("/").filter(part => part.endsWith(".slice")).at(-1)!;
+  assert.ok(Buffer.byteLength(deepest) <= 255, deepest);
+  t.diagnostic(JSON.stringify({ nestedCaseSlice: deepest, bytes: Buffer.byteLength(deepest), sliceDepth: deepest.split("-").length - 1 }));
 });
 
 test("a tooling collector survives its workers exhausting their step boundary and records pressure", async t => {
