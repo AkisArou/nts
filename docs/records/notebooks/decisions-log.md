@@ -2068,6 +2068,6 @@ and its canonical context.
 Isolation does not imply cold caches. An early per-child environment produced
 42 private native archive caches and a 473 s, 2,469 CPU-s tooling step, against
 #695's 234 s and 1,865 CPU-s. Content-addressed caches are declared by name,
-separately from private mutable state, so native dependencies, C objects, case
+separately from private mutable state, so native dependencies, pinned Node inputs, C objects, case
 roots and JVM CDS retain their shared inputs. #702 separately owns making the
 native archive's identity and bytes independent of extraction paths.

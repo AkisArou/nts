@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {availableParallelism,homedir,tmpdir} from "node:os";
+import {availableParallelism,userInfo,tmpdir} from "node:os";
 import {dirname,isAbsolute,join,relative} from "node:path";
 import {test} from "node:test";
 import {spawnTest} from "../gate/test-wait.ts";
@@ -41,9 +41,9 @@ test("offline manager is private, runs with this Node and is deleted after use",
     t.diagnostic("package-manager storage: "+JSON.stringify({temporary:first.temporary,compileCache:first.compileCache,enabledCache:first.enabledCache}));
     assert.equal(typeof first.temporary,"string","the rebuilt manager environment must retain an owned temporary");
     assert.equal(isAbsolute(first.temporary),true);
-    const temporaryFromCache=relative(join(homedir(),".cache"),first.temporary);
+    const temporaryFromCache=relative(join(userInfo().homedir,".cache"),first.temporary);
     assert.ok(temporaryFromCache!==".."&&!temporaryFromCache.startsWith("../")&&!isAbsolute(temporaryFromCache));
-    assert.equal(first.compileCache,join(homedir(),".cache/nts/node-compile-cache/v1"));
+    assert.equal(first.compileCache,join(userInfo().homedir,".cache/nts/node-compile-cache/v1"));
     // Node reports the base on first enable, and its version directory when already enabled.
     assert.ok(first.enabledCache.directory===first.compileCache||first.enabledCache.directory.startsWith(first.compileCache+"/"),JSON.stringify(first.enabledCache));
     const second=JSON.parse(await manager.run(["--probe"]));assert.equal(second.file,executed);

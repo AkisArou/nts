@@ -42,7 +42,7 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   const shared=join(root,'shared');mkdirSync(shared);
   for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
     const result=spawnSync('sh',[join(from,'tooling/inputs/link.sh'),'work',shared,to],{encoding:'utf8',
-      env:{...fixtureEnvironment(t),HOME:home,PATH:dirname(process.execPath)+':'+process.env.PATH}});
+      env:{...fixtureEnvironment(t),HOME:home,NTS_NODE_INPUTS_CACHE:cache,PATH:dirname(process.execPath)+':'+process.env.PATH}});
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(realpathSync(join(to,'third_party/node-inputs')),pairPath(release,table.releases[release]!,cache));
     assert.equal(readFileSync(join(to,'dependency-provisioned'),'utf8'),'yes');

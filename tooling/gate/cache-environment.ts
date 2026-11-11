@@ -3,9 +3,9 @@
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
 
-export const CONTENT_CACHE_ENVIRONMENT=['NTS_NODE_DEPS_CACHE','NTS_CENSUS_OBJECT_CACHE','NTS_CENSUS_CASE_ROOTS','NTS_JVM_CDS_DIR'] as const;
+export const CONTENT_CACHE_ENVIRONMENT=['NTS_NODE_DEPS_CACHE','NTS_NODE_INPUTS_CACHE','NTS_CENSUS_OBJECT_CACHE','NTS_CENSUS_CASE_ROOTS','NTS_JVM_CDS_DIR'] as const;
 export function contentCacheEnvironment():Record<(typeof CONTENT_CACHE_ENVIRONMENT)[number],string>{
   const root=join(userInfo().homedir,'.cache/nts');
-  return {NTS_NODE_DEPS_CACHE:join(root,'node-deps'),NTS_CENSUS_OBJECT_CACHE:join(root,'c-objects'),
+  return {NTS_NODE_DEPS_CACHE:join(root,'node-deps'),NTS_NODE_INPUTS_CACHE:join(userInfo().homedir,'.cache/nts-node-inputs'),NTS_CENSUS_OBJECT_CACHE:join(root,'c-objects'),
     NTS_CENSUS_CASE_ROOTS:join(root,'case-roots'),NTS_JVM_CDS_DIR:join(root,'jvm-cds')};
 }

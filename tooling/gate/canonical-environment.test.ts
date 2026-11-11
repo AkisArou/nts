@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync, symlinkSync, utimesSync, chmodSync, rmSync} from "node:fs";
 import {copyModuleClosure,moduleClosure} from "./module-closure-fixture.ts";
-import {homedir} from "node:os";
+import {homedir,userInfo} from "node:os";
 import {dirname, join} from "node:path";
 import {pathToFileURL} from "node:url";
 import {dependencyCapability} from "../differential/oracle-dependencies.ts";
@@ -33,7 +33,7 @@ function cacheAuthority(){
 
 test("owned Node cache storage retains its temporary and ignores a shell cache override",t=>{
   const {run,base}=fixture(t),authority=cacheAuthority();
-  assert.equal(authority.root,join(homedir(),".cache/nts/node-compile-cache/v1"));
+  assert.equal(authority.root,join(userInfo().homedir,".cache/nts/node-compile-cache/v1"));
   assert.deepEqual(authority.environment({...base,TMPDIR:"/tmp",NODE_COMPILE_CACHE:"/tmp/shell-cache"},{temporary:run}),
     {TMPDIR:run,NODE_COMPILE_CACHE:authority.root});
 });
@@ -41,7 +41,7 @@ test("owned Node cache storage retains its temporary and ignores a shell cache o
 test("owned Node cache storage refuses invalid temporary candidates by name",t=>{
   const {run,base}=fixture(t),authority=cacheAuthority(),file=join(run,"file"),link=join(run,"link");
   writeFileSync(file,"not a directory");symlinkSync("/tmp",link);
-  for(const temporary of ["relative","/tmp",join(homedir(),".cache"),join(run,"missing"),file,link])
+  for(const temporary of ["relative","/tmp",join(userInfo().homedir,".cache"),join(run,"missing"),file,link])
     assert.throws(()=>authority.environment(base,{temporary}),/owned Node cache temporary/);
 });
 
@@ -58,7 +58,7 @@ test("owned Node cache storage preserves a validated canonical temporary",t=>{
 });
 
 test("canonical Node cache storage has one owned root across nested runs",t=>{
-  const {run,base}=fixture(t),expected=join(homedir(),".cache/nts/node-compile-cache/v1");
+  const {run,base}=fixture(t),expected=join(userInfo().homedir,".cache/nts/node-compile-cache/v1");
   const parent=gateEnvironment({...base,NODE_COMPILE_CACHE:"/tmp/shell-cache"},{run});
   assert.equal(parent.env.NODE_COMPILE_CACHE,expected);
   assert.equal(parent.report.ambient.NODE_COMPILE_CACHE,expected);
@@ -305,7 +305,7 @@ test("the explicit old-environment comparison is never landing evidence",t=>{
   const old=gateEnvironment(launcher,{run,standalone:true});
   assert.equal(old.report.canonical,false);assert.equal(old.env.NODE_OPTIONS,"--max-old-space-size=8192");
   assert.equal(old.env.TMPDIR,join(run,"tmp"));
-  const expected:NodeJS.ProcessEnv={...launcher,TMPDIR:join(run,"tmp"),NODE_COMPILE_CACHE:join(homedir(),".cache/nts/node-compile-cache/v1"),XDG_CACHE_HOME:join(base.HOME,".cache"),NTS_GATE_RUN_DIR:run,NTS_ORACLE_TYPESCRIPT:oracleToolchainLocation()};
+  const expected:NodeJS.ProcessEnv={...launcher,TMPDIR:join(run,"tmp"),NODE_COMPILE_CACHE:join(userInfo().homedir,".cache/nts/node-compile-cache/v1"),XDG_CACHE_HOME:join(base.HOME,".cache"),NTS_GATE_RUN_DIR:run,NTS_ORACLE_TYPESCRIPT:oracleToolchainLocation()};
   expected.NTS_ORACLE_DEPENDENCIES=JSON.stringify(dependencyCapability(new URL('../../',import.meta.url).pathname,join(run,'tmp','oracle-dependencies')));
   delete expected[ENVIRONMENT_EXPERIMENT];
   assert.deepEqual(Object.fromEntries(Object.entries(old.env).filter(([name])=>name!==ENVIRONMENT_CONTEXT)),expected);
