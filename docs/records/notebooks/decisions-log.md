@@ -2056,3 +2056,18 @@ The priority-admission control's synthetic memory did not cover oracle startup's
 real disk admission. It waited below the disk floor before reaching its fake
 execution clock. The inventory and landing-run evidence are attached to #694;
 #695 is the resource capability slice of that group.
+
+#697 owns test children's environments through an allowlist. HOME, XDG,
+temporary and Git state belong to each TestContext and are reused by its
+children. Node, JDK and rustup directories are resolved ahead of shims that
+consult HOME: the asdf Java shim exited 126 under a private HOME, while the
+declared JDK binary succeeded. Run, oracle and resource handoffs are named,
+and independent resource fixtures revoke reservations in both the environment
+and its canonical context.
+
+Isolation does not imply cold caches. An early per-child environment produced
+42 private native archive caches and a 473 s, 2,469 CPU-s tooling step, against
+#695's 234 s and 1,865 CPU-s. Content-addressed caches are declared by name,
+separately from private mutable state, so native dependencies, C objects, case
+roots and JVM CDS retain their shared inputs. #702 separately owns making the
+native archive's identity and bytes independent of extraction paths.

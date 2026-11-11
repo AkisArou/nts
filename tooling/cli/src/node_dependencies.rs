@@ -56,15 +56,15 @@ pub(super) fn for_build(
         PathBuf::from(cache)
     } else {
         std::env::var_os("XDG_CACHE_HOME")
-        .map_or_else(
-            || {
-                std::env::var_os("HOME")
-                    .map(|home| PathBuf::from(home).join(".cache"))
-                    .context("native dependency cache needs HOME or XDG_CACHE_HOME")
-            },
-            |path| Ok(PathBuf::from(path)),
-        )?
-        .join("nts/node-deps")
+            .map_or_else(
+                || {
+                    std::env::var_os("HOME")
+                        .map(|home| PathBuf::from(home).join(".cache"))
+                        .context("native dependency cache needs HOME or XDG_CACHE_HOME")
+                },
+                |path| Ok(PathBuf::from(path)),
+            )?
+            .join("nts/node-deps")
     };
     let mut flags = tools.cpu.clone();
     if tools.lto {

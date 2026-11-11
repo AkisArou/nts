@@ -1,5 +1,5 @@
 // Test children get tool capabilities and named run handoffs, never the shell's
-// policy. Everything writable belongs to this environment's fixture lifetime.
+// policy. Mutable state belongs to the fixture; declared content caches are shared.
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {userInfo} from 'node:os';
 import {delimiter,dirname,join} from 'node:path';
@@ -71,10 +71,6 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   if(owned.PATH===undefined)env.PATH=[...toolchainDirectories(process.execPath,env),...(env.PATH?[env.PATH]:[])].join(delimiter);
   if(context){
     const next=JSON.parse(env[ENVIRONMENT_CONTEXT]!) as GateEnvironmentContext;
-    for(const [name,value] of Object.entries(owned)){
-      if(value===undefined)continue;
-      if(!HOST.has(name)||name==='NTS_ORACLE_TYPESCRIPT'||name==='NTS_ORACLE_DEPENDENCIES')next.owned[name]=value;
-    }
     for(const name of HOST_CAPABILITIES)next.report.host[name]=env[name]??null;
     for(const name of Object.keys(next.report.ambient))next.report.ambient[name]=env[name]??null;
     env[ENVIRONMENT_CONTEXT]=JSON.stringify(next);

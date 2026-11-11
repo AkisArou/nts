@@ -379,6 +379,18 @@ locked session on CPU 4 and keep the wall-time floor below.
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
+- **Test children receive an owned environment.** `fixtureEnvironment` in
+  `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
+  temporary and Git state, reused by its children and removed with the fixture.
+  Tools and named run, oracle and resource capabilities are allowlisted;
+  unknown shell variables never reach a child. Declared Node, JDK and rustup
+  directories precede version-manager shims that consult HOME. Shared
+  content-addressed caches are explicit named capabilities from
+  `tooling/gate/cache-environment.ts`, including native dependencies, C
+  objects, case roots and JVM CDS; they are never discovered through the
+  fixture's private HOME. A fixture testing cache behavior declares its own
+  cache capability. A generated shim declares any additional protocol fields
+  or descriptors it forwards.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
   priority; a process is stopped by its systemd unit, never by a PID found
   in `ps`.
@@ -442,7 +454,9 @@ the first node task.
 - **Tests own their view of the host**: one complete resource capability
   reaches admission, dependency startup, the ledger, scheduling and census
   reporting. Omission fails by name. Decision fixtures supply observations;
-  kernel wiring controls opt into live sampling and use readiness barriers
+  kernel wiring controls opt into live sampling and use readiness barriers.
+  Test children receive an allowlisted environment with private state per
+  fixture; shared content-addressed caches are declared by name
   ([log](records/notebooks/decisions-log.md#tests-own-their-view-of-the-host-11-11)).
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket
