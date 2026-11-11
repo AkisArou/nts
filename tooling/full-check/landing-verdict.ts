@@ -39,7 +39,6 @@ export function measureWithLanding(options: {
   evidenceRun: string; lastGreen?: RunRecord; log: (line: string) => void;
   measure: (steps: readonly string[], lastGreen?: RunRecord) => Measurement;
 }): Measurement {
-  const started = Date.now();
   const plan = readLandingVerdict(options.home, options.commit, options.tree, options.contract, options.requested);
   if (!plan.receipt) {
     options.log("core landing reuse: " + plan.reason);
@@ -56,7 +55,7 @@ export function measureWithLanding(options: {
   const fresh = plan.execute.length ? options.measure(plan.execute, options.lastGreen) : undefined;
   const run = fresh?.run ?? options.evidenceRun;
   mkdirSync(run, { recursive: true });
-  const summary = fresh ? summaryOf(run) : {};
+  const summary: Summary = fresh ? summaryOf(run) : { wall_s: 0 };
   const steps: Measurement["steps"] = { ...fresh?.steps };
   const reasons: Measurement["reasons"] = { ...fresh?.reasons };
   const rows = new Map((summary.steps ?? []).map(step => [step.name, step]));
@@ -88,7 +87,6 @@ export function measureWithLanding(options: {
     identities: { ...summary.identities, commit: options.commit },
     environment: { ...summary.environment, canonical: fresh ? summary.environment?.canonical === true : true, contract: options.contract },
     verdict, requested: [...options.requested], executed: plan.execute, execution,
-    wall_s: typeof summary.wall_s === "number" ? summary.wall_s : (Date.now() - started) / 1000,
     steps: options.requested.map(name => rows.get(name)),
   };
   writeFileSync(join(run, "summary.json"), JSON.stringify(combined, null, 2) + "\n");

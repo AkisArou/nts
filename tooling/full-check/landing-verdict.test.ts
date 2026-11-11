@@ -50,6 +50,7 @@ test("the core executes deferred work and prepares release artifacts while retai
   assert.equal(notices.pending[0]?.name, "new-case");
   assert.equal(notices.accepted[0]?.name, "better-case");
   const summary = JSON.parse(readFileSync(join(result.run, "summary.json"), "utf8"));
+  assert.equal(summary.wall_s, 2);
   assert.equal(summary.execution.cpu_s, 2.75);
   assert.equal(summary.execution.credited_cpu_s, 20);
   assert.equal(summary.steps.find((step: { name: string }) => step.name === "tests").cpu, 0);
@@ -77,6 +78,7 @@ test("an entirely covered probe produces its own complete summary without invoki
   assert.equal(result.verdict, "green");
   assert.deepEqual(readSummary(result.run, commit, requested), { steps: { tests: "PASS", rustfmt: "PASS" }, reasons: {} });
   const summary = JSON.parse(readFileSync(join(result.run, "summary.json"), "utf8"));
+  assert.equal(summary.wall_s, 0);
   assert.equal(summary.execution.cpu_s, 0);
   assert.equal(summary.execution.credited_cpu_s, 20);
 });
