@@ -30,3 +30,8 @@ export function ownUnit(cgroup: string = readFileSync("/proc/self/cgroup", "utf8
 export function bindsToProperties(unit: string | undefined): string[] {
   return unit ? ["BindsTo", "as", "1", unit, "After", "as", "1", unit] : [];
 }
+
+/** The retained worker boundary is a sibling of the step's supervisor. */
+export function stepWorkersSlice(stepSlice: string): string {
+  return stepSlice.slice(0, -6) + "-workers.slice";
+}

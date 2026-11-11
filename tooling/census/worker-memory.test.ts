@@ -712,13 +712,14 @@ test("a pool whose reservation is outranked starts no new case until the request
   await gate.settled();
 });
 
-test("inside a gate step's bounded slice, the step's census has no aggregate cap of its own, and a case killed at the step's bound is pressure, never its budget", async t => {
-  // The step's slice, as run.mjs makes it: MemoryMax alone, here 256 MiB, so
-  // a case that holds more is killed at the step's bound. The census runs
-  // inside it, sized by the step's budget, as a step's does.
+for (const family of [false, true]) test(`inside a gate step's bounded worker subtree, the supervisor records pressure from ${family ? "a worker process family" : "one worker"}`, async t => {
+  // The worker subtree holds 256 MiB. The supervisor's sibling has its
+  // own runaway bound, so even a second OOM while victim pages drain stays
+  // inside the workers. An oracle worker and its SDK child die as one group.
   const { GateScopes } = await import("../gate/scopes/step-scope.ts");
   const owner = new GateScopes(process.env), slice = owner.step({ max: 256 * 2 ** 20 });
   t.after(async () => { await slice.drain(); owner.close(); });
+  const allocation = "const held = Buffer.alloc(400 * 2 ** 20, 1); console.log(held.length)";
   const census = `import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const { MemoryRun, memoryCause } = await import(${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});
@@ -727,17 +728,30 @@ const own = readFileSync("/sys/fs/cgroup" + memory.group + "/memory.max", "utf8"
 // A worker whose own cap is above the step's: the step's bound fires first.
 const worker = memory.worker("over", 512 * 2 ** 20);
 const before = worker.counters(), aggregateBefore = memory.aggregateOoms();
-const scope = worker.scope(process.execPath, ["-e", "const held = Buffer.alloc(400 * 2 ** 20, 1); console.log(held.length)"]);
-const killed = spawnSync("systemd-run", scope.argv, { env: scope.env, stdio: "ignore" });
+const allocation = "const held = Buffer.alloc(400 * 2 ** 20, 1); console.log(held.length)";
+const work = \`const fs = require("node:fs");
+const group = fs.readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
+console.log("oom_group " + fs.readFileSync("/sys/fs/cgroup" + group + "/memory.oom.group", "utf8").trim());
+${family ? 'require("node:child_process").spawnSync(process.execPath, ["-e", ' + JSON.stringify(allocation) + '], {stdio: "inherit"}); console.log("worker family survived");' : allocation}\`;
+const scope = worker.scope(process.execPath, ["-e", work]);
+const killed = spawnSync("systemd-run", scope.argv, { env: scope.env, encoding: "utf8" });
 const cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms());
 worker.stop(scope);
 memory.close();
-console.log(JSON.stringify({ own, effective, status: killed.status, cause, group: memory.group }));`;
+console.log(JSON.stringify({ own, effective, status: killed.status, cause, group: memory.group,
+  supervisor: readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, ""),
+  workerOutput: killed.stdout, workerError: killed.stderr }));`;
   const launch = slice.command(process.execPath, ["--input-type=module", "-e", census]);
   const ran = spawnTest(launch.command, launch.args, { encoding: "utf8",
     env: { ...process.env, NTS_TOOLING_SLICE: slice.slice, NTS_GATE_STEP_MEMORY_BYTES: String(512 * 2 ** 20) } }, "the step's census");
   assert.equal(ran.status, 0, ran.stdout + ran.stderr);
-  const seen = JSON.parse(ran.stdout.trim().split("\n").at(-1)!) as { own: string; effective: number; status: number; cause: string; group: string };
+  const seen = JSON.parse(ran.stdout.trim().split("\n").at(-1)!) as { own: string; effective: number; status: number; cause: string; group: string;
+    supervisor: string; workerOutput: string; workerError: string };
+  assert.ok(seen.supervisor.startsWith(slice.supervisorGroup + "/"));
+  assert.ok(seen.group.startsWith(slice.workerGroup + "/"));
+  assert.equal(readFileSync(join(CGROUP, slice.group, "memory.max"), "utf8").trim(), "max");
+  assert.match(seen.workerOutput, /oom_group 1/, seen.workerError);
+  assert.doesNotMatch(seen.workerOutput, /worker family survived/);
   assert.equal(seen.own, "max", "no cap of its own beneath the step's");
   assert.ok(seen.group.startsWith(`${slice.group}/`));
   assert.equal(seen.effective, 256 * 2 ** 20, "the step's bound is its ceiling");

@@ -10,7 +10,7 @@ import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { toolingSlice, toolingSlicePrefix } from "../gate/tooling-slice.ts";
-import { bindsToProperties, ownUnit } from "../gate/scopes/bound-slice.ts";
+import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -134,6 +134,8 @@ const ENTRY = [
   '[ "$scope_limit" -le "$scope_max" ] || { echo "resident cap: worker MemoryMax exceeds budget" >&2; exit 125; }',
   'scope_swap=; IFS= read -r scope_swap < "$scope_path/memory.swap.max"',
   '[ "$scope_swap" = 0 ] || { echo "resident cap: worker swap is not disabled" >&2; exit 125; }',
+  'scope_oom_group=; IFS= read -r scope_oom_group < "$scope_path/memory.oom.group"',
+  '[ "$scope_oom_group" = 1 ] || { echo "resident cap: worker has no OOM group boundary" >&2; exit 125; }',
   'printf "%s\\n" "$scope_current" > "$scope_ready"',
   "ulimit -c 0",
   'exec "$@"',
@@ -142,23 +144,24 @@ const ENTRY = [
 export type MemoryScope = { unit: string; ready: string; argv: string[]; env: NodeJS.ProcessEnv };
 
 /**
- * The cgroup of the tooling slice this process runs in (NTS_TOOLING_SLICE)
- * when the kernel holds it to a finite memory.max with no swap: a gate step's
- * slice, bounded at the step's runaway bound (run.mjs, "Memory"). A census
- * inside it caps its aggregate at that slice's limit, not its own.
+ * The step's retained worker boundary is a sibling of its supervisor.
+ * The kernel must place both beneath the caller's owned accounting root.
+ * A worker hitting this boundary cannot make the supervisor an OOM victim.
  */
-function cappingSlice(): string | undefined {
+function cappingSlice(): { slice: string; group: string } | undefined {
   const slice = toolingSlice();
   if (!slice) return undefined;
-  // Its cgroup is an ancestor of this process's own: read, never asked of
-  // the manager.
   const own = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
   const at = own.split("/").indexOf(slice);
   if (at < 1) return undefined;
-  const group = own.split("/").slice(0, at + 1).join("/");
-  const read = (name: string) => { try { return readFileSync(join(CGROUP, group, name), "utf8").trim(); } catch { return ""; } };
-  const max = Number(read("memory.max"));
-  return Number.isSafeInteger(max) && max >= 1 && read("memory.swap.max") === "0" ? group : undefined;
+  const parent = own.split("/").slice(0, at + 1).join("/");
+  const workers = stepWorkersSlice(slice), group = parent + "/" + workers;
+  if (!existsSync(join(CGROUP, group))) return undefined;
+  const max = Number(readFileSync(join(CGROUP, group, "memory.max"), "utf8"));
+  if (!Number.isSafeInteger(max) || max < 1 || readFileSync(join(CGROUP, group, "memory.swap.max"), "utf8").trim() !== "0") {
+    throw new Error("resident cap: the step's worker boundary lacks a finite swap-free ceiling");
+  }
+  return { slice: workers, group };
 }
 
 export class MemoryRun {
@@ -170,7 +173,7 @@ export class MemoryRun {
   #workers: MemoryWorker[] = [];
   #closed = false;
   #recordPeak = false;
-  /** The gate step's slice that holds the aggregate to its limits, when it runs in one (`cappingSlice`). */
+  /** The step's sibling worker boundary, when it supplies the aggregate's cap. */
   #outer: string | undefined;
   constructor({ budgetBytes, id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) }: { budgetBytes?: number; id?: string } = {}) {
     // A budget of its own -- a caller's, as a capture's or a test's -- is its
@@ -179,16 +182,17 @@ export class MemoryRun {
     const stepBudget = budgetBytes === undefined;
     this.budgetBytes = integer(budgetBytes ?? Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), "resident run budget");
     this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
-    this.prefix = toolingSlicePrefix(`ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`);
+    const boundary = cappingSlice();
+    const suffix = `ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`;
+    this.prefix = boundary ? boundary.slice.slice(0, -6) + "-" + suffix : toolingSlicePrefix(suffix);
     this.slice = `${this.prefix}.slice`;
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
     mkdirSync(this.directory, { recursive: true });
     try {
-      // Inside a gate step, the step's slice bounds the aggregate at its
-      // runaway bound, which follows the step's grant: the aggregate has no
-      // cap of its own beneath it, and a kill there is pressure, never a
-      // case's.
-      this.#outer = stepBudget ? cappingSlice() : undefined;
+      // The step's worker boundary follows its grant. Its supervisor is
+      // outside that cap and can record a worker killed by pressure there.
+      // An explicit budget also keeps its aggregate's own case limit.
+      this.#outer = stepBudget ? boundary?.group : undefined;
       // Bound to the unit this process runs in, as a gate run's root slice
       // is: a census killed without close() -- its unit stopped, itself
       // SIGKILLed -- takes its slices with that unit instead of leaving
@@ -247,8 +251,8 @@ export class MemoryRun {
   }
   aggregateOoms() { return events(this.group, true).oom; }
   effectiveBudgetBytes() {
-    // Inside a gate step, the step's slice's runaway bound, which follows its
-    // grant.
+    // The step's worker boundary follows its live grant independently of
+    // the supervisor's sibling runaway bound.
     if (this.#outer) {
       const outer = Number(readFileSync(join(CGROUP, this.#outer, "memory.max"), "utf8"));
       if (!Number.isSafeInteger(outer) || outer < 1) throw new Error("resident cap: the step slice's ceiling is not finite");
@@ -293,7 +297,7 @@ export class MemoryWorker {
     const ready = join(this.run.directory, `${unit}.ready`);
     const scope = {
       unit, ready,
-      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${this.bytes}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=continue", "sh", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
+      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${this.bytes}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "sh", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
       env: { ...environment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);

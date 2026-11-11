@@ -33,7 +33,7 @@ test("a delegated cpuset is applied to the owned scope without creating a siblin
       assert.equal(launch.command, "systemd-run");
       assert.equal(launch.args.filter((argument: string) => argument === "--scope").length, 1);
       assert.ok(launch.args.includes(`--property=AllowedCPUs=${cpus}`));
-      assert.ok(launch.args.includes(`--slice=${step.slice}`));
+      assert.ok(launch.args.includes(`--slice=${step.supervisorSlice}`));
       assert.equal(launch.args.includes("systemd-run"), false, "the inner command cannot move itself to another scope");
     } finally { await step.drain(); owner.close(); }
   } finally { hooks.deregister(); }

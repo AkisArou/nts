@@ -400,8 +400,8 @@ function stepEnv(step, slots, scope) {
   e.NTS_GATE_STEP = step.name;
   e.NTS_GATE_STEP_ATTEMPT = RUN_DIR;
   e.NTS_GATE_STEP_RESULT = join(RUN_DIR, `${step.name}.instrument.json`);
-  // What its tools size their workers by; the step's slice holds the step,
-  // its resident worker scopes among it, to its grant (see "Memory").
+  // What its tools size their workers by. Separately capped supervisor and
+  // worker subtrees share the step's retained accounting root.
   e.NTS_GATE_STEP_MEMORY_BYTES = String(stepBudget(step));
   if (step.elastic && tokenAddr) e.NTS_GATE_TOKENS = tokenAddr;
   else e.NTS_GATE_TOKEN_HELD = "1";
@@ -757,8 +757,10 @@ let pending = [];
 // when its request named one, else one token's share -- each with what it
 // grew by while it ran (`used()`).
 //
-// **A step's slice bounds only a runaway** (`runawayBound`). Its MemoryMax
-// is twice what the step was measured to hold, and never below its grant and
+// **A step's sibling boundaries bound runaways** (`runawayBound`). The
+// supervisor and workers have separate MemoryMax limits under one accounting
+// root, so worker pressure leaves the supervisor able to record it. Each is
+// twice what the step was measured to hold, and never below its grant and
 // a block or a quarter of it more, with no swap and no MemoryHigh: nothing
 // throttles a step to its grant, since anonymous memory held at MemoryHigh
 // without swap does not slow but stops, and a stopped step's wall clock runs

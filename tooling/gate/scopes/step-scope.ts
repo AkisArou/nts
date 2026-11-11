@@ -8,7 +8,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { newToolingSlice } from "../tooling-slice.ts";
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
-import { bindsToProperties, ownUnit } from "./bound-slice.ts";
+import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -129,13 +129,17 @@ export async function waitForEmptyCgroup(read: () => 0 | 1, effects = { now: () 
   }
 }
 
-/** The retained step slice contains its execution scope and nested census
- * scopes. Read populated=0 on that complete subtree before stopping the slice;
- * reading only the execution scope would miss its sibling worker scopes. */
+/** An accounting root retains separately bounded supervisor and worker
+ * subtrees. Pressure inside a worker boundary cannot kill its supervisor.
+ * Drain and memory accounting cover the complete retained root. */
 export class StepScope {
   readonly unit: string;
   readonly slice: string;
   readonly group: string;
+  readonly supervisorSlice: string;
+  readonly supervisorGroup: string;
+  readonly workerSlice: string;
+  readonly workerGroup: string;
   private readonly device: bigint;
   private readonly inode: bigint;
   private closed = false;
@@ -150,12 +154,23 @@ export class StepScope {
   constructor(root: GateScopes, limits: StepLimits) {
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = `${this.slice.slice(0, -6)}-step.scope`;
-    this.group = startSlice(this.slice, root.slice, limits);
+    this.group = startSlice(this.slice, root.slice);
+    this.supervisorSlice = this.slice.slice(0, -6) + "-supervisor.slice";
+    this.workerSlice = stepWorkersSlice(this.slice);
     this.entryPath = join(root.directory, `step-entry-${this.nonce}.json`);
-    if (!this.group.startsWith(`${root.group}/`)) throw new Error("step slice escaped its run's subtree");
-    if (!enforced(this.group, limits)) {
+    try {
+      this.supervisorGroup = startSlice(this.supervisorSlice, this.slice, limits);
+      this.workerGroup = startSlice(this.workerSlice, this.slice, limits);
+      if (!this.group.startsWith(`${root.group}/`) ||
+          !this.supervisorGroup.startsWith(`${this.group}/`) || !this.workerGroup.startsWith(`${this.group}/`)) {
+        throw new Error("step boundaries escaped their accounting subtree");
+      }
+      if (!enforced(this.supervisorGroup, limits) || !enforced(this.workerGroup, limits)) {
+        throw new Error(`the kernel does not hold the step's sibling boundaries to MemoryMax=${limits.max} alone and no swap`);
+      }
+    } catch (error) {
       control("stop", this.slice);
-      throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryMax=${limits.max} alone and no swap`);
+      throw error;
     }
     this.wanted = this.held = limits;
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
@@ -176,33 +191,41 @@ export class StepScope {
   private async apply(): Promise<void> {
     while (!this.closed && this.wanted.max !== this.held.max) {
       const want = this.wanted;
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn("systemctl", ["--user", "set-property", "--runtime", this.slice, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
-        let err = "";
-        child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
-        child.on("error", reject);
-        child.on("close", code => code === 0 ? resolve() : reject(new Error(`systemctl set-property ${this.slice}: ${err.trim() || `exit ${code}`}`)));
-      });
+      for (const slice of [this.supervisorSlice, this.workerSlice]) {
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn("systemctl", ["--user", "set-property", "--runtime", slice, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
+          let err = "";
+          child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
+          child.on("error", reject);
+          child.on("close", code => code === 0 ? resolve() : reject(new Error(`systemctl set-property ${slice}: ${err.trim() || `exit ${code}`}`)));
+        });
+      }
       if (this.closed) return;
-      if (!enforced(this.group, want)) throw new Error(`the kernel does not hold step slice ${this.slice} to MemoryMax=${want.max}`);
+      if (!enforced(this.supervisorGroup, want) || !enforced(this.workerGroup, want)) {
+        throw new Error(`the kernel does not hold the step's sibling boundaries to MemoryMax=${want.max}`);
+      }
       this.held = want;
     }
   }
   /** The slice's memory events so far: read live while it runs, and once more as `drain` empties it. */
-  memoryEvents(): MemoryEvents { return this.events ?? memoryEvents(this.group); }
+  private boundaryEvents(): MemoryEvents {
+    const all = memoryEvents(this.group);
+    return { ...all, own_oom: memoryEvents(this.supervisorGroup).own_oom + memoryEvents(this.workerGroup).own_oom };
+  }
+  memoryEvents(): MemoryEvents { return this.events ?? this.boundaryEvents(); }
   command(command: string, args: string[]): { command: string; args: string[] } {
     if (this.launched) throw new Error("step scope launched twice");
     this.launched = true;
     const cpus = gateCpus(inheritedCpus()), affinity = gateScope(cpus);
     // Apply a delegated ceiling in this scope. A second systemd scope would
     // move the command outside the subtree whose drain we prove.
-    return { command: "systemd-run", args: ["--user", "--scope", "--quiet", "--collect", `--unit=${this.unit}`, `--slice=${this.slice}`,
+    return { command: "systemd-run", args: ["--user", "--scope", "--quiet", "--collect", `--unit=${this.unit}`, `--slice=${this.supervisorSlice}`,
       ...(affinity.kind === "scope" ? [`--property=AllowedCPUs=${cpus}`] : []), "--",
       "sh", "-c", 'ulimit -c 0; "$1" "$2" "$3" "$4" "$5" "$6" || exit $?; shift 6; exec "$@"', "_",
-      process.execPath, fileURLToPath(new URL("./step-entry.ts", import.meta.url)), this.entryPath, this.nonce, this.unit, `${this.group}/${this.unit}`,
+      process.execPath, fileURLToPath(new URL("./step-entry.ts", import.meta.url)), this.entryPath, this.nonce, this.unit, `${this.supervisorGroup}/${this.unit}`,
       "taskset", "-c", cpus, command, ...args] };
   }
-  entry(): StepEntry { return readStepEntry(this.entryPath, { nonce: this.nonce, unit: this.unit, group: `${this.group}/${this.unit}` }); }
+  entry(): StepEntry { return readStepEntry(this.entryPath, { nonce: this.nonce, unit: this.unit, group: `${this.supervisorGroup}/${this.unit}` }); }
   kill(): void { if (!this.closed) control("kill", "--kill-whom=all", "--signal=SIGKILL", this.slice); }
   /** The step's measured peak: the slice's memory.peak, which `drain` reads once its last process has exited; null before, or unread. */
   get memoryPeakBytes(): number | null { return this.peak; }
@@ -216,7 +239,7 @@ export class StepScope {
       device: String(this.device), inode: String(this.inode), populated: 0, observed_at: new Date().toISOString() };
     // Nothing of the step runs any more, and stopping the slice removes its cgroup.
     this.peak = memoryPeak(this.group);
-    this.events = memoryEvents(this.group);
+    this.events = this.boundaryEvents();
     control("stop", this.slice);
     this.closed = true;
     return proof;
