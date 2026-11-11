@@ -138,9 +138,9 @@ function plannedEntry(line:string):OraclePlanEntry{
     throw new ToolingInstrumentError('tooling-setup','oracle planner held: its first line names no entry: '+line.slice(0,200));
   return {entry:named.entry,source:named.source};
 }
-export async function runOraclePlanner(planner:string,args:readonly string[],options:{env:NodeJS.ProcessEnv;cwd?:string;limits?:OraclePlannerLimits}):Promise<OraclePlanned>{
+export async function runOraclePlanner(planner:string,args:readonly string[],options:{env:NodeJS.ProcessEnv;cwd?:string;limits?:OraclePlannerLimits;compile?:typeof compileActive}):Promise<OraclePlanned>{
   const limits=options.limits??ORACLE_PLANNER_LIMITS;
-  const result=await compileActive({},planner,args,{cwd:options.cwd??process.cwd(),env:options.env,maxBuffer:64*2**20,
+  const result=await (options.compile??compileActive)({},planner,args,{cwd:options.cwd??process.cwd(),env:options.env,maxBuffer:64*2**20,
     eachProcessCpuSeconds:limits.cpuSeconds,idleMs:limits.idleMs,pollMs:Math.min(COMMAND_ACTIVITY_POLL_MS,limits.idleMs/4)});
   const end=result.stdout.indexOf('\n');
   if(result.timeout&&!result.memoryKilled){

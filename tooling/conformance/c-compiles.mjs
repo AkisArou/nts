@@ -25,8 +25,8 @@ import { publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentEr
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FLAGS = ["-std=c11", "-fsyntax-only"];
 
-function run(command, args, root, env, activity) {
-  return activeCommand(command,args,{...activity,cwd:root,env});
+function run(command, args, root, env, activity,execute) {
+  return execute(command,args,{...activity,cwd:root,env});
 }
 
 function size(path) {
@@ -43,11 +43,11 @@ export function cachedEmission(project, base, hash) {
   return read(join(base, `${name}.status`)) === "0" ? join(base, name) : null;
 }
 
-export async function measure({ project, root, compiler, env, work, cached, cc, activity }) {
+export async function measure({ project, root, compiler, env, work, cached, cc, activity, run:execute=activeCommand }) {
   const out = cached ?? work;
   if (!cached) {
     mkdirSync(out, { recursive: true });
-    const emit = await run(compiler, ["emit-c", project, "--out", out, "--napi"], root, env, activity);
+    const emit = await run(compiler, ["emit-c", project, "--out", out, "--napi"], root, env, activity,execute);
     if (emit.hung) return { category: "hung", why: emit.hung };
     if (emit.runaway) return { category: "runaway", why: emit.runaway };
     if (emit.error || emit.signal || emit.status !== 0) {
@@ -57,7 +57,7 @@ export async function measure({ project, root, compiler, env, work, cached, cc, 
   const source = join(out, "program.c");
   const bytes = size(source);
   if (bytes === 0) return { category: "not-measured", why: "emit-c wrote no nonempty program.c" };
-  const compiled = await run(cc, [...FLAGS, "-I", out, source], root, env, activity);
+  const compiled = await run(cc, [...FLAGS, "-I", out, source], root, env, activity,execute);
   if (compiled.hung) return { category: "hung", why: compiled.hung };
   if (compiled.runaway) return { category: "runaway", why: compiled.runaway };
   if (compiled.error || compiled.signal) {

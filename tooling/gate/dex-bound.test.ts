@@ -45,9 +45,11 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
       .map(([name, outcome]) => `benchmarks/cases/${name}\t${JSON.stringify({ scope: "compile", source: digest("1"), driver: digest("2"), outcome })}\n`).join(""));
   const nts = join(own, "bin/nts");
   writeFileSync(nts, '#!/bin/sh\ncase "$2" in *-spin*) while :; do :; done ;; *-dexes*|*-refused*) mkdir -p "$4/nts/gen" && echo class > "$4/nts/gen/Program.class" && exit 0 ;; esac\necho "error: the backend declines this program" >&2\nexit 1\n', { mode: 0o755 });
-  // The real supervisor, with the compile bound it was asked for made small.
+  // The owner receives a fixed compile-timeout observation; normal targets retain live tool wiring.
   const preload = join(own, "compile-bound.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-command.ts")).href;
-  writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,...(options.ownCpuSeconds?{ownCpuSeconds:0.5}:{}),pollMs:50})}});\n`);
+  writeFileSync(preload, `import {mock} from 'node:test';import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('./command-observations-fixture.ts',import.meta.url).href)};
+const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>
+ args.some(arg=>String(arg).includes('-spin'))&&options.ownCpuSeconds?Promise.resolve(scriptedCommand(command,{...options,ownCpuSeconds:0.5},[commandSample(500,{own:50})])):real.activeCommand(command,args,options)}});\n`);
   writeFileSync(join(own, "bin/node"), `#!/bin/sh\nexec '${process.execPath}' --no-warnings --experimental-test-module-mocks --import '${preload}' "$@"\n`, { mode: 0o755 });
   const frame = join(own, "result.json");
   const run = (targets: string[], named: boolean, extra: NodeJS.ProcessEnv = {}) => {

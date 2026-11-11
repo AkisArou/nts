@@ -1,3 +1,4 @@
+import {commandObservationFixture} from './command-observations-fixture.ts';
 import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawn,spawnSync} from "node:child_process";
@@ -5,7 +6,7 @@ import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {randomUUID} from "node:crypto";
 import {join} from "node:path";
 import {test} from "node:test";
-import {activeCommand,processActivity,CommandActivitySampler,threadsBusy} from "./active-command.ts";
+import {activeCommand,processActivity,CommandActivitySampler,threadsBusy,liveCommandObservations} from "./active-command.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {waitFor} from "./test-wait.ts";
 import {testScratch} from "./test-scratch.ts";
@@ -86,11 +87,12 @@ test("a group with a busy thread is reported as busy, without CPU progress",()=>
 
 test("every thread's state counts: this test's own thread is busy, a sleeping child's are not",async()=>{
   assert.equal(threadsBusy(process.pid),true,"the thread reading its own state is running");
-  const child=spawn(process.execPath,["-e","Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{env:testEnvironment(),stdio:"ignore"});
-  let closed=false;child.on("close",()=>{closed=true;});
+  const child=spawn(process.execPath,["-e","require('node:fs').writeSync(1,'ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{env:testEnvironment(),stdio:['ignore','pipe','ignore']});
+  let closed=false,ready=false;child.stdout.on('data',()=>{ready=true;});
+  const done=new Promise<void>(resolve=>child.on('close',()=>{closed=true;resolve();}));
   try{
-    await waitFor("every thread of a sleeping child asleep",()=>!threadsBusy(child.pid!),{stopped:()=>closed?"the sleeping child exited":undefined});
-  }finally{child.kill("SIGKILL");}
+    await waitFor("every thread of the ready sleeping child asleep",()=>ready&&!threadsBusy(child.pid!),{stopped:()=>closed?"the sleeping child exited":undefined});
+  }finally{child.kill("SIGKILL");await done;}
   assert.equal(threadsBusy(2**22+1),false,"no such process has no busy thread");
 });
 
@@ -100,11 +102,17 @@ test("structured stdout stays separate while command diagnostics are retained",a
   assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout),{value:7});assert.equal(result.stderr,"diagnostic\n");assert.ok(result.out.includes("diagnostic\n"));assert.ok(result.out.includes(result.stdout));
 });
 
-test("CPU in a nested owned group keeps its waiting parent active",async t=>{
-  const {root,env}=fixture(t);
-  const body="import time\nstart=time.process_time()\nwhile time.process_time()-start<2.1: pass";
+test("live session observations include CPU in a nested owned group",async t=>{
+  const {root,env}=fixture(t),ready=join(root,'ready'),release=join(root,'release'),live=liveCommandObservations(env);
+  let descendant=false;
+  const observations={...live,watch:watch=>live.watch({...watch,sample:(cpu,own,busy,processOwn)=>{
+    watch.sample(cpu,own,busy,processOwn);
+    if(cpu>own&&existsSync(ready)){descendant=true;writeFileSync(release,'release');}
+  }})};
+  const body="import os\nopen("+JSON.stringify(ready)+",'w').close()\nwhile not os.path.exists("+JSON.stringify(release)+"): pass";
   const parent=`import subprocess\np=subprocess.Popen(['python3','-c',${JSON.stringify(body)}],process_group=0)\np.wait()\nraise SystemExit(p.returncode)`;
-  const result=await activeCommand('python3',['-c',parent],{cwd:root,env,idleMs:1000,pollMs:100});
+  const result=await activeCommand('python3',['-c',parent],{cwd:root,env,pollMs:50,observations});
+  assert.equal(descendant,true,'the shared session snapshot observes child CPU beyond the waiting leader');
   assert.equal(result.status,0,result.out);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
 });
 
@@ -121,77 +129,59 @@ test("capture budgets hold and multibyte output remains exact across pipe chunks
   assert.equal(frame?.kind,"tooling-setup");assert.equal(frame?.verdict,"INSTRUMENT");
 });
 
-test("CPU-busy work remains live without output beyond the idle guard",async t=>{
-  const {root,env}=fixture(t),release=join(root,"release");
-  const result=await activeCommand(process.execPath,["-e",`const fs=require('node:fs');while(!fs.existsSync(process.argv[1])){};process.stdout.write('complete\\n');`,release],{
-    cwd:root,env,idleMs:2000,pollMs:50,onActivity:event=>{if(event.elapsedMs>4000)writeFileSync(release,"release\n");},
-  });
-  assert.equal(result.status,0,result.out);assert.equal(result.out,"complete\n");assert.equal(result.hung,undefined);
-  assert.ok(result.elapsedMs>2000);assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
-});
-
-test("a case its memory cap holds in the kernel past its idle guard is never taken for hung",async t=>{
-  // A case whose anonymous memory passes its cgroup's MemoryHigh with no swap
-  // does not slow, it stops: its thread waits in the kernel's throttle (D)
-  // with no CPU progress. Held there for three times its idle guard, then
-  // let go, it completes, and nothing calls it hung.
-  const {root,env}=fixture(t),unit=`nts-test-memory-held-${randomUUID().slice(0,8)}`;
-  t.after(()=>{spawnSync("systemctl",["--user","stop",`${unit}.scope`],{env:fixtureEnvironment(t),stdio:"ignore"});});
-  const control=(...args:string[])=>{const r=spawnSync("systemctl",["--user",...args],{env:fixtureEnvironment(t),encoding:"utf8"});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
-  const cgroup=()=>{const r=spawnSync("systemctl",["--user","show",`${unit}.scope`,"--property=ControlGroup","--value"],{env:fixtureEnvironment(t),encoding:"utf8"});return r.stdout.trim();};
-  // How long the case goes without CPU progress while held, sampled as an
-  // idle guard reading CPU alone would see it; once that is three idle
-  // guards, its cap is lifted.
-  let flatFrom:number|undefined,cpu:number|undefined,flatMs=0,high=0,lifted:boolean|Error=false;
-  const sample=setInterval(()=>{
-    if(lifted)return;
-    try{
-      const group=cgroup();if(!group)return;
-      const pid=readFileSync(`/sys/fs/cgroup${group}/cgroup.procs`,"utf8").trim().split("\n")[0];if(!pid)return;
-      const fields=readFileSync(`/proc/${pid}/stat`,"utf8").replace(/^.*\) /s,"").split(" "),used=Number(fields[11])+Number(fields[12]),now=performance.now();
-      if(used!==cpu){cpu=used;flatFrom=now;}
-      flatMs=Math.max(flatMs,now-flatFrom!);
-      high=Number(/^high (\d+)$/m.exec(readFileSync(`/sys/fs/cgroup${group}/memory.events`,"utf8"))?.[1]);
-    }catch{return;/* the case started or ended as it was read */}
-    if(high>0&&flatMs>=3000){try{control("set-property","--runtime",`${unit}.scope`,"MemoryHigh=infinity");lifted=true;}catch(error){lifted=error as Error;}}
-  },50);
-  t.after(()=>clearInterval(sample));
-  const result=await activeCommand("systemd-run",["--user","--scope","--quiet","--collect",`--unit=${unit}`,...toolingSliceArgs(),
-    "-p","MemoryHigh=64M","-p","MemoryMax=1G","-p","MemorySwapMax=0","-p","RuntimeMaxSec=60","--",
-    process.execPath,"-e","const held=[];for(let i=0;i<16;i++)held.push(Buffer.alloc(16*2**20,1));process.stdout.write('complete\\n');"],{cwd:root,env,idleMs:1000,pollMs:50});
-  clearInterval(sample);
-  if(lifted instanceof Error)throw lifted;
-  assert.equal(lifted,true,`never held three idle guards: ${Math.round(flatMs)} ms with no CPU progress at most, ${high} memory.high events`);
-  assert.equal(result.hung,undefined,result.out);assert.equal(result.status,0,result.out);assert.equal(result.stdout,"complete\n");
+test("live busy activity reaches the command owner after readiness",async t=>{
+  const {root,env}=fixture(t),ready=join(root,'ready'),release=join(root,'release'),live=liveCommandObservations(env);
+  let sampled=false;
+  const observations={...live,watch:watch=>live.watch({...watch,sample:(cpu,own,busy,processOwn)=>{
+    watch.sample(cpu,own,busy,processOwn);
+    if(cpu>0&&busy&&existsSync(ready)){sampled=true;writeFileSync(release,'release');}
+  }})};
+  const body=`const fs=require('node:fs');fs.writeFileSync(process.argv[1],'ready');while(!fs.existsSync(process.argv[2])){};process.stdout.write('complete\\n');`;
+  const result=await activeCommand(process.execPath,['-e',body,ready,release],{cwd:root,env,pollMs:50,observations});
+  assert.equal(sampled,true);assert.equal(result.status,0,result.out);assert.equal(result.out,'complete\n');assert.equal(result.hung,undefined);
   assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
 });
 
-test("an idle command is typed NOT RUN hung while completed exits keep their meaning",async t=>{
+test("a live memory.high and busy-state observation releases its kernel control",async t=>{
+  // The pure busy-state sequence covers any stall length. This live control
+  // releases on the kernel's memory.high/D-state readiness, never after time.
+  const {root,env}=fixture(t),unit=`nts-test-memory-held-${randomUUID().slice(0,8)}`,live=liveCommandObservations(env);
+  t.after(()=>{spawnSync('systemctl',['--user','stop',`${unit}.scope`],{env:fixtureEnvironment(t),stdio:'ignore'});});
+  const control=(...args:string[])=>{const r=spawnSync('systemctl',['--user',...args],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  let lifted=false,high=0;
+  const observations={...live,watch:watch=>live.watch({...watch,sample:(cpu,own,busy,processOwn)=>{
+    watch.sample(cpu,own,busy,processOwn);if(lifted)return;
+    try{
+      const group=control('show',`${unit}.scope`,'--property=ControlGroup','--value');if(!group)return;
+      const pid=readFileSync(`/sys/fs/cgroup${group}/cgroup.procs`,'utf8').trim().split('\n')[0];if(!pid)return;
+      const stat=readFileSync(`/proc/${pid}/stat`,'utf8'),state=stat.slice(stat.lastIndexOf(')')+2).split(' ')[0];
+      high=Number(/^high (\d+)$/m.exec(readFileSync(`/sys/fs/cgroup${group}/memory.events`,'utf8'))?.[1]);
+      if(high>0&&state==='D'&&busy){control('set-property','--runtime',`${unit}.scope`,'MemoryHigh=infinity');lifted=true;}
+    }catch(error){if(!String(error).includes('No such file'))throw error;}
+  }})};
+  const result=await activeCommand('systemd-run',['--user','--scope','--quiet','--collect',`--unit=${unit}`,...toolingSliceArgs(),
+    '-p','MemoryHigh=64M','-p','MemoryMax=1G','-p','MemorySwapMax=0','--',
+    process.execPath,'-e',"const held=[];for(let i=0;i<16;i++)held.push(Buffer.alloc(16*2**20,1));process.stdout.write('complete\\n');"],{cwd:root,env,pollMs:50,observations});
+  assert.equal(lifted,true,`no memory.high/D-state readiness observed (${high} high events)`);
+  assert.equal(result.hung,undefined,result.out);assert.equal(result.status,0,result.out);assert.equal(result.stdout,'complete\n');
+  assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
+});
+
+test("a completed real exit keeps its status without a liveness frame",async t=>{
   const {root,env}=fixture(t);
-  const idle=await activeCommand(process.execPath,["-e","Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{cwd:root,env,idleMs:2000,pollMs:50});
-  assert.match(idle.hung!,/no output, process-group CPU activity or busy thread/);
-  const frame=readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control");
-  assert.equal(frame?.verdict,"NOT RUN");assert.equal(frame?.kind,"hung");
-  rmSync(env.NTS_GATE_STEP_RESULT);
-  const failed=await activeCommand(process.execPath,["-e","process.exit(7)"],{cwd:root,env});
+  // Supplied hung/runaway decisions and their frames are proved by the bridge
+  // controls. This live exit carries only the child's completed status.
+  const failed=await activeCommand(process.execPath,['-e','process.exit(7)'],{cwd:root,env});
   assert.equal(failed.status,7);assert.equal(failed.hung,undefined);assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
 });
 
-test("CPU runaway budgets hold a busy loop without manufacturing a verdict",async t=>{
-  const {root,env}=fixture(t),ready=join(root,"busy");
-  const result=await activeCommand(process.execPath,["-e","require('node:fs').writeFileSync(process.argv[1],'ready');while(true){}",ready],{cwd:root,env,idleMs:2000,pollMs:50,cpuBudgetSeconds:0.25});
-  assert.ok(existsSync(ready));assert.equal(result.hung,undefined);
-  assert.match(result.runaway!,/user\+sys CPU .* reached its 0.25 s budget/);
-  const frame=readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control");
-  assert.equal(frame?.verdict,"NOT RUN");assert.equal(frame?.kind,"runaway");
-});
 
 test("leader exit stops its grandchild even when inherited pipes postpone close",async t=>{
   const {root,env}=fixture(t),ready=join(root,"grandchild");
   const helper=join(root,"helper.cjs");
   writeFileSync(helper,"require('node:fs').writeFileSync(process.argv[2],String(process.pid));process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
   const parent="require('node:child_process').fork(process.argv[1],[process.argv[2]],{stdio:['ignore','inherit','inherit','ipc']}).once('message',()=>process.exit(0));";
-  const result=await activeCommand(process.execPath,["-e",parent,helper,ready],{cwd:root,env,idleMs:2000,pollMs:50});
+  const result=await activeCommand(process.execPath,["-e",parent,helper,ready],{cwd:root,env});
   assert.equal(result.status,0);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
   assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
   assert.ok(existsSync(ready));const pid=Number(readFileSync(ready,"utf8"));
@@ -211,38 +201,39 @@ test("close reaps a helper whose redirected stdio does not keep the leader open"
 });
 
 test("nested supervisors forward observed busy/output progress while idle children hold",async t=>{
-  const {root,env}=fixture(t);
-  const helper=join(root,"nested.ts");
-  const supervisor=new URL("./active-command.ts",import.meta.url).href;
-  writeFileSync(helper,`import {activeCommand} from ${JSON.stringify(supervisor)};
-const mode=process.argv[2],env={...${testEnvironmentHandoff(["NTS_GATE_STEP","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_MEMORY_BYTES"])}};delete env.NTS_GATE_STEP_RESULT;
-const body=mode==='busy'?'const start=process.cpuUsage();while(process.cpuUsage(start).user+process.cpuUsage(start).system<1200000){}':mode==='output'?'import os,time\\nfor _ in range(16): os.write(1,b".");time.sleep(0.12)':'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)';
-const result=await activeCommand(mode==='output'?'python3':process.execPath,mode==='output'?['-c',body]:['-e',body],{
-cwd:process.cwd(),env,idleMs:500,pollMs:mode==='output'?5000:50,
-onActivity:event=>process.stdout.write(JSON.stringify({cpu:event.cpu})+'\\n')});
+  const {root,env}=fixture(t),helper=join(root,'nested.ts');
+  writeFileSync(helper,`import {activeCommand} from ${JSON.stringify(new URL('./active-command.ts',import.meta.url).href)};
+import {commandObservationFixture} from ${JSON.stringify(new URL('./command-observations-fixture.ts',import.meta.url).href)};
+import {writeFileSync} from 'node:fs';
+const mode=process.argv[2],release=process.argv[3],control=commandObservationFixture();
+const env={...${testEnvironmentHandoff(['NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES'])}};delete env.NTS_GATE_STEP_RESULT;
+const body="import {watch,existsSync} from 'node:fs';await new Promise(resolve=>{const observer=watch(process.cwd(),()=>{if(existsSync(process.argv[1])){observer.close();resolve();}});process.stdout.write('ready');});process.stdout.write('complete');";
+let ready=false;
+const result=await activeCommand(process.execPath,['--input-type=module','-e',body,release],{cwd:process.cwd(),env,idleMs:500,observations:control.observations,
+ onActivity:event=>{process.stdout.write(JSON.stringify({cpu:event.cpu})+'\\n');
+  if(!ready){ready=true;if(mode==='idle')control.sample(500);else{if(mode==='busy')control.sample(9_000_000,{busy:true});else control.clock(9_000_000);writeFileSync(release,'release');}}
+  else if(mode==='output')control.sample(9_000_000);
+ }});
 process.stdout.write(JSON.stringify({result})+'\\n');process.exitCode=result.hung?124:result.status??1;
 `);
-  for(const mode of ["busy","output","idle"]){
-    const result=await activeCommand(process.execPath,[helper,mode],{cwd:root,env,idleMs:1000,pollMs:50});
-    const frames=result.stdout.trim().split("\n").map(line=>JSON.parse(line));
-    const inner=frames.pop().result;
+  for(const mode of ['busy','output','idle']){
+    const result=await activeCommand(process.execPath,[helper,mode,join(root,'release-'+mode)],{cwd:root,env});
+    const frames=result.stdout.trim().split('\n').map(line=>JSON.parse(line)),inner=frames.pop().result;
     assert.equal(result.hung,undefined);
-    if(mode==='idle'){
-      assert.equal(result.status,124);assert.ok(inner.hung);
-    }else{
-      assert.equal(result.status,0,result.out);assert.equal(inner.hung,undefined);
-      assert.ok(result.elapsedMs>1000);assert.ok(frames.length>0);
-      if(mode==='output')assert.equal(new Set(frames.map(frame=>frame.cpu)).size,1,"output progress requires no CPU-counter change");
-    }
+    if(mode==='idle'){assert.equal(result.status,124);assert.ok(inner.hung);}
+    else{assert.equal(result.status,0,result.out);assert.equal(inner.hung,undefined);assert.ok(frames.length>0);
+      if(mode==='output')assert.equal(new Set(frames.map(frame=>frame.cpu)).size,1,'output progress requires no CPU-counter change');}
   }
 });
 
 test("an escaped helper retaining pipes still holds instead of disabling supervision",async t=>{
-  const {root,env}=fixture(t),helper=join(root,"escaped.cjs");
-  writeFileSync(helper,"process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
-  const parent="require('node:child_process').fork(process.argv[1],[],{detached:true,stdio:['ignore','inherit','inherit','ipc']}).once('message',()=>process.exit(0));";
-  const result=await activeCommand(process.execPath,["-e",parent,helper],{cwd:root,env,idleMs:500,pollMs:50});
-  assert.ok(result.hung);assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control")?.verdict,"NOT RUN");
-  // The suite's named unit owns the helper that intentionally escaped its
-  // parent's group, and removes it when this run ends.
+  const {root,env}=fixture(t),helper=join(root,'escaped.cjs'),ready=join(root,'escaped-ready'),control=commandObservationFixture();
+  writeFileSync(helper,"require('node:fs').writeFileSync(process.argv[2],'ready');process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
+  const parent="require('node:child_process').fork(process.argv[1],[process.argv[2]],{detached:true,stdio:['ignore','inherit','inherit','ipc']}).once('message',()=>process.exit(0));";
+  const running=activeCommand(process.execPath,['-e',parent,helper,ready],{cwd:root,env,idleMs:500,observations:control.observations});
+  await control.attached;
+  await waitFor('escaped helper readiness and the recorded leader exit',()=>existsSync(ready)&&processHasExited(control.group()!));
+  control.sample(500);const result=await running;
+  assert.ok(result.hung);assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,'c-compiles','active-control')?.verdict,'NOT RUN');
+  // The suite's named unit removes the helper that deliberately escaped its group.
 });

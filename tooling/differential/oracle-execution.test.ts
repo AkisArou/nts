@@ -1,3 +1,6 @@
+import {scriptedCommand,commandSample} from '../gate/command-observations-fixture.ts';
+import {publishHung} from '../gate/step-result.ts';
+import type {compileActive} from '../census/worker-memory.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -8,6 +11,7 @@ import {closeMemoryRun} from '../census/worker-memory.ts';
 import {COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,CommandNotMeasuredError} from '../gate/active-command.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {testScratch} from '../gate/test-scratch.ts';
+import {spawnTest} from '../gate/test-wait.ts';
 import {ORACLE_HEAP_FLAGS,ORACLE_PLANNER_LIMITS,oracleChildProblem,oracleExecutionLimits,oracleNode,runOracleCommand,runOraclePlanner,v8HeapStop} from './oracle-execution.ts';
 import {ORACLE_EXECUTION_POLICY as policy} from './oracle-execution-policy.ts';
 
@@ -23,8 +27,26 @@ test('virtual reservation alone does not exhaust the oracle resident scope',asyn
   assert.ok(Number(result.run.stdout.split('\n')[0])*1024>2*2**30,'more than 2 GiB is reserved virtually');
   assert.ok(result.residentPeakBytes<2*2**30);
 });
-test('only an observed CPU or own resident bound is a case budget',async()=>{
-  const timed=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','for(;;){}'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:0.1,residentBytes:2*2**30}});
+test('only an observed CPU or own resident bound is a case budget',async t=>{
+  const root=testScratch(t,'oracle-timeout'),script=join(root,'control.ts');
+  writeFileSync(script,`
+import {mock} from 'node:test';
+import {writeFileSync} from 'node:fs';
+import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('../gate/command-observations-fixture.ts',import.meta.url).href)};
+const activeURL=${JSON.stringify(new URL('../gate/active-command.ts',import.meta.url).href)},real=await import(activeURL);
+mock.module(activeURL,{namedExports:{...real,activeCommand:async(command,args,options)=>{
+  const entry=args.indexOf('nts-resident-worker');if(entry<0)throw Error('no supplied scope entry');
+  writeFileSync(args[entry+1],'supplied bounded entry');
+  return scriptedCommand(command,options,[commandSample(300,{cpu:10,processOwn:{pid:71,cpu:10}})],{stdoutRaw:Buffer.alloc(0),stderrRaw:Buffer.alloc(0)});
+}}});
+const {runOracleCommand,ORACLE_HEAP_FLAGS}=await import(${JSON.stringify(new URL('./oracle-execution.ts',import.meta.url).href)});
+const {closeMemoryRun}=await import(${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)});
+try{console.log(JSON.stringify(await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','process.exit(127)'],{source:'private',env:process.env,limits:{cpuSeconds:0.1,residentBytes:2*2**30}})));}
+finally{closeMemoryRun();}
+`);
+  const control=spawnTest(process.execPath,['--experimental-test-module-mocks',script],{encoding:'utf8',env:fixtureEnvironment(t)},'supplied oracle CPU boundary');
+  assert.equal(control.status,0,control.stdout+control.stderr);
+  const timed=JSON.parse(control.stdout);
   assert.equal(timed.budget?.outcome,'timeout');assert.equal(timed.budget?.bound,0.1);
   const capped=await runOracleCommand(process.execPath,[...ORACLE_HEAP_FLAGS,'-e','const held=[];for(;;)held.push(Buffer.alloc(16*1024*1024,1));'],{source:'private',env:testEnvironment(),limits:{cpuSeconds:15,residentBytes:128*2**20}});
   assert.equal(capped.budget?.outcome,'memory-cap');assert.equal(capped.budget?.bound,128*2**20);
@@ -112,10 +134,14 @@ test('the planner is held as a case compile is: its CPU bound, and the shared ac
 });
 // What oracle-plan prints first, once its capture finds its entry.
 const ENTRY={entry:'/fixtures/benchmarks/cases/slow/case.ts',source:'benchmarks/cases/slow/case.ts'};
-const named=`process.stdout.write(${JSON.stringify(JSON.stringify(ENTRY)+'\n')});`;
+const suppliedPlanner=(samples:Parameters<typeof scriptedCommand>[2],stdout=''):typeof compileActive=>async(_tools,command,_args,options={})=>{
+  const result=scriptedCommand(command,options,samples,{stdout});
+  if(result.hung){publishHung(result.hung,options.env);throw new CommandNotMeasuredError(result);}
+  return {...result,memoryKilled:false,residentLimitBytes:2*2**30,residentRunBytes:2*2**30};
+};
 test('a planner past its CPU bound planned no population: a plan budget, which is no hold',async t=>{
-  const f=planner(t,process.execPath,'for(;;){}');
-  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000}});
+  const f=planner(t,process.execPath,'process.exit(127)');
+  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000},compile:suppliedPlanner([commandSample(300,{cpu:30,processOwn:{pid:71,cpu:30}})])});
   assert.ok('budget' in planned,JSON.stringify(planned));
   const {reason,...budget}=planned.budget;
   assert.deepEqual(budget,{phase:'plan',outcome:'timeout',bound:0.3,signal:'SIGKILL'});
@@ -124,16 +150,16 @@ test('a planner past its CPU bound planned no population: a plan budget, which i
   assert.equal(f.published(),null,'a budget is the case outcome, never the step hold');
 });
 test('a plan budget is for the entry its planner named before its bound',async t=>{
-  const f=planner(t,process.execPath,named+'for(;;){}');
-  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000}});
+  const f=planner(t,process.execPath,'process.exit(127)');
+  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:0.3,idleMs:2000},compile:suppliedPlanner([commandSample(300,{cpu:30,processOwn:{pid:71,cpu:30}})],JSON.stringify(ENTRY)+'\n')});
   assert.ok('budget' in planned,JSON.stringify(planned));
   assert.deepEqual(planned.entry,ENTRY);
   assert.equal(f.published(),null);
 });
 test('an active planner that prints nothing until it is done is not stopped by the activity bound',async t=>{
-  // Three CPU seconds with no output: three times the inactivity guard.
-  const f=planner(t,process.execPath,'while(process.cpuUsage().user<3e6){}\n'+named+'process.stdout.write(JSON.stringify({planned:process.argv[2]})+"\\n");');
-  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:1000}});
+  // Busy activity remains live even after an arbitrary virtual scheduling delay.
+  const f=planner(t,process.execPath,'process.exit(127)');
+  const planned=await runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:1000},compile:suppliedPlanner([commandSample(9_000_000,{busy:true})],JSON.stringify(ENTRY)+'\n'+JSON.stringify({planned:'project.json'})+'\n')});
   assert.deepEqual(planned,{plan:'{"planned":"project.json"}\n',entry:ENTRY},'the plan is the rest, byte for byte');
   assert.equal(f.published(),null);
 });
@@ -145,8 +171,8 @@ test('a planner that names no entry first is held, never read as a plan',async t
   }
 });
 test('a planner with no output, CPU or busy thread measured nothing: hung, held, never a budget',async t=>{
-  const f=planner(t,'/bin/sh','exec tail -f /dev/null');
-  await assert.rejects(runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:1000}}),
+  const f=planner(t,process.execPath,'process.exit(127)');
+  await assert.rejects(runOraclePlanner(f.file,['project.json'],{env:f.env,limits:{cpuSeconds:60,idleMs:1000},compile:suppliedPlanner([commandSample(1000)])}),
     error=>error instanceof CommandNotMeasuredError&&error.kind==='hung');
   assert.equal(f.published(),'hung');
 });

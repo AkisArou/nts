@@ -19,11 +19,14 @@ import { finishRunTemporary } from "../gate/run-temporary.ts";
 // finalization. Admission and waiting for the reserved core spend this budget.
 export const BENCH_SESSION_BUDGET_MS = 7.5 * 60 * 60_000;
 export const SESSION_OUTCOME = "session.outcome.json";
+export type SessionBudgetObservation={schedule:(expire:()=>void,milliseconds:number)=>()=>void};
 
 export async function runSession(tree: string, run: string, binary: string, history: string,
-  ownerUnit: string, budgetMs = BENCH_SESSION_BUDGET_MS, journal = join(run, `bench-${randomUUID()}.jsonl`)): Promise<BenchAttempt> {
+  ownerUnit: string, budgetMs = BENCH_SESSION_BUDGET_MS, journal = join(run, `bench-${randomUUID()}.jsonl`), observation?:SessionBudgetObservation): Promise<BenchAttempt> {
   assert.match(ownerUnit, /^[a-zA-Z0-9_-]+$/);
   assert.ok(Number.isFinite(budgetMs) && budgetMs > 0, "session budget must be positive");
+  const budget=observation===undefined?{schedule:(expire:()=>void,milliseconds:number)=>{const timer=setTimeout(expire,milliseconds);return()=>clearTimeout(timer);}}:observation;
+  if(!budget||typeof budget.schedule!=='function')throw Error('session budget observation is incomplete');
   assert.equal(spawnSync("systemctl", ["--user", "is-active", "--quiet", ownerUnit]).status, 0,
     "the benchmark session must belong to a running unit");
   const unit = `nts-bench-session-${randomUUID()}`;
@@ -44,7 +47,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
     const stopped = spawnSync("systemctl", ["--user", "stop", unit], { encoding: "utf8" });
     if (stopped.status !== 0 && !stopped.stderr.includes("not loaded")) throw new Error(`cannot stop ${unit}: ${stopped.stderr}`);
   };
-  const timer = setTimeout(() => {
+  const cancelBudget = budget.schedule(() => {
     exhausted = true;
     try { stop(); } catch (error) { console.error("benchmark budget could not stop its unit; waiting for its outcome:", error); }
   }, budgetMs);
@@ -52,7 +55,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
   try {
     status = await new Promise<number>((resolve, reject) => { child.once("error", reject); child.once("close", code => resolve(code ?? 1)); });
   } finally {
-    clearTimeout(timer);
+    cancelBudget();
     rmSync(handoff, { force: true });
     finishRunTemporary(planned.temporary, planned.env.HOME!, true);
   }

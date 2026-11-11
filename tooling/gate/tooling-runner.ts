@@ -109,14 +109,18 @@ export class ToolingTestOwners {
 }
 
 type ToolingInstrument={
-  scheduleIdle?:(callback:()=>void,milliseconds:number,file:string)=>()=>void;
+  scheduleIdle:(callback:()=>void,milliseconds:number,file:string)=>()=>void;
   event?:(name:string,data:TestActivity)=>void;
-  now?:()=>number;
+  now:()=>number;
 };
 export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;instrument?:ToolingInstrument}={}):Promise<ToolingResult> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
   const active=new Map<string,()=>void>(),owners=new ToolingTestOwners(names);
-  const schedule=options.instrument?.scheduleIdle??((callback:()=>void,milliseconds:number)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);});
+  const instrument:ToolingInstrument=options.instrument===undefined?{
+    now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
+  }:options.instrument;
+  if(!instrument||typeof instrument.now!=='function'||typeof instrument.scheduleIdle!=='function')throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
+  const schedule=instrument.scheduleIdle;
   let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0;
   // Each file's tests that have started and not completed: what a hang names,
   // since a hung test prints nothing of its own.
@@ -135,7 +139,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   };
   const fileOf=(data:TestActivity)=>owners.file(data);
   // Each file's own wrapper test marks its process's start and end.
-  const clock=options.instrument?.now??(()=>performance.now()),begun=clock();
+  const clock=instrument.now,begun=clock();
   const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
   const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
@@ -161,8 +165,8 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       else if(active.has(file))touch(file);
     });
     events.on("test:summary",data=>{if(!data.success)success=false;});
-    if(options.instrument?.event)for(const event of ["test:enqueue","test:dequeue","test:start","test:complete","test:pass","test:fail"] as const)
-      events.on(event,data=>options.instrument!.event!(event,data));
+    if(instrument.event)for(const event of ["test:enqueue","test:dequeue","test:start","test:complete","test:pass","test:fail"] as const)
+      events.on(event,data=>instrument.event!(event,data));
   }});
   const report=stream.compose(spec);
   report.pipe(options.output??process.stdout,{end:false});

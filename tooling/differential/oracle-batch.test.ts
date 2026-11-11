@@ -22,18 +22,24 @@ for(const mode of ['virtual','timeout','memory-cap','runaway','pressure'] as con
     writeFileSync(script,`
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
-import {readFileSync,mkdirSync,existsSync} from 'node:fs';
+import {readFileSync,mkdirSync,existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 const root=${JSON.stringify(root)},mode=${JSON.stringify(mode)};
+import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('../gate/command-observations-fixture.ts',import.meta.url).href)};
 const real=await import(${JSON.stringify(active)});
 const calls=[];
 mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:async(command,args,options)=>{
   calls.push({command,args,options});
-  return real.activeCommand(command,args,{...options,pollMs:50,
-    ...(options.eachProcessCpuSeconds&&mode!=='runaway'?{eachProcessCpuSeconds:0.2}:{}),
-    ...(mode==='runaway'?{cpuBudgetSeconds:0.2}:{}),
-    // Make the old incorrect group limit observable without a 15 second spin.
-    ...(options.cpuBudgetSeconds===15?{cpuBudgetSeconds:0.2}:{})});
+  if(calls.length===1&&(mode==='timeout'||mode==='runaway')){
+    // This consumer receives a supplied bounded-entry observation. The live
+    // scope-entry control below runs the real command for the other modes.
+    const entry=args.indexOf('nts-resident-worker');assert.ok(entry>=0);
+    writeFileSync(args[entry+1],'supplied bounded entry');
+    return scriptedCommand(command,
+      mode==='timeout'?{...options,eachProcessCpuSeconds:0.2}:{...options,eachProcessCpuSeconds:undefined,cpuBudgetSeconds:0.2},
+      [commandSample(300,{cpu:20,busy:true,processOwn:{pid:71,cpu:20}})]);
+  }
+  return real.activeCommand(command,args,options);
 }}});
 class OracleWorker{
   identity={fixture:true};

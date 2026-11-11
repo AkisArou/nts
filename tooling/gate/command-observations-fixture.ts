@@ -2,11 +2,11 @@
 import {CommandLiveness,type CommandPolicy,type CommandSample} from './command-liveness.ts';
 import type {ActiveResult,ActivityWatch,CommandObservations} from './active-process.ts';
 export function commandObservationFixture(initialCpu=0,frequency=100){
-  let now=0,watch:ActivityWatch|undefined;
+  let now=0,group:number|undefined,watch:ActivityWatch|undefined;
   const attached=Promise.withResolvers<void>();
   const observations:CommandObservations={now:()=>now,frequency,initialCpu:()=>initialCpu,
-    watch:value=>{if(watch)throw Error('fixture already observes a command');watch=value;attached.resolve();return()=>{watch=undefined;};}};
-  return {observations,attached:attached.promise,
+    watch:value=>{if(watch)throw Error('fixture already observes a command');watch=value;group=value.group;attached.resolve();return()=>{watch=undefined;};}};
+  return {observations,attached:attached.promise,group:()=>group,
     clock(value:number){now=value;},
     sample(value:number,{cpu=initialCpu,own=0,busy=false,processCpu=0,pid=watch?.group??51}={}){
       if(!watch)throw Error('fixture has no active command observer');now=value;

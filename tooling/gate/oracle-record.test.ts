@@ -390,25 +390,38 @@ test("the records pass holds each planner as a worker does: past its bound after
   const named=(name:string)=>JSON.stringify({entry:join(root,'tests/programs',name,'src/main.ts'),source:`tests/programs/${name}/src/main.ts`})+'\n';
   writeFileSync(join(root,'slow.entry'),named('slow'));writeFileSync(join(root,'fine.entry'),named('fine'));
   for(const backend of ['c','llvm','jvm'])writeFileSync(join(root,`fine-${backend}.plan`),JSON.stringify({...plan,backend,source:'tests/programs/fine/src/main.ts',entry:join(root,'tests/programs/fine/src/main.ts'),driver:'fine driver'})+'\n');
-  // slow names its entry, then plans past its bound; early never gets as far; quiet goes silent; broken fails.
+  // Completed planners exercise the real pipe. Supplied observations below
+  // cover bounded and silent planners without running loops or timed waits.
   writeFileSync(planner,`#!/bin/sh
 case "$1" in
-  */slow/*) cat ${JSON.stringify(join(root,'slow.entry'))}; while :; do :; done ;;
+  */slow/*|*/early/*|*/quiet/*) echo "unexpected live decision fixture" >&2; exit 127 ;;
   */fine/*) cat ${JSON.stringify(join(root,'fine.entry'))} ${JSON.stringify(root)}/fine-$NTS_BACKEND.plan ;;
-  */early/*) while :; do :; done ;;
-  */quiet/*) exec tail -f /dev/null ;;
   *) echo "the program does not typecheck" >&2; exit 3 ;;
 esac
 `,{mode:0o755});
-  // Enter one real bounded worker before applying the deliberately small
-  // planner inactivity allowance. Unit startup is not a quiet planner.
+  // The real worker proves completed-planner transport; supplied compile
+  // observations prove the record classifications independently of startup.
   sliceReceipt=join(root,'resident-slice');
   const control=join(root,'plan-control.mjs');
   writeFileSync(control,`
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {planAll} from ${JSON.stringify(new URL('../differential/record-oracles.ts',import.meta.url).href)};
-import {ORACLE_PLANNER_LIMITS} from ${JSON.stringify(new URL('../differential/oracle-execution.ts',import.meta.url).href)};
+import {mock} from 'node:test';
+import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('./command-observations-fixture.ts',import.meta.url).href)};
+import {CommandNotMeasuredError} from ${JSON.stringify(new URL('./active-command.ts',import.meta.url).href)};
+import {publishHung} from ${JSON.stringify(new URL('./step-result.ts',import.meta.url).href)};
+const workerURL=${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)};
+const worker=await import(workerURL);
+mock.module(workerURL,{namedExports:{...worker,compileActive:async(tools,command,args,options)=>{
+  const config=args[0],name=['slow','early','quiet'].find(name=>config.includes('/'+name+'/'));
+  if(!name)return worker.compileActive(tools,command,args,options);
+  const result=scriptedCommand(command,options,[commandSample(300,{cpu:name==='quiet'?0:50,processOwn:{pid:71,cpu:name==='quiet'?0:50}})],
+    {stdout:name==='slow'?readFileSync(${JSON.stringify(join(root,'slow.entry'))},'utf8'):''});
+  if(result.hung){publishHung(result.hung,options.env);throw new CommandNotMeasuredError(result);}
+  return {...result,memoryKilled:false};
+}}});
+const {planAll}=await import(${JSON.stringify(new URL('../differential/record-oracles.ts',import.meta.url).href)});
+const {ORACLE_PLANNER_LIMITS}=await import(${JSON.stringify(new URL('../differential/oracle-execution.ts',import.meta.url).href)});
 import {serialRun,inResidentWorker,memoryRun,closeMemoryRun} from ${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)};
 if(!inResidentWorker())writeFileSync(${JSON.stringify(sliceReceipt)},memoryRun().slice);
 serialRun({});
@@ -435,7 +448,7 @@ finally{closeMemoryRun();}
   const actual=spawnTest('systemd-run',['--user',...toolingSliceArgs(),`--unit=${unit}`,'--collect','--quiet','--wait','--pipe',
     '-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=180s','-p','TimeoutStopSec=5s',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
-    process.execPath,control],{encoding:'utf8'});
+    process.execPath,'--experimental-test-module-mocks',control],{encoding:'utf8'});
   assert.equal(actual.status,0,actual.stdout+actual.stderr);
   const lines=actual.stdout.split('\n');
   const manifest=JSON.parse(readFileSync(join(evidence,'plans.json'),'utf8'));

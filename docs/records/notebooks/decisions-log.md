@@ -2063,6 +2063,11 @@ and pipe ownership behind one complete observation capability; fixture holes
 never select a live reader. Group birth identity remains a kernel safety
 check. The integrity control that failed under load now replays observations;
 real children prove only sampling and exit wiring behind named barriers.
+The [supervision inventory](../tooling-host-tests-696.tsv) maps all 127 rows
+to supplied decisions, readiness controls or existing broad wiring guards.
+The benchmark session's former 500 ms race also receives a supplied budget
+event after child readiness; its real unit stop and retained prefix remain
+observed.
 
 #697 owns test children's environments through an allowlist. HOME, XDG,
 temporary and Git state belong to each TestContext and are reused by its

@@ -388,8 +388,11 @@ locked session on CPU 4 and keep the wall-time floor below.
   birth identity remains a live safety check. Decision tests replay fixed
   sequences without children. Real-process controls prove sampling, pipes and
   exit wiring behind readiness/release barriers, without asserting how quickly
-  the scheduler runs them. Own-process timeout, group runaway and inactivity
-  retain their distinct outcomes and precedence.
+  the scheduler runs them. Own-process and per-process CPU timeouts, group
+  runaway and inactivity retain their distinct outcomes and precedence.
+  Tooling-file guards own their clock and idle scheduler together. Benchmark
+  session controls supply a budget event after child readiness, then observe
+  the real named-unit stop and retained record.
 - **Test children receive an owned environment.** `fixtureEnvironment` in
   `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
   temporary and Git state, reused by its children and removed with the fixture.

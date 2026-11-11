@@ -52,3 +52,13 @@ test('every missing command observation fails before any live process can be sta
     assert.equal(f.frame()?.kind,'tooling-setup');
   }
 });
+
+test('the bridge takes its initial CPU counter from the supplied capability',async t=>{
+  const f=fixture(t),control=commandObservationFixture(12);
+  const running=activeCommand(process.execPath,['--input-type=module','-e',f.body,f.ready,f.release],{cwd:f.root,env:f.env,idleMs:300,observations:control.observations});
+  try{
+    await control.attached;await ready(f,running);
+    control.sample(300,{cpu:12});
+    assert.equal(f.frame()?.kind,'hung','an unchanged initial counter supplies no progress');
+  }finally{writeFileSync(f.release,'release');await running;}
+});

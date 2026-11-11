@@ -25,6 +25,11 @@ import { ownMemory } from "../gate/test-memory.ts";
 import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 import { COLUMNS, COMPARATORS, POLICY } from "../bench/run-record.ts";
 import { removable } from "../gate/run-temporary.ts";
+import {runSession,type SessionBudgetObservation} from './bench-session.ts';
+
+test('a partial session budget observation fails before accessing a live unit',async()=>{
+  await assert.rejects(runSession('/unused','/unused','/unused','/unused','unused',500,'/unused',{} as SessionBudgetObservation),/session budget observation is incomplete/);
+});
 
 function scratch(t: TestContext, prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -131,12 +136,12 @@ for (const stopFails of [false, true]) test(`a session past its budget retains i
     results: [measurement, measurement, null, measurement, measurement, null],
     absences: { outcomes: {}, jvm: null, cpp: null }, node: measurement, bun: measurement };
   // A durable row already belongs to this run. The active case never returns;
-  // the real budget must stop its entire unit before publishing this prefix.
+  // the supplied budget event must stop its unit before publishing this prefix.
   writeFileSync(journal, JSON.stringify({ version: 1, metadata, cases, requested: [], lanes: null }) + "\n" +
     JSON.stringify({ name: "control", measured: observed, failure: null, conditions: {}, spoiled: false, failed: [] }) + "\n" + '{"name":"not-reached"');
   const gate = join(repo.dir, "tooling/gate"); mkdirSync(gate, { recursive: true });
   writeFileSync(join(gate, "with-lock.sh"), 'shift 2\nexec "$@"\n');
-  const binary = join(run, "blocked-bench");
+  const binary = join(run, "blocked-bench"), ready=join(run,"ready");
   const marker = join(run, "stop-refused"), bin = join(run, "bin");
   if (stopFails) {
     mkdirSync(bin);
@@ -149,20 +154,32 @@ if (args[0] === '--user' && args[1] === 'stop' && args[2].startsWith('nts-bench-
 process.exit(spawnSync('/usr/bin/systemctl', args, {stdio:'inherit'}).status ?? 1);
 `, { mode: 0o755 });
     writeFileSync(binary, `#!${process.execPath}
-import {watch, existsSync} from 'node:fs';
+import {watch, existsSync, writeFileSync} from 'node:fs';
 await new Promise(resolve => {
   const observer = watch(${JSON.stringify(run)}, () => { if (existsSync(${JSON.stringify(marker)})) { observer.close(); resolve(); } });
   if (existsSync(${JSON.stringify(marker)})) { observer.close(); resolve(); }
+  writeFileSync(${JSON.stringify(ready)},'ready');
 });
 `, { mode: 0o755 });
   } else {
-    writeFileSync(binary, `#!/bin/sh\nexec node -e 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)'\n`, { mode: 0o755 });
+    writeFileSync(binary, `#!${process.execPath}
+import {writeFileSync} from 'node:fs';
+writeFileSync(${JSON.stringify(ready)},'ready');
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+`, { mode: 0o755 });
   }
   const sessionModule = new URL("./bench-session.ts", import.meta.url).href;
   const memory = inUnit(t, run, unit => `import {runSession} from ${JSON.stringify(sessionModule)};
 import {measureJob} from ${JSON.stringify(new URL("./bench.ts", import.meta.url).href)};
+import assert from 'node:assert/strict';
+import {watch,existsSync} from 'node:fs';
+let expire,cancelled=false;
+const ready=new Promise(resolve=>{const observer=watch(${JSON.stringify(run)},()=>{if(existsSync(${JSON.stringify(ready)})){observer.close();resolve();}});if(existsSync(${JSON.stringify(ready)})){observer.close();resolve();}});
 ${stopFails ? `process.env.PATH = ${JSON.stringify(bin)} + ':' + process.env.PATH;` : ""}
-const attempt = await runSession(${JSON.stringify(repo.dir)}, ${JSON.stringify(run)}, ${JSON.stringify(binary)}, ${JSON.stringify(history)}, ${JSON.stringify(unit)}, 500, ${JSON.stringify(journal)});
+const running = runSession(${JSON.stringify(repo.dir)}, ${JSON.stringify(run)}, ${JSON.stringify(binary)}, ${JSON.stringify(history)}, ${JSON.stringify(unit)}, 500, ${JSON.stringify(journal)},
+  {schedule(callback,milliseconds){assert.equal(milliseconds,500);expire=callback;return()=>{cancelled=true;};}});
+await ready;assert.equal(typeof expire,'function');expire();
+const attempt=await running;assert.equal(cancelled,true);
 measureJob(${JSON.stringify(repo.dir)}, ${JSON.stringify({ commit, run, bench: binary, history, outcome })}, () => attempt);
 `);
   const saved = readOutcome<MeasureOutcome>(outcome)!;

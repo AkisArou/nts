@@ -1,3 +1,4 @@
+import {scriptedCommand,commandSample} from './command-observations-fixture.ts';
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -74,10 +75,10 @@ test("an idle emission stays NOT RUN rather than becoming a C verdict", async ()
   const dir = mkdtempSync(join(tmpdir(), "nts-c-compiles-idle-"));
   try {
     const compiler=join(dir,"compiler");
-    writeFileSync(compiler,"#!/bin/sh\nexec sleep 600\n");chmodSync(compiler,0o755);
     const env={...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"idle-emission",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
-    const result=await measure({project:"fixture",root:dir,compiler,work:join(dir,"out"),cached:null,cc:"clang",env,activity:{idleMs:2000,pollMs:50}});
+    const result=await measure({project:"fixture",root:dir,compiler,work:join(dir,"out"),cached:null,cc:"clang",env,run:async(command,_args,options)=>scriptedCommand(command,{...options,idleMs:300},[commandSample(300)])});
     assert.equal(result.category,"hung");
+    assert.equal(finishLiveness([result],{kind:result.category,why:result.why},env),2);
     assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","idle-emission").verdict,"NOT RUN");
   } finally { rmSync(dir,{recursive:true,force:true}); }
 });
@@ -88,11 +89,10 @@ test("completed C rejections stay red when another emission hangs",async()=>{
   try{
     const cached=join(dir,"cached"),compiler=join(dir,"compiler");mkdirSync(cached);
     writeFileSync(join(cached,"program.c"),"const int *lookup(void) { return &missing_descriptor; }\n");
-    writeFileSync(compiler,"#!/bin/sh\nexec sleep 600\n");chmodSync(compiler,0o755);
     const env={...testEnvironment(),NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"mixed",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
     const common={project:"fixture",root:dir,compiler,work:join(dir,"out"),cc:"clang",env};
     const rejected=await measure({...common,cached});assert.equal(rejected.category,"rejected");
-    const hung=await measure({...common,cached:null,activity:{idleMs:1000,pollMs:50}});assert.equal(hung.category,"hung");
+    const hung=await measure({...common,cached:null,run:async(command,_args,options)=>scriptedCommand(command,{...options,idleMs:300},[commandSample(300)])});assert.equal(hung.category,"hung");
     const hold={kind:hung.category,why:hung.why};
     assert.equal(finishLiveness([hung],hold,env),2);assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","mixed").verdict,"NOT RUN");
     assert.equal(finishLiveness([rejected,hung],hold,env),1);
