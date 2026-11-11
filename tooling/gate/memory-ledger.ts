@@ -714,18 +714,6 @@ function outrankedIn(dir: string, priority: Priority): boolean {
   return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
 }
 
-/** The entry can disappear between reads, or its owner can already have exited. */
-function liveAdmitted(dir: string, id: string): LedgerEntry | null {
-  const file = entryPath(dir, "admitted", id);
-  try {
-    const entry = parseEntry(readFileSync(file, "utf8"), file);
-    return entry !== null && alive(entry.owner) ? entry : null;
-  } catch (error) {
-    if (!gone(error)) throw error;
-    return null;
-  }
-}
-
 /**
  * Checks that the request of `what`, owned by `pid`, may take over reservation
  * `id`: one whose measure counts `pid`'s memory, as a child's is counted
@@ -735,7 +723,7 @@ function liveAdmitted(dir: string, id: string): LedgerEntry | null {
  */
 function taking(dir: string, id: string, pid: number, what: string): void {
   if (!ID.test(id)) throw new TypeError(`memory: ${what} would take over ${JSON.stringify(id)}, which is not a reservation id`);
-  const entry = liveAdmitted(dir, id);
+  const entry = admittedEntry(dir, id);
   if (entry !== null && !counts(entry, pid)) {
     throw new Error(`memory: ${what} (pid ${pid}) would take over ${entry.what}'s reservation, which does not count its memory: `
       + `it is outside that reservation's process tree${entry.measure.cgroup ? " and cgroup" : ""}`);
@@ -746,7 +734,7 @@ function taking(dir: string, id: string, pid: number, what: string): void {
 function counting(dir: string, id: string, pid: number, except: string | undefined, what: string): string | undefined {
   if (!ID.test(id)) throw new TypeError(`memory: ${what} would draw on ${JSON.stringify(id)}, which is not a reservation id`);
   if (id === except) return undefined;
-  const entry = liveAdmitted(dir, id);
+  const entry = admittedEntry(dir, id);
   return entry !== null && counts(entry, pid) ? id : undefined;
 }
 
@@ -776,7 +764,7 @@ function ancestorReservation(dir: string, pid: number, except: string | undefine
 function inside(parent: string | undefined, dir: string, pid: number, what: string, bytes: number, report: (line: string) => void): Reservation | null {
   if (!parent) return null;
   if (!ID.test(parent)) throw new Error(`${RESERVATION_ENV}=${parent} is not a reservation id`);
-  const entry = liveAdmitted(dir, parent);
+  const entry = admittedEntry(dir, parent);
   if (entry === null) {
     report(`memory: ${what} was started inside reservation ${parent}, which has ended; it asks for its own`);
     return null;
@@ -791,7 +779,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
   const { priority } = entry;
   return {
     id: entry.id, ledger: dir, inherited: true, env: reservationEnv(entry.id, dir),
-    active: () => liveAdmitted(dir, entry.id) !== null,
+    active: () => admittedEntry(dir, entry.id) !== null,
     get bytes() { return held; },
     grow: async more => { amount(more, what, "grows by"); held += more; },
     shrink: async less => {
@@ -1108,7 +1096,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
     : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
     id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir),
-    active: () => !released && liveAdmitted(dir, self.id) !== null,
+    active: () => !released && admittedEntry(dir, self.id) !== null,
     get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
       amount(more, self.what, "grows by");
@@ -1378,6 +1366,7 @@ export async function reserveJob(request: JobRequest,
   process.once("exit", release);
   return {
     id: held.id, ledger: held.ledger, inherited: false, env: held.env,
+    active: () => held.active(),
     get bytes() { return held.bytes; },
     grow: (bytes, growOptions) => held.grow(bytes, growOptions),
     shrink: bytes => held.shrink(bytes),
