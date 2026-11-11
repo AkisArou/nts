@@ -4,11 +4,11 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy } from "../gate/verdict-policy.ts";
 import type { Layout, RunRecord } from "./state.ts";
 import { readBaseline } from "../landing/selection.ts";
-import { newToolingSlice } from "../gate/tooling-slice.ts";
+import { newToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { MEASUREMENT_HOLD } from "./measure-command.ts";
 import {nodePin} from "../bootstrap/node.ts";
 import {nodeToolchain} from "../gate/toolchain.ts";
@@ -139,7 +139,24 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
         stdio: ['ignore', out, out, 'ignore', 'ignore', 'ignore', 'ignore', 'ignore', lock.fd],
       });
       if (prepared.status !== 0 || prepared.error || prepared.signal || ceiling === undefined) return prepared;
-      const slice = newToolingSlice(false, launcher);
+      // A historical runner validates its own slice grammar. Ask that version
+      // to construct the boundary, using its canonical environment and Node.
+      const namingModule = join(layout.tree, "tooling/gate/tooling-slice.ts");
+      let slice: string;
+      if (existsSync(namingModule)) {
+        const namingRun = join(run, "slice-name"), receipt = join(run, "tooling-slice");
+        const namingHost = { ...launcher };
+        delete namingHost.NTS_TOOLING_SLICE;
+        const named = candidateCommand(selected.node, {
+          tree: layout.tree, run: namingRun, owned: { ...owned, NTS_GATE_RUN_DIR: namingRun },
+          standalone: true, discardTemporary: true,
+          command: [selected.node, "--input-type=module", "-e",
+            'import {writeFileSync} from "node:fs";const {newToolingSlice}=await import(process.argv[1]);writeFileSync(process.argv[3],newToolingSlice(false,JSON.parse(process.argv[2])));',
+            pathToFileURL(namingModule).href, JSON.stringify({ NTS_TOOLING_SLICE: launcher.NTS_TOOLING_SLICE }), receipt],
+        }, namingHost, { output: out, treeLock: lock.fd });
+        if (named.status !== 0 || named.error || named.signal) return named;
+        slice = toolingSlice({ NTS_TOOLING_SLICE: readFileSync(receipt, "utf8") })!;
+      } else slice = newToolingSlice(false, launcher);
       const measure = fileURLToPath(new URL("./measure-command.ts", import.meta.url));
       log(`full check wall ceiling: ${ceiling} s; logs ${run}`);
       return candidateCommand(selected.node, {

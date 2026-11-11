@@ -74,6 +74,7 @@ test("a full-check wall ceiling stops an older command and holds even a green su
 
 test("the full check launches each measured commit with its pin, including historical commits",t=>{
   const repo=scratchRepo(t,"full-check-toolchain"),paths=layout(repo.dir),installations=join(repo.dir,"installed"),log=join(repo.dir,"node-launches.jsonl");
+  const legacySlice=`nts-tooling-${randomUUID().replaceAll("-","")}.slice`;
   for(const pin of ["99.1.0","99.2.0"])nodeInstallation(installations,pin,log);
   const script=`#!/bin/sh
 if [ -n "$NTS_GATE_SETUP_ONLY" ];then
@@ -82,22 +83,27 @@ if [ -n "$NTS_GATE_SETUP_ONLY" ];then
   exit 0
 fi
 [ "$1" = --environment-ready ] && shift
-node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
+node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";if(process.env.NTS_TOOLING_SLICE!==${JSON.stringify(legacySlice)})throw Error("historical slice grammar changed");const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
 `;
-  candidateEnvironmentFixture(repo.root);repo.git(['add','-f','tooling']);repo.git(['commit','-qm','private environment']);
+  candidateEnvironmentFixture(repo.root);
+  const naming=join(repo.root,"tooling/gate/tooling-slice.ts");
+  writeFileSync(join(repo.root,"tooling/gate/current-tooling-slice.ts"),readFileSync(naming));
+  writeFileSync(naming,`export * from './current-tooling-slice.ts';export function newToolingSlice(){return ${JSON.stringify(legacySlice)};}
+export function toolingSlice(env=process.env){const value=env.NTS_TOOLING_SLICE;if(value!==undefined&&value!==${JSON.stringify(legacySlice)})throw Error('historical slice grammar changed');return value;}\n`);
+  repo.git(['add','-f','tooling']);repo.git(['commit','-qm','private environment']);
   const old=repo.commit({".tool-versions":"nodejs 99.1.0\n","tooling/gate/pinned.sh":script},"first pin");
   const next=repo.commit({".tool-versions":"nodejs 99.2.0\n"},"next pin");
   const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir}});
   for(const [commit,pin] of [[old,"99.1.0"],[next,"99.2.0"]]){
     const result=gate.run(commit!,["tooling"],pin!);
-    assert.equal(result.verdict,"green",JSON.stringify(result.reasons));
+    assert.equal(result.verdict,"green",JSON.stringify(result.reasons)+"\n"+readFileSync(join(result.run,"full-check.log"),"utf8"));
     assert.equal(readFileSync(join(result.run,"observed-node"),"utf8").split(":")[0],join(installations,pin!,"bin"));
   }
   const missing=repo.commit({".tool-versions":"nodejs 99.3.0\n"},"missing pin");
   const result=gate.run(missing,["tooling"],"missing");
   assert.equal(result.verdict,"held");assert.match(result.reasons.tooling!,/asdf install nodejs 99\.3\.0/);
   const invocations=readFileSync(log,"utf8").trim().split("\n").map(line=>JSON.parse(line) as string[]);
-  assert.equal(invocations.filter(args=>args.includes("--input-type=module")).length,2,"both measured pins execute their private binary");
+  assert.equal(invocations.filter(args=>args.includes("--input-type=module")).length,4,"both pins construct their slice and execute their private binary");
 });
 
 test('red full-check runs use the measured environment and release resolution sessions while the controller lives',async t=>{
