@@ -96,10 +96,10 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | 32 | `lower/parameters.rs` | 1,029 | 1,029 | Determine declared parameter shapes and lower callee binding, defaults, and omitted arguments. |
 | 33 | `lower/arguments.rs` | 789 | 789 | Evaluate and arrange arguments for the chosen parameter shape, including tuple/rest/spread gathering. |
 | 34 | `lower/places.rs` | 1,388 | 1,388 | Classify assignable storage and emit its reads, writes, and deletion, with the binding and property checks those operations require. |
-| 35 | `lower/accessors.rs` | 1,120 | 1,120 | Select and invoke get/set methods, including delegated, static, and super accessors. |
+| 35 | `lower/accessors.rs` | 1,136 | 1,136 | Select and invoke get/set methods, including delegated, static, and super accessors. |
 | 36 | `lower/local_bindings.rs` | 962 | 962 | Lower local declarations and identifier reads, including evolved types and declaration/initializer facts. |
 | 37 | `lower/destructuring.rs` | 1,543 | 1,543 | Extract, default, and bind or assign values of array and object patterns. |
-| 38 | `lower/assignments.rs` | 426 | 426 | Evaluate ordinary, compound, logical, and stepping assignments through their places. |
+| 38 | `lower/assignments.rs` | 377 | 377 | Evaluate ordinary, compound, logical, and stepping assignments through their places. |
 | 39 | `lower/body_entries.rs` | 999 | 999 | Build plain function and member bodies and dispatch each statement or expression to its owner. |
 | 40 | `lower/call_expression.rs` | 881 | 881 | Resolve a CallExpression target, choose its entry route, and finish a typed call result. |
 | 41 | `lower/method_calls.rs` | 1,175 | 1,175 | Choose and lower a receiver call, including static, registered, virtual, and builtin methods. |
@@ -112,7 +112,7 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | | **Control flow and suspension** | | | |
 | 48 | `lower/branch_values.rs` | 1,100 | 1,100 | Build value-producing joins and short-circuit branches, using static branch facts where proved. |
 | 49 | `lower/statement_branches.rs` | 948 | 948 | Lower if and switch statements, including case chains, narrowing, and join decisions. |
-| 50 | `lower/loop_flow.rs` | 990 | 990 | Build loop and labelled control edges, carrying the values assigned across iterations and exits. |
+| 50 | `lower/loop_flow.rs` | 1,023 | 1,023 | Build loop and labelled control edges, carrying the values assigned across iterations and exits. |
 | 51 | `lower/exceptions.rs` | 840 | 840 | Lower try, catch, finally, and throw, including the exceptional control edges and local bindings. |
 | 52 | `lower/suspended_bodies.rs` | 688 | 688 | Emit the entry and suspension operations of generators and async bodies, including their frame and promise setup. |
 | 53 | `lower/iterable_walks.rs` | 1,669 | 1,669 | Choose an iterator or indexed walk and lower for-in/for-of binding, stepping, and reads across supported representations. |
@@ -196,6 +196,13 @@ Each numbered row is one module commit. Each of the nine named sections is one l
 | The `closed_calls`, `erased_calls`, and `generic_values` declarations at 11,133–11,135 | `lower.rs` | The parent owns existing module paths and shared facades. Structural copy planning imports their helpers through those paths. |
 
 Existing documentation links follow their targets into the new modules. A target referenced from another lowering module keeps parent-scoped access, preserving its original `hir::lower` boundary. Rendered labels stay the same.
+
+### Ownership corrections from section 4
+
+| Baseline item | Destination | Caller or shared responsibility |
+| --- | --- | --- |
+| `Step` at 22,496 | `loop_flow.rs` | `end_loop` consumes the latch action for source and synthesized loops. The record stays in the parent until that owner moves in section 5. |
+| `method_takes` at 50,021 | `accessors.rs` | Delegated setter resolution and property-place selection share the predicate for a setter's argument. |
 
 ## Source inventory
 
@@ -788,7 +795,7 @@ The rows use baseline coordinates and count inclusive source lines. An indented 
 22462–22468     7  native_properties        lower*       enum ConstructedSetter
 22470–22481    12  native_properties        lower*       struct SetProperty
 22483–22494    12  array_sort               private*     struct Comparator
-22496–22528    33  assignments              lower*       enum Step
+22496–22528    33  loop_flow                lower*       enum Step
 22530–22542    13  suspended_bodies         lower*       struct AsyncResult
 22544–22555    12  promise_settlement       lower*       struct Settler
 22557–22565     9  promise_settlement       lower*       struct CapabilityBinding
@@ -1543,7 +1550,7 @@ The rows use baseline coordinates and count inclusive source lines. An indented 
 49928–49941    14  accessors                lower        method delegated_named
 49943–50005    63  accessors                lower        method delegated_typed_setter
 50007–50019    13  assignments              lower        method assigned_value
-50021–50036    16  assignments              lower        method method_takes
+50021–50036    16  accessors                lower        method method_takes
 50038–50040     3  accessors                lower        method is_accessor_property
 50042–50053    12  accessors                lower        method accessor
 50055–50099    45  accessors                lower        method lower_accessor
@@ -2235,7 +2242,7 @@ access_families -> access_families (71), access_family_flow (6), access_family_s
 access_family_flow -> access_family_flow (40), closure_calls (2), closure_values (1), hierarchy (1), implementations (15), module_evaluation (1), property_keys (4), snapshot_queries (23), type_tests (1), typeof_expression (1)
 access_family_functions -> access_families (7), access_family_functions (37), implementations (5), lower (15), returns (4)
 access_family_sites -> access_family_sites (2), hierarchy (2), implementations (3), property_keys (3), snapshot_queries (5)
-accessors -> access_families (2), access_family_functions (1), accessors (22), assignments (1), body_entries (2), call_expression (4), class_members (1), coercion (3), com_class (1), diagnostics (12), foreign_arguments (3), foreign_callbacks (4), hierarchy (4), implementations (12), lower (10), names (5), native_calls (3), native_construction (3), object_layouts (3), property_keys (8), raising_calls (4), receiver_binding (2), returns (3), snapshot_queries (28), structural_copies (1)
+accessors -> access_families (2), access_family_functions (1), accessors (23), binding_calls (1), body_entries (2), call_expression (4), class_members (1), coercion (3), com_class (1), diagnostics (12), foreign_arguments (3), foreign_callbacks (4), hierarchy (4), implementations (13), lower (10), names (5), native_calls (3), native_construction (3), object_layouts (3), property_keys (8), raising_calls (4), receiver_binding (2), returns (3), snapshot_queries (28), structural_copies (1)
 arguments -> absence (2), access (1), arguments (13), array_methods (2), body_entries (3), closure_calls (2), closure_values (2), coercion (4), diagnostics (6), expression_types (1), foreign_arguments (4), implementations (3), lower (13), parameters (8), places (1), representations (1), returns (2), snapshot_queries (11)
 array_construction -> absence (1), array_construction (37), array_from (2), array_methods (4), body_entries (5), branch_values (1), closure_calls (1), closure_values (4), coercion (7), construction (2), diagnostics (17), expression_types (4), implementations (7), iterable_walks (2), lower (37), module_binding_bodies (1), module_binding_types (4), object_layouts (1), parameters (1), provided_errors (1), representations (1), returns (3), snapshot_queries (33), tuples (2)
 array_from -> array_construction (1), array_from (12), array_methods (1), body_entries (2), closure_calls (1), coercion (1), diagnostics (7), generator_iteration (2), iterable_walks (13), iteration_callbacks (2), iterator_close (1), loop_flow (9), lower (17), object_builtins (1), snapshot_queries (3), table_methods (2)
@@ -2243,7 +2250,7 @@ array_methods -> absence (2), access (6), array_construction (4), array_methods 
 array_sort -> access (2), array_construction (1), array_methods (1), array_sort (9), body_entries (1), closure_calls (2), coercion (1), diagnostics (2), expression_types (1), implementations (3), loop_flow (12), lower (24), signature_entries (1), snapshot_queries (4)
 assertions -> absence (9), access (2), assertions (19), assertions/literals (2), claimed_reads (1), coercion (2), diagnostics (2), expression_types (2), hierarchy (1), implementations (3), lower (12), provided_errors (1), raising_calls (1), representations (1), returns (1), snapshot_queries (13), type_tests (1)
 assertions/literals -> assertions (2), assertions/literals (2), coercion (1), diagnostics (1), literals (1), lower (2), snapshot_queries (3)
-assignments -> absence (1), accessors (3), bigint (2), binding_calls (1), body_entries (2), branch_values (2), destructuring (1), diagnostics (3), expression_types (1), foreign_arguments (1), implementations (1), lower (5), member_layouts (1), objc_dispatch (1), operators (4), places (10), primitive_conversion (4), snapshot_queries (6), string_builtins (1)
+assignments -> absence (1), accessors (3), bigint (2), body_entries (2), branch_values (2), destructuring (1), diagnostics (3), expression_types (1), foreign_arguments (1), lower (5), member_layouts (1), objc_dispatch (1), operators (4), places (10), primitive_conversion (4), snapshot_queries (6), string_builtins (1)
 bigint -> absence (1), bigint (4), foreign_arguments (1), lower (18), provided_errors (2), snapshot_queries (9)
 binding_calls -> binding_calls (22), branch_values (1), call_expression (1), diagnostics (2), foreign_arguments (2), implementations (15), lower (4), native_calls (3), objc_dispatch (1), property_keys (6), snapshot_queries (20)
 binding_thens -> binding_thens (2)
@@ -2334,7 +2341,7 @@ optional_chains -> absence (6), accessors (4), array_methods (1), body_entries (
 overload_results -> call_expression (1), implementations (5), lower (1), overload_results (7), receiver_binding (1), representations (1), returns (3), snapshot_queries (6)
 parameter_entries -> branch_values (1), closure_context (3), closure_values (4), coercion (1), destructuring (4), diagnostics (1), implementations (4), lower (4), names (1), parameter_entries (21), parameters (7), receiver_binding (2), snapshot_queries (29)
 parameters -> absence (5), accessors (2), arguments (3), body_entries (1), branch_values (1), closure_calls (2), closure_values (1), destructuring (2), diagnostics (3), elision_patterns (2), expression_types (1), foreign_arguments (3), foreign_values (1), implementations (13), lower (5), parameter_entries (5), parameters (32), receiver_binding (1), representations (1), returns (2), snapshot_queries (22)
-places -> absence (1), access (7), access_families (3), accessors (13), array_methods (4), assignments (2), body_entries (2), claimed_reads (1), closure_values (3), coercion (7), diagnostics (12), expression_types (1), generator_iteration (1), gobject_templates (1), implementations (4), initialization (3), layout_collection (2), local_bindings (2), lower (13), module_binding_bodies (5), module_namespaces (2), names (1), native_memory (5), native_properties (2), objc_class (1), object_layouts (2), places (20), property_keys (11), property_presence (3), provided_errors (2), receiver_binding (1), returns (1), snapshot_queries (14), tuples (1)
+places -> absence (1), access (7), access_families (3), accessors (14), array_methods (4), assignments (1), body_entries (2), claimed_reads (1), closure_values (3), coercion (7), diagnostics (12), expression_types (1), generator_iteration (1), gobject_templates (1), implementations (4), initialization (3), layout_collection (2), local_bindings (2), lower (13), module_binding_bodies (5), module_namespaces (2), names (1), native_memory (5), native_properties (2), objc_class (1), object_layouts (2), places (20), property_keys (11), property_presence (3), provided_errors (2), receiver_binding (1), returns (1), snapshot_queries (14), tuples (1)
 primitive_conversion -> body_entries (1), buffers (1), coercion (1), diagnostics (4), hierarchy (1), implementations (2), iterator_calls (6), lower (21), member_layouts (1), numeric_arguments (1), object_layouts (1), primitive_conversion (13), property_keys (1), provided_errors (2), returns (2), snapshot_queries (6), string_builtins (2), type_tests (1)
 printed -> capture_discovery (1), hierarchy (2), printed (20), printed/edges (2)
 printed/edges -> call_expression (1), closure_values (1), hierarchy (3), implementations (3), lower (1), names (1), object_layouts (1), parameters (1), printed/edges (8), property_keys (2), provided_errors (1), snapshot_queries (3)
