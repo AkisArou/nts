@@ -71,7 +71,7 @@
 //
 // **A reservation can grow and shrink**, for a job whose need moves while it
 // runs (a gate run, as its steps start and end). `grow` asks for more exactly
-// as a new request would: at the reservation's priority, behind every request
+// as a new request would: at the reservation's priority and admitted order, before later requests
 // that arrived before it. Once admitted, the bytes join the reservation's own
 // entry, so a job is one entry and one measure however its size moves.
 // `shrink` gives bytes back at once. A growth whose reservation has ended is
@@ -388,13 +388,16 @@ function counts(entry: LedgerEntry, pid: number): boolean {
 // The queue.
 // ---------------------------------------------------------------------------
 
-export type Queued = { id: string; bytes: number; priority: Priority; seq: number };
+export type Queued = { id: string; bytes: number; priority: Priority; seq: number;
+  /** An admitted job's order, inherited by its growth and borrowers. New jobs use seq. */
+  order?: number;
+};
 
 const rank = (priority: Priority) => PRIORITIES.indexOf(priority);
 
-/** Priority first, then arrival. */
-export function queueOrder(a: Pick<Queued, "priority" | "seq">, b: Pick<Queued, "priority" | "seq">): number {
-  return rank(a.priority) - rank(b.priority) || a.seq - b.seq;
+/** Priority first; admitted work keeps its place, then requests retain arrival order. */
+export function queueOrder(a: Pick<Queued, "priority" | "seq" | "order">, b: Pick<Queued, "priority" | "seq" | "order">): number {
+  return rank(a.priority) - rank(b.priority) || (a.order ?? a.seq) - (b.order ?? b.seq) || a.seq - b.seq;
 }
 
 /**
@@ -637,7 +640,7 @@ export type Reservation = {
   readonly bytes: number;
   /**
    * Waits until `bytes` more may start, exactly as a new request of `bytes`
-   * at this reservation's priority would, then holds them in this
+   * at this reservation's priority and admission order would, then holds them in this
    * reservation's own entry. One growth at a time; `signal` withdraws it while
    * it waits, and so does `release`. Inside a parent's reservation it asks
    * for nothing, as `reserve` does there. A live job follows its use and
@@ -679,15 +682,44 @@ function amount(bytes: number, what: string, verb: string): void {
   if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new RangeError(`memory: ${what} ${verb} a positive whole number of bytes, not ${bytes}`);
 }
 
-const reservationEnv = (id: string, dir: string): Record<string, string> => ({ [RESERVATION_ENV]: id, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
+const reservationEnv = (id: string, dir: string, priority: Priority): Record<string, string> => ({ [RESERVATION_ENV]: id, [PRIORITY_ENV]: priority, ...(dir === LEDGER_DIR ? {} : { [LEDGER_ENV]: dir }) });
+
+/** The one scheduling owner of admitted work: its oldest live reserving ancestor.
+ * Growth belongs to the admitted job; a new independent request owns its ticket. */
+function reservationOrder(entry: LedgerEntry, admitted: ReadonlyMap<string, LedgerEntry>): {priority: Priority; order: number} {
+  let owner = entry.grows === null ? entry : admitted.get(entry.grows) ?? entry;
+  const seen = new Set<string>();
+  for (;;) {
+    if (seen.has(owner.id)) throw new Error(`memory: reservation ancestry contains a cycle at ${owner.id}`);
+    seen.add(owner.id);
+    const parent = owner.drawsOn === undefined ? undefined : admitted.get(owner.drawsOn);
+    if (parent === undefined) return {priority: owner.priority, order: owner.seq};
+    owner = parent;
+  }
+}
+function liveReservations(dir: string): Map<string, LedgerEntry> {
+  return new Map(readEntries(dir, "admitted").filter(entry => alive(entry.owner)).map(entry => [entry.id, entry]));
+}
+
+/** Resolve a launcher's rank before it sets irreversible kernel OOM scores.
+ * The same scheduling owner feeds admission, growth, yield, status and handoffs. */
+export function reservationPriority(priority: Priority, env: NodeJS.ProcessEnv = process.env, named = env[RESERVATION_ENV]): Priority {
+  const dir = resolve(env[LEDGER_ENV] ?? LEDGER_DIR);
+  const on = (named === undefined ? undefined : counting(dir, named, process.pid, undefined, "job priority"))
+    ?? ancestorReservation(dir, process.pid, undefined);
+  const admitted = liveReservations(dir), owner = on === undefined ? undefined : admitted.get(on);
+  return owner === undefined ? priority : reservationOrder(owner, admitted).priority;
+}
 
 /**
  * Whether a request of higher priority than `priority` waits in `dir`, among
  * those whose waiter and owner are alive and that could fit were every
  * admitted job to end: one that could not is not helped by what a yield frees.
  */
-function outrankedIn(dir: string, priority: Priority): boolean {
-  return readEntries(dir, "waiting").some(entry => rank(entry.priority) < rank(priority) && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
+function outrankedIn(dir: string, self: LedgerEntry): boolean {
+  const admitted = liveReservations(dir), {priority} = reservationOrder(self, admitted);
+  return readEntries(dir, "waiting").some(entry => rank(reservationOrder(entry, admitted).priority) < rank(priority)
+    && entry.fits !== false && alive(entry.waiter) && alive(entry.owner));
 }
 
 /**
@@ -752,9 +784,9 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
   // The parent sized its reservation for what runs inside it, so a growth
   // asks for nothing more than the request did.
   let held = bytes;
-  const { priority } = entry;
+  const {priority} = reservationOrder(entry, liveReservations(dir));
   return {
-    id: entry.id, ledger: dir, inherited: true, env: reservationEnv(entry.id, dir),
+    id: entry.id, ledger: dir, inherited: true, env: reservationEnv(entry.id, dir, priority),
     active: () => admittedEntry(dir, entry.id) !== null,
     get bytes() { return held; },
     grow: async more => { amount(more, what, "grows by"); held += more; },
@@ -763,7 +795,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
       if (less >= held) throw new RangeError(`memory: ${what} holds ${gib(held)}, so it cannot give back ${gib(less)}; release it instead`);
       held -= less;
     },
-    outranked: () => outrankedIn(dir, priority),
+    outranked: () => outrankedIn(dir, entry),
     noteOver: async () => {},
     release: () => {},
   };
@@ -876,7 +908,7 @@ function accountsOf(admitted: ReadonlyMap<string, LedgerEntry>, use: (entry: Led
     let unused = entry.liveUse ? 0 : Math.max(0, entry.bytes - account.used - account.lent);
     // A live child's share follows its current charge, so its growth and
     // shrink neither duplicate nor strand the ancestor's unused forecast.
-    for (const child of children.filter(child => child.liveUse).sort(queueOrder)) {
+    for (const child of children.filter(child => child.liveUse).map(child => ({...child, ...reservationOrder(child, admitted)})).sort(queueOrder)) {
       const theirs = accounts.get(child.id)!;
       theirs.drawn = Math.min(unused, peakReservation([Math.max(1, theirs.used)]));
       unused -= theirs.drawn; account.lent += theirs.drawn;
@@ -924,7 +956,9 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
   const grown = self.grows === null ? undefined : admitted.get(self.grows);
   if (self.grows !== null && grown === undefined) refuse(`memory: ${self.what}'s reservation has ended, so its ${requestFor(self)} is dropped`);
   if (registered && !listed) report(`memory: ${self.what}'s ${requestFor(self)} left the ledger while it waited; it asks again, at the back of the queue`);
-  if (!listed) self.seq = 1 + Math.max(0, ...waiting.map(entry => entry.seq));
+  if (!listed) self.seq = 1 + Math.max(0, ...waiting.map(entry => entry.seq), ...[...admitted.values()].map(entry => entry.seq));
+  const policy = reservationOrder(self, admitted);
+  self.priority = policy.priority;
 
   const { availableBytes } = context.host.memory();
   let table: Table | undefined;
@@ -940,11 +974,11 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     liveMargins.set(entry.id, Math.max(0, charged - used));
   }
   const usedBytes = [...accounts.values()].reduce((sum, account) => sum + account.used, 0);
-  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry, ...accounts.get(entry.id)! })), self);
+  const pendingBytes = pendingFor([...admitted.values()].map(entry => ({ entry: {...entry, ...reservationOrder(entry, admitted)}, ...accounts.get(entry.id)! })), self);
   const roomBytes = availableBytes - pendingBytes - SYSTEM_FLOOR_BYTES;
   // What the queue could be given were every admitted job to end.
   const freeBytes = availableBytes + usedBytes - SYSTEM_FLOOR_BYTES;
-  const everyone = [...waiting, self].sort(queueOrder);
+  const everyone = [...waiting, self].map(entry => ({...entry, ...reservationOrder(entry, admitted)})).sort(queueOrder);
   // What each request draws on the unused part of the reservation it draws
   // on, in the queue's order: it asks the queue only for the rest.
   const left = new Map<string, number>(), draws = new Map<string, number>();
@@ -999,7 +1033,7 @@ function decide(context: Context, self: LedgerEntry, registered: boolean, joint?
     report(`memory: ${self.what} took over ${replaced.what}'s reservation of ${gib(replaced.bytes)}`);
   }
   return {
-    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.indexOf(self), fits, drawnBytes },
+    decision: { id: self.id, what: self.what, admitted: go, grows: self.grows, availableBytes, pendingBytes, roomBytes, ahead: everyone.findIndex(entry => entry.id === self.id), fits, drawnBytes },
     registered: !go && !resourceBusy,
   };
 }
@@ -1071,7 +1105,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null
     : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
-    id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir),
+    id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
     active: () => !released && admittedEntry(dir, self.id) !== null,
     get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
@@ -1102,7 +1136,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       context.observe(outcome.decision);
       if (outcome.waitedMs !== null) context.report(`memory: ${self.what} grew by ${gib(more)} to ${gib(bytes)} after ${Math.round(outcome.waitedMs / 1000)} s`);
     },
-    outranked: () => !released && outrankedIn(dir, self.priority),
+    outranked: () => !released && outrankedIn(dir, self),
     noteOver: async key => { if (!released) await noteOver(dir, self.id, key); },
     async shrink(less) {
       amount(less, self.what, "gives back");
@@ -1417,21 +1451,22 @@ export function ledgerStatus(options: { dir?: string; env?: NodeJS.ProcessEnv } 
     const account = accounts.get(entry.id) ?? { used: 0, lent: 0, drawn: 0 };
     const on = entry.live ? drawnOn(entry, live) : undefined;
     return {
-      id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.liveUse ? peakReservation([Math.max(1, account.used)]) : entry.bytes,
+      id: entry.id, what: entry.what, priority: reservationOrder(entry, live).priority, bytes: entry.liveUse ? peakReservation([Math.max(1, account.used)]) : entry.bytes,
       ...(entry.liveUse ? { liveUse: true } : {}),
       used_bytes: account.used, owner_pid: entry.owner.pid, since: entry.since, live: entry.live,
       unmeasured: entry.unmeasured ?? [], over: entry.over ?? [],
       draws_on: on ?? null, drawn_bytes: on === undefined ? 0 : account.drawn, lent_bytes: account.lent,
     };
   });
-  const head = view.waiting.find(entry => entry.live) ?? null;
+  const waiting = view.waiting.map(entry => ({...entry, ...reservationOrder(entry, live)})).sort(queueOrder);
+  const head = waiting.find(entry => entry.live) ?? null;
   const pending = pendingFor(admitted.filter(entry => entry.live).map(entry => ({ entry, used: entry.used_bytes, lent: entry.lent_bytes })), head);
   return {
     version: 1, kind: "memory", at: new Date(now).toISOString(), ledger: dir,
     machine: { total_bytes: totalBytes, available_bytes: availableBytes, floor_bytes: SYSTEM_FLOOR_BYTES },
     pending_bytes: pending, room_bytes: availableBytes - pending - SYSTEM_FLOOR_BYTES,
     admitted,
-    waiting: view.waiting.map(entry => ({
+    waiting: waiting.map(entry => ({
       id: entry.id, what: entry.what, priority: entry.priority, bytes: entry.bytes, grows: entry.grows,
       owner_pid: entry.owner.pid, waiter_pid: entry.waiter.pid, since: entry.since,
       waited_s: Math.max(0, (now - Date.parse(entry.since)) / 1000), live: entry.live,

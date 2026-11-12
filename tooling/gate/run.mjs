@@ -109,7 +109,7 @@ import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
-import {gib, machineMemory, priorityOf, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
+import {gib, machineMemory, priorityOf, reservationPriority, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
 import {workerCapBytes} from "../census/worker-memory.ts";
 import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
 import {defaultSlots, frontendBudget} from "./budget.ts";
@@ -231,7 +231,7 @@ const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", defaultSlot
 // (the landing check, the full check), and a shell's own value never reaches
 // here (canonical-environment.ts).
 const PRIORITY = (() => {
-  try { return priorityOf(env); }
+  try { return reservationPriority(priorityOf(env), env, LAUNCHER_RESERVATION); }
   catch (error) { usage(error.message); }
 })();
 // Its steps inherit its OOM score: a machine that runs out kills the lowest

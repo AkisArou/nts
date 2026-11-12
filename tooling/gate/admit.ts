@@ -218,7 +218,7 @@ async function main(argv: readonly string[]): Promise<void> {
   // Watched from outside: this process becomes the command, ranked for the
   // OOM killer by its priority (memory-ledger.ts's OOM_SCORE).
   if (options.job && !reservation.inherited) watchPeak(reservation, options.job, say);
-  rankForOom(options.priority, say);
+  rankForOom(priorityOf(reservation.env), say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;
   // The shell keeps this pid, validates the lock's owner and owns its EXIT trap.

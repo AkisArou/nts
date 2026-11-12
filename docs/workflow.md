@@ -406,6 +406,13 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   Everything else the count only reports.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
+- **Admitted work keeps its place within its priority.** Growth of an admitted
+  job precedes later arrivals of equal rank. A borrower follows its live
+  admitted ancestor chain for rank and admission order, and draws on unused
+  ancestor bytes before asking for more. The same owner governs admission,
+  yield decisions, status and child handoffs. A higher-rank landing still
+  preempts an admitted agent job and its borrowers: only live work and its
+  margin remain promised to that landing. Independent new jobs retain FIFO.
 - **Resource observations belong to the run.** `HostObservations`
   (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
   admission, oracle dependency capture, temporary pruning, the memory ledger,
@@ -572,6 +579,13 @@ the first node task.
   first and asks the ledger only for the rest, so a holder whose child needs
   memory never waits for itself
   ([log](records/notebooks/decisions-log.md#a-reservation-made-inside-another-jobs-draws-on-it-first-11-10)).
+- **Admitted work grows at its reservation's rank and order:** growth keeps
+  an admitted job's place before later arrivals of equal rank, and borrowers
+  inherit their live ancestor's rank and place. A landing's higher rank still
+  preempts an admitted agent job, so precedence lasts only for that job's
+  lifetime and never blocks a landing. Live entry order is unique, including
+  when the queue was empty at admission
+  ([log](records/notebooks/decisions-log.md#admitted-work-keeps-its-rank-and-place-11-12)).
 - **Memory limits guard against runaways only.** A step's supervisor and
   workers have separate sibling boundaries, each with only a MemoryMax,
   about twice what the step was measured to hold and never

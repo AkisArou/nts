@@ -2140,3 +2140,23 @@ may only fall, so cleanup can proceed by directory while every new module is
 checked at once. Diagnostics in imported compiler and runtime sources remain
 with their own projects. Governs [the machine](../../workflow.md#the-machine);
 implemented by #711 under #710.
+
+## Admitted work keeps its rank and place (11-12)
+
+The nested reservation replay found two stalls: a full-check borrower yielded
+at its own rank while its agent ancestor's unused promise blocked the outside
+agent, and same-rank growth waited behind a later new job that could not fit.
+The latter was already netted correctly against ancestor bytes; the earlier
+claim of missing netting was wrong. Top-level growth also took a new ticket,
+and empty queues let multiple admitted jobs receive the same sequence.
+
+An admitted job now grows at its admission place before later arrivals of
+**equal rank**, and a borrower follows its live admitted ancestor chain for
+both rank and order. Higher-rank landings still preempt admitted agent jobs;
+only those jobs' own lifetimes delay later equal-rank work. Fresh independent
+requests retain FIFO. One owner feeds admission, yield, status and handoffs.
+The ledger allocates unique order across live admitted and waiting entries.
+The coordinator chose finishing admitted work over surrendering its forecast
+mid-run to begin a later job. Governs [the machine](../../workflow.md#the-machine);
+implemented by #718, with both captured configurations and the top-level growth
+control replayed through fixture-owned observations.

@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory } from "./step-scheduling.ts";
@@ -183,7 +183,7 @@ test("a reservation that fits is admitted at once, and its handle releases it", 
   const f = fixture(t);
   const job = await f.ask({ bytes: 4 * GiB, what: "job" });
   assert.equal(job.inherited, false);
-  assert.deepEqual(job.env, { NTS_MEMORY_RESERVATION: job.id, NTS_MEMORY_LEDGER: f.dir });
+  assert.deepEqual(job.env, { NTS_MEMORY_RESERVATION: job.id, NTS_MEMORY_LEDGER: f.dir, NTS_MEMORY_PRIORITY: "agent" });
   const [entry, ...others] = readLedger(f.dir).admitted;
   assert.deepEqual(others, []);
   assert.equal(entry?.id, job.id);
@@ -337,38 +337,42 @@ test("a reservation grows when the queue admits its growth and shrinks at once, 
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
-test("a growth waits its turn as a new request would: behind those before it, ahead of those after, and behind the landing check", async t => {
-  const f = fixture(t); // 20 available
-  const job = await f.ask({ bytes: 10 * GiB, what: "job" }); // room for 8 now
-  const early = f.ask({ bytes: 9 * GiB, what: "early" });
-  await waitFor("the early request to wait", () => f.of("early").length >= 1, { stopped: f.stopped });
-  const growth = job.grow(2 * GiB);
-  growth.catch(() => {});
-  const growthOf = () => f.decisions.filter(d => d.grows === job.id);
-  await waitFor("the growth to wait three times", () => growthOf().length >= 3, { stopped: f.stopped });
-  assert.ok(growthOf().every(d => !d.admitted && d.ahead === 1 && d.roomBytes === 8 * GiB), "2 GiB fit in 8, yet the growth waits behind the 9 that do not");
-  assert.match(f.lines.find(line => line.includes("waits to grow")) ?? "",
-    /^memory: job waits to grow by 2\.0 GiB to 12\.0 GiB \(agent\): 20\.0 GiB available, 10\.0 GiB of it promised to running jobs, 2\.0 GiB kept for the system; 1 ahead of it in the queue$/);
-  assert.deepEqual(readLedger(f.dir).waiting.map(e => [e.what, e.grows]), [["early", null], ["job", job.id]]);
-  const late = f.ask({ bytes: GiB, what: "late" });
-  await waitFor("the late request to wait", () => f.of("late").length >= 2, { stopped: f.stopped });
-  assert.ok(f.of("late").every(d => !d.admitted && d.ahead === 2), "behind the growth, which arrived first");
-  const landing = await f.ask({ bytes: GiB, what: "landing", priority: "landing" });
-  assert.equal(f.of("landing").at(-1)?.ahead, 0, "the landing check goes ahead of the growth");
+test("an admitted job grows before later equal-rank arrivals, which retain their own FIFO order", async t => {
+  const f=fixture(t),job=await f.ask({bytes:10*GiB,what:"admitted job"});
+  const early=f.ask({bytes:9*GiB,what:"early arrival"});
+  await waitFor("early arrival waits",()=>f.of("early arrival").some(d=>!d.admitted),{stopped:f.stopped});
+  await job.grow(2*GiB);
+  const growth=f.decisions.find(d=>d.grows===job.id)!;
+  assert.deepEqual([growth.admitted,growth.ahead,growth.roomBytes],[true,0,8*GiB]);
+  const late=f.ask({bytes:GiB,what:"late arrival"});
+  await waitFor("late arrival retains FIFO",()=>f.of("late arrival").some(d=>!d.admitted),{stopped:f.stopped});
+  assert.ok(f.of("late arrival").every(d=>!d.admitted&&d.ahead===1));
+  f.memory(25);
+  const [first,second]=await Promise.all([early,late]);
+  assert.equal(job.bytes,12*GiB);
+  const entries=readLedger(f.dir).admitted;
+  assert.ok(entries.find(e=>e.id===first.id)!.seq<entries.find(e=>e.id===second.id)!.seq);
+  for(const held of [job,first,second])held.release();
+});
 
-  // The job has used 3 of its 10: room for 10, which the early 9 takes.
-  f.used.set("job", 3 * GiB);
-  const earlyHeld = await early;
-  const seen = growthOf().length;
-  await waitFor("the growth to look again", () => growthOf().length > seen, { stopped: f.stopped });
-  assert.ok(growthOf().slice(seen).every(d => !d.admitted), "1 left after the early request's 9");
-  earlyHeld.release(); // room for 10: the growth's 2, then the late 1
-  const [, lateHeld] = await Promise.all([growth, late]);
-  assert.equal(job.bytes, 12 * GiB);
-  assert.ok(f.lines.some(line => /^memory: job grew by 2\.0 GiB to 12\.0 GiB after \d+ s$/.test(line)), f.lines.join("\n"));
-  assert.deepEqual(readLedger(f.dir).admitted.map(e => [e.what, e.bytes]).sort(), [["job", 12 * GiB], ["landing", GiB], ["late", GiB]]);
-  for (const reservation of [job, landing, lateHeld]) reservation.release();
-  assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
+test("a growing admitted agent still yields its place and unused promise to a waiting landing", async t => {
+  const f=fixture(t),job=await f.ask({bytes:10*GiB,what:"agent job"});
+  const blocker=await f.ask({bytes:8*GiB,what:"running landing",priority:"landing"});
+  const landing=f.ask({bytes:16*GiB,what:"waiting landing",priority:"landing"});
+  await waitFor("higher-rank landing waits",()=>f.of("waiting landing").some(d=>!d.admitted),{stopped:f.stopped});
+  const growing=job.grow(2*GiB);growing.catch(()=>{});
+  await waitFor("growth follows the landing",()=>f.decisions.some(d=>d.grows===job.id&&!d.admitted),{stopped:f.stopped});
+  assert.equal(job.outranked(),true);
+  assert.ok(f.decisions.filter(d=>d.grows===job.id).every(d=>!d.admitted&&d.ahead===1));
+  blocker.release();const priority=await landing;priority.release();await growing;job.release();
+});
+
+test("admitted jobs have distinct live order even when nobody had to queue",async t=>{
+  const f=fixture(t),held=[];
+  for(const what of ["one","two","three"])held.push(await f.ask({bytes:GiB,what}));
+  const order=readLedger(f.dir).admitted.map(e=>e.seq);
+  assert.equal(new Set(order).size,3);assert.deepEqual([...order].sort((a,b)=>a-b),[1,2,3]);
+  for(const job of held)job.release();
 });
 
 test("a growth whose owner exits while it waits fails and leaves the queue, and the reservation it would have grown is dropped", async t => {
@@ -1153,4 +1157,47 @@ const { rankForOom } = await import(${JSON.stringify(ledger)}); rankForOom(${JSO
   for (const priority of PRIORITIES) assert.equal(ranked(priority), Math.max(inherited, OOM_SCORE[priority]), priority);
   // Above its priority's score already, it stays: an unprivileged process cannot lower its own.
   assert.equal(ranked("landing", 900), 900);
+});
+
+
+test("the 13.6 GiB ancestor replay gives its borrower the agent rank and releases forecasts to a landing",async t=>{
+  const f=fixture(t),outer=await f.ask({bytes:Math.round(13.6*GiB),what:"outer agent"});
+  const child=await f.ask({bytes:431*2**20,what:"nested full check",priority:"full-check",owner:{pid:ownerProcess(t).pid}});
+  f.memory(18.9);
+  const outside=f.ask({bytes:10*GiB,what:"outside agent"});
+  await waitFor("outside agent waits",()=>f.of("outside agent").some(d=>!d.admitted),{stopped:f.stopped});
+  assert.equal(child.outranked(),false);assert.equal(child.env.NTS_MEMORY_PRIORITY,"agent");
+  assert.equal(reservationPriority("full-check",f.env,outer.id),"agent");
+  assert.equal(ledgerStatus({env:f.env}).admitted.find(e=>e.id===child.id)!.priority,"agent");
+  const blocker=await f.ask({bytes:8*GiB,what:"running landing",priority:"landing"});
+  const priority=f.ask({bytes:10*GiB,what:"waiting landing",priority:"landing"});
+  await waitFor("landing waits",()=>f.of("waiting landing").some(d=>!d.admitted),{stopped:f.stopped});
+  assert.equal(child.outranked(),true);assert.equal(outer.outranked(),true);
+  assert.ok(ledgerStatus({env:f.env}).pending_bytes<blocker.bytes+2*GiB,"ancestor unused forecast is available to the landing");
+  blocker.release();const first=await priority;first.release();child.release();outer.release();(await outside).release();
+});
+
+test("the 8.8 GiB ancestor replay admits the net 3.2 GiB growth at the ancestor's place",async t=>{
+  const f=fixture(t),outer=await f.ask({bytes:Math.round(8.8*GiB),what:"outer agent"});
+  const child=await f.ask({bytes:2*GiB,what:"nested run",owner:{pid:ownerProcess(t).pid}});
+  f.memory(18.9);const outside=f.ask({bytes:10*GiB,what:"outside agent"});
+  await waitFor("outside waits for 10 GiB",()=>f.of("outside agent").some(d=>!d.admitted),{stopped:f.stopped});
+  await child.grow(10*GiB);
+  const growth=f.decisions.find(d=>d.grows===child.id)!;
+  assert.deepEqual([growth.admitted,growth.ahead,growth.drawnBytes],[true,0,outer.bytes-2*GiB]);
+  assert.ok(Math.abs(growth.roomBytes-8.1*GiB)<1024);
+  assert.equal(f.of("outside agent").at(-1)!.admitted,false);
+  child.release();outer.release();(await outside).release();
+});
+
+test("borrowers inherit rank and admission order across multiple ancestors",async t=>{
+  const f=fixture(t),outer=await f.ask({bytes:12*GiB,what:"outer agent"});
+  const middle=await f.ask({bytes:8*GiB,what:"middle borrower",priority:"full-check",drawsOn:outer.id});
+  const inner=await f.ask({bytes:2*GiB,what:"inner borrower",priority:"full-check",drawsOn:middle.id});
+  const outside=f.ask({bytes:10*GiB,what:"outside agent"});
+  await waitFor("outside waits",()=>f.of("outside agent").some(d=>!d.admitted),{stopped:f.stopped});
+  assert.equal(inner.outranked(),false);assert.equal(inner.env.NTS_MEMORY_PRIORITY,"agent");
+  await inner.grow(4*GiB);
+  assert.deepEqual(f.decisions.filter(d=>d.grows===inner.id).map(d=>[d.admitted,d.ahead]),[[true,0]]);
+  for(const held of [inner,middle,outer])held.release();(await outside).release();
 });
