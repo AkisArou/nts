@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -20,8 +21,8 @@ function fixture(t:TestContext){
   const scratch=testScratch(t,'oracle-producer'),root=join(scratch,'source');
   copyModuleClosure([ENTRY],root);
   writeFileSync(join(root,'pnpm-lock.yaml'),'private lockfile\n');
-  execFileSync('git',['init','--quiet'],{env:fixtureEnvironment(t),cwd:root});
-  execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','--allow-empty','-m','Private producer root'],{env:fixtureEnvironment(t),cwd:root});
+  execFileSync('git',gitArguments(['init','--quiet']),{env:fixtureEnvironment(t),cwd:root});
+  execFileSync('git',gitArguments(['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','--allow-empty','-m','Private producer root']),{env:fixtureEnvironment(t),cwd:root});
   return {root,cap:()=>dependencyCapability(root,join(scratch,'tmp','dependencies'))};
 }
 

@@ -134,3 +134,18 @@ The final placement census has 28,507 tracked paths, 149 unplaced paths and
 125 tests; the leaf/outcomes/timing proof passes 18 tests. Host ownership checks
 1,868 sources, 252 closures and 412 reads. Strict coverage checks 809 modules
 with no new diagnostics.
+
+## Fixtures and generated subjects
+
+The final slice protects the remaining 71 positions in 39 test/fixture modules:
+67 root positions and four generated JavaScript positions in the range and
+legacy-oracle fixtures. The writer reports 239 protected sites and zero debt.
+The record remains present and rejects a new unprotected source expression.
+
+Universal argv protection initially defeated canonical-environment's positive
+control for GIT_OPTIONAL_LOCKS=1. That test now disables only a private staged
+copy of the argv leaf, so its two environment arms still prove the ambient
+rule. The ordinary argv owner's index-protection control remains unchanged.
+The corrected ambient/Git/timing proof passes 47 tests, followed by the host
+and strict audits. Compiler-backed proof uses the supported
+landing check's --here route, which builds the compiler and seals its environment.

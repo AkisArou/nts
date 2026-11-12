@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Saved observations exercise the actual consumer's selection and comparison
@@ -35,7 +36,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
   copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true});
   mkdirSync(join(fixture,'tests/typescript/private'),{recursive:true});
   for(const value of [1,2])writeFileSync(join(fixture,'tests/typescript/private',value+'.ts'),`assert.sameValue(${value},${value});\n`);
-  const git=(args:string[])=>{const result=spawnSync('git',args,{env:fixtureEnvironment(t),cwd:fixture,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
+  const git=(args:string[])=>{const result=spawnSync('git',gitArguments(args),{env:fixtureEnvironment(t),cwd:fixture,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
   git(['init','--quiet']);git(['add','tests']);git(['-c','user.name=Fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Private sample']);
   const selected=selectTypescript(fixture,'tests/typescript'),sampled=populationOf(selected,{sample:1});
   assert.ok('population' in sampled);const target=sampled.population[0]!.path;

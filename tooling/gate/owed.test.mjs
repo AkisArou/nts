@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // What owed.mjs maps a changed path to, on this tree:
 //
@@ -61,7 +62,7 @@ test('the census CLI retains its initializer, writer and JSON forms in an owned 
   put('tooling/gate/run.mjs','');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
-    const result=spawnTest('git',args,{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+    const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   }
   for(const args of [['--record','--initialize','--json'],[],['--json'],['--record'],['--record','--json']]){
     const result=spawnTest(process.execPath,[fileURLToPath(new URL('./owed.mjs',import.meta.url)),'--full-census',...args],{cwd:root,env,encoding:'utf8'});
@@ -112,7 +113,7 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   const env = fixtureEnvironment(t);
   /** @param {...string} args */
   const git = (...args) => {
-    const result = spawnSync('git', args, { cwd: root, env, encoding: 'utf8' });
+    const result = spawnSync('git', gitArguments(args), { cwd: root, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
   put('Cargo.toml', '[package]\nname="selector-fixture"\nversion="0.0.0"\nedition="2021"\n');
@@ -265,7 +266,7 @@ test("a quoted runtime/* fixture alias does not make tooling read the Chromium r
 });
 
 test("the real Chromium runtime readers are complete", () => {
-  const listed = spawnSync("git", ["ls-files", "-z", "--", "runtime/chromium"], {env:testEnvironment(),encoding:"utf8"});
+  const listed = spawnSync("git", gitArguments(["ls-files", "-z", "--", "runtime/chromium"]), {env:testEnvironment(),encoding:"utf8"});
   assert.equal(listed.status, 0, listed.stderr);
   const paths = listed.stdout.split("\0").filter(Boolean);
   assert.ok(paths.length > 0, "the real Chromium runtime inventory is empty");
@@ -554,7 +555,7 @@ test("backend-only changes run counting checks for the backend they change", () 
 test("every HIR pass owes the counting checks, not just files named for ownership", () => {
   // CFG/liveness, scalarization, cycle classification and callee summaries
   // also change allocation or reference placement. Cover the whole directory.
-  const listed = spawnSync("git", ["ls-files", "--", "compiler/core/src/hir"], {env:testEnvironment(), encoding: "utf8" });
+  const listed = spawnSync("git", gitArguments(["ls-files", "--", "compiler/core/src/hir"]), {env:testEnvironment(), encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const paths = listed.stdout.trim().split("\n").filter((p) => p.endsWith(".rs"));
   assert.ok(paths.length > 0);

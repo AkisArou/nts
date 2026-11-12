@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
@@ -24,7 +25,7 @@ test("record numbering preserves named collisions and refuses new or stale allow
 test("the real records step validates benchmark evidence and its rendered table",()=>{
   const root=newTestScratch("records-step");
   const runGit=(...args:string[])=>{
-    const result=spawnSync("git",args,{env:testEnvironment(),cwd:root,encoding:"utf8"});
+    const result=spawnSync("git",gitArguments(args),{env:testEnvironment(),cwd:root,encoding:"utf8"});
     assert.equal(result.status,0,result.stderr);return result.stdout;
   };
   const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{env:testEnvironment(),cwd:root,encoding:"utf8"});

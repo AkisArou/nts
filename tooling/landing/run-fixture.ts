@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Running a landing's steps: the build first, the rest through the gate's own
 // runner, both admitted by the memory ledger, memory pressure retried, pending
@@ -77,7 +78,7 @@ fi
 exec node "$(dirname "$0")/run.mjs" "$@"
 `);
   chmodSync(join(gate, "all.sh"), 0o755);
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: tree, encoding: "utf8", env: { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
+  const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: tree, encoding: "utf8", env: { ...fixtureEnvironment(t), GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
   const commit = git("rev-parse", "HEAD");
   const memory = ownMemory(join(own, "memory"));
   const build = join(own, "build.sh");

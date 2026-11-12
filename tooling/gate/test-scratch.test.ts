@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {existsSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -50,7 +51,7 @@ test('compile-time target scratch is reachable only through its shared owner',()
   assert.equal(bypassesScratchOwner('let p=Path::new(env!("CARGO_TARGET_TMPDIR"));'),true);
   assert.equal(bypassesScratchOwner('let p=scratch::ScratchDir::in_target("test");'),false);
   const root=fileURLToPath(new URL('../../',import.meta.url));
-  const listed=spawnSync('git',['ls-files','-z','--','*.rs'],{cwd:root,env:hostEnvironment(process.env),encoding:'utf8'});
+  const listed=spawnSync('git',gitArguments(['ls-files','-z','--','*.rs']),{cwd:root,env:hostEnvironment(process.env),encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
   const bad=listed.stdout.split('\0').filter(path=>path&&!path.startsWith('third_party/')&&path!=='compiler/test-support/scratch.rs')
     .filter(path=>bypassesScratchOwner(readFileSync(join(root,path),'utf8')));

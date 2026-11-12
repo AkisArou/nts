@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The worktree pool, elastic: take (reusing a warm tree, else growing while
 // the disk allows), give back, discard, release after landing, the upkeep that
@@ -43,7 +44,7 @@ function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptio
   /** Free tree `name` was last given back `ago` ms before NOW: a task's branch on it, then main again. */
   const freedAt = (name: string, ago: number) => {
     const cwd = join(p.dir, name), env = clock(ago);
-    for (const args of [["switch", "-q", "-c", `task-${name}`], ["switch", "-q", "--detach", "refs/heads/main"], ["branch", "-q", "-D", `task-${name}`]]) execFileSync("git", args, { cwd, env });
+    for (const args of [["switch", "-q", "-c", `task-${name}`], ["switch", "-q", "--detach", "refs/heads/main"], ["branch", "-q", "-D", `task-${name}`]]) execFileSync("git", gitArguments(args), { cwd, env });
   };
   return { s, p, linked, at, freedAt,
     observe:(disk: {freeBytes:number;freeInodes:number},paths:Record<string,number>={})=>ownMemory(observationRoot,{disk,allocated:{kind:'fixed',defaultBytes:0,paths}}) };

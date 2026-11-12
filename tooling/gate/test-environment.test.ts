@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
@@ -22,7 +23,7 @@ test('a child owns HOME, XDG, temporary and Git, and drops ambient policy',()=>{
     assert.ok(env[name]!.startsWith(join(userInfo().homedir,'.cache/')));
   }
   writeFileSync(join(env.HOME!,'.gitconfig'),'[core]\n bare = true\n');
-  const git=spawnSync('git',['config','--global','--get','core.bare'],{env,encoding:'utf8'});
+  const git=spawnSync('git',gitArguments(['config','--global','--get','core.bare']),{env,encoding:'utf8'});
   assert.equal(git.status,1,git.stderr);
   const node=spawnSync(process.execPath,['-e','console.log(process.env.NTS_TEST_UNKNOWN??"clean")'],{env,encoding:'utf8'});
   assert.equal(node.status,0,node.stderr);assert.equal(node.stdout.trim(),'clean');

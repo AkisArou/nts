@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT} from "../gate/canonical-environment.ts";
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
@@ -39,7 +40,7 @@ function fixture(t: { after(fn: () => void): void }) {
     GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
     GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
   });
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   writeFileSync(join(root, "results/marker"), "main record\n");
   writeFileSync(join(root, "tooling/gate/pinned.sh"), readFileSync(new URL("../gate/pinned.sh", import.meta.url)));
   copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json", "tooling/inputs/linker.ts"], root);
@@ -123,7 +124,7 @@ test("candidate setup consumes a sealed sha and cannot write main's records or f
   assert.equal(env.NTS_GATE_RUN_DIR, plan.run);
   const result = spawnTest("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env, encoding: "utf8",});
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], {env:fixtureEnvironment(t), cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
+  assert.equal(execFileSync("git", gitArguments(["rev-parse", "HEAD"]), {env:fixtureEnvironment(t), cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
   assert.equal(readFileSync(join(plan.tree, "results/setup-marker"), "utf8"), "CANDIDATE");
   assert.equal(readFileSync(join(f.root, "results/marker"), "utf8"), "main record\n");
   assert.equal(readFileSync(join(f.home, "runs/latest"), "utf8"), "main's last full run\n");

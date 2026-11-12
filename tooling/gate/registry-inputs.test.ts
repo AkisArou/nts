@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
 import {acquireRevision,dependencyCache} from "../inputs/dependency-inputs.ts";
 import { readFileSync, writeFileSync, rmSync, readdirSync, mkdirSync, realpathSync } from "node:fs";
@@ -62,12 +63,12 @@ test("concurrent acquisition publishes one complete identity and leaves main unc
 test("a new composed lock uses the acquired content offline rather than requiring its own fetch",async t=>{
   const fixture=await registryInputsFixture(t,async fixture=>{
     const cache=dependencyCache(fixture.main);t.after(()=>rmSync(cache,{recursive:true,force:true}));await acquireRevision(fixture.main,fixture.candidate,"HEAD");
-    const second=join(fixture.root,"second-candidate"),cloned=await command("git",["clone","--quiet","--no-hardlinks",fixture.main,second],fixture.root);assert.equal(cloned.status,0,cloned.stderr);
+    const second=join(fixture.root,"second-candidate"),cloned=await command("git",gitArguments(["clone","--quiet","--no-hardlinks",fixture.main,second]),fixture.root);assert.equal(cloned.status,0,cloned.stderr);
     const importer=join(second,"test/second-importer");mkdirSync(importer,{recursive:true});
     writeFileSync(join(importer,"package.json"),JSON.stringify({name:"second-importer",private:true,type:"module",devDependencies:{[SECOND_REGISTRY_PACKAGE]:"1.0.0"}}));
     const installed=await command("pnpm",["install","--ignore-scripts","--fetch-retries=0"],second);assert.equal(installed.status,0,installed.stdout+installed.stderr);
-    const added=await command("git",["add","pnpm-lock.yaml","test/second-importer"],second);assert.equal(added.status,0,added.stderr);
-    const committed=await command("git",["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","-qm","second independent dependency"],second);assert.equal(committed.status,0,committed.stderr);
+    const added=await command("git",gitArguments(["add","pnpm-lock.yaml","test/second-importer"]),second);assert.equal(added.status,0,added.stderr);
+    const committed=await command("git",gitArguments(["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","-qm","second independent dependency"]),second);assert.equal(committed.status,0,committed.stderr);
     await acquireRevision(fixture.main,second,"HEAD");
     assert.equal(readdirSync(join(cache,"identities")).filter(name=>name.endsWith(".json")).length,2);
   });
@@ -99,8 +100,8 @@ test("scoped workspace links bind to the frozen tree while registry content stay
     const manifest=JSON.parse(readFileSync(join(importer,"package.json"),"utf8"));manifest.devDependencies["@nts/fixture-workspace"]="workspace:*";writeFileSync(join(importer,"package.json"),JSON.stringify(manifest));
     writeFileSync(join(importer,"workspace-probe.mjs"),"import {where} from '@nts/fixture-workspace';console.log(where);");
     const installed=await command("pnpm",["install","--no-frozen-lockfile","--ignore-scripts","--fetch-retries=0"],fixture.candidate);assert.equal(installed.status,0,installed.stdout+installed.stderr);
-    const added=await command("git",["add","pnpm-lock.yaml","test"],fixture.candidate);assert.equal(added.status,0,added.stderr);
-    const committed=await command("git",["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","-qm","workspace supplier"],fixture.candidate);assert.equal(committed.status,0,committed.stderr);
+    const added=await command("git",gitArguments(["add","pnpm-lock.yaml","test"]),fixture.candidate);assert.equal(added.status,0,added.stderr);
+    const committed=await command("git",gitArguments(["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","-qm","workspace supplier"]),fixture.candidate);assert.equal(committed.status,0,committed.stderr);
     await acquireRevision(fixture.main,fixture.candidate,"HEAD");
   });
   const result=await prepare(fixture);assert.equal(result.status,0,result.stdout+result.stderr);

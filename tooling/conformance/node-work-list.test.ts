@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
@@ -108,7 +109,7 @@ test("type-import preambles retain citations without treating body comments as o
 
 test("source identity pins Git objects and refuses missing references by name", t => {
   const root = mkdtempSync(join(tmpdir(), "node-work-list-")); t.after(() => rmSync(root, {recursive: true, force: true}));
-  const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], {env:fixtureEnvironment(t),encoding: "utf8"}).trim();
+  const git = (...args: string[]) => execFileSync("git", gitArguments(["-C", root, ...args]), {env:fixtureEnvironment(t),encoding: "utf8"}).trim();
   git("init", "-q"); mkdirSync(join(root, "lib")); writeFileSync(join(root, "lib/zlib.js"), "// original\n");
   git("add", "lib/zlib.js"); git("-c", "user.name=control", "-c", "user.email=control@example.invalid", "commit", "-qm", "source control");
   const pinned = gitSource(root, "HEAD"); writeFileSync(join(root, "lib/zlib.js"), "// edited later\n");

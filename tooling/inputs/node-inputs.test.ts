@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -75,7 +76,7 @@ test('linking either Node version leaves a real candidate checkout clean',t=>{
   for(const [source,name] of [[old,'clean26'],[next,'clean27']] as const){
     const tree=join(root,name);candidate(source,tree);
     writeFileSync(join(tree,'.gitignore'),readFileSync(new URL('../../.gitignore',import.meta.url)));
-    const git=(...args:string[])=>execFileSync('git',args,{env:fixtureEnvironment(t),cwd:tree,encoding:'utf8'}).trim();
+    const git=(...args:string[])=>execFileSync('git',gitArguments(args),{env:fixtureEnvironment(t),cwd:tree,encoding:'utf8'}).trim();
     git('init','-q');git('add','.tool-versions','.gitignore','build/node-deps/recipes.json');
     git('-c','user.name=Node input control','-c','user.email=node-input-control@invalid','commit','-qm','candidate inputs');
     assert.equal(git('status','--porcelain'),'');link(tree,cache,table);

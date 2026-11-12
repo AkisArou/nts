@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
@@ -77,7 +78,7 @@ function temp(): string {
   return newTestScratch("bench-record-test");
 }
 function git(root: string, args: string[]): string {
-  const r = spawnSync("git", args, {env:testEnvironment(), cwd: root, encoding: "utf8" });
+  const r = spawnSync("git", gitArguments(args), {env:testEnvironment(), cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 }

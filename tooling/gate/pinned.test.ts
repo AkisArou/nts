@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from './test-environment.ts';
 import { launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
@@ -26,7 +27,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
       NTS_GATE_TREE: tree, NTS_GATE_TARGET: join(directory, "target"), NTS_GATE_SETUP_ONLY: "1",
       NTS_GATE_RUN_DIR: join(directory, "run"),
     });
-    const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
     copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/inputs/linker.ts"], root);
     // Affinity is independently tested; this fixture isolates which commit

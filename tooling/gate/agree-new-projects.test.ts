@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
 import {symlinkSync} from "node:fs";
 import {fileURLToPath} from "node:url";
@@ -23,7 +24,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   Object.assign(env,ownMemory(join(directory,"memory")),{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});
   const git=(...args:string[])=>{
-    const result=spawnTest("git",args,{cwd:root,env,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();
+    const result=spawnTest("git",gitArguments(args),{cwd:root,env,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();
   };
   const put=(path:string,text:string)=>{const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);};
   const header={version:1,generator_version:1,generator_digest:"a".repeat(32),seed:null} as const;

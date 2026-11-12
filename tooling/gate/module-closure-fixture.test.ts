@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
 import {existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
@@ -143,7 +144,7 @@ test("a named URL directory declares its tracked files with either spelling and 
   f.write("assets/worker.ts", "import '../shared.ts';");
   f.write("shared.ts", "export const value = 1;");
   for (const args of [["init", "--quiet", "--initial-branch=main"], ["add", "entry.ts", "assets", "shared.ts"]]) {
-    const result = spawnTest("git", args, {cwd: f.source, encoding: "utf8"});
+    const result = spawnTest("git", gitArguments(args), {cwd: f.source, encoding: "utf8"});
     assert.equal(result.status, 0, result.stderr);
   }
   f.write("assets/untracked.txt", "not a source-tree input");

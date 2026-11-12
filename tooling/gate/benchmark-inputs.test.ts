@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
@@ -18,7 +19,7 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 function fixture() {
   const root = newTestScratch("benchmark-input-controls");
   const git = (...args: string[]) => {
-    const result = spawnTest("git", args, {cwd: root, encoding: "utf8"});
+    const result = spawnTest("git", gitArguments(args), {cwd: root, encoding: "utf8"});
     assert.equal(result.status, 0, result.stderr); return result.stdout;
   };
   git("init", "-q");

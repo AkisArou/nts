@@ -1,3 +1,4 @@
+import {gitArguments} from "../git-arguments/main.ts";
 import {fixtureEnvironment} from "../test-environment.ts";
 import assert from "node:assert/strict";
 import {moduleClosure} from "../module-closure-fixture.ts";
@@ -193,9 +194,9 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   if (control.repository) {
     for (const args of [["init", "-q", "-b", "main"], ["add", "tooling/gate/times.tsv"],
       ["-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture identity"]]) {
-      const result = spawnTest("git", args, { cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stderr);
+      const result = spawnTest("git", gitArguments(args), { cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stderr);
     }
-    commit = spawnTest("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+    commit = spawnTest("git", gitArguments(["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).stdout.trim();
   }
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2",

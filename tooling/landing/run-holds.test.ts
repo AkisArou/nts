@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {historyFile,writeCostHistory} from "../gate/step-scheduling.ts";
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 // What holds a landing (run.ts): memory it waits for in the ledger, a tree
@@ -72,7 +73,7 @@ test("a --here run at the agent priority yields its unused reservation to a serv
   // synchronously by runLanding, so in this process it would freeze the
   // service run out of its own event loop rather than out of memory.
   const hereResult = join(here.own, "here-result.json");
-  const commit = spawnTest("git", ["-C", here.tree, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  const commit = spawnTest("git", gitArguments(["-C", here.tree, "rev-parse", "HEAD"]), { encoding: "utf8" }).stdout.trim();
   const child = spawn(process.execPath, ["--input-type=module", "-e",
     `import {runLanding} from ${JSON.stringify(new URL("./run.ts", import.meta.url).href)};` +
     `import {durableRecord} from ${JSON.stringify(new URL("../gate/durable-record.ts",import.meta.url).href)};` +

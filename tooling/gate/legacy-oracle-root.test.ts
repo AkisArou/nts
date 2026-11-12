@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -14,7 +15,7 @@ function fixture(t: { after(fn: () => void): void }, oldUnrecorded = false) {
   const directory = testScratch(t, "oracle-bridge-run");
   const root = join(directory, "repo"), cache = join(directory, "cache"); mkdirSync(root);
   const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
-  const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Bridge test", "-c", "user.email=bridge@example.invalid", ...args], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }).trim();
+  const git = (...args: string[]) => execFileSync("git", gitArguments(["-c", "user.name=Bridge test", "-c", "user.email=bridge@example.invalid", ...args]), {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }).trim();
   const source = "tests/programs/example/src/main.ts";
   put(source, "export function work(n: number): number { return 1; }\n");
   put("tests/programs/example/tsconfig.json", '{"files":["src/main.ts"]}');
@@ -63,7 +64,7 @@ test("a private view preserves working inputs and is deleted after comparison", 
   const view = join(snapshot.root, "results/oracle-counts.json");
   try {
     assert.equal(snapshot.legacy, true); assert.notEqual(snapshot.root, f.root);
-    const viewCommon=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{env:fixtureEnvironment(t),cwd:snapshot.root,encoding:"utf8"}).trim();
+    const viewCommon=execFileSync("git",gitArguments(["rev-parse","--path-format=absolute","--git-common-dir"]),{env:fixtureEnvironment(t),cwd:snapshot.root,encoding:"utf8"}).trim();
     assert.notEqual(viewCommon,f.git("rev-parse","--path-format=absolute","--git-common-dir"),"the view must own Git metadata");
     assert.equal(f.git("worktree","list","--porcelain"),registry,"the source registry must stay unchanged");
     assert.deepEqual(JSON.parse(readFileSync(view, "utf8")), f.table);
@@ -138,12 +139,12 @@ test("concurrent comparison clones own their metadata and never change the sourc
   const common = f.git("rev-parse", "--path-format=absolute", "--git-common-dir");
   writeFileSync(worker, `import {parentPort,workerData} from 'node:worker_threads';import {execFileSync} from 'node:child_process';import {comparisonOracleRoot} from ${JSON.stringify(module)};
 const view=comparisonOracleRoot(workerData.root,[workerData.binary],workerData.cache);
-const git=(...args)=>execFileSync('git',args,{cwd:view.root,encoding:'utf8'}).trim();
+const git=(...args)=>execFileSync('git',['--no-optional-locks',...args],{cwd:view.root,encoding:'utf8'}).trim();
 parentPort.on('message',()=>{view.dispose();parentPort.close();});
 parentPort.postMessage({root:view.root,common:git('rev-parse','--path-format=absolute','--git-common-dir'),head:git('rev-parse','HEAD')});`);
   const code = `import assert from 'node:assert/strict';import {Worker} from 'node:worker_threads';import {join} from 'node:path';import {execFileSync} from 'node:child_process';import {existsSync,readFileSync} from 'node:fs';
 const workers=Array.from({length:2},()=>new Worker(${JSON.stringify(worker)},{execArgv:[],workerData:${JSON.stringify({root:f.root,binary:f.old,cache:f.cache})}}));
-const registry=()=>execFileSync('git',['worktree','list','--porcelain'],{cwd:${JSON.stringify(f.root)},encoding:'utf8'}).trim();
+const registry=()=>execFileSync('git',['--no-optional-locks','worktree','list','--porcelain'],{cwd:${JSON.stringify(f.root)},encoding:'utf8'}).trim();
 try{
  const views=await Promise.all(workers.map(worker=>new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);}))); 
  assert.equal(new Set(views.map(view=>view.common)).size,2);

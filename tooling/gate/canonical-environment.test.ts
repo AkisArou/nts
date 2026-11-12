@@ -1,3 +1,5 @@
+import {gitArguments} from "./git-arguments/main.ts";
+import {generatedJavaScript} from './generated-javascript.ts';
 import {FIXTURE_ENVIRONMENT} from './cache-environment.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 import {removable} from "./run-temporary.ts";
@@ -193,17 +195,31 @@ test("canonical Git status keeps its index unchanged after a stat refresh",t=>{
   const {run,base}=fixture(t),repo=join(run,"repo");mkdirSync(repo);
   const planned=gateEnvironment({...base,GIT_OPTIONAL_LOCKS:"1"},{run});
   const git=(args:string[],env=planned.env)=>{
-    const result=spawnTest("git",args,{cwd:repo,env,encoding:"utf8"});
+    const result=spawnTest("git",gitArguments(args),{cwd:repo,env,encoding:"utf8"});
     assert.equal(result.status,0,result.stderr);return result.stdout;
   };
   git(["init","--quiet"]);git(["config","user.name","Fixture"]);git(["config","user.email","fixture@example.invalid"]);
   const file=join(repo,"input");writeFileSync(file,"unchanged content\n");git(["add","input"]);git(["-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","--quiet","-m","fixture"]);
   const index=join(repo,".git/index"),before=readFileSync(index);
+  // Disable argv protection only in a private staged owner. Both arms then
+  // exercise the ambient rule; the normal argv owner has its own control.
+  const stage=join(run,'git-environment-control');
+  copyModuleClosure(['tooling/gate/git-arguments/main.ts'],stage);
+  writeFileSync(join(stage,'tooling/gate/git-arguments/main.ts'),'export function gitArguments(args:readonly string[]){return [...args];}');
+  const script=join(stage,'tooling/gate/status-control.ts');
+  writeFileSync(script,generatedJavaScript(`import {gitArguments} from './git-arguments/main.ts';
+import {spawnSync} from 'node:child_process';
+const result=spawnSync('git',gitArguments(['status','--porcelain']),{cwd:process.argv[2],encoding:'utf8'});
+process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??String(result.error??''));process.exit(result.status??1);`));
+  const status=(env:NodeJS.ProcessEnv)=>{
+    const result=spawnTest(process.execPath,[script,repo],{env,encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);return result.stdout;
+  };
   utimesSync(file,946684800,946684800);
-  assert.equal(git(["status","--porcelain"],{...planned.env,GIT_OPTIONAL_LOCKS:"1"}),"");
+  assert.equal(status({...planned.env,GIT_OPTIONAL_LOCKS:"1"}),"");
   assert.notDeepEqual(readFileSync(index),before,"the control must refresh the index");
   const refreshed=readFileSync(index);utimesSync(file,978307200,978307200);
-  assert.equal(git(["status","--porcelain"]),"");
+  assert.equal(status(planned.env),"");
   assert.deepEqual(readFileSync(index),refreshed,"canonical read-only status must not write the index");
   assert.equal(planned.env.GIT_OPTIONAL_LOCKS,"0");
 });

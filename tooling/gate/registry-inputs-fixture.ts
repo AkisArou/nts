@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {testEnvironment} from "./test-environment.ts";
 // A real registry, tarball, pnpm store and committed candidate for preparation
 // controls. The registry is closed before the frozen tree is prepared.
@@ -134,9 +135,9 @@ export async function registryInputsFixture(t: TestContext,
   writeFileSync(join(main, "pnpm-workspace.yaml"), "packages:\n  - test/*\n");
   writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n");
   writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\ncache-dir=${join(root,"metadata-cache")}\nstate-dir=${join(root,"state")}\nverify-store-integrity=true\n`);
-  const git = (cwd: string, args: string[]) => checked("git", ["-c", "commit.gpgsign=false",
+  const git = (cwd: string, args: string[]) => checked("git", gitArguments(["-c", "commit.gpgsign=false",
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",
-    "-c", "user.email=fixture@example.invalid", ...args], cwd);
+    "-c", "user.email=fixture@example.invalid", ...args]), cwd);
   await git(main, ["init", "--initial-branch=main"]);
   await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json", ...nodeFiles, "tooling/inputs/node-inputs.json"]);
   await git(main, ["commit", "-m", "fixture main has no registry dependency or test importer"]);

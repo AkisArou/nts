@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
@@ -73,7 +74,7 @@ test("the compile CLI records one compile at a time and four at once alike, chec
   }
   writeFileSync(join(root, "benchmarks/cases/root-coverage/unimported.ts"), "export const sibling = 1;\n");
   const git = (args: string[]) => {
-    const result = spawnSync("git", args, {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
+    const result = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
   };
   git(["init", "--quiet", "--initial-branch=main"]); git(["config", "user.name", "Fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
   git(["add", "benchmarks", "tsconfig.fixtures.json"]); git(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "benchmark recorder fixture"]);

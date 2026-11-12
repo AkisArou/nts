@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
 // The inner loop's decisions: which crates a change touches, when reference
 // counting is owed, which runtime C is formatted, and which CPUs heavy work
@@ -121,7 +122,7 @@ const args=process.argv.slice(2),command=args.slice(args.indexOf('--')+1);
 process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1);
 `);
     for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["-c", "user.name=inner-test", "-c", "user.email=inner@example.invalid", "commit", "-qm", "fixture"]]) {
-      const ran = spawnSync("git", args, {env:fixtureEnvironment(t), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
+      const ran = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: tree, encoding: "utf8" }); assert.equal(ran.status, 0, ran.stderr);
     }
     const memory = ownMemory(join(root, "memory"));
     const env = gateEnvironment(hostEnvironment(process.env),

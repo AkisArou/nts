@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
@@ -21,7 +22,7 @@ test("cache admission preserves one measured live set and leaves disk working sp
 /** Stage the parsed module graph, then give the tree its own Git inventory. */
 function testsFixture(root: string): void {
   copyModuleClosure(["tooling/gate/tests.mjs"], root);
-  const initialized = spawnSync("git", ["init", "--quiet"], {cwd: root, encoding: "utf8",
+  const initialized = spawnSync("git", gitArguments(["init", "--quiet"]), {cwd: root, encoding: "utf8",
     env: {...testEnvironment(), GIT_DIR: join(root,".git"), GIT_WORK_TREE: root,
       GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"}});
   assert.equal(initialized.status, 0, initialized.stderr);

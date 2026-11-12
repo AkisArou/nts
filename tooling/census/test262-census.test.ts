@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The test262 census and its writer, run for real on the cases each check
 // manipulates, against fixture records of only those cases: a run held to a
@@ -47,7 +48,7 @@ test("a test262 run held to a record lists the cases it lacks and its fails that
   t.after(() => { removable(scratch); rmSync(scratch, { recursive: true, force: true }); });
   // The writer writes a claim about a commit, so it runs from a clean pin.
   const pinned = publishPin(binary, join(scratch, "pin"), provenanceOf(binary) ?? {
-    sha: execFileSync("git", ["rev-parse", "HEAD"], {env:fixtureEnvironment(t), cwd: repository, encoding: "utf8" }).trim(),
+    sha: execFileSync("git", gitArguments(["rev-parse", "HEAD"]), {env:fixtureEnvironment(t), cwd: repository, encoding: "utf8" }).trim(),
     subject: "test fixture copy of the gate compiler", clean: true, applied: null, built_at: new Date().toISOString(),
   });
   const real = readFileSync(join(repository, RECORD), "utf8");

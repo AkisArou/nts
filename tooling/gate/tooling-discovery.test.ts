@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
 import {test} from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +12,7 @@ import {collectToolingTests,discoverToolingTests,isToolingTest,parseToolingTestE
 function fixture(t:{after:(fn:()=>void)=>void}):{root:string;file:(path:string)=>void} {
   const root=mkdtempSync(join(tmpdir(),"tooling-discovery-"));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
-  execFileSync("git",["init","--quiet",root], {env:fixtureEnvironment(t)});
+  execFileSync("git",gitArguments(["init","--quiet",root]), {env:fixtureEnvironment(t)});
   return {root,file(path){mkdirSync(join(root,path,".."),{recursive:true});writeFileSync(join(root,path),"");}};
 }
 test("recursive discovery reaches omitted folders, nested tests, both suffixes and spaces",t=>{
@@ -27,7 +28,7 @@ test("recursive discovery reaches omitted folders, nested tests, both suffixes a
 });
 test("Git inventory covers tracked, untracked and ignored tests without shell splitting",t=>{
   const {root,file}=fixture(t);
-  file("tooling/tracked.test.ts");execFileSync("git",["add","tooling"],{env:fixtureEnvironment(t),cwd:root});
+  file("tooling/tracked.test.ts");execFileSync("git",gitArguments(["add","tooling"]),{env:fixtureEnvironment(t),cwd:root});
   file("tooling/untracked.test.mjs");file("tooling/ignored/hidden.test.ts");
   writeFileSync(join(root,".gitignore"),"tooling/ignored/\n");
   assert.deepEqual(toolingTestInventory(root),["tooling/ignored/hidden.test.ts","tooling/tracked.test.ts","tooling/untracked.test.mjs"]);

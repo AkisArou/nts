@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import assert from "node:assert/strict";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -13,7 +14,7 @@ test("dependency preparation and old-paths accept a tracked inventory larger tha
   mkdirSync(root);mkdirSync(tree);
   t.after(()=>{rmSync(dependencyCache(root),{recursive:true,force:true});rmSync(scratch,{recursive:true,force:true});});
   const git=(...args:string[])=>{
-    const result=spawnTest("git",args,{cwd:tree,encoding:"utf8",maxBuffer:Infinity});
+    const result=spawnTest("git",gitArguments(args),{cwd:tree,encoding:"utf8",maxBuffer:Infinity});
     assert.equal(result.status,0,result.error?.message??result.stderr);return result.stdout;
   };
   git("init","--quiet");

@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {testEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
@@ -86,7 +87,7 @@ test("unknown header fields, malformed bounds and false no-oracle measurements a
 }));
 
 test("comparison pins choose their own committed record version, never working-tree bytes", () => fixture((root, table) => {
-  const git = (...args: string[]): string => execFileSync("git", ["-c", "user.name=Oracle test", "-c", "user.email=oracle@example.invalid", ...args], {env:testEnvironment(), cwd: root, encoding: "utf8" });
+  const git = (...args: string[]): string => execFileSync("git", gitArguments(["-c", "user.name=Oracle test", "-c", "user.email=oracle@example.invalid", ...args]), {env:testEnvironment(), cwd: root, encoding: "utf8" });
   git("init", "--quiet");
   rmSync(join(root, "results/oracle-counts"), { recursive: true });
   writeFileSync(join(root, "results/oracle-counts.json"), JSON.stringify(table));
@@ -105,7 +106,7 @@ test("comparison pins choose their own committed record version, never working-t
 }));
 
 test("a partial committed directory never falls back to a leftover flat table", () => fixture((root, table) => {
-  const git = (...args: string[]): string => execFileSync("git", ["-c", "user.name=Oracle test", "-c", "user.email=oracle@example.invalid", ...args], {env:testEnvironment(), cwd: root, encoding: "utf8" });
+  const git = (...args: string[]): string => execFileSync("git", gitArguments(["-c", "user.name=Oracle test", "-c", "user.email=oracle@example.invalid", ...args]), {env:testEnvironment(), cwd: root, encoding: "utf8" });
   git("init", "--quiet");
   writeFileSync(join(root, "results/oracle-counts.json"), JSON.stringify(table));
   git("add", "."); git("commit", "--quiet", "-m", "two authorities");

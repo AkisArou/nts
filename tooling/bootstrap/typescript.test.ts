@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {testEnvironment} from "../gate/test-environment.ts";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -25,7 +26,7 @@ test("the corpus and checker must name one TypeScript revision", () => scratch((
 }));
 
 test("an existing checkout is verified without moving it or hiding local edits", () => scratch((root) => {
-  const git = (args: string[]) => execFileSync("git", args, {env:testEnvironment(), cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const git = (args: string[]) => execFileSync("git", gitArguments(args), {env:testEnvironment(), cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git(["init", "-q"]);
   const cases = join(root, "tsc/testdata/tests/cases");
   mkdirSync(cases, { recursive: true });

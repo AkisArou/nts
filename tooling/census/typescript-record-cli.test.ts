@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Exercise the real consumer with versioned saved observations. No source case
@@ -66,7 +67,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const fixturePaths = ["control", "subject"].map(name => `${familyPath}/${name}.ts`);
   for (const path of fixturePaths) writeFileSync(join(fixture, path), "assert.sameValue(1 + 1, 2);\n");
   const git = (args: string[], cwd = fixture) => {
-    const result = spawnSync("git", args, {env:fixtureEnvironment(t), cwd, encoding: "utf8" });
+    const result = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd, encoding: "utf8" });
     assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
   };
   git(["init", "--quiet"]); git(["config", "user.name", "Fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
@@ -195,9 +196,9 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   copyModuleClosure(['tooling/census/conformance262.ts'],copied,{reuseSourceLinks:true});
   // The real report records its consumer repository's HEAD. Bind the actual
   // copied files in this isolated fixture, without borrowing the author's Git.
-  execFileSync('git',['init','--quiet',copied], {env:fixtureEnvironment(t)});
-  execFileSync('git',['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime'], {env:fixtureEnvironment(t)});
-  execFileSync('git',['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs'], {env:fixtureEnvironment(t)});
+  execFileSync('git',gitArguments(['init','--quiet',copied]), {env:fixtureEnvironment(t)});
+  execFileSync('git',gitArguments(['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime']), {env:fixtureEnvironment(t)});
+  execFileSync('git',gitArguments(['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs']), {env:fixtureEnvironment(t)});
   const unchangedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
   assert.equal(unchangedAdapter.status,0,unchangedAdapter.stdout+unchangedAdapter.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,'utf8')).oracleIdentity,sourceOracle);

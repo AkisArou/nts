@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -46,7 +47,7 @@ test("removing flags from the real follow-up launchers is detected", () => {
 
 test("tracked JVM launchers use the shared flag policy", t => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
-  const paths = execFileSync("git", ["ls-files", "-z"], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8", maxBuffer: Infinity }).split("\0").filter(path => /\.(sh|ts|mjs|rs)$/.test(path));
+  const paths = execFileSync("git", gitArguments(["ls-files", "-z"]), {env:fixtureEnvironment(t), cwd: root, encoding: "utf8", maxBuffer: Infinity }).split("\0").filter(path => /\.(sh|ts|mjs|rs)$/.test(path));
   assert.ok(paths.length > 0, "a launcher audit over no tracked files is not a verdict");
   // Bootstrap's user-facing JDK discovery precedes build/test setup. Its version
   // output is diagnostic, never compared program output. Each exception is exact
