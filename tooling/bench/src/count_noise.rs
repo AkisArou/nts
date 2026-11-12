@@ -46,7 +46,7 @@ fn validate(record: Record, expected: &[&str]) -> Result<Bands> {
         record.version
     );
     ensure!(
-        record.measure == "instructions:u/per-op"
+        record.measure == "net-instructions:u/per-op"
             && record.definition == "max-minus-min-over-min-ceil-bp-v1",
         "count bands: unsupported measurement or rounding rule"
     );
@@ -54,6 +54,10 @@ fn validate(record: Record, expected: &[&str]) -> Result<Bands> {
     ensure!(
         record.provenance["version"] == 1,
         "count bands: unsupported provenance version"
+    );
+    ensure!(
+        record.provenance["instrument"] == "instruction-calibrated-empty-subtracted-v1",
+        "count bands: unsupported count instrument"
     );
     for field in ["case", "profile", "unit", "host"] {
         ensure!(
@@ -137,8 +141,8 @@ mod tests {
             "nts C", "nts LLVM", "nts JVM", "C++", "Java", "node", "Bun JIT", "Bun AOT", "ScriptC",
         ];
         serde_json::json!({
-            "version":1,"measure":"instructions:u/per-op","definition":"max-minus-min-over-min-ceil-bp-v1",
-            "provenance":{"version":1,"case":"supplied","profile":"fixture","unit":"fixture","host":"fixture",
+            "version":1,"measure":"net-instructions:u/per-op","definition":"max-minus-min-over-min-ceil-bp-v1",
+            "provenance":{"version":1,"instrument":"instruction-calibrated-empty-subtracted-v1","case":"supplied","profile":"fixture","unit":"fixture","host":"fixture",
                 "runs":2,"counter_cpu":0,"measurement_lock":false,"source_commit":"a".repeat(40),
                 "binary_sha256":"b".repeat(64),"raw_cohort_sha256":"c".repeat(64)},
             "observations":[{"run":0},{"run":1}],

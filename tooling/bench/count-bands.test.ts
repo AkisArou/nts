@@ -4,11 +4,12 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {deriveBands,writeBands} from './count-bands.ts';
+import {COUNT_INSTRUMENT} from './count-driver.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 
 function fixture(){
   const commit='a'.repeat(40),rows=[0,1].map(run=>({run,commit,wall_s:1,load:[0,0,0],counts:run?[1000001,1070000]:[1000000,1000000]}));
-  const provenance={version:1,source_commit:commit,binary_sha256:'b'.repeat(64),counter_cpu:0,measurement_lock:false,runs:2,case:'fixture',profile:'fixture',unit:'fixture',host:'fixture',command:['nts-bench','--count','fixture'],columns:[{name:'native'},{name:'JIT'}]};
+  const provenance={version:1,instrument:COUNT_INSTRUMENT,source_commit:commit,binary_sha256:'b'.repeat(64),counter_cpu:0,measurement_lock:false,runs:2,case:'fixture',profile:'fixture',unit:'fixture',host:'fixture',command:['nts-bench','--count','fixture'],columns:[{name:'native'},{name:'JIT'}]};
   return {rows,provenance};
 }
 test('the owner derives each column from its own samples with a stated integer rounding rule',()=>{
@@ -27,6 +28,7 @@ test('partial, mixed, unsafe or measurement-pair cohorts cannot produce a band',
   assert.throws(()=>deriveBands([{...rows[0],counts:[1,1]},{...rows[1],counts:[Number.MAX_SAFE_INTEGER,1]}],provenance),/derived band is not a safe integer/);
   assert.throws(()=>deriveBands(rows,{...provenance,counter_cpu:4}),/outside CPUs 4-5/);
   assert.throws(()=>deriveBands(rows,{...provenance,measurement_lock:true}),/without the lock/);
+  assert.throws(()=>deriveBands(rows,{...provenance,instrument:'raw-wall-calibrated'}),/unsupported count instrument/);
 });
 test('publication authenticates its raw cohort and leaves a newer record unchanged',t=>{
   const dir=testScratch(t,'count-bands'),cohort=join(dir,'cohort.json'),origin=join(dir,'origin.json'),out=join(dir,'bands.json');

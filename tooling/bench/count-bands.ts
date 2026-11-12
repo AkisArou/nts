@@ -5,6 +5,7 @@ import {existsSync,readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {durableRecord} from '../gate/durable-record.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
+import {COUNT_INSTRUMENT} from './count-driver.ts';
 
 export const COUNT_BANDS=fileURLToPath(new URL('../../results/benchmarks/count-bands.json',import.meta.url));
 function fail(what:string):never{throw Error('count bands: '+what);}
@@ -21,6 +22,7 @@ export function deriveBands(input:unknown,metadata:unknown){
   if(!Array.isArray(input)||input.length<2)fail('at least two complete runs are required');
   const provenance=object(metadata,'provenance');
   if(provenance.version!==1)fail('unsupported provenance version '+String(provenance.version));
+  if(provenance.instrument!==COUNT_INSTRUMENT)fail('cohort has an unsupported count instrument');
   if(typeof provenance.source_commit!=='string'||! /^[a-f0-9]{40}$/.test(provenance.source_commit))fail('provenance has no source commit');
   if(typeof provenance.binary_sha256!=='string'||! /^[a-f0-9]{64}$/.test(provenance.binary_sha256))fail('provenance has no binary SHA-256');
   for(const key of ['case','profile','unit','host'])if(typeof provenance[key]!=='string'||!String(provenance[key]).trim())fail('provenance has no '+key);
@@ -42,7 +44,7 @@ export function deriveBands(input:unknown,metadata:unknown){
   });
   if(provenance.runs!==runs.length)fail('provenance run count disagrees with the cohort');
   const {columns:_derivedColumns,...origin}=provenance;
-  return {version:1,measure:'instructions:u/per-op',definition:'max-minus-min-over-min-ceil-bp-v1',provenance:origin,
+  return {version:1,measure:'net-instructions:u/per-op',definition:'max-minus-min-over-min-ceil-bp-v1',provenance:origin,
     observations:runs.map(({counts:_,...context})=>context),
     columns:names.map((name,index)=>{
       const samples=runs.map(run=>run.counts[index]!);

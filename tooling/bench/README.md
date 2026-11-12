@@ -46,11 +46,12 @@ null and pre-correction invalid timings stay invalid.
 # Counting mode
 
 `nts-bench --count [case ...]` (or `--count --group <name>`) counts instead
-of timing: each common driver (native, Java, JS) calibrates its own fixed
-repetition count once, then runs exactly that work inside perf's
-enable/disable bracket, pinned to one CPU outside the measurement pair
-4–5. The printed cell is instructions per op (the bracketed total over the
-fixed repetitions), beside each column's empirical repeat range from the
+of timing: one count-driver owner serves native, Java and JS columns. It
+chooses repetitions from an instruction-count probe, uses that fixed work
+for warmup, and subtracts a matching empty bracket from the work bracket.
+Wall time never chooses the repetitions. Each counter is pinned to one CPU
+outside the measurement pair 4–5. The printed cell is net instructions per
+operation, beside each column's empirical repeat range from the
 tool-written `results/benchmarks/count-bands.json` cohort. Native repeatability
 is checked tightly; JIT tiering spread is reported without refusing a landing.
 The range describes that cohort, not a guarantee about a future JIT draw.
