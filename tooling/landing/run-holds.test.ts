@@ -154,7 +154,8 @@ test("a tree whose gate cannot say what its steps need holds the change", async 
   writeFileSync(join(f.tree, "tooling/gate/run.mjs"), "throw new Error('a runner this change broke');\n");
   const ran = await runLanding(f.options(["build", "outcomes"]));
   assert.equal(ran.state, "held");
-  assert.match(ran.message, /could not say what its steps need: cannot read gate capabilities/);
+  assert.match(ran.message, /could not say what its steps need: infrastructure probe read gate capability declarations/);
+  assert.match(ran.message, /a runner this change broke/);
 });
 
 test("pending and improved lines are listed as information, and pass", async t => {
