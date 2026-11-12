@@ -1517,6 +1517,9 @@ mod tests {
             std::fs::read_to_string(assets.join("package.json")).unwrap(),
             "{\"type\":\"module\"}\n"
         );
+        for &(file, bytes) in super::super::oracle_run::EXECUTION_FILES {
+            assert_eq!(std::fs::read(assets.join(file)).unwrap(), bytes);
+        }
     }
 
     fn manifest_fixture() -> (super::super::Scratch, Utf8PathBuf, Utf8PathBuf, Utf8PathBuf) {
@@ -1643,6 +1646,20 @@ mod tests {
             "{error}"
         );
         assert!(error.contains("oracle filesystem file changed"), "{error}");
+    }
+
+    #[test]
+    fn a_changed_materialized_command_entry_is_not_an_authentic_oracle() {
+        let (_scratch, manifest, source, project) = manifest_fixture();
+        let prepared = read_prepared(&manifest, &source, &project).unwrap();
+        std::fs::write(prepared.assets.join("command-entry/main.ts"), "changed").unwrap();
+        let error = read_prepared(&manifest, &source, &project).err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("command-entry/main.ts identity mismatch"),
+            "{error:#}"
+        );
     }
 
     #[test]
