@@ -13,6 +13,12 @@
 # Inside an ancestor's reservation the command shares it; an outer admit.ts
 # for this same measurement is refused, because it would reserve while waiting.
 set -eu
+# FIXTURE_ENVIRONMENT (cache-capabilities.ts) is a presence marker, even empty.
+# A fixture must name its own mutex before any path can select the machine lock.
+if [ "${NTS_TEST_ENVIRONMENT+x}" = x ] && [ -z "${NTS_MEASUREMENT_LOCK:-}" ]; then
+    echo "with-lock: fixture environment requires an owned NTS_MEASUREMENT_LOCK" >&2
+    exit 2
+fi
 lock=${NTS_MEASUREMENT_LOCK:-/tmp/nts-gate/gate.lock.d}
 held_by() {
     holder=$(cat "$lock/pid" 2>/dev/null || true)

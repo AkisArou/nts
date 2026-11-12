@@ -25,6 +25,7 @@ import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
 import { removable } from "./run-temporary.ts";
 import { toolingSliceArgs } from "./tooling-slice.ts";
 import { measurementQueue } from "./measurement-admission.ts";
+import { contentCacheEnvironment, FIXTURE_ENVIRONMENT } from "./cache-environment.ts";
 
 const WITH_LOCK = fileURLToPath(new URL("./with-lock.sh", import.meta.url));
 const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
@@ -36,7 +37,9 @@ function fixture(t: TestContext, availableKiB = 20 * GiB_KIB) {
   const memory = ownMemory(join(root, "memory"), { availableKiB, totalKiB: 32 * GiB_KIB });
   const lock = join(root, "lock.d");
   // A test inside a gate step runs inside the step's reservation: these runs have their own.
-  const env = { ...gateEnvironment(hostEnvironment(process.env), { run: join(root, "canonical"), standalone: true, owned: memory }).env, NTS_MEASUREMENT_LOCK: lock };
+  const source = fixtureEnvironment(t);
+  const env = gateEnvironment(hostEnvironment(source), { run: join(root, "canonical"), standalone: true,
+    owned: { ...contentCacheEnvironment(source), [FIXTURE_ENVIRONMENT]: "1", ...memory, NTS_MEASUREMENT_LOCK: lock } }).env;
   t.after(() => {
     for (const unit of units) spawnSync("systemctl", ["--user", "stop", unit], {env:fixtureEnvironment(t), stdio: "ignore" });
     removable(root); rmSync(root, { recursive: true, force: true });
@@ -65,6 +68,20 @@ test("outside a reservation, a measurement without a key is refused, naming the 
   const usage = f.withLock(["--wait", "--key", "perf-nothing"]);
   assert.equal(usage.status, 2);
   assert.match(usage.stderr, /usage: tooling\/gate\/with-lock\.sh \[--wait\] \[--no-quiet-wait\] --key <name> <command>/);
+});
+
+test("a fixture, including an empty marker, must name its lock before any admission or payload", t => {
+  const f = fixture(t), ran = join(f.root, "ran");
+  const before = readdirSync(f.root).sort();
+  for (const marker of ["1", ""]) for (const lock of [undefined, ""]) {
+    const refused = f.withLock(["--no-quiet-wait", "--key", "perf-private", "touch", ran],
+      { [FIXTURE_ENVIRONMENT]: marker, NTS_MEASUREMENT_LOCK: lock });
+    assert.equal(refused.status, 2, refused.stderr);
+    assert.match(refused.stderr, /with-lock: fixture environment requires an owned NTS_MEASUREMENT_LOCK/);
+    assert.equal(refused.stdout, "");
+    assert.deepEqual(readdirSync(f.root).sort(), before, "the refusal creates nothing");
+    assert.deepEqual([existsSync(ran), existsSync(f.lock), existsSync(f.memory.NTS_MEMORY_LEDGER)], [false, false, false]);
+  }
 });
 
 test("a session waits for its memory in the ledger without holding the lock: another measurement takes the lock meanwhile, and the session takes it once admitted", async t => {
@@ -193,14 +210,22 @@ test("a full ledger leaves the CPU mutex available to a landing, then admits the
   assert.equal(existsSync(ran), true);
 });
 
-test("a genuinely nested measurement borrows its ancestor's reservation without a second entry", t => {
+test("a genuinely nested measurement uses its owned lock and borrows its ancestor's reservation without a second entry", t => {
   const f = fixture(t);
   const body = `const {reserve} = await import(process.argv[1]);
 const {spawnSync} = await import('node:child_process');
 const held = await reserve({bytes:2**20,what:'parent job'});
-const run = spawnSync('sh',[process.argv[2],'--no-quiet-wait',process.execPath,'--input-type=module','-e',process.argv[3],process.argv[1]], {env:{...${testEnvironmentHandoff()},...held.env},encoding:'utf8'});
+const run = spawnSync('sh',[process.argv[2],'--no-quiet-wait',process.execPath,'--input-type=module','-e',process.argv[3],process.argv[1]], {env:{...${testEnvironmentHandoff()},...held.env,NTS_MEASUREMENT_LOCK:process.argv[4]},encoding:'utf8'});
 held.release(); process.stdout.write(run.stdout);process.stderr.write(run.stderr);process.exit(run.status??1);`;
-  const ran = spawnTest("systemd-run", f.unitArgs([process.execPath, "--input-type=module", "-e", body, LEDGER, WITH_LOCK, CASES]), { encoding: "utf8" });
+  const run = () => spawnTest("systemd-run", f.unitArgs([process.execPath, "--input-type=module", "-e", body, LEDGER, WITH_LOCK, CASES, f.lock]), { encoding: "utf8" });
+  mkdirSync(f.lock); writeFileSync(join(f.lock, "pid"), String(process.pid));
+  const busy = run();
+  assert.equal(busy.status, 75, busy.stderr);
+  assert.ok(busy.stderr.includes(`pid ${process.pid} is measuring`), busy.stderr);
+  assert.equal(readFileSync(join(f.lock, "pid"), "utf8"), String(process.pid));
+  assert.deepEqual(readLedger(f.memory.NTS_MEMORY_LEDGER), { waiting: [], admitted: [] });
+  unlinkSync(join(f.lock, "pid")); rmdirSync(f.lock);
+  const ran = run();
   assert.equal(ran.status, 0, ran.stderr);
   const seen = JSON.parse(ran.stdout);
   assert.deepEqual(seen.admitted.map((entry: string[]) => entry[0]), [seen.session]);
