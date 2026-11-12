@@ -345,6 +345,7 @@ let stopping = false;
 const startupAbort = new AbortController();
 let preparing = true; // the run's scopes, its memory and its capture, before any step
 let scopes;
+/** @type {{state:"complete"}|{state:"error",reason:string}} */
 let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
 let caseCosts = null;

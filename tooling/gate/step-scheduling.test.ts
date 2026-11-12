@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,GNU_CPU_MEASURE} from './step-time.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {moduleClosure} from "./module-closure-fixture.ts";
@@ -20,6 +21,9 @@ import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
 import {OOM_SCORE} from "./memory-ledger.ts";
 
+// Scheduling vectors are fixture-owned CPU observations of the current measure.
+const fixtureBaseline=(text:string)=>text.split('\n').map(line=>line&&!line.startsWith('#')&&line.split('\t').length===4?line+'\t'+STEP_CPU_MEASURE:line).join('\n');
+
 test("equal and missing estimates have a deterministic name tie-break", () => {
   const names = ["typescript-c", "tests", "blockers", "integrity"];
   const expected = ["blockers", "integrity", "tests", "typescript-c"];
@@ -35,18 +39,18 @@ test("completed CPU history survives small runs and corrupt or failed cache writ
   const own = testScratch(t, "step-scheduling-history");
   const previous = join(own, "summary.json"), file = join(own, "costs/steps.json");
   writeFileSync(previous, JSON.stringify({ schema: 1, environment: { canonical: true }, steps: [
-    { name: "typescript-c", verdict: "PASS", wall: 1067, cpu: 2663 }, { name: "blockers", verdict: "NOT RUN", wall: 900, cpu: 900 },
+    { name: "typescript-c", verdict: "PASS", cpu_measure:STEP_CPU_MEASURE, wall: 1067, cpu: 2663 }, { name: "blockers", verdict: "NOT RUN", wall: 900, cpu: 900 },
   ] }));
   const seed = readPreviousStepCpu(previous);
   assert.deepEqual([...seed], [["typescript-c", 2663]]);
   const cpu = () => [...stepCpu(readCostHistory(file))];
-  assert.equal(writeCostHistory(file, { steps: [{ name: "rustfmt", verdict: "PASS", cpu: 2 }] }, seed), undefined);
+  assert.equal(writeCostHistory(file, { steps: [{ name: "rustfmt", verdict: "PASS", cpu_measure:STEP_CPU_MEASURE,cpu: 2 }] }, seed), undefined);
   assert.deepEqual(cpu(), [["rustfmt", 2], ["typescript-c", 2663]]);
-  assert.equal(writeCostHistory(file, { steps: [{ name: "typescript-c", verdict: "PASS", cpu: 600 },
+  assert.equal(writeCostHistory(file, { steps: [{ name: "typescript-c", verdict: "PASS", cpu_measure:STEP_CPU_MEASURE,cpu: 600 },
     { name: "blockers", verdict: "FAIL", cpu: 1 }] }), undefined);
   assert.deepEqual(cpu(), [["rustfmt", 2], ["typescript-c", 600]]);
   writeFileSync(file, JSON.stringify({ version: 2, steps: { "typescript-c": 1067 } }));
-  assert.deepEqual(cpu(), [["typescript-c", 1067]], "a history from before memory was measured keeps its CPU seconds");
+  assert.deepEqual(cpu(), [], "legacy rusage CPU cannot seed the new instrument");
   writeFileSync(file, JSON.stringify({ version: 1, steps: { "typescript-c": 1067 } }));
   assert.equal(readCostHistory(file).steps.size, 0, "a wall-time history from before is not read as work");
   writeFileSync(file, "partial{"); assert.equal(readCostHistory(file).steps.size, 0);
@@ -64,7 +68,7 @@ test("completed CPU history survives small runs and corrupt or failed cache writ
 test("a key's last few peaks are kept, per unit, and one small run does not shrink its reservation", t => {
   const file = join(testScratch(t, "step-scheduling-peaks"), "costs/steps.json");
   const MiB = 2 ** 20;
-  const run = (peak: number) => assert.equal(writeCostHistory(file, { steps: [{ name: "tests", verdict: "PASS", cpu: 10, memory: { unit: "step", peak } }],
+  const run = (peak: number) => assert.equal(writeCostHistory(file, { steps: [{ name: "tests", verdict: "PASS", cpu_measure:STEP_CPU_MEASURE,cpu: 10, memory: { unit: "step", peak } }],
     jobs: [{ key: "agree", peak: peak / 2 }] }), undefined);
   for (const peak of [800, 1000, 900, 950, 990, 100]) run(peak * MiB);
   const history = readCostHistory(file);
@@ -139,12 +143,12 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
     else copyFileSync(original,destination);
   }
   oracleWorkspaceFixture(t,root);
-  const baseline = "tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n";
+  const baseline = fixtureBaseline("tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n");
   writeFileSync(join(gate, "times.tsv"), baseline);
   // The run's history is the test's own, as its memory is.
-  const memory = ownMemory(join(own, "memory")), historyFile = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
+  const memory = ownMemory(join(own, "memory"),{cpu:{kind:"fixed",default:{usageUsec:5_000_000,userUsec:4_000_000,systemUsec:1_000_000}}}), historyFile = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
-  writeFileSync(historyFile, JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000, "typescript-oracles": 16000 } }) + "\n");
+  writeFileSync(historyFile, JSON.stringify({version:4,cpu_measure:STEP_CPU_MEASURE,jobs:{},steps:{tests:{cpu:100},"typescript-c":{cpu:8000},"typescript-oracles":{cpu:16000}}}) + "\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const observed = join(own, "starts.jsonl");
@@ -181,7 +185,7 @@ fi
   // canonical alone and not inside a gate, whose variables make it an experiment.
   const measured = summary.steps.find(step => step.name === "typescript-c")?.cpu;
   const written = summary.environment?.canonical === true && typeof measured === "number" && measured > 0;
-  assert.equal(JSON.parse(readFileSync(historyFile, "utf8")).version, written ? 3 : 2);
+  assert.equal(JSON.parse(readFileSync(historyFile, "utf8")).version,4);
   assert.equal(stepCpu(readCostHistory(historyFile)).get("typescript-c"), written ? measured : 8000,
     "a canonical run records the step's measured CPU; any other run leaves the history as it was");
 });
@@ -276,7 +280,7 @@ export { stepTableProblem };
     } else symlinkSync(original, destination);
   }
   symlinkSync(join(source, "token.sh"), join(gate, "token.sh"));
-  writeFileSync(join(gate, "times.tsv"), times);
+  writeFileSync(join(gate, "times.tsv"), fixtureBaseline(times));
   writeFileSync(join(gate, "until.mjs"), UNTIL);
   writeFileSync(join(gate, "payload.sh"), payload);
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
@@ -714,4 +718,31 @@ esac
   const bound = (grant: number) => Math.max(grant + Math.max(GiB, grant / 4), 2 * grant / RESERVATION_PER_PEAK);
   assert.equal(atFirst, bound(GiB), `its 1 GiB token's bound at its answer, not its 256 MiB unit's: ${atFirst}`);
   assert.equal(atSecond, bound(1.5 * GiB), `both its tokens' sizes: ${atSecond}`);
+});
+
+
+test('the CPU instrument migration keeps memory peaks but resets legacy CPU and summary seeds',t=>{
+  const root=testScratch(t,'cpu-epoch'),file=join(root,'steps.json'),summary=join(root,'summary.json');
+  const memory={unit:'step',peaks:[1000]};
+  writeFileSync(file,JSON.stringify({version:3,steps:{tests:{cpu:0.17,memory}},jobs:{probe:{unit:'worker',peaks:[500]}}}));
+  assert.deepEqual(readCostHistory(file).steps.get('tests'),{memory});
+  assert.deepEqual(readCostHistory(file).jobs.get('probe'),{unit:'worker',peaks:[500]});
+  writeFileSync(summary,JSON.stringify({schema:1,environment:{canonical:true},steps:[{name:'tests',verdict:'PASS',cpu:0.17,cpu_measure:GNU_CPU_MEASURE}]}));
+  assert.equal(readPreviousStepCpu(summary).size,0);
+  assert.equal(writeCostHistory(file,{steps:[{name:'tests',verdict:'PASS',cpu:9,cpu_measure:GNU_CPU_MEASURE}]}),undefined);
+  assert.equal(stepCpu(readCostHistory(file)).size,0);
+  assert.equal(writeCostHistory(file,{steps:[{name:'tests',verdict:'PASS',cpu:4,cpu_measure:STEP_CPU_MEASURE}]}),undefined);
+  assert.equal(stepCpu(readCostHistory(file)).get('tests'),4);
+  assert.deepEqual(readCostHistory(file).steps.get('tests')!.memory,memory);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,4);
+});
+
+test('the runner never classifies an accounting switch as a CPU regression',t=>{
+  for(const measure of [GNU_CPU_MEASURE,STEP_CPU_MEASURE]){
+    const {result,summary,output}=memoryRun(t,{steps:'format',availableKiB:16*2**20,
+      rows:{format:{slots:1,reserve:1,bound:60}},times:`format\t100\t1\t1\t${measure}\n`,payload:'exit 0',owned:{NTS_GATE_TIME_STRICT:'1'},
+      before:(_own,memory)=>{const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));packet.cpu={kind:'fixed',default:{usageUsec:100_000_000,userUsec:90_000_000,systemUsec:10_000_000}};writeFileSync(memory.NTS_HOST_OBSERVATIONS,JSON.stringify(packet));}});
+    assert.equal(result.status,measure===STEP_CPU_MEASURE?1:0,output);
+    assert.equal(summary.verdict,measure===STEP_CPU_MEASURE?'red':'green');
+  }
 });

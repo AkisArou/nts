@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readBaseline } from "../landing/selection.ts";
+import {readStepBaseline} from "./step-time.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
 import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, StepBoundClock, landingCeiling, stepBound, stepBoundReason, stepBoundWait, unmeasuredSteps } from "./step-bound.ts";
@@ -21,7 +21,8 @@ import { moduleClosure } from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
 import { ownMemory } from "./test-memory.ts";
 
-const baseline = () => readBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
+// These are arithmetic policy vectors, not comparisons of measured CPU.
+const baseline = () => readStepBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
 
 test("only a gate-owned admission wait with no executing case suspends a step's execution budget", () => {
   const ready = { elastic:true, held:0, outranked:false, requests:[8,4], freeSlots:1, freeFrontends:1, freeBytes:4 };

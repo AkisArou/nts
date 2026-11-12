@@ -1,3 +1,4 @@
+import {GNU_CPU_MEASURE,STEP_CPU_MEASURE} from '../gate/step-time.ts';
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ function fixture(t: Parameters<typeof testScratch>[0]) {
       const reasons = Object.fromEntries(steps.filter(name => failing.has(name)).map(name => [name, "fixture failure"]));
       writeFileSync(join(run, "summary.json"), JSON.stringify({
         identities: { commit }, environment: { canonical: true }, requested: steps, verdict: verdictOf(outcomes), wall_s: 2,
-        steps: steps.map(name => ({ name, verdict: outcomes[name], cpu: 1, wall: 2, reason: reasons[name] })),
+        steps: steps.map(name => ({ name, verdict: outcomes[name], cpu: 1,cpu_measure:STEP_CPU_MEASURE,gnu_time:{version:1,cpu_measure:GNU_CPU_MEASURE,cpu:1,user:1,sys:0,wall:2,maxrss_kb:1},wall: 2, reason: reasons[name] })),
       }));
       writeFileSync(join(run, "prepare.cpu"), "0.5 0.5 0.25\n");
       return { commit, run, steps: outcomes, reasons, verdict: verdictOf(outcomes) };
@@ -52,7 +53,12 @@ test("the core executes deferred work and prepares release artifacts while retai
   const summary = JSON.parse(readFileSync(join(result.run, "summary.json"), "utf8"));
   assert.equal(summary.wall_s, 2);
   assert.equal(summary.execution.cpu_s, 2.75);
+  assert.deepEqual(summary.execution.cpu_s_by_measure,{[STEP_CPU_MEASURE]:2,[GNU_CPU_MEASURE]:0.75});
+  assert.deepEqual(summary.execution.credited_cpu_s_by_measure,{[GNU_CPU_MEASURE]:20});
+  assert.equal(summary.execution.gnu_cpu_s,2.75);
   assert.equal(summary.execution.credited_cpu_s, 20);
+  assert.equal(summary.steps.find((step:{name:string})=>step.name==='tests').origin.cpu_measure,GNU_CPU_MEASURE);
+  assert.equal(summary.steps.find((step:{name:string})=>step.name==='tests').gnu_time.cpu,0,'reuse does not count original rusage as fresh execution');
   assert.equal(summary.steps.find((step: { name: string }) => step.name === "tests").cpu, 0);
   assert.equal(summary.steps.find((step: { name: string }) => step.name === "tests").origin.cpu, 10);
 });

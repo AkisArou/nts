@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,GNU_CPU_MEASURE} from '../gate/step-time.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // The landing service end to end, in a scratch repository with a local bare
 // origin and a pool of two trees: queue order, rebase and conflict refusal,
@@ -21,7 +22,7 @@ import { Pool } from "./pool.ts";
 import { Queue } from "./queue.ts";
 import type { Ran, RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
-import { landingSelection, type Selection } from "./selection.ts";
+import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
 import { drain, prepareTree, prune, recordCosts, type Config } from "./service.ts";
 
 function selection(steps: string[]): Selection {
@@ -44,7 +45,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
       checked.push(options.commit);
       const red = existsSync(join(options.tree, "RED"));
       return { state: red ? "red" : "green", message: red ? `tests FAIL; logs ${options.run}` : "green", run: options.run, wall_s: 2, pending: [],
-        steps: options.steps.map(name => ({ name, verdict: red && name === "tests" ? "FAIL" as const : "PASS" as const, cpu: 5, wall: 1 })) };
+        steps: options.steps.map(name => ({ name, verdict: red && name === "tests" ? "FAIL" as const : "PASS" as const, cpu: 5, cpu_measure:landingCpuMeasure(name),wall: 1 })) };
     },
     log: line => logs.push(line), ...overrides,
   };
@@ -301,10 +302,10 @@ test("a second service finds the first draining and leaves", async t => {
 test("the costs of passing steps are kept by kind of change, and old runs are pruned", t => {
   const f = service(t);
   recordCosts(f.config.home, { state: "green", message: "", run: "", pending: [], wall_s: 1, steps: [
-    { name: "build", verdict: "PASS", cpu: 700, wall: 120 }, { name: "tooling", verdict: "PASS", cpu: 500, wall: 240 },
+    { name: "build", verdict: "PASS", cpu: 700,cpu_measure:GNU_CPU_MEASURE,wall: 120 }, { name: "tooling", verdict: "PASS", cpu: 500,cpu_measure:STEP_CPU_MEASURE,wall: 240 },
     { name: "tests", verdict: "FAIL", cpu: 9999 } ] }, "rust");
   const costs = JSON.parse(readFileSync(join(f.config.home, "costs.json"), "utf8"));
-  assert.deepEqual(costs, { version: 1, steps: { "build:rust": { cpu: 700, wall: 120 }, tooling: { cpu: 500, wall: 240 } } });
+  assert.deepEqual(costs, { version: 2, steps: { "build:rust": { cpu: 700, cpu_measure:GNU_CPU_MEASURE,wall: 120 }, tooling: { cpu: 500,cpu_measure:STEP_CPU_MEASURE,wall: 240 } } });
   // A run is aged by its own time: kept at three days less a minute, deleted after three.
   const runs = join(f.s.dir, "runs"), old = join(runs, "a-run");
   mkdirSync(old, { recursive: true });

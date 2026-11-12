@@ -2176,3 +2176,21 @@ idle condition. Eligible changes coalesce; a blocked opportunity does not
 consume a start. Background records and benchmark units keep their existing
 lifecycle. The governing contract is in
 [workflow](../../workflow.md#after-landing-the-full-check).
+
+## Step CPU is versioned cgroup accounting (11-12)
+
+A same-run #720 control spent at least half a CPU second in a descendant, then
+killed it without reaping. GNU time counted 0.10 CPU-s; the retained step cgroup
+counted 0.660816 CPU-s. The earlier #711 typecheck also reported only 0.17 CPU-s
+through rusage while its standalone unit counted 3.754 CPU-s in a separate run.
+
+Final step CPU comes from cpu.stat after the cgroup is empty and before it is
+removed, through the complete HostObservations capability. Fixtures supply
+counters; kernel wiring controls select live CPU explicitly. Missing counters
+fail the instrument, without a fallback. cgroup-v2-scope-v1 is authoritative;
+wait4-rusage-v1 remains an explicitly versioned comparison. Version 4 scheduling
+history keeps memory peaks and drops legacy CPU; baseline and landing-cost
+readers accept CPU only from the matching measure. Receipts preserve their
+basis, imported work has zero executed CPU in both comparisons, and combined
+summaries partition mixed-basis totals. Separate build preparation retains its
+named rusage basis. Governs [the machine](../../workflow.md#the-machine).

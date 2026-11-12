@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,GNU_CPU_MEASURE,readStepBaseline} from '../gate/step-time.ts';
 // The landing selection: what runs before a change lands, and its estimate.
 //
 //   node --test tooling/landing/selection.test.ts
@@ -14,7 +15,7 @@ import { join } from "node:path";
 import { allSteps, gateSteps, inCorpus, LANDING, owed } from "../gate/owed.mjs";
 import { STEPS } from "../gate/step-table.mjs";
 import {
-  costKey, costLookup, deferredSteps, describeSelection, landingSelection, landingSteps, machineBudget, owedReach, readBaseline,
+  landingCpuMeasure,costKey, costLookup, deferredSteps, describeSelection, landingSelection, landingSteps, machineBudget, owedReach, readBaseline,
   readLandingCosts, recompilesRust, stepSeconds, type Owed, type SelectionInput, type StepCost, type StepRow, type Table,
 } from "./selection.ts";
 
@@ -182,13 +183,13 @@ test("recorded costs: the landing check's own by kind of change, then the baseli
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "landing-costs-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, "costs.json");
-  writeFileSync(file, JSON.stringify({ version: 1, steps: {
-    "build:rust": { cpu: 700, wall: 120 }, "build:other": { cpu: 4 }, tooling: { cpu: 500, wall: 240 },
+  writeFileSync(file, JSON.stringify({ version: 2, steps: {
+    "build:rust": { cpu: 700, wall: 120,cpu_measure:GNU_CPU_MEASURE }, "build:other": { cpu: 4,cpu_measure:GNU_CPU_MEASURE }, tooling: { cpu: 500, wall: 240,cpu_measure:STEP_CPU_MEASURE },legacy:{cpu:0.1,cpu_measure:GNU_CPU_MEASURE},
     "tests:nonsense": { cpu: 1 }, bogus: { cpu: -1 },
   } }));
   const own = readLandingCosts(file);
   assert.deepEqual([...own.keys()].sort(), ["build:other", "build:rust", "tooling"]);
-  const baseline = readBaseline("# step\twall\tcpu\tslots\ntests\t219.1\t3253.8\t8\nclippy\t0.3\t0.2\t6\nbad\tx\ty\t1\n");
+  const baseline = readBaseline(`# step\twall\tcpu\tslots\ntests\t219.1\t3253.8\t8\t${STEP_CPU_MEASURE}\nclippy\t0.3\t0.2\t6\t${STEP_CPU_MEASURE}\nbad\tx\ty\t1\n`);
   const rust = costLookup(own, baseline, "rust", rows, budget), other = costLookup(own, baseline, "other", rows, budget);
   assert.equal(rust("build").cpu, 700);
   assert.equal(other("build").cpu, 4);
@@ -202,7 +203,9 @@ test("recorded costs: the landing check's own by kind of change, then the baseli
   writeFileSync(file, "{not json");
   assert.deepEqual([...readLandingCosts(file)], []);
   // The committed baseline parses.
-  assert.ok(readBaseline(readFileSync(new URL("../gate/times.tsv", import.meta.url), "utf8")).get("tests")!.cpu > 0);
+  const committed=readFileSync(new URL("../gate/times.tsv",import.meta.url),'utf8');
+  for(const [name,row] of readStepBaseline(committed))assert.equal(readBaseline(committed).has(name),row.cpu_measure===landingCpuMeasure(name));
+  assert.equal(readBaseline('tests\t2\t0.1\t1\n').size,0,'a legacy CPU baseline cannot estimate cgroup work');
 });
 
 test("a change recompiles Rust when it touches a crate, a Rust source, the lock or a vendored source", () => {

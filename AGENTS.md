@@ -75,7 +75,7 @@ checker is compiled into nts, and every tree shares the object store.
   `tooling/gate/test-memory.ts`'s `ownMemory` (`NTS_HOST_OBSERVATIONS`,
   `NTS_MEMORY_LEDGER` and `NTS_GATE_COSTS_DIR`) through `gateEnvironment`'s
   owned values. The complete `HostObservations` capability supplies disk
-  bytes and inodes, memory, paging, resident charge, machine width, load and
+  bytes and inodes, memory, paging, resident charge, cgroup CPU counters, machine width, load and
   a monotonic clock to the runner, its dependencies and its samplers. A
   missing observation fails by name; it never falls back to the host. Pure
   decision tests supply observations; kernel wiring controls explicitly

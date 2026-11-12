@@ -422,6 +422,17 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   yield decisions, status and child handoffs. A higher-rank landing still
   preempts an admitted agent job and its borrowers: only live work and its
   margin remain promised to that landing. Independent new jobs retain FIFO.
+- **Step CPU includes its complete retained cgroup.** After its processes exit
+  and before its scope is deleted, the runner reads `cpu.stat` through
+  `HostObservations`. A missing counter fails the instrument. The authoritative
+  measure is `cgroup-v2-scope-v1`; the explicitly named `wait4-rusage-v1`
+  comparison remains beside it. Step `.time` files are versioned JSON;
+  `.gnu-time` retains the raw comparison. Scheduling history retains memory
+  peaks across a CPU measure change and starts CPU history afresh. The baseline
+  table names each CPU measure, and trends compare only like measures. Landing
+  receipts preserve both bases; imported work records zero executed CPU and
+  keeps its original measurement in `origin`. Combined summaries partition
+  totals by basis. Separate build preparation still names its rusage basis.
 - **Resource observations belong to the run.** `HostObservations`
   (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
   admission, oracle dependency capture, temporary pruning, the memory ledger,
@@ -431,7 +442,7 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   memory ledger and scheduling history (`ownMemory` in
   `tooling/gate/test-memory.ts`). Children and peak samplers retain the same
   capability. It supplies disk bytes and inodes, machine memory and paging,
-  process and cgroup resident charge, machine width, load and a monotonic
+  process and cgroup resident charge, cgroup CPU counters, machine width, load and a monotonic
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
@@ -493,6 +504,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Step CPU is versioned cgroup accounting:** final counters include descendants
+  killed without reaping. GNU time stays a named comparison. CPU histories and
+  trends never compare unlike measures, memory histories remain valid, and
+  receipt reuse preserves the original CPU basis
+  ([log](records/notebooks/decisions-log.md#step-cpu-is-versioned-cgroup-accounting-11-12)).
 
 - **One strict project checks every tooling module:** the gate validates the
   project flags and complete module inventory, and a tool-written per-module
