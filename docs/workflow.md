@@ -620,6 +620,10 @@ outside Worker closures may use top-level await.
   A real sampling control declares a live monotonic clock: a fixed or file
   clock does not advance while its child sleeps. A manually driven bridge
   control advances its supplied clock explicitly after readiness.
+  Compiled-call supervision supplies its Rust `Probe` with the clock and
+  process observations together. After killing an owned group, cleanup waits
+  for observed exit under a generous wedged-instrument backstop. Expiry names
+  the group and surviving process identities; it never becomes a case verdict.
 - **Test children receive an owned environment.** `fixtureEnvironment` in
   `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
   temporary and Git state, reused by its children and removed with the fixture.
@@ -663,6 +667,12 @@ the first node task.
   compatible completed builds release it. The same owner supplies temporary
   admission. Clippy has one declared cache on every route.
   ([log](records/notebooks/decisions-log.md#active-build-disk-promises-11-12)).
+
+- **Compiled cleanup follows observed ownership.** Inactivity and CPU decisions
+  consume supplied observations; real-child controls use readiness barriers.
+  Post-kill cleanup has a minutes-scale wedged-instrument guard, rather than
+  treating ordinary scheduling delay as failed cleanup
+  ([log](records/notebooks/decisions-log.md#compiled-cleanup-follows-observed-ownership-11-12)).
 
 - **Every Rust test route uses one profile owner.** The shared Cargo invocation
   uses incremental `nts-dev` without debug info; the manifest, invocation and

@@ -2400,3 +2400,15 @@ it waits until the admitted run's next step completes. The higher-rank yield
 control still passes. The original refusal was the ordering control in landing
 run `61cb59a50b5c-1794494563299`; it was a handoff defect, not a verdict based
 on elapsed time.
+
+
+## Compiled cleanup follows observed ownership (11-12)
+
+A landing unrelated to the compiled-call supervisor failed because a SIGKILLed
+owned group did not disappear within three seconds on a loaded machine. The
+supervisor now waits for observed group exit with a five-minute wedged-cleanup
+backstop, whose instrument error names the group and remaining PID/state/start
+identities. Its clock is part of the process probe, and inactivity, progress,
+runaway and delayed-cleanup controls replay supplied observations. A real
+owned-group control crosses the former bound on supplied time after a readiness
+barrier; the C and JVM protocol controls retain generous hang guards. #744.
