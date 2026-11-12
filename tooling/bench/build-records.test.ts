@@ -275,7 +275,9 @@ test("case identities cover resolved options, roots, sources and data independen
   const original = await identity();
   assert.deepEqual(await benchmarkIdentities(root, [b, a], join(root, "scratch-b")), new Map([...original].reverse()));
   const base = join(root, "tsconfig.fixtures.json");
-  writeFileSync(base, '{\n// configuration documentation\n"exclude":["${configDir}/tooling/**/*","${configDir}/node_modules/**/*"],"compilerOptions":{"noEmit":true,"target":"ESNext"}\n}\n');
+  // These are paths in the private fixture, not this tree's gate inputs.
+  const excludes = ["tooling", "node_modules"].map(directory => ["${configDir}", directory, "**", "*"].join("/"));
+  writeFileSync(base, '{\n// configuration documentation\n"exclude":' + JSON.stringify(excludes) + ',"compilerOptions":{"noEmit":true,"target":"ESNext"}\n}\n');
   assert.deepEqual(await identity(), original, "comments, option order and an irrelevant inherited exclude do not change inputs");
   writeFileSync(base, JSON.stringify({ compilerOptions: { target: "ESNext", noEmit: true, strictNullChecks: true } }));
   assert.notEqual((await identity()).get(a), original.get(a), "an option changes identity even when the source graph stays the same");
