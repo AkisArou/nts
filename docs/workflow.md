@@ -522,8 +522,10 @@ outside Worker closures may use top-level await.
   instead of reusing it. Publication and deletion recheck the existing version
   under the owner's same lock, so a stale reader cannot downgrade a newer
   writer's file. Missing and malformed files retain their separate recovery
-  paths. Ledger release remains synchronous: if its bounded lock attempt fails,
-  it names the failure and leaves the entry for dead-owner reclamation.
+  paths. Ledger release starts synchronously; `closed` includes its locked
+  deletion. Contention waits asynchronously on the parent's retained lock fd.
+  A bounded acquisition failure names the failure and leaves the entry for
+  dead-owner reclamation.
 - **A job key keeps one measurement basis.** First use binds whole-job or
   worker sizing under the history's flock before admission. `--workers`, even
   a width of one, declares worker sizing; omission declares a whole job.
@@ -557,6 +559,15 @@ outside Worker closures may use top-level await.
   until its final peak is retained and its workers have drained. A kill by
   an ancestor limit names that cgroup, its cap and the case cap, rather than
   claiming host-wide memory pressure.
+- **Case retirement has an owned lifetime.** Worker `close()` starts once;
+  `closed` settles after the broker acknowledges the last peak and the owned
+  worker scope is removed. The parent run stays until all its workers close.
+  Token completion sends done and FIN only after this drain. Command owners,
+  serial re-entry and process shutdown await it before returning or removing
+  state. A slow live broker delays cleanup; a departed broker or a five-minute
+  wedged-peer backstop is a named `tooling-cleanup` instrument failure carrying
+  the lease and group. It is never a case outcome. Ledger lock contention
+  yields the runner's event loop so it can continue serving these peers.
 - **Resource observations belong to the run.** `HostObservations`
   (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
   admission, oracle dependency capture, temporary pruning, the memory ledger,
@@ -816,8 +827,15 @@ the first node task.
   the entry point, without an outer memory admission. A measurement inside
   an ancestor's job shares its reservation
   ([log](records/notebooks/decisions-log.md#measurement-admission-takes-memory-and-cpus-together-11-10)).
+- **Case retirement is asynchronous cleanup.** A worker retains its scope
+  until its final peak reaches the broker, and its parent retains the worker.
+  `close()` starts the drain; owners await `closed` before teardown and token
+  completion. A departed or wedged broker reports an instrument failure by
+  lease and group. Contended ledger deletion waits outside the broker loop
+  ([log](records/notebooks/decisions-log.md#case-retirement-has-an-owned-lifetime-11-12)).
 - **Sampler services have an explicit lifecycle.** A reservation's release
-  takes its final reading, records the peak and returns memory synchronously.
+  takes its final reading, records the peak and starts memory release
+  synchronously; contended locked deletion is part of `closed`.
   Its sampler starts and stops by message, replies with its final sample and
   exits itself. A scoped owner awaits `closed` before tearing down any state
   its sampler or reporter can use; process-lifetime jobs drain at `beforeExit`.

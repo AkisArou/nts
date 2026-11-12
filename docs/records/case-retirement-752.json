@@ -1,0 +1,1321 @@
+{
+  "source": "c898a89929f1cbce0f76ec399ec61636a7a19833",
+  "node": "v26.13.0",
+  "matched_delay": [
+    {
+      "arm": "before",
+      "status": 1,
+      "signal": null,
+      "elapsedMs": 30170.635907,
+      "replyDelayMs": 31000,
+      "stdout": "",
+      "stderr": "file:///home/akisarou/.cache/nts-pool/5/target/752-investigation/before-context.ts:27\n  if(result.status!==0)throw Error('case memory: cannot retire owned scope: '+(result.stderr||result.error?.message||result.signal));\n                             ^\n\nError: case memory: cannot retire owned scope: spawnSync bash ETIMEDOUT\n    at retireCaseScope (file:///home/akisarou/.cache/nts-pool/5/target/752-investigation/before-context.ts:27:30)\n    at file:///home/akisarou/.cache/nts-pool/5/[eval1]:1:130\n\nNode.js v26.13.0\n"
+    },
+    {
+      "arm": "after",
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 31097.779934,
+      "replyDelayMs": 31000,
+      "stdout": "retired\n",
+      "stderr": ""
+    }
+  ],
+  "stalls": [
+    {
+      "load": [
+        50.58,
+        44.91,
+        44.84
+      ]
+    },
+    {
+      "name": "run-scope-create",
+      "eventLoopStallMs": 30.642103999999904
+    },
+    {
+      "name": "step-create-0",
+      "eventLoopStallMs": 106.86328700000001
+    },
+    {
+      "name": "step-drain-0",
+      "elapsedMs": 8.726314000000002
+    },
+    {
+      "name": "step-create-1",
+      "eventLoopStallMs": 57.795537999999965
+    },
+    {
+      "name": "step-drain-1",
+      "elapsedMs": 8.314163000000008
+    },
+    {
+      "name": "step-create-2",
+      "eventLoopStallMs": 81.32246199999997
+    },
+    {
+      "name": "step-drain-2",
+      "elapsedMs": 16.145587999999975
+    },
+    {
+      "name": "step-create-3",
+      "eventLoopStallMs": 71.85503299999993
+    },
+    {
+      "name": "step-drain-3",
+      "elapsedMs": 6.265378999999939
+    },
+    {
+      "name": "step-create-4",
+      "eventLoopStallMs": 45.47986399999991
+    },
+    {
+      "name": "step-drain-4",
+      "elapsedMs": 94.08981300000005
+    },
+    {
+      "name": "step-create-5",
+      "eventLoopStallMs": 95.38013300000011
+    },
+    {
+      "name": "step-drain-5",
+      "elapsedMs": 8.073028000000022
+    },
+    {
+      "name": "release-with-held-lock",
+      "eventLoopStallMs": 10002.643175000001
+    },
+    {
+      "managerCalls": 64,
+      "totalMs": 441.53440199999966,
+      "maxMs": 23.397780999999895
+    }
+  ],
+  "manager_calls": [
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-agent-752-stalls-2.service",
+        "After",
+        "as",
+        "1",
+        "nts-agent-752-stalls-2.service",
+        "0"
+      ],
+      "ms": 4.976726000000099,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2.slice"
+      ],
+      "ms": 16.011491999999976,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 7.001284000000055,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 5.488371000000029,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r0qpjeasm.slice"
+      ],
+      "ms": 10.613330000000019,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 8.934088999999972,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r0qpjeasm-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 5.27126700000008,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r0qpjeasm-s.slice"
+      ],
+      "ms": 21.339823000000024,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r0qpjeasm-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 7.1074769999999035,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r0qpjeasm-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r0qpjeasm.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.808607000000052,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r0qpjeasm-w.slice"
+      ],
+      "ms": 6.176863000000026,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r0qpjeasm-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 7.750130999999897,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-r0qpjeasm.slice"
+      ],
+      "ms": 8.056020999999987,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 3.6214610000000675,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rumxgrd60.slice"
+      ],
+      "ms": 5.7698219999999765,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 6.042762000000039,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rumxgrd60-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 5.050226000000066,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rumxgrd60-s.slice"
+      ],
+      "ms": 16.55069000000003,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rumxgrd60-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 4.831849999999918,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rumxgrd60-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rumxgrd60.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.4596410000000333,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rumxgrd60-w.slice"
+      ],
+      "ms": 5.79492700000003,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rumxgrd60-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 5.506309999999985,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-rumxgrd60.slice"
+      ],
+      "ms": 7.883808000000045,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 5.106485000000021,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rmz6lib2z.slice"
+      ],
+      "ms": 6.273083999999926,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 6.757237000000032,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rmz6lib2z-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 5.113756999999964,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rmz6lib2z-s.slice"
+      ],
+      "ms": 6.036625000000072,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rmz6lib2z-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 5.974734000000012,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rmz6lib2z-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rmz6lib2z.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 4.292693000000099,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rmz6lib2z-w.slice"
+      ],
+      "ms": 5.404455999999982,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rmz6lib2z-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 4.669348000000014,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-rmz6lib2z.slice"
+      ],
+      "ms": 15.807732999999985,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 5.3871749999999565,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rv19gw08u.slice"
+      ],
+      "ms": 6.174994000000083,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 5.179433000000017,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rv19gw08u-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.694071000000008,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rv19gw08u-s.slice"
+      ],
+      "ms": 6.32598900000005,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rv19gw08u-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 4.351169000000027,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rv19gw08u-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rv19gw08u.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.961112999999955,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rv19gw08u-w.slice"
+      ],
+      "ms": 3.9777579999999944,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rv19gw08u-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 6.8354060000000345,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-rv19gw08u.slice"
+      ],
+      "ms": 5.926812999999811,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 4.398235999999997,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r8exkp653.slice"
+      ],
+      "ms": 5.494382999999971,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 5.652463000000125,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r8exkp653-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.4684749999998985,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r8exkp653-s.slice"
+      ],
+      "ms": 4.032535999999936,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r8exkp653-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 4.063617000000022,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-r8exkp653-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-r8exkp653.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.2935419999998885,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-r8exkp653-w.slice"
+      ],
+      "ms": 5.621468999999934,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-r8exkp653-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 8.636818999999832,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-r8exkp653.slice"
+      ],
+      "ms": 18.74456699999996,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "fail",
+        "5",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2.slice",
+        "0"
+      ],
+      "ms": 3.896972000000005,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rl51px5wb.slice"
+      ],
+      "ms": 6.6306399999998575,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 23.397780999999895,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rl51px5wb-s.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 4.0540289999999,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rl51px5wb-s.slice"
+      ],
+      "ms": 6.432161000000178,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rl51px5wb-s.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 6.610881000000063,
+      "status": 0
+    },
+    {
+      "command": "busctl",
+      "args": [
+        "--user",
+        "call",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "StartTransientUnit",
+        "ssa(sv)a(sa(sv))",
+        "nts-r5atsa8o2-rl51px5wb-w.slice",
+        "fail",
+        "7",
+        "Description",
+        "s",
+        "nts owned gate step",
+        "StopWhenUnneeded",
+        "b",
+        "false",
+        "CollectMode",
+        "s",
+        "inactive-or-failed",
+        "BindsTo",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "After",
+        "as",
+        "1",
+        "nts-r5atsa8o2-rl51px5wb.slice",
+        "MemoryMax",
+        "t",
+        "268435456",
+        "MemorySwapMax",
+        "t",
+        "0",
+        "0"
+      ],
+      "ms": 3.8604310000000623,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "start",
+        "nts-r5atsa8o2-rl51px5wb-w.slice"
+      ],
+      "ms": 5.616440999999895,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "show",
+        "nts-r5atsa8o2-rl51px5wb-w.slice",
+        "--property=ControlGroup",
+        "--value"
+      ],
+      "ms": 6.539393000000018,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2-rl51px5wb.slice"
+      ],
+      "ms": 7.774414999999863,
+      "status": 0
+    },
+    {
+      "command": "systemctl",
+      "args": [
+        "--user",
+        "stop",
+        "nts-r5atsa8o2.slice"
+      ],
+      "ms": 9.018100000000004,
+      "status": 0
+    }
+  ]
+}

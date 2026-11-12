@@ -1251,12 +1251,13 @@ test('a contended release keeps answering peer sockets and its closed boundary w
 });
 
 test("a unit signal during cleanup lock acquisition names the fallback and the next decision reclaims it",async t=>{
-  const f=fixture(t),root=testScratch(t,'ledger-lock-signal'),bin=join(root,'bin'),ready=join(root,'lock-ready'),pipe=join(root,'barrier');
+  const f=fixture(t),root=testScratch(t,'ledger-lock-signal'),bin=join(root,'bin'),ready=join(root,'lock-ready'),pipe=join(root,'barrier'),cleanup=join(root,'cleanup.json');
   mkdirSync(bin);
   const fifo=spawnTest('mkfifo',[pipe],{encoding:'utf8'});assert.equal(fifo.status,0,fifo.stderr);
   // Only cleanup's blocking acquisition pauses. No lock is held behind this
   // barrier: the parent still owns fd 8, but flock has not acquired it yet.
   writeFileSync(join(bin,'flock'),`#!/bin/sh
+if [ "$1" = -n ] && [ -e ${JSON.stringify(cleanup)} ]; then exit 75; fi
 if [ "$1" = -w ]; then
   printf ready > ${JSON.stringify(ready)}
   read barrier_byte < ${JSON.stringify(pipe)}
@@ -1266,9 +1267,12 @@ exec /usr/bin/flock "$@"
   const script=join(root,'release.ts');
   writeFileSync(script,generatedJavaScript(`
 import {reserve} from ${JSON.stringify(LEDGER)};
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
 process.on('SIGTERM',()=>{});
 const held=await reserve({bytes:2**30,what:'signal release control'});
+durableRecord(${JSON.stringify(cleanup)},{closing:true});
 held.release();
+await held.closed;
 console.log('release finished');
 `));
   const env=fixtureEnvironment(t,f.env);env.PATH=bin+':'+env.PATH;

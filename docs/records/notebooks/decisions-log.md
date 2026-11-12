@@ -2421,3 +2421,21 @@ wedged-cleanup wait at each call would multiply the declared backstop. The
 compiled-child owner now retains the first cleanup success or named failure,
 and later calls return it without another observation, signal or wait. A
 supplied-state control checks both terminal outcomes. #744.
+
+## Case retirement has an owned lifetime (11-12)
+
+Worker close starts once and exposes a closed promise. The worker keeps its
+scope until its final peak reaches the case broker; its parent stays until
+every worker has drained. Token completion sends done and FIN after that
+drain. Commands, resident pools, serial re-entry and shutdown await the same
+boundary. A departed broker and the five-minute wedged-peer guard produce
+named cleanup instrument failures, never product failures.
+
+The runner's contended ledger cleanup waits asynchronously in flock while the
+parent retains the lock's open file description. The free-lock path still
+deletes immediately. This keeps the broker's event loop serving retirement
+requests instead of waiting synchronously for the directory lock.
+
+The old thirty-second synchronous retirement refused the full check's types
+and example-refusals steps. The retained investigation and matched controls
+are in [the retirement record](../case-retirement-752.md).
