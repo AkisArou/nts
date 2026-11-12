@@ -511,6 +511,10 @@ outside Worker closures may use top-level await.
   yield decisions, status and child handoffs. A higher-rank landing still
   preempts an admitted agent job and its borrowers: only live work and its
   margin remain promised to that landing. Independent new jobs retain FIFO.
+  At a step boundary, a run retains the larger of its next known demand and
+  its active grants, withheld memory and slack before giving bytes back.
+  It never releases the promise before publishing growth, so a later
+  neighbour cannot enter between those two operations.
 - **Future state versions are read-only.** Every shared versioned state owner
   checks a recognizable newer numeric version before validating its schema.
   A history gives a named empty view and records nothing; operational state
@@ -859,6 +863,13 @@ the first node task.
   lifetime and never blocks a landing. Live entry order is unique, including
   when the queue was empty at admission
   ([log](records/notebooks/decisions-log.md#admitted-work-keeps-its-rank-and-place-11-12)).
+- **A step handoff retains the next demand.** The give-back calculation keeps
+  the larger of the next known demand and active grants, withheld memory and
+  slack until growth is published. Otherwise a later neighbour can be admitted
+  in the release-before-growth gap, before queue order can protect the running
+  job. Higher-rank yield still returns everything except live use and its
+  margin
+  ([log](records/notebooks/decisions-log.md#step-handoffs-retain-the-next-demand-11-12)).
 - **Memory limits guard against runaways only.** A step's supervisor and
   workers have separate sibling boundaries, each with only a MemoryMax,
   about twice what the step was measured to hold and never

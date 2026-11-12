@@ -2386,3 +2386,17 @@ partial allocations consume it, completed compatible owners release it, and
 free checkouts promise nothing. Pool takes and build claims use the same lock;
 temporary admission reads the same floor and outstanding promises. All Clippy
 routes share target/clippy. [Contract](../../workflow.md#the-machine).
+## Step handoffs retain the next demand (11-12)
+
+The gate's give-back calculation retains the larger of its next known demand
+and its active grants, withheld memory and slack. Higher-rank yield keeps its
+existing rule. The ledger's admission order cannot protect growth that the
+runner has not published yet: releasing memory first gave a later neighbour
+a real window to enter at a step boundary.
+
+The forced-handoff controls pause only a private staged runner. With the old
+calculation the neighbour enters in that window; with the fixed calculation
+it waits until the admitted run's next step completes. The higher-rank yield
+control still passes. The original refusal was the ordering control in landing
+run `61cb59a50b5c-1794494563299`; it was a handoff defect, not a verdict based
+on elapsed time.
