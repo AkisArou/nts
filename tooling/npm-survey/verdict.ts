@@ -4,6 +4,7 @@
 // compiled with *nothing calling it*, so the compiler prunes what no root
 // reaches and never walks it. A zero here is not a pass.
 import { readFile, writeFile, readdir } from "node:fs/promises";
+import {gateEnvironment} from "../gate/canonical-environment.ts";
 import type { Vendored } from "./vendor.ts";
 import {runCheck, Outcome as CheckOutcome} from "../differential/check-report.ts";
 
@@ -77,7 +78,7 @@ for (const v of vendored) {
   await writeFile(configPath, JSON.stringify(config, null, 1));
 
   const {record: observation} = await runCheck(NTS, configPath, {cwd: REPO,
-    env: {...process.env, NTS_CHECKERS: "1"}});
+    env: gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR??v.root,owned:{NTS_BIN:NTS,NTS_CHECKERS:"1"}}).env});
   if ((observation.outcome === CheckOutcome.NOT_MEASURED && observation.report?.error?.kind !== "typecheck") || observation.outcome === CheckOutcome.INVALID_HIR) {
     throw new Error(`npm survey not measured: ${v.name}: ${observation.first}`);
   }

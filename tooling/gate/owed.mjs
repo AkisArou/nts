@@ -588,6 +588,24 @@ export const RULES = [
     arms: [{ kind: "valid", asks: "shared source included by integration-test harnesses across crates", run: "the workspace tests" }],
   },
   {
+    name: "native platform build and launch helpers",
+    when: (/** @type {string} */ p) => /^tooling\/(?:apple|windows)\/[^/]+\.sh$/.test(p),
+    steps: ["interop"],
+    arms: [],
+  },
+  {
+    name: "the JVM catalogue launcher",
+    when: (/** @type {string} */ p) => p === "tooling/jvm/member-name.ts",
+    steps: ["interop", "on-device"],
+    arms: [],
+  },
+  {
+    name: "native memory measurement harnesses",
+    when: (/** @type {string} */ p) => /^tooling\/memory\/[^/]+\.[ch]$/.test(p) || /^tests\/memory\/[^/]+\.c$/.test(p),
+    steps: ["memory"],
+    arms: [],
+  },
+  {
     name: "reference counting",
     when: (p) => /^compiler\/core\/src\/hir\/(rc|own)\.rs$/.test(p),
     steps: ["rc", "llvm-rc", "memory"],

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { copyModuleClosure } from "../gate/module-closure-fixture.ts";
@@ -31,15 +31,15 @@ function fixture(t: TestContext) {
     if (!inherited) stopToolingSlice(slice);
     removable(root); rmSync(root, { recursive: true, force: true });
   });
-  copyModuleClosure(["tooling/conformance/compiled-axis.ts", "tooling/conformance/run.mjs", "tooling/conformance/run-one.mjs"], root);
+  copyModuleClosure([new URL("./compiled-axis.ts",import.meta.url),new URL("./run.mjs",import.meta.url),new URL("./run-one.mjs",import.meta.url)].map(url=>relative(SOURCE,fileURLToPath(url))), root);
   // run-one loads these finite runtime roots dynamically, beyond the static
   // import graph copied above. Preparation captures the real implementations.
-  copyModuleClosure(["common.mjs", "tmpdir.mjs", "fixtures.mjs", "hijackstdio.mjs", "run-cjs-worker.mjs"]
-    .map(name => "tooling/conformance/" + name), root);
+  copyModuleClosure([new URL("./common.mjs",import.meta.url),new URL("./tmpdir.mjs",import.meta.url),new URL("./fixtures.mjs",import.meta.url),new URL("./hijackstdio.mjs",import.meta.url),new URL("./run-cjs-worker.mjs",import.meta.url)]
+    .map(url=>relative(SOURCE,fileURLToPath(url))), root);
   oracleWorkspaceFixture(t, root);
   // The real preparation worker keeps every imported TypeScript file in its
   // original project. Configs are runtime assets, outside the import graph.
-  const config = JSON.parse(readFileSync(join(SOURCE, "tooling/conformance/tsconfig.json"), "utf8"));
+  const config = JSON.parse(readFileSync(new URL("./tsconfig.json",import.meta.url), "utf8"));
   copyModuleClosure(config.files.map((name: string) => "tooling/conformance/" + name), root);
   for (const name of ["tsconfig.base.json", "tsconfig.fixtures.json", "tooling/conformance/tsconfig.json"])
     write(name, readFileSync(join(SOURCE, name), "utf8"));

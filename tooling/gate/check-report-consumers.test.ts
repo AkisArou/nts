@@ -4,7 +4,7 @@ import {spawnTest} from "./test-wait.ts";
 import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {tmpdir} from "node:os";
-import {dirname, join} from "node:path";
+import {basename, dirname, join, relative} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import test from "node:test";
 import type { TestContext } from "node:test";
@@ -20,14 +20,14 @@ function sandbox(t: TestContext) {
     "tests/programs/invalid", "tests/programs/unsupported", "benchmarks/cases/control"]) {
     mkdirSync(join(root, directory), { recursive: true });
   }
-  for (const script of ["gate.sh", "rc.sh", "bench-agree.sh", "declines.sh"]) {
-    copyFileSync(join(source, script), join(root, "tooling/gate", script));
+  for (const script of [new URL("./gate.sh",import.meta.url),new URL("./rc.sh",import.meta.url),new URL("./bench-agree.sh",import.meta.url),new URL("./declines.sh",import.meta.url)]) {
+    copyFileSync(script, join(root, "tooling/gate", basename(fileURLToPath(script))));
   }
-  copyFileSync(join(source, "../jvm/agrees-with-c.sh"), join(root, "tooling/jvm/agrees-with-c.sh"));
+  copyFileSync(new URL("../jvm/agrees-with-c.sh",import.meta.url), join(root, "tooling/jvm/agrees-with-c.sh"));
   copyModuleClosure([
-    "tooling/differential/check-consumers.ts", "tooling/differential/oracle-toolchain.json",
-    "tooling/conformance/pin.ts", "tooling/npm-survey/verdict.ts",
-  ], root);
+    new URL("../differential/check-consumers.ts",import.meta.url),new URL("../differential/oracle-toolchain.json",import.meta.url),
+    new URL("../conformance/pin.ts",import.meta.url),new URL("../npm-survey/verdict.ts",import.meta.url),
+  ].map(url=>relative(join(source,"../.."),fileURLToPath(url))), root);
   // Package imports use the same provisioned toolchain as the real entry.
   symlinkSync(join(source, "../../node_modules"), join(root, "node_modules"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
