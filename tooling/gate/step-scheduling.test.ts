@@ -267,17 +267,17 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
         // The before arm mutates this private closure copy, never the tree's
         // runner. Commit the fix before running the retained negative control.
         if(handoffBarrier==='before')source=source.replace(protectedBack,'Math.floor((reserved() - u.bytes - withholdBytes - 2 * BLOCK) / BLOCK) * BLOCK');
-        source=source.replace(entry,'let handoffEntered=false,handoffHeld=false;\nasync function adjustMemory() {\n  if(handoffHeld)return;')
+        source=source.replace(entry,'let handoffEntered=false,handoffAdjusting=false;\nasync function adjustMemory() {\n  if(handoffAdjusting)return;\n  handoffAdjusting=true;\n  try {')
           .replace(shrink,'await '+shrink)
+          .replace('\n}\n\nfunction schedule()', '\n  } finally {handoffAdjusting=false;}\n}\n\nfunction schedule()')
           .replace(growth,`  if(!handoffEntered && memoryWanted === 8 * 2**30 && used().bytes === 0) {
-    handoffEntered=true;handoffHeld=true;
+    handoffEntered=true;
     const {watch}=await import('node:fs');
     await new Promise(resolve=>{
       const done=()=>{if(existsSync(${JSON.stringify(join(own,'neighbour-decided'))})){watcher.close();resolve();}};
       const watcher=watch(${JSON.stringify(own)},done);
       writeFileSync(${JSON.stringify(join(own,'handoff-ready'))},'ready');done();
     });
-    handoffHeld=false;
   }
 `+growth);
       }
@@ -422,7 +422,10 @@ const publish=()=>{if(last && !reported && existsSync(join(own,'handoff-ready'))
 const asked = reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50,
   observe: decision=>{last=decision;publish();} });
 asked.catch(()=>writeFileSync(join(own,'neighbour-decided'),'instrument failed'));
-await until(own,()=>existsSync(join(own,'handoff-ready')));publish();
+await until(own,()=>existsSync(join(own,'handoff-ready')));
+// A cached admission still owns its memory. A cached refusal must instead
+// wait for a fresh decision made after the runner reached the handoff.
+if(last?.admitted)publish();
 const held=await asked;
 if (!existsSync(join(own, "records-ran"))) throw new Error("later neighbour ran before the admitted run's next step");
 held.release();
