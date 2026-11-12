@@ -114,6 +114,7 @@ import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow
 import { artifactResult, completeVerifier, verifierEnvironment, verifierExecution } from "../gate/artifact-reuse.ts";
 import { createFailureRun, retainRecentFailures } from "./jvm-failure-retention.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
+import {createVerifierDriver,type DriverProcessResult} from "./jvm-verifier-driver.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -222,8 +223,8 @@ try {
   process.exit(2);
 }
 
-const run = (cmd, args, timeout = 900_000, childEnvironment = env) =>
-  new Promise((done) => {
+const run = (cmd:string, args:string[], timeout = 900_000, childEnvironment:NodeJS.ProcessEnv = env) =>
+  new Promise<DriverProcessResult & {command:string;args:string[];pid:number|undefined;out:string}>((done) => {
     const child = spawn(cmd, args, { cwd: ROOT, env: childEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", stdout = "", stderr = "";
     child.stdout.on("data", (d) => { stdout += d; out += d; });
@@ -601,12 +602,13 @@ async function check(project, slot) {
   catch (error) { unmeasured.push(`${project}: ${error.message}`); return; }
   const inputs = () => {
     return { files: [
-      ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
+      ...artifactFiles(out), ...artifactFiles(compiledDriver.directory,"verifier-driver"), { name: "verifier-driver-source", path: DRIVER },
     ], values: { tool: toolIdentity(JAVA, verifierEnv), flags, script: fileDigest(fileURLToPath(import.meta.url)),
+      driver:compiledDriver.identity,
       reuse_policy: fileDigest(fileURLToPath(new URL("../gate/artifact-reuse.ts", import.meta.url))) } };
   };
   const classCount = artifactFiles(out).filter(file => file.name.endsWith(".class")).length;
-  const args = [...flags, "-cp", `${out}:${jar}`, DRIVER, out];
+  const args = [...flags, "-cp", `${out}:${jar}:${compiledDriver.directory}`, "JvmVerify", out];
   let freshRun;
   const result = await artifactResult("jvm-verifies", inputs, () => verifierExecution(async (command, arguments_, timeout) => {
     freshRun = await run(command, arguments_, timeout, verifierEnv); return freshRun;
@@ -644,6 +646,12 @@ async function check(project, slot) {
   }
 }
 
+// The two corpus commands are sequential and share only this run's compilation.
+// javac has its own stable case lease; it never borrows a project's token.
+const driverEnv=verifierEnvironment(JAVA),javac=join(driverEnv.JAVA_HOME,"bin/javac");
+const prepareDriver=createVerifierDriver();
+const compiledDriver=await prepareDriver({root:join(process.env.NTS_GATE_RUN_DIR??scratch,"share/jvm-verifier-driver"),source:DRIVER,javac,env:driverEnv,identify:toolIdentity,
+  run:(command,args,environment)=>withToken(()=>run(command,args,900_000,environment),{project:"tooling/conformance/JvmVerify.java",backend:"jvm"})});
 const started = Date.now();
 let next = 0;
 // Longest first, so the step does not end waiting on one large module drawn

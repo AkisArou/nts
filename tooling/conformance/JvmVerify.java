@@ -1,7 +1,7 @@
 // Generated from a member-templates source by generate-members.ts. Do not edit.
-// Link every class under a directory, so the JVM verifies it: the driver
-// jvm-verifies.ts runs, as `java -Xverify:all -cp <dir>:<runtime jar>
-// JvmVerify.java <dir>` (the single-file launcher; nothing is compiled).
+// Link every class under a directory. jvm-verifies.ts compiles this driver
+// once per run and launches its class in an isolated JVM for each project.
+// Source launching is also supported by the direct wiring controls.
 //
 // Loading a class does not verify it -- verification happens when it is
 // *linked*, which HotSpot does lazily. `Class.forName(name, false, loader)`

@@ -4,6 +4,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { artifactShadow, canonicalJson, type Inputs } from "./artifact-shadow.ts";
 import { REUSE } from "./artifact-reuse-policy.ts";
+import { GateResource } from "./gate-resource.ts";
 export { REUSE } from "./artifact-reuse-policy.ts";
 
 type Kind = keyof typeof REUSE;
@@ -63,18 +64,33 @@ export async function artifactResult<T>(kind: Kind, inputs: () => Inputs, fresh:
   const env = options.env ?? process.env, enabled = options.enabled ?? REUSE[kind];
   const observe = artifactShadow(kind, inputs, env, undefined, context);
   let source: string | null = null, reused: T | undefined;
-  if (enabled && observe.key && env.NTS_GATE_SHADOW_DIR) {
-    try {
-      const entry = JSON.parse(readFileSync(join(env.NTS_GATE_SHADOW_DIR, kind, `${observe.key}.json`), "utf8"));
-      const hash = createHash("sha256").update(canonicalJson(entry.result)).digest("hex");
-      if (entry.version === 1 && entry.key === observe.key && entry.result_sha256 === hash
-        && typeof entry.run === "string" && entry.run.length > 0 && !Object.hasOwn(entry, "comparison_result")
-        && Object.hasOwn(entry, "result") && accept(entry.result)
-        && artifactShadow(kind, inputs, env).key === observe.key) {
-        source = entry.run; reused = entry.result;
-      }
-    } catch { /* Never trust a missing, corrupt or incomplete payload. */ }
-  }
+  type Baseline={version:1;key:string;result:T;result_sha256:string;run:string};
+  const complete=(entry:unknown):entry is Baseline=>{
+    if(!entry||typeof entry!=="object"||!("version" in entry)||entry.version!==1
+      ||!("key" in entry)||entry.key!==observe.key||!("result" in entry)
+      ||!("result_sha256" in entry)||!("run" in entry)||typeof entry.run!=="string"||!entry.run
+      ||Object.hasOwn(entry,"comparison_result")||!accept(entry.result))return false;
+    return entry.result_sha256===createHash("sha256").update(canonicalJson(entry.result)).digest("hex");
+  };
+  try { if (observe.key && env.NTS_GATE_SHADOW_DIR) {
+    const path=join(env.NTS_GATE_SHADOW_DIR,kind,`${observe.key}.json`);
+    const read=():unknown=>{
+      try{return JSON.parse(readFileSync(path,"utf8"));}
+      catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return undefined;return null;}
+    };
+    let entry=read();
+    const future=(value:unknown)=>!!value&&typeof value==="object"&&"version" in value&&typeof value.version==="number"&&value.version>1;
+    if(entry!==undefined&&!future(entry)&&!complete(entry)){
+      // Only invalid baselines are mutable. Re-read under the repair lock so
+      // concurrent readers cannot delete another reader's complete replacement.
+      const lock=GateResource.tryAcquire(join(env.NTS_GATE_SHADOW_DIR,"locks",kind,observe.key));
+      if(lock)try{
+        entry=read();
+        if(entry!==undefined&&!future(entry)&&!complete(entry)){rmSync(path,{force:true});entry=undefined;}
+      }finally{lock.close();}
+    }
+    if(enabled&&complete(entry)&&artifactShadow(kind,inputs,env).key===observe.key){source=entry.run;reused=entry.result;}
+  } } catch { /* A cache read or repair failure still requires fresh execution. */ }
   const record = (status: string, cpu: number | null, shadow?: string) => {
     try {
       if (env.NTS_GATE_CASE_COSTS_DIR && env.NTS_GATE_STEP) appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR, `reuse-${process.pid}-${counter++}.jsonl`), JSON.stringify({
@@ -90,7 +106,9 @@ export async function artifactResult<T>(kind: Kind, inputs: () => Inputs, fresh:
     return reused;
   }
   const measured = await fresh();
-  const shadow = observe(measured.result);
+  // Infrastructure failures and partial verifier protocols cannot establish
+  // a baseline. The same completeness rule governs admission and later reads.
+  const shadow = accept(measured.result) ? observe(measured.result) : null;
   record("fresh", measured.cpu_s, shadow?.status);
   return measured.result;
 }

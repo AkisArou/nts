@@ -2525,3 +2525,18 @@ the landing service's restart. Unpublished candidates from dead PIDs are
 collected under the same reclamation flock, including when the crash happened
 before any public owner existed. A reused PID conservatively delays cleanup.
 Fixes #762.
+## Verifier setup belongs to the run (11-12)
+
+The JVM verification step repeatedly compiled its driver through the Java
+source launcher. It now compiles once in run-local storage and launches one
+isolated JVM per project's emitted output. The driver source, javac identity
+and compiled classes enter the artifact key. Full-population comparisons
+retain identical verifier facts and decline summaries.
+
+The zero reuse hits came from baselines containing an earlier pre-entry
+DBUS/XDG failure. The shared store had kept those first observations forever,
+even after verification completed. Only complete verifier facts now enter
+it; the same validator discards invalid existing baselines under a repair
+lock, leaving future formats untouched. Run logs retain infrastructure
+failures. The controlled before, after and repeated runs, with their separate
+CPU bases, are in the #759 proof summaries and comparison record. Fixes #759.

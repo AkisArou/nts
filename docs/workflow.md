@@ -226,6 +226,18 @@ The full check is every step the gate has today, in two parts. Both run at
 low priority, and reserve their memory at the full check's priority, below
 landing checks' and agents', so those come first.
 
+The JVM verification step compiles its Java driver once into the run's
+temporary storage, shared by its sequential runtime and outcomes commands.
+Each project still runs in its own JVM with full verification. Reuse keys
+include the emitted artifacts, driver source and compiled classes, javac
+identity and flags, and the verifier's JDK and execution policy.
+
+Only complete verifier facts enter the artifact baseline store. An existing
+baseline that fails the same completeness validation is treated as absent
+and pruned under a repair lock before fresh evidence replaces it. A future
+format is left untouched. Infrastructure failures remain in the run's logs;
+they cannot poison the reusable baseline for unchanged artifacts.
+
 - **The core** covers all suites on all three backends on the newest `main`,
   covering everything that landed since its last run. For the exact commit
   checked green by the landing service, it takes that landing's complete
@@ -739,6 +751,11 @@ the first node task.
   prevents new runs even while the controller waits for its tree lock. The
   restarted controller adopts independent background units; completed runs
   keep their measured verdicts.
+
+- **Verifier setup belongs to the run.** Compiling the driver is shared
+  preparation; verification stays isolated by project. A reusable baseline
+  requires complete facts on both admission and read, so an infrastructure
+  failure cannot permanently prevent reuse after the instrument is repaired.
 
 - **Contributor proof uses the prepared inner loop.** `inner.ts` prepares the
   oracle seal, builds the compiler and owns the per-binary runner before

@@ -2,7 +2,7 @@ import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,36 @@ test("the default execution path follows the checked-in per-kind policy", async 
   await artifactResult("jvm-verifies", inputs, fresh, accept, "project", options);
   await artifactResult("jvm-verifies", inputs, fresh, accept, "project", options);
   assert.equal(calls, REUSE["jvm-verifies"] ? 1 : 2);
+});
+
+test("an incomplete verifier observation cannot establish a baseline",async t=>{
+  const {env,inputs,cache}=fixture(t);
+  const incomplete={...ok,status:null,error:"worker command failed before bounded entry",stdout:"",stderr:"no scope bus"};
+  assert.deepEqual(await artifactResult("jvm-verifies",inputs,async()=>({result:incomplete,cpu_s:null}),accept,"project",{env}),incomplete);
+  assert.equal(existsSync(join(cache,"jvm-verifies")),false);
+});
+
+test("a poisoned baseline is replaced by complete evidence and the next run reuses it",async t=>{
+  const {env,inputs,cache}=fixture(t);
+  const incomplete={...ok,status:null,error:"worker command failed before bounded entry",stdout:"",stderr:"no scope bus"};
+  artifactShadow("jvm-verifies",inputs,env,undefined,"legacy observation")(incomplete);
+  let calls=0;
+  const fresh=async()=>{calls++;return {result:ok,cpu_s:.5};};
+  assert.deepEqual(await artifactResult("jvm-verifies",inputs,fresh,accept,"project",{env}),ok);
+  assert.deepEqual(JSON.parse(readFileSync(entry(cache),"utf8")).result,ok);
+  assert.deepEqual(await artifactResult("jvm-verifies",inputs,fresh,accept,"project",{env,log:()=>{}}),ok);
+  assert.equal(calls,1);
+});
+
+test("a future baseline is not pruned or overwritten by an older reader",async t=>{
+  const {env,inputs,cache}=fixture(t);
+  artifactShadow("jvm-verifies",inputs,env)(ok);
+  const path=entry(cache),future=JSON.stringify({...JSON.parse(readFileSync(path,"utf8")),version:2});
+  writeFileSync(path,future);
+  let calls=0;
+  await artifactResult("jvm-verifies",inputs,async()=>{calls++;return {result:ok,cpu_s:1};},accept,"project",{env});
+  assert.equal(calls,1);
+  assert.equal(readFileSync(path,"utf8"),future);
 });
 
 test("corruption, incomplete payloads, signals and missing origins always execute fresh", async t => {
