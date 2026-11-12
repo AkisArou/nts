@@ -21,6 +21,7 @@ pub(crate) fn project_context() -> Option<String> {
 #[derive(Debug)]
 struct Context {
     file: std::fs::File,
+    record: Vec<u8>,
     project: String,
     step: String,
     failed: bool,
@@ -107,7 +108,16 @@ pub(crate) fn event(mut value: serde_json::Value) {
             // An unavailable/full metrics directory must never change the
             // command's output or status. The runner reports missing/partial
             // timing records independently from the product verdict.
-            if writeln!(context.file, "{value}").is_err() {
+            // Display writes JSON punctuation separately. Serialize into the
+            // session's buffer, then publish each complete event immediately:
+            // an abort must not lose the last observed phase to a later flush.
+            context.record.clear();
+            if serde_json::to_writer(&mut context.record, &value).is_err() {
+                context.failed = true;
+                return;
+            }
+            context.record.push(b'\n');
+            if context.file.write_all(&context.record).is_err() {
                 context.failed = true;
             }
         }
@@ -225,6 +235,7 @@ fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) 
             .ok()?;
         Some(Context {
             file,
+            record: Vec::new(),
             project: project.to_string(),
             step,
             failed: false,
@@ -292,13 +303,22 @@ mod tests {
         .unwrap();
         assert_eq!(output.status.code(), Some(7));
         assert_eq!(output.stdout, b"original");
-        drop(session);
         let path = std::fs::read_dir(&root)
             .unwrap()
             .next()
             .unwrap()
             .unwrap()
             .path();
+        let published = std::fs::read_to_string(&path).unwrap();
+        assert!(published.ends_with('\n'));
+        assert!(
+            published.lines().any(|line| {
+                let row: serde_json::Value = serde_json::from_str(line).unwrap();
+                row["event"] == "child.result" && row["exit"] == 7
+            }),
+            "a complete event is visible before the session is dropped"
+        );
+        drop(session);
         let rows: Vec<serde_json::Value> = std::fs::read_to_string(path)
             .unwrap()
             .lines()
