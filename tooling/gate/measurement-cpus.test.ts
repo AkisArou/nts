@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 // The CPUs reserved for measurement (4-5): every gate and heavy job keeps off
 // them, and a measurement waits for them to be quiet.
@@ -37,8 +38,7 @@ test("counted.sh's default perf child inherits the restriction, with an explicit
     copyFileSync(new URL("../../runtime/jvm/test-vm-flags.txt", import.meta.url), join(dir, "runtime/jvm/test-vm-flags.txt"));
     const counted = join(dir, "tooling/bench/counted.sh");
     copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
-    copyFileSync(new URL("./affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));
-    for(const file of ["tooling-slice.ts","step-result.ts"])copyFileSync(new URL("./"+file,import.meta.url),join(dir,"tooling/gate",file));
+    copyModuleClosure(["tooling/gate/affinity.ts"],dir);
     writeFileSync(join(dir, "target/bench/probe.jvm/Case.java"), "return nts.gen.Program.work(in0);\nprivate static volatile double in0 = 1;\n");
     writeFileSync(join(dir, "bin/javac"), "#!/bin/sh\nexit 0\n");
     writeFileSync(join(dir, "bin/perf"), `#!/bin/sh

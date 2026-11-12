@@ -22,7 +22,7 @@ test('one owner preserves input, environment and output bounds without timing a 
   const probe=infrastructureProbes((command,args,options)=>{
     calls++;simulatedElapsed+=120_000;
     assert.equal(command,request.command);assert.deepEqual(args,request.args);
-    assert.equal(options.timeout,INFRASTRUCTURE_PROBE_BOUND_MS);assert.equal(options.encoding,'utf8');
+    assert.equal(options.timeout,INFRASTRUCTURE_PROBE_BOUND_MS);assert.equal(options.killSignal,'SIGKILL');assert.equal(options.encoding,'utf8');
     assert.equal(options.input,input);assert.equal(options.env,env);assert.equal(options.cwd,'/owned/tree');assert.equal(options.maxBuffer,12345);
     return result();
   });
@@ -92,4 +92,13 @@ test('prechecks classify completed source errors but never turn a probe failure 
   assert.equal(precheckProgram('/owned/program',functions,success).ok,true);assert.equal(calls,3);
   const noAnswer=infrastructureProbes((_command,args)=>args.includes('--project')?result({stdout:''}):timeout());
   named(()=>precheckProgram('/owned/program',functions,noAnswer),'observe a generated program');
+});
+
+test('the wedged-probe guard stops a child that ignores SIGTERM',()=>{
+  let stopped=false;
+  const probe=infrastructureProbes((_command,_args,options)=>{
+    if(options.killSignal==='SIGKILL'){stopped=true;return timeout();}
+    return result({stdout:'the child ignored termination and remains live'});
+  });
+  named(()=>probe(request),'wedged-probe');assert.equal(stopped,true);
 });

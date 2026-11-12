@@ -27,7 +27,7 @@ export function infrastructureProbes(runner:ProbeRunner=spawnSync):Infrastructur
     };
     let result:ProbeResult;
     try{result=runner(request.command,request.args,{cwd:request.cwd,env:request.env,input:request.input,
-      encoding:'utf8',timeout:INFRASTRUCTURE_PROBE_BOUND_MS,maxBuffer:request.maxBuffer??16*1024*1024});}
+      encoding:'utf8',timeout:INFRASTRUCTURE_PROBE_BOUND_MS,killSignal:'SIGKILL',maxBuffer:request.maxBuffer??16*1024*1024});}
     catch(error){return failure(`could not start: ${error instanceof Error?error.message:String(error)}`,error);}
     if(result.error){
       if((result.error as NodeJS.ErrnoException).code==='ETIMEDOUT')return failure(`did not answer within the ${INFRASTRUCTURE_PROBE_BOUND_MS} ms wedged-probe bound`,result.error);
