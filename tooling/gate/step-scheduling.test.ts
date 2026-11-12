@@ -268,7 +268,7 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
         assert.ok(source.includes(condition)&&source.includes(end),'the growth replay follows the current ticket owner');
         if(excessGrowth==='before')source=source.replace(condition,'need <= 0 && !growth.withdrawn');
         source=source.replace(end,`    if(u.bytes===0 && bytes>0 && growth.bytes>bytes){
-      writeFileSync(${JSON.stringify(join(own,'growth-observed.json'))},JSON.stringify({reserved:reserved(),wanted:memoryWanted,queued:growth.bytes,useful:bytes,withdrawn:growth.withdrawn}));
+      process.stdout.write('control: growth observed '+JSON.stringify({reserved:reserved(),wanted:memoryWanted,queued:growth.bytes,useful:bytes,withdrawn:growth.withdrawn})+'\\n');
       if(!growth.withdrawn)stop('control: stale queued growth exceeds current demand');
     }
 `+end);
@@ -382,7 +382,7 @@ esac
 });
 
 for(const arm of ['before','after']as const)test(`excess queued growth is replaced after running work drains (${arm})`,t=>{
-  const {own,result,summary,output}=memoryRun(t,{
+  const {result,summary,output}=memoryRun(t,{
     steps:'format records',availableKiB:22.5*2**20,excessGrowth:arm,
     rows:{format:{slots:1,reserve:10,bound:60},records:{slots:1,reserve:11,bound:60}},
     times:'format\t100\t200\t1\nrecords\t100\t100\t1\n',
@@ -391,7 +391,9 @@ for(const arm of ['before','after']as const)test(`excess queued growth is replac
   records) : > "$2/records-ran" ;;
 esac\n`,
   });
-  const seen=JSON.parse(readFileSync(join(own,'growth-observed.json'),'utf8')) as {reserved:number;wanted:number;queued:number;useful:number;withdrawn:boolean};
+  const observed=/^control: growth observed (\{[^\n]+\})$/m.exec(output);
+  assert.ok(observed,'the runner reports its growth observation through its owned stdout:\n'+output);
+  const seen=JSON.parse(observed[1]!) as {reserved:number;wanted:number;queued:number;useful:number;withdrawn:boolean};
   assert.deepEqual(seen,{reserved:10*GiB,wanted:11*GiB,queued:11*GiB,useful:GiB,withdrawn:arm==='after'});
   if(arm==='before'){
     assert.notEqual(result.status,0,output);assert.match(output,/control: stale queued growth exceeds current demand/);
