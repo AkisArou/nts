@@ -20,12 +20,6 @@
     "tooling/census/test262.ts",
     "tooling/config/fixtures/provider-selector.ts",
     "tooling/config/package.json",
-    "tooling/config/src/index.ts",
-    "tooling/config/src/native.ts",
-    "tooling/config/src/product.ts",
-    "tooling/config/src/profiles.ts",
-    "tooling/config/src/profiles/data.json",
-    "tooling/config/src/workspace.ts",
     "tooling/config/tsconfig.json",
     "tooling/conformance/accessor-audit.mjs",
     "tooling/conformance/addon-extras.mjs",
@@ -148,7 +142,6 @@
     "tooling/npm-survey/corpus.ts",
     "tooling/npm-survey/roots.json",
     "tooling/npm-survey/run.sh",
-    "tooling/sweep/probe-harness.ts",
     "tsconfig.json"
   ],
   "policy": [
