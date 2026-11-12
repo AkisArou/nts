@@ -61,11 +61,11 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   }
   for (const name of readdirSync(join(sourceRoot, "tooling"))) if (name !== "census")
     symlinkSync(join(sourceRoot, "tooling", name), join(fixture, "tooling", name));
-  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true});
   const familyPath = "tests/typescript/record-protocol";
   mkdirSync(join(fixture, familyPath), { recursive: true });
   const fixturePaths = ["control", "subject"].map(name => `${familyPath}/${name}.ts`);
   for (const path of fixturePaths) writeFileSync(join(fixture, path), "assert.sameValue(1 + 1, 2);\n");
+  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true,dataNamespaces:{'tests/typescript':'TypeScript record CLI fixture'}});
   const git = (args: string[], cwd = fixture) => {
     const result = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd, encoding: "utf8" });
     assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
@@ -190,10 +190,10 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   cpSync(join(sourceRoot,'tooling'),join(copied,'tooling'),{recursive:true,verbatimSymlinks:true});
   for(const file of ['package.json','.tool-versions','tsconfig.fixtures.json'])cpSync(join(sourceRoot,file),join(copied,file));
   symlinkSync(join(sourceRoot,'node_modules'),join(copied,'node_modules'),'dir');
-  symlinkSync(join(root,'tests'),join(copied,'tests'),'dir');
+  cpSync(join(root,'tests'),join(copied,'tests'),{recursive:true});
   symlinkSync(join(sourceRoot,'third_party'),join(copied,'third_party'),'dir');
   symlinkSync(join(sourceRoot,'runtime'),join(copied,'runtime'),'dir');
-  copyModuleClosure(['tooling/census/conformance262.ts'],copied,{reuseSourceLinks:true});
+  copyModuleClosure(['tooling/census/conformance262.ts'],copied,{reuseSourceLinks:true,dataNamespaces:{'tests/typescript':'copied TypeScript record consumer'}});
   // The real report records its consumer repository's HEAD. Bind the actual
   // copied files in this isolated fixture, without borrowing the author's Git.
   execFileSync('git',gitArguments(['init','--quiet',copied]), {env:fixtureEnvironment(t)});

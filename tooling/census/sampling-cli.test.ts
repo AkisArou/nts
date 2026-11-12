@@ -33,9 +33,9 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     if(name==='conformance262.ts')copyFileSync(fileURLToPath(new URL('./conformance262.ts',import.meta.url)),to);else symlinkSync(from,to);
   }
   for(const name of readdirSync(join(repository,'tooling')))if(name!=='census')symlinkSync(join(repository,'tooling',name),join(fixture,'tooling',name));
-  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true});
   mkdirSync(join(fixture,'tests/typescript/private'),{recursive:true});
   for(const value of [1,2])writeFileSync(join(fixture,'tests/typescript/private',value+'.ts'),`assert.sameValue(${value},${value});\n`);
+  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true,dataNamespaces:{'tests/typescript':'sampling CLI fixture'}});
   const git=(args:string[])=>{const result=spawnSync('git',gitArguments(args),{env:fixtureEnvironment(t),cwd:fixture,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
   git(['init','--quiet']);git(['add','tests']);git(['-c','user.name=Fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Private sample']);
   const selected=selectTypescript(fixture,'tests/typescript'),sampled=populationOf(selected,{sample:1});

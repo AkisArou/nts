@@ -1,9 +1,10 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
+import {dataDirectory} from '../gate/reader-inputs.ts';
 // A run's three backend steps share one measured Node answer per case. Only
 // original inputs and authenticated evidence survive each admitted attempt;
 // its executable snapshot is finalized and removed before the next dispatch.
 import { mkdirSync,readFileSync } from 'node:fs';
-import {join} from 'node:path';
+import {join,relative} from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
 import { REPOSITORY } from '../differential/oracle-emit.ts';
@@ -18,6 +19,7 @@ import { runMemoryWorkers } from './worker-pool.ts';
 import { createTypeScriptOracleResults,oracleResultHash,type TypeScriptOracleResult } from './typescript-oracle-results.ts';
 import { typeScriptOracleDirectory } from './typescript-oracle-capture.ts';
 import type { NodeResolutionSession } from '../differential/oracle-runtime.ts';
+const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
 
 /** Use precisely each backend's population rule, then take its union. Pending
  * cases with no recorded row are left to the record policy, not executed here. */
@@ -36,11 +38,12 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
   try{
     const directory=typeScriptOracleDirectory(),inputs=join(directory,'inputs'),results=join(directory,'results');
     mkdirSync(inputs,{recursive:true});mkdirSync(results,{recursive:true});
-    const records=selectTypescript(REPOSITORY,'tests/typescript');
+    const under=relative(REPOSITORY,fileURLToPath(TYPESCRIPT_CASES));
+    const records=selectTypescript(REPOSITORY,under);
     const named=['c','llvm','jvm'].map(backend=>{
       const file=join(REPOSITORY,'results/typescript',backend,'cases.tsv'),text=readFileSync(file,'utf8');
       const parsed=parseTypeScriptRecord(text);
-      if(parsed.metadata.backend!==backend||parsed.metadata.under!=='tests/typescript')throw new ToolingInstrumentError('tooling-setup','TypeScript oracle record selection differs: '+file);
+      if(parsed.metadata.backend!==backend||parsed.metadata.under!==under)throw new ToolingInstrumentError('tooling-setup','TypeScript oracle record selection differs: '+file);
       return {backend,file,text};
     });
     const paths=typeScriptOraclePopulation(records,named,sample);

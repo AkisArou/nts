@@ -5,13 +5,14 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import {fileURLToPath} from 'node:url';
 
 test("metadata audit reads all authorities and exclusions without a compiler or selection", () => {
   const root = mkdtempSync(join(tmpdir(), "classification-audit-"));
   const write = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
   try {
-    const path = "tooling/census/audit.ts";
+    const path = relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('./audit.ts',import.meta.url)));
     copyModuleClosure([path],root);
     write("tooling/census/features.json", JSON.stringify({ version: 1, features: { Feature: { class: "inapplicable", reason: "reason", authority: "docs/boundary.md §Boundary" } } }));
     const exclusions = { exclusions: [{ kind: "include", match: "helper.js", reason: "reason", authority: "docs/boundary.md §Boundary" }] };

@@ -51,7 +51,7 @@ function checkSource(t: TestContext, source: string, functions = inventory()) {
 test("the directory test entry imports every test file exactly once", () => {
   const directory = fileURLToPath(new URL("./", import.meta.url));
   const expected = readdirSync(directory).filter(name => name.endsWith(".test.ts")).sort();
-  const entry = readFileSync(join(directory, "index.ts"), "utf8");
+  const entry = readFileSync(new URL('./index.ts',import.meta.url), "utf8");
   const imported = [...entry.matchAll(/^import ["']\.\/([^"']+\.test\.ts)["'];$/gm)]
     .map(match => match[1]).sort();
   assert.deepEqual(imported, expected);

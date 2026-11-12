@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GENERATOR_VERSION, validateModel } from "./model.ts";
 import type { FunctionSpec, PrintedProgram, ProgramModel } from "./model.ts";
@@ -8,6 +8,7 @@ import type { DistinguishingInput } from "./precheck.ts";
 import { printProgram } from "./printer.ts";
 
 export const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const FIXTURE_CONFIG=new URL('../../../tsconfig.fixtures.json',import.meta.url);
 export interface Manifest {
   version: 1;
   generatorVersion: string;
@@ -47,7 +48,7 @@ export function writeProgram(directory: string, input: ProgramModel,
   mkdirSync(join(directory, "src"), { recursive: true });
   writeFileSync(join(directory, "src", "main.ts"), source);
   writeFileSync(join(directory, "tsconfig.json"), json({
-    extends: resolve(ROOT, "tsconfig.fixtures.json"), compilerOptions: { strict: true }, include: ["src"],
+    extends: fileURLToPath(FIXTURE_CONFIG), compilerOptions: { strict: true }, include: ["src"],
   }));
   // nts resolves the sidecar from the entry file, not from tsconfig.json.
   // Keep the root copy requested by the handoff and the consumed copy identical.

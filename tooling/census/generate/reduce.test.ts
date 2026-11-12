@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reduceProgram, statementDeletionCandidates } from "./reduce.ts";
 import { precheckProgram } from "./precheck.ts";
@@ -38,10 +38,9 @@ test("text reduction deletes whole multiline statements, not arbitrary lines", (
 test("model then text shrinking retains strict/Node/witness and every oracle control gate", async context => {
   const directory = mkdtempSync(join(tmpdir(), "nts-generator-reducer-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
   mkdirSync(join(directory, "src"));
   writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
-    extends: join(root, "tsconfig.fixtures.json"), include: ["src"],
+    extends: fileURLToPath(new URL('../../../tsconfig.fixtures.json',import.meta.url)), include: ["src"],
   }));
   const expectation = "all: count array.get.checked in control == 0";
   const functions: FunctionSpec[] = [

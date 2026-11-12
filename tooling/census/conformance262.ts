@@ -135,11 +135,12 @@ import {cacheLocation} from '../gate/cache-capabilities.ts';
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
 import {hostObservations} from "../gate/host-observations.ts";
+import {dataDirectory} from '../gate/reader-inputs.ts';
 import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
@@ -164,6 +165,7 @@ import { ownTemporary } from "../gate/canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
 const argvEarly = process.argv.slice(2);
 // Which suite: test262, upstream and unedited, or the TypeScript cases. The
 // suite's root is what every path is relative to.
@@ -184,7 +186,7 @@ const flag = (name, fallback) => {
   return at === -1 ? fallback : argv[at + 1];
 };
 const flagAll = (name) => argv.flatMap((arg, at) => (arg === name ? [argv[at + 1]] : []));
-const under = flag("--under", TYPESCRIPT ? "tests/typescript" : "test/language");
+const under = flag("--under", TYPESCRIPT ? relative(ROOT,fileURLToPath(TYPESCRIPT_CASES)) : "test/language");
 // Eight, not a fraction of the cores: memory, not CPU, is what ran out. The
 // frontend is the large process, and eight of them at their ordinary ~100 MB
 // leave room for one case that climbs to the cap.
@@ -393,8 +395,8 @@ const partial = sample > 0 || recordedFile !== null || casesNamed.length > 0;
 
 // --- exclusions ------------------------------------------------------------
 
-const FEATURES = JSON.parse(readFileSync(join(HERE, "features.json"), "utf8"));
-const EXTRA = JSON.parse(readFileSync(join(HERE, "test262-exclusions.json"), "utf8"));
+const FEATURES = JSON.parse(readFileSync(new URL('./features.json',import.meta.url), "utf8"));
+const EXTRA = JSON.parse(readFileSync(new URL('./test262-exclusions.json',import.meta.url), "utf8"));
 
 /**
  * `{ id, kind, match, reason, authority }` -- one list, from two ledgers.

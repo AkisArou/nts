@@ -72,6 +72,7 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // merged what applies, 1 for a delta it cannot read or that names a record
 // no recorder writes (before writing anything), and it does not commit.
 import assert from "node:assert/strict";
+import {dataDirectory} from '../gate/reader-inputs.ts';
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -100,6 +101,9 @@ import { inventory, listedIn, pendingLine } from "./pending.ts";
 export const KINDS = ["oracle-counts", "typescript", "test262", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
+const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
+const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
+const OUTCOMES_RECORDER=new URL('../conformance/outcomes-check.ts',import.meta.url);
 
 /**
  * The gate steps whose checks hold each kind's records: a kind is recorded
@@ -158,7 +162,7 @@ export function findPending(root: string, kind: Kind): Pending[] {
       // new: they are what its census listed (acceptedIn's listed pending).
       return [];
     case "typescript": {
-      const sources = selectTypescript(root, "tests/typescript").map(row => row.path);
+      const sources = selectTypescript(root, relative(SOURCE_ROOT,fileURLToPath(TYPESCRIPT_CASES))).map(row => row.path);
       return BACKENDS.flatMap(backend => pendingCases(parseTypeScriptRecord(read(root, typescriptRecord(backend))), sources)
         .map(name => ({ kind, name, record: typescriptRecord(backend) })));
     }
@@ -260,7 +264,7 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       // The JVM, which bench-agree checks (BENCH_AGREE_BACKENDS).
       return [["tooling/differential/check-consumers.ts", "benchmarks", "--record-pending"]];
     case "outcomes":
-      return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
+      return [[relative(SOURCE_ROOT,fileURLToPath(OUTCOMES_RECORDER)), "--record-pending"]];
     case "dex":
       return [["tooling/android/dex-record.ts", "record-pending"]];
     case "compile-times": {
