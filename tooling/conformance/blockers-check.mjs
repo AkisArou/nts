@@ -886,7 +886,7 @@ if (worker) {
     // The fixture leases have ended; integrity must acquire its own case tokens.
     const env = { ...process.env, NTS_BIN: compiler };
     delete env.NTS_GATE_TOKEN_HELD;
-    const check = spawnSync("node", [join(HERE, "integrity.ts"), ...pending.map((n) => join("tests/refusals", n))], {
+    const check = spawnSync("node", [fileURLToPath(new URL("./integrity.ts", import.meta.url)), ...pending.map((n) => join("tests/refusals", n))], {
       cwd: ROOT,
       encoding: "utf8",
       env,

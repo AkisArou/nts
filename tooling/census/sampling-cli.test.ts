@@ -28,7 +28,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
   const fixture=join(scratch,'fixture'),census=join(fixture,'tooling/census');mkdirSync(census,{recursive:true});
   for(const name of readdirSync(join(repository,'tooling/census'))){
     const from=join(repository,'tooling/census',name),to=join(census,name);
-    if(name==='conformance262.ts')copyFileSync(from,to);else symlinkSync(from,to);
+    if(name==='conformance262.ts')copyFileSync(fileURLToPath(new URL('./conformance262.ts',import.meta.url)),to);else symlinkSync(from,to);
   }
   for(const name of readdirSync(join(repository,'tooling')))if(name!=='census')symlinkSync(join(repository,'tooling',name),join(fixture,'tooling',name));
   mkdirSync(join(fixture,'tests/typescript/private'),{recursive:true});
