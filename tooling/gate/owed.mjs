@@ -80,6 +80,7 @@ import { selectRange, SelectionInfrastructureError, selectionInfrastructure, ste
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
+import { moduleClosure } from "./module-closure.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
 /**
@@ -1375,8 +1376,19 @@ export function corpusInputs() {
  * paths a step's body in all.sh names, and what each named script names and
  * imports in turn.
  */
-export function stepInputs() {
+function stepInputGraph() {
   return once("stepInputs", () => {
+    // Exact runtime inputs of their declared readers. These are launched or
+    // spliced as source rather than imported as modules. Inference may find
+    // other readers, but cannot add entries to this declaration.
+    /** @type {Readonly<Record<string, readonly string[]>>} */
+    const runtimeInputs = {
+      "tooling/census/definitions.ts": ["tooling/gate/definitions"],
+      "tooling/conformance/integrity.ts": ["tooling/conformance/integrity.known"],
+      "tooling/census/conformance262.ts": ["tooling/census/attempt262-worker.ts"],
+      "tooling/census/typescript-oracles.ts": ["tooling/census/attempt262-worker.ts"],
+      "tooling/census/project.ts": ["harness.ts", "harness-donotevaluate.ts", "harness-done.ts", "harness-throws.ts", "harness-compare-array.ts"].map(name => `tooling/census/${name}`),
+    };
     const toolingTests=discoverToolingTests(TREE);
     const text = readFileSync(join(TREE, "tooling/gate/all.sh"), "utf8");
     const bodies = new Map();
@@ -1416,8 +1428,15 @@ export function stepInputs() {
         .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p) || DATA.test(p)),
       ...[...code(body).matchAll(/["'](benchmarks)["']/g)].map((m) => m[1]),
     ];
+    // Canonical step declarations and collected entries can place an input.
+    // A glob's expansion and paths found recursively in source text cannot:
+    // they describe conservative reach, not an execution declaration.
+    const exact = (/** @type {string} */ body) => [...code(body).matchAll(PATH)]
+      .map(match => match[1]).filter(path => !/[*?]/.test(path)
+        && existsSync(join(TREE, path)) && statSync(join(TREE, path)).isFile());
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new Map();
+    const declared = new Set();
     const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1];
@@ -1427,6 +1446,7 @@ export function stepInputs() {
       // their step reach after all.sh stops naming fixed folder globs.
       const queue = step === "tooling" ? [...toolingTests.files]
         : toolingTests.exclusions.filter(row=>row.step===step).map(row=>row.path);
+      const entries = [...queue];
       // The step's function, and every all.sh function it calls (llvm calls
       // backend_examples, which runs agree.mjs).
       const fns = [command.split(/\s+/)[0]];
@@ -1434,12 +1454,26 @@ export function stepInputs() {
         const body = bodies.get(fns[k]);
         if (body === undefined) continue;
         queue.push(...named(body));
+        entries.push(...exact(body));
         // Called: a function name where a command starts, not any word.
         for (const m of code(body).matchAll(/(?:^|[;&|(]|\$\(|then|do|else)\s*([a-z_][a-z0-9_]*)\b/gm)) {
           if (bodies.has(m[1]) && !fns.includes(m[1])) fns.push(m[1]);
         }
       }
       queue.push(...named(` ${command.replace(/^\.\//, "")}`));
+      entries.push(...exact(` ${command.replace(/^\.\//, "")}`));
+      // The parser follows import/export declarations, never data strings
+      // containing import-shaped text or paths quoted by a private fixture.
+      const placed = new Set();
+      while (entries.length) {
+        const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
+        if (!batch.length) break;
+        for (const input of moduleClosure(batch, { sourceRoot: TREE })) {
+          if (placed.has(input)) continue;
+          placed.add(input); declared.add(input); add(input, step); queue.push(input);
+          entries.push(...(runtimeInputs[input] ?? []));
+        }
+      }
       const seen = new Set();
       while (queue.length) {
         const input = normalize(queue.shift()).split("\\").join("/");
@@ -1482,9 +1516,11 @@ export function stepInputs() {
       const [, taker, giver] = m;
       for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
     }
-    return map;
+    return { reach: map, declared };
   });
 }
+
+export function stepInputs() { return stepInputGraph().reach; }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
 export function covering(map, path) {
@@ -1629,7 +1665,7 @@ export function owed(changes) {
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unrun = true;
+      if (rule.placedBy === "stepInputs" && !stepInputGraph().declared.has(path)) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.
@@ -1678,11 +1714,10 @@ export function owed(changes) {
       // are owed by their own rules, and a fixture's wide steps run in the
       // full run like any other change's.
       add("an input to what a gate step runs", path, steps, { wide: /^tooling\//.test(path) }, projects);
-      gave += steps.length;
     }
 
     if (unplaced) full.push(`${path} (${unplaced})`);
-    else if (gave === 0 && !settled) full.push(path);
+    else if (gave === 0 && !settled && !stepInputGraph().declared.has(path)) full.push(path);
   }
 
   if (full.length) {

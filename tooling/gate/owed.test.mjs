@@ -35,6 +35,62 @@ test('an unplaced path owes the full gate whether or not the host audit reaches 
   }
 });
 
+test('fixture globs, ancestors and data strings add reach without placing unknown paths', t => {
+  const root = mkdtempSync(join(tmpdir(), 'owed-inferred-inputs-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const put = (/** @type {string} */ path, /** @type {string} */ text) => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); };
+  const env = fixtureEnvironment(t);
+  const git = (.../** @type {string[]} */ args) => {
+    const result = spawnSync('git', args, { cwd: root, env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  };
+  put('Cargo.toml', '[package]\nname="selector-fixture"\nversion="0.0.0"\nedition="2021"\n');
+  put('src/lib.rs', '');
+  put('tooling/gate/all.sh', '#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tooling proof; exit; fi\nstep "tooling" node tooling/runner.ts\nstep "proof" node tooling/census/exact.ts\n');
+  put('tooling/gate/run.mjs', '');
+  put('tooling/gate/tooling-test-exclusions.json', '[]');
+  put('tooling/runner.ts', '');
+  put('tooling/entry.test.ts', '');
+  put('tooling/census/exact.ts', 'import "./dependency.ts";\n');
+  put('tooling/census/dependency.ts', '');
+  const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts'];
+  for (const path of [...unknown, 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh']) put(path, '');
+  git('init', '--quiet', '--initial-branch=main');
+  const paths = [...unknown, 'tooling/census/exact.ts', 'tooling/census/dependency.ts', 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh'];
+  /** @returns {{path:string, full:boolean, steps:string[], reach:string[]}[]} */
+  const snapshot = () => {
+    const script = `import {owed,gateSteps,stepInputs,covering} from ${JSON.stringify(new URL('./owed.mjs', import.meta.url).href)};
+      const paths=${JSON.stringify(paths)};
+      process.stdout.write(JSON.stringify(paths.map(path=>{const rules=owed([{path,added:true}]);return {path,full:rules.some(r=>r.full),steps:gateSteps(rules),reach:[...covering(stepInputs(),path)]};})));`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: root, env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const before = snapshot();
+  // The exact literal that broke #722 is data owned by this private fixture.
+  put('tooling/entry.test.ts', 'const config={exclude:["${configDir}/tooling/**/*"]};\nconst ancestor="tooling/census/fixtures";\nconst body="import \'./census/data-only.ts\'";\n');
+  const after = snapshot();
+  for (const path of unknown) {
+    assert.ok(before.find(row => row.path === path)?.full, path);
+    const row = after.find(row => row.path === path);
+    assert.ok(row);
+    assert.ok(row.reach.includes('tooling'), path + ' gained inferred reach');
+    assert.ok(row.full, path + ' retained its full fallback');
+  }
+  for (const path of ['tooling/census/exact.ts', 'tooling/census/dependency.ts']) {
+    const row = after.find(row => row.path === path);
+    assert.ok(row);
+    assert.equal(row.full, false, path + ' is a declared entry or static dependency');
+    assert.ok(row.steps.includes('proof'));
+  }
+  for (const path of ['runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh']) {
+    const old = before.find(row => row.path === path), next = after.find(row => row.path === path);
+    assert.ok(old && next);
+    assert.equal(next.full, old.full, path + ' keeps its ordinary placement');
+    superset(next.steps, old.steps, path + ' keeps every ordinary obligation');
+  }
+});
+
 test('each program consumer owes one shared producer before native execution',()=>{
   for(const step of ['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree']){
     assert.deepEqual(gateSteps([{precise:true,steps:[step]}]),['program-oracles',step]);
@@ -585,11 +641,13 @@ test("the finite Node preload planner and the harness it reads owe their tooling
     assert.deepEqual([...stepsFor(path)].sort(),[...new Set([...always,"tooling"])].sort(),path);
 });
 
-test("the host project retains conservative quoted-basename reader reach",()=>{
+test("inferred quoted-basename reach cannot place the host project",()=>{
   // The generic beside-file heuristic also sees case-local 'tsconfig.json'
   // literals in other readers. Its over-selection is a separate gate finding;
   // this path's explicit rule never removes those additive obligations.
-  assert.deepEqual([...stepsFor('tooling/conformance/tsconfig.json')].sort(),[
+  const rules = owed([{path:'tooling/conformance/tsconfig.json',added:false}]);
+  assert.ok(rules.some(rule => rule.full), 'a basename inferred from fixture text is not a declaration');
+  superset(gateSteps(rules),[
     'assembles','blockers','build','c-compiles','clippy','compile-time','compile-time-rc','definitions',
     'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types','types',
   ]);
