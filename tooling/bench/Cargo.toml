@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "nts-bench"
 version.workspace = true
 edition.workspace = true
@@ -27,3 +28,7 @@ serde_json.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

@@ -24,28 +24,11 @@ fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-/// The runtime jar, copied somewhere this process owns.
-///
-/// `runtime_jar.rs` rewrites the checked-in path **in place**, so a driver that
-/// reads it directly can be handed a half-written archive -- which fails as a
-/// `ZipException` in whichever suite happened to be running and looks exactly
-/// like the thing under test being broken.
+#[path = "../../../test-support/runtime_jar.rs"]
+mod runtime_jar_support;
+
 fn runtime_jar() -> PathBuf {
-    static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-    JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
-            || repository().join("runtime/jvm/nts-runtime.jar"),
-            PathBuf::from,
-        );
-        let mine =
-            std::env::temp_dir().join(format!("nts-runtime-store-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() {
-            mine
-        } else {
-            source
-        }
-    })
-    .clone()
+    runtime_jar_support::runtime_jar(&repository())
 }
 
 fn tool(name: &str) -> Option<PathBuf> {

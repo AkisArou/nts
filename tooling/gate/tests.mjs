@@ -39,8 +39,16 @@ import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
 import { TestScratch } from "./test-scratch.ts";
 import { exitAfterOutput } from "./exit.ts";
+import {assertTestLayout} from './test-layout.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+try {
+  const layout=assertTestLayout(ROOT);
+  console.log(`  Rust integration layout: ${layout.harnesses.length} checked harnesses`);
+} catch(error) {
+  console.log(`  NOT MEASURED: Rust integration layout: ${String(error)}`);
+  process.exit(2);
+}
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
 const PROFILE = process.env.NTS_TEST_PROFILE ?? "";
 if (PROFILE !== "" && !/^[a-z][a-z0-9-]*$/.test(PROFILE)) {

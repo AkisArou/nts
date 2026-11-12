@@ -411,17 +411,19 @@ fn nothing_to_map_writes_nothing() {
 #[test]
 fn extends_names_the_config_beside_it_even_from_a_relative_path() {
     let root = fixture("extends");
-    let relative = Utf8PathBuf::from("packages/app/tsconfig.json");
-    // The only test here that touches the process-wide working directory, and
-    // it restores it before asserting so a failure cannot strand the others.
-    let previous = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&root).unwrap();
-    let result = nts_deps::acquire(
-        Utf8Path::new("packages/app"),
-        &relative,
-        &nts_deps::Options::default(),
-    );
-    std::env::set_current_dir(previous).unwrap();
+    // Keep the argument relative without changing the cwd shared by tests.
+    let current = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
+    let mut base = current.as_path();
+    let mut prefix = Utf8PathBuf::new();
+    while !root.starts_with(base) {
+        base = base.parent().expect("a shared filesystem root");
+        prefix.push("..");
+    }
+    let project = prefix
+        .join(root.strip_prefix(base).unwrap())
+        .join("packages/app");
+    let relative = project.join("tsconfig.json");
+    let result = nts_deps::acquire(&project, &relative, &nts_deps::Options::default());
     result.expect("acquisition succeeds");
 
     let text = std::fs::read_to_string(root.join("packages/app/tsconfig.nts.json")).unwrap();

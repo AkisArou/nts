@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "nts-codegen-llvm"
 version.workspace = true
 edition.workspace = true
@@ -19,3 +20,7 @@ nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
 nts-codegen-c.workspace = true
 camino.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

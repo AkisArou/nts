@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "nts-react"
 description = "The React lane's compiler stage: TSX through the upstream Rust React Compiler, its output typed again and its JSX lowered, as source nts builds"
 version.workspace = true
@@ -31,3 +32,7 @@ react_compiler_diagnostics.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

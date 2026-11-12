@@ -208,6 +208,19 @@ made them appear covered, and unchecked code accumulated thousands of diagnostic
 
 ## Fixtures
 
+**Rust integration cases join their crate's declared harness.** Cargo's automatic
+test discovery is disabled: add a named `#[path]` module to `tests/integration.rs`,
+or to the relevant `tests/integration_<topic>.rs` in core. Core's topics are
+scalars, numbers, strings, arrays, collections, erasure, interfaces, classes,
+signatures, dispatch, control, memory, ranges, providers, lowering and modules.
+Choose the topic whose behavior the case checks; keep the case at its existing
+path. `tooling/gate/test-layout.ts` checks ownership and rejects an omitted case,
+a duplicate or a new per-file target. Its compiled inventory comparison proves
+layout changes retain every test and its multiplicity. On 2026-11-11, hundreds
+of per-file binaries repeatedly linked the whole compiler; one giant core
+harness instead made a single-test edit expensive, so core uses topic harnesses.
+Cases in a harness share a process: keep mutable state private to each test.
+
 The corpora are the specification: `tests/programs/` (compiled and compared with
 node), `tests/refusals/` (must refuse, with the `// expect:`
 message), `tests/outcomes/` (a recorded wrong answer or crash,

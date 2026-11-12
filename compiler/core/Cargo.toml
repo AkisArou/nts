@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "nts-core"
 version.workspace = true
 edition.workspace = true
@@ -20,3 +21,67 @@ camino.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "integration_scalars"
+path = "tests/integration_scalars.rs"
+
+[[test]]
+name = "integration_numbers"
+path = "tests/integration_numbers.rs"
+
+[[test]]
+name = "integration_strings"
+path = "tests/integration_strings.rs"
+
+[[test]]
+name = "integration_arrays"
+path = "tests/integration_arrays.rs"
+
+[[test]]
+name = "integration_collections"
+path = "tests/integration_collections.rs"
+
+[[test]]
+name = "integration_erasure"
+path = "tests/integration_erasure.rs"
+
+[[test]]
+name = "integration_interfaces"
+path = "tests/integration_interfaces.rs"
+
+[[test]]
+name = "integration_classes"
+path = "tests/integration_classes.rs"
+
+[[test]]
+name = "integration_signatures"
+path = "tests/integration_signatures.rs"
+
+[[test]]
+name = "integration_dispatch"
+path = "tests/integration_dispatch.rs"
+
+[[test]]
+name = "integration_control"
+path = "tests/integration_control.rs"
+
+[[test]]
+name = "integration_memory"
+path = "tests/integration_memory.rs"
+
+[[test]]
+name = "integration_ranges"
+path = "tests/integration_ranges.rs"
+
+[[test]]
+name = "integration_providers"
+path = "tests/integration_providers.rs"
+
+[[test]]
+name = "integration_lowering"
+path = "tests/integration_lowering.rs"
+
+[[test]]
+name = "integration_modules"
+path = "tests/integration_modules.rs"

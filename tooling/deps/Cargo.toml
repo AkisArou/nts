@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "nts-deps"
 version.workspace = true
 edition.workspace = true
@@ -20,3 +21,7 @@ xxhash-rust.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

@@ -53,7 +53,8 @@ fn tool(name: &str) -> Option<PathBuf> {
 ///
 /// `--date` pins the archive's timestamps and `--release 8` pins the class file
 /// version, so the only thing that can move the bytes is the source. Regenerate
-/// with `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test runtime_jar`.
+/// with `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test integration
+/// runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact`.
 #[test]
 fn the_jar_matches_the_sources_it_was_built_from() {
     if tool("javac").is_none() || tool("jar").is_none() {
@@ -62,6 +63,17 @@ fn the_jar_matches_the_sources_it_was_built_from() {
     let root = root();
     let checked_in = root.join("runtime/jvm/nts-runtime.jar");
     let regenerate = std::env::var("NTS_REGENERATE").is_ok_and(|value| value != "0");
+    if regenerate {
+        let args: Vec<_> = std::env::args().skip(1).collect();
+        assert!(
+            args.iter().any(|arg| arg == "--exact")
+                && args
+                    .iter()
+                    .any(|arg| arg == "runtime_jar::the_jar_matches_the_sources_it_was_built_from"),
+            "regeneration must run alone: NTS_REGENERATE=1 cargo test -p nts-codegen-jvm \
+             --test integration runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact"
+        );
+    }
     let rebuilt = if regenerate {
         checked_in.clone()
     } else {
@@ -93,14 +105,15 @@ fn the_jar_matches_the_sources_it_was_built_from() {
         theirs.len(),
         "runtime/jvm/nts-runtime.jar is {} bytes and rebuilding its sources \
          gives {} -- run `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm \
-         --test runtime_jar`",
+         --test integration runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact`",
         ours.len(),
         theirs.len()
     );
     assert!(
         ours == theirs,
         "runtime/jvm/nts-runtime.jar does not match its sources -- run \
-         `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test runtime_jar`"
+         `NTS_REGENERATE=1 cargo test -p nts-codegen-jvm --test integration \
+         runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact`"
     );
 }
 

@@ -48,6 +48,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.ts";
 import { defaultSlots } from "./budget.ts";
+import {assertTestLayout} from './test-layout.ts';
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
 let launchEnvironment:NodeJS.ProcessEnv=process.env;
@@ -143,6 +144,7 @@ function changedPaths(base: string): string[] {
 
 function packages(): Package[] {
   const metadata = JSON.parse(text("cargo", ["metadata", "--no-deps", "--format-version", "1"]));
+  assertTestLayout(ROOT,metadata.packages);
   return metadata.packages.map((pkg: { name: string; manifest_path: string }) => ({
     name: pkg.name,
     dir: pkg.manifest_path.slice(ROOT.length + 1).replace(/\/Cargo\.toml$/, ""),
