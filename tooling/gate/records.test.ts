@@ -63,6 +63,12 @@ test("the real records step validates benchmark evidence and its rendered table"
     const rewritten=call();assert.equal(rewritten.status,1);assert.match(rewritten.stderr,/immutable.*rewritten/);
     writeFileSync(path,original);writeFileSync(page,rendered);
     const restored=call();assert.equal(restored.status,0,restored.stderr);
+    const subject=join(root,"tests/programs/pending");mkdirSync(join(subject,"src"),{recursive:true});
+    writeFileSync(join(subject,"tsconfig.json"),'{"files":["src/main.ts"]}');
+    writeFileSync(join(subject,"src/main.ts"),"export function work(n:number):number{return n;}\n");
+    const pending=call();assert.equal(pending.status,0,pending.stderr);
+    assert.match(pending.stdout,/pending: tests\/programs\/pending is not recorded in results\/oracle-counts\/tests\/programs\/pending\.json yet/,
+      "the controller must see pending work even when no other step lists it");
     writeFileSync(join(root,"docs/records/1234-a.md"),"first\n");writeFileSync(join(root,"docs/records/1234-b.md"),"second\n");
     const duplicate=call();assert.equal(duplicate.status,1);assert.match(duplicate.stderr,/1234-a.md/);assert.match(duplicate.stderr,/1234-b.md/);
     rmSync(join(root,"docs/records/1234-b.md"));rmSync(join(root,"docs/records/0099-second.md"));

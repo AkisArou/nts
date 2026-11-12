@@ -3,7 +3,8 @@ import {readdirSync} from "node:fs";
 import {join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {checkRecords as checkBenchmarkRecords} from "../bench/run-record.ts";
-import {readRecords} from "../differential/oracle-records.ts";
+import {pendingFixtures,readRecords,recordPath} from "../differential/oracle-records.ts";
+import {pendingLine} from "../records/pending.ts";
 import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identities.ts";
 
 // Existing collisions are named, never allowed by count: fixing one cannot
@@ -36,6 +37,7 @@ export function checkRecords(root:string,report:(message:string)=>void,env:NodeJ
   const problems=oracleIdentityProblems(root,readRecords(root).rows,env);
   report(oracleIdentityScope());
   if(problems.length)throw Error(problems.join("\n"));
+  for(const fixture of pendingFixtures(root))report(pendingLine(fixture,recordPath(fixture)));
   report(`${numbers.count} records, ${KNOWN_DUPLICATE_RECORDS.length} numbers claimed twice and named; benchmark run records and table validated`);
 }
 
