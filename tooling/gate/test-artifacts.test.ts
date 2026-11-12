@@ -6,7 +6,7 @@ import {  existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { cleanDevProfile, pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_BUILD_WORKING_BYTES, TEST_DISK_FLOOR_BYTES, testBuildAdmissionProblem } from "./test-artifacts.ts";
+import { cleanDevProfile, pruneTestArtifacts, TEST_BUILD_WORKING_BYTES, TEST_DISK_FLOOR_BYTES, testBuildAdmissionProblem } from "./test-artifacts.ts";
 
 test("cache admission preserves one measured live set and leaves disk working space", () => {
   const gib = 2 ** 30;
@@ -63,7 +63,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
     const cargo = (args: string[], env: Record<string, string> = {}) => {
       const result = spawnSync("cargo", args, {
         cwd: root, encoding: "utf8",
-        env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, CARGO_TERM_COLOR: "never", ...env },
+        env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: "line-tables-only", CARGO_PROFILE_DEV_OPT_LEVEL: "1", CARGO_TERM_COLOR: "never", ...env },
       });
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       return result;

@@ -85,14 +85,15 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   // Validate the exact values handed to spawn, not a separate policy projection.
   assertTestInvocation(invocation);
   const child=spawn('cargo',invocation.args,{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
-  let pending='',artifacts=0,problem:unknown;
+  let pending='',artifacts=0,buildFinished=false,problem:unknown;
   const line=(text:string)=>{
     let value:unknown;
     try{value=JSON.parse(text);}catch{process.stdout.write(text+'\n');return;}
     const event=value as {reason?:unknown;message?:{rendered?:unknown}};
-    if(event&&typeof event==='object'&&typeof event.reason==='string'){
+    if(!buildFinished&&event&&typeof event==='object'&&['compiler-artifact','compiler-message','build-script-executed','build-finished'].includes(String(event.reason))){
       try{if(assertTestArtifact(invocation,event))artifacts++;}catch(error){problem??=error;}
       if(event.reason==='compiler-message'&&typeof event.message?.rendered==='string')process.stdout.write(event.message.rendered);
+      if(event.reason==='build-finished')buildFinished=true;
     }else process.stdout.write(text+'\n');
   };
   child.stdout.setEncoding('utf8');
@@ -104,6 +105,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   if(pending)line(pending);
   if(problem)throw problem;
   if(status===0&&!artifacts)fail(route+' produced no compiler-artifact evidence');
+  if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
   return status;
 }
 

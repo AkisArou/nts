@@ -7,7 +7,7 @@ export type RecordPublication={file:string;line:number;source:string};
 type Binding={value:Node;member?:string};
 
 /** Consume the host audit's leased root, and retain only detached findings. */
-export function inspectRecordPublications(file:string,source:string,shared?:import('typescript/sync').API,root?:Node):RecordPublication[]{
+export function inspectRecordPublications(file:string,source:string,shared?:import('typescript/sync').API,root?:Node,inspectGenerated?:(source:string,root:Node,offset:number)=>void):RecordPublication[]{
   const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
   const ast=require('typescript/ast') as typeof import('typescript/ast');
   const api=shared??new API(),found:RecordPublication[]=[],seen=new Set<string>(),parsed=new Set<string>();
@@ -164,7 +164,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
         }
       }
     }
-    try{for(const call of calls)visit(call);}finally{lease?.dispose();}
+    try{if(generated)inspectGenerated?.(text,tree,offset);for(const call of calls)visit(call);}finally{lease?.dispose();}
   }
   try{parse(source,0,false,0,root);}finally{if(!shared)api.close();}
   return found;

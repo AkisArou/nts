@@ -9,33 +9,33 @@ export const CARGO_TEST_SOURCE_OWNERS={
   'tooling/gate/test-artifacts.test.ts':'isolated Cargo cache-pruning controls must manufacture obsolete profiles and incremental variants',
 } as const;
 
-export function inspectCargoTestCalls(file:string,source:string,root:Node):string[]{
+export function inspectCargoTestCalls(file:string,source:string,root:Node,offset=0):string[]{
   if(file in CARGO_TEST_SOURCE_OWNERS)return [];
   const ast=createRequire(import.meta.url)('typescript/ast') as typeof import('typescript/ast');
-  const values=new Map<string,Node>(),problems:string[]=[],wrappers=new Map<string,number>();
-  const code=(node:Node)=>source.slice(node.pos,node.end).trim();
-  const gather=(node:Node):void=>{if(ast.isVariableDeclaration(node)&&ast.isIdentifier(node.name)&&node.initializer)values.set(node.name.text,node.initializer);node.forEachChild(gather);};gather(root);
-  const value=(node:Node|undefined,seen=new Set<string>()):Node|undefined=>{
-    if(node&&ast.isIdentifier(node)&&values.has(node.text)&&!seen.has(node.text)){seen.add(node.text);return value(values.get(node.text),seen);}return node;
+  const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Node>>(),problems:string[]=[];
+  const isScope=(node:Node)=>ast.isSourceFile(node)||ast.isBlock(node)||ast.isForStatement(node)||ast.isForOfStatement(node)||
+    [ast.SyntaxKind.FunctionDeclaration,ast.SyntaxKind.FunctionExpression,ast.SyntaxKind.ArrowFunction,ast.SyntaxKind.MethodDeclaration].includes(node.kind);
+  const gather=(node:Node,scope:Node):void=>{
+    if(isScope(node)){scope=node;scopes.set(scope,new Map());}
+    if(ast.isVariableDeclaration(node)&&ast.isIdentifier(node.name)&&node.initializer)scopes.get(scope)!.set(node.name.text,node.initializer);
+    if(ast.isParameterDeclaration(node)&&ast.isIdentifier(node.name))scopes.get(scope)!.set(node.name.text,node.name);
+    node.forEachChild(child=>{parents.set(child,node);gather(child,scope);});
+  };gather(root,root);
+  const value=(node:Node|undefined,seen=new Set<Node>()):Node|undefined=>{
+    if(node&&ast.isIdentifier(node)&&!seen.has(node)){
+      seen.add(node);let at:Node|undefined=node;
+      while(at){const found=scopes.get(at)?.get(node.text);if(found)return value(found,seen);at=parents.get(at);}
+    }
+    if(node&&(ast.isParenthesizedExpression(node)||ast.isAsExpression(node)||ast.isNonNullExpression(node)))return value(node.expression,seen);
+    return node;
   };
   const literal=(node:Node|undefined):string|undefined=>{const item=value(node);return item&&ast.isStringLiteralLikeNode(item)?item.text:undefined;};
-  const add=(node:Node)=>problems.push(file+':'+source.slice(0,node.pos).split('\n').length+': cargo test must run through test-profile.ts');
-  // A helper such as cargo(args) is still an invocation, not inert test data.
-  const helpers=(node:Node,owner?:{name:string;parameters:readonly {name:Node}[]}):void=>{
-    let next=owner;
-    if(ast.isFunctionDeclaration(node)&&node.name)next={name:node.name.text,parameters:node.parameters};
-    if(ast.isVariableDeclaration(node)&&ast.isIdentifier(node.name)&&node.initializer&&ast.isArrowFunction(node.initializer))next={name:node.name.text,parameters:node.initializer.parameters};
-    if(ast.isCallExpression(node)&&literal(node.arguments[0])==='cargo'&&node.arguments[1]&&ast.isIdentifier(node.arguments[1])&&next){
-      const name=node.arguments[1].text,index=next.parameters.findIndex(parameter=>ast.isIdentifier(parameter.name)&&parameter.name.text===name);
-      if(index>=0)wrappers.set(next.name,index);
-    }
-    node.forEachChild(child=>helpers(child,next));
-  };helpers(root);
+  const add=(node:Node)=>problems.push(file+':'+(offset+source.slice(0,node.pos).split('\n').length)+': cargo test must run through test-profile.ts');
   const visit=(node:Node):void=>{
-    if(ast.isCallExpression(node)){
-      const direct=literal(node.arguments[0])==='cargo',wrapped=wrappers.get(code(node.expression));
-      const args=value(direct?node.arguments[1]:wrapped===undefined?undefined:node.arguments[wrapped]);
-      if((direct||wrapped!==undefined)&&(!args||!ast.isArrayLiteralExpression(args)||literal(args.elements[0])==='test'))add(node);
+    if(ast.isCallExpression(node)&&literal(node.arguments[0])==='cargo'){
+      const args=value(node.arguments[1]),first=args&&ast.isArrayLiteralExpression(args)?literal(args.elements[0]):undefined;
+      // Unknown command arrays cannot certify that the helper excludes tests.
+      if(first===undefined||first==='test')add(node);
     }
     node.forEachChild(visit);
   };visit(root);return problems;

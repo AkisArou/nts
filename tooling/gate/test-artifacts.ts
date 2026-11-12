@@ -6,8 +6,6 @@ import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-export const TEST_BUILD_DEBUG = "line-tables-only";
-export const TEST_BUILD_OPT_LEVEL = "1";
 const GIB = 2 ** 30;
 // Measured with all 305 test binaries at opt-level 1: 34.07 GiB including
 // Cargo state. Keep room for a new artifact set above the 40 GiB disk floor.

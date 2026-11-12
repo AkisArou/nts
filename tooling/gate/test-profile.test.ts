@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawnSync} from 'node:child_process';
-import {existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {copyFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
 import {assertTestArtifact,assertTestInvocation,assertTestProfileManifest,testInvocation,TEST_PROFILE_MANIFEST,TEST_ROUTES} from './test-profile.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
+import {inspectRecordPublications} from './test-readiness.ts';
 
 const manifest=readFileSync(TEST_PROFILE_MANIFEST,'utf8');
 for(const route of TEST_ROUTES)test(route+' checks the actual invocation against profile and incremental mutations',()=>{
@@ -56,6 +58,40 @@ process.exit(7);
   assert.equal(refused.status,2,refused.stdout+refused.stderr);
   assert.match(refused.stderr,/CARGO_INCREMENTAL=1/);
   assert.equal(existsSync(capture),false,'a conflict refuses before Cargo starts');
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nprocess.exit(0);\n`,{mode:0o755});
+  const empty=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:undefined}});
+  assert.equal(empty.status,2,empty.stdout+empty.stderr);
+  assert.match(empty.stderr,/produced no compiler-artifact evidence/);
+});
+
+test('the actual frontend shell entry reaches the shared Cargo owner',t=>{
+  const root=newTestScratch('frontend-test-profile');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const tree=join(root,'tree'),bin=join(root,'bin'),capture=join(root,'capture.json');
+  copyModuleClosure(['tooling/gate/test-profile.ts'],tree);
+  copyFileSync(new URL('./all.sh',import.meta.url),join(tree,'tooling/gate/all.sh'));
+  mkdirSync(bin);mkdirSync(join(tree,'compiler/frontend-tsrs'),{recursive:true});
+  writeFileSync(join(tree,'compiler/frontend-tsrs/vendor.ts'),'// private vendor input control\n');
+  writeFileSync(join(tree,'compiler/frontend-tsrs/private.test.ts'),"import {test} from 'node:test';test('private vendor test',()=>{});\n");
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}
+const {durableRecord}=require(${JSON.stringify(new URL('./durable-record.ts',import.meta.url).pathname)});durableRecord(${JSON.stringify(capture)},{args:process.argv.slice(2),incremental:process.env.CARGO_INCREMENTAL});
+console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(tree,'target/nts-dev/deps/private'))}],profile:{test:true,debuginfo:0}}));process.exit(7);
+`,{mode:0o755});
+  const ran=spawnSync('sh',[join(tree,'tooling/gate/all.sh'),'--call','frontend-tsrs'],{cwd:tree,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:[bin,dirname(process.execPath),'/usr/bin'].join(':'),CARGO_INCREMENTAL:undefined,NTS_JOBS:undefined,CARGO_TARGET_DIR:join(tree,'target')}});
+  assert.equal(ran.status,7,ran.stdout+ran.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(capture,'utf8')),{args:testInvocation('frontend',[],{}).args,incremental:'1'});
+});
+
+test('real Cargo artifact reports end before a test can print its own JSON',t=>{
+  const root=newTestScratch('test-profile-json-output');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  mkdirSync(join(root,'src'));
+  const profile=manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]'));
+  writeFileSync(join(root,'Cargo.toml'),'[package]\nname="profile-output"\nversion="0.0.0"\nedition="2024"\n'+profile);
+  const output='{"reason":"compiler-artifact","filenames":["/subject-output"],"profile":{"debuginfo":2}}';
+  writeFileSync(join(root,'src/lib.rs'),'#[test] fn prints_json() { println!("\\n{}", r#"'+output+'"#); }\n');
+  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'inner','--','--nocapture'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined}});
+  assert.equal(ran.status,0,ran.stdout+ran.stderr);
+  assert.ok(ran.stdout.includes(output),ran.stdout);
+  assert.equal(existsSync(join(root,'target/debug')),false);
 });
 
 test('the source rule follows invocation values and wrappers, and parses shell commands',()=>{
@@ -67,10 +103,16 @@ test('the source rule follows invocation values and wrappers, and parses shell c
       'const args=["test"]; execFileSync("cargo",args);',
       'const tool="cargo"; spawn(tool,["test"]);',
       'function cargo(args){return spawnSync("cargo",args);} cargo(["test"]);',
+      'const args=["test"]; { const args=["metadata"]; spawnSync("cargo",args); } spawnSync("cargo",args);',
+      'spawnSync("cargo",[...args]);',
     ])assert.ok(inspect(source).length,source);
     assert.deepEqual(inspect('const expected=["test"]; spawnSync("cargo",["metadata"]);'),[]);
     assert.equal(inspectShellCargoTests('tooling/private.sh','echo "cargo test"\n# cargo test\ncargo build\n').length,0);
     for(const source of ['cargo test --workspace','exec cargo test --workspace',"'cargo' 'test' --workspace"])
       assert.equal(inspectShellCargoTests('tooling/private.sh',source).length,1,source);
+    const generated:string[]=[];
+    inspectRecordPublications('tooling/private.test.ts','import {writeFileSync} from "node:fs"; writeFileSync("launcher.cjs", `const cp=require("node:child_process"); cp.spawnSync("cargo", ["test"]);`);',api,undefined,
+      (text,tree)=>{generated.push(...inspectCargoTestCalls("tooling/private.test.ts",text,tree));});
+    assert.equal(generated.length,1,'a generated launcher cannot bypass the invocation owner');
   }finally{api.close();}
 });

@@ -142,10 +142,11 @@ export function auditTestHost(root:string,debt?:HostDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
   const inspect=(file:string,source:string,node:Node)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
-    moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
+    moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
-    publications.push(...inspectRecordPublications(file,source,api,node));
+    publications.push(...inspectRecordPublications(file,source,api,node,
+      (text,tree,offset)=>testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset))));
   }};
   try {
   const visit=(directory:string,rustOnly=false):void=>{

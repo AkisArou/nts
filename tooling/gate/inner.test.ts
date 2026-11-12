@@ -108,6 +108,7 @@ if(args[0]==='build') {
 }
 if(args[0]==='test') {
   console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(tree,'target/nts-dev/deps/fixture'))}],profile:{test:true,debuginfo:0}}));
+  console.log(JSON.stringify({reason:'build-finished',success:true}));
   if(process.env.NTS_BIN!==${JSON.stringify(compiler)}||process.env.NTS_CHECKERS!=='1') process.exit(24);
   const ran=spawnSync(process.env.NTS_BIN,[],{encoding:'utf8'}); if(ran.status!==0||ran.stdout.trim()!=='fresh') process.exit(25);
 }
