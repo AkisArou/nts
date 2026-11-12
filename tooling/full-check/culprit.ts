@@ -49,12 +49,26 @@ export type SearchInput = {
   reverted: Map<string, string>;
 };
 
-export type SearchResult =
+export type MainProbe = { commit: string; through: string; run: string };
+type HistoryResult =
   | { kind: "culprit"; commit: string; index: number; failed: string[]; flaky: string[]; probes: Probe[] }
   | { kind: "ambiguous"; commits: string[]; failed: string[]; probes: Probe[] }
   | { kind: "explained"; probes: Probe[] }
   | { kind: "flaky"; probes: Probe[] }
   | { kind: "held"; reason: string; probes: Probe[] };
+export type SearchResult = (HistoryResult & { main?: MainProbe })
+  | { kind: "fixed-forward"; commit: string; through: string; probes: Probe[]; main: MainProbe };
+
+/** Main is observed at each decision, not frozen when an older run began. */
+export type Main = {
+  commit(): string;
+  /** The endpoint-union owed rules, including wide reach. Unknown reach throws. */
+  reaches(base: string, tip: string, steps: string[]): boolean;
+};
+
+// A busy history must not keep the controller probing forever. Two changed-
+// input re-probes beyond the initial observation defer the decision instead.
+const MAIN_REPROBES = 2;
 
 /**
  * The first red index of `n` candidates, where index -1 (the last green run)
@@ -94,13 +108,56 @@ export function takenOut(input: SearchInput, index: number): string[] {
     .sort((a, b) => at.get(a)! - at.get(b)!);
 }
 
-export function search(input: SearchInput, measure: Measure): SearchResult {
+export function search(input: SearchInput, measure: Measure, main: Main): SearchResult {
+  const probes: Probe[] = [];
+  if (!input.candidates.length) return { kind: "held", reason: "no commit since the last green run: the red is not a commit's", probes };
+  let attempts = 0;
+  for (;;) {
+    const commit = main.commit();
+    const current = measure(commit, [], input.steps, true);
+    probes.push(current);
+    const held = (reason: string): SearchResult => ({ kind: "held", reason, probes });
+    if (current.verdict === "skip") return held(`newest main ${commit.slice(0, 12)} could not be measured: ${current.reason ?? "no verdict"}`);
+    const advanced = (): { through: string } | { again: true } | { held: SearchResult } => {
+      const tip = main.commit();
+      if (tip === commit) return { through: tip };
+      try {
+        if (!main.reaches(commit, tip, input.steps)) return { through: tip };
+      } catch (error) {
+        return { held: held(`could not establish owed reach after main probe ${commit.slice(0, 12)}: ${String(error)}`) };
+      }
+      if (attempts++ < MAIN_REPROBES) return { again: true };
+      return { held: held(`main changed inputs to ${input.steps.join(", ")} after ${MAIN_REPROBES} fix-forward re-probes; no revert decision`) };
+    };
+    let validity = advanced();
+    if ("held" in validity) return validity.held;
+    if ("again" in validity) continue;
+    if (current.verdict === "green") {
+      // A false green costs another core run; a false revert removes a good
+      // change. Prefer that cheaper error, and retain the deciding probe.
+      return commit === input.candidates.at(-1)
+        ? { kind: "flaky", probes, main: { commit, through: validity.through, run: current.run } }
+        : { kind: "fixed-forward", commit, through: validity.through, probes, main: { commit, through: validity.through, run: current.run } };
+    }
+    const steps = input.steps.filter(step => current.failed.includes(step));
+    if (!steps.length) return held(`newest main ${commit.slice(0, 12)} was red without naming a failed step`);
+    const result = searchHistory({ ...input, steps }, measure, current);
+    probes.push(...result.probes.filter(p => p !== current));
+    validity = advanced();
+    if ("held" in validity) return validity.held;
+    if ("again" in validity) continue;
+    return { ...result, probes, main: { commit, through: validity.through, run: current.run } };
+  }
+}
+
+/** Bisection only sees steps that still fail on main with culprits left in. */
+function searchHistory(input: SearchInput, measure: Measure, current: Probe): HistoryResult {
   const probes: Probe[] = [];
   const n = input.candidates.length;
   const tip = input.candidates[n - 1];
   if (!tip) return { kind: "held", reason: "no commit since the last green run: the red is not a commit's", probes };
   const outAtTip = takenOut(input, n - 1);
-  const confirm = measure(tip, outAtTip, input.steps, true);
+  const confirm = tip === current.base && !outAtTip.length ? current : measure(tip, outAtTip, input.steps, true);
   probes.push(confirm);
   if (confirm.verdict === "skip") return { kind: "held", reason: `the tip could not be measured again: ${confirm.reason ?? "no verdict"}`, probes };
   if (confirm.verdict === "green") return { kind: outAtTip.length ? "explained" : "flaky", probes };

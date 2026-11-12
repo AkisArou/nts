@@ -81,6 +81,8 @@ import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-ret
 import { count as countMachine, countLines, gather, stopSlices as stopCountedSlices, sweep as sweepLeftovers, type CountResult, type Removable, type Stoppable } from "./count.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
+import {selectRange,type RangeSelection} from '../gate/owed-range.ts';
+import {owedReach} from '../landing/selection.ts';
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
 import { landedTimes, landingQueue, submitTo, type LandingAnswer, type LandingQueue } from "./queue.ts";
@@ -109,6 +111,8 @@ export type Effects = {
   queue: LandingQueue;
   /** A live higher-priority memory request, or null when none waits. */
   memoryWaiter: () => string | null;
+  /** Whether changes between these commits reach any of the failed steps. */
+  reaches: (base: string, tip: string, steps: string[]) => boolean;
   /** The units the full check's background work runs in: each part's records unit (background.ts). */
   units: Units;
   /** The Node a tree's own code runs on: the one its .tool-versions pins. */
@@ -326,9 +330,23 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
   // be made included: taken out where it applies, so it hides no other.
   const pending = state.culprits.filter(c => !landed.has(c.commit)).map(c => c.commit);
   fx.log(`culprit search over ${candidates.length} commit(s) since ${short(good)} for ${red.failed.join(", ")}${pending.length ? `, taking out the pending reverts of ${pending.map(short).join(", ")}` : ""}`);
-  const result = search({ good, candidates, steps: red.failed, pending, reverted }, probe(fx, state, part));
+  const result = search({ good, candidates, steps: red.failed, pending, reverted }, probe(fx, state, part), {
+    commit: () => {
+      const main = fx.git.commit("refs/heads/main");
+      if (!main) throw Error("no main for fix-forward probe");
+      return main;
+    },
+    reaches: fx.reaches,
+  });
+  const evidence = result.main;
+  if (evidence) fx.log(`fix-forward decision: main ${short(evidence.commit)}, valid through ${short(evidence.through)}; probe ${evidence.run}`);
   const runs = result.probes.map(p => p.run).filter(Boolean);
   switch (result.kind) {
+    case "fixed-forward": {
+      const decision = `fixed forward at ${short(result.commit)} (probe ${result.main.run})`;
+      fx.log(`${red.failed.join(", ")} ${decision}; no revert or reopened issue; the next core checks main again`);
+      return decision;
+    }
     case "flaky":
       task(fx, state, `- ${red.failed.join(", ")} went red once in the full check's ${part} run at ${short(red.commit)} (${red.run}) and green when measured again: a flaky step.`);
       return "flaky";
@@ -342,9 +360,10 @@ async function searchAndRevert(fx: Effects, state: State, part: Part, red: RunRe
       task(fx, state, `- One of ${result.commits.map(short).join(", ")} turned ${result.failed.join(", ")} red in the full check's ${part} run (${red.run}); the search could not measure between them: find and revert it by hand.`);
       return `ambiguous: ${result.commits.map(short).join(" ")}`;
     case "culprit": {
+      if (!evidence) return "held: the culprit has no newest-main probe";
       const finding: Finding = {
         part, culprit: result.commit, subject: fx.git.subject(result.commit), steps: result.failed, run: red.run,
-        tip: red.commit, good, candidates: candidates.length, probes: runs,
+        tip: red.commit, good, candidates: candidates.length, probes: runs, main: evidence,
       };
       if (result.flaky.length) fx.log(`also red at ${short(red.commit)} once, green when measured again: ${result.flaky.join(", ")}`);
       await revertCulprit(fx, state, finding);
@@ -358,7 +377,7 @@ async function revertCulprit(fx: Effects, state: State, finding: Finding): Promi
     fx.log(`${short(finding.culprit)} was already found; its revert is on the way`);
     return;
   }
-  const main = fx.git.commit("refs/heads/main")!;
+  const main = finding.main.through;
   const made = makeRevert(fx.git, main, finding);
   if ("conflict" in made) {
     state.culprits.push({ commit: finding.culprit, part: finding.part, steps: finding.steps, run: finding.run, found_at: fx.now().toISOString(), revert: null, reason: made.conflict });
@@ -1222,6 +1241,19 @@ export function recordPending(tree: string, pin: string, run: string, part: Part
   return { status: r.status ?? 1, output: tail(log) };
 }
 
+/** Both endpoint policies and their wide reach govern a probe's reuse. */
+export function rangeReaches(git: Git, base: string, tip: string, steps: string[], select: typeof selectRange = selectRange): boolean {
+  if (!git.isAncestor(base, tip)) return true;
+  const range: RangeSelection = select(git.cwd, `${base}..${tip}`);
+  const catalogue = [...new Set(range.views.flatMap(view => view.catalogue))];
+  if (steps.some(step => !catalogue.includes(step))) return true;
+  const reach = new Set([
+    ...(range.checks.steps === "all" ? catalogue : range.checks.steps),
+    ...owedReach(range.views.flatMap(view => view.rules), catalogue),
+  ]);
+  return steps.some(step => reach.has(step));
+}
+
 function production(options: { schedule: Schedule }): Effects {
   const layout = defaultLayout();
   mkdirSync(layout.runs, { recursive: true });
@@ -1231,6 +1263,7 @@ function production(options: { schedule: Schedule }): Effects {
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
     memoryWaiter: () => wideMemoryWaiter(readLedger().waiting),
+    reaches: (base, tip, steps) => rangeReaches(git, base, tip, steps),
     // Each unit at the controller's own priority and on its own CPUs, never the measurement pair.
     units: systemdUnits(lowPriority(gateCpus(inheritedCpus()))),
     node: tree => nodeToolchain(nodePin(tree), launcherEnvironment(process.env)).node,

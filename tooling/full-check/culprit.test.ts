@@ -5,7 +5,15 @@
 // its revert, and a red that does not repeat reverts nothing.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bisect, search, takenOut, type Measure, type Probe, type SearchInput } from "./culprit.ts";
+import { bisect, search as searchAtMain, takenOut, type Main, type Measure, type Probe, type SearchInput } from "./culprit.ts";
+
+/** Existing histories keep main at their tip unless a control moves it. */
+function search(input: SearchInput, measure: Measure, main: Main = {
+  commit: () => input.candidates.at(-1) ?? input.good,
+  reaches: () => true,
+}) {
+  return searchAtMain(input, measure, main);
+}
 
 test("bisection finds the first red commit of every history, in logarithmic probes", () => {
   for (let n = 1; n <= 40; n++) {
@@ -129,4 +137,62 @@ test("the tip itself can be the culprit, and an empty range holds", () => {
   const result = search(m.input(["tests"]), m.measure);
   assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
   assert.equal(search({ good: "g".repeat(40), candidates: [], steps: ["tests"], pending: [], reverted: new Map() }, m.measure).kind, "held");
+});
+
+
+test("newest main is probed with known culprits left in, and a fix ends the search", () => {
+  const m = model(8, { 2: ["tests"] }), latest = "f".repeat(40);
+  const calls: Probe[] = [];
+  const result = search(m.input(["tests"], [2]), (base, reverts, steps, fresh) => {
+    const p = base === latest
+      ? { base, reverts, steps, verdict: "green" as const, failed: [], run: "fix-probe" }
+      : m.measure(base, reverts, steps, fresh);
+    calls.push(p); return p;
+  }, { commit: () => latest, reaches: () => false });
+  assert.equal(result.kind, "fixed-forward");
+  assert.deepEqual(calls.map(p => [p.base, p.reverts]), [[latest, []]]);
+  assert.deepEqual(result.main, { commit: latest, through: latest, run: "fix-probe" });
+});
+
+test("a partial fix searches only the steps still red on newest main", () => {
+  const m = model(8, { 2: ["tests"], 5: ["clippy"] }), latest = "f".repeat(40);
+  const result = search(m.input(["tests", "clippy"]), (base, reverts, steps, fresh) => base === latest
+    ? { base, reverts, steps, verdict: "red", failed: ["clippy"], run: "partial-fix" }
+    : m.measure(base, reverts, steps, fresh),
+  { commit: () => latest, reaches: () => false });
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[5]);
+  assert.deepEqual(result.kind === "culprit" && result.failed, ["clippy"]);
+  assert.ok(result.probes.slice(1).every(p => p.steps.join() === "clippy"));
+});
+
+test("unrelated main changes carry the probe while affected changes require another", () => {
+  for (const affected of [false, true]) {
+    const m = model(8, { 2: ["tests"] }), latest = "f".repeat(40);
+    let tip = m.candidates.at(-1)!;
+    const reaches: string[][] = [];
+    const result = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
+      if (base === latest) return { base, reverts, steps, verdict: "green", failed: [], run: "late-fix" };
+      const p = m.measure(base, reverts, steps, fresh);
+      if (base === m.candidates[2] && fresh) tip = latest;
+      return p;
+    }, { commit: () => tip, reaches: (base, next, steps) => { reaches.push([base, next, ...steps]); return affected; } });
+    assert.equal(result.kind, affected ? "fixed-forward" : "culprit");
+    assert.ok(reaches.length);
+    assert.equal(result.probes.filter(p => p.base === latest).length, affected ? 1 : 0);
+    assert.equal(result.main?.through, latest);
+  }
+});
+
+test("two changed-input re-probes bound a busy history, and unknown reach holds closed", () => {
+  for (const unknown of [false, true]) {
+    const m = model(4, { 1: ["tests"] });
+    let tip = "main-0", count = 0;
+    const result = search(m.input(["tests"]), (base, reverts, steps) => {
+      tip = "main-" + ++count;
+      return { base, reverts, steps, verdict: "red", failed: steps, run: "probe-" + count };
+    }, { commit: () => tip, reaches: () => { if (unknown) throw Error("selector unavailable"); return true; } });
+    assert.equal(result.kind, "held");
+    assert.equal(count, unknown ? 1 : 3);
+    assert.match(result.kind === "held" ? result.reason : "", unknown ? /could not establish owed reach.*selector unavailable/ : /after 2 fix-forward re-probes; no revert/);
+  }
 });

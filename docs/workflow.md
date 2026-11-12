@@ -286,9 +286,20 @@ What follows from a run:
 - **Green core:** the commit is marked `verified` (a branch of that name,
   pushed). Recordings, benchmarks and anything that needs a known-good
   compiler use `verified`, not the tip of `main`.
-- **Red:** the tip and the last green commit are measured again first, so a
-  flaky or machine red reverts nothing. Then the culprit search finds the
-  commit that broke it, among those since that part's last green run. The full check reverts that commit (the
+- **Red:** first, the failed steps are measured freshly on newest main as
+  it is, with no pending culprits taken out. Green records the deciding
+  commit and probe as fixed forward; nothing is reverted or reopened, and
+  the next core checks newest main. A partial fix leaves only the still-red
+  steps for the search. The red tip and the last green commit are measured
+  again, so a flaky or machine red reverts nothing. The culprit search finds
+  the commit that broke the remaining steps among those since the last green
+  run. Before any automatic or hand-revert decision, its main probe must
+  still cover the current inputs: both endpoint owed rules over subsequent
+  changes, including wide reach, decide this. Unrelated commits keep the
+  probe valid. Changed inputs get at most two re-probes, then a named hold;
+  unknown reach also holds. A false green defers a defect to the next core,
+  a cheaper error than reverting a change already fixed forward.
+  The full check reverts a still-red culprit (the
   revert passes the landing check like any change), and re-landing it with a
   fix is a task again: the issue the commit names is reopened, with a comment
   that gives the red steps, their logs, the search and the revert. A commit
@@ -666,6 +677,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **A revert requires a fresh as-is main probe.** A historical red can already
+  be fixed forward. Search only steps still red on newest main, carry its
+  probe only across changes that cannot reach those steps, and bound changed-
+  input retries. The deciding commit and run stay with the finding.
 
 - **Count bands are empirical per column:** the calibration owner writes the
   samples, observed ranges and cohort provenance into results. Native

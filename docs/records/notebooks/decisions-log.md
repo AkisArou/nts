@@ -2439,3 +2439,17 @@ requests instead of waiting synchronously for the directory lock.
 The old thirty-second synchronous retirement refused the full check's types
 and example-refusals steps. The retained investigation and matched controls
 are in [the retirement record](../case-retirement-752.md).
+## A revert requires a fresh as-is main probe (11-12)
+
+The full check bisected an older JVM-verifier failure after its host-infrastructure
+handoff had been fixed forward. It could ask for a partial revert of the case
+lease work even though newest main already had the fix. The search now probes
+the failed steps on newest main with every culprit left in, records a green
+as fixed forward, and bisects only steps still red. The deciding probe remains
+valid across unrelated changes by the endpoint-union owed rules; changed inputs
+allow two re-probes before a named hold. Unknown reach fails closed.
+
+A flaky green that temporarily says fixed forward is accepted: the next core
+catches it again, while a wrong revert removes working code. Fix attribution
+names the deciding main commit instead of spending more suite runs finding the
+first fixing commit. #754.

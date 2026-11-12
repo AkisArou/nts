@@ -16,7 +16,7 @@ import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
 import {applyEveryRow, assertMessage, checkoutIn, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
-import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
+import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, rangeReaches, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
 import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
@@ -50,6 +50,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     queue,
     // Core controls own a waiting agent; wide/benchmark controls select idle explicitly.
     memoryWaiter: options.memoryWaiter ?? (() => options.idle ? null : "fixture agent memory request waits"),
+    reaches: () => true,
     submitted: queue.submitted,
     withdrawn: queue.withdrawn,
     units: options.units ?? stubUnits(),
@@ -253,6 +254,76 @@ test("a red core is searched, and the first red commit's revert is made on main 
   assert.equal(repo.git.commit(`refs/full-check/reverts/${b.slice(0, 12)}`), null);
 });
 
+test("a fix landed during the red run is recorded before any search or issue reopening", async t => {
+  const repo = repository(t), gate = fakeGate(repo), fx = harness(repo, gate);
+  const good = repo.commit({ "src.txt": "base" }, "good");
+  await cycle(fx);
+  const bad = repo.commit({ "RED/typescript-c": "" }, "breaks compiler\n\nFixes #740");
+  let fixed = "";
+  const run = gate.run.bind(gate);
+  gate.run = (commit, steps, label, ...rest) => {
+    const result = run(commit, steps, label, ...rest);
+    if (commit === bad && label === "core") fixed = repo.commit({ "RED/typescript-c": null }, "fix forward");
+    return result;
+  };
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.equal(state.core.last_run?.commit, bad);
+  assert.match(state.core.last_run?.search?.result ?? "", new RegExp("fixed forward at " + fixed.slice(0,12) + ".*probe"));
+  assert.deepEqual(fx.submitted, []);
+  assert.deepEqual(fx.told, []);
+  assert.deepEqual(state.culprits, []);
+  const probes = gate.measured.filter(m => m.label === "core-probe");
+  assert.deepEqual(probes.map(m => [m.commit,m.steps]), [[fixed,["typescript-c"]]]);
+  assert.equal(verified(repo), good, "a step probe is not a complete core verdict");
+  await cycle(fx);
+  assert.equal(gate.measured.at(-1)?.commit, fixed);
+  assert.equal(verified(repo), fixed, "the next core verifies newest main");
+});
+
+test("a partial fix reverts and reopens only the culprit of the remaining red steps", async t => {
+  const repo = repository(t), gate = fakeGate(repo), fx = harness(repo, gate);
+  repo.commit({ "src.txt": "base" }, "good");
+  await cycle(fx);
+  repo.commit({ "RED/tests": "" }, "breaks tests\n\nFixes #101");
+  const bad = repo.commit({ "RED/typescript-c": "" }, "breaks compiler\n\nFixes #102");
+  let fixed = "";
+  const run = gate.run.bind(gate);
+  gate.run = (commit, steps, label, ...rest) => {
+    const result = run(commit, steps, label, ...rest);
+    if (commit === bad && label === "core") fixed = repo.commit({ "RED/tests": null }, "fix tests forward");
+    return result;
+  };
+  await cycle(fx);
+  const state = readState(repo.layout.state), culprit = state.culprits[0]!;
+  assert.deepEqual(state.culprits.map(c => [c.commit,c.steps]), [[bad,["typescript-c"]]]);
+  assert.deepEqual(fx.told.map(told => told.n), [102]);
+  assert.equal(fx.submitted.length, 1);
+  assert.equal(repo.git.run(["rev-parse", culprit.revert! + "^"]), fixed);
+  assertMessage(repo.git, culprit.revert!, /Newest main remained red/, /valid through/, /typescript-c/);
+  assert.ok(gate.measured.filter(m => m.label === "core-probe").slice(1).every(m => m.steps.join() === "typescript-c"));
+});
+
+test("probe carry uses both endpoint rules and wide reach; unknown or non-forward reach cannot narrow", t => {
+  const repo = repository(t);
+  const base = repo.commit({ "src.txt": "base" }, "base");
+  const tip = repo.commit({ "src.txt": "tip" }, "tip");
+  const select = (rules: { name: string; steps: string[]; full?: boolean }[]) => (root: string, range: string) => {
+    assert.equal(root, repo.git.cwd);
+    assert.equal(range, base + ".." + tip);
+    return { base, tip, checks: { steps: ["build"], interop: null }, views: [base,tip].map(revision => ({
+      revision, catalogue: ["build","tests","dex"], checks: { steps: ["build"], interop: null },
+      rules: rules.map(rule => ({ ...rule, paths: ["input"], arms: [] })),
+    })) };
+  };
+  assert.equal(rangeReaches(repo.git,base,tip,["tests"],select([{name:"docs",steps:["build"]}])),false);
+  assert.equal(rangeReaches(repo.git,base,tip,["tests"],select([{name:"reader",steps:["tests"]}])),true);
+  assert.equal(rangeReaches(repo.git,base,tip,["dex"],select([{name:"wide reader",steps:["dex"]}])),true);
+  assert.equal(rangeReaches(repo.git,base,tip,["dex"],select([{name:"policy",steps:[],full:true}])),true);
+  assert.equal(rangeReaches(repo.git,base,tip,["unknown"],select([])),true);
+  assert.equal(rangeReaches(repo.git,tip,base,["tests"],()=>{throw Error("non-forward history must not be selected");}),true);
+});
+
 test("one culprit does not hide another: a reverted culprit is taken out of the commits before its revert", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);
@@ -312,7 +383,7 @@ test("a search that could not finish is taken up again half an hour later, keepi
     return { ...m, steps: held, reasons: Object.fromEntries(steps.map(step => [step, "INSTRUMENT: memory"])), verdict: "held" };
   };
   await cycle(fx);
-  assert.match(readState(repo.layout.state).core.last_run?.search?.result ?? "", /^held: the tip could not be measured again/);
+  assert.match(readState(repo.layout.state).core.last_run?.search?.result ?? "", /^held: newest main .* could not be measured/);
   assert.equal(fx.submitted.length, 0);
   clock = new Date(clock.getTime() + 10 * 60_000);
   assert.equal(await cycle(fx), "idle", "not yet");
