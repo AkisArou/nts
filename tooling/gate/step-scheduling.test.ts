@@ -360,6 +360,11 @@ test("a fixed step waiting for memory is not starved by an elastic step's tokens
       format: { slots: 1, reserve: 3, after: ["records"], bound: 60 },
     },
     times: "integrity\t100\t800\t8\nformat\t100\t50\t1\nrecords\t100\t1\t1\n",
+    before: (_own,memory) => {
+      assert.equal(writeCaseHistory(caseHistoryFile('integrity',memory),[
+        {key:caseMemoryKey({step:'integrity',backend:'',path:'@step'}),peak:peakFor(GiB)},
+      ]),undefined);
+    },
     payload: `
 own=$2 gate=$(dirname "$0")
 case $1 in
@@ -484,6 +489,9 @@ esac
 `,
     before: (own, memory) => {
       fixture = own;
+      assert.equal(writeCaseHistory(caseHistoryFile('integrity',memory),[
+        {key:caseMemoryKey({step:'integrity',backend:'',path:'@step'}),peak:peakFor(GiB)},
+      ]),undefined);
       const env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t) };
       delete env.NTS_MEMORY_RESERVATION;
       landing = spawn(process.execPath, ["--input-type=module", "-e", LANDING, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
