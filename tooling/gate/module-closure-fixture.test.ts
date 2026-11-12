@@ -26,7 +26,7 @@ console.log(readFileSync(new URL('case.ts',data),'utf8'));`);
   f.write('data/case.ts',"import './not-a-host-input.ts';");
   f.write('data/nested/second.txt','production data');
   for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
-    const result=spawnTest('git',args,{cwd:f.source,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+    const result=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   }
   return {...f,privateData(){mkdirSync(join(f.destination,'data'),{recursive:true});writeFileSync(join(f.destination,'data/case.ts'),'fixture data');}};
 }
@@ -129,7 +129,7 @@ test('fixture namespaces refuse symlinked directories, parents, members and mani
     if(shape==='directory')symlinkSync(foreign,join(f.destination,'data'),'dir');
     else if(shape==='parent'){
       f.write('entry.ts',"import {dataDirectory} from './tooling/gate/reader-inputs.ts';const data=dataDirectory(new URL('./parent/data/',import.meta.url));");
-      f.write('parent/data/case.txt','production');const added=spawnTest('git',['add','.'],{cwd:f.source,encoding:'utf8'});assert.equal(added.status,0,added.stderr);
+      f.write('parent/data/case.txt','production');const added=spawnTest('git',gitArguments(['add','.']),{cwd:f.source,encoding:'utf8'});assert.equal(added.status,0,added.stderr);
       mkdirSync(join(foreign,'data'));symlinkSync(foreign,join(f.destination,'parent'),'dir');
     }else {f.privateData();if(shape==='member')symlinkSync(join(f.source,'data/case.ts'),join(f.destination,'data/link.ts'));
       else {writeFileSync(join(foreign,'manifest.json'),'{"version":1,"data":[]}');symlinkSync(join(foreign,'manifest.json'),join(f.destination,FIXTURE_INPUT_MANIFEST));}}

@@ -190,7 +190,7 @@ for(const launcher of ['sh','py'])test(`an inferred ${launcher} to JavaScript ha
   put('tooling/private/middle.ts',"const leaf=new URL('./payload.bin',import.meta.url);\n");
   put('tooling/private/payload.bin','declared leaf');
   const env=fixtureEnvironment(t);
-  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){const result=spawnTest('git',args,{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const script=`import {stepInputs,covering,owed} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const path='tooling/private/payload.bin';console.log(JSON.stringify({reach:[...covering(stepInputs(),path)],full:owed([{path,added:true}]).some(row=>row.full)}));`;
   const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
