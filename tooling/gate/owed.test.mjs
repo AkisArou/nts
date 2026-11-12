@@ -196,7 +196,7 @@ for(const launcher of ['direct','sh','py'])test(`a ${launcher} JavaScript entry 
   put('tooling/launcher.'+launcher,launcher==='sh'?'node tooling/private/entry.ts\n':"import subprocess\nsubprocess.run(['node', 'tooling/private/entry.ts'])\n");
   put('tooling/private/entry.ts',"export * from './middle.ts';\n");
   put('tooling/private/middle.ts',"import {dataDirectory} from '../gate/reader-inputs/main.ts';const leaf=new URL('./payload.bin',import.meta.url);const data=dataDirectory(new URL('./data/',import.meta.url));\n");
-  put('tooling/private/payload.bin','declared leaf');
+  put('tooling/private/payload.bin',"non-module leaf: 'tooling/census/not-an-input.ts'\n");
   put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;');
   put('tooling/private/data/case.ts',"const note='tooling/census/not-an-input.ts';\n");
   put('tooling/census/not-an-input.ts','');
