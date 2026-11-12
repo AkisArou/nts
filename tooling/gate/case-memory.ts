@@ -16,7 +16,7 @@ export type CaseMemoryEffects={
 export function caseIdentity(step:string,context:Record<string,unknown>,root:string):CaseIdentity {
   const path=context.project;
   if(typeof path!=='string'||!path.trim())throw Error(`case memory: ${step} has no case path`);
-  const local=isAbsolute(path)?relative(root,resolve(path)):path;
+  const local=relative(root,resolve(root,path));
   if(local==='..'||local.startsWith('../')||isAbsolute(local))throw Error(`case memory: ${step} case is outside its source tree: ${path}`);
   const backend=context.backend;
   if(backend!==undefined&&typeof backend!=='string')throw Error(`case memory: ${step} has an invalid backend`);

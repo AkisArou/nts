@@ -20,9 +20,11 @@ test('case identity keeps its measured history across compiler and content chang
   const context={project:'/source/benchmarks/cases/heavy',backend:'llvm',binary:'old',source:'old'};
   const before=caseIdentity('benches',context,'/source');
   assert.deepEqual(caseIdentity('benches',{...context,binary:'new',source:'new'},'/source'),before);
+  assert.deepEqual(caseIdentity('benches',{...context,project:'benchmarks/./cases/../cases/heavy'},'/source'),before);
   assert.notEqual(caseMemoryKey(before),caseMemoryKey({...before,backend:'c'}));
   assert.notEqual(caseMemoryKey(before),caseMemoryKey({...before,step:'dex'}));
   assert.throws(()=>caseIdentity('benches',{project:'/outside'},'/source'),/outside its source tree/);
+  assert.throws(()=>caseIdentity('benches',{project:'tests/../../outside'},'/source'),/outside its source tree/);
 });
 
 test('a known case asks for its own peak, including when it exceeds the entire initial grant',()=>{

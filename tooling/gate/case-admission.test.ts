@@ -18,7 +18,7 @@ const ROOT=fileURLToPath(new URL('../../',import.meta.url)),GiB=2**30,MiB=2**20;
 type QueueEvent={event:string;request?:number;context?:string;memory?:{reserved_bytes:number;used_bytes:number}};
 type Summary={verdict:string;memory:{growths:number};steps:{name:string;verdict:string;reason?:string;instrument?:{kind:string}}[]};
 
-function runFixture(t:TestContext,{payload,known=[],live=true}:{payload:string;known?:string[];live?:boolean}){
+function runFixture(t:TestContext,{payload,known=[],knownPeak=1.25*GiB,live=true}:{payload:string;known?:string[];knownPeak?:number;live?:boolean}){
   const f=fixture(t),gate=join(f.tree,'tooling/gate');
   for(const path of moduleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts'])){
     const destination=join(f.tree,path);mkdirSync(dirname(destination),{recursive:true});copyFileSync(join(ROOT,path),destination);
@@ -56,7 +56,7 @@ ${payload}
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
   assert.equal(writeCostHistory(join(memory.NTS_GATE_COSTS_DIR,'steps.json'),{steps:[{name:'integrity',memory:{unit:'token',peak:MiB}}]}),undefined);
   const history=caseHistoryFile('integrity',memory,f.tree);
-  assert.equal(writeCaseHistory(history,known.map(path=>({key:caseMemoryKey({step:'integrity',backend:'llvm',path}),peak:1.25*GiB}))),undefined);
+  assert.equal(writeCaseHistory(history,known.map(path=>({key:caseMemoryKey({step:'integrity',backend:'llvm',path}),peak:knownPeak}))),undefined);
   const inherited=toolingSlice(),slice=inherited??newToolingSlice(true),unit='nts-test-case-admission-'+randomUUID();
   if(!inherited)t.after(()=>stopToolingSlice(slice));
   const launcher=f.options(['integrity']).env;assert.ok(launcher);
@@ -88,6 +88,13 @@ const next=await second;assert.ok(next);try{await compile(next,128*2**20);}final
   assert.ok(release>=0&&granted>release,'the second large case waits for the first promise to return');
   for(const row of f.events.filter(row=>row.event==='pool.change'&&row.memory))assert.ok(row.memory!.used_bytes<=row.memory!.reserved_bytes,JSON.stringify(row));
   for(const path of [a,b]){const peaks=f.history.get(caseMemoryKey({step:'integrity',backend:'llvm',path}));assert.ok(peaks&&peaks.length===2&&peaks[1]!>100*MiB);}
+});
+
+test('a case forecast larger than the whole machine is refused by name instead of waiting forever',t=>{
+  const path='tests/fixture/impossible';
+  const f=runFixture(t,{known:[path],knownPeak:3*GiB,payload:`await assert.rejects(acquireToken({project:'${path}',backend:'llvm'}),/case memory: .*cannot fit the run's maximum reservation/);`});
+  assert.equal(f.status,0,f.output);assert.equal(f.summary.verdict,'green',f.output);
+  assert.equal(f.events.some(row=>row.event==='token.grant'),false);
 });
 
 test('an unknown case keeps its hard cap despite a much smaller step forecast',t=>{

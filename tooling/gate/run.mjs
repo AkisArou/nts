@@ -693,7 +693,10 @@ const caseMemory=new CaseMemoryBroker({root:ROOT,env,host,
   },report:message=>process.stderr.write(message+'\n')});
 const tok = createTokenPool({
   now:()=>host.now(),
-  prepare:request=>caseMemory.prepare(request),
+  prepare:request=>{
+    caseMemory.prepare(request);
+    if(request.memory&&request.memory.bytes>capacity)throw Error(`case memory: ${request.memory.identity.path} asks for ${request.memory.bytes} bytes, which cannot fit the run's maximum reservation of ${capacity} bytes`);
+  },
   attach:(request,scope)=>caseMemory.attach(request,scope),
   retire:(request,group)=>caseMemory.retire(request,group),
   completed:request=>caseMemory.completed(request),
