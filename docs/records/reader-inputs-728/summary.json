@@ -1,0 +1,621 @@
+{
+  "source": "08852c508f035ff4e946eb91e36dd180ace498ec",
+  "tracked": 28478,
+  "lostEdges": 295122,
+  "lostPaths": 24942,
+  "sites": 7771,
+  "contributingSites": 3878,
+  "readers": 732,
+  "withoutProvenance": 0,
+  "byStep": {
+    "old-paths": 8082,
+    "tooling": 20081,
+    "test-host": 20726,
+    "bench-agree": 3407,
+    "examples": 3407,
+    "rc": 3407,
+    "test262-cases": 13414,
+    "test262-builtins-cases": 13414,
+    "test262-rest-cases": 13414,
+    "test262-jvm": 13414,
+    "test262-llvm": 13414,
+    "test262-census-c": 13416,
+    "test262-census-llvm": 13416,
+    "test262-census-jvm": 13416,
+    "typescript-oracles": 13320,
+    "typescript-c": 1225,
+    "typescript-llvm": 1225,
+    "typescript-jvm": 1225,
+    "outcomes": 8245,
+    "expect-ir": 4562,
+    "integrity": 8248,
+    "compile-time": 8244,
+    "compile-time-rc": 3289,
+    "integrity-runtime": 8248,
+    "assembles": 3294,
+    "jvm-verifies": 4819,
+    "corpus": 1127,
+    "benches": 13325,
+    "sweep": 1127,
+    "llvm": 1131,
+    "llvm-rc": 1131,
+    "jvm": 1131,
+    "program-oracles": 4869,
+    "blockers": 8341,
+    "definitions": 8248,
+    "audit": 97,
+    "test262": 91,
+    "gate-inputs": 8,
+    "licenses": 84,
+    "frontend-tsrs": 89,
+    "addons": 9,
+    "tests": 2,
+    "interop": 194,
+    "records": 533,
+    "dex": 12194,
+    "tooling-types": 1,
+    "types": 4360,
+    "c-compiles": 1275,
+    "config": 3383
+  },
+  "classification": {
+    "sites": 621,
+    "readers": 175,
+    "roleCounts": {
+      "data": 348,
+      "reader": 196,
+      "existing-import": 2,
+      "project-context": 50,
+      "generator-provenance": 25
+    },
+    "edgeCounts": {
+      "retire": 65403,
+      "preserve-or-resolve": 229716,
+      "freshness": 3
+    },
+    "byStep": {
+      "old-paths": {
+        "total": 8082,
+        "preserve-or-resolve": 0,
+        "freshness": 0,
+        "retire": 8082
+      },
+      "tooling": {
+        "total": 20081,
+        "preserve-or-resolve": 17249,
+        "freshness": 0,
+        "retire": 2832
+      },
+      "test-host": {
+        "total": 20726,
+        "preserve-or-resolve": 0,
+        "freshness": 0,
+        "retire": 20726
+      },
+      "bench-agree": {
+        "total": 3407,
+        "preserve-or-resolve": 3349,
+        "freshness": 0,
+        "retire": 58
+      },
+      "examples": {
+        "total": 3407,
+        "preserve-or-resolve": 3349,
+        "freshness": 0,
+        "retire": 58
+      },
+      "rc": {
+        "total": 3407,
+        "preserve-or-resolve": 3349,
+        "freshness": 0,
+        "retire": 58
+      },
+      "test262-cases": {
+        "total": 13414,
+        "preserve-or-resolve": 13324,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-builtins-cases": {
+        "total": 13414,
+        "preserve-or-resolve": 13324,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-rest-cases": {
+        "total": 13414,
+        "preserve-or-resolve": 13324,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-jvm": {
+        "total": 13414,
+        "preserve-or-resolve": 13324,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-llvm": {
+        "total": 13414,
+        "preserve-or-resolve": 13324,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-census-c": {
+        "total": 13416,
+        "preserve-or-resolve": 13326,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-census-llvm": {
+        "total": 13416,
+        "preserve-or-resolve": 13326,
+        "freshness": 0,
+        "retire": 90
+      },
+      "test262-census-jvm": {
+        "total": 13416,
+        "preserve-or-resolve": 13326,
+        "freshness": 0,
+        "retire": 90
+      },
+      "typescript-oracles": {
+        "total": 13320,
+        "preserve-or-resolve": 13320,
+        "freshness": 0,
+        "retire": 0
+      },
+      "typescript-c": {
+        "total": 1225,
+        "preserve-or-resolve": 1134,
+        "freshness": 1,
+        "retire": 90
+      },
+      "typescript-llvm": {
+        "total": 1225,
+        "preserve-or-resolve": 1134,
+        "freshness": 1,
+        "retire": 90
+      },
+      "typescript-jvm": {
+        "total": 1225,
+        "preserve-or-resolve": 1134,
+        "freshness": 1,
+        "retire": 90
+      },
+      "outcomes": {
+        "total": 8245,
+        "preserve-or-resolve": 8243,
+        "freshness": 0,
+        "retire": 2
+      },
+      "expect-ir": {
+        "total": 4562,
+        "preserve-or-resolve": 4562,
+        "freshness": 0,
+        "retire": 0
+      },
+      "integrity": {
+        "total": 8248,
+        "preserve-or-resolve": 7114,
+        "freshness": 0,
+        "retire": 1134
+      },
+      "compile-time": {
+        "total": 8244,
+        "preserve-or-resolve": 7114,
+        "freshness": 0,
+        "retire": 1130
+      },
+      "compile-time-rc": {
+        "total": 3289,
+        "preserve-or-resolve": 3283,
+        "freshness": 0,
+        "retire": 6
+      },
+      "integrity-runtime": {
+        "total": 8248,
+        "preserve-or-resolve": 7114,
+        "freshness": 0,
+        "retire": 1134
+      },
+      "assembles": {
+        "total": 3294,
+        "preserve-or-resolve": 3294,
+        "freshness": 0,
+        "retire": 0
+      },
+      "jvm-verifies": {
+        "total": 4819,
+        "preserve-or-resolve": 4819,
+        "freshness": 0,
+        "retire": 0
+      },
+      "corpus": {
+        "total": 1127,
+        "preserve-or-resolve": 3,
+        "freshness": 0,
+        "retire": 1124
+      },
+      "benches": {
+        "total": 13325,
+        "preserve-or-resolve": 1135,
+        "freshness": 0,
+        "retire": 12190
+      },
+      "sweep": {
+        "total": 1127,
+        "preserve-or-resolve": 3,
+        "freshness": 0,
+        "retire": 1124
+      },
+      "llvm": {
+        "total": 1131,
+        "preserve-or-resolve": 1131,
+        "freshness": 0,
+        "retire": 0
+      },
+      "llvm-rc": {
+        "total": 1131,
+        "preserve-or-resolve": 1131,
+        "freshness": 0,
+        "retire": 0
+      },
+      "jvm": {
+        "total": 1131,
+        "preserve-or-resolve": 1131,
+        "freshness": 0,
+        "retire": 0
+      },
+      "program-oracles": {
+        "total": 4869,
+        "preserve-or-resolve": 4869,
+        "freshness": 0,
+        "retire": 0
+      },
+      "blockers": {
+        "total": 8341,
+        "preserve-or-resolve": 7196,
+        "freshness": 0,
+        "retire": 1145
+      },
+      "definitions": {
+        "total": 8248,
+        "preserve-or-resolve": 7114,
+        "freshness": 0,
+        "retire": 1134
+      },
+      "audit": {
+        "total": 97,
+        "preserve-or-resolve": 0,
+        "freshness": 0,
+        "retire": 97
+      },
+      "test262": {
+        "total": 91,
+        "preserve-or-resolve": 1,
+        "freshness": 0,
+        "retire": 90
+      },
+      "gate-inputs": {
+        "total": 8,
+        "preserve-or-resolve": 8,
+        "freshness": 0,
+        "retire": 0
+      },
+      "licenses": {
+        "total": 84,
+        "preserve-or-resolve": 84,
+        "freshness": 0,
+        "retire": 0
+      },
+      "frontend-tsrs": {
+        "total": 89,
+        "preserve-or-resolve": 3,
+        "freshness": 0,
+        "retire": 86
+      },
+      "addons": {
+        "total": 9,
+        "preserve-or-resolve": 1,
+        "freshness": 0,
+        "retire": 8
+      },
+      "tests": {
+        "total": 2,
+        "preserve-or-resolve": 0,
+        "freshness": 0,
+        "retire": 2
+      },
+      "interop": {
+        "total": 194,
+        "preserve-or-resolve": 192,
+        "freshness": 0,
+        "retire": 2
+      },
+      "records": {
+        "total": 533,
+        "preserve-or-resolve": 532,
+        "freshness": 0,
+        "retire": 1
+      },
+      "dex": {
+        "total": 12194,
+        "preserve-or-resolve": 4,
+        "freshness": 0,
+        "retire": 12190
+      },
+      "tooling-types": {
+        "total": 1,
+        "preserve-or-resolve": 1,
+        "freshness": 0,
+        "retire": 0
+      },
+      "types": {
+        "total": 4360,
+        "preserve-or-resolve": 4360,
+        "freshness": 0,
+        "retire": 0
+      },
+      "c-compiles": {
+        "total": 1275,
+        "preserve-or-resolve": 1275,
+        "freshness": 0,
+        "retire": 0
+      },
+      "config": {
+        "total": 3383,
+        "preserve-or-resolve": 3383,
+        "freshness": 0,
+        "retire": 0
+      }
+    }
+  },
+  "sliceBudgets": [
+    {
+      "group": "test262-and-typescript",
+      "assignedEdges": 121912,
+      "remaining": 107804,
+      "sites": 20,
+      "readers": [
+        "tooling/census/audit.test.ts",
+        "tooling/census/conformance262.ts",
+        "tooling/census/generate/integration.test.ts",
+        "tooling/census/generate/precheck.ts",
+        "tooling/census/generate/reduce.test.ts",
+        "tooling/census/generate/writer.ts",
+        "tooling/census/sampling-cli.test.ts",
+        "tooling/census/typescript-oracles.ts",
+        "tooling/records/record-pending.ts"
+      ],
+      "byStep": {
+        "test262-cases": 12190,
+        "test262-builtins-cases": 12190,
+        "test262-rest-cases": 12190,
+        "test262-jvm": 12190,
+        "test262-llvm": 12190,
+        "test262-census-c": 12192,
+        "test262-census-llvm": 12192,
+        "test262-census-jvm": 12192,
+        "typescript-oracles": 12190,
+        "tooling": 12196
+      }
+    },
+    {
+      "group": "runtime-and-config",
+      "assignedEdges": 67447,
+      "remaining": 40357,
+      "sites": 85,
+      "readers": [
+        "runtime/node/internal/errors.ts",
+        "runtime/node/internal/utf8.ts",
+        "runtime/web-platform/test/wpt/versions.ts",
+        "tests/interop/native-compression/provider-loader.mjs",
+        "tests/interop/native-compression/verify.ts",
+        "tooling/census/definitions.ts",
+        "tooling/config/audit.mjs",
+        "tooling/conformance/assembles.ts",
+        "tooling/conformance/blockers-check.mjs",
+        "tooling/conformance/c-compiles.mjs",
+        "tooling/conformance/expect-ir.ts",
+        "tooling/conformance/fuzz-runtime.mjs",
+        "tooling/conformance/integrity.ts",
+        "tooling/conformance/jvm-verifies.ts",
+        "tooling/conformance/outcomes-check.ts",
+        "tooling/conformance/outcomes-project.ts",
+        "tooling/conformance/run.mjs",
+        "tooling/conformance/types-check.mjs",
+        "tooling/conformance/web-platform/unrouted.mjs"
+      ],
+      "byStep": {
+        "tooling": 3698,
+        "expect-ir": 4562,
+        "blockers": 7178,
+        "interop": 192,
+        "outcomes": 7096,
+        "integrity": 7096,
+        "definitions": 7096,
+        "compile-time": 7096,
+        "integrity-runtime": 7096,
+        "assembles": 2139,
+        "types": 4360,
+        "jvm-verifies": 3659,
+        "c-compiles": 1275,
+        "config": 3383,
+        "program-oracles": 1521
+      }
+    },
+    {
+      "group": "benches-and-oracles",
+      "assignedEdges": 38324,
+      "remaining": 2033,
+      "sites": 55,
+      "readers": [
+        "tooling/bench/build-records.ts",
+        "tooling/bench/groups.ts",
+        "tooling/bench/layouts-heap.test.ts",
+        "tooling/bench/run-record.ts",
+        "tooling/bench/run-session.ts",
+        "tooling/differential/agree.mjs",
+        "tooling/differential/check-consumers.ts",
+        "tooling/differential/oracle-emit.ts",
+        "tooling/differential/oracle-filesystem.ts",
+        "tooling/differential/oracle-records.ts",
+        "tooling/differential/oracle-runtime.ts",
+        "tooling/differential/program-oracles.ts",
+        "tooling/gate/compile-counter.test.ts",
+        "tooling/gate/compile-counter.ts"
+      ],
+      "byStep": {
+        "bench-agree": 3347,
+        "examples": 3347,
+        "rc": 3347,
+        "test262-cases": 1128,
+        "test262-builtins-cases": 1128,
+        "test262-rest-cases": 1128,
+        "test262-jvm": 1128,
+        "test262-llvm": 1128,
+        "test262-census-c": 1128,
+        "test262-census-llvm": 1128,
+        "test262-census-jvm": 1128,
+        "typescript-oracles": 1128,
+        "typescript-c": 1128,
+        "typescript-llvm": 1128,
+        "typescript-jvm": 1128,
+        "outcomes": 1140,
+        "compile-time-rc": 3281,
+        "assembles": 1155,
+        "jvm-verifies": 1155,
+        "benches": 1128,
+        "llvm": 1125,
+        "llvm-rc": 1125,
+        "jvm": 1125,
+        "program-oracles": 3346,
+        "records": 52,
+        "tooling": 32,
+        "integrity": 16,
+        "compile-time": 16,
+        "integrity-runtime": 16,
+        "blockers": 16,
+        "definitions": 16,
+        "corpus": 1,
+        "sweep": 1,
+        "dex": 1
+      }
+    },
+    {
+      "group": "tooling",
+      "assignedEdges": 2033,
+      "remaining": 0,
+      "sites": 55,
+      "readers": [
+        "compiler/frontend-tsrs/names.test.ts",
+        "compiler/frontend-tsrs/roles.test.ts",
+        "compiler/frontend-tsrs/vendor.test.ts",
+        "compiler/frontend-tsrs/vendor.ts",
+        "tooling/android/dex-record.ts",
+        "tooling/bootstrap/node.ts",
+        "tooling/full-check/count.ts",
+        "tooling/gate/agree-new-projects.test.ts",
+        "tooling/gate/benchmark-inputs.test.ts",
+        "tooling/gate/blockers-log.test.ts",
+        "tooling/gate/blockers-pool.test.ts",
+        "tooling/gate/check-report-consumers.test.ts",
+        "tooling/gate/corpus.test.ts",
+        "tooling/gate/dex-bound.test.ts",
+        "tooling/gate/dex-shadow.test.ts",
+        "tooling/gate/environment.ts",
+        "tooling/gate/gate-resource.ts",
+        "tooling/gate/inner.ts",
+        "tooling/gate/jvm-launcher-audit.test.ts",
+        "tooling/gate/records.ts",
+        "tooling/gate/tooling-discovery.ts",
+        "tooling/gate/tooling-types.ts",
+        "tooling/inputs/linker.ts",
+        "tooling/inputs/node-inputs.ts",
+        "tooling/jvm/member-name.test.ts",
+        "tooling/licenses/licenses.ts",
+        "tooling/tasks/audit.ts"
+      ],
+      "byStep": {
+        "test262-cases": 6,
+        "test262-builtins-cases": 6,
+        "test262-rest-cases": 6,
+        "test262-jvm": 6,
+        "test262-llvm": 6,
+        "test262-census-c": 6,
+        "test262-census-llvm": 6,
+        "test262-census-jvm": 6,
+        "typescript-c": 6,
+        "typescript-llvm": 6,
+        "typescript-jvm": 6,
+        "outcomes": 7,
+        "tooling": 1323,
+        "gate-inputs": 8,
+        "jvm-verifies": 5,
+        "benches": 7,
+        "licenses": 84,
+        "llvm": 6,
+        "llvm-rc": 6,
+        "jvm": 6,
+        "frontend-tsrs": 3,
+        "records": 480,
+        "dex": 3,
+        "tooling-types": 1,
+        "test262": 1,
+        "addons": 1,
+        "typescript-oracles": 2,
+        "integrity": 2,
+        "compile-time": 2,
+        "compile-time-rc": 2,
+        "integrity-runtime": 2,
+        "corpus": 2,
+        "sweep": 2,
+        "bench-agree": 2,
+        "program-oracles": 2,
+        "examples": 2,
+        "rc": 2,
+        "blockers": 2,
+        "definitions": 2
+      }
+    }
+  ],
+  "fullGate": {
+    "before": {
+      "tracked": 28478,
+      "full": 182,
+      "unplaced": 149,
+      "policy": 33
+    },
+    "withoutModuleText": {
+      "tracked": 28478,
+      "full": 182,
+      "unplaced": 149,
+      "policy": 33
+    },
+    "newUnplaced": 0
+  },
+  "treeSizes": [
+    {
+      "path": "tests/typescript",
+      "files": 12190,
+      "bytes": 29349858
+    },
+    {
+      "path": "tests/programs",
+      "files": 2221,
+      "bytes": 2907150
+    },
+    {
+      "path": "benchmarks/cases",
+      "files": 1124,
+      "bytes": 48208998
+    }
+  ],
+  "edgeIndex": {
+    "cache": "~/.cache/nts-scratch/728/edges.json",
+    "bytes": 6754577,
+    "sha256": "0c409f453dee0c913ef9dcebadc2968a7361f295469f47f10c49dd37d64a5475",
+    "reproduction": "node docs/records/reader-inputs-728/reproduce.ts <output directory>",
+    "verifiedUnit": "nts-agent-728-exact-reproduction-2.service"
+  }
+}
