@@ -147,6 +147,9 @@ declares no input. A named asset declares the file it resolves to, or every
 tracked file beneath it when it resolves to a directory. The census names
 each directory declaration, its reader and its breadth. Conservative path
 inference may add checks; it cannot place a path or remove its full fallback.
+Canonical step directories declare tracked membership as data; their members
+are not host modules to parse. The selector shares parsed module references
+and input indexes only within one invocation, and reads fresh bytes next time.
 Generated outputs use path operations from positional anchors instead of
 declaring named module-relative input URLs.
 A traced area with no gate reader has a settled rule naming its standalone

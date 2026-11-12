@@ -2205,6 +2205,9 @@ URL positions are anchors. Directory assets place tracked members and the
 census reports each reader and breadth. Traced areas with no gate runner have
 settled rules naming their standalone readers. Untraced paths keep the full
 fallback, held by a tool-written inventory that can only fall.
+Canonical step directories declare data membership without parsing corpus
+programs as host modules. Parsed references and indexes live for one selector
+invocation only; a new run reads fresh source and configuration bytes.
 
 The whole-tree investigation found that a fixture's runtime wildcard and the
 migration destination table had been claiming unrelated trees. Removing all

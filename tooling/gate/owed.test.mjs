@@ -68,10 +68,11 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   put('tooling/gate/tooling-test-exclusions.json', '[]');
   put('tooling/runner.ts', '');
   put('tooling/entry.test.ts', '');
+  put('tooling/census/basename.test.ts', '');
   put('tooling/census/exact.ts', 'import "./dependency.ts";\n');
   put('tooling/census/dependency.ts', '');
   put('tooling/data/program.ts', "const applicationAsset=new URL('./absent.bin',import.meta.url);\n");
-  const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts', 'tooling/census/partial'];
+  const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts', 'tooling/census/partial', 'tooling/census/tsconfig.json'];
   for (const path of [...unknown, 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh']) put(path, '');
   git('init', '--quiet', '--initial-branch=main');
   git('add', 'tooling/data/program.ts');
@@ -86,6 +87,10 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
     return JSON.parse(result.stdout);
   };
   const before = snapshot();
+  put('tooling/census/basename.test.ts', "const fixtureProject='tsconfig.json';\n");
+  const basename = snapshot().find(row => row.path === 'tooling/census/tsconfig.json');
+  assert.ok(basename?.reach.includes('tooling'), 'a quoted basename adds inferred reach');
+  assert.ok(basename.full, 'a quoted basename cannot place private fixture data');
   // The exact literal that broke #722 is data owned by this private fixture.
   put('tooling/entry.test.ts', 'const config={exclude:["${configDir}/tooling/**/*"]};\nconst ancestor="tooling/census/fixtures";\nconst body="import \'./census/data-only.ts\'";\n');
   const after = snapshot();
@@ -660,16 +665,12 @@ test("the finite Node preload planner and the harness it reads owe their tooling
     assert.deepEqual([...stepsFor(path)].sort(),[...new Set([...always,"tooling"])].sort(),path);
 });
 
-test("inferred quoted-basename reach cannot place the host project",()=>{
-  // The generic beside-file heuristic also sees case-local 'tsconfig.json'
-  // literals in other readers. It adds checks without declaring this file
-  // to be placed, so it cannot discharge the full fallback.
+test("the declared host project reader places its own configuration",()=>{
+  // compiled-axis-context.test.ts reads this actual host project through its
+  // URL declaration. The basename-only control lives in the private fixture.
   const rules = owed([{path:'tooling/conformance/tsconfig.json',added:false}]);
-  assert.ok(rules.some(rule => rule.full), 'a basename inferred from fixture text is not a declaration');
-  superset(gateSteps(rules),[
-    'assembles','blockers','build','c-compiles','clippy','compile-time','compile-time-rc','definitions',
-    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types','types',
-  ]);
+  assert.equal(rules.some(rule => rule.full), false);
+  assert.ok(gateSteps(rules).includes('tooling'));
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
