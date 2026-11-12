@@ -31,10 +31,15 @@ projections, not measured after-change daily totals.
 
 Keep the local nightly time, 03:00 by default. A due nightly wide attempt
 overrides the daytime gap and the changed-commit requirement. It still
-waits for queued/running landings and higher-priority memory requests.
+waits for queued/running landings and higher-priority memory requests until
+two hours after the nightly slot. It then enters ordinary full-check
+admission even while they wait, so ledger priority still puts them first.
+The log names this deadline. Daytime runs remain idle-only.
 A completed attempt whose start is on or
 after the latest nightly slot satisfies that night; restarting the
-controller does not duplicate it. A missed night is coalesced into the
+controller does not duplicate it. With no previous wide run, a persisted
+scheduling origin excludes nights before the controller began and retains
+the first owed night's deadline across restart. A missed night is coalesced into the
 latest night, as the current benchmark schedule already does.
 
 The nightly benchmark request remains independently durable. A new
@@ -76,7 +81,8 @@ benchmark and culprit lifecycle stays in its existing owner.
 
 Pure schedule tests own all dates and show verified movement, exact gap
 boundary, unchanged verified, initial run, landing deferral without consumed
-eligibility, nightly exception, missed-night coalescing and restart.
+eligibility, nightly exception and its exact two-hour idle deadline,
+missed-night coalescing and restart.
 Service fixtures exercise newest-verified selection, deferred nightly
 benchmarks, the unchanged background units and records lifecycle. Queue
 adapter tests use a private queue; parser/unit tests cover old arguments

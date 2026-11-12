@@ -7,6 +7,7 @@ export type Schedule = { nightly: string };
 
 export const DEFAULT_SCHEDULE: Schedule = { nightly: "03:00" };
 export const WIDE_MIN_GAP_MS = 4 * 3_600_000;
+export const NIGHTLY_IDLE_WAIT_MS = 2 * 3_600_000;
 
 const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -32,15 +33,15 @@ export function wideMemoryWaiter(waiting: readonly { priority: Priority; live: b
 /** Eligibility does not consume a start: only the actual run changes last. */
 export function wideDecision(options: {
   schedule: Schedule; last?: { commit: string; at: string }; verified: string | null;
-  now: Date; busy: string | null;
+  since: string; now: Date; busy: string | null;
 }): WideDecision {
   const { schedule, last, verified, now, busy } = options;
   if (!verified) return { due: null, waiting: "nothing is verified yet" };
   const start = last ? new Date(last.at) : undefined;
-  const nightly = dueNightly(schedule, start, now) !== null;
+  const nightly = dueNightly(schedule, start ?? new Date(options.since), now);
   if (!nightly && verified === last?.commit) return { due: null, waiting: null };
   const due = nightly ? "nightly" : "advanced";
-  if (busy) return { due, waiting: busy };
+  if (busy && (!nightly || now.getTime() < nightly.getTime() + NIGHTLY_IDLE_WAIT_MS)) return { due, waiting: busy };
   if (!nightly && start && now.getTime() < start.getTime() + WIDE_MIN_GAP_MS) {
     return { due, waiting: `minimum wide gap until ${new Date(start.getTime() + WIDE_MIN_GAP_MS).toISOString()}` };
   }

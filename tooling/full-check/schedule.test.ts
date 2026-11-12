@@ -1,12 +1,12 @@
 // node --test tooling/full-check/schedule.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dueNightly, lastNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, type Schedule } from "./schedule.ts";
+import { dueNightly, lastNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, NIGHTLY_IDLE_WAIT_MS, type Schedule } from "./schedule.ts";
 
 const schedule: Schedule = { nightly: "03:00" };
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute);
 const decision = (last: { commit: string; at: string } | undefined, now: Date, verified = "new", busy: string | null = null) =>
-  wideDecision({ schedule, last, now, verified, busy });
+  wideDecision({ schedule, last, now, verified, busy, since: last?.at ?? now.toISOString() });
 
 test("changed verified starts at the four-hour boundary without a clock slot", () => {
   assert.equal(WIDE_MIN_GAP_MS, 4 * 3_600_000);
@@ -14,7 +14,7 @@ test("changed verified starts at the four-hour boundary without a clock slot", (
   assert.match(decision(last, at(6, 13, 16)).waiting!, /minimum wide gap/);
   assert.deepEqual(decision(last, at(6, 13, 17)), { due: "advanced", waiting: null });
   assert.deepEqual(decision(last, at(6, 14), "old"), { due: null, waiting: null });
-  assert.deepEqual(wideDecision({ schedule, now: at(6, 14), verified: null, busy: null }), { due: null, waiting: "nothing is verified yet" });
+  assert.deepEqual(wideDecision({ schedule, now: at(6, 14), verified: null, busy: null, since: at(6, 14).toISOString() }), { due: null, waiting: "nothing is verified yet" });
 });
 
 test("landings and higher-priority waiters defer a start without consuming it", () => {
@@ -36,7 +36,23 @@ test("nightly crosses the gap and repeats an unchanged commit, still waiting for
   const restarted = { commit: "same", at: at(6, 3).toISOString() };
   assert.deepEqual(decision(restarted, at(6, 4), "same"), { due: null, waiting: null });
   assert.deepEqual(decision(restarted, at(7, 3), "same"), { due: "nightly", waiting: null });
-  assert.deepEqual(decision(undefined, at(6, 12)), { due: "nightly", waiting: null });
+  assert.deepEqual(decision(undefined, at(6, 12)), { due: "advanced", waiting: null });
+});
+
+test("nightly waits at most two hours for idle; daytime never bypasses a waiter", () => {
+  assert.equal(NIGHTLY_IDLE_WAIT_MS, 2 * 3_600_000);
+  const last = { commit: "same", at: at(5, 22).toISOString() };
+  for (const busy of ["landing queued", "landing running", "agent memory request waits"]) {
+    assert.deepEqual(decision(last, at(6, 4, 59), "same", busy), { due: "nightly", waiting: busy });
+    assert.deepEqual(decision(last, at(6, 5), "same", busy), { due: "nightly", waiting: null });
+    assert.deepEqual(decision({ commit: "old", at: at(6, 5).toISOString() }, at(6, 22), "new", busy), { due: "advanced", waiting: busy });
+  }
+});
+
+test("an initial wide deferral keeps its scheduling origin across restart and reaches the nightly deadline", () => {
+  const since = at(5, 12).toISOString(), busy = "agent memory request waits";
+  assert.deepEqual(wideDecision({ schedule, since, now: at(5, 22), verified: "new", busy }), { due: "advanced", waiting: busy });
+  assert.deepEqual(wideDecision({ schedule, since, now: at(6, 5), verified: "new", busy }), { due: "nightly", waiting: null });
 });
 
 test("missed nights coalesce into one attempt and an actual start answers it on restart", () => {

@@ -212,7 +212,10 @@ landing checks' and agents', so those come first.
   queued or running and no higher-priority memory request waits. Changes
   coalesce onto the newest verified; skipped opportunities consume no start.
   The nightly run, at 03:00 by default, can cross the gap and repeat an
-  unchanged commit, still waiting for idleness, before new benchmarks start.
+  unchanged commit before new benchmarks start. It waits for idleness for
+  at most two hours after the nightly slot, then enters normal full-check
+  admission even while higher-priority work waits. Ledger priorities still
+  put landings and agents first. Daytime runs remain idle-only.
   A core already running finishes first. There are no daytime clock slots.
 - **Records, the benchmarks and the count run beside the parts,** each in a
   unit of its own, so neither part waits for them. A part's records run
@@ -499,8 +502,9 @@ the first node task.
 - **Wide runs follow verified during idle time**: changed verified can start
   a wide run after a four-hour gap, when no landing is queued or running and
   no higher-priority memory waiter exists. The nightly attempt overrides
-  the gap and unchanged-commit check, while retaining idleness, before new
-  benchmarks. Records and running benchmark units keep their independent
+  the gap and unchanged-commit check before new benchmarks. After two hours
+  past its slot it enters full-check admission without waiting for idle;
+  daytime runs remain idle-only. Records and running benchmark units keep their independent
   lifecycle
   ([log](records/notebooks/decisions-log.md#wide-runs-follow-verified-during-idle-time-11-12)).
 - **Step budgets count execution and expose admission waits**: an elastic

@@ -800,6 +800,26 @@ test("nightly wide repeats unchanged verified inside the gap and blocks a new be
   assert.equal(units.specs.at(-1)!.name, BENCH_UNIT);
 });
 
+test("a busy night enters normal wide admission at its deadline, while daytime remains idle-only", async t => {
+  const repo = repository(t), gate = fakeGate(repo), queue = stubQueue(), units = stubUnits();
+  const at = (now: Date) => harness(repo, gate, { now, queue, units, memoryWaiter: () => "agent memory request waits" });
+  const first = repo.commit({ "a.txt": "1\n" }, "first");
+  assert.equal(await cycle(at(BEFORE)), "core");
+  queue.submit(first);
+  assert.equal(await cycle(at(NIGHT)), "idle");
+  const origin = readState(repo.layout.state).wide.since;
+  const deadline = at(new Date(2026, 10, 7, 5));
+  assert.equal(await cycle(deadline), "wide", "a restarted controller keeps the original night's deadline");
+  assert.equal(readState(repo.layout.state).wide.since, origin);
+  assert.ok(deadline.lines.some(line => line.includes("nightly wide idle deadline passed") && line.includes("full-check priority")));
+  assert.equal(gate.measured.at(-1)!.label, "wide", "uses the normal full-check measurement path");
+  repo.commit({ "a.txt": "2\n" }, "second");
+  const daytime = at(new Date(2026, 10, 7, 12));
+  assert.equal(await cycle(daytime), "core");
+  assert.equal(await cycle(daytime), "idle");
+  assert.equal(readState(repo.layout.state).wide.last_run!.commit, first);
+});
+
 test("a benchmark session's budget answers the night once, with or without a retained record", async t => {
   for (const kept of [true, false]) {
     const repo = repository(t), gate = fakeGate(repo), measured = stubBench();

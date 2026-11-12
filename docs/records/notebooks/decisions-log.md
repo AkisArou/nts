@@ -2169,7 +2169,9 @@ The coordinator chose a four-hour minimum between actual wide starts and
 an idle start condition: no queued/running landing and no live
 higher-priority memory request. A proposed two-hour gap allowed roughly
 three times the observed daily CPU cost, so it was rejected. The nightly
-attempt can cross the gap and repeat an unchanged commit but retains the
+attempt can cross the gap and repeat an unchanged commit. Its idle wait
+ends two hours after the nightly slot; it then enters ordinary full-check
+admission, preserving the ledger's priorities. Daytime starts retain the
 idle condition. Eligible changes coalesce; a blocked opportunity does not
 consume a start. Background records and benchmark units keep their existing
 lifecycle. The governing contract is in

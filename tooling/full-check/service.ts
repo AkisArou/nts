@@ -141,6 +141,12 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   if (await followBenchmarks(fx, state)) return "benchmarks";
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
+  // With no previous wide result, only nights after scheduling began are
+  // owed. Keep that origin across restarts and idle deferrals, as for benches.
+  if (!state.wide.since) {
+    state.wide.since = state.wide.last_run?.at ?? now.toISOString();
+    writeState(fx.layout.state, state);
+  }
   // Answered on its own: a cycle that first gets to the night later still
   // makes it due. A state that never answered one starts
   // here, and its first night is the next slot.
@@ -148,14 +154,15 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   // A slot that comes while a night's run measures is answered once it ends.
   const night = dueNightly(fx.schedule, new Date(state.nightly), now);
   if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, verified);
-  const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now,
-    busy: fx.queue.busy() ?? fx.memoryWaiter() });
+  const busy = fx.queue.busy() ?? fx.memoryWaiter();
+  const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now, since: state.wide.since, busy });
   if ((state.wide.waiting ?? null) !== wide.waiting) {
     if (wide.waiting) fx.log(`wide steps waiting: ${wide.waiting}`);
     state.wide.waiting = wide.waiting ?? undefined;
     writeState(fx.layout.state, state);
   }
   if (wide.due && !wide.waiting && verified) {
+    if (wide.due === "nightly" && busy) fx.log(`nightly wide idle deadline passed (${busy}); entering admission at full-check priority`);
     fx.log(`wide steps due (${wide.due === "nightly" ? "the nightly run" : "verified advanced and the machine is idle"}) on verified ${short(verified)}`);
     holds(state, `the wide steps on verified ${short(verified)} go first`);
     await runPart(fx, state, "wide", verified);

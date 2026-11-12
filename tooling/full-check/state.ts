@@ -212,7 +212,7 @@ export type BenchmarksDue = {
  * A part's runs, and its records: each part records the kinds its own checks
  * hold, after its own green run. `waiting` names what holds a wide start.
  */
-export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; waiting?: string };
+export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; waiting?: string; since?: string };
 
 export type State = {
   version: 1;
