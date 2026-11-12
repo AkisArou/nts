@@ -99,6 +99,12 @@ export class SourceFacts {
     return low;
   }
   *ancestors(node:Node):Iterable<Node>{let at=this.parents.get(node);while(at){yield at;at=this.parents.get(at);}}
+  /** Immediate child rows come from preorder intervals, without asking the
+   * parser for the tree again. Value propagation can memoize these edges. */
+  *childrenOf(node:Node):Iterable<Node>{
+    const range=this.ranges.get(node);if(!range)return;
+    for(let at=range.start+1;at<range.end;){const child=this.nodes[at]!;yield child;at=this.ranges.get(child)!.end;}
+  }
   callsWithin(node:Node):readonly CallExpression[]{
     const range=this.ranges.get(node);if(!range)return [];
     const bound=(position:number)=>{let low=0,high=this.callOrders.length;while(low<high){const mid=(low+high)>>>1;if(this.callOrders[mid]!<position)low=mid+1;else high=mid;}return low;};

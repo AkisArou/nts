@@ -56,27 +56,16 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   }
   return ['__unknown__'];
  };
+ const readValues=Array.from({length:17},()=>new Map<Node,string[]>());
  const reads=(input:Node,depth=0):string[]=>{
   const node=unwrap(input);if(depth>16)return [];
-  if(ast.isIdentifier(node)){const value=binding(node);return value?reads(value.value,depth+1):[];}
-  if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')return [];
-  if(ast.isCallExpression(node)&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(node.expression))&&node.arguments[0])return paths(node.arguments[0]);
-  const found:string[]=[];
-  for(const call of facts.callsWithin(node)){
-   if(call===node)continue;
-   let hidden=false;
-   for(const parent of facts.ancestors(call)){
-    if(parent===node)break;
-    if(ast.isCallExpression(parent)&&name(parent.expression)==='JSON.stringify'){hidden=true;break;}
-   }
-   if(!hidden&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(call.expression))&&call.arguments[0])found.push(...paths(call.arguments[0],depth+1));
-  }
-  for(const identifier of facts.within(node,ast.SyntaxKind.Identifier)){
-   let hidden=false;
-   for(const parent of facts.ancestors(identifier)){if(parent===node)break;if(ast.isCallExpression(parent)&&name(parent.expression)==='JSON.stringify'){hidden=true;break;}}
-   if(!hidden){const value=binding(identifier);if(value&&value.kind!=='parameter')found.push(...reads(value.value,depth+1));}
-  }
-  return found;
+  const cache=readValues[depth]!,known=cache.get(node);if(known)return known;
+  let found:string[];
+  if(ast.isIdentifier(node)){const value=binding(node);found=value&&value.kind!=='parameter'?reads(value.value,depth+1):[];}
+  else if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')found=[];
+  else if(ast.isCallExpression(node)&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(node.expression))&&node.arguments[0])found=paths(node.arguments[0]);
+  else found=[...facts.childrenOf(node)].flatMap(child=>reads(child,depth+1));
+  cache.set(node,found);return found;
  };
  const found:FixtureCopy[]=[],seen=new Set<string>();
  for(const call of calls){
