@@ -36,6 +36,16 @@ test('a known case asks for its own peak, including when it exceeds the entire i
   assert.ok(2*f.lease.bytes>grownGrant,'a second large case must wait, not borrow the same promise');
 });
 
+test('the shared owner retains the former oracle subject peaks until its composite key is measured',()=>{
+  const identity={step:'program-oracles',backend:'node',path:'tests/programs/example'};
+  const history=new Map([[identity.path,[600*MiB]]]);
+  const effects:CaseMemoryEffects={history:()=>history,completed:()=>{},open:()=>{throw Error('no scope needed');}};
+  assert.equal(new CaseMemoryLease(identity,effects).forecast,peakReservation([600*MiB]));
+  history.set(caseMemoryKey(identity),[300*MiB]);
+  assert.equal(new CaseMemoryLease(identity,effects).forecast,peakReservation([300*MiB]));
+  assert.equal(new CaseMemoryLease({...identity,step:'benches'},effects).forecast,undefined);
+});
+
 test('an unknown case charges live use and margin, and records its own peak',()=>{
   const f=fixture(),row={charge:40*MiB,peak:50*MiB,closed:0};f.samples.set('/workers/a',row);
   assert.equal(f.lease.measured,false);

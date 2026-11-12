@@ -46,7 +46,10 @@ export class CaseMemoryLease {
   #closed=false;
   constructor(identity:CaseIdentity,effects:CaseMemoryEffects){
     this.identity=identity;this.key=caseMemoryKey(identity);this.#effects=effects;
-    this.forecast=caseReservation(effects.history(identity.step),this.key);
+    const history=effects.history(identity.step);
+    // The former oracle-only owner wrote subject-path keys. Retain those
+    // measured peaks until this owner has written the stable composite key.
+    this.forecast=caseReservation(history,this.key)??(identity.step==='program-oracles'&&identity.backend==='node'?caseReservation(history,identity.path):undefined);
   }
   /** Known cases keep their forecast; growth beyond it and unknown cases
    * use exactly the ledger's live-use-plus-margin arithmetic. */
