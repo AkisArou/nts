@@ -1,9 +1,10 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Prepare Node's unedited dependency sources. Recipe resolution is bootstrap-only.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+
 
 const ROOT=resolve(import.meta.dirname,'../..');
 export const DEPENDENCIES=['openssl','brotli','zlib','zstd','uv'] as const;
@@ -76,7 +77,7 @@ export function resolveRecipe(source:string,output=join(ROOT,'build/node-deps/re
  }finally{rmSync(stage,{recursive:true,force:true});}
 }
 
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+runAsCommand(import.meta.url,async()=>{
  try{
   const args=process.argv.slice(2),paths=args.filter(s=>!s.startsWith('--'));
   if(paths.length>1||args.some(s=>s.startsWith('--')&&!['--resolve-recipe','--check-recipe'].includes(s)))throw Error('usage: node.ts [destination] [--resolve-recipe|--check-recipe]');
@@ -86,4 +87,4 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   console.log('Node dependency source prepared: '+nodePin());
  }
  catch(error){console.error(error instanceof Error?error.message:error);process.exitCode=1;}
-}
+});

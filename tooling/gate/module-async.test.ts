@@ -58,3 +58,10 @@ test('path-looking fixture data does not make a command an imported module',t=>{
  writeFileSync(join(root,'tooling/command.ts'),'await 0;');
  assert.deepEqual(auditModuleAsync(root).problems,[]);
 });
+
+test('type-only imports do not evaluate a command module',t=>{
+ const root=newTestScratch('import-module-types');t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'tooling'));
+ writeFileSync(join(root,'tooling/entry.ts'),`import type {T} from './command.ts'; export type {T} from './command.ts';`);
+ writeFileSync(join(root,'tooling/command.ts'),'export type T=number; await 0;');
+ assert.deepEqual(auditModuleAsync(root).problems,[]);
+});

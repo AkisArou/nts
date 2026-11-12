@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // The recorder and the native differential execute the same population under
 // one CPU allowance and the census's resident-memory owner. Virtual address
 // reservations are not memory consumption, and a signal alone proves no cap.
@@ -13,7 +14,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {basename,isAbsolute,resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+
 import {activeCommand,COMMAND_ACTIVITY_POLL_MS,COMMAND_IDLE_GUARD_MS,COMPILE_CPU_BOUND_SECONDS,type ActiveResult} from '../gate/active-command.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError,publishPressure} from '../gate/step-result.ts';
 import {memoryRun,memoryCause,memoryDisposition,closeMemoryRun,compileActive} from '../census/worker-memory.ts';
@@ -153,7 +154,7 @@ export async function runOraclePlanner(planner:string,args:readonly string[],opt
   return {plan:result.stdout.slice(end+1),entry:plannedEntry(result.stdout.slice(0,end))};
 }
 
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+runAsCommand(import.meta.url,async()=>{
   try{
     const mode=process.argv[2],request=JSON.parse(process.argv[3]!);
     if(mode==='--prepare'){
@@ -170,4 +171,4 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     }
   }catch(error){if(error instanceof CaseBudgetError&&'budget' in error)process.stdout.write(JSON.stringify({budget:error.budget})+'\n');else {if(error instanceof PressureError)publishPressure(error);process.stdout.write(JSON.stringify({instrument:{kind:error instanceof PressureError?'memory-pressure':'tooling-setup',reason:String(error)}})+'\n');}}
   finally{closeMemoryRun();}
-}
+});

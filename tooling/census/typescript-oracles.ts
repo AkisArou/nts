@@ -1,8 +1,9 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // A run's three backend steps share one measured Node answer per case. Only
 // original inputs and authenticated evidence survive each admitted attempt;
 // its executable snapshot is finalized and removed before the next dispatch.
 import { mkdirSync,readFileSync } from 'node:fs';
-import { join,resolve } from 'node:path';
+import {join} from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
 import { REPOSITORY } from '../differential/oracle-emit.ts';
@@ -70,8 +71,8 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
   }finally{cleanup();}
 }
 
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+runAsCommand(import.meta.url,async()=>{
   const value=(name:string,fallback:number)=>{const at=process.argv.indexOf(name);return at<0?fallback:Number(process.argv[at+1]);};
   try{await produceTypeScriptOracles({sample:value('--sample',0),jobs:value('--jobs',Math.min(8,availableParallelism()))});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}
-}
+});

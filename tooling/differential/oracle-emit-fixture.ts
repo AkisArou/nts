@@ -15,7 +15,7 @@ import {createHash} from "node:crypto";
 import {chmodSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join,relative,resolve} from "node:path";
-import {afterEach,type TestContext} from "node:test";
+import {before,afterEach,type TestContext} from "node:test";
 import {OracleWorker,REPOSITORY,removeOracleSnapshot,prepareOracle as prepareOracleTemplate,oracleExecution as newOracleExecution,oracleLoaderReady,type OracleOptions,type OraclePrepared} from "./oracle-emit.ts";
 import {readOracleSnapshotIndex,writeOracleSnapshotIndex,type HostObservation,type DirectoryEntries} from './oracle-filesystem.ts';
 import {type SnapshotSlotIndex} from './oracle-runtime.ts';
@@ -23,7 +23,7 @@ import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 
 export type EmittedFile={path:string;text:string;sourceFileName?:string};
 
-await setupOracleTestEnvironment();
+before(setupOracleTestEnvironment);
 
 export const toolchain=oracleToolchainLocation();
 export const executions=new Set<OraclePrepared>();

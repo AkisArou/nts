@@ -1,6 +1,7 @@
+import {runAsCommand} from "../../gate/command-entry.ts";
 // One owner drains host test events before publishing web liveness evidence.
-import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+
+
 import { runScopedTooling, type ToolingResult } from "../../gate/tooling-runner.ts";
 import { publishToolingFailure, ToolingInstrumentError, type InstrumentResult } from "../../gate/step-result.ts";
 import { publishWptHangs, readWptHungResults } from "../../../runtime/web-platform/test/wpt/hung.ts";
@@ -12,7 +13,7 @@ export function finishWebHost(result: ToolingResult, observations: readonly Inst
   return result.status === 2 ? 124 : result.status;
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+runAsCommand(import.meta.url,async()=>{
   try {
     const files = process.argv.slice(2);
     if (!files.length || !process.env.NTS_WPT_HUNG_RESULTS)
@@ -29,4 +30,4 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     console.error(instrument);
     process.exitCode = 2;
   }
-}
+});

@@ -1,3 +1,4 @@
+import {runAsCommand} from './command-entry.ts';
 import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environment.ts";
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
 // node tooling/gate/compile-counter-calibrate.ts --run-dir <evidence directory>
@@ -14,6 +15,7 @@ import { reserveJob } from "./memory-ledger.ts";
 import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, compileTimeModules, counterProblem, calibrationRecord, withCalibratedModule, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
+export async function calibrate():Promise<void>{
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const nts = resolve(process.env.NTS_BIN ?? join(root, "target/release/nts"));
 const arm = compileArm(process.argv.slice(2));
@@ -137,3 +139,6 @@ writeFileSync(join(out, "summary.json"), JSON.stringify(summary, null, 2) + "\n"
 console.log(`calibration ${summary.complete ? "complete" : "NOT MEASURED"}: ${rows.length}/${tasks.length}; ${out}`);
 if (!summary.complete) process.exitCode = 2;
 else if (process.argv.includes("--record")) publish(summary);
+
+}
+runAsCommand(import.meta.url,calibrate);

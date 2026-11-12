@@ -1,3 +1,4 @@
+import {runAsCommand} from "./command-entry.ts";
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
 import { createHash } from "node:crypto";
@@ -5,7 +6,7 @@ import { registerHooks } from "node:module";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import {basename,dirname,join,relative} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
@@ -259,10 +260,10 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
   }finally{hooks.deregister();}
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+runAsCommand(import.meta.url,async()=>{
   try {
     const [operation, tree, revision, ...rest] = process.argv.slice(2);
     if (operation !== "--endpoint" || !tree || !revision || rest.length) throw new Error("invalid owed endpoint invocation");
     process.stdout.write(JSON.stringify(await endpoint(tree, revision, JSON.parse(readFileSync(0,"utf8")))));
   } catch (error) { console.error(String(error)); process.exitCode = selectionInfrastructure(error) ? INFRASTRUCTURE_EXIT : 1; }
-}
+});

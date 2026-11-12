@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // The full check's recorder (docs/workflow.md, Records: "The full check writes
 // them. Nobody records by hand."). A case whose source exists and whose record
 // has no row yet is pending: every record check lists it and does not fail on
@@ -75,7 +76,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import {fileURLToPath} from "node:url";
 
 import { benchmarkCases, benchmarkIdentities } from "../bench/build-records.ts";
 import { compileKey } from "../bench/compile-producer.ts";
@@ -928,7 +929,7 @@ export async function applyCommand(root: string, args: readonly string[], say = 
   return 0;
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+runAsCommand(import.meta.url,async()=>{
   const argv = process.argv.slice(2);
   const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
   if (argv[0] === "--apply") process.exitCode = await applyCommand(root, argv.slice(1));
@@ -952,4 +953,4 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       process.exitCode = recordPending(root, kinds, runNode, line => console.log(line), accepted.byKind, delta && resolve(delta), accepted.pendingByKind);
     }
   }
-}
+});

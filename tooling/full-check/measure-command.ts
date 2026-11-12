@@ -1,9 +1,10 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // The full check owns the wall ceiling even when it measures an old runner.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { ownUnit } from "../gate/scopes/bound-slice.ts";
 import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
@@ -75,8 +76,8 @@ async function measure(seconds: number, run: string, slice: string, command: str
   return status;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+runAsCommand(import.meta.url,async()=>{
   const [, , seconds, run, slice, ...command] = process.argv;
   try { process.exitCode = await measure(Number(seconds), run!, slice!, command); }
   catch (error) { console.error(error); process.exitCode = 1; }
-}
+});

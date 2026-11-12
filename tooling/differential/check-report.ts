@@ -1,7 +1,8 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Versioned check decoding is shared by every machine consumer.
 import assert from 'node:assert/strict';
 import {statSync} from 'node:fs';
-import {pathToFileURL} from 'node:url';
+
 import {isDeepStrictEqual} from 'node:util';
 
 import {CHECK_STATUSES, FAILURE_KINDS, COUNT_NAMES} from "./check-report-types.ts";
@@ -621,7 +622,7 @@ function legacyCheck(status: number | null, out: string): Omit<DecodedCheck, "fo
   return { outcome, ...record, first: said };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+runAsCommand(import.meta.url,async()=>{
   const [command, requestedConsumer, binary, project] = process.argv.slice(2);
   try {
     if (command === 'finish') {
@@ -645,7 +646,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error('check NOT MEASURED:', error instanceof Error ? error.message : String(error));
     process.exitCode = reportCheckFailure(error);
   }
-}
+});
 
 
 

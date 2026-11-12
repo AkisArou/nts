@@ -1,10 +1,11 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // The session owns a unit for everything it starts, including nested build
 // supervisors. A budget ends that unit before the durable prefix is sealed.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {join} from "node:path";
 import { fileURLToPath } from "node:url";
 import { finishBudget } from "../bench/run-session.ts";
 import { readJournal } from "../bench/run-journal.ts";
@@ -73,7 +74,7 @@ export async function runSession(tree: string, run: string, binary: string, hist
   return { admitted: true, status: 124, budget: { milliseconds: budgetMs, unreached }, ...(record ? { record } : {}) };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+runAsCommand(import.meta.url,async()=>{
   if (process.argv[2] === "--measure") {
     const request = JSON.parse(readFileSync(process.argv[3], "utf8"));
     process.exitCode = spawnSync(request.command[0], request.command.slice(1), { cwd: request.cwd, env: request.env, stdio: "inherit" }).status ?? 1;
@@ -85,4 +86,4 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exitCode = outcome.admitted ? outcome.status : 75;
     } catch (error) { console.error(error); process.exitCode = 1; }
   }
-}
+});

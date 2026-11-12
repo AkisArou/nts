@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Parent-only Node resolution service. It never evaluates a subject module.
 import {createHash,randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -158,7 +159,6 @@ async function serve(directory:string){
   try{unlinkSync(join(directory,'holder.sock'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
   const total=process.cpuUsage();if(existsSync(directory))atomic(join(directory,'holder-finished.json'),{version:1,cpuUsec:total.user+total.system,queries:totalQueries});
 }
-async function main():Promise<void>{
+runAsCommand(import.meta.url,async()=>{
   if(process.argv[2]==='--serve')await serve(resolve(process.argv[3]!));
-}
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url)main().catch(error=>{console.error(error);process.exitCode=1;});
+});

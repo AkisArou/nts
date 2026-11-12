@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // One run-owned, offline dependency image. The existing pinned pnpm provisioner
 // owns registry integrity; an application installation is never a fallback.
 import {createHash} from 'node:crypto';
@@ -259,7 +260,7 @@ async function build(capability:DependencyCapability,inputSha256:string){
   const entries=protectDependencyImage(tree),allocatedBytes=lstatSync(tree).blocks*512+entries.reduce((sum,entry)=>sum+lstatSync(join(tree,entry.path)).blocks*512,0);
   publish(join(capability.directory,'build-result.json'),{entries,allocatedBytes});
 }
-async function main():Promise<void>{
+runAsCommand(import.meta.url,async()=>{
   const controller=new AbortController();
   process.once('SIGTERM',()=>controller.abort());process.once('SIGINT',()=>controller.abort());
   try{
@@ -268,6 +269,4 @@ async function main():Promise<void>{
     else if(mode==='--capture')process.stdout.write(await captureDependencies(capability,controller.signal)+'\n');
     else throw Error('unknown oracle dependency operation');
   }catch(error){console.error(String(error));process.exitCode=2;}
-}
-
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) main().catch(error=>{console.error(error);process.exitCode=1;});
+});

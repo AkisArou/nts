@@ -1,9 +1,10 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Relink immutable ThinLTO inputs with seeded function orders. Caller owns the
 // bounded build scope; no workload executes here. Keep shipping flags intact.
 import {spawnSync} from "node:child_process";
 import {mkdirSync,readFileSync,statfsSync,writeFileSync} from "node:fs";
 import {join,resolve} from "node:path";
-import {pathToFileURL} from "node:url";
+
 import {body,orderingWarnings,symbolOrder,textSymbols,type Symbol} from "./layouts.ts";
 import {readOnlyConstants} from "./layouts-elf.ts";
 import {random} from "./layouts-interval.ts";
@@ -86,9 +87,9 @@ export async function linkLayouts(plan:LinkPlan,out:string){
   return rows;
 }
 
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+runAsCommand(import.meta.url,async()=>{
   const [input,out]=process.argv.slice(2);
   if(!input||!out)throw Error("layouts-link.ts <link-plan.json> <fresh output directory>");
   await reserveLayoutJob("layout links");
   await linkLayouts(JSON.parse(readFileSync(input,"utf8")),resolve(out));
-}
+});

@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
@@ -5,7 +6,7 @@ import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.t
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { typedTimer } from "./typed-timer.ts";
 import { absent } from "./run-producers.ts";
@@ -473,7 +474,7 @@ export async function hostColumns(
     },
   };
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+runAsCommand(import.meta.url,async()=>{
   const [root, name, harness, out, ...input] = process.argv.slice(2);
   assert.ok(
     root && name && harness && out,
@@ -484,4 +485,4 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if(!(error instanceof ToolingInstrumentError))throw error;
     console.error(error.message);process.exitCode=2;
   }
-}
+});

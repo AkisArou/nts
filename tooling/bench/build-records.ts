@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 /** Compile-only benchmark observations. This command never executes a workload. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -5,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import {fileURLToPath} from "node:url";
 import { closeMemoryRun, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
@@ -321,11 +322,11 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+runAsCommand(import.meta.url,async()=>{
   try { process.exitCode = await runBuildRecords(); }
   catch (error) {
     console.error(`benchmark NOT MEASURED: ${error instanceof Error ? error.message : String(error)}`);
     if (!(error instanceof CommandNotMeasuredError)) publishToolingFailure(error instanceof ToolingInstrumentError ? error : new ToolingInstrumentError("tooling-setup", String(error)));
     process.exitCode = 124;
   }
-}
+});

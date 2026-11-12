@@ -1,7 +1,8 @@
+import {runAsCommand} from "./command-entry.ts";
 // Admission to a timed run depends on the reserved physical core, not on
 // load average or other cores. The measurement mutex is owned by with-lock.sh.
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+
 import { MEASUREMENT_CPUS } from "./affinity.ts";
 
 type Ticks = Map<number, { total: number; idle: number; program: number }>;
@@ -119,7 +120,7 @@ export async function waitForQuiet(options: {
   return false;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+runAsCommand(import.meta.url,async()=>{
   if (process.platform !== "linux") {
     console.error("with-lock: reserved-core quiet admission applies on Linux; use the host's measurement affinity");
   } else {
@@ -139,4 +140,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exitCode = 75;
     }
   }
-}
+});

@@ -1,3 +1,4 @@
+import {runAsCommand} from "./command-entry.ts";
 import {hostObservations} from "./host-observations.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
@@ -247,10 +248,10 @@ function main(argv: readonly string[]): number {
   return red ? 1 : 0;
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+runAsCommand(import.meta.url,async()=>{
   const planned=gateEnvironment(process.env,{run:join(homedir(),'.cache/nts-inner',String(Date.now())+'-'+process.pid),standalone:!process.env.NTS_GATE_ENV_CONTEXT,oracleAdmissionContext:'gate'});
   let status=1;
   try{const sealed=await sealOracleRun(planned);launchEnvironment=sealed.env;status=main(process.argv.slice(2));}
   finally{finishRunTemporary(planned.temporary,planned.env.HOME!,status===0);}
   process.exitCode=status;
-}
+},{realpath:true});

@@ -1,9 +1,10 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Cross-version contract: the candidate's tooling/gate/canonical-environment.ts
 // exports gateEnvironment. No other version creates its environment or grants.
 // Keep this process alive while the command runs: it owns resolutionOwner.
 import {spawnSync,type StdioOptions} from "node:child_process";
 import {readFileSync,writeFileSync} from "node:fs";
-import {isAbsolute,join,resolve} from "node:path";
+import {isAbsolute,join} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 
@@ -54,11 +55,11 @@ async function launch():Promise<number>{
   }
 }
 
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+runAsCommand(import.meta.url,async()=>{
   try{process.exitCode=await launch();}
   catch(error){
     console.error(`candidate environment: ${String(error)}`);
     if(!(error instanceof CandidateEnvironmentContractError))writeFileSync(3,JSON.stringify({signal:null,error:{message:String(error)}}));
     process.exitCode=2;
   }
-}
+});

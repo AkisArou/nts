@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Registry bytes are acquired before submission; every reader installs frozen
 // and offline into its own tree. No installed tree is an input of another.
 import {createHash} from "node:crypto";
@@ -5,7 +6,7 @@ import {execFileSync} from "node:child_process";
 import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync} from "node:fs";
 import {userInfo} from "node:os";
 import {dirname,join,relative,resolve,sep} from "node:path";
-import {pathToFileURL} from "node:url";
+
 import {setTimeout as pause} from "node:timers/promises";
 import {ToolingInstrumentError,publishToolingFailure} from "../gate/step-result.ts";
 import {GateResource} from "../gate/gate-resource.ts";
@@ -146,13 +147,11 @@ export async function installDependencies(root:string,tree:string,options:{manag
   }));
 }
 
-async function main():Promise<void>{
+runAsCommand(import.meta.url,async()=>{
   const [mode,root,tree,revision,...extra]=process.argv.slice(2);
   try {
     if(!root||!tree||extra.length||!['--acquire','--offline'].includes(mode!))throw failure("usage: dependency-inputs.ts --acquire <shared> <source> <commit> | --offline <shared> <tree>");
     if(mode==="--acquire")await acquireSubmission(root,tree,revision??"HEAD");
     else await installDependencies(root,tree);
   }catch(error){const problem=error instanceof ToolingInstrumentError?error:failure(String(error));publishToolingFailure(problem);console.error(`instrument failure: ${problem.message}`);process.exitCode=2;}
-}
-
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url) main().catch(error=>{console.error(error);process.exitCode=1;});
+});

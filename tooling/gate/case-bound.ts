@@ -1,3 +1,4 @@
+import {runAsCommand} from "./command-entry.ts";
 // One case's command under the shared supervisor (active-command.ts), for a
 // runner written in shell or a tool that runs one command at a time.
 //
@@ -18,8 +19,8 @@
 // frame says so (runaway, hung, tooling-setup) and it exits 124, as every
 // unmeasured check does.
 import { constants } from "node:os";
-import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+
+
 import { activeCommand, commandMemoryFailure, COMMAND_ACTIVITY_POLL_MS, COMMAND_CPU_BUDGET_SECONDS, COMMAND_IDLE_GUARD_MS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
 import { CaseBudgetError, publishPressure, publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentError } from "./step-result.ts";
 
@@ -90,9 +91,9 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
   return result.status ?? CASE_UNMEASURED_EXIT;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+runAsCommand(import.meta.url,async()=>{
   let bound;
   try { bound = parseCaseBound(process.argv.slice(2)); }
   catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exit(2); }
   process.exitCode = await runCaseBound(bound);
-}
+});

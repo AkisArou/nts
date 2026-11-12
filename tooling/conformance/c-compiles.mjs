@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // Compile the generated C for every runtime project, including web-platform.
 //
 //   NTS_BIN=<pin> node tooling/conformance/c-compiles.mjs [project ...]
@@ -15,7 +16,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,  } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import {fileURLToPath} from "node:url";
 
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
@@ -143,7 +144,7 @@ async function main() {
   return compiled.length === projects.length ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+runAsCommand(import.meta.url,async()=>{
   try { process.exitCode = await main(); }
   catch (error) { if(error instanceof ToolingInstrumentError)publishToolingFailure(error); console.error(`  NOT MEASURED: ${error.message}`); process.exitCode = 2; }
-}
+});

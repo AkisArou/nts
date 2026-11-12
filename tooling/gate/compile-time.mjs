@@ -55,6 +55,7 @@ import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from ".
 import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, compileTimeModules, readCounterTable } from "./compile-counter.ts";
 import { improvedLine, pendingLine } from "../records/pending.ts";
 import { withToken } from "./tokens.mjs";
+import { calibrate } from './compile-counter-calibrate.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -66,7 +67,7 @@ const RECORD = process.argv.includes("--record");
 // Only NoGC has shared prepared listings. RC always measures its own pipeline.
 let FROM = ARM === "nogc" ? process.env.NTS_COMPILE_TIMES_FROM : undefined;
 if (RECORD) {
-  await import("./compile-counter-calibrate.ts");
+  await calibrate();
   process.exit(0);
 }
 const cache = join(homedir(), ".cache/nts-compile-counters");

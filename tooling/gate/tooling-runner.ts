@@ -1,9 +1,10 @@
+import {runAsCommand} from "./command-entry.ts";
 // Test events decide results. Silence can only fail to measure a file.
 import {run} from "node:test";
 import {spec} from "node:test/reporters";
 import {finished} from "node:stream/promises";
 import {resolve} from "node:path";
-import {fileURLToPath,pathToFileURL} from "node:url";
+import {fileURLToPath} from "node:url";
 import {spawn} from "node:child_process";
 import {mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,writeFileSync} from "node:fs";
 import {availableParallelism,homedir} from "node:os";
@@ -230,7 +231,7 @@ function reportTimes(result:ToolingResult,root:string):number {
   if(result.times)for(const line of toolingTimesReport(result.times,root))process.stdout.write(line+"\n");
   return result.status;
 }
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
+runAsCommand(import.meta.url,async()=>{
   try {
     const args=process.argv.slice(2);
     if(args[0]==="--worker") {
@@ -264,4 +265,4 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     }
     process.exitCode=2;
   }
-}
+});

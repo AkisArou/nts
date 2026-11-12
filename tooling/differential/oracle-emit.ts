@@ -1,3 +1,4 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
 import {createHash} from 'node:crypto';
@@ -1655,7 +1656,7 @@ export async function prepareOracle(request:OracleOptions,resolutionOwnerPid=pro
   try{return await worker.prepare(request);}finally{worker.close();}
 }
 
-async function main():Promise<void>{
+runAsCommand(import.meta.url,async()=>{
   if(process.argv[2]==='--read-program-reference'&&process.argv[3]){
     const {readProgramOracleReference}=await import('./oracle-results.ts');
     const request=JSON.parse(process.argv[3]);
@@ -1688,6 +1689,4 @@ async function main():Promise<void>{
     }finally{try{finish();}finally{if(prepared)closeOracleExecution(prepared);}}
   }
   else throw Error('usage: oracle-emit.ts --identity | --prepare <entry.ts> <owned directory> [tsconfig.json]');
-}
-
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) main().catch(error=>{console.error(error);process.exitCode=1;});
+});

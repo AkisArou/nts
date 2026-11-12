@@ -27,7 +27,7 @@ export function inspectModuleAsync(rootDirectory:string,file:string,source:strin
   const entries=new Set<string>(),imports=new Set<string>(),problems:string[]=[];
   const workers=new Set<string>(),values=new Map<string,Node>();
   const gather=(node:Node):void=>{
-    const specifier=ast.isImportDeclaration(node)?node.importClause?.isTypeOnly?undefined:node.moduleSpecifier
+    const specifier=ast.isImportDeclaration(node)?node.importClause?.phaseModifier===ast.SyntaxKind.TypeKeyword?undefined:node.moduleSpecifier
       :ast.isExportDeclaration(node)?node.isTypeOnly?undefined:node.moduleSpecifier
       :ast.isImportEqualsDeclaration(node)&&!node.isTypeOnly&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
       :ast.isCallExpression(node)&&(node.expression.kind===ast.SyntaxKind.ImportKeyword||ast.isIdentifier(node.expression)&&node.expression.text==='require')?node.arguments[0]:undefined;

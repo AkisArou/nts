@@ -1,8 +1,9 @@
+import {runAsCommand} from "../gate/command-entry.ts";
 // One producer owns the SDK; consumers read authenticated answers after it
 // exits. A bounded warm pool amortizes SDK startup without retaining its heaps.
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {dirname,isAbsolute,join,resolve} from 'node:path';
+import {dirname,isAbsolute,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {availableParallelism} from 'node:os';
 import {REPOSITORY,oracleRecipeIdentity} from './oracle-emit.ts';
@@ -143,7 +144,7 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
   }finally{cleanup();}
 }
 
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+runAsCommand(import.meta.url,async()=>{
   try{const at=process.argv.indexOf('--jobs');await produceProgramOracles({directory:programOracleDirectory(),jobs:at<0?undefined:Number(process.argv[at+1])});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}
-}
+});
