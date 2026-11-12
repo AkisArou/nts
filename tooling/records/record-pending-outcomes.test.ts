@@ -43,8 +43,11 @@ function recordsRun(t:{after(fn:()=>void):void}){
   // own them, and checks each of those projects whole.
   cpSync(join(SOURCE,"tooling"),join(root,"tooling"),{recursive:true});
   mkdirSync(join(root,'tests/typescript'),{recursive:true});
-  copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{'tests/typescript':'pending-outcome records fixture'}});
+  mkdirSync(join(root,'tests/outcomes'),{recursive:true});
+  copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{
+    'tests/typescript':'pending-outcome records fixture','tests/outcomes':'one pending outcome fixture'}});
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
+  assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const file of ["tsconfig.base.json","tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }
@@ -53,6 +56,8 @@ function recordsRun(t:{after(fn:()=>void):void}){
   for(const file of ["tsconfig.json","src/main.ts"]){
     mkdirSync(dirname(join(root,FIXTURE,file)),{recursive:true});copyFileSync(join(SOURCE,FIXTURE,file),join(root,FIXTURE,file));
   }
+  assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[FIXTURE.split('/').at(-1)]);
+  assert.equal(existsSync(join(root,RECORD)),false,'the fixture owns a pending case, never its production record');
   git(root,"add","-f","tsconfig.fixtures.json",FIXTURE);git(root,"commit","-qm","one pending outcome");
   const pin=publishPin(binary,join(scratch,"pin"),provenanceOf(binary)??{sha:git(SOURCE,"rev-parse","HEAD"),
     subject:"test fixture copy of the gate compiler",clean:true,applied:null,built_at:new Date().toISOString()});
