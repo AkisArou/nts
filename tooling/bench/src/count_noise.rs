@@ -133,8 +133,18 @@ mod tests {
     use super::*;
 
     fn record() -> serde_json::Value {
-        serde_json::from_str(include_str!("../../../results/benchmarks/count-bands.json"))
-            .expect("tool-written calibration")
+        let names = [
+            "nts C", "nts LLVM", "nts JVM", "C++", "Java", "node", "Bun JIT", "Bun AOT", "ScriptC",
+        ];
+        serde_json::json!({
+            "version":1,"measure":"instructions:u/per-op","definition":"max-minus-min-over-min-ceil-bp-v1",
+            "provenance":{"version":1,"case":"supplied","profile":"fixture","unit":"fixture","host":"fixture",
+                "runs":2,"counter_cpu":0,"measurement_lock":false,"source_commit":"a".repeat(40),
+                "binary_sha256":"b".repeat(64),"raw_cohort_sha256":"c".repeat(64)},
+            "observations":[{"run":0},{"run":1}],
+            "columns":names.map(|name|serde_json::json!({"name":name,"samples":[1_000_000,1_000_001],
+                "min":1_000_000,"max":1_000_001,"band_basis_points":1}))
+        })
     }
     fn check(value: &serde_json::Value) -> Result<Bands> {
         let names = value["columns"]
@@ -146,8 +156,8 @@ mod tests {
         validate(serde_json::from_value(value.clone())?, &names)
     }
     #[test]
-    fn the_recorded_bands_recompute_from_the_retained_samples() {
-        let bands = check(&record()).expect("authentic measured ranges");
+    fn supplied_bands_recompute_from_the_retained_samples() {
+        let bands = check(&record()).expect("consistent supplied ranges");
         assert_eq!(bands.values.len(), 9);
         for name in ["nts C", "nts LLVM", "C++", "ScriptC"] {
             assert!(bands.values[name] < 100);

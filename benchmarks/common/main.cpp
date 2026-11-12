@@ -112,7 +112,7 @@ static int calibrate(double checksum) {
 static int count(double checksum) {
   const long long n = count_env("NTS_BENCH_COUNT_N");
   const long long warmed = count_env("NTS_BENCH_COUNT_WARMUP");
-  if (n < 1 || warmed < 0) {
+  if (n < 0 || warmed < 0) {
     std::fprintf(stderr, "fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP\n");
     return 1;
   }
@@ -137,7 +137,7 @@ static int count(double checksum) {
   }
   std::printf("{\"checksum\":\"%016llx\",\"warmup\":%lld,\"n\":%lld,\"elapsedNs\":%.17g,\"nsPerOp\":%.17g,\"sink\":%.17g}\n",
               static_cast<unsigned long long>(bits_of(checksum)), warmed, n,
-              elapsed, elapsed / static_cast<double>(n), sink);
+              elapsed, n == 0 ? 0 : elapsed / static_cast<double>(n), sink);
   return 0;
 }
 

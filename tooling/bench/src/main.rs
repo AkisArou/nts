@@ -364,6 +364,7 @@ fn run() -> Result<()> {
         let counting = Counting {
             cpu: execution::count_cpu()?,
             out: out.clone(),
+            driver: root.join("tooling/bench/count-driver.ts"),
         };
         return count_cases(&root, &out, &cases, &counting);
     }
@@ -455,8 +456,11 @@ fn count_cases(
         );
     }
     println!(
-        "instructions per op, counted on CPU {} (outside the measurement pair 4-5), no lock",
+        "net user instructions per op, counted on CPU {} (outside the measurement pair 4-5), no lock",
         counting.cpu
+    );
+    println!(
+        "count instrument: instruction-calibrated-empty-subtracted-v1; repetitions from instructions; matching empty bracket subtracted"
     );
     println!(
         "noise bands (basis points): {}",
@@ -2612,6 +2616,7 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
 struct Counting {
     cpu: u32,
     out: Utf8PathBuf,
+    driver: Utf8PathBuf,
 }
 
 /// The one JSON line a driver in a counting mode prints.
@@ -2627,74 +2632,66 @@ fn driver_json(output: &std::process::Output) -> Result<serde_json::Value> {
     serde_json::from_str(line).context("counting output was not one JSON line")
 }
 
-/// Count fixed work instead of timing it: calibrate the driver's own
-/// repetition count once, then run exactly that work inside perf's bracket.
-/// The checksum both stages print must agree, as in a timed row.
+/// The shared owner chooses work by instruction count and subtracts its empty
+/// bracket. Native and host columns use exactly the same counting protocol.
 fn count(
     command: &mut std::process::Command,
     counting: &Counting,
     name: &str,
     column: &str,
 ) -> Result<Measured> {
-    command.env("NTS_BENCH_COUNT_MODE", "calibrate");
-    let calibration = {
-        let mut pinned = confine(command, &counting.cpu.to_string());
-        let output = pinned.output().context("calibrating a counted benchmark")?;
-        driver_json(&output)?
-    };
-    let field = |key: &str| {
-        calibration
-            .get(key)
-            .cloned()
-            .unwrap_or(serde_json::Value::Null)
-    };
-    let reps = field("reps")
-        .as_u64()
-        .context("calibration named no reps")?;
-    let warmup = field("warmup")
-        .as_u64()
-        .context("calibration named no warmup")?;
-    let checksum = field("checksum")
-        .as_str()
-        .context("calibration named no checksum")?
-        .to_owned();
-
-    command
-        .env("NTS_BENCH_COUNT_MODE", "count")
-        .env("NTS_BENCH_COUNT_N", reps.to_string())
-        .env("NTS_BENCH_COUNT_WARMUP", warmup.to_string());
     let label: String = column
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
-    let counted = execution::spawn_counted(
-        command,
-        counting.cpu,
-        counting
-            .out
-            .join(format!("count/{name}-{label}"))
-            .as_std_path(),
-    )?;
-    let value = driver_json(&counted.output)?;
+    let mut owner = std::process::Command::new("node");
+    owner
+        .arg(&counting.driver)
+        .arg(counting.cpu.to_string())
+        .arg(counting.out.join(format!("count/{name}-{label}")))
+        .arg("--")
+        .arg(command.get_program())
+        .args(command.get_args());
+    for (key, value) in command.get_envs() {
+        match value {
+            Some(value) => {
+                owner.env(key, value);
+            }
+            None => {
+                owner.env_remove(key);
+            }
+        }
+    }
+    if let Some(directory) = command.get_current_dir() {
+        owner.current_dir(directory);
+    }
+    let output = owner.output().context("running the shared count driver")?;
+    let value = driver_json(&output)?;
     ensure!(
-        value.get("checksum").and_then(serde_json::Value::as_str) == Some(checksum.as_str()),
-        "counted checksum disagrees with calibration"
+        value["instrument"] == "instruction-calibrated-empty-subtracted-v1",
+        "unsupported count instrument"
     );
-    ensure!(
-        value.get("n").and_then(serde_json::Value::as_u64) == Some(reps)
-            && value.get("warmup").and_then(serde_json::Value::as_u64) == Some(warmup),
-        "counted run did not run the calibrated work"
-    );
+    let counted = &value["counted"];
     Ok(Measured {
-        ns_per_op: value
-            .get("nsPerOp")
-            .and_then(serde_json::Value::as_f64)
+        ns_per_op: counted["nsPerOp"]
+            .as_f64()
             .context("counted run named no nsPerOp")?,
-        checksum,
+        checksum: counted["checksum"]
+            .as_str()
+            .context("counted run named no checksum")?
+            .to_owned(),
         spread: 1.0,
         warm_capped: false,
-        instructions: Some(counted.instructions),
-        counted_reps: Some(reps),
+        instructions: Some(
+            value["instructions"]
+                .as_u64()
+                .context("counted run named no net instructions")?,
+        ),
+        counted_reps: Some(
+            counted["n"]
+                .as_u64()
+                .context("counted run named no repetitions")?,
+        ),
     })
 }
 

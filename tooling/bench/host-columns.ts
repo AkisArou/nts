@@ -1,7 +1,7 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { countDriver } from "./count-driver.ts";
 import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
@@ -167,83 +167,10 @@ export function parseMeasurement(
 const COUNTING = process.env.NTS_BENCH_COUNT === "1";
 const COUNT_CPU = process.env.NTS_BENCH_COUNT_CPU ?? "";
 const COUNT_OUT = process.env.NTS_BENCH_COUNT_OUT ?? "";
-type Counted = { calibration: Json; counted: Json; instructions: number; receipts: Receipt[] };
-async function executeCounted(
-  program: string,
-  args: string[],
-  cwd: string,
-  label: string,
-): Promise<Counted> {
-  assert.match(COUNT_CPU, /^\d+$/, "counted runs name their CPU");
-  assert.ok(COUNT_OUT, "counted runs name their output directory");
-  const clean = (extra: Record<string, string>) => {
-    const env = { ...process.env };
-    delete env.NTS_BENCH_STARTUP;
-    for (const key of Object.keys(env)) if (key.startsWith("NTS_BENCH_COUNT_")) delete env[key];
-    return { ...env, ...extra };
-  };
-  const run = (command: string[], env: Record<string, string>) =>
-    new Promise<Receipt>((done, reject) => {
-      const startedAt = new Date().toISOString(), began = process.hrtime.bigint(), before = cpu5();
-      let stdout = "", stderr = "";
-      const child = spawn(command[0], command.slice(1), { cwd, env: clean(env), stdio: ["ignore", "pipe", "pipe"] });
-      child.stdout.on("data", (b) => (stdout += b));
-      child.stderr.on("data", (b) => (stderr += b));
-      child.on("error", reject);
-      child.on("close", (status, signal) => done({
-        command, cwd, startedAt, finishedAt: new Date().toISOString(), status, signal,
-        stdout, stderr, wallNanoseconds: Number(process.hrtime.bigint() - began), cpu5: delta(before, cpu5()),
-      }));
-    });
-  const json = (receipt: Receipt): Record<string, Json> => {
-    assert.equal(receipt.status, 0, `counted run failed: ${receipt.stderr.trim()}`);
-    const line = receipt.stdout.trim().split("\n").at(-1);
-    assert.ok(line, "counted run printed nothing");
-    return JSON.parse(line);
-  };
-  const receipts: Receipt[] = [];
-  const calibrationReceipt = await run(
-    ["timeout", "--kill-after=10s", "180s", "prlimit", "--cpu=120:125", "--core=0:0", "--", "taskset", "-c", COUNT_CPU, program, ...args],
-    { NTS_BENCH_COUNT_MODE: "calibrate" },
-  );
-  receipts.push(calibrationReceipt);
-  const calibration = json(calibrationReceipt) as { checksum?: unknown; reps?: unknown; warmup?: unknown };
-  assert.ok(typeof calibration.checksum === "string" && Number.isSafeInteger(calibration.reps) && Number(calibration.reps) >= 1
-    && Number.isSafeInteger(calibration.warmup) && Number(calibration.warmup) >= 0, "calibration named no fixed work");
-
-  const folder = join(COUNT_OUT, "count", label);
-  mkdirSync(folder, { recursive: true });
-  const ctl = join(folder, "control"), ack = join(folder, "ack"), csv = join(folder, "perf.csv");
-  for (const fifo of [ctl, ack]) try { rmSync(fifo); } catch {}
-  const made = spawnSync("mkfifo", [ctl, ack], { encoding: "utf8" });
-  assert.equal(made.status, 0, "mkfifo: " + made.stderr);
-  const held = [openSync(ctl, "r+"), openSync(ack, "r+")];
-  try {
-    const countedReceipt = await run(
-      ["timeout", "-k", "5", "120", "perf", "stat", "-D", "-1", "--control", `fifo:${ctl},${ack}`, "-x,", "-o", csv,
-        "-e", "cpu_core/instructions/u", "--", "taskset", "-c", COUNT_CPU, program, ...args],
-      {
-        NTS_BENCH_COUNT_MODE: "count",
-        NTS_BENCH_COUNT_N: String(calibration.reps),
-        NTS_BENCH_COUNT_WARMUP: String(calibration.warmup),
-        NTS_BENCH_COUNT_CONTROL: ctl,
-        NTS_BENCH_COUNT_ACK: ack,
-      },
-    );
-    receipts.push(countedReceipt);
-    const counted = json(countedReceipt) as { checksum?: unknown; n?: unknown; warmup?: unknown };
-    assert.equal(counted.checksum, calibration.checksum, "counted checksum disagrees with calibration");
-    assert.equal(counted.n, calibration.reps, "counted run did not run the calibrated work");
-    assert.equal(counted.warmup, calibration.warmup, "counted run did not run the calibrated warmup");
-    const rows = readFileSync(csv, "utf8").split("\n").map((line) => line.split(",").map((x) => x.trim()))
-      .filter((fields) => fields[2]?.includes("/instructions/"));
-    const active = rows.filter((fields) => fields[0] !== "<not counted>");
-    assert.ok(active.length === 1 && /^\d+$/.test(active[0][0]) && Number(active[0][4]) >= 99,
-      "instructions must run on one pinned PMU");
-    return { calibration: calibration as Json, counted: counted as Json, instructions: Number(active[0][0]), receipts };
-  } finally {
-    held.forEach(closeSync);
-  }
+async function executeCounted(program:string,args:string[],cwd:string,label:string){
+  assert.match(COUNT_CPU,/^\d+$/,"counted runs name their CPU");
+  assert.ok(COUNT_OUT,"counted runs name their output directory");
+  return countDriver({program,args,cwd,folder:join(COUNT_OUT,"count",label),cpu:Number(COUNT_CPU),env:process.env});
 }
 async function measure(
   program: string,
@@ -255,10 +182,10 @@ async function measure(
 ): Promise<Cell> {
   if (COUNTING) {
     try {
-      const { calibration, counted, instructions, receipts } = await executeCounted(program, args, cwd, countedLabel);
+      const { calibration, counted, instructions, brackets, instrument } = await executeCounted(program, args, cwd, countedLabel);
       const value = counted as { checksum: string; nsPerOp: number; n: number };
       if (expected !== null && value.checksum !== expected)
-        return absent("INVALID", "Checksum disagreement; no count accepted", { calibration, counted, build: build as unknown as Json });
+        return absent("INVALID", "Checksum disagreement; no count accepted", { calibration, counted: counted as unknown as Json, build: build as unknown as Json });
       return {
         status: "OK",
         nanoseconds: value.nsPerOp,
@@ -268,7 +195,7 @@ async function measure(
         reason: null,
         instructions,
         counted_reps: value.n,
-        details: { attempts: receipts as unknown as Json, build: build as unknown as Json, calibration, counted },
+        details: { brackets: brackets as unknown as Json, build: build as unknown as Json, calibration, counted: counted as unknown as Json, instrument },
       };
     } catch (error) {
       return absent("INVALID", error instanceof Error ? error.message : String(error), { build: build as unknown as Json });

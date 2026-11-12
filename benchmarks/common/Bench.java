@@ -197,7 +197,7 @@ public final class Bench {
         } catch (RuntimeException bad) {
             throw new AssertionError("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
         }
-        if (n < 1 || warmed < 0) {
+        if (n < 0 || warmed < 0) {
             throw new AssertionError("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
         }
         // Warm up the loop being counted, outside the bracket, then let the
@@ -222,7 +222,7 @@ public final class Bench {
             throw new AssertionError("unreachable");
         }
         System.out.printf("{\"checksum\":\"%s\",\"warmup\":%d,\"n\":%d,\"elapsedNs\":%d,\"nsPerOp\":%s,\"sink\":%s}%n",
-            bits(checksum), warmed, n, elapsed, Double.toString((double) elapsed / (double) n), Double.toString(sink));
+            bits(checksum), warmed, n, elapsed, Double.toString(n == 0 ? 0 : (double) elapsed / (double) n), Double.toString(sink));
     }
 
     /** How long the JIT must add no compilation time for warm-up to be over. */

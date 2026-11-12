@@ -349,8 +349,11 @@ slows another in its group is seen in the same sitting.
 
 **Counting compares before and after without the lock.**
 `nts-bench --count [case ...]` (also `--count --group <name>`) prints each
-selected row's instruction counts per column: the drivers' own fixed work,
-calibrated once and counted inside perf's bracket on any CPU outside 4–5.
+selected row's net instruction counts per column. One shared count driver
+chooses fixed work from an instruction-count probe, warms the empty and work
+processes by that same count, and subtracts the matching empty bracket.
+Neither the chosen repetitions nor the subtraction depends on wall time.
+The counter runs on any CPU outside 4–5.
 It takes no measurement lock and publishes no run record, so agents count
 in parallel. The header reads each column's observed repeat range from
 `results/benchmarks/count-bands.json`, written by

@@ -78,7 +78,7 @@ function calibrate(run, checksum) {
 function count(run, checksum) {
   const n = Number(process.env.NTS_BENCH_COUNT_N);
   const warmed = Number(process.env.NTS_BENCH_COUNT_WARMUP);
-  if (!Number.isSafeInteger(n) || n < 1 || !Number.isSafeInteger(warmed) || warmed < 0) {
+  if (!Number.isSafeInteger(n) || n < 0 || !Number.isSafeInteger(warmed) || warmed < 0) {
     throw new Error("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
   }
   // Warm up the loop being counted, outside the bracket.
@@ -98,7 +98,7 @@ function count(run, checksum) {
     warmup: warmed,
     n,
     elapsedNs: elapsed,
-    nsPerOp: elapsed / n,
+    nsPerOp: n === 0 ? 0 : elapsed / n,
     sink,
   }));
 }
