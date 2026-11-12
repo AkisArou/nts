@@ -24,7 +24,7 @@ export function copyModuleClosure(entries: readonly string[], root: string, opti
   while (!info(ancestor)) ancestor = dirname(ancestor);
   const destination = resolve(realpathSync(ancestor), relative(ancestor, requested));
   if (inside(source, destination)) throw new Error("fixture destination resolves inside source tree: " + root);
-  const files = moduleClosure(entries, {sourceRoot: source});
+  const files = moduleClosure(entries, {...options, sourceRoot: source});
   for (const name of files) {
     const from = resolve(source, name), to = resolve(destination, name);
     if (to === from) throw new Error("fixture destination is the source: " + name);

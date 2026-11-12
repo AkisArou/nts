@@ -136,7 +136,7 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
     await runMemoryWorkers({paths,jobs:workers,memory,workerBytes:Math.floor(memory.budgetBytes/Math.max(1,workers)),recycleAfterCases:16,recycleAboveBytes:PROGRAM_WORKER_RECYCLE_BYTES,
       key:'program-oracles',what:'program oracle references',
       token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal,caseReservation(sizes,subjects.get(path)!)),
-      args:index=>[join(dirname(fileURLToPath(import.meta.url)),'program-oracle-worker.ts'),join(scratch,'w'+index),join(directory,'executables')],report,
+      args:index=>[fileURLToPath(new URL('./program-oracle-worker.ts',import.meta.url)),join(scratch,'w'+index),join(directory,'executables')],report,
       onRow:(row:{path:string;bucket:string;why?:string;answer?:ProgramAnswer;capture?:ProgramCapture;memory?:ProgramMemory})=>{
         if(row.bucket!=='oracle-reference'||!row.answer||!row.capture)errors.push(row.path+': '+(row.why??row.bucket));
         else {writer.add(row.answer,row.capture);if(row.answer.kind==='budget')budgets++;}

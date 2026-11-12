@@ -27,7 +27,7 @@ import {newTestScratch} from "../gate/test-scratch.ts";
 import {ownMemory} from "../gate/test-memory.ts";
 
 
-export const GATE = fileURLToPath(new URL("../gate/", import.meta.url));
+export const GATE = dirname(fileURLToPath(new URL("../gate/all.sh", import.meta.url)));
 
 export function fixture(t: TestContext) {
   // A red run keeps read-only captured inputs in its temporary directory: removeRun restores them first.
@@ -43,7 +43,7 @@ export function fixture(t: TestContext) {
   }
   oracleWorkspaceFixture(t,tree);
   writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
-  symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
+  symlinkSync(fileURLToPath(new URL("../gate/times.tsv", import.meta.url)), join(gate, "times.tsv"));
   const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], {env:fixtureEnvironment(t), encoding: "utf8" }).trim();
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh
 controls=${JSON.stringify(controls)}

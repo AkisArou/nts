@@ -71,7 +71,7 @@ test("the default full run refuses a non-main pin and writes nothing", t => {
 });
 
 test("a plain full run canonically accepts exactly the landing's standing skips",t=>{
-  const f=fixture(t),source=new URL("../gate/",import.meta.url).pathname,gate=join(f.root,"tooling/gate");
+  const f=fixture(t),source=dirname(new URL("../gate/run.mjs",import.meta.url).pathname),gate=join(f.root,"tooling/gate");
   // Exercise the real verdict runner in its own repository, with two stand-in
   // steps that both return 77. Only the source-owned device skip may be green.
   for(const file of moduleClosure(["tooling/gate/run.mjs"])){
@@ -80,8 +80,8 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
     if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
     else if(!existsSync(target))symlinkSync(original,target);
   }
-  symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
-  const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
+  symlinkSync(new URL("../gate/times.tsv",import.meta.url),join(gate,"times.tsv"));
+  const listed=spawnTest("sh",[new URL("../gate/all.sh",import.meta.url).pathname,"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
   writeFileSync(join(gate,"all.sh"),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  echo 'SKIP: fixture unavailable'\n  exit 77\nfi\n`);
   const home=join(f.directory,"home");

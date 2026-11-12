@@ -176,7 +176,6 @@ for (const mode of ["ok", "install-fails", "app-fails", "boot-fails"] as const) 
 
 test("successful interop retains only the named stage clocks", () => {
   const dir = newTestScratch("ios-clock-log");
-  const source = fileURLToPath(new URL("../gate/", import.meta.url));
   const gate = join(dir, "tooling", "gate");
   const clocks = [
     "run-ios: readiness (Test Phone) exit 0 after 3s",
@@ -185,8 +184,8 @@ test("successful interop retains only the named stage clocks", () => {
   ];
   try {
     mkdirSync(gate, { recursive: true });
-    copyFileSync(join(source, "all.sh"), join(gate, "all.sh"));
-    for (const name of ["costs.mjs", "token.sh"]) copyFileSync(join(source, name), join(gate, name));
+    for (const source of [new URL("../gate/all.sh", import.meta.url), new URL("../gate/costs.mjs", import.meta.url), new URL("../gate/token.sh", import.meta.url)])
+      copyFileSync(source, join(gate, source.pathname.split("/").at(-1)!));
     chmodSync(join(gate, "token.sh"), 0o755);
     for (const name of ["ios-clock", "native-control"]) {
       const project = join(dir, "tests", "interop", name);

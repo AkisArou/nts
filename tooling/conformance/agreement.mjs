@@ -72,7 +72,7 @@ process.on("exit", () => {
   }
 });
 
-const DIR = join(HERE, "../../tests/agreements");
+const DIR = fileURLToPath(new URL("../../tests/agreements/", import.meta.url));
 const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const names = argv.length > 0
   ? argv

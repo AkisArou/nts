@@ -51,7 +51,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const MAP = join(HERE, "features.json");
+const MAP = fileURLToPath(new URL("./features.json", import.meta.url));
 const SUITE = join(ROOT, "third_party/test262");
 const REGISTRY = join(SUITE, "features.txt");
 
@@ -169,7 +169,7 @@ function authority(name, row) {
   }
 }
 
-const extra = JSON.parse(readFileSync(join(HERE, "test262-exclusions.json"), "utf8"));
+const extra = JSON.parse(readFileSync(fileURLToPath(new URL("./test262-exclusions.json", import.meta.url)), "utf8"));
 if (!Array.isArray(extra.exclusions)) cannotMeasure("no exclusions array");
 const exclusionKeys = new Set();
 for (const row of extra.exclusions) {

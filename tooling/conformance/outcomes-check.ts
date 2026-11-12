@@ -677,7 +677,7 @@ else if (recordingPending) {
 // violation it does not already know is printed as owed.
 if (written.length > 0) {
   const recorded = written.map(fixturePath);
-  const check = spawnSync("node", [join(HERE, "integrity.ts"), ...recorded], {
+  const check = spawnSync("node", [fileURLToPath(new URL("./integrity.ts", import.meta.url)), ...recorded], {
     cwd: ROOT,
     encoding: "utf8",
     env: { ...process.env, NTS_BIN: NTS },

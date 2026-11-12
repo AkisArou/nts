@@ -10,7 +10,7 @@ import {HOST_READ_OWNERS} from './test-host-owners.ts';
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
 export type HostRead={file:string;line:number;kind:HostReadKind;source:string;generated:boolean};
 export type HostDebt=Record<string,Partial<Record<HostReadKind,number>>>;
-export const HOST_DEBT='tooling/gate/test-host-debt.json';
+export const HOST_DEBT=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('./test-host-debt.json',import.meta.url))).split(sep).join('/');
 // These are product implementations or benchmark subjects, not the instrument.
 // Their clocks and machine APIs are behaviour nts compiles or measures.
 export const HOST_AUDIT_EXCLUDED_ROOTS={

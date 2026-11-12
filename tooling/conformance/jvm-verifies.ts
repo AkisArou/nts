@@ -117,9 +117,9 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const KNOWN = join(HERE, "jvm-verifies.known");
-const DECLINES = join(HERE, "jvm-declines.known");
-const DRIVER = join(HERE, "JvmVerify.java");
+const KNOWN = fileURLToPath(new URL("./jvm-verifies.known", import.meta.url));
+const DECLINES = fileURLToPath(new URL("./jvm-declines.known", import.meta.url));
+const DRIVER = fileURLToPath(new URL("./JvmVerify.java", import.meta.url));
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JAVA = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "java";
 const WORKERS = Number(process.env.NTS_JVM_VERIFIES_JOBS ?? 4);
@@ -603,7 +603,7 @@ async function check(project, slot) {
     return { files: [
       ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
     ], values: { tool: toolIdentity(JAVA, verifierEnv), flags, script: fileDigest(fileURLToPath(import.meta.url)),
-      reuse_policy: fileDigest(join(HERE, "../gate/artifact-reuse.ts")) } };
+      reuse_policy: fileDigest(fileURLToPath(new URL("../gate/artifact-reuse.ts", import.meta.url))) } };
   };
   const classCount = artifactFiles(out).filter(file => file.name.endsWith(".class")).length;
   const args = [...flags, "-cp", `${out}:${jar}`, DRIVER, out];

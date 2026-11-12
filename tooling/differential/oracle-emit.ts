@@ -13,7 +13,7 @@ import {ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProces
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
-export const ORACLE_LOADER=pathToFileURL(join(HERE,'oracle-loader.ts')).href;
+export const ORACLE_LOADER=new URL('./oracle-loader.ts',import.meta.url).href;
 const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 
 export type TypeScriptIdentity={version:string;rootPackageSha256:string;packageSha256:string;nativeSha256:string;nativePackageSha256:string};
@@ -548,7 +548,7 @@ type Capture={root:string;compiler:string;identity:TypeScriptIdentity;files:Map<
 // either refused or has no effect on the worker's owned snapshot.
 function captureToolchain(location?:string):Capture{
   if(!location)throw Error('oracle TypeScript capability NTS_ORACLE_TYPESCRIPT is missing');
-  const root=realpathSync(location),records:ToolchainRecords=JSON.parse(readFileSync(join(HERE,'oracle-toolchain.json'),'utf8'));
+  const root=realpathSync(location),records:ToolchainRecords=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8'));
   const expected=records.platforms[process.platform+'-'+process.arch];
   if(records.version!==1||!expected)throw Error('oracle TypeScript toolchain has no recorded identity for '+process.platform+'-'+process.arch);
   const files=new Map<string,Buffer>(),digest=createHash('sha256');
@@ -651,7 +651,7 @@ function compileChildAssets(directory:string,sessionDirectory:string,identity:Or
  * or incomplete plan is left to the bounded live path, with its native error. */
 async function publishNodeRoutes(directory:string,stored:OracleManifest,descriptor:OracleRuntimeDescriptor,records:Map<string,unknown>,nodes:Map<string,OracleRuntimeNode>,sources:Map<string,OracleRuntimeRoute[]>,assets:Map<string,{path:string;sha256:string}>,api:API,sessionDirectory:string,ownerPid:number){
   const began=performance.now(),cpu=process.cpuUsage();
-  const execution=JSON.parse(readFileSync(join(HERE,'oracle-toolchain.json'),'utf8')).execution.args as string[];
+  const execution=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args as string[];
   const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
   const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),ownerPid);
   descriptor.runtimeAssets=compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node);
@@ -1566,7 +1566,7 @@ export class OracleWorker{
       const manifestBytes=Buffer.from(JSON.stringify(stored,null,2)+'\n');
       writeFileSync(manifest+'.pending',manifestBytes);
       const snapshot:OracleSnapshotIdentity={version:1,index:stored.runtimeIndex,manifestSha256:hash(manifestBytes),assets:stored.runtimeAssets};
-      pending.push({manifest,loaderState,identity,snapshot,args:JSON.parse(readFileSync(join(HERE,'oracle-toolchain.json'),'utf8')).execution.args,
+      pending.push({manifest,loaderState,identity,snapshot,args:JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args,
         env:{NTS_ORACLE_EMIT_MANIFEST:manifest,NTS_ORACLE_EMIT_STATUS:loaderState,NTS_ORACLE_TYPESCRIPT:this.binding.root,NTS_ORACLE_SNAPSHOT:JSON.stringify(snapshot)}});
     }
     // Conflicting roots, changed declarations or a missing output invalidate
