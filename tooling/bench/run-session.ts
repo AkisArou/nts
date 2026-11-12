@@ -5,7 +5,8 @@ import { spawnSync } from "node:child_process";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { fileURLToPath } from "node:url";
 import { hostname, cpus } from "node:os";
 import {
@@ -23,6 +24,9 @@ import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 import { groupRows, readBenchmarkGroups } from "./groups.ts";
 import { readJournal } from "./run-journal.ts";
+const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
+const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
+const COMMON=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/common/",import.meta.url))));
 function command(root: string, program: string, args: string[]): string {
   const r = spawnSync(program, args, { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
@@ -56,23 +60,23 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
     /^[a-f0-9]{40}$/,
     "compiler build has no committed source identity; rebuild nts-bench",
   );
-  const inventory = readdirSync(join(root, "benchmarks/cases"), { withFileTypes: true })
+  const inventory = readdirSync(join(root, CASES), { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
   const files = [
-    "benchmarks/common/bench.mjs",
-    "benchmarks/common/main.cpp",
-    "benchmarks/common/harness.h",
-    "benchmarks/common/Bench.java",
-    "tooling/bench/src/main.rs",
-    "tooling/bench/host-columns.ts",
-    "tooling/bench/typed-timer.ts",
-  ].map((path) => ({ path, sha256: sha256(join(root, path)) }));
+    new URL("../../benchmarks/common/bench.mjs",import.meta.url),
+    new URL("../../benchmarks/common/main.cpp",import.meta.url),
+    new URL("../../benchmarks/common/harness.h",import.meta.url),
+    new URL("../../benchmarks/common/Bench.java",import.meta.url),
+    new URL("./src/main.rs",import.meta.url),
+    new URL("./host-columns.ts",import.meta.url),
+    new URL("./typed-timer.ts",import.meta.url),
+  ].map(input=>relative(SOURCE,fileURLToPath(input))).map((path) => ({ path, sha256: sha256(join(root, path)) }));
   const identity = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   const bridge = spawnSync(
     "git",
-    gitArguments(["grep", "-n", "-F", "@scriptc/node", "--", "benchmarks/cases", "benchmarks/common"]),
+    gitArguments(["grep", "-n", "-F", "@scriptc/node", "--", CASES, COMMON]),
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(

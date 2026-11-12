@@ -2,7 +2,9 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // The tracked authority is one record per fixture, plus the generator header.
 // A flat table is an interchange value in memory, never a second authority.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, posix } from "node:path";
+import { dirname, join, posix, relative } from "node:path";
+import {fileURLToPath} from "node:url";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {createHash} from "node:crypto";
 import {homedir} from "node:os";
 import type {OracleBudget} from "./oracle-execution.ts";
@@ -230,10 +232,13 @@ export function parseShard(value: unknown, fixture: string): Shard {
 }
 
 // These are compiler-checker negative inputs, not executable oracle subjects.
-const NOT_SUBJECTS = new Set(["tests/programs/invalid", "tests/programs/unsupported"]);
+const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
+const PROGRAMS=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../tests/programs/",import.meta.url))));
+const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
+const NOT_SUBJECTS = new Set([`${PROGRAMS}/invalid`, `${PROGRAMS}/unsupported`]);
 function inventory(root: string): Set<string> {
   const expected = new Set<string>();
-  for (const [parent, entry] of [["tests/programs", "tsconfig.json"], ["benchmarks/cases", "case.ts"]] as const) {
+  for (const [parent, entry] of [[PROGRAMS, "tsconfig.json"], [CASES, "case.ts"]] as const) {
     for (const name of readdirSync(join(root, parent), { withFileTypes: true })) {
       const fixture = `${parent}/${name.name}`;
       if (name.isDirectory() && !NOT_SUBJECTS.has(fixture) && existsSync(join(root, fixture, entry))) expected.add(fixture);

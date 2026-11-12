@@ -2,7 +2,8 @@ import {CaseBudgetError} from '../gate/step-result.ts';
 // Batch owners count completed comparisons before publishing incomplete work.
 import {existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {availableParallelism, homedir} from "node:os";
-import {dirname, join, resolve} from "node:path";
+import {dirname, join, relative, resolve} from "node:path";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import assert from "node:assert/strict";
 import {openProgramOracleResults} from './oracle-results.ts';
@@ -23,13 +24,16 @@ type Entry = {name: string; project: string; consumer: CheckConsumer; backend?: 
 type Completed = {entry: Entry; record: DecodedCheck; disposition: number};
 type Incomplete = {entry: Entry; error: unknown};
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const PROGRAMS=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../tests/programs/",import.meta.url))));
+const BENCHMARKS=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
+const COMPILED_WEB=relative(ROOT,fileURLToPath(dataDirectory(new URL("../conformance/web-platform/compiled/",import.meta.url))));
 
 function entries(mode: Mode, only: string | undefined, scratch: string): Entry[] {
   const references=mode==='benchmarks'&&process.env.NTS_PROGRAM_ORACLE
     ?openProgramOracleResults(JSON.parse(process.env.NTS_PROGRAM_ORACLE),oracleRecipeIdentity()):undefined;
   if (mode === "compiled-web") return ["jvm", "c", "llvm"].map(backend => ({name: backend, backend,
-    project: "tooling/conformance/web-platform/compiled/tsconfig.json", consumer: "program"}));
-  const benchmarks = mode === "benchmarks", area = benchmarks ? "benchmarks/cases" : "tests/programs";
+    project: join(COMPILED_WEB,"tsconfig.json"), consumer: "program"}));
+  const benchmarks = mode === "benchmarks", area = benchmarks ? BENCHMARKS : PROGRAMS;
   const result: Entry[] = [];
   for (const directory of readdirSync(join(ROOT, area), {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!directory.isDirectory() || (only && only !== directory.name)) continue;
@@ -40,7 +44,7 @@ function entries(mode: Mode, only: string | undefined, scratch: string): Entry[]
       if(references&&existsSync(join(ROOT,recordPath(fixture))))project=references.project(fixture);
       else if (!existsSync(join(ROOT, project))) {
         project = join(scratch, `${name}.tsconfig.json`);
-        writeFileSync(project, JSON.stringify({extends: join(ROOT, "tsconfig.fixtures.json"), include: [join(ROOT, fixture, "case.ts")]}));
+        writeFileSync(project, JSON.stringify({extends: fileURLToPath(new URL("../../tsconfig.fixtures.json",import.meta.url)), include: [join(ROOT, fixture, "case.ts")]}));
       }
     } else if (!existsSync(join(ROOT, project))) continue;
     result.push({name, project, fixture, consumer: benchmarks ? "benchmark" : ["invalid", "unsupported"].includes(name) ? "refusal" : "program"});

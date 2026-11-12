@@ -1,5 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import {fileURLToPath} from "node:url";
+import {dataDirectory} from "./reader-inputs/main.ts";
+
+const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
+const FIXTURES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../tests/compile-time/",import.meta.url))));
+const NODE_RUNTIME=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url))));
+const WEB_RUNTIME=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url))));
 
 // Scope changes invalidate old baselines and kept listings. Inheritance covers
 // the exec's threads and descendants; the runtime hir population has no child
@@ -48,7 +55,7 @@ export function compileCommand(arm: CompileArm, module: string): string[] {
 
 /** Compile-time tripwire projects are discovered from their checked-in configs. */
 export function discoverCompileTimeFixtures(root: string): string[] {
-  const base = join(root, "tests/compile-time");
+  const base = join(root, FIXTURES);
   if (!existsSync(base)) return [];
   const pending = [base];
   const fixtures: string[] = [];
@@ -67,12 +74,12 @@ export function discoverCompileTimeFixtures(root: string): string[] {
 
 /** Every module the tripwire measures in the tree at `root`: each runtime module with a config, and each compile-time fixture. */
 export function compileTimeModules(root: string): string[] {
-  const node = join(root, "runtime/node");
+  const node = join(root, NODE_RUNTIME);
   return [
     ...(existsSync(node) ? readdirSync(node, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && existsSync(join(node, entry.name, "tsconfig.json")))
-      .map(entry => `runtime/node/${entry.name}`) : []),
-    ...(existsSync(join(root, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
+      .map(entry => `${NODE_RUNTIME}/${entry.name}`) : []),
+    ...(existsSync(join(root, WEB_RUNTIME,"tsconfig.json")) ? [WEB_RUNTIME] : []),
     ...discoverCompileTimeFixtures(root),
   ].sort();
 }

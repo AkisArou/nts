@@ -5,7 +5,13 @@
 // task audit's ownership checks, so the three cannot disagree about which
 // rows a group names.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import {fileURLToPath} from "node:url";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
+
+const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
+const FOUNDATIONS=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../docs/foundations/",import.meta.url))));
+const PRIMITIVES=relative(SOURCE,fileURLToPath(new URL("../../docs/primitives.md",import.meta.url)));
 
 /** One list line's rows, under its page and group name. */
 export type RowList = { page: string; name: string; rows: string[] };
@@ -41,10 +47,10 @@ export function parseRowLists(page: string, markdown: string): RowList[] {
 
 /** Every canonical row list in the tree, in page order. */
 export function rowLists(root: string): RowList[] {
-  const dir = join(root, "docs/foundations");
+  const dir = join(root, FOUNDATIONS);
   if (!existsSync(dir)) return [];
-  const pages = readdirSync(dir).filter((p) => p.endsWith(".md")).sort().map((p) => `docs/foundations/${p}`);
-  if (existsSync(join(root, "docs/primitives.md"))) pages.push("docs/primitives.md");
+  const pages = readdirSync(dir).filter((p) => p.endsWith(".md")).sort().map((p) => `${FOUNDATIONS}/${p}`);
+  if (existsSync(join(root, PRIMITIVES))) pages.push(PRIMITIVES);
   return pages.flatMap((page) => parseRowLists(page, readFileSync(join(root, page), "utf8")));
 }
 

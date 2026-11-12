@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSy
 import { availableParallelism, homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {fileURLToPath} from "node:url";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { closeMemoryRun, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
@@ -23,6 +24,7 @@ import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchma
   serializeBenchmarkRecord, type BenchmarkOutcome, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const CASES=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 /**
  * Each compile's own kernel cap: the one its rows were recorded under, a
@@ -56,8 +58,8 @@ export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow
 
 /** Every benchmark case: a directory under benchmarks/cases with a case.ts. */
 export function benchmarkCases(root: string): string[] {
-  const paths = readdirSync(join(root, "benchmarks/cases"), { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(join(root, "benchmarks/cases", entry.name, "case.ts")))
-    .map(entry => `benchmarks/cases/${entry.name}`).sort();
+  const paths = readdirSync(join(root, CASES), { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(join(root, CASES, entry.name, "case.ts")))
+    .map(entry => `${CASES}/${entry.name}`).sort();
   assert.ok(paths.length > 0, "no benchmark cases found; an empty run is not passing"); return paths;
 }
 

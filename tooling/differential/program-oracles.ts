@@ -49,10 +49,10 @@ export function sweepOracleTask(directory:string):ProgramOracleTask{
   if(generated.error||generated.status!==0)throw new ToolingInstrumentError('tooling-setup','JVM sweep generation failed: '+String(generated.error??generated.stderr));
   const project=join(directory,'inputs/jvm-sweep'),entry=join(project,'src/main.ts');
   mkdirSync(dirname(entry),{recursive:true});writeFileSync(entry,generated.stdout);
-  const pkg=fs.readBytes(join(REPOSITORY,'package.json'));
+  const pkg=fs.readBytes(fileURLToPath(new URL('../../package.json',import.meta.url)));
   if(!pkg)throw new ToolingInstrumentError('tooling-setup','JVM sweep module format is missing');
   writeFileSync(join(project,'package.json'),pkg);
-  writeFileSync(join(project,'tsconfig.json'),JSON.stringify({extends:join(REPOSITORY,'tsconfig.fixtures.json'),include:['src']}));
+  writeFileSync(join(project,'tsconfig.json'),JSON.stringify({extends:fileURLToPath(new URL('../../tsconfig.fixtures.json',import.meta.url)),include:['src']}));
   return {subject:'gate/jvm-sweep',project:join(project,'tsconfig.json'),entry,mode:'calls',program:false,observations:fs.captured()};
 }
 
@@ -88,7 +88,7 @@ export function programOracleTasks(directory:string):ProgramOracleTask[]{
     if(benchmark&&!fs.fileExists(project)){
       const generated=join(directory,'inputs/benchmarks');mkdirSync(generated,{recursive:true});
       project=join(generated,fixture.split('/').at(-1)!+'.tsconfig.json');
-      writeFileSync(project,JSON.stringify({extends:join(REPOSITORY,'tsconfig.fixtures.json'),include:[join(REPOSITORY,fixture,'case.ts')]}));
+      writeFileSync(project,JSON.stringify({extends:fileURLToPath(new URL('../../tsconfig.fixtures.json',import.meta.url)),include:[join(REPOSITORY,fixture,'case.ts')]}));
     }
     tasks.push({subject:fixture,project,entry:join(REPOSITORY,source),mode:'calls',
       program:PROGRAM_EMIT_PROJECTS.includes(fixture.split('/').at(-1)!),observations:fs.captured()});

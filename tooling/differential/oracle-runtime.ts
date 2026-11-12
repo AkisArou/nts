@@ -7,28 +7,45 @@ import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
 
 // Recipe identity is shared with result-only consumers. It reads pinned source
 // bytes and records, never the preparation graph or a compiler API.
-export const ORACLE_EXECUTION_FILES=['oracle-execution.ts','oracle-execution-policy.ts','oracle-batch.ts','command-entry/main.ts'] as const;
+const EXECUTION_INPUTS=[
+  new URL('./oracle-execution.ts',import.meta.url),
+  new URL('./oracle-execution-policy.ts',import.meta.url),
+  new URL('./oracle-batch.ts',import.meta.url),
+  new URL('./command-entry/main.ts',import.meta.url),
+] as const;
+const RECIPE_INPUTS={
+  emitter:new URL('./oracle-emit.ts',import.meta.url),
+  loader:new URL('./oracle-loader.ts',import.meta.url),
+  filesystem:new URL('./oracle-filesystem.ts',import.meta.url),
+  runtime:new URL('./oracle-runtime.ts',import.meta.url),
+  resolution:new URL('./oracle-resolution.ts',import.meta.url),
+  assets:new URL('./oracle-assets.ts',import.meta.url),
+  toolchain:new URL('./oracle-toolchain.json',import.meta.url),
+} as const;
+const assetName=(input:URL)=>relative(fileURLToPath(new URL('./',import.meta.url)),fileURLToPath(input)).split(sep).join('/');
+export const ORACLE_EXECUTION_FILES:readonly string[]=EXECUTION_INPUTS.map(assetName);
+/** One declared asset inventory serves recipe hashing and portable bundles. */
+export const ORACLE_RUNTIME_FILES:readonly string[]=[...ORACLE_EXECUTION_FILES,...Object.values(RECIPE_INPUTS).map(assetName)];
 // The phase a case's oracle stopped in: planning its population, preparing its
 // program, or executing it. Only a planned population has a driver.
 export type OracleBudget={phase:'plan'|'prepare'|'execute';outcome:'timeout'|'memory-cap';bound:number;signal:string|null;reason:string};
 let recipeIdentity:OracleIdentity|undefined;
 export function oracleIdentityFor(typescript:OracleIdentity['typescript']):OracleIdentity{
-  const here=dirname(fileURLToPath(import.meta.url)),hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
+  const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
   const dependency=process.env.NTS_ORACLE_DEPENDENCIES?JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES):undefined;
-  return recipeIdentity??={version:1,typescript,executionSha256:hash(JSON.stringify(ORACLE_EXECUTION_FILES.map(file=>hash(readFileSync(join(here,file)))))),
+  return recipeIdentity??={version:1,typescript,executionSha256:hash(JSON.stringify(EXECUTION_INPUTS.map(input=>hash(readFileSync(input))))),
     ...(dependency?{dependencyRecipeSha256:hash(JSON.stringify([dependency.lockfileSha256,dependency.producerSha256]))}:{}),
-    emitterSha256:hash(readFileSync(join(here,'oracle-emit.ts'))),
-    loaderSha256:hash(readFileSync(join(here,'oracle-loader.ts'))),
-    filesystemSha256:hash(readFileSync(join(here,'oracle-filesystem.ts'))),
-    runtimeSha256:hash(readFileSync(join(here,'oracle-runtime.ts'))),
-    resolutionSha256:hash(readFileSync(join(here,'oracle-resolution.ts'))),
-    assetsSha256:hash(readFileSync(join(here,'oracle-assets.ts'))),
-    toolchainRecordSha256:hash(readFileSync(join(here,'oracle-toolchain.json'))),
-    options:JSON.parse(readFileSync(join(here,'oracle-toolchain.json'),'utf8')).execution.options};
+    emitterSha256:hash(readFileSync(RECIPE_INPUTS.emitter)),
+    loaderSha256:hash(readFileSync(RECIPE_INPUTS.loader)),
+    filesystemSha256:hash(readFileSync(RECIPE_INPUTS.filesystem)),
+    runtimeSha256:hash(readFileSync(RECIPE_INPUTS.runtime)),
+    resolutionSha256:hash(readFileSync(RECIPE_INPUTS.resolution)),
+    assetsSha256:hash(readFileSync(RECIPE_INPUTS.assets)),
+    toolchainRecordSha256:hash(readFileSync(RECIPE_INPUTS.toolchain)),
+    options:JSON.parse(readFileSync(RECIPE_INPUTS.toolchain,'utf8')).execution.options};
 }
 export function oracleRecipeIdentity():OracleIdentity{
-  const here=dirname(fileURLToPath(import.meta.url));
-  const records:{version:number;platforms:Record<string,OracleIdentity['typescript']>;execution:{options:string}}=JSON.parse(readFileSync(join(here,'oracle-toolchain.json'),'utf8'));
+  const records:{version:number;platforms:Record<string,OracleIdentity['typescript']>;execution:{options:string}}=JSON.parse(readFileSync(RECIPE_INPUTS.toolchain,'utf8'));
   const expected=records.platforms[process.platform+'-'+process.arch];
   if(records.version!==1||!expected)throw Error('oracle TypeScript toolchain has no recorded identity');
   const {version,rootPackageSha256,packageSha256,nativeSha256,nativePackageSha256}=expected;

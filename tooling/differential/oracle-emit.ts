@@ -10,7 +10,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_RUNTIME_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
@@ -610,7 +610,7 @@ function dependencies():DependencyHandle{
   const previous=dependencyImages.get(key);if(previous)return previous;
   let record=sealed;
   if(!record){
-    const helper=join(cap.source,'tooling/differential/oracle-dependencies.ts');
+    const helper=join(cap.source,relative(REPOSITORY,fileURLToPath(new URL('./oracle-dependencies.ts',import.meta.url))));
     if(hash(readFileSync(helper))!==cap.helperSha256)throw Error('oracle dependency provisioner source mismatch');
     const run=spawnSync(process.execPath,[helper,'--capture',raw],{encoding:'utf8',maxBuffer:32*2**20});
     if(run.status!==0||run.signal||run.error)throw Error('oracle dependency capture not measured: '+run.stdout+run.stderr);
@@ -1527,7 +1527,7 @@ export class OracleWorker{
     const pending:OraclePrepared[]=[];
     for(const job of jobs){
       const {directory}=job,assets=join(directory,'assets');mkdirSync(assets);
-      for(const file of [...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-assets.ts','oracle-toolchain.json']){
+      for(const file of ORACLE_RUNTIME_FILES){
         const target=join(assets,file);mkdirSync(dirname(target),{recursive:true});writeFileSync(target,readFileSync(join(HERE,file)));
       }
       writeFileSync(join(assets,'package.json'),'{"type":"module"}\n');
