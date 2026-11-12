@@ -17,6 +17,7 @@ import {ownMemory} from './test-memory.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {removable} from './run-temporary.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
+import {caseMemoryKey} from './step-scheduling.ts';
 
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 
@@ -56,12 +57,19 @@ test('a real jvm-verifies case reaches verification through a case lease without
   const env=(await sealOracleRun(planned)).env;
   const scopes=new GateScopes(env),step=scopes.step({max:2**30});let drained=false;
   const broker=new CaseMemoryBroker({root:ROOT,env,host:hostObservations(env),boundary:()=>({group:step.workerGroup,raise:bytes=>step.caseLimit(bytes)}),report:()=>{}});
-  let attached=0,completed=0;
+  const attached=new Map<string,number>(),completed:string[]=[];
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
     prepare:request=>broker.prepare(request),
-    attach:async(request,scope)=>{await broker.attach(request,scope);attached++;},
+    attach:async(request,scope)=>{
+      await broker.attach(request,scope);
+      const key=request.memory?.key;assert.ok(key,'each attached worker belongs to a real case lease');
+      attached.set(key,(attached.get(key)??0)+1);
+    },
     retire:(request,group)=>broker.retire(request,group),
-    completed:async request=>{await broker.completed(request);completed++;},
+    completed:async request=>{
+      const key=request.memory?.key;assert.ok(key,'each completed request retains its case identity');
+      await broker.completed(request);completed.push(key);
+    },
   });
   dispose=async()=>{pool.close();if(!drained)await step.drain();scopes.close();};
   const address=await pool.start();assert.ok(address);
@@ -73,8 +81,13 @@ test('a real jvm-verifies case reaches verification through a case lease without
   let stdout='',stderr='';child.stdout.on('data',part=>{stdout+=part;});child.stderr.on('data',part=>{stderr+=part;});
   assert.deepEqual(await once(child,'close'),[0,null],stdout+stderr);
   assert.match(stdout,/every module verifies, or is known not to/);
-  assert.ok(attached>=2,'both emission and the sanitized verifier enter the actual case lease');
-  assert.equal(completed,1);assert.equal(pool.total,0);
+  const driver=caseMemoryKey({step:'jvm-verifies',backend:'jvm',path:'tooling/conformance/JvmVerify.java'});
+  const project=caseMemoryKey({step:'jvm-verifies',backend:'jvm',path:'tests/programs/induction-boundary-near-start'});
+  assert.deepEqual(completed.sort(),[driver,project].sort(),'exactly one driver-compile lease and one project lease complete');
+  assert.deepEqual([...attached.keys()].sort(),[driver,project].sort(),'both leases attach under the real broker boundary');
+  assert.ok((attached.get(driver)??0)>=1,'the compiler enters the driver lease');
+  assert.ok((attached.get(project)??0)>=2,'emission and sanitized verification enter the project lease');
+  assert.equal(pool.total,0);
   assert.equal(existsSync(trap),false,'bounded entry imports no BASH_ENV startup file');
   await step.drain();drained=true;
 });
