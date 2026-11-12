@@ -7,6 +7,19 @@ import { Queue } from "../landing/queue.ts";
 import { answerOf, landingQueue, submitTo } from "./queue.ts";
 import { repository } from "./repository-fixture.ts";
 
+test("a queued or running landing blocks wide, and a held result alone does not", t => {
+  const repo = repository(t), home = join(repo.root, "landing"), queue = new Queue(home);
+  const commit = repo.commit({ "a.txt": "a\n" }, "change");
+  const landing = landingQueue({ root: repo.dir, home });
+  assert.equal(landing.busy(), null);
+  const entry = queue.submit(commit);
+  assert.equal(landing.busy(), `landing ${entry.id} is queued`);
+  queue.take();
+  assert.equal(landing.busy(), `landing ${entry.id} is running`);
+  queue.answer(entry, { state: "held", message: "needs review" });
+  assert.equal(landing.busy(), null);
+});
+
 test("the full check's revert goes into the landing check's queue first, and a records commit takes its turn", async t => {
   const repo = repository(t);
   const change = repo.commit({ "a.txt": "a\n" }, "a change waiting to land");

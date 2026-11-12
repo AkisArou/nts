@@ -6,7 +6,7 @@
 //
 //   node tooling/full-check/unit.ts                  print the controller's unit, and the count's service and timer
 //   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the three, reload systemd
-//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00
+//   options: --nightly-at=03:00
 //
 // Then `systemctl --user enable --now nts-full-check` starts the controller,
 // `systemctl --user enable --now nts-full-check-count.timer` the count, and
@@ -60,7 +60,7 @@ const environment = (env: NodeJS.ProcessEnv) =>
 
 export function unitText(options: UnitOptions): string {
   const { layout, schedule } = options;
-  const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--wide-at=${schedule.wide.join(",")}`, `--nightly-at=${schedule.nightly}`];
+  const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--nightly-at=${schedule.nightly}`];
   return [
     "[Unit]",
     "Description=nts full check: the core on the newest main, the wide steps on verified",
@@ -130,12 +130,11 @@ export function parseUnitOptions(argv: readonly string[]): { install: boolean; s
   let install = false;
   for (const arg of argv) {
     if (arg === "--install") install = true;
-    else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
     else if (arg.startsWith("--nightly-at=")) {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
+    } else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--nightly-at=HH:MM]`);
   }
   return { install, schedule };
 }

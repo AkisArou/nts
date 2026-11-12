@@ -13,7 +13,7 @@
 //                                                          a records unit's work, in the records tree it runs from (recordsUnit)
 //   node tooling/full-check/service.ts --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>
 //                                                          the benchmarks unit's work, in the bench tree it runs from (benchmarksUnit)
-//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00   (local time; schedule.ts)
+//   options: --nightly-at=03:00   (local time; schedule.ts)
 //
 // Each cycle does the first of these that is due:
 //   0. a part's records unit that ended, what it recorded applied on the
@@ -22,10 +22,9 @@
 //      submitted (seconds; followRecords); then the same for the benchmarks
 //      unit and the run record it kept (followBenchmarks). A unit still
 //      running holds nothing: the cycle goes on;
-//   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
-//      the schedule, if verified moved since their last run; the nightly slot
-//      also makes the benchmarks due (bench.ts), whatever wide slot came after
-//      it, if nts-bench has not measured verified yet;
+//   1. the wide steps on changed `verified`, after their minimum gap, when no
+//      landing is queued/running and no higher-priority memory request waits;
+//      the nightly run crosses the gap, before new benchmarks start;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
 //   3. due benchmarks on the newest `verified`: nts-bench built there, then
@@ -72,6 +71,7 @@ import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
 import { gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { GateResource } from "../gate/gate-resource.ts";
+import { readLedger } from "../gate/memory-ledger.ts";
 import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
@@ -91,7 +91,7 @@ import { newTest262Fails, newTest262FailsTask, writeNewFails } from "../records/
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
-import { DEFAULT_SCHEDULE, dueNightly, dueSlot, nextNightly, parseTimes, type Schedule } from "./schedule.ts";
+import { DEFAULT_SCHEDULE, dueNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchOutcome, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RecordsRunOutcome, type RunRecord, type State } from "./state.ts";
 import { BENCH_UNIT, lowPriority, recordsUnitName } from "./unit.ts";
 
@@ -107,6 +107,8 @@ export type Effects = {
   gate: Gate;
   /** The landing check's queue (queue.ts). */
   queue: LandingQueue;
+  /** A live higher-priority memory request, or null when none waits. */
+  memoryWaiter: () => string | null;
   /** The units the full check's background work runs in: each part's records unit (background.ts). */
   units: Units;
   /** The Node a tree's own code runs on: the one its .tool-versions pins. */
@@ -139,25 +141,25 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   if (await followBenchmarks(fx, state)) return "benchmarks";
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
-  // Answered on its own: a cycle that first gets to the night after a later
-  // wide slot still makes it due. A state that never answered one starts
+  // Answered on its own: a cycle that first gets to the night later still
+  // makes it due. A state that never answered one starts
   // here, and its first night is the next slot.
   if (!state.nightly) { state.nightly = now.toISOString(); writeState(fx.layout.state, state); }
   // A slot that comes while a night's run measures is answered once it ends.
   const night = dueNightly(fx.schedule, new Date(state.nightly), now);
   if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, verified);
-  const slot = dueSlot(fx.schedule, state.wide.slot ? new Date(state.wide.slot) : undefined, now);
-  if (slot) {
-    state.wide.slot = now.toISOString();
-    let did: "wide" | null = null;
-    if (verified && verified !== state.wide.last_run?.commit) {
-      fx.log(`wide steps due (${slot.nightly ? "the nightly run" : `the ${slot.at.toTimeString().slice(0, 5)} slot`}) on verified ${short(verified)}`);
-      holds(state, `the wide steps on verified ${short(verified)} go first`);
-      await runPart(fx, state, "wide", verified);
-      did = "wide";
-    } else fx.log(verified ? `wide steps due, but verified ${short(verified)} is where they last ran` : "wide steps due, but nothing is verified yet");
+  const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now,
+    busy: fx.queue.busy() ?? fx.memoryWaiter() });
+  if ((state.wide.waiting ?? null) !== wide.waiting) {
+    if (wide.waiting) fx.log(`wide steps waiting: ${wide.waiting}`);
+    state.wide.waiting = wide.waiting ?? undefined;
     writeState(fx.layout.state, state);
-    if (did) return did;
+  }
+  if (wide.due && !wide.waiting && verified) {
+    fx.log(`wide steps due (${wide.due === "nightly" ? "the nightly run" : "verified advanced and the machine is idle"}) on verified ${short(verified)}`);
+    holds(state, `the wide steps on verified ${short(verified)} go first`);
+    await runPart(fx, state, "wide", verified);
+    return "wide";
   }
   const main = fx.git.commit("refs/heads/main");
   if (!main) throw new Error("no main");
@@ -180,6 +182,11 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   // One night's run in flight at a time, as one delta of a part's rows is: a
   // night measures once the last run has landed or been given up.
   const due = state.benchmarks_due;
+  if (wide.due === "nightly" && wide.waiting && due && !due.measuring) {
+    holds(state, `the nightly wide run waits: ${wide.waiting}`);
+    writeState(fx.layout.state, state);
+    return "idle";
+  }
   if (due && !due.measuring && verified && !(due.asked && now.getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS)) {
     if (publishing(state.bench)) {
       const waiting = `the run at ${short(state.bench.commit)} still waits to land (${state.bench.result})`;
@@ -1216,6 +1223,7 @@ function production(options: { schedule: Schedule }): Effects {
     layout, git,
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
+    memoryWaiter: () => wideMemoryWaiter(readLedger().waiting),
     // Each unit at the controller's own priority and on its own CPUs, never the measurement pair.
     units: systemdUnits(lowPriority(gateCpus(inheritedCpus()))),
     node: tree => nodeToolchain(nodePin(tree), launcherEnvironment(process.env)).node,
@@ -1340,7 +1348,7 @@ export type FullCheckStatus = {
   /** The commits on main that verified has not reached, and how long the oldest has waited since it landed; null with nothing verified. */
   behind: { commits: number; oldest_landed_at: string | null; delay_s: number | null } | null;
   core: PartStatus;
-  wide: PartStatus & { slot: string | null };
+  wide: PartStatus & { waiting: string | null };
   culprits: Culprit[];
   /** The last attempt or night and how it ended, its slower rows, the night still due and what holds it, and when the nightly slot was last answered. */
   benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null; slot: string | null };
@@ -1377,7 +1385,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     behind: inputs.unverified === null ? null
       : { commits: inputs.unverified.length, oldest_landed_at: oldest, delay_s: oldest === null ? null : Math.round((now - Date.parse(oldest)) / 1000) },
     core: part(state.core),
-    wide: { ...part(state.wide), slot: state.wide.slot ?? null },
+    wide: { ...part(state.wide), waiting: state.wide.waiting ?? null },
     culprits: state.culprits,
     benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
     count: inputs.count,
@@ -1397,6 +1405,7 @@ export function statusText(s: FullCheckStatus): string {
     `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
     `core: last ${run(s.core.last_run)}`, `      green ${run(s.core.last_green)}`,
     `wide: last ${run(s.wide.last_run)}`, `      green ${run(s.wide.last_green)}`,
+    ...(s.wide.waiting ? [`      waiting: ${s.wide.waiting}`] : []),
     s.verified.commit && s.behind
       ? `verified ${short(s.verified.commit)}: ${s.behind.commits} commit(s) behind main${s.behind.delay_s === null ? "" : `, the oldest landed ${minutes(s.behind.delay_s)} ago`}`
       : "verified: none yet",
@@ -1464,13 +1473,13 @@ export function parseOptions(argv: readonly string[]): Options {
     // A unit written before the benchmarks stayed due until the next nightly
     // slot still passes the wait that bounded them; it starts, and says so.
     else if (/^--bench-wait=\d+$/.test(arg)) ignored.push(arg);
-    else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
+    else if (arg.startsWith("--wide-at=")) { parseTimes(arg.slice(10)); ignored.push(arg); }
     else if (arg.startsWith("--nightly-at=")) {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
     } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json] | --count | --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>`
-      + ` | --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
+      + ` | --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>] [--nightly-at=HH:MM]`);
   }
   if (json && !status) throw new Error("--json is for --status");
   if (part && benchmarks) throw new Error("--record and --benchmarks are each a command of its own");
@@ -1510,8 +1519,8 @@ async function main(argv: readonly string[]): Promise<number> {
   const left = readState(layout.state);
   if (left.now) { delete left.now; writeState(layout.state, left); }
   const fx = production(options);
-  stamp(`full check: core on main, wide steps at ${options.schedule.wide.join(", ")} and ${options.schedule.nightly} nightly with the benchmarks (due until the next nightly slot, measured on CPU 4 with its sibling idle); tree ${layout.tree}`);
-  if (options.ignored.length) stamp(`ignored ${options.ignored.join(" ")}: the benchmarks stay due until the next nightly slot; node tooling/full-check/unit.ts --install writes the unit without it`);
+  stamp(`full check: core on main, wide steps follow verified when idle with a ${WIDE_MIN_GAP_MS / HOUR} h minimum gap, and ${options.schedule.nightly} nightly before benchmarks (due until the next nightly slot, measured on CPU 4 with its sibling idle); tree ${layout.tree}`);
+  if (options.ignored.length) stamp(`ignored obsolete options ${options.ignored.join(" ")}: wide follows verified when idle; benchmarks stay due until the next nightly slot; the current unit definition omits these options`);
   const nap = new Int32Array(new SharedArrayBuffer(4));
   for (;;) {
     if (followVerified(fx.git, layout)) return 0;

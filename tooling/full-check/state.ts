@@ -210,10 +210,9 @@ export type BenchmarksDue = {
 
 /**
  * A part's runs, and its records: each part records the kinds its own checks
- * hold, after its own green run. `slot` is when the wide steps last answered
- * their schedule.
+ * hold, after its own green run. `waiting` names what holds a wide start.
  */
-export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; slot?: string };
+export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; waiting?: string };
 
 export type State = {
   version: 1;
@@ -251,6 +250,8 @@ export function readState(file: string): State {
   // One records run for both parts, from before each part kept its own: it was the core's.
   const { records, ...rest } = value;
   if (records && !rest.core?.records) rest.core = { ...rest.core, records };
+  // Fixed daytime slots no longer decide wide eligibility.
+  if (rest.wide) delete (rest.wide as PartState & { slot?: string }).slot;
   // The count the cycle kept, from before the count had a timer and a file of its own.
   delete (rest as { count?: unknown }).count;
   return { ...emptyState(), ...rest };

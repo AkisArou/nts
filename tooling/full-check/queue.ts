@@ -16,6 +16,8 @@ export type LandingQueue = {
   withdraw(commit: string): Withdrawal;
   /** "waiting" while the commit waits or is checked, the landing check's latest answer once it has one, null when the queue has no record of it. */
   answer(commit: string): LandingAnswer | "waiting" | null;
+  /** A queued or running landing prevents new wide work, while held answers do not. */
+  busy(): string | null;
 };
 
 /**
@@ -28,6 +30,13 @@ export function landingQueue(where: { root?: string; home?: string } = {}): Land
     submit: (commit, options) => submit(commit, { first: options.first === true, by: "full-check", ...where }),
     withdraw: commit => new Queue(where.home ?? LANDING_HOME).withdraw(commit),
     answer: commit => answerOf(new Queue(where.home ?? LANDING_HOME), commit),
+    busy: () => {
+      const queue = new Queue(where.home ?? LANDING_HOME);
+      const checking = queue.checking();
+      if (checking) return `landing ${checking.id} is running`;
+      const first = queue.waiting()[0];
+      return first ? `landing ${first.id} is queued` : null;
+    },
   };
 }
 

@@ -207,7 +207,13 @@ landing checks' and agents', so those come first.
   complete core.
 - **The wide steps** (integrity, the profile, compile time, addons, interop,
   on-device and the rest, about an hour more) run on the newest `verified`
-  commit a few times a day, and every night before the benchmarks.
+  commit when it has advanced since their last run and at least four hours
+  have passed since that run started. They start only while no landing is
+  queued or running and no higher-priority memory request waits. Changes
+  coalesce onto the newest verified; skipped opportunities consume no start.
+  The nightly run, at 03:00 by default, can cross the gap and repeat an
+  unchanged commit, still waiting for idleness, before new benchmarks start.
+  A core already running finishes first. There are no daytime clock slots.
 - **Records, the benchmarks and the count run beside the parts,** each in a
   unit of its own, so neither part waits for them. A part's records run
   (below) records in `nts-full-check-records-<part>`, in that part's records
@@ -261,7 +267,7 @@ What follows from a run:
   was no culprit: a revert of it still waiting to land is withdrawn.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
   result, and only until the full check finds it: within about an hour for
-  the core, within the day for a wide step. A build or unit test that a
+  the core, and at the next eligible idle run for a wide step. A build or unit test that a
   change can affect is never broken on `main`, because the landing check
   runs it.
 
@@ -326,7 +332,7 @@ locked session on CPU 4 and keep the wall-time floor below.
   it. `tooling/gate/with-lock.sh` admits a run, and nts-bench marks a row
   whose reserved core another program used.
 - **Due from the nightly slot until they run.** The slot makes them due on
-  the newest `verified`, whatever wide slots follow it, until they run or the
+  the newest `verified`, regardless of daytime wide runs, until they run or the
   next nightly slot replaces them; a slot that comes while a night's run
   measures waits for it. They never block a landing, start when the core has
   nothing to do, and measure in their own unit while the core goes on.
@@ -490,6 +496,13 @@ the first node task.
   diagnostic ceiling accepts improvements while refusing increases
   ([log](records/notebooks/decisions-log.md#one-strict-project-for-all-tooling-11-12)).
 
+- **Wide runs follow verified during idle time**: changed verified can start
+  a wide run after a four-hour gap, when no landing is queued or running and
+  no higher-priority memory waiter exists. The nightly attempt overrides
+  the gap and unchanged-commit check, while retaining idleness, before new
+  benchmarks. Records and running benchmark units keep their independent
+  lifecycle
+  ([log](records/notebooks/decisions-log.md#wide-runs-follow-verified-during-idle-time-11-12)).
 - **Step budgets count execution and expose admission waits**: an elastic
   step with no active case suspends its execution budget only for the
   runner's known memory, priority, slot or frontend wait. Token transitions

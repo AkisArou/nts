@@ -5,34 +5,34 @@ be `docs/workflow.md`, After landing: the full check and its Decisions.
 
 ## Trigger and cost bound
 
-Replace the three daytime clock slots with a two-hour minimum between
+Replace the three daytime clock slots with a four-hour minimum between
 wide-run starts. At a controller cycle, run wide on the newest verified
-when its commit differs from the last wide run, the gap has elapsed, and
-the landing service has no active check. The existing minute idle poll is
+when its commit differs from the last wide run, the gap has elapsed, no
+landing is queued or running, and no higher-priority memory request waits.
+The existing minute idle poll is
 the only additional delay when the controller is free. A core run already
 in progress finishes first: the controller and its gate tree remain serial.
 Later landing arrivals retain their existing higher memory priority.
 
 The gap is a source-owned policy constant. It is measured from an actual
 wide attempt's start (`wide.last_run.at`), never from a skipped eligibility
-check. Missing verified, an active landing or an unelapsed gap consumes no
+check. Missing verified, busy higher-priority work or an unelapsed gap consumes no
 opportunity. New verified commits coalesce while waiting; no backlog is
 replayed. An unchanged verified does not schedule another daytime run.
 
-Two hours leaves room for the observed half-hour wide run and several core
-runs between starts, while reducing the old six-hour schedule wait. This
-increases the permitted work: at the first three measured run costs of
-6.7–7.1 CPU-hours, twelve runs cost 80–85 CPU-hours rather than roughly
-27–28 for four. A nightly exception can add one start in a rolling day,
-so the conservative thirteen-run bound is 87–92 CPU-hours. Actual work is
-lower when verified does not advance or landing checks remain active.
-These are policy projections, not measured after-change daily totals.
+Four hours bounds regular work to about six runs per day, roughly 40
+CPU-hours at the observed per-run cost, while using eligible idle periods
+rather than waiting for fixed slots. A nightly exception can add one start
+in a rolling day; its cost is reported separately. Actual work is lower when
+verified does not advance or higher-priority work waits. These are policy
+projections, not measured after-change daily totals.
 
 ## Nightly and background work
 
 Keep the local nightly time, 03:00 by default. A due nightly wide attempt
 overrides the daytime gap and the changed-commit requirement. It still
-waits for an active landing check. A completed attempt whose start is on or
+waits for queued/running landings and higher-priority memory requests.
+A completed attempt whose start is on or
 after the latest nightly slot satisfies that night; restarting the
 controller does not duplicate it. A missed night is coalesced into the
 latest night, as the current benchmark schedule already does.
@@ -55,9 +55,10 @@ landing queue. No live unit is stopped, restarted or reinstalled here.
 ## Interfaces and migration
 
 `schedule.ts` owns the pure eligibility decision, with an explicit now,
-verified, last wide result and landing-active input. The queue adapter
-exposes whether `Queue.checking()` exists. A queued or held entry alone is
-not an active check; later arrivals are handled by ledger priority. Tests
+verified, last wide result and busy input. The queue adapter
+exposes queued and checking entries; held entries alone do not block a run.
+The ledger's existing public observation supplies live landing/agent waiters.
+Later arrivals are handled by ledger priority. Tests
 give that input directly and never inspect the host's queue or clock.
 
 Remove the daytime clock list from the current Schedule and generated unit.

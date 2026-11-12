@@ -1,15 +1,12 @@
-// When the wide steps run: at a few fixed times of day, and every night, when
-// the benchmarks follow them. The times are the unit's to set, on the service's
-// command line (`--wide-at=10:00,16:00,22:00 --nightly-at=03:00`, local time);
-// these are the defaults. A slot that passes while the core is running starts
-// as soon as that run ends, and one missed while the service was stopped runs
-// once when it starts again, not once per slot missed. The benchmarks answer
-// the nightly slot on their own: a controller that first gets to it after a
-// later wide slot still makes them due.
+// Wide runs follow verified during idle time, at most once per minimum gap.
+// The nightly run can cross that gap and repeat an unchanged commit before
+// benchmarks. All dates and observations come from the caller.
+import type { Priority } from "../gate/memory-ledger.ts";
 
-export type Schedule = { wide: string[]; nightly: string };
+export type Schedule = { nightly: string };
 
-export const DEFAULT_SCHEDULE: Schedule = { wide: ["10:00", "16:00", "22:00"], nightly: "03:00" };
+export const DEFAULT_SCHEDULE: Schedule = { nightly: "03:00" };
+export const WIDE_MIN_GAP_MS = 4 * 3_600_000;
 
 const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -25,27 +22,29 @@ function at(day: Date, clock: string): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), Number(h), Number(m));
 }
 
-export type Slot = { at: Date; nightly: boolean };
+export type WideDecision = { due: "nightly" | "advanced" | null; waiting: string | null };
 
-/** The latest slot at or before `now`, today's or yesterday's. */
-export function lastSlot(schedule: Schedule, now: Date): Slot {
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const slots: Slot[] = [];
-  for (const day of [yesterday, now]) {
-    for (const clock of schedule.wide) slots.push({ at: at(day, clock), nightly: false });
-    slots.push({ at: at(day, schedule.nightly), nightly: true });
-  }
-  const past = slots.filter(slot => slot.at.getTime() <= now.getTime()).sort((a, b) => a.at.getTime() - b.at.getTime());
-  return past.at(-1)!;
+export function wideMemoryWaiter(waiting: readonly { priority: Priority; live: boolean; what: string }[]): string | null {
+  const first = waiting.find(entry => entry.live && entry.priority !== "full-check");
+  return first ? `${first.priority} memory request waits: ${first.what}` : null;
 }
 
-/**
- * The slot the wide steps are due for, or null: due when the latest slot
- * came after the last wide run started.
- */
-export function dueSlot(schedule: Schedule, lastStart: Date | undefined, now: Date): Slot | null {
-  const slot = lastSlot(schedule, now);
-  return !lastStart || lastStart.getTime() < slot.at.getTime() ? slot : null;
+/** Eligibility does not consume a start: only the actual run changes last. */
+export function wideDecision(options: {
+  schedule: Schedule; last?: { commit: string; at: string }; verified: string | null;
+  now: Date; busy: string | null;
+}): WideDecision {
+  const { schedule, last, verified, now, busy } = options;
+  if (!verified) return { due: null, waiting: "nothing is verified yet" };
+  const start = last ? new Date(last.at) : undefined;
+  const nightly = dueNightly(schedule, start, now) !== null;
+  if (!nightly && verified === last?.commit) return { due: null, waiting: null };
+  const due = nightly ? "nightly" : "advanced";
+  if (busy) return { due, waiting: busy };
+  if (!nightly && start && now.getTime() < start.getTime() + WIDE_MIN_GAP_MS) {
+    return { due, waiting: `minimum wide gap until ${new Date(start.getTime() + WIDE_MIN_GAP_MS).toISOString()}` };
+  }
+  return { due, waiting: null };
 }
 
 /** The latest nightly slot at or before `now`: today's, or yesterday's before it. */
@@ -61,8 +60,8 @@ export function nextNightly(schedule: Schedule, slot: Date): Date {
 
 /**
  * The nightly slot the benchmarks are due for, or null: due when the latest
- * nightly slot came after they last answered one, whatever wide slots came
- * since.
+ * nightly slot came after they last answered one, independently of daytime
+ * wide runs.
  */
 export function dueNightly(schedule: Schedule, lastAnswer: Date | undefined, now: Date): Date | null {
   const slot = lastNightly(schedule, now);

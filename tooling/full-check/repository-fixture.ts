@@ -164,6 +164,7 @@ export type StubQueue = {
   submit(commit: string, options?: { first?: boolean }): void;
   withdraw(commit: string): "withdrawn" | "unknown";
   answer(commit: string): LandingAnswer | "waiting" | null;
+  busy(): string | null;
 };
 
 /** A landing queue that records what it was given and what was withdrawn from it, and answers as a test says. */
@@ -171,6 +172,7 @@ export function stubQueue(): StubQueue {
   const submitted: { commit: string; first: boolean }[] = [], withdrawn: string[] = [], answers = new Map<string, LandingAnswer>();
   return {
     submitted, withdrawn, answers,
+    busy: () => submitted.some(entry => !withdrawn.includes(entry.commit) && !answers.has(entry.commit)) ? "a fixture landing is queued" : null,
     submit(commit, options) { submitted.push({ commit, first: options?.first === true }); },
     withdraw(commit) {
       if (!submitted.some(entry => entry.commit === commit) || withdrawn.includes(commit)) return "unknown";

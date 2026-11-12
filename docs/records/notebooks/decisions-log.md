@@ -2160,3 +2160,17 @@ The coordinator chose finishing admitted work over surrendering its forecast
 mid-run to begin a later job. Governs [the machine](../../workflow.md#the-machine);
 implemented by #718, with both captured configurations and the top-level growth
 control replayed through fixture-owned observations.
+
+## Wide runs follow verified during idle time (11-12)
+
+The user replaced fixed daytime wide slots with a trigger on verified
+advancement, while retaining the nightly run before benchmarks (#716).
+The coordinator chose a four-hour minimum between actual wide starts and
+an idle start condition: no queued/running landing and no live
+higher-priority memory request. A proposed two-hour gap allowed roughly
+three times the observed daily CPU cost, so it was rejected. The nightly
+attempt can cross the gap and repeat an unchanged commit but retains the
+idle condition. Eligible changes coalesce; a blocked opportunity does not
+consume a start. Background records and benchmark units keep their existing
+lifecycle. The governing contract is in
+[workflow](../../workflow.md#after-landing-the-full-check).
