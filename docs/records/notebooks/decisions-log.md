@@ -2245,3 +2245,13 @@ a named bounded fallback. A
 source rule rejects top-level await in Worker entry closures. Governs
 [the machine](../../workflow.md#the-machine); the
 [reduction](worker-termination-2026-11-12.md) is retained outside sweeps.
+
+
+## CLI memory peaks survive command-unit shutdown (11-12)
+
+The detached CLI watcher samples outside the command service under the run's
+tooling slice. At owner exit it moves its own PID to a fresh collected scope,
+whose one-minute RuntimeMaxUSec bounds only the history flush. A sampling
+scope that cannot start refuses before command execution; every history write
+failure is named. See [the reproduction](exit-peak-2026-11-12.md) and
+[the contract](../../workflow.md#decisions).

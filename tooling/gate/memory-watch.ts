@@ -15,7 +15,7 @@
 //     when it releases the reservation.
 //   - As a process of its own, for a job that `admit.ts` has become:
 //
-//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers>
+//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers> <scope>
 //
 //     It does not count itself, and once the reservation has ended (released,
 //     dropped, or its owner gone) it adds the most it saw, per worker, to the
@@ -27,6 +27,8 @@ import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
 import {HostObservationError} from "./host-observations.ts";
 import { KEY, writeCostHistory } from "./step-scheduling.ts";
+import {enterWatcherFlush} from "./memory-watch-scope.ts";
+import {ToolingInstrumentError} from "./step-result.ts";
 
 /**
  * Samples reservation `id` in `ledger` until it ends, and returns the most it
@@ -73,13 +75,17 @@ function startThread():void {
   });
 }
 async function main():Promise<void> {
-  const [ledger,id,history,key,workers]=process.argv.slice(2),units=Number(workers);
-  if(!ledger||!id||!history||!key||!KEY.test(key)||!Number.isSafeInteger(units)||units<1)
-    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers>');
+  const [ledger,id,history,key,workers,scope]=process.argv.slice(2),units=Number(workers);
+  if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||!Number.isSafeInteger(units)||units<1)
+    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers> <scope>');
   const ending=new AbortController();
   for(const signal of ['SIGINT','SIGTERM','SIGHUP'] as const)process.on(signal,()=>ending.abort());
   const most=await watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
-  if(most>0)writeCostHistory(history,{jobs:[{key,peak:Math.ceil(most/units)}]});
+  if(most>0)try{
+    enterWatcherFlush(scope,process.env);
+    const warning=writeCostHistory(history,{jobs:[{key,peak:Math.ceil(most/units)}]});
+    if(warning)throw Error(warning);
+  }catch(error){throw new ToolingInstrumentError('tooling-setup',`memory: ${key}'s peak is not in its history: ${String(error)}`,{cause:error});}
 }
 if(!isMainThread)startThread();
 else if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))

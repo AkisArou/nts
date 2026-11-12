@@ -15,7 +15,8 @@ import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,cacheLocation} from './cache-environment.ts';
 import {toolchainDirectories} from './toolchain.ts';
 
-export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
+import {HOST_INFRASTRUCTURE} from "./host-infrastructure.ts";
+export {HOST_INFRASTRUCTURE} from "./host-infrastructure.ts";
 export const HOST_CAPABILITIES = [
   "PATH", "HOME", ...HOST_INFRASTRUCTURE, "CARGO_HOME", "RUSTUP_HOME",
   "JAVA_HOME", "JDK_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "DEBUGINFOD_URLS",

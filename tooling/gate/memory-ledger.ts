@@ -137,6 +137,10 @@ import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import {workerLifecycle} from "./worker-lifecycle.ts";
+import {hostInfrastructure} from "./host-infrastructure.ts";
+import {peakWatcherScope} from "./memory-watch-scope.ts";
+import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
+import {ToolingInstrumentError} from "./step-result.ts";
 import { historyFile, KEY, peakReservation, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
@@ -1287,16 +1291,20 @@ export const WATCH_MS = POLL_MS;
  * count it, and a signal to the job's group does not end it before it has
  * written the peak. It holds the job's standard output and error open, so a
  * caller that reads the job's output to its end has the peak written by
- * then. It stays in the job's cgroup, so stopping the job's unit stops it
- * too, and where that cgroup is the job's measure it does not count itself.
- * A watcher that does not start leaves the job unmeasured, and the job runs:
- * the history is observation-only.
+ * then. Its collected scope is a sibling of the command's service under the
+ * run's tooling slice: stopping the command cannot reach the final history
+ * write. After the command ends, only its flush has a bounded lifetime.
+ * A scope that cannot start refuses before the command executes.
  */
 export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units"> & { key: string },
-  report: (line: string) => void, env:NodeJS.ProcessEnv=process.env): void {
-  const started = spawnSync("setsid", ["-f", process.execPath, fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, String(job.units)],
-    { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostObservationEnvironment(env) } });
-  if (started.status !== 0) report(`memory: ${job.key}'s peak goes unmeasured: its watcher did not start (${started.error?.message ?? `setsid ended ${started.status ?? started.signal}`})`);
+  env:NodeJS.ProcessEnv=process.env): void {
+  const scope=peakWatcherScope(reservation.id),slice=toolingSlice(env);
+  const started = spawnSync("systemd-run", ["--user","--scope","--quiet","--collect",`--unit=${scope}`,
+    ...toolingSliceArgs(env),`--description=memory peak watcher for ${job.key}`,"--","setsid","-f",process.execPath,
+    fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, String(job.units),scope],
+    { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostInfrastructure(env),...hostObservationEnvironment(env),...(slice?{NTS_TOOLING_SLICE:slice}:{}) } });
+  if (started.error||started.status !== 0) throw new ToolingInstrumentError('tooling-setup',
+    `memory: ${job.key}'s peak watcher scope ${scope} could not start: ${started.error?.message??`systemd-run ended ${started.status??started.signal}`}`);
 }
 
 /**

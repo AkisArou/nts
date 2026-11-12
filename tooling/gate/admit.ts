@@ -217,7 +217,8 @@ async function main(argv: readonly string[]): Promise<void> {
   }
   // Watched from outside: this process becomes the command, ranked for the
   // OOM killer by its priority (memory-ledger.ts's OOM_SCORE).
-  if (options.job && !reservation.inherited) watchPeak(reservation, options.job, say);
+  try { if (options.job && !reservation.inherited) watchPeak(reservation, options.job); }
+  catch(error){reservation.release();cleanup();throw error;}
   rankForOom(priorityOf(reservation.env), say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;

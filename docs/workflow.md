@@ -632,6 +632,11 @@ the first node task.
   exits itself. A scoped owner awaits `closed` before tearing down any state
   its sampler or reporter can use; process-lifetime jobs drain at `beforeExit`.
   A valid final reply also certifies a reservation that ended by handover.
+  The exec CLI's watcher samples in a collected sibling scope under the run's
+  tooling slice, outside the command service. At command end it moves itself
+  into a fresh bounded flush scope before writing history. Failure to create
+  the sampling scope refuses before command execution; a final write failure
+  names the job and its cause.
   `closed` certifies that shutdown; a missing reply or a wedged
   drain is named, and forced termination is only the bounded fallback. Worker
   entries and their module closures contain no top-level await; command bodies
