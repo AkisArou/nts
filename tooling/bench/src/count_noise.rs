@@ -136,7 +136,7 @@ mod tests {
         serde_json::from_str(include_str!("../../../results/benchmarks/count-bands.json"))
             .expect("tool-written calibration")
     }
-    fn check(value: serde_json::Value) -> Result<Bands> {
+    fn check(value: &serde_json::Value) -> Result<Bands> {
         let names = value["columns"]
             .as_array()
             .expect("column inventory")
@@ -147,7 +147,7 @@ mod tests {
     }
     #[test]
     fn the_recorded_bands_recompute_from_the_retained_samples() {
-        let bands = check(record()).expect("authentic measured ranges");
+        let bands = check(&record()).expect("authentic measured ranges");
         assert_eq!(bands.values.len(), 9);
         for name in ["nts C", "nts LLVM", "C++", "ScriptC"] {
             assert!(bands.values[name] < 100);
@@ -161,16 +161,16 @@ mod tests {
         ] {
             let mut changed = record();
             changed[field] = value;
-            assert!(check(changed).is_err());
+            assert!(check(&changed).is_err());
         }
         let mut changed = record();
         changed["columns"][0]["band_basis_points"] = serde_json::json!(9999);
-        assert!(check(changed).is_err());
+        assert!(check(&changed).is_err());
         let mut changed = record();
         changed["columns"][0]["samples"]
             .as_array_mut()
             .expect("samples")
             .pop();
-        assert!(check(changed).is_err());
+        assert!(check(&changed).is_err());
     }
 }

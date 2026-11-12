@@ -50,8 +50,13 @@ of timing: each common driver (native, Java, JS) calibrates its own fixed
 repetition count once, then runs exactly that work inside perf's
 enable/disable bracket, pinned to one CPU outside the measurement pair
 4–5. The printed cell is instructions per op (the bracketed total over the
-fixed repetitions), beside a stated noise band — two runs of an unchanged
-build agree inside it, the native columns bit for bit. No measurement lock
+fixed repetitions), beside each column's empirical repeat range from the
+tool-written `results/benchmarks/count-bands.json` cohort. Native repeatability
+is checked tightly; JIT tiering spread is reported without refusing a landing.
+The range describes that cohort, not a guarantee about a future JIT draw.
+`node tooling/bench/count-bands.ts --cohort <runs.json> --provenance <origin.json>
+--record` writes a complete measured cohort; it retains samples and provenance,
+and the reader recomputes the ranges before using them. No measurement lock
 is taken and no run record is published, so counted runs proceed in
 parallel; a timed row still comes from a locked session on CPU 4. The
 checksum agreement a timed row keeps is kept here too: calibration and
