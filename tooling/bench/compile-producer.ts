@@ -20,6 +20,8 @@ import type { BenchmarkOutcome } from "./outcomes.ts";
 
 /** The files whose bytes are the compile key, relative to the repository. */
 export const COMPILE_KEY_INPUTS = ["tooling/bench/compile-producer.ts", "tooling/conformance/compile-diagnostics.ts"] as const;
+/** Captured diagnostics are bounded independently of emitted artifact size. */
+export const COMPILE_CAPTURE_BYTES = 128 * 1024 * 1024;
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -83,12 +85,12 @@ export function regularFiles(directory: string): string[] {
 // bounded (COMPILE_CPU_BOUND_SECONDS), and past it the case timed out.
 export async function observeCompile({ backend, project, output, binary, root, env, command = (binary, args, options) =>
   compileActive({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args,
-    { ...options, maxBuffer: 128 * 1024 * 1024, ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS }),
+    { ...options, maxBuffer: COMPILE_CAPTURE_BYTES, ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS }),
 }:
   { backend: Backend; project: string; output: string; binary: string; root: string; env: NodeJS.ProcessEnv; command?: Command }): Promise<BenchmarkOutcome> {
   rmSync(output, { recursive: true, force: true }); mkdirSync(output, { recursive: true });
   const options = { cwd: root, env: { ...env, NTS_CHECKERS: "1" } };
-  const emitted = await command(binary, [`emit-${backend}`, project, ...(backend === "llvm" ? ["--rc"] : ["--out", output, ...(backend === "c" ? ["--rc"] : [])])], options);
+  const emitted = await command(binary, [`emit-${backend}`, project, "--out", output, ...(backend === "jvm" ? [] : ["--rc"])], options);
   const refusal = compileOutcome(emitted, "emit"); if (refusal) return refusal;
   if (backend === "jvm") {
     return regularFiles(output).some(path => path.endsWith(".class")) ? { kind: "pass" }
@@ -96,7 +98,6 @@ export async function observeCompile({ backend, project, output, binary, root, e
   }
   const [tool, ...prefix] = commandLine(backend === "c" ? env.CC ?? "clang" : env.NTS_LLVM_CC ?? "clang");
   const program = join(output, backend === "c" ? "program.c" : "program.ll");
-  if (backend === "llvm") writeFileSync(program, emitted.stdout);
   if (!existsSync(program) || lstatSync(program).size === 0) return { kind: "build-failure", stage: "emit", diagnostic: `emit-${backend} produced no program` };
   const flags = backend === "c" ? ["-O2", "-Wall", "-Wextra", "-Werror", "-std=c11", "-DNTS_PROVIDER_RC", `-I${output}`]
     : ["-x", "ir", "-w", "-O2"];

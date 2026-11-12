@@ -92,9 +92,9 @@ if (!config.include[0].endsWith('.ts') && fs.existsSync(path.join(config.include
 if (config.include[0].includes('/subject/') && testMode !== 'fixed') {
   console.error('NTS4001: unsupported benchmark shape'); process.exit(0);
 }
-if (mode === 'emit-llvm') console.log('define i32 @control() { ret i32 1 }');
-else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {recursive:true});
-  fs.writeFileSync(path.join(output, mode === 'emit-c' ? 'program.c' : 'Program.class'), mode === 'emit-c' ? 'int control(void) { return 1; }' : 'class'); }
+const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {recursive:true});
+fs.writeFileSync(path.join(output, mode === 'emit-c' ? 'program.c' : mode === 'emit-llvm' ? 'program.ll' : 'Program.class'),
+  mode === 'emit-c' ? 'int control(void) { return 1; }' : mode === 'emit-llvm' ? 'define i32 @control() { ret i32 1 }' : 'class');
 `); chmodSync(binary, 0o755);
   const pinned = publishPin(binary, join(scratch, "pin"), { sha: git(["rev-parse", "HEAD"]), clean: true, applied: null });
   // The recorder reserves in a ledger of its own, against a reading of its own.
@@ -230,6 +230,7 @@ test("recorded compile cells execute every backend and expose outcome movement",
     calls.push([binary, ...args]);
     const output = args[args.indexOf("--out") + 1];
     if (args[0] === "emit-c") { mkdirSync(output, { recursive: true }); writeFileSync(join(output, "program.c"), "/* generated */"); }
+    if (args[0] === "emit-llvm") { mkdirSync(output, { recursive: true }); writeFileSync(join(output, "program.ll"), "; IR"); }
     if (args[0] === "emit-jvm") { mkdirSync(output, { recursive: true }); writeFileSync(join(output, "Program.class"), "class bytes"); }
     const stderr = refused && args[0]?.startsWith("emit-") ? "NTS4001: unsupported shape" : "";
     return { status: 0, signal: null, stdout: args[0] === "emit-llvm" ? "; IR" : "", stderr, out: stderr, elapsedMs: 1 };
