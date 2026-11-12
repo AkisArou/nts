@@ -189,7 +189,7 @@ against a pin). They take minutes, and they caught seventeen regressions that
 fixtures, examples and blockers did not.
 
 Before you land, run the gate's own commands, not look-alikes:
-`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`;
+`cargo fmt`; `node tooling/gate/clippy.ts`;
 `node tooling/gate/test-profile.ts inner -p <crate> ...` over every crate you
 touched *and the backend crates* (`-p nts-codegen-{c,llvm,jvm}`); the owner
 sets `NTS_CHECKERS=1` to bound each test process's checker pool and memory

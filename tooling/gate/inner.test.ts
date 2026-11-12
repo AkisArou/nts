@@ -102,6 +102,7 @@ for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", fa
 import {appendFileSync,writeFileSync,readFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';
 const args=process.argv.slice(2);appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
 if(args[0]==='metadata') console.log(JSON.stringify({packages:[]}));
+if(args[0]==='clippy') writeFileSync(${JSON.stringify(calls+'.clippy-target')},process.env.CARGO_TARGET_DIR);
 if(args[0]==='build') {
   if(${fails}) process.exit(23);
   if(!readFileSync(${JSON.stringify(compiler)},'utf8').includes('fresh')) writeFileSync(${JSON.stringify(compiler)},${JSON.stringify(executable("fresh"))},{mode:0o755});
@@ -132,6 +133,7 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
     assert.equal(ran.status, fails ? 1 : 0, ran.stdout + ran.stderr);
     assert.ok(existsSync(calls), ran.stdout + ran.stderr);
     const phases = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
+    assert.equal(readFileSync(calls+".clippy-target","utf8"),join(tree,"target/clippy"));
     const build = phases.findIndex(args => args[0] === "build"), tests = phases.findIndex(args => args[0] === "test");
     assert.ok(build >= 0, ran.stdout + ran.stderr);
     assert.deepEqual(phases[build], ["build", "--profile", "nts-dev", "-p", "nts-cli"]);

@@ -176,7 +176,7 @@ step() {
 # passed for a clippy that died without printing a diagnostic -- killed by a
 # memory cap (SIGKILL prints nothing), or a cargo that could not take its lock.
 lint() {
-  out=$(cargo clippy --workspace --all-targets 2>&1)
+  out=$(node tooling/gate/clippy.ts --cache 2>&1)
   status=$?
   if printf '%s\n' "$out" | grep -E '^(warning|error)'; then return 1; fi
   if [ "$status" -ne 0 ]; then

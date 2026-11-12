@@ -92,6 +92,7 @@
 //   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
 //                         unless the launcher's code owns another, as a test does)
 
+import {clippyTarget} from "./build-targets.ts";
 import {hostObservations,HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
@@ -385,7 +386,7 @@ function stepEnv(step, slots, scope) {
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
   // instead of queueing on their lock. What it lints is unchanged.
-  if (step.name === "clippy") e.CARGO_TARGET_DIR = join(target, "clippy");
+  if (step.name === "clippy") e.CARGO_TARGET_DIR = clippyTarget(target);
   e.NTS_GATE_RUN_DIR = RUN_DIR;
   delete e.NTS_GATE_CASE_COSTS_DIR;
   if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;

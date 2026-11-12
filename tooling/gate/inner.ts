@@ -1,5 +1,6 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
+import {clippyTarget} from "./build-targets.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
 // machine allows -- the gate's own core commands, not look-alikes.
@@ -115,6 +116,7 @@ function text(command: string, args: readonly string[]): string {
 
 const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
 const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
+const CLIPPY_OWNER = fileURLToPath(new URL("./clippy.ts", import.meta.url));
 
 /** A heavy phase: its key in the tree's history, what it is, its scope's MemoryMax, and the workers it runs. */
 type Phase = { key: string; what: string; memoryMax: string; workers: number };
@@ -205,7 +207,7 @@ function main(argv: readonly string[]): number {
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
-    step("clippy", () => heavy({ key: "inner-clippy", what: "clippy", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
+    step("clippy", () => heavy({ key: "inner-clippy", what: "clippy", memoryMax: "14G", workers: CARGO_WORKERS }, process.execPath, [CLIPPY_OWNER,"--cache"],{CARGO_TARGET_DIR:clippyTarget(launchEnvironment.CARGO_TARGET_DIR??join(ROOT,"target"))})) &&
     step("build", () => {
       const status = heavy({ key: "inner-build", what: "the compiler", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]);
       compilerReady = status === 0;

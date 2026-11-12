@@ -1,8 +1,9 @@
 // Resource observations are a capability of a run. Tests provide a complete
 // owned view, including observations made by dependencies and child processes.
-import {closeSync,openSync,readFileSync,readSync,statfsSync,writeSync} from 'node:fs';
+import {closeSync,existsSync,openSync,readFileSync,readSync,statfsSync,writeSync} from 'node:fs';
 import {availableParallelism,cpus,loadavg} from 'node:os';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
+import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR'] as const;
@@ -22,6 +23,7 @@ export type HostObservationFixture = {
   memory:{file:string};
   paging:{file:string};
   disk:DiskSpace;
+  allocated:{kind:'fixed';defaultBytes:number;paths?:Record<string,number>}|{kind:'live'};
   cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
   resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>}|{kind:'live'};
   scopePeak:{kind:'fixed';bytes:number;resettable:boolean}|{kind:'live'};
@@ -36,6 +38,7 @@ export interface HostObservations {
   load():[number,number,number];
   paging():{inputPages:number;outputPages:number};
   disk(path:string):DiskSpace;
+  allocatedBytes(path:string):number;
   processCharge(pid:number):number;
   cgroupCharge(path:string):number;
   cgroupCpu(path:string):CgroupCpu;
@@ -87,6 +90,14 @@ export function parseCgroupCpu(text:string):CgroupCpu {
   return {usageUsec:counter('usage_usec'),userUsec:counter('user_usec'),systemUsec:counter('system_usec')};
 }
 function liveCgroupCpu(path:string):CgroupCpu { return parseCgroupCpu(readFileSync(`/sys/fs/cgroup${path}/cpu.stat`,'utf8')); }
+
+function liveAllocatedBytes(path:string,env:NodeJS.ProcessEnv):number {
+  if(!existsSync(path))return 0;
+  const result=infrastructureProbe({purpose:'measure allocated disk bytes for '+path,command:'du',args:['-sx','-B1','--',path],env});
+  const value=/^(\d+)\s/.exec(result.stdout)?.[1];
+  if(value===undefined)throw new HostObservationError('host observation allocatedBytes has no byte count: '+path);
+  return number(Number(value),'allocatedBytes.'+path);
+}
 
 /** memory.peak resets belong to an open descriptor, not to a cgroup path.
  * Retain the descriptor for the whole case stream and discover reset support
@@ -147,6 +158,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       number(value.width?.logical,'width.logical');number(value.width?.available,'width.available');
       if(value.cpu?.kind==='fixed')cpuCounters(value.cpu.default,'cpu.default');
       else if(value.cpu?.kind!=='live')throw new HostObservationError('host observation cpu is missing or invalid');
+      if(value.allocated?.kind==='fixed')number(value.allocated.defaultBytes,'allocated.defaultBytes');
+      else if(value.allocated?.kind!=='live')throw new HostObservationError('host observation allocated is missing or invalid');
       if(value.resident?.kind==='fixed')number(value.resident.defaultBytes,'resident.defaultBytes');
       else if(value.resident?.kind!=='live')throw new HostObservationError('host observation resident is missing or invalid');
       if(value.scopePeak?.kind==='fixed'){
@@ -178,6 +191,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       load:()=>read().load,
       paging:()=>paging(read().paging?.file??''),
       disk:()=>{const value=read().disk;return {freeBytes:number(value?.freeBytes,'disk.freeBytes'),freeInodes:number(value?.freeInodes,'disk.freeInodes')};},
+      allocatedBytes:path=>{const value=read().allocated;return value.kind==='live'?liveAllocatedBytes(path,env):number(value.paths?.[path]??value.defaultBytes,'allocated.paths.'+path);},
       processCharge:pid=>charge('processes',String(pid)),
       cgroupCharge:path=>charge('cgroups',path),
       cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
@@ -197,6 +211,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     swap:()=>swap('/proc/meminfo'),
     load:()=>loadavg() as [number,number,number],
     disk:path=>{const value=statfsSync(path);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},
+    allocatedBytes:path=>liveAllocatedBytes(path,env),
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,
     cgroupCpu:liveCgroupCpu,

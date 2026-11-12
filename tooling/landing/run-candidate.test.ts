@@ -13,6 +13,7 @@ import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 import {fullEnvironment} from "../census/full-plan.ts";
 import {candidateCommand} from "./candidate-environment.ts";
 import {GATE,fixture} from './run-fixture.ts';
+import {clippyTarget} from "../gate/build-targets.ts";
 
 test("a runner's in-process provisioning ignores a launcher-supplied Git", t => {
   const f = fixture(t), options = f.options([]), bin = join(f.own, "launcher-tools");
@@ -150,4 +151,13 @@ test('the candidate launcher refuses a malformed inherited oracle grant before e
   assert.equal(child.status,2);assert.match(child.stderr,/invalid owned oracle dependency handoff/);
   assert.match(child.error!.message,/invalid owned oracle dependency handoff/);
   assert.equal(existsSync(join(f.controls,'launched')),false);
+});
+
+
+test("the real gate runner selects the declared Clippy cache",async t=>{
+  const f=fixture(t);f.control("clippy","target-dir");
+  const ran=await runLanding(f.options(["build","clippy"]));
+  assert.equal(ran.state,"green",ran.message);
+  assert.equal(readFileSync(join(f.controls,"target-dir"),"utf8"),clippyTarget(f.target));
+  assert.equal(existsSync(join(f.target,"debug")),false);
 });

@@ -11,8 +11,8 @@ export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],str
  * Called again, it changes the reading at once, as a reader polling it sees
  * it: whole, never half written.
  */
-export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, resident, clock, cpu, scopePeak }:
-  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];scopePeak?:HostObservationFixture['scopePeak']} = {}): OwnMemory {
+export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, scopePeak }:
+  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];scopePeak?:HostObservationFixture['scopePeak']} = {}): OwnMemory {
   mkdirSync(dir, { recursive: true });
   const meminfo = join(dir, "meminfo"), vmstat = join(dir, "vmstat");
   writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
@@ -23,6 +23,7 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
   const previous:HostObservationFixture|undefined=existsSync(capability)?JSON.parse(readFileSync(capability,'utf8')):undefined;
   const observations:HostObservationFixture={version:1,memory:{file:meminfo},paging:{file:vmstat},
     disk:disk??previous?.disk??{freeBytes:2**40,freeInodes:2**30},
+    allocated:allocated??previous?.allocated??{kind:'fixed',defaultBytes:0},
     resident:resident??previous?.resident??{kind:'fixed',defaultBytes:0},
     cpu:cpu??previous?.cpu??{kind:'fixed',default:{usageUsec:0,userUsec:0,systemUsec:0}},
     scopePeak:scopePeak??previous?.scopePeak??{kind:'fixed',bytes:0,resettable:true},

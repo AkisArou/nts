@@ -64,6 +64,7 @@ if [ "$1" = --call ]; then
   [ "$step" = doctests ] && echo "$NTS_DOCTEST_CRATES" > "$controls/doctest-crates"
   case $control in
     pass) echo "  $step: every case as recorded"; exit 0 ;;
+    target-dir) printf '%s' "$CARGO_TARGET_DIR" > "$controls/target-dir"; exit 0 ;;
     oracle-context) node --input-type=module -e 'import {readFileSync,writeFileSync} from "node:fs";import {createHash} from "node:crypto";const capture=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES),parent=readFileSync(${JSON.stringify(join(controls,"parent-record"))},"utf8");writeFileSync(${JSON.stringify(join(controls,"oracle-context.json"))},JSON.stringify({capture,imageSource:JSON.parse(readFileSync(capture.seal.record,"utf8")).source,parentSha256:createHash("sha256").update(readFileSync(parent)).digest("hex"),temporary:JSON.parse(process.env[${JSON.stringify(ENVIRONMENT_CONTEXT)}]).temporary}));'; exit $? ;;
     fail) echo "  $step: a recorded case went wrong"; exit 1 ;;
     pending) echo "  pending: tests/x/a.ts is not recorded in results/x.tsv yet"; echo "  improved, record pending: tests/x/b.ts refused -> pass"; exit 0 ;;
