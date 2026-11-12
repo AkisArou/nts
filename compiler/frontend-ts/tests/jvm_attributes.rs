@@ -6,10 +6,8 @@ use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
-fn snapshot(name: &str, declarations: &str) -> SemanticSnapshot {
-    let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-jvm-attributes-{}-{name}", std::process::id()));
+fn snapshot(name: &str, declarations: &str) -> crate::scratch::ScratchValue<SemanticSnapshot> {
+    let root = crate::scratch::ScratchDir::path_in_target(&format!("nts-jvm-attributes-{name}"));
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("api.d.ts"), declarations).unwrap();
     std::fs::write(root.join("main.ts"), "export const value = 1;\n").unwrap();
@@ -20,8 +18,8 @@ fn snapshot(name: &str, declarations: &str) -> SemanticSnapshot {
     let result = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&root.join("tsconfig.json"));
-    std::fs::remove_dir_all(&root).unwrap();
-    result.expect("the frontend reports annotation errors in the snapshot")
+
+    root.hold(result.expect("the frontend reports annotation errors in the snapshot"))
 }
 
 #[test]

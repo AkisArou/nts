@@ -100,7 +100,7 @@ fn quoted_properties_keep_distinct_catalogue_storage() {
             physical.insert((name, *key), member);
         }
     }
-    let dir = std::env::temp_dir().join(format!("nts-quoted-storage-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-quoted-storage");
     std::fs::create_dir_all(&dir).unwrap();
     for class in emitted.classes {
         let path = dir.join(class.path());

@@ -37,3 +37,7 @@ pub mod dependencies;
 pub mod features;
 pub mod node_deps;
 pub mod swift;
+
+#[cfg(test)]
+#[path = "../../compiler/test-support/scratch.rs"]
+mod scratch;

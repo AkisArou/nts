@@ -41,7 +41,7 @@ fn a_wide_view_subscript_is_bounded_as_a_long() {
         eprintln!("SKIP wide_cursor: no JDK, so javap has not been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-wide-cursor-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-wide-cursor");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());

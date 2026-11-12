@@ -71,7 +71,7 @@ fn every_double_prints_the_characters_node_prints() {
     let (Some(javac), Some(java), Some(node)) = (tool("javac"), tool("java"), tool("node")) else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-n2s-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-n2s");
     std::fs::create_dir_all(&dir).unwrap();
 
     // `NTS_JVM_RUNTIME_JAR` for the same reason the sabotage test uses it: to

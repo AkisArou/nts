@@ -345,10 +345,7 @@ mod tests {
             .expect("benchmark fixture path")
             .parent()
             .expect("benchmark fixture path");
-        let root = repository.join(format!(
-            "target/bench-workload-controls-{}",
-            std::process::id()
-        ));
+        let root = crate::scratch::ScratchDir::path_in_target("bench-workload-controls");
         let cases = root.join("benchmarks/cases");
         let output = root.join("generated");
         std::fs::create_dir_all(&output)?;

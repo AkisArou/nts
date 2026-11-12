@@ -43,3 +43,7 @@ pub mod string_hash;
 pub mod callback_abi;
 
 pub mod entry_parameters;
+
+#[cfg(test)]
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;

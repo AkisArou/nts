@@ -6,3 +6,7 @@
 //! invoking the compiler or linking a `NativeTS` runtime.
 
 pub mod test262_runner;
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

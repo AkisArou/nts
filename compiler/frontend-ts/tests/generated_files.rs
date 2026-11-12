@@ -20,10 +20,8 @@ export const sum: number = a + b + extra();
 /// A project whose config names its file as `names` says -- `"files"`,
 /// `"include"`, or nothing, which is the default include -- importing two
 /// modules only a generator declares, and calling one only `extra.d.ts` does.
-fn project(name: &str, names: &str) -> Utf8PathBuf {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-generated-files-{}-{name}", std::process::id()));
+fn project(name: &str, names: &str) -> crate::scratch::ScratchDir {
+    let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-generated-files-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join("generated")).unwrap();
@@ -43,7 +41,7 @@ fn project(name: &str, names: &str) -> Utf8PathBuf {
         "declare function extra(): number;\n",
     )
     .unwrap();
-    dir.join("tsconfig.json").canonicalize_utf8().unwrap()
+    dir.map(|path| path.join("tsconfig.json").canonicalize_utf8().unwrap())
 }
 
 /// Declares one module the checker cannot find per round, so a program

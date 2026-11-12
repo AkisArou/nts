@@ -439,14 +439,11 @@ fn a_root_class_has_no_base_types() {
 
 /// A snapshot of `main` against a two-class `objc:` binding: `KitWindow`,
 /// whose `screen` is a `KitScreen`.
-fn over_a_foreign_binding(main: &str) -> SemanticSnapshot {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!(
-            "nts-decompose-foreign-{}-{}",
-            std::process::id(),
-            main.len()
-        ));
+fn over_a_foreign_binding(main: &str) -> crate::scratch::ScratchValue<SemanticSnapshot> {
+    let dir = crate::scratch::ScratchDir::path_in_target(&format!(
+        "nts-decompose-foreign-{}",
+        main.len()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("kit.d.ts"),
@@ -462,7 +459,7 @@ fn over_a_foreign_binding(main: &str) -> SemanticSnapshot {
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
     let mut source =
         Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
-    source.snapshot(&tsconfig).expect("snapshot should succeed")
+    dir.hold(source.snapshot(&tsconfig).expect("snapshot should succeed"))
 }
 
 /// The kind of the type the class named `name` declares.
@@ -530,9 +527,7 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
 /// generic instance still has its arguments and nothing goes unanswered.
 #[test]
 fn type_arguments_are_asked_of_references_only() {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-decompose-arguments-{}", std::process::id()));
+    let dir = crate::scratch::ScratchDir::path_in_target("nts-decompose-arguments");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.ts"),

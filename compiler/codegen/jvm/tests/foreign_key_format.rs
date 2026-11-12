@@ -147,35 +147,34 @@ fn the_escape_table_builds_the_same_key() {
 ///
 /// Same shape as `reads.rs`'s `android_shape`: javac over checked-in `.java`,
 /// so the only thing it depends on beyond the repository is a JDK.
-fn fixture_classes() -> Option<std::path::PathBuf> {
-    static BUILT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let home = std::env::var("JAVA_HOME").ok()?;
-            let javac = std::path::Path::new(&home).join("bin/javac");
-            if !javac.exists() {
-                return None;
-            }
-            let sources = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../tests/interop/android-shape/java/com/example/ui");
-            if !sources.exists() {
-                return None;
-            }
-            let out = std::env::temp_dir().join(format!("nts-fkf-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&out);
-            std::fs::create_dir_all(&out).ok()?;
-            let files: Vec<std::path::PathBuf> = std::fs::read_dir(&sources)
-                .ok()?
-                .filter_map(|it| it.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|e| e == "java"))
-                .collect();
-            let built = nts_codegen_jvm::toolchain::command(&javac)
-                .args(["--release", "8", "-nowarn", "-d"])
-                .arg(&out)
-                .args(&files)
-                .output()
-                .ok()?;
-            built.status.success().then_some(out)
-        })
-        .clone()
+fn fixture_classes() -> Option<crate::scratch::StdScratchDir> {
+    static BUILT: crate::scratch::SharedScratch<std::path::PathBuf> =
+        crate::scratch::SharedScratch::new();
+    BUILT.get(|| {
+        let home = std::env::var("JAVA_HOME").ok()?;
+        let javac = std::path::Path::new(&home).join("bin/javac");
+        if !javac.exists() {
+            return None;
+        }
+        let sources = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../tests/interop/android-shape/java/com/example/ui");
+        if !sources.exists() {
+            return None;
+        }
+        let out = crate::scratch::StdScratchDir::path_in_std_target("nts-fkf");
+        let _ = std::fs::remove_dir_all(&out);
+        std::fs::create_dir_all(&out).ok()?;
+        let files: Vec<std::path::PathBuf> = std::fs::read_dir(&sources)
+            .ok()?
+            .filter_map(|it| it.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|e| e == "java"))
+            .collect();
+        let built = nts_codegen_jvm::toolchain::command(&javac)
+            .args(["--release", "8", "-nowarn", "-d"])
+            .arg(&out)
+            .args(&files)
+            .output()
+            .ok()?;
+        built.status.success().then_some(out)
+    })
 }

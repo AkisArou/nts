@@ -476,9 +476,7 @@ mod tests {
             }
             return;
         }
-        let path = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-output-prefix-{}", std::process::id()));
+        let path = crate::scratch::ScratchDir::path_in_target("nts-output-prefix");
         let scratch = super::super::Scratch::holding(path);
         std::fs::create_dir_all(scratch.path.join("src")).unwrap();
         let main = scratch.path.join("src/main.ts");

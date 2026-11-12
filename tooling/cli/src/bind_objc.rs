@@ -5713,7 +5713,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
 
     fn fake_request(test: &str) -> Request {
         let root =
-            std::env::temp_dir().join(format!("nts-bind-objc-{test}-{}", std::process::id()));
+            crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-bind-objc-{test}"));
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
         let symbols = root.join("symbolgraph");
         std::fs::create_dir_all(&headers).unwrap();
@@ -5837,7 +5837,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     #[test]
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn a_framework_is_bound_as_swift_imports_it() {
-        let root = std::env::temp_dir().join(format!("nts-bind-objc-test-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-objc-test");
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
         let symbols = root.join("symbolgraph");
         std::fs::create_dir_all(&headers).unwrap();
@@ -6075,7 +6075,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     /// dies at launch, the runtime having no such class. No stub stands in.
     #[test]
     fn a_class_introduced_after_the_target_is_not_bound_nor_named() {
-        let root = std::env::temp_dir().join(format!("nts-bind-objc-late-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-objc-late");
         let headers = root.join("System/Library/Frameworks/Late.framework/Headers");
         let symbols = root.join("symbolgraph");
         std::fs::create_dir_all(&headers).unwrap();

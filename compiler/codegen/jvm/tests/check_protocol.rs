@@ -36,7 +36,7 @@ public final class Program {
 "#;
 
 struct Fixture {
-    dir: PathBuf,
+    dir: crate::scratch::StdScratchDir,
     classpath: std::ffi::OsString,
     java: PathBuf,
 }
@@ -47,8 +47,9 @@ impl Fixture {
             eprintln!("SKIP JVM check protocol: no JDK");
             return None;
         };
-        let dir =
-            std::env::temp_dir().join(format!("nts-check-protocol-{label}-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-check-protocol-{label}"
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);

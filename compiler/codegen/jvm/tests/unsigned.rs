@@ -230,7 +230,7 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
     );
-    let out = std::env::temp_dir().join(format!("nts-unsigned-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-unsigned");
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
         let path = out.join(class.path());

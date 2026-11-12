@@ -262,7 +262,8 @@ mod tests {
     }
 
     fn header_fixture(label: &str, header: &str) -> (std::path::PathBuf, Vec<Vec<String>>) {
-        let dir = std::env::temp_dir().join(format!("nts-resource-{label}-{}", std::process::id()));
+        let dir =
+            crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-resource-{label}"));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("resources.h");
         std::fs::write(&path, header).unwrap();

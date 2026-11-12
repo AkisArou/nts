@@ -852,7 +852,7 @@ mod corpus_input_tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    pub(super) struct Scratch(pub(super) Utf8PathBuf);
+    pub(super) struct Scratch(pub(super) crate::scratch::ScratchDir);
 
     impl Scratch {
         pub(super) fn open() -> Self {
@@ -860,11 +860,7 @@ mod corpus_input_tests {
             let cache = std::env::var("TMPDIR").unwrap_or_else(|_| {
                 format!("{}/.cache", std::env::var("HOME").expect("home directory"))
             });
-            let root = Utf8PathBuf::from(cache).join(format!(
-                "nts-suite-input-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
+            let root = crate::scratch::ScratchDir::path_in_target("nts-suite-input");
             std::fs::create_dir(&root).expect("private scratch");
             Self(root)
         }
@@ -939,3 +935,7 @@ mod corpus_input_tests {
         assert_eq!(totals.unverifiable, 0);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

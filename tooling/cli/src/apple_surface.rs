@@ -320,9 +320,7 @@ mod tests {
     /// only: a struct named in a block extending another module is not its.
     #[test]
     fn records_are_read_from_a_packages_own_module() {
-        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-records-of-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-records-of");
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("index.d.ts");
         std::fs::write(
@@ -446,9 +444,7 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-apple-packages-{os}-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-apple-packages-{os}"));
         std::fs::create_dir_all(&dir).unwrap();
         // As a project has them, through `types`, but as the binder wrote
         // them: without the store's `// @ts-nocheck`.

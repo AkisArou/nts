@@ -9,20 +9,17 @@ use std::fmt::Write;
 use std::num::NonZeroU16;
 
 struct Project {
-    root: Utf8PathBuf,
+    root: crate::scratch::ScratchDir,
 }
 
 impl Project {
     fn new(name: &str, main: &str) -> Self {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!(
-                "nts-declaration-identities-{}-{name}",
-                std::process::id()
-            ));
+        let root = crate::scratch::ScratchDir::path_in_target(&format!(
+            "nts-declaration-identities-{name}"
+        ));
         std::fs::create_dir_all(&root).unwrap();
         let this = Self {
-            root: root.canonicalize_utf8().unwrap(),
+            root: root.map(|path| path.canonicalize_utf8().unwrap()),
         };
         this.write("main.ts", main);
         this.write(

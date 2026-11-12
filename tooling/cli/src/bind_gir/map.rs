@@ -5465,7 +5465,7 @@ mod tests {
     }
     fn raw_pointer_fixture() -> (std::path::PathBuf, super::Repository) {
         use std::fmt::Write as _;
-        let dir = std::env::temp_dir().join(format!("nts-gir-raw-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-gir-raw");
         std::fs::create_dir_all(&dir).expect("fixture directory");
         std::fs::write(
             dir.join("raw.h"),

@@ -161,10 +161,8 @@ fn optional_and_rest_parameters_are_distinguished() {
 
 /// A snapshot of a program written to hold **both** kinds of `any`, side by
 /// side, in the shape `decomposition.rs` writes a synthetic project in.
-fn over_both_kinds_of_any() -> SemanticSnapshot {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-two-anys-{}", std::process::id()));
+fn over_both_kinds_of_any() -> crate::scratch::ScratchValue<SemanticSnapshot> {
+    let dir = crate::scratch::ScratchDir::path_in_target("nts-two-anys");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.ts"),
@@ -191,7 +189,7 @@ fn over_both_kinds_of_any() -> SemanticSnapshot {
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
     let mut source =
         Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
-    source.snapshot(&tsconfig).expect("snapshot should succeed")
+    dir.hold(source.snapshot(&tsconfig).expect("snapshot should succeed"))
 }
 
 /// A written `any` and the checker's evolving declarations are different facts.

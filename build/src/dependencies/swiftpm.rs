@@ -640,10 +640,8 @@ mod tests {
         }
     }
 
-    fn scratch(name: &str) -> Utf8PathBuf {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-swiftpm-{name}-{}", std::process::id()));
+    fn scratch(name: &str) -> crate::scratch::ScratchDir {
+        let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-swiftpm-{name}"));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

@@ -32,3 +32,7 @@ pub use emit::{
     leaves_the_program_inconsistent, main_for, object_field_name, object_type_name,
     standalone_main, standalone_main_in_glib, support_files,
 };
+
+#[cfg(test)]
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;

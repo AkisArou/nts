@@ -205,7 +205,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     if tool("javac").is_none() || tool("java").is_none() {
         return;
     }
-    let scratch = std::env::temp_dir().join(format!("nts-jvm-sabotage-{}", std::process::id()));
+    let scratch = crate::scratch::StdScratchDir::path_in_std_target("nts-jvm-sabotage");
     std::fs::create_dir_all(&scratch).unwrap();
     // **Sabotaged in a copy, never in the tree.** Each sabotage used to be
     // written into `runtime/jvm/src` for the length of its build and then put

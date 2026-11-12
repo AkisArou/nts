@@ -52,7 +52,7 @@ fn every_producer_publishes_and_every_credit_returns() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-inbox-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-inbox");
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
 

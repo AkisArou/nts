@@ -7669,7 +7669,7 @@ mod tests {
     fn the_erasures_still_match_the_header() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let header = root.join("runtime/c/nts_runtime.h");
-        let dir = std::env::temp_dir().join(format!("nts-erasures-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-erasures");
         if std::fs::create_dir_all(&dir).is_err()
             || std::fs::copy(&header, dir.join("nts_runtime.h")).is_err()
             || std::fs::copy(

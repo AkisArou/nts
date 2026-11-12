@@ -98,7 +98,7 @@ fn compare() -> Option<(String, String)> {
     };
     let root = repository();
     let here = root.join("compiler/codegen/jvm/tests/memory");
-    let dir = std::env::temp_dir().join(format!("nts-memory-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-memory");
     std::fs::create_dir_all(&dir).unwrap();
 
     let jar = runtime_jar();

@@ -89,7 +89,7 @@ fn an_erased_length_reads_every_actual_representation() {
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
     );
-    let out = std::env::temp_dir().join(format!("nts-erased-length-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-erased-length");
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
         let path = out.join(class.path());

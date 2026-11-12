@@ -6,7 +6,7 @@ const NOTICE: &str = "the Wasm backend is being rebuilt on Binaryen; see docs/ta
 
 #[test]
 fn retired_requests_fail_explicitly_without_a_native_fallback() {
-    let out = std::env::temp_dir().join(format!("nts-retired-backend-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-retired-backend");
     assert!(!out.exists());
     for arguments in [
         vec!["emit-wasm"],

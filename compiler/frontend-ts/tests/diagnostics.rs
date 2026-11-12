@@ -90,9 +90,7 @@ fn a_clean_program_reports_no_errors() {
 /// missing.
 #[test]
 fn a_type_error_in_any_of_the_programs_files_is_reported() {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-diagnostics-own-{}", std::process::id()));
+    let dir = crate::scratch::ScratchDir::path_in_target("nts-diagnostics-own");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.ts"),

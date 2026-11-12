@@ -48,12 +48,12 @@ fn tool(name: &str) -> Option<PathBuf> {
 /// files another was midway through reading. It passed with five tests and
 /// broke on the sixth, reporting `the class file ends inside a value`, which
 /// reads exactly like a reader bug and is not one.
-fn fixture() -> Option<PathBuf> {
-    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    BUILT.get_or_init(build_fixture).clone()
+fn fixture() -> Option<crate::scratch::StdScratchDir> {
+    static BUILT: crate::scratch::SharedScratch<PathBuf> = crate::scratch::SharedScratch::new();
+    BUILT.get(build_fixture)
 }
 
-fn build_fixture() -> Option<PathBuf> {
+fn build_fixture() -> Option<crate::scratch::StdScratchDir> {
     let javac = tool("javac")?;
     let sources = repository().join("tests/interop/java-from-ts/java/com/example");
     if !sources.exists() {
@@ -63,7 +63,7 @@ fn build_fixture() -> Option<PathBuf> {
         );
         return None;
     }
-    let out = std::env::temp_dir().join(format!("nts-reads-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-reads");
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).expect("a temp dir");
 
@@ -145,7 +145,7 @@ fn the_kotlin_spelling_of_non_null_is_accepted() {
         eprintln!("SKIP reads/kotlin-spelling: no javac");
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-notnull-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-notnull");
     let _ = std::fs::remove_dir_all(&out);
     let src = out.join("src/org/jetbrains/annotations");
     std::fs::create_dir_all(&src).expect("a temp dir");
@@ -910,32 +910,30 @@ fn inherited_members_are_surfaced_through_a_resolver() {
 
 /// The `android-shape` fixture, compiled. Its `View extends Widget` is the only
 /// real inheritance chain checked in to this repository's interop projects.
-fn android_shape() -> Option<PathBuf> {
-    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let javac = tool("javac")?;
-            let sources = repository().join("tests/interop/android-shape/java/com/example/ui");
-            if !sources.exists() {
-                return None;
-            }
-            let out = std::env::temp_dir().join(format!("nts-ui-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&out);
-            std::fs::create_dir_all(&out).ok()?;
-            let files: Vec<PathBuf> = std::fs::read_dir(&sources)
-                .ok()?
-                .filter_map(|it| it.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|e| e == "java"))
-                .collect();
-            let built = nts_jvm_emitter::toolchain::command(&javac)
-                .args(["--release", "8", "-nowarn", "-d"])
-                .arg(&out)
-                .args(&files)
-                .output()
-                .ok()?;
-            built.status.success().then_some(out)
-        })
-        .clone()
+fn android_shape() -> Option<crate::scratch::StdScratchDir> {
+    static BUILT: crate::scratch::SharedScratch<PathBuf> = crate::scratch::SharedScratch::new();
+    BUILT.get(|| {
+        let javac = tool("javac")?;
+        let sources = repository().join("tests/interop/android-shape/java/com/example/ui");
+        if !sources.exists() {
+            return None;
+        }
+        let out = crate::scratch::StdScratchDir::path_in_std_target("nts-ui");
+        let _ = std::fs::remove_dir_all(&out);
+        std::fs::create_dir_all(&out).ok()?;
+        let files: Vec<PathBuf> = std::fs::read_dir(&sources)
+            .ok()?
+            .filter_map(|it| it.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|e| e == "java"))
+            .collect();
+        let built = nts_jvm_emitter::toolchain::command(&javac)
+            .args(["--release", "8", "-nowarn", "-d"])
+            .arg(&out)
+            .args(&files)
+            .output()
+            .ok()?;
+        built.status.success().then_some(out)
+    })
 }
 
 /// The escape analysis, against methods whose behaviour is obvious by reading.
@@ -1138,7 +1136,7 @@ fn an_unmodelled_instruction_fails_closed() {
         eprintln!("SKIP reads/fail-closed: no jmod");
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-jb-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-jb");
     // The `exists()` check is kept and is now only ever false: the path carries
     // this process's pid, so it could never be reused across runs, and within
     // one run this is the only test that names it.
@@ -1374,32 +1372,30 @@ fn collect_classes(at: &Path, found: &mut Vec<PathBuf>) {
 
 /// `java.base`'s classes, extracted once. The JDK is the only corpus to hand
 /// with real bodies in it -- `android.jar` is stubs, which is its own test.
-fn java_base() -> Option<PathBuf> {
-    static BUILT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    BUILT
-        .get_or_init(|| {
-            let home = PathBuf::from(std::env::var("JAVA_HOME").ok()?);
-            let jmod = home.join("jmods/java.base.jmod");
-            if !jmod.exists() {
+fn java_base() -> Option<crate::scratch::StdScratchDir> {
+    static BUILT: crate::scratch::SharedScratch<PathBuf> = crate::scratch::SharedScratch::new();
+    BUILT.get(|| {
+        let home = PathBuf::from(std::env::var("JAVA_HOME").ok()?);
+        let jmod = home.join("jmods/java.base.jmod");
+        if !jmod.exists() {
+            return None;
+        }
+        let out = crate::scratch::StdScratchDir::path_in_std_target("java-base-widths");
+        let classes = out.join("classes");
+        if !classes.exists() {
+            let _ = std::fs::create_dir_all(&out);
+            let ran = nts_jvm_emitter::toolchain::command(tool("jmod")?)
+                .args(["extract", "--dir"])
+                .arg(&out)
+                .arg(&jmod)
+                .output()
+                .ok()?;
+            if !ran.status.success() {
                 return None;
             }
-            let out = std::env::temp_dir().join("nts-java-base-widths");
-            let classes = out.join("classes");
-            if !classes.exists() {
-                let _ = std::fs::create_dir_all(&out);
-                let ran = nts_jvm_emitter::toolchain::command(tool("jmod")?)
-                    .args(["extract", "--dir"])
-                    .arg(&out)
-                    .arg(&jmod)
-                    .output()
-                    .ok()?;
-                if !ran.status.success() {
-                    return None;
-                }
-            }
-            classes.exists().then_some(classes)
-        })
-        .clone()
+        }
+        classes.exists().then(|| out.hold(classes))
+    })
 }
 
 /// The two type renderers agree about a primitive array.

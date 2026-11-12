@@ -54,7 +54,7 @@ fn a_value_is_whole_or_absent_and_a_name_cannot_escape() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-store-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-store");
     let store = dir.join("store");
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
@@ -123,7 +123,7 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-durability-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-durability");
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
 
@@ -302,9 +302,8 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
     let (name, edits, must_fail) = entry;
     let root = repository();
     {
-        let dir = std::env::temp_dir().join(format!(
-            "nts-sabotage-{}-{}",
-            std::process::id(),
+        let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-sabotage-{}",
             name.len()
         ));
         let _ = std::fs::remove_dir_all(&dir);

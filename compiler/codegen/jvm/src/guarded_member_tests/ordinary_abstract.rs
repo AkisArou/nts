@@ -107,9 +107,8 @@ fn ordinary_abstract_implementer_keeps_old_plain_subclass_override() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/guarded-ordinary-abstract-{}-{stamp}",
-        std::process::id()
+    let directory = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "guarded-ordinary-abstract-{stamp}"
     ));
     println!(
         "GUARDED_ORDINARY_ABSTRACT_ARTIFACTS {}",

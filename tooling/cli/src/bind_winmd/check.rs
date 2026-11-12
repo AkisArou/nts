@@ -416,8 +416,7 @@ mod tests {
 
     #[test]
     fn header_values_distinguish_sign_extension_from_zero_extension() {
-        let dir =
-            std::env::temp_dir().join(format!("nts-winmd-sentinel-values-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-sentinel-values");
         std::fs::create_dir_all(&dir).unwrap();
         let header = dir.join("sentinels.h");
         std::fs::write(
@@ -472,8 +471,7 @@ mod tests {
 
     #[test]
     fn a_tagged_enums_member_values_are_the_headers_to_confirm() {
-        let dir =
-            std::env::temp_dir().join(format!("nts-winmd-enum-values-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-enum-values");
         std::fs::create_dir_all(&dir).unwrap();
         let header = dir.join("enums.h");
         std::fs::write(

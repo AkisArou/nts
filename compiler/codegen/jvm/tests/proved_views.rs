@@ -40,7 +40,7 @@ fn a_proven_view_access_takes_the_proved_accessor() {
         eprintln!("SKIP proved_views: no JDK, so javap has not been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-proved-views-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-proved-views");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());

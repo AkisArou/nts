@@ -79,7 +79,7 @@ fn private_chains_transfer_one_builder_while_observed_versions_stay_strings() {
             "{name}: {proof:?}"
         );
     }
-    let dir = std::env::temp_dir().join(format!("nts-string-chains-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-string-chains");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());
@@ -264,7 +264,7 @@ fn split_optional_arguments_and_a_private_carrier_share_one_descriptor() {
         method.descriptor,
         "(Ljava/lang/StringBuilder;DZ)Ljava/lang/StringBuilder;"
     );
-    let dir = std::env::temp_dir().join(format!("nts-string-pair-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-string-pair");
     let _ = std::fs::remove_dir_all(&dir);
     for class in emitted.classes {
         let path = dir.join(class.path());

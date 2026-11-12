@@ -45,7 +45,7 @@ fn variants<'a>(
     reason = "checks original allocation, species emission and execution together"
 )]
 fn plain_single_and_deep_views_allocate_the_requested_class_once() {
-    let dir = std::env::temp_dir().join(format!("nts-view-allocations-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-view-allocations");
     std::fs::create_dir_all(&dir).unwrap();
     let root = common::repository().canonicalize().unwrap();
     std::fs::write(

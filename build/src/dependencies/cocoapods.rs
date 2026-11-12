@@ -524,9 +524,7 @@ mod tests {
     /// as `CocoaPods`' own check refuses it; the same one resolves each pod.
     #[test]
     fn pods_must_be_the_lockfiles() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-cocoapods-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-cocoapods");
         let lock = "PODS:\n  - Chirp (0.1.0)\n\nEXTERNAL SOURCES:\n  Chirp:\n    :path: Chirp\n\nCOCOAPODS: 1.11.3\n";
         std::fs::create_dir_all(dir.join("Chirp/Classes")).unwrap();
         std::fs::create_dir_all(dir.join("Pods/Headers/Public/Chirp")).unwrap();
@@ -598,9 +596,7 @@ mod tests {
     /// through any depth, and a framework bundle matched whole.
     #[test]
     fn a_podspec_pattern_names_its_files() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-podspec-glob-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-podspec-glob");
         for file in [
             "Classes/Chirp.h",
             "Classes/Chirp.m",

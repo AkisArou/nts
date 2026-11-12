@@ -63,7 +63,7 @@ fn run(driver: &str) -> Option<String> {
     };
     let root = repository();
     let here = root.join("compiler/codegen/jvm/tests/gzip");
-    let dir = std::env::temp_dir().join(format!("nts-gzip-{}-{driver}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-gzip-{driver}"));
     std::fs::create_dir_all(&dir).unwrap();
 
     // `NTS_JVM_RUNTIME_JAR` for the reason the other Java tests take it: to

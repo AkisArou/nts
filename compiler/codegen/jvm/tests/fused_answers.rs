@@ -41,7 +41,7 @@ fn an_answer_read_only_as_a_float_is_never_boxed() {
         eprintln!("SKIP fused_answers: no JDK, so javap has not been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-fused-answers-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-fused-answers");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());

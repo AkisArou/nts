@@ -162,10 +162,7 @@ mod tests {
 
     #[test]
     fn a_fixture_without_a_record_is_pending_but_a_missing_header_is_not() {
-        let root = camino::Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-oracle-records-{}", std::process::id())),
-        )
-        .unwrap();
+        let root = crate::scratch::ScratchDir::path_in_target("nts-oracle-records");
         let source = "tests/programs/example/src/main.ts";
         assert!(read(&root, source).is_err(), "no generator header");
         let fixtures = root.join("results/oracle-counts/tests/programs");

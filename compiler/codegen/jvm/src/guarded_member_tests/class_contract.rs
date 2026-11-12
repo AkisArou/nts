@@ -666,9 +666,8 @@ fn class_contract_name_does_not_license_cross_class_store_or_field_cast() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/guarded-class-contract-negative-{}-{stamp}",
-        std::process::id()
+    let directory = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "guarded-class-contract-negative-{stamp}"
     ));
     println!(
         "GUARDED_CLASS_CONTRACT_NEGATIVE_ARTIFACTS {}",
@@ -778,9 +777,8 @@ fn class_contract_old_subclass_binary_and_actual_receiver_named_stops_execute() 
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/guarded-class-contract-{}-{stamp}",
-        std::process::id()
+    let directory = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "guarded-class-contract-{stamp}"
     ));
     println!("GUARDED_CLASS_CONTRACT_ARTIFACTS {}", directory.display());
     let old = directory.join("old");

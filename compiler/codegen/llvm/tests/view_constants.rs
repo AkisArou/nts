@@ -10,7 +10,7 @@ use std::process::Command;
 #[test]
 fn the_view_constants_are_the_headers() {
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../runtime/c");
-    let scratch = std::env::temp_dir().join(format!("nts-view-constants-{}", std::process::id()));
+    let scratch = crate::scratch::StdScratchDir::path_in_std_target("nts-view-constants");
     std::fs::create_dir_all(&scratch).unwrap();
     let source = scratch.join("view.c");
     std::fs::write(

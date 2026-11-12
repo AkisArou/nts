@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn search_inventory_observes_shadowing_and_missing_link_targets() {
-        let root = std::env::temp_dir().join(format!("nts-header-search-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-header-search");
         std::fs::create_dir_all(&root).expect("search fixture");
         let target = root.join("later.h");
         symlink(&target, root.join("alias.h")).expect("absent header link");

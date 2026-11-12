@@ -1145,9 +1145,7 @@ mod tests {
     #[test]
     fn a_changed_native_source_changes_the_identity() {
         use nts_frontend_ts::generated::Generated as _;
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-objc-identity-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-objc-identity");
         std::fs::create_dir_all(&dir).unwrap();
         let bindings =
             ObjcBindings::new(Vec::new(), vec![dir.clone()], dir.clone(), BTreeMap::new());

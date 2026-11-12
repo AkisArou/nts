@@ -11,10 +11,11 @@ use nts_semantic_schema::{SemanticSnapshot, SnapshotError};
 
 /// A project whose one package, `@x/kit`, declares `objc:Kit`, with `nts` as
 /// the package's `package.json` says it.
-fn over_a_package(arm: &str, nts: &str) -> Result<SemanticSnapshot, SnapshotError> {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-surfaces-{}-{arm}", std::process::id()));
+fn over_a_package(
+    arm: &str,
+    nts: &str,
+) -> Result<crate::scratch::ScratchValue<SemanticSnapshot>, SnapshotError> {
+    let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-surfaces-{arm}"));
     let package = dir.join("node_modules/@x/kit");
     std::fs::create_dir_all(&package).unwrap();
     std::fs::write(
@@ -37,6 +38,7 @@ fn over_a_package(arm: &str, nts: &str) -> Result<SemanticSnapshot, SnapshotErro
     Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
+        .map(|snapshot| dir.hold(snapshot))
 }
 
 fn reads_the_package(snapshot: &SemanticSnapshot) -> bool {

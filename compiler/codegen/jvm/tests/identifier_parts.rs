@@ -171,7 +171,7 @@ fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) -> Option<String> 
         eprintln!("SKIP identifier_parts Java-source/reference execution: no JDK");
         return None;
     };
-    let dir = std::env::temp_dir().join(format!("nts-identifier-parts-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-identifier-parts");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());

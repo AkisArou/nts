@@ -439,9 +439,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn concurrent_links_of_one_project_all_succeed() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-surfaces-link-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-surfaces-link");
         let _ = std::fs::remove_dir_all(&root);
         let (old, current, project) =
             (root.join("old"), root.join("current"), root.join("project"));
@@ -506,9 +504,7 @@ mod tests {
     /// written, created or removed: a missing file is not an empty one.
     #[test]
     fn a_fingerprint_follows_its_files() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-fingerprint-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-fingerprint");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let files = [root.join("a.gir"), root.join("b.gir")];
@@ -539,9 +535,7 @@ mod tests {
     /// no build has used for [`RETAIN`] is removed by the next.
     #[test]
     fn two_versions_share_a_store_until_one_is_idle() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-versions-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-versions");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let input = root.join("input.txt");
@@ -593,9 +587,7 @@ mod tests {
     /// package it writes says what surface it is.
     #[test]
     fn a_store_generates_once_per_input() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-surfaces-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-surfaces");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let input = root.join("input.txt");
@@ -727,9 +719,7 @@ mod tests {
     /// than a directory's name can be.
     #[test]
     fn a_long_identity_installs_and_is_found_again() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-long-identity-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-long-identity");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let input = root.join("input.txt");
@@ -745,3 +735,7 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

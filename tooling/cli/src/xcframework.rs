@@ -175,10 +175,7 @@ mod tests {
     /// the simulator's is not the device's, and macOS's is neither.
     #[test]
     fn the_slice_is_the_platform_variant_and_architecture() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-xcframework-{}", std::process::id()))
-            .join("Beep.xcframework");
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-xcframework");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("Info.plist"), PLIST).unwrap();
         let mac = framework_for(

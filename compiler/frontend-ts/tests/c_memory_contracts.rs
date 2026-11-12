@@ -92,24 +92,22 @@ export namespace decoy {
 }
 ";
 
-fn snapshot() -> &'static SemanticSnapshot {
-    static SNAPSHOT: OnceLock<SemanticSnapshot> = OnceLock::new();
-    SNAPSHOT.get_or_init(|| {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-c-memory-contracts-{}", std::process::id()));
+fn snapshot() -> crate::scratch::ScratchValue<SemanticSnapshot> {
+    static SNAPSHOT: crate::scratch::SharedScratch<SemanticSnapshot> =
+        crate::scratch::SharedScratch::new();
+    SNAPSHOT.get(|| {
+        let root = crate::scratch::ScratchDir::path_in_target("nts-c-memory-contracts");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("memory.d.ts"), DECLARATIONS).unwrap();
         std::fs::write(root.join("main.ts"), MAIN).unwrap();
         std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","noEmit":true,"types":[]},"files":["main.ts","memory.d.ts"]}"#).unwrap();
-        let snapshot = Frontend::new(&root)
+        let snapshot = Frontend::new(root.as_path())
             .with_checkers(NonZeroU16::MIN)
             .snapshot(&root.join("tsconfig.json"))
             .unwrap();
-        std::fs::remove_dir_all(root).unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-        snapshot
-    })
+        Some(root.hold(snapshot))
+    }).expect("owned memory-contract snapshot")
 }
 
 fn named_type(snapshot: &SemanticSnapshot, name: &str) -> TypeId {

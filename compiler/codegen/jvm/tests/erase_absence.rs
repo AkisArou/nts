@@ -94,7 +94,7 @@ fn a_null_reference_erases_to_the_absence_the_ir_names() {
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
     );
-    let out = std::env::temp_dir().join(format!("nts-erase-absence-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-erase-absence");
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
         let path = out.join(class.path());

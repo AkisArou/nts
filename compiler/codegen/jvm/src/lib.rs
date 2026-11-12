@@ -4513,3 +4513,7 @@ pub use nts_jvm_emitter::toolchain;
 #[cfg(test)]
 #[path = "../tests/common/mod.rs"]
 mod test_common;
+
+#[cfg(test)]
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;

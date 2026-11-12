@@ -5,6 +5,7 @@ import{spawnSync}from'node:child_process';
 import{existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync}from'node:fs';
 import{basename,dirname,join,relative,resolve}from'node:path';
 import{fileURLToPath,pathToFileURL}from'node:url';
+import{inspectRustPidPaths}from'./rust-test-paths.ts';
 
 export const CORE_TEST_TOPICS=['scalars','numbers','strings','arrays','collections','erasure','interfaces','classes',
   'signatures','dispatch','control','memory','ranges','providers','lowering','modules'] as const;
@@ -90,6 +91,14 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
 
 export function assertTestLayout(root:string,packages:readonly CargoPackage[]=cargoPackages(root)):TestLayout{
   const layout=checkTestLayout(root,packages);
+  const listed=spawnSync('git',['ls-files','-z','--','*.rs'],{cwd:root,encoding:'utf8'});
+  if(listed.error||listed.status!==0)throw Error('Rust test resource inventory: '+(listed.stderr||listed.error?.message||listed.status));
+  const owned=packages.map(pkg=>normalize(relative(root,dirname(pkg.manifest_path)))+'/');
+  for(const file of listed.stdout.split('\0').filter(Boolean)){
+    if(file==='compiler/test-support/scratch.rs'||!owned.some(directory=>file.startsWith(directory)))continue;
+    const source=readFileSync(join(root,file),'utf8');if(!/process\s*::\s*id|getpid|\{pid/.test(source))continue;
+    for(const site of inspectRustPidPaths(file,source).paths)if(site.test)layout.problems.push(file+':'+site.line+': test resource is keyed by a process ID; use a per-test scratch owner');
+  }
   if(layout.problems.length)throw Error(layout.problems.join('\n'));
   return layout;
 }

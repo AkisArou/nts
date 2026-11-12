@@ -261,7 +261,7 @@ mod tests {
 
     fn verify(label: &str, populate: impl FnOnce(&Path)) -> String {
         let path =
-            std::env::temp_dir().join(format!("member-pairs-{}-{label}", std::process::id()));
+            crate::scratch::StdScratchDir::path_in_std_target(&format!("member-pairs-{label}"));
         populate(&path);
         let java = std::env::var_os("JAVA_HOME").map_or_else(
             || PathBuf::from("java"),

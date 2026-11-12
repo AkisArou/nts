@@ -40,9 +40,8 @@ fn new_callee_alias_discovery_is_shared_by_the_constructor_collector() {
     let mut reports = Vec::new();
     for aliases in [false, true] {
         for count in [16, 64, 256] {
-            let dir = std::env::temp_dir().join(format!(
-                "nts-constructor-discovery-{}-{aliases}-{count}",
-                std::process::id()
+            let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+                "nts-constructor-discovery-{aliases}-{count}"
             ));
             std::fs::create_dir_all(&dir).unwrap();
             let mut source = String::from(
@@ -117,9 +116,8 @@ fn distinct_and_sibling_view_classes_have_linear_collection_work() {
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for siblings in [false, true] {
         for count in [16, 64, 256] {
-            let dir = std::env::temp_dir().join(format!(
-                "nts-view-relations-{}-{siblings}-{count}",
-                std::process::id()
+            let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+                "nts-view-relations-{siblings}-{count}"
             ));
             std::fs::create_dir_all(&dir).unwrap();
             let mut source = String::new();
@@ -213,8 +211,9 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut reports = Vec::new();
     for count in [16, 64, 256] {
-        let dir =
-            std::env::temp_dir().join(format!("nts-view-implicit-{}-{count}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-view-implicit-{count}"
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let mut source = String::from(
             "class Base extends Uint8Array { constructor(n: number) { super(n); } }\n",
@@ -341,9 +340,8 @@ fn alias_proof_population(siblings: bool, prefixes: bool) -> Vec<(usize, usize, 
     let mut reports = Vec::new();
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for count in [16, 64, 256] {
-        let dir = std::env::temp_dir().join(format!(
-            "nts-view-alias-proof-{}-{siblings}-{prefixes}-{count}",
-            std::process::id()
+        let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-view-alias-proof-{siblings}-{prefixes}-{count}"
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let mut source = String::from("const Alias0 = Uint8Array;\n");
@@ -454,10 +452,7 @@ fn distinct_alias_prefixes_share_their_binding_suffixes() {
 #[test]
 fn reference_index_reuses_ordered_paths_and_caches_cycles_and_missing_symbols() {
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let dir = std::env::temp_dir().join(format!(
-        "nts-reference-index-negative-{}",
-        std::process::id()
-    ));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-reference-index-negative");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("main.ts"), "const Alias0 = Uint8Array; const Alias1 = Alias0; const Alias2 = Alias1; class View extends Alias2 {} export function present(n: number): number { return n; }").unwrap();
     let config = dir.join("tsconfig.json");

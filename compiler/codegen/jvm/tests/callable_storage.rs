@@ -13,10 +13,8 @@ fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
         eprintln!("SKIP callable_storage: no JDK");
         return;
     };
-    let dir = std::env::temp_dir().join(format!(
-        "nts-callable-storage-{name}-{}",
-        std::process::id()
-    ));
+    let dir =
+        crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-callable-storage-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();

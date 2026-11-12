@@ -8,9 +8,7 @@ use nts_frontend_ts::Frontend;
 
 #[test]
 fn one_and_four_checkers_preserve_capture_and_diagnostics() {
-    let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!("nts-checker-invariance-{}", std::process::id()));
+    let root = crate::scratch::ScratchDir::path_in_target("nts-checker-invariance");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","types":[]},"include":["src/**/*"]}"#).unwrap();
     for index in 0..8 {

@@ -1153,3 +1153,7 @@ mod tests {
         assert!(value["compilerOptions"]["paths"]["a"].is_array());
     }
 }
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

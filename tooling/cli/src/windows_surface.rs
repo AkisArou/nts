@@ -333,9 +333,7 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-winrt-packages-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-winrt-packages");
         std::fs::create_dir_all(&dir).unwrap();
         let mut files = vec![
             root.join("runtime/native/libc.d.ts"),

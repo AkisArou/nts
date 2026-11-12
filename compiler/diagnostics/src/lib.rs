@@ -199,3 +199,7 @@ mod tests {
         assert!(span.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "../../test-support/scratch.rs"]
+mod scratch;

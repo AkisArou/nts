@@ -21,17 +21,12 @@ fn example(name: &str) -> Utf8PathBuf {
 }
 
 /// A one-file project under the temporary directory, as its tsconfig.
-fn project(name: &str, main: &str) -> Utf8PathBuf {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!(
-            "nts-source-transform-{}-{name}",
-            std::process::id()
-        ));
+fn project(name: &str, main: &str) -> crate::scratch::ScratchDir {
+    let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-source-transform-{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("tsconfig.json"), r#"{ "compilerOptions": { "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }, "include": ["main.ts"] }"#).unwrap();
     std::fs::write(dir.join("main.ts"), main).unwrap();
-    dir.join("tsconfig.json").canonicalize_utf8().unwrap()
+    dir.map(|path| path.join("tsconfig.json").canonicalize_utf8().unwrap())
 }
 
 fn has_error(snapshot: &SemanticSnapshot, code: &str) -> bool {

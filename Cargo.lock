@@ -558,6 +558,7 @@ dependencies = [
 name = "nts-jvm-emitter"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "nts-diagnostics",
  "nts-semantic-schema",
  "rustc-hash",

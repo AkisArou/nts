@@ -60,7 +60,7 @@ fn both_backends_ran(
     // directory keyed on the pid means two tests writing each other's
     // `program.ll`. Which is how this was found -- the test that had passed
     // started failing the moment a second one existed.
-    let dir = std::env::temp_dir().join(format!("nts-llvm-{}-{case}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-llvm-{case}"));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).expect("a work directory");
     std::fs::write(src.join("main.ts"), source).expect("write the program");

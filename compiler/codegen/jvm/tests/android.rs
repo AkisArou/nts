@@ -136,7 +136,7 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
     else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-android-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-android");
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
@@ -218,7 +218,7 @@ fn a_handover_sweeps_the_sockets_and_nothing_else_does() {
     let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-network-watch-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-network-watch");
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
@@ -292,7 +292,7 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-d8");
     let classes = dir.join("classes");
     std::fs::create_dir_all(&classes).unwrap();
 
@@ -418,7 +418,8 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
             // A rename within one directory is atomic, so the entry is either
             // absent or complete. The temporary is per-process so two binaries
             // do not collide on it either.
-            let partial = cache.join(format!(".{name}.{}", std::process::id()));
+            let partial =
+                crate::scratch::StdScratchDir::path_in_std_target(&format!(".{name}.partial"));
             let fetched = nts_codegen_jvm::toolchain::command(&curl)
                 .args(["-sSfL", "--max-time", "120", "-o"])
                 .arg(&partial)
@@ -475,7 +476,7 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     // away from being removed from a release build, exactly the way
     // `AndroidNetworking`'s keep rule once matched nothing because this test
     // never compiled `src/android`.
-    let dir = std::env::temp_dir().join(format!("nts-r8-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-r8");
     let classes = dir.join("classes");
     let out = dir.join("out");
     std::fs::create_dir_all(&classes).unwrap();
@@ -649,7 +650,7 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-both-tunnels-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-both-tunnels");
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
@@ -783,7 +784,7 @@ fn both_adapters_negotiate_the_same_application_protocol() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-both-alpn-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-both-alpn");
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
@@ -907,7 +908,7 @@ fn the_library_compiles_against_the_api_level_it_declares() {
         return;
     }
 
-    let dir = std::env::temp_dir().join(format!("nts-api26-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-api26");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let classpath = std::iter::once(floor.display().to_string())
@@ -959,7 +960,7 @@ fn the_device_cases_compile_against_api_29() {
         return;
     }
 
-    let dir = std::env::temp_dir().join(format!("nts-device-src-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-device-src");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // The device cases call into the library, so the library is on the path --
@@ -1008,7 +1009,7 @@ fn the_device_cases_compile_against_api_29() {
 #[test]
 fn the_library_is_java_eight_and_names_no_sdk_outside_its_one_sdk_file() {
     let Some(javac) = tool("javac") else { return };
-    let dir = std::env::temp_dir().join(format!("nts-android-bytes-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-android-bytes");
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));

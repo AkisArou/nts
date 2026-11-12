@@ -68,7 +68,7 @@ fn the_runtime_passes_its_own_tests() {
     // sources against themselves.
     let jar = runtime_jar();
 
-    let dir = std::env::temp_dir().join(format!("nts-jvm-regression-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-jvm-regression");
     std::fs::create_dir_all(&dir).unwrap();
 
     let mut compile = nts_codegen_jvm::toolchain::command(&javac);

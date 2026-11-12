@@ -74,13 +74,14 @@ fn the_jar_matches_the_sources_it_was_built_from() {
              --test integration runtime_jar::the_jar_matches_the_sources_it_was_built_from -- --exact"
         );
     }
+    let temporary = crate::scratch::StdScratchDir::path_in_std_target("nts-runtime-rebuilt.jar");
     let rebuilt = if regenerate {
         checked_in.clone()
     } else {
         // Per process: two gates at once share a temporary directory, and a
         // fixed name let one's `build.sh` overwrite the jar the other was
         // comparing -- a red `tests` step on a jar that matched its sources.
-        std::env::temp_dir().join(format!("nts-runtime-rebuilt-{}.jar", std::process::id()))
+        temporary.to_path_buf()
     };
 
     let built = nts_codegen_jvm::toolchain::command("sh")
@@ -346,7 +347,7 @@ fn d8_accepts_the_runtime_jar() {
     // A named directory rather than a `tempfile` dependency: this crate's
     // manifest says every addition is a maintenance obligation, and one test
     // needing a scratch directory is not worth one.
-    let out = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-d8");
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).expect("a directory to dex into");
     let run = nts_codegen_jvm::toolchain::command(&d8)

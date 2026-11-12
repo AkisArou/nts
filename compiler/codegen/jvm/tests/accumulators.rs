@@ -72,7 +72,7 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         eprintln!("SKIP accumulators: no JDK, so javap has not been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-accumulators-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-accumulators");
     let _ = std::fs::remove_dir_all(&dir);
     for class in &emitted.classes {
         let path = dir.join(class.path());

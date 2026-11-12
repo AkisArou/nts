@@ -340,7 +340,7 @@ fn erased_bigints_cross_without_rounding_truncation_or_leaks() {
     };
     let program = program();
     assert!(hir::verify::verify(&program).is_ok());
-    let dir = std::env::temp_dir().join(format!("nts-erased-bigint-node-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-erased-bigint-node");
     std::fs::create_dir_all(&dir).unwrap();
     let binary = emit_client(&program, &headers, &dir);
 

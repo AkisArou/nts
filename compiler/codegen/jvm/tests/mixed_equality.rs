@@ -171,7 +171,7 @@ fn a_string_against_another_reference_is_identity_in_both_forms() {
             .map(|d| d.message.clone())
             .collect::<Vec<_>>()
     );
-    let out = std::env::temp_dir().join(format!("nts-mixed-equality-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-mixed-equality");
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
         let path = out.join(class.path());

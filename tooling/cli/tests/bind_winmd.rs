@@ -55,7 +55,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winmd-test-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winmd-test");
     let _ = std::fs::remove_dir_all(&out);
     let run = generate_bindings(&out, &winmd);
     assert!(
@@ -406,7 +406,7 @@ fn a_guid_parameter_binds_as_the_one_guid_type() {
     let Some(_metadata) = winmd() else {
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-win32-guid-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-win32-guid");
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Win32.UI.Shell", "--out"])
         .arg(&out)
@@ -473,7 +473,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-test-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-test");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Data.Json", "--out"])
@@ -620,7 +620,7 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-events-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-events");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Foundation", "--out"])
@@ -724,7 +724,7 @@ fn winrt_structs_cross_by_value() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-structs-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-structs");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -812,7 +812,7 @@ fn a_struct_holding_a_string_is_copied() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-copied-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-copied");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -858,7 +858,7 @@ fn a_boolean_struct_field_is_a_one_byte_boolean() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-bool-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-bool");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.UI.Core", "--out"])
@@ -891,7 +891,7 @@ fn a_struct_holding_objects_is_declared_so_http_binds() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-http-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-http");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Web.Http", "--out"])
@@ -931,7 +931,7 @@ fn winrt_byte_arrays_are_lent_in_place() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-bytes-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-bytes");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -985,8 +985,7 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
         );
         return;
     };
-    let out =
-        std::env::temp_dir().join(format!("nts-bind-winrt-specialized-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-specialized");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Storage", "--out"])
@@ -1027,7 +1026,7 @@ fn an_async_operation_is_awaitable_as_itself() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-then-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-then");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -1112,8 +1111,7 @@ fn a_struct_result_is_fulfilled_as_a_plain_object() {
         );
         return;
     };
-    let out =
-        std::env::temp_dir().join(format!("nts-bind-winrt-struct-then-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-struct-then");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.UI.Xaml.Data", "--out"])
@@ -1160,8 +1158,7 @@ fn an_enum_array_is_its_integer_typed_array() {
         );
         return;
     };
-    let out =
-        std::env::temp_dir().join(format!("nts-bind-winrt-enum-array-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-enum-array");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -1205,7 +1202,7 @@ fn an_array_the_callee_fills_is_the_programs() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-filled-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-filled");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -1286,7 +1283,7 @@ fn a_received_array_is_a_typed_array() {
         );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-received-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-received");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args([
@@ -1387,8 +1384,7 @@ fn composable_classes_are_constructed_as_themselves() {
         );
         return;
     };
-    let out =
-        std::env::temp_dir().join(format!("nts-bind-winrt-composable-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-composable");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.UI.Xaml.Controls", "--out"])
@@ -1619,7 +1615,7 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
         eprintln!("skipping: needs the Windows App SDK (tooling/windows/fetch-winappsdk.sh)");
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-alias-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-bind-winrt-alias");
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Microsoft.UI.Xaml", "--out"])

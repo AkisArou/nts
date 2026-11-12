@@ -1,6 +1,5 @@
 //! nts checks source semantics and owns emission independently of TypeScript.
 use std::num::NonZeroU16;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::*;
 use crate::run;
@@ -70,7 +69,7 @@ fn no_emit_does_not_hide_a_real_type_error() {
     }
 }
 
-struct Directory(Utf8PathBuf);
+struct Directory(crate::scratch::ScratchDir);
 impl Drop for Directory {
     fn drop(&mut self) {
         std::fs::remove_dir_all(&self.0).expect("remove only test directory");
@@ -79,13 +78,8 @@ impl Drop for Directory {
 
 #[test]
 fn effective_no_emit_stays_true_through_checking_without_rewriting_the_config() {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
     for count in [1, 4] {
-        let root = Directory(crate::test_scratch::base().join(format!(
-            "no-emit-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        )));
+        let root = Directory(crate::scratch::ScratchDir::path_in_target("no-emit"));
         std::fs::create_dir_all(&root.0).expect("test directory");
         let config = r#"{"compilerOptions":{"noEmit":false,"types":[],"target":"ESNext"},"files":["main.ts"]}"#;
         let path = root.0.join("tsconfig.json");

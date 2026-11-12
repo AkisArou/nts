@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn a_missing_selected_case_is_named_rather_than_skipped() {
-        let path = std::env::temp_dir().join(format!("nts-missing-corpus-{}", std::process::id()));
+        let path = crate::scratch::StdScratchDir::path_in_std_target("nts-missing-corpus");
         let path = Utf8PathBuf::from_path_buf(path).expect("UTF-8 scratch");
         let error = core(&path).expect_err("missing corpus").to_string();
         assert!(

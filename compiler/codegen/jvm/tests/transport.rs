@@ -88,7 +88,7 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-socket-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-socket");
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "SocketTest");
     let ran = nts_codegen_jvm::toolchain::command(&java)
@@ -129,7 +129,7 @@ fn a_full_io_queue_refuses_at_submission_and_gives_the_credit_back() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-saturate-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-saturate");
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "SaturateTest");
     let ran = nts_codegen_jvm::toolchain::command(&java)
@@ -272,7 +272,7 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
     else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-proxy-sabotage-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-proxy-sabotage");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
@@ -360,7 +360,7 @@ fn a_tunnel_carries_bytes_and_keeps_the_targets_name() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-proxy-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-proxy");
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
     compile(&javac, &jar, &dir, "ProxyTest");
@@ -398,7 +398,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-tls-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-tls");
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
 
@@ -443,7 +443,7 @@ fn alpn_negotiates_and_the_servers_order_is_the_one_that_counts() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-alpn-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-alpn");
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
 
@@ -491,7 +491,7 @@ fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
         return;
     };
     let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-httpgzip-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-httpgzip");
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "HttpGzipTest");
     let ran = nts_codegen_jvm::toolchain::command(&java)

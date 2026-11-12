@@ -116,9 +116,8 @@ fn a_symbol_declared_in_two_files_keeps_both_declarations() {
         ("class-first", ["a.d.ts", "b.d.ts"]),
         ("interface-first", ["b.d.ts", "a.d.ts"]),
     ] {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-symbols-merged-{}-{order}", std::process::id()));
+        let dir =
+            crate::scratch::ScratchDir::path_in_target(&format!("nts-symbols-merged-{order}"));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("a.d.ts"),

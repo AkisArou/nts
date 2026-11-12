@@ -260,10 +260,7 @@ fn retain_owned(program: &Program, emitted: &nts_codegen_jvm::Emitted) {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/opaque-default-{}-{stamp}",
-        std::process::id()
-    ));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("opaque-default-{stamp}"));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("program.txt"), format!("{program:#?}")).unwrap();
     std::fs::write(

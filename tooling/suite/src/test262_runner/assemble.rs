@@ -206,7 +206,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("nts-test262-{}-{nonce}", std::process::id()));
+        let root =
+            crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-test262-{nonce}"));
         let helper = root.join("harness/helpers/value.js");
         fs::create_dir_all(helper.parent().expect("helper parent")).expect("create harness");
         fs::write(&helper, "function value() { return 1; }").expect("write include");

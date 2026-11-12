@@ -164,13 +164,10 @@ mod tests {
     impl Fixture {
         fn new(main: &str) -> Self {
             static NEXT: AtomicU64 = AtomicU64::new(0);
-            let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-                .unwrap()
-                .join(format!(
-                    "nts-deps-complaints-{}-{}",
-                    std::process::id(),
-                    NEXT.fetch_add(1, Ordering::Relaxed)
-                ));
+            let root = crate::scratch::ScratchDir::path_in_target(&format!(
+                "nts-deps-complaints-{}",
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
             let fixture = Self(root);
             fixture.write("project/tsconfig.json", r#"{"compilerOptions":{"types":[],"target":"esnext","module":"esnext","moduleResolution":"bundler"},"include":["**/*.ts"]}"#);
             fixture.write("project/main.ts", main);

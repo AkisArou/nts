@@ -1194,9 +1194,7 @@ mod entry_tests {
         roots: serde_json::Value,
         files: &[(&str, &str)],
     ) -> (super::Scratch, Utf8PathBuf, Frontend) {
-        let path = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-entry-{label}-{}", std::process::id()));
+        let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-entry-{label}"));
         for (name, text) in files {
             let file = path.join(name);
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -3626,10 +3624,7 @@ mod structural_cast_array_stop {
     }
 
     fn check_case(label: &str, source: &str, expected: &str) {
-        let path = Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-cast-stop-{label}-{}", std::process::id())),
-        )
-        .unwrap();
+        let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-cast-stop-{label}"));
         std::fs::create_dir_all(path.join("src")).unwrap();
         let scratch = Scratch::holding(path);
         let main = scratch.path.join("src/main.ts");
@@ -3975,11 +3970,8 @@ mod result_channel {
     use camino::Utf8PathBuf;
     use std::os::unix::process::ExitStatusExt;
 
-    fn scratch(name: &str) -> Utf8PathBuf {
-        let dir = Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-result-channel-{name}-{}", std::process::id())),
-        )
-        .expect("utf-8 temp dir");
+    fn scratch(name: &str) -> crate::scratch::ScratchDir {
+        let dir = crate::scratch::ScratchDir::path_in_target(&format!("nts-result-channel-{name}"));
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
     }
@@ -4336,3 +4328,7 @@ mod pairing {
 
 #[cfg(test)]
 mod table_membership_tests;
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

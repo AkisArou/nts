@@ -1028,7 +1028,8 @@ mod tests {
         // four seconds it is runnable (R) with almost no CPU, past its one
         // second idle guard; once they end it finishes its 50 ms of CPU.
         let core = shared_core();
-        let id = std::process::id();
+        let namespace = crate::scratch::StdScratchDir::in_std_target("busy-observer");
+        let id = namespace.namespace();
         let mut siblings = weighted(
             10_000,
             &format!("nts-test-busy-siblings-{id}"),
@@ -1162,8 +1163,7 @@ else:
 
     #[test]
     fn the_jvm_keeps_an_unwrapped_exception_with_events_enabled_or_unset() {
-        let root =
-            std::env::temp_dir().join(format!("nts-jvm-call-observer-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-jvm-call-observer");
         std::fs::create_dir_all(root.join("nts/gen")).unwrap();
         let source = root.join("nts/gen/Program.java");
         std::fs::write(&source,"package nts.gen; public class Program {public static double work(double n) {if(n==0)throw new IllegalStateException(\"kept cause\");return n;}}").unwrap();
@@ -1248,7 +1248,7 @@ else:
 
     #[test]
     fn the_actual_c_driver_handshake_preserves_output_and_exit_status() {
-        let root = std::env::temp_dir().join(format!("nts-call-observer-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-call-observer");
         std::fs::create_dir(&root).unwrap();
         let source = root.join("driver.c");
         let binary = root.join("driver");

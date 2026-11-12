@@ -101,7 +101,7 @@ fn run(example: &str, body: &str) -> Option<String> {
             .join("; ")
     );
 
-    let dir = std::env::temp_dir().join(format!("nts-execute-{example}-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-execute-{example}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a temp dir");
     for class in &emitted.classes {

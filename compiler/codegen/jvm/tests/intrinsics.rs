@@ -150,7 +150,7 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
             .join("; ")
     );
 
-    let dir = std::env::temp_dir().join(format!("nts-intrinsics-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-intrinsics");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a temp dir");
 
@@ -415,7 +415,7 @@ fn the_declarations_the_table_and_the_jar_agree() {
         eprintln!("SKIP the jar half: no JDK");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-intrinsic-drift-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-intrinsic-drift");
     std::fs::create_dir_all(&dir).expect("a temp dir");
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");

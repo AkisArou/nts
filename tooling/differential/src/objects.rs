@@ -266,8 +266,9 @@ mod tests {
     #[test]
     fn the_same_files_in_another_directory_have_the_same_key() {
         let scratch = |name: &str| {
-            let dir = std::env::temp_dir()
-                .join(format!("nts-objects-same-{name}-{}", std::process::id()));
+            let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+                "nts-objects-same-{name}"
+            ));
             let dir = Utf8PathBuf::from_path_buf(dir).expect("utf-8 temp dir");
             std::fs::create_dir_all(&dir).expect("temp dir");
             std::fs::write(dir.join("r.h"), "#define R 1\n").expect("temp file");
@@ -295,7 +296,7 @@ mod tests {
 
     #[test]
     fn a_header_two_levels_down_changes_the_key() {
-        let dir = std::env::temp_dir().join(format!("nts-objects-key-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-objects-key");
         let dir = Utf8PathBuf::from_path_buf(dir).expect("utf-8 temp dir");
         std::fs::create_dir_all(dir.join("sub")).expect("temp dir");
         let include = dir.join("inc");

@@ -304,7 +304,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     // this at once, and one copying the header over the other's mid-compile
     // failed as "nts_runtime.h is broken" one run in a few.
     let probe = PROBES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("nts-sigs-{}-{probe}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-sigs-{probe}"));
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
     std::fs::copy(&unicode, dir.join("nts_unicode.h")).ok()?;

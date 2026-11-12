@@ -7,7 +7,7 @@ use nts_frontend_ts::Frontend;
 
 use crate::common;
 
-struct Scratch(std::path::PathBuf);
+struct Scratch(crate::scratch::StdScratchDir);
 
 impl Drop for Scratch {
     fn drop(&mut self) {
@@ -18,10 +18,9 @@ impl Drop for Scratch {
 #[test]
 fn the_real_stream_constructor_prepares_with_both_ambient_contracts() {
     let root = common::repository();
-    let scratch = Scratch(root.join(format!(
-        "target/constructor-capabilities-{}",
-        std::process::id()
-    )));
+    let scratch = Scratch(crate::scratch::StdScratchDir::path_in_std_target(
+        "constructor-capabilities",
+    ));
     for (ambient, types) in [("bare", "[]"), ("node", r#"["node"]"#)] {
         let directory = scratch.0.join(ambient);
         std::fs::create_dir_all(&directory).unwrap();

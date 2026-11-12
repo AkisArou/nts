@@ -63,7 +63,7 @@ fn run_source_suite(
         .chars()
         .filter(char::is_ascii_alphanumeric)
         .collect();
-    let out = std::env::temp_dir().join(format!("nts-{name}{flavour}-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-{name}{flavour}"));
     std::fs::create_dir_all(&out).expect("a build directory");
     let binary = out.join(name);
     let bundled = link
@@ -680,7 +680,7 @@ fn bigint_string_ordering_uses_the_integer_grammar_without_rounding() {
 fn the_bigint_upper_endpoint_is_refused_rather_than_converted() {
     let root = repository();
     let runtime = root.join("runtime/c");
-    let out = std::env::temp_dir().join(format!("nts-contracts-abort-{}", std::process::id()));
+    let out = crate::scratch::StdScratchDir::path_in_std_target("nts-contracts-abort");
     std::fs::create_dir_all(&out).expect("a build directory");
     let binary = out.join("contracts");
     let compile = std::process::Command::new("clang")

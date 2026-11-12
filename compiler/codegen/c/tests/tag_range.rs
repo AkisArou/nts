@@ -103,7 +103,7 @@ fn folded_object_tests_answer_for_exactly_the_object_band() {
     // Allocation-free after the fold; the runtime's definition is a separate
     // translation unit and does not count as a surviving generated call.
     assert!(!emitted.writer.text().contains("nts_tag_name"));
-    let dir = std::env::temp_dir().join(format!("nts-tag-range-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-tag-range");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     let mut runtime = Vec::new();

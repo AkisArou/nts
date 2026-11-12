@@ -247,14 +247,12 @@ fn a_typeof_comparison_is_folded_to_an_integer_compare() {
 ///
 /// An absolute `include` works from anywhere, which is what lets a benchmark
 /// case keep no configuration of its own.
-fn written_for(directory: &camino::Utf8Path) -> Option<camino::Utf8PathBuf> {
+fn written_for(directory: &camino::Utf8Path) -> Option<crate::scratch::ScratchDir> {
     let fixtures = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tsconfig.fixtures.json")
         .canonicalize_utf8()
         .ok()?;
-    let out = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .ok()?
-        .join(format!("nts-erased-{}", std::process::id()));
+    let out = crate::scratch::ScratchDir::path_in_target("nts-erased");
     std::fs::create_dir_all(&out).ok()?;
     let tsconfig = out.join("tsconfig.json");
     std::fs::write(
@@ -262,7 +260,7 @@ fn written_for(directory: &camino::Utf8Path) -> Option<camino::Utf8PathBuf> {
         format!("{{\"extends\": \"{fixtures}\", \"include\": [\"{directory}/**/*.ts\"]}}"),
     )
     .ok()?;
-    Some(tsconfig)
+    Some(out.hold(tsconfig))
 }
 
 fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {

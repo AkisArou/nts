@@ -93,9 +93,8 @@ fn fresh_shared_context_copy_work_grows_linearly() {
     let mut reports = Vec::new();
     for calls in family::Calls::ALL {
         for count in family::COUNTS {
-            let dir = std::env::temp_dir().join(format!(
-                "nts-context102-{}-{}-{count}",
-                std::process::id(),
+            let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+                "nts-context102-{}-{count}",
                 calls.name()
             ));
             calls.write(&dir, count, repository.as_std_path()).unwrap();

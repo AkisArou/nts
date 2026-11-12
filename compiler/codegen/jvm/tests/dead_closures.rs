@@ -37,12 +37,13 @@ const RAISING_SOURCE: &str = "const fs: Array<(x: number) => number> = [\n\
                               (x: number): number => x + 1,\n];\n\
                               export function run(n: number): number {\n  try {\n    return fs[n & 1]!(n);\n  } catch (e) {\n    return -1;\n  }\n}\n";
 
-fn lowered(name: &str) -> (hir::Program, std::path::PathBuf) {
+fn lowered(name: &str) -> (hir::Program, crate::scratch::StdScratchDir) {
     lowered_from(name, SOURCE)
 }
 
 fn lowered_from(name: &str, source: &str) -> (hir::Program, std::path::PathBuf) {
-    let dir = std::env::temp_dir().join(format!("nts-dead-closures-{name}-{}", std::process::id()));
+    let dir =
+        crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-dead-closures-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     let fixtures = common::repository().join("tsconfig.fixtures.json");

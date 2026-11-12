@@ -1,21 +1,15 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU16;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use camino::Utf8PathBuf;
 use tsrs_vfs::FS;
 
 use crate::*;
 
-struct Scratch(Utf8PathBuf);
+struct Scratch(crate::scratch::ScratchDir);
 impl Scratch {
     fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let root = crate::test_scratch::base().join(format!(
-            "tsrs-input-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
+        let root = crate::scratch::ScratchDir::path_in_target("tsrs-input");
         std::fs::create_dir_all(&root).expect("scratch directory");
         Self(root)
     }

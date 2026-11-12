@@ -145,11 +145,9 @@ fn survives(sabotage: &Sabotage) -> bool {
         &source[end..]
     );
 
-    let out = std::env::temp_dir().join(format!(
-        "nts-sabotage-{}-{}-{}",
-        sabotage.suite,
-        sabotage.function,
-        std::process::id()
+    let out = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "nts-sabotage-{}-{}",
+        sabotage.suite, sabotage.function
     ));
     std::fs::create_dir_all(&out).expect("a build directory");
     let runtime_c = out.join("nts_runtime.c");

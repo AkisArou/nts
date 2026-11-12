@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[test]
 fn an_owned_result_resizes_without_another_logical_allocation() {
-    let dir = std::env::temp_dir().join(format!("nts-unicode-resize-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-unicode-resize");
     std::fs::create_dir_all(&dir).unwrap();
     for support in crate::support_files(super::UnicodeNeeds::ALL) {
         support.write(&dir).unwrap();
@@ -45,7 +45,7 @@ fn native_identity_runs_respect_tails_mapping_and_ownership() {
         eprintln!("SKIP native Unicode runtime: clang unavailable");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("nts-unicode-kernels-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-unicode-kernels");
     std::fs::create_dir_all(&dir).unwrap();
     for support in crate::support_files(super::UnicodeNeeds::ALL) {
         support.write(&dir).unwrap();

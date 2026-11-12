@@ -323,8 +323,7 @@ fn deep_builtin_bases_keep_reached_calls_and_source_owned_callbacks() {
     );
     assert!(!deep.diagnostics.iter().any(|d| d.code == "NTS0003"));
 
-    let directory =
-        std::env::temp_dir().join(format!("nts-deep-native-members-{}", std::process::id()));
+    let directory = crate::scratch::StdScratchDir::path_in_std_target("nts-deep-native-members");
     std::fs::create_dir_all(&directory).unwrap();
     let mut text = String::from(
         "class Bytes0 extends Uint8Array { applyToFirst(callback: (value: number) => number): number { return callback(this[0]); } }\n",
@@ -391,9 +390,9 @@ fn instantiated_callbacks_rest_and_composites_have_complete_reachable_contracts(
     }
 }
 
-fn protocol_snapshot(name: &str, text: &str) -> SemanticSnapshot {
+fn protocol_snapshot(name: &str, text: &str) -> crate::scratch::ScratchValue<SemanticSnapshot> {
     let directory =
-        std::env::temp_dir().join(format!("nts-protocol-{name}-{}", std::process::id()));
+        crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-protocol-{name}"));
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("main.ts"), text).unwrap();
     std::fs::write(directory.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","types":[]},"files":["main.ts"]}"#).unwrap();
@@ -409,7 +408,7 @@ fn protocol_snapshot(name: &str, text: &str) -> SemanticSnapshot {
         "{name}: budget"
     );
     assert!(unrequested(&snapshot).is_empty(), "{name}: unrequested");
-    snapshot
+    dir.hold(snapshot)
 }
 
 fn contract(snapshot: &SemanticSnapshot, ty: TypeId) -> SignatureId {

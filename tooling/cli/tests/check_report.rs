@@ -7,13 +7,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
-struct Project(PathBuf);
+struct Project(crate::scratch::StdScratchDir);
 
 impl Project {
     fn new(source: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "nts-check-report-{}-{}",
-            std::process::id(),
+        let path = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-check-report-{}",
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&path).unwrap();
@@ -132,7 +131,7 @@ fn a_checker_failure_has_a_structured_stage_and_nonzero_exit() {
 /// make a source an oracle subject, a record store, and no record.
 #[test]
 fn a_fixture_with_no_oracle_record_is_pending_and_succeeds() {
-    let root = std::env::temp_dir().join(format!("nts-check-pending-{}", std::process::id()));
+    let root = crate::scratch::StdScratchDir::path_in_std_target("nts-check-pending");
     let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()

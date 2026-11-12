@@ -37,14 +37,13 @@ fn pair() -> (Program, Program) {
     (control, subject)
 }
 
-fn directory() -> PathBuf {
+fn directory() -> crate::scratch::StdScratchDir {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/guarded-concrete-override-{}-{stamp}",
-        std::process::id()
+    let path = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "guarded-concrete-override-{stamp}"
     ));
     std::fs::create_dir_all(&path).unwrap();
     println!("GUARDED_CONCRETE_OVERRIDE_ARTIFACTS {}", path.display());

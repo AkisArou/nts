@@ -157,9 +157,7 @@ mod tests {
 
     #[test]
     fn actual_link_accepts_available_and_reports_missing_without_a_build_error() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .expect("valid reference-link control")
-            .join(format!("nts-reference-link-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-reference-link");
         std::fs::create_dir(&dir).expect("valid reference-link control");
         let result = (|| -> anyhow::Result<()> {
             assert!(Libraries::read(&dir)?.flags().next().is_none());

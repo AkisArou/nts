@@ -110,7 +110,7 @@ fn a_recovered_external_field_survives_folding_and_reads_the_callers_value() {
     assert!(hir::verify::verify(&program).is_ok());
     let emitted = nts_codegen_c::emit(&program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    let dir = std::env::temp_dir().join(format!("nts-external-fields-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-external-fields");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     let mut runtime = Vec::new();

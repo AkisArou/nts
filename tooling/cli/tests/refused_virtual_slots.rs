@@ -89,7 +89,7 @@ fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
 fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../compiler/core/tests/programs/refused-virtual-slots/runtime.json");
-    let scratch = std::env::temp_dir().join(format!("nts-refused-slot-{}", std::process::id()));
+    let scratch = crate::scratch::StdScratchDir::path_in_std_target("nts-refused-slot");
     std::fs::create_dir_all(&scratch).unwrap();
     for backend in ["c", "llvm", "jvm"] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));

@@ -278,8 +278,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn observations_keep_an_actual_childs_output_and_nonzero_status() {
-        let root =
-            std::env::temp_dir().join(format!("nts-case-costs-output-{}", std::process::id()));
+        let root = crate::scratch::StdScratchDir::path_in_std_target("nts-case-costs-output");
         let session = session_at(&root, camino::Utf8Path::new("fixture"), "examples".into());
         let output = child("oracle.execute", || {
             std::process::Command::new("sh")
@@ -331,7 +330,7 @@ mod tests {
 
     #[test]
     fn failed_metrics_output_preserves_the_work_and_error() {
-        let path = std::env::temp_dir().join(format!("nts-case-costs-file-{}", std::process::id()));
+        let path = crate::scratch::StdScratchDir::path_in_std_target("nts-case-costs-file");
         std::fs::write(&path, "not a directory").unwrap();
         let _session = session_at(&path, camino::Utf8Path::new("test"), "examples".into());
         assert_eq!(measure("unchanged", || 27), 27);

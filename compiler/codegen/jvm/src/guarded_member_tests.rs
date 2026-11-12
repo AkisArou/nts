@@ -898,16 +898,13 @@ fn old_binary_controls(java: &Path, javac: &Path, old: &Path, new: &Path) -> Vec
 fn old_java_binary_uses_the_new_default_and_generated_calls_keep_distinct_reasons() {
     let javac = common::tool("javac").expect("javac is a prerequisite, never a silent skip");
     let java = common::tool("java").expect("java is a prerequisite, never a silent skip");
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../target/tmp")
-        .join(format!(
-            "guarded-default-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+    let directory = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "guarded-default-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
     let old = directory.join("old");
     let new = directory.join("new");
     write_classes(&old, &fixture(false));

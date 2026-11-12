@@ -11,9 +11,8 @@ use std::num::NonZeroU16;
 struct Project(Utf8PathBuf);
 impl Project {
     fn new(name: &str, main: &str) -> Self {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-global-bindings-{}-{name}", std::process::id()));
+        let root =
+            crate::scratch::ScratchDir::path_in_target(&format!("nts-global-bindings-{name}"));
         std::fs::create_dir_all(&root).unwrap();
         let project = Self(root.canonicalize_utf8().unwrap());
         project.write("main.ts", main);

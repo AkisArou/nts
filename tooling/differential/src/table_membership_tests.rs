@@ -215,10 +215,7 @@ fn all_three_results_agree_on_every_backend() {
             excluded_tuples: Vec::new(),
         })
         .collect();
-    let path = Utf8PathBuf::from_path_buf(
-        std::env::temp_dir().join(format!("nts-table-membership-{}", std::process::id())),
-    )
-    .unwrap();
+    let path = crate::scratch::ScratchDir::path_in_target("nts-table-membership");
     std::fs::create_dir_all(&path).unwrap();
     let scratch = Scratch::holding(path);
     let mut refused = Vec::new();

@@ -8077,9 +8077,7 @@ mod module_cache_tests {
             eprintln!("SKIP absolute shared library: clang is not available");
             return;
         }
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-no-soname-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-no-soname");
         let build = root.join("build");
         let elsewhere = root.join("elsewhere/deeper");
         std::fs::create_dir_all(&build).unwrap();
@@ -8163,9 +8161,7 @@ mod module_cache_tests {
             eprintln!("SKIP shared native cache: clang is not available");
             return;
         }
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-native-cache-dirs-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-native-cache-dirs");
         let tools = Toolchain {
             program: "clang".to_owned(),
             leading: Vec::new(),
@@ -8217,9 +8213,7 @@ mod module_cache_tests {
     /// this asserts the hit.
     #[test]
     fn a_module_is_reused_until_an_input_changes() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-module-cache-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-module-cache");
         std::fs::create_dir_all(&dir).unwrap();
         let (source, header) = (dir.join("Greeter.swift"), dir.join("Greeter.h"));
         std::fs::write(&source, "@objc public class Greeter {}\n").unwrap();
@@ -10126,3 +10120,7 @@ mod runtime_notice_tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

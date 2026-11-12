@@ -5,9 +5,8 @@ use nts_core::hir::{self, StaticDeclaration, StaticValueKind};
 use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::read;
 
+use crate::scratch;
 use crate::test_common as common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 
 fn prepare(path: &Utf8Path, source: &str) -> hir::Program {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");

@@ -120,7 +120,7 @@ mod tests {
         );
     }
 
-    struct ProbeDir(PathBuf);
+    struct ProbeDir(crate::scratch::StdScratchDir);
     impl Drop for ProbeDir {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
@@ -150,12 +150,9 @@ mod tests {
                 .map(|at| u16::try_from(at % 251).expect("byte"))
                 .collect(),
         ]);
-        let dir = ProbeDir(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../..")
-                .join("target")
-                .join(format!("string-hash-parity-{}", std::process::id())),
-        );
+        let dir = ProbeDir(crate::scratch::StdScratchDir::path_in_std_target(
+            "string-hash-parity",
+        ));
         fs::create_dir_all(&dir.0).expect("create parity probe directory");
         let mut source = format!(
             "#include <stdint.h>\n#include <stdio.h>\n{}\nint main(void) {{\n",

@@ -10,12 +10,11 @@ use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{Library, NodeId, PropertyKey, SemanticSnapshot, SymbolFlags, SymbolId};
 use std::num::NonZeroU16;
 
-struct Project(Utf8PathBuf);
+struct Project(crate::scratch::ScratchDir);
 impl Project {
     fn new(name: &str, source: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "nts-provider-identity-{}-{name}",
-            std::process::id()
+        let path = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-provider-identity-{name}"
         ));
         std::fs::create_dir_all(&path).unwrap();
         let root = Utf8PathBuf::from_path_buf(path)

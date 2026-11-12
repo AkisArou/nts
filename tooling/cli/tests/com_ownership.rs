@@ -171,8 +171,7 @@ fn synthetic_com_ownership_metadata_is_reproducible_and_header_checked() {
         .canonicalize()
         .unwrap();
     let project = root.join("tests/interop/windows-com/ownership");
-    let dir =
-        std::env::temp_dir().join(format!("nts-com-ownership-fixture-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-com-ownership-fixture");
     std::fs::create_dir_all(&dir).unwrap();
     let bytes = fixture();
     let candidate = dir.join("ownership.winmd");

@@ -4,12 +4,7 @@ use super::*;
 use std::time::Duration;
 
 fn directory(label: &str) -> Scratch {
-    let path = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .unwrap()
-        .join(format!(
-            "nts-oracle-protocol-{label}-{}",
-            std::process::id()
-        ));
+    let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-oracle-protocol-{label}"));
     std::fs::create_dir_all(&path).unwrap();
     Scratch::holding(path)
 }

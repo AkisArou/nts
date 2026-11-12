@@ -134,7 +134,7 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
         eprintln!("SKIP empty_face: no JDK, so neither javap nor the verifier has been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-empty-face-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-empty-face");
     let classpath = written(&emitted, &dir);
 
     let answer = disassembled(&disassembler, &classpath, "public static double answer()");
@@ -234,7 +234,7 @@ fn a_store_out_of_an_empty_face_into_a_class_declines() {
         eprintln!("SKIP empty_face: no JDK, so the verifier has not been asked");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-empty-face-out-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-empty-face-out");
     let classpath = written(&emitted, &dir);
     std::fs::write(
         dir.join("Drive.java"),

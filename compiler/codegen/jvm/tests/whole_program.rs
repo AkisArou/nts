@@ -30,7 +30,7 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
         eprintln!("SKIP whole_program/{name}: no JDK");
         return None;
     };
-    let dir = std::env::temp_dir().join(format!("nts-whole-{name}-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-whole-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).expect("a temp dir");
     let fixtures = common::repository().join("tsconfig.fixtures.json");

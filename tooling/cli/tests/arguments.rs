@@ -139,7 +139,7 @@ fn a_backend_value_before_the_project_is_not_a_project() {
     assert!(!error.contains("`llvm` does not exist"), "{error}");
 }
 
-struct CaptureScope(std::path::PathBuf);
+struct CaptureScope(crate::scratch::StdScratchDir);
 impl Drop for CaptureScope {
     fn drop(&mut self) {
         fn writable(path: &std::path::Path) {
@@ -240,8 +240,7 @@ fn assert_provider_selection(
 #[test]
 fn check_rc_reaches_the_differential_librarys_provider_selection() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let directory =
-        std::env::temp_dir().join(format!("nts-cli-provider-capture-{}", std::process::id()));
+    let directory = crate::scratch::StdScratchDir::path_in_std_target("nts-cli-provider-capture");
     std::fs::create_dir(&directory).unwrap();
     let scope = CaptureScope(directory);
     // The check's oracle preparation reserves in a ledger of this test's own,

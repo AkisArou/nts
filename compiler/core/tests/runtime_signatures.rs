@@ -114,9 +114,8 @@ fn windows_flags() -> Option<Vec<String>> {
 /// with its C types.
 fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Reported>> {
     let header = root.join("runtime/c/nts_runtime.h");
-    let dir = std::env::temp_dir().join(format!(
-        "nts-runtime-sigs-{}-{}",
-        std::process::id(),
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "nts-runtime-sigs-{}",
         flags.len()
     ));
     std::fs::create_dir_all(&dir).ok()?;

@@ -553,9 +553,7 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .unwrap()
-            .join(format!("nts-gir-packages-{}", std::process::id()));
+        let dir = crate::scratch::ScratchDir::path_in_target("nts-gir-packages");
         std::fs::create_dir_all(&dir).unwrap();
         // As a project has them, through `types`, but as the binder wrote
         // them: without the store's `// @ts-nocheck`.

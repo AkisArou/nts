@@ -9,17 +9,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_FILE: AtomicUsize = AtomicUsize::new(0);
 
-struct Scratch(Utf8PathBuf);
+struct Scratch(crate::scratch::ScratchDir);
 
 impl Scratch {
     fn new(bytes: &[u8]) -> Self {
-        let name = format!(
-            "nts-place-{}-{}.ts",
-            std::process::id(),
-            NEXT_FILE.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = Utf8PathBuf::from_path_buf(std::env::temp_dir().join(name))
-            .expect("test scratch path is UTF-8");
+        let path = crate::scratch::ScratchDir::path_in_target("nts-place.ts");
         std::fs::write(&path, bytes).expect("write location fixture");
         Self(path)
     }
@@ -27,7 +21,8 @@ impl Scratch {
     fn source(&self) -> SourceFile {
         SourceFile {
             uri: format!(
-                "nts-workspace:///{}",
+                "nts-workspace:///{}/{}",
+                self.0.namespace(),
                 self.0.file_name().expect("file name")
             ),
             digest: Digest([0; 16]),

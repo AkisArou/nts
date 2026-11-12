@@ -134,9 +134,8 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     fn fixture(action: impl FnOnce(&Utf8Path)) {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let path = std::env::temp_dir().join(format!(
-            "nts-ref-origin-{}-{}",
-            std::process::id(),
+        let path = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+            "nts-ref-origin-{}",
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&path).unwrap();

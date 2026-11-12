@@ -96,3 +96,7 @@ mod yield_diagnostics_tests;
 #[cfg(test)]
 #[path = "test_scratch.rs"]
 mod test_scratch;
+
+#[cfg(test)]
+#[path = "../../test-support/scratch.rs"]
+mod scratch;

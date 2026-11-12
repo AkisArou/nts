@@ -13,6 +13,7 @@ nts-semantic-schema.workspace = true
 rustc-hash.workspace = true
 
 [dev-dependencies]
+camino.workspace = true
 nts-diagnostics.workspace = true
 
 [lints]

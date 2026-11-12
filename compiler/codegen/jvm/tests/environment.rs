@@ -51,7 +51,7 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-env-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-env");
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
 
@@ -112,7 +112,7 @@ fn a_rejection_keeps_the_tag_it_arrived_with() {
     };
     let root = repository();
     let jar = runtime_jar();
-    let dir = std::env::temp_dir().join(format!("nts-reject-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-reject");
     std::fs::create_dir_all(&dir).unwrap();
     let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
@@ -165,7 +165,7 @@ fn one_default_environment_and_one_lane_owns_it() {
     };
     let root = repository();
     let jar = runtime_jar();
-    let dir = std::env::temp_dir().join(format!("nts-default-lane-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-default-lane");
     std::fs::create_dir_all(&dir).unwrap();
     let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
@@ -217,7 +217,7 @@ fn closing_under_arriving_completions_loses_nothing() {
         return;
     };
     let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-close-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-close");
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
     let compiled = nts_codegen_jvm::toolchain::command(&javac)
@@ -267,7 +267,7 @@ fn close_waits_for_delayed_credits_without_losing_notifications() {
     };
     let root = repository();
     let jar = runtime_jar();
-    let dir = std::env::temp_dir().join(format!("nts-close-delay-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-close-delay");
     std::fs::create_dir_all(&dir).unwrap();
     let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])

@@ -59,7 +59,7 @@ fn read_only_literals_carry_settled_native_hashes() {
 /// The LLVM module for one small program, and the HIR behind it.
 fn rendered(case: &str, source: &str) -> (String, hir::Program) {
     // Per case, because `cargo test` runs these in parallel.
-    let dir = std::env::temp_dir().join(format!("nts-opt-{}-{case}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-opt-{case}"));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).expect("a work directory");
     std::fs::write(src.join("main.ts"), source).expect("write the program");
@@ -95,7 +95,7 @@ fn rendered(case: &str, source: &str) -> (String, hir::Program) {
 
 /// Optimize the module the way `tooling/bench` does and hand back the assembly.
 fn optimized(case: &str, module: &str) -> Option<String> {
-    let dir = std::env::temp_dir().join(format!("nts-opt-{}-{case}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-opt-{case}"));
     let path = dir.join("program.ll");
     std::fs::write(&path, module).ok()?;
     let out = std::process::Command::new("clang")

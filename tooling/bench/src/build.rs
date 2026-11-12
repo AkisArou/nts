@@ -99,13 +99,10 @@ mod tests {
     }
     fn fixture() -> Result<Fixture> {
         let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .expect("cache scratch is UTF-8")
-            .join(format!(
-                "nts-bench-build-bound-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
+        let dir = crate::scratch::ScratchDir::path_in_target(&format!(
+            "nts-bench-build-bound-{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         std::fs::create_dir(&dir)?;
         let own = Fixture {
             root: root.clone(),

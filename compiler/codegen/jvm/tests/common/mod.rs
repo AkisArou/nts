@@ -192,9 +192,8 @@ pub fn with_sabotage(
     args: &[String],
 ) -> Ran {
     let root = repository();
-    let dir = std::env::temp_dir().join(format!(
-        "nts-sabotage-{}-{:x}",
-        std::process::id(),
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
+        "nts-sabotage-{:x}",
         fingerprint(name)
     ));
     let _ = std::fs::remove_dir_all(&dir);

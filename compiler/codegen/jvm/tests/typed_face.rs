@@ -73,7 +73,7 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
         eprintln!("SKIP typed_face: no JDK");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-typed-face-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-typed-face");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();

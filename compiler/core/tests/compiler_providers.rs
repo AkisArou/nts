@@ -9,7 +9,7 @@ use nts_core::hir::{
 };
 use nts_frontend_ts::Frontend;
 
-struct Directory(std::path::PathBuf);
+struct Directory(crate::scratch::StdScratchDir);
 impl Drop for Directory {
     fn drop(&mut self) {
         drop(std::fs::remove_dir_all(&self.0));
@@ -268,10 +268,7 @@ fn every_published_member_has_a_surviving_lowering_witness() {
         || root.join("target").into_std_path_buf(),
         std::path::PathBuf::from,
     );
-    let path = cache.join(format!(
-        "nts-compiler-provider-witnesses-{}",
-        std::process::id()
-    ));
+    let path = crate::scratch::StdScratchDir::path_in_std_target("compiler-provider-witnesses");
     std::fs::create_dir_all(&path).expect("create provider witness project");
     let directory = Directory(path);
     let config = directory.0.join("tsconfig.json");

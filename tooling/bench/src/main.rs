@@ -3323,3 +3323,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;

@@ -374,15 +374,12 @@ fn an_uncovered_receiver_and_field_selector_cannot_gain_a_companion_alias() {
     );
 }
 
-fn directory() -> PathBuf {
+fn directory() -> crate::scratch::StdScratchDir {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../../../target/tmp/guarded-split-{}-{stamp}",
-        std::process::id()
-    ));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("guarded-split-{stamp}"));
     std::fs::create_dir_all(&dir).unwrap();
     println!("GUARDED_SPLIT_ARTIFACTS {}", dir.display());
     dir

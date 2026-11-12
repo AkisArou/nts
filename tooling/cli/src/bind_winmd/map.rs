@@ -2303,8 +2303,7 @@ mod tests {
     fn com_emission_checks_metadata_slots_signatures_and_explicit_out_slots() {
         use super::super::check;
         use super::bindings;
-        let dir =
-            std::env::temp_dir().join(format!("nts-winmd-com-emission-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-com-emission");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("interfaces.h");
         let headers = vec![vec![path.to_str().unwrap().to_owned()]];
@@ -2421,7 +2420,7 @@ mod tests {
     fn com_output_projection_requires_one_proven_trailing_owned_interface() {
         use super::super::{check, emit, read};
         use windows_metadata::{Type, TypeName, Value};
-        let dir = std::env::temp_dir().join(format!("nts-winmd-owned-out-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-owned-out");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("interfaces.h");
         let headers = vec![vec![path.to_str().unwrap().to_owned()]];
@@ -2717,7 +2716,7 @@ mod tests {
     fn header_layout_selects_packed_without_changing_an_unpacked_control() {
         use super::super::{check, emit};
         let namespace = "Windows.Win32.LayoutTest";
-        let dir = std::env::temp_dir().join(format!("nts-winmd-layout-{}", std::process::id()));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-layout");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("layout.h");
         let headers = vec![vec![path.to_str().unwrap().to_owned()]];
@@ -2816,10 +2815,7 @@ mod tests {
     #[test]
     fn incomplete_or_bitfield_records_have_named_refusals_without_layout_fallback() {
         let namespace = "Windows.Win32.LayoutTest";
-        let dir = std::env::temp_dir().join(format!(
-            "nts-winmd-layout-incomplete-{}",
-            std::process::id()
-        ));
+        let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-winmd-layout-incomplete");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("layout.h");
         let headers = vec![vec![path.to_str().unwrap().to_owned()]];

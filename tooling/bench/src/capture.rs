@@ -79,10 +79,7 @@ mod tests {
     #[test]
     fn a_local_declaration_content_change_changes_the_captured_workload() -> Result<()> {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let case = root.join("target").join(format!(
-            "benchmark-declaration-identity-{}",
-            std::process::id()
-        ));
+        let case = crate::scratch::ScratchDir::path_in_target("benchmark-declaration-identity");
         std::fs::create_dir_all(&case)?;
         let config = case.join("tsconfig.json");
         std::fs::write(&config,serde_json::json!({"extends":root.join("tsconfig.fixtures.json"),"files":["main.ts","config.d.ts"]}).to_string())?;

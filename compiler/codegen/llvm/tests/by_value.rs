@@ -731,7 +731,7 @@ fn byval_is_a_pointer_to_a_copy_on_win64() {
     let module = "%T = type { ptr, ptr, double }\n\
                   declare void @take(ptr byval(%T) align 8)\n\
                   define void @f(ptr %p) {\n  call void @take(ptr byval(%T) align 8 %p)\n  ret void\n}\n";
-    let dir = std::env::temp_dir().join(format!("nts-byval-win64-{}", std::process::id()));
+    let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-byval-win64");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("m.ll"), module).unwrap();
     let Ok(out) = Command::new("clang")
