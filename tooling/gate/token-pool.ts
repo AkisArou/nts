@@ -87,8 +87,9 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         }
         if(words[0]==='attach'){
           w.step='registration';const [,id,group,cap,scope]=words;
+          if(!id||!group||!cap||!scope){sock.end('error: incomplete case scope registration\n');return;}
           const owner=[...pool.active].find(entry=>entry.lease===id);
-          if(!owner||!group||!scope){sock.end('error: case lease has ended or registration is incomplete\n');return;}
+          if(!owner){sock.end(`error: case lease has ended (no live owner): ${id}\n`);return;}
           void Promise.resolve().then(()=>attach(owner,{group,cap:Number(cap),scope})).then(()=>sock.end('ready\n'),error=>sock.end(`error: ${String(error)}\n`));return;
         }
         if(words[0]!=='want'){sock.destroy();return;}

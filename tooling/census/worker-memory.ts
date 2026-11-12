@@ -152,7 +152,8 @@ const ENTRY = [
   '[ "$scope_swap" = 0 ] || { echo "resident cap: worker swap is not disabled" >&2; exit 125; }',
   'scope_oom_group=; IFS= read -r scope_oom_group < "$scope_path/memory.oom.group"',
   '[ "$scope_oom_group" = 1 ] || { echo "resident cap: worker has no OOM group boundary" >&2; exit 125; }',
-  'printf "%s\\n" "$scope_current" > "$scope_ready"',
+  'printf "%s\\n" "$scope_current" > "$scope_ready.pending"',
+  'mv -f -- "$scope_ready.pending" "$scope_ready"',
   "ulimit -c 0",
   'exec "$@"',
 ].join("\n");
