@@ -8,8 +8,7 @@
 //!
 //! Native capture failures fail the test.
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::path::Path;
 use std::process::Command;

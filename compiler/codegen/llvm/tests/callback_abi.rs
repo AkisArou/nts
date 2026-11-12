@@ -1,12 +1,11 @@
 //! Check the actual IR table target type, then execute it through the C host.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
-use std::process::Command;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 use scratch::ScratchDir;
+use std::process::Command;
 
 fn callback_types(text: &str) -> Result<(), String> {
     let call = text

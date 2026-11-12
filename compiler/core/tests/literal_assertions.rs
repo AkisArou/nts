@@ -1,11 +1,10 @@
 //! Membership is established at erased assertions and never inferred from a
 //! declared target. Backend callers execute the same fixture independently.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
 use nts_frontend_ts::Frontend;
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
 
 #[test]
 fn erased_literal_checks_survive_and_typed_claims_remain_unchecked() {

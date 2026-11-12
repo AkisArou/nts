@@ -3,8 +3,7 @@
 //! The one-difference int control compiles. A compiler fix must carry the
 //! header's status C spelling, then turn the long rejection into a guard.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;

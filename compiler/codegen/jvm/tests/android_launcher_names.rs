@@ -4,8 +4,7 @@ use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 const HARNESSES: [(&str, &str, &str); 4] = [
     (

@@ -26,6 +26,13 @@ test('an unowned new case is rejected before Cargo can silently omit it',t=>{
   assert.match(f.check().problems.join('\n'),/forgotten.rs has 0 owners/);
 });
 
+test('shared test-support modules are owned once by the harness',t=>{
+  const f=fixture(t);mkdirSync(join(f.tests,'support'));writeFileSync(join(f.tests,'support','common.rs'),'pub(crate) fn helper() {}\n');
+  const declaration='#[path = "support/common.rs"]\nmod common;\n';appendFileSync(f.entry,declaration);
+  assert.deepEqual(f.check().problems,[]);assert.equal(f.check().harnesses[0]!.helpers.length,1);
+  appendFileSync(f.entry,declaration);assert.match(f.check().problems.join('\n'),/shared helper is compiled twice/);
+});
+
 test('a case included twice is rejected even under another module name',t=>{
   const f=fixture(t);appendFileSync(f.entry,'#[path = "alpha.rs"]\nmod alpha;\n');
   assert.match(f.check().problems.join('\n'),/alpha.rs has 2 owners/);

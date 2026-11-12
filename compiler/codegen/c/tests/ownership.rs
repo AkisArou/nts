@@ -14,16 +14,14 @@
 //! long after the store that caused it.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
 /// The C for `source`, compiled for reference counting.
-#[path = "../../common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 use c_symbols::function_symbol as private_symbol;
 
 fn counted(name: &str, source: &str) -> String {

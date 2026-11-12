@@ -34,8 +34,7 @@ fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-#[path = "../../../test-support/runtime_jar.rs"]
-mod runtime_jar_support;
+use crate::runtime_jar_support;
 
 fn runtime_jar() -> PathBuf {
     runtime_jar_support::runtime_jar(&repository())

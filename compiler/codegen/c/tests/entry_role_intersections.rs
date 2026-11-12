@@ -1,7 +1,6 @@
 //! One implementation can ignore different argument types in distinct roles.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;

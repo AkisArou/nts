@@ -2,8 +2,7 @@
 //! or the representation of arbitrary object intersections.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;

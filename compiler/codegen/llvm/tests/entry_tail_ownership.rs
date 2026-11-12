@@ -1,7 +1,6 @@
 //! Virtual and direct physical tails borrow references; the caller owns temporaries.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;

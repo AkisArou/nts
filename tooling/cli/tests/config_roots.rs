@@ -20,16 +20,14 @@
 //! Skips when node or the frontend is absent -- the config is TypeScript and is
 //! evaluated rather than parsed, so there is nothing to read without both.
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
 #[allow(dead_code)]
-#[path = "../../../compiler/codegen/common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 
 /// The entry. Publishes `published`, and reaches one private helper.
 const ENTRY: &str = r"

@@ -9,8 +9,7 @@
 //! that crash. After fixing the defect, first check that preserved async case.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;

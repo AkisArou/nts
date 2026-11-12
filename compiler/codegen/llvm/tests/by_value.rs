@@ -14,8 +14,7 @@
 //! program in C, and `tests/interop/macos-geometry`'s on the lane's Mac.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;

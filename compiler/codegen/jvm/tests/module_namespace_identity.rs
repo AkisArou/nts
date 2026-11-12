@@ -1,8 +1,7 @@
 //! A dynamic import's singleton keeps the imported module's source owner.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8PathBuf;
 use nts_core::hir::{HirType, ManagedType, OpKind, StaticDeclaration, StaticValueKind};

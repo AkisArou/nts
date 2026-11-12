@@ -1,8 +1,7 @@
 //! N-API and C must use the same physical type names, including C keywords.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;

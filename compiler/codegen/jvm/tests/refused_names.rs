@@ -1,10 +1,9 @@
 //! Constant-pool audit for a body refused during emission.
 
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 use scratch::ScratchDir;
 
 const NEEDLE: &str = "discardedJvmLiteralNeedle";

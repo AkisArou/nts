@@ -6,8 +6,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::collections::BTreeMap;
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 const SOURCE: &str = include_str!("../../common/test-support/refused-names/main.ts");

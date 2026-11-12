@@ -18,8 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
-#[path = "support/node_deps.rs"]
-mod node_deps;
+use crate::node_deps;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")

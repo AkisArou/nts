@@ -1,8 +1,7 @@
 //! Effective options reject only a construct that needs different semantics.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Unprepared};

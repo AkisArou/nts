@@ -5,8 +5,7 @@
 
 #![cfg(target_os = "linux")]
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::path::Path;
 use std::process::Command;

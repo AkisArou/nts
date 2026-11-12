@@ -3,8 +3,7 @@
 //! it does not equate adapters or waive distinct dispatch bodies.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::path::PathBuf;
 

@@ -7,8 +7,7 @@ use nts_core::hir::{self, Callee, HirType, Op, OpKind, ValueId};
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 const SOURCE: &str = include_str!("../../../../tests/programs/count-free-sort/src/main.ts");

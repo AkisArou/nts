@@ -1,8 +1,7 @@
 //! Several emit commands' answers, with one frontend and lowering.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

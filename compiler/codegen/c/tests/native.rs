@@ -4,8 +4,7 @@
 
 #[path = "../../common/test-support/native_lending.rs"]
 mod native_lending;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use scratch::ScratchDir;
 

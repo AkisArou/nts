@@ -1,8 +1,7 @@
 //! A merged global root can contain an ordinary source implementation.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8PathBuf;
 use nts_core::hir;

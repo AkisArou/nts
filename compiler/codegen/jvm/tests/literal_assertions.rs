@@ -5,8 +5,7 @@ use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 fn checked(command: &mut Command) -> Vec<u8> {
     let output = command.output().unwrap();

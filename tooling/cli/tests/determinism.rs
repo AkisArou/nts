@@ -2,8 +2,7 @@
 //! packaged classes and native objects.
 #![cfg(target_os = "linux")]
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

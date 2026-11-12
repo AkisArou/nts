@@ -9,8 +9,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::process::{Command, Output};
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 const SOURCE: &str = r"
 export const scalar: number = 17;

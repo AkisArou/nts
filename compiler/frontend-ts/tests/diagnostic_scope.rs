@@ -2,8 +2,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::num::NonZeroU16;
 

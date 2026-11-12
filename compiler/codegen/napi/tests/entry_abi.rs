@@ -1,11 +1,10 @@
 //! The addon declares and calls the C producer's actual method receiver ABI.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 
 #[test]
 fn addon_method_prototypes_match_the_c_definitions_and_call_them() {

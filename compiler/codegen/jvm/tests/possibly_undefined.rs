@@ -6,8 +6,7 @@ use nts_core::hir;
 use std::process::Command;
 #[path = "../../../test-support/optional.rs"]
 mod fixture;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 fn checked(command: &mut Command) {
     let out = command.output().expect("run JDK tool");
     assert!(

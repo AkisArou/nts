@@ -10,8 +10,7 @@
 #![cfg(target_os = "linux")]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::path::Path;
 use std::process::Command;

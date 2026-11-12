@@ -1,8 +1,7 @@
 //! Each native request observes newly present files, including outside the app.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;

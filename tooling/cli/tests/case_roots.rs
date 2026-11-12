@@ -1,7 +1,6 @@
 //! The gate's cargo tests also execute the conformance input-root contracts.
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::path::Path;
 use std::process::Command;

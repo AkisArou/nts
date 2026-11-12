@@ -8,8 +8,7 @@ use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
 use nts_frontend_ts::Frontend;
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 const SOURCE: &str = include_str!("../../../../tests/programs/container-content-facts/src/main.ts");

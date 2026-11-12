@@ -16,16 +16,14 @@
 //! lower without it -- and fails rather than skips when it is present, which is
 //! the rule `runtime_jar.rs` states for the JDK.
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
 #[allow(dead_code)]
-#[path = "../../../compiler/codegen/common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 
 /// Two exports, each reaching one private helper and nothing else.
 ///

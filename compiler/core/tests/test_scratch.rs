@@ -1,7 +1,6 @@
 //! The same owner cleans direct cargo tests and checked-runner namespaces.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 #[test]
 fn scratch_child() {

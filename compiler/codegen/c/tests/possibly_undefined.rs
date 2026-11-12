@@ -7,8 +7,7 @@ use std::fmt::Write as _;
 use std::process::Command;
 #[path = "../../../test-support/optional.rs"]
 mod fixture;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 fn checked(command: &mut Command) {
     let result = command.output().expect("run toolchain");

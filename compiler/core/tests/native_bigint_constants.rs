@@ -1,8 +1,7 @@
 //! Binding tags and bigint literals must enter the same exact HIR value.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, OpKind};

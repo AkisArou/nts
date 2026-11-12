@@ -1,8 +1,7 @@
 //! The private carrier convention is a proof over actual uses and call edges.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-#[path = "../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8PathBuf;
 use nts_core::hir::{self, string_accumulators::chains::Plan};

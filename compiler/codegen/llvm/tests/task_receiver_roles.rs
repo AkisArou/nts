@@ -1,8 +1,7 @@
 //! A dispatch target which resumes a task has one physical receiver type.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
 use nts_frontend_ts::Frontend;

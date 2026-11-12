@@ -11,8 +11,7 @@
 //! lane keeps finding one layer up, and `nts build` exited zero on one for as
 //! long as it took to run `nm` on the result.
 
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};

@@ -8,8 +8,7 @@
 //! VM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;
@@ -19,8 +18,7 @@ use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own, the way
 /// a real one is. See `native.rs`'s helper of the same name for why.
-#[path = "../../common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 use c_symbols::function_symbol as private_symbol;
 
 fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {

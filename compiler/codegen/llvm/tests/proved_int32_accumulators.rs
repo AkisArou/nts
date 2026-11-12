@@ -8,8 +8,7 @@ use nts_core::hir::{self, OpKind, UnOp};
 use nts_frontend_ts::Frontend;
 use std::process::Command;
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 const SOURCE: &str =

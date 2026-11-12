@@ -4,8 +4,7 @@ use nts_core::hir::{Field, HirType, Layout, Program};
 use nts_semantic_schema::{PropertyKey, TypeId};
 
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 fn class_project() -> (scratch::ScratchDir, Program) {
     use camino::Utf8Path;

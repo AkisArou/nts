@@ -11,7 +11,7 @@ export const CORE_TEST_TOPICS=['scalars','numbers','strings','arrays','collectio
 export type CargoTarget={name:string;kind:string[];src_path:string};
 export type CargoPackage={id:string;name:string;manifest_path:string;targets:CargoTarget[]};
 export type CaseModule={name:string;file:string};
-export type TestHarness={crate:string;name:string;file:string;cases:CaseModule[]};
+export type TestHarness={crate:string;name:string;file:string;cases:CaseModule[];helpers:CaseModule[]};
 export type TestLayout={harnesses:TestHarness[];problems:string[]};
 export type InventoryRow={crate:string;kind:string;file:string;name:string;multiplicity:number};
 export type TestInventory={version:1;rows:InventoryRow[]};
@@ -57,9 +57,17 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
       }
       entries.add(basename(target.src_path));
       const source=readFileSync(target.src_path,'utf8').replace(/\/\/[^\n]*/g,'');
-      const cases:CaseModule[]=[];
+      const cases:CaseModule[]=[],helpers:CaseModule[]=[],names=new Set<string>();
       for(const match of source.matchAll(modulePattern)){
         const path=match[1]!,name=match[2]!;
+        if(names.has(name))problems.push(file+': module '+name+' is declared twice');names.add(name);
+        const resolved=resolve(tests,path),helperFile=normalize(relative(root,resolved));
+        if(path.includes('/')){
+          if(helperFile.startsWith('../')||!/(?:^|\/)(?:test-support|tests\/support)\/.+\.rs$/.test(helperFile)||!existsSync(resolved))
+            problems.push(file+': shared helper must be an existing test-support source: '+path);
+          if(helpers.some(helper=>helper.file===helperFile))problems.push(file+': shared helper is compiled twice: '+path);
+          helpers.push({name,file:helperFile});continue;
+        }
         if(!/^[A-Za-z_]\w*\.rs$/.test(path)||name!==basename(path,'.rs')){
           problems.push(file+': case path and module must have the same plain file name');continue;
         }
@@ -68,7 +76,7 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
         if(!files.includes(path))problems.push(file+': missing case '+path);
       }
       if(source.replace(modulePattern,'').trim()||!cases.length)problems.push(file+': harness contains only unconditional #[path] case modules');
-      harnesses.push({crate:pkg.name,name:target.name,file,cases});
+      harnesses.push({crate:pkg.name,name:target.name,file,cases,helpers});
     }
     for(const file of files){
       const count=owned.get(file)??0;

@@ -1,7 +1,6 @@
 //! A separately emitted addon reads only an actual C-owned value reader.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use std::process::Command;

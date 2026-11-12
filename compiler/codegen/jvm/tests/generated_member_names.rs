@@ -7,8 +7,7 @@ use nts_jvm_emitter::read;
 use std::process::Command;
 
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 const SOURCE: &str = r"
 export class Base {

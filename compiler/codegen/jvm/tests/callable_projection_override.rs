@@ -7,8 +7,7 @@ use nts_jvm_emitter::{class::access, read};
 use std::process::Command;
 
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 const CLASS: &str = r"
 export interface Entry { run(by: number): number; }

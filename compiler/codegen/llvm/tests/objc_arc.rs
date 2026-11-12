@@ -18,8 +18,7 @@
 //! Mac fixture asserts an empty stderr for that.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;

@@ -8,8 +8,7 @@ use nts_diagnostics::{Location, SourceId, Span};
 use nts_semantic_schema::Origin;
 
 mod common;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 fn function(name: &str, signed: bool, forward: bool) -> hir::Func {
     let ty = HirType::Int { bits: 32, signed };

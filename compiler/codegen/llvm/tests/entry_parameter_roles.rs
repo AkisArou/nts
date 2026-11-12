@@ -1,11 +1,10 @@
 //! Native physical arity is independent from the source declaration's arity.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::fmt::Write as _;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 
 fn fixture(source: &str) -> (scratch::ScratchDir, nts_semantic_schema::SemanticSnapshot) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

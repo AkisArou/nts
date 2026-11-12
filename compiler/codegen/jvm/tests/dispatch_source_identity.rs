@@ -1,8 +1,7 @@
 //! Source identities on the exact corpus materialization that publishes them.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8PathBuf;
 use nts_core::hir::{DispatchRoot, features as identity};

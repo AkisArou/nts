@@ -9,8 +9,7 @@
 //! on the lane's VM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;
@@ -66,8 +65,7 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
 }
 "#;
 
-#[path = "../../common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 use c_symbols::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {

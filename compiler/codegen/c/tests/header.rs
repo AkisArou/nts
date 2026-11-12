@@ -2,8 +2,7 @@
 //! that must fail at compile time instead of reaching the linker with a wrong ABI.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;

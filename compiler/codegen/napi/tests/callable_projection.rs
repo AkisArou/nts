@@ -1,8 +1,7 @@
 //! A calls-only structural view must not expose invented callback storage.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType};

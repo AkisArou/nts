@@ -1,6 +1,5 @@
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use nts_build::node_deps::{Artifacts, Request};
 use std::{

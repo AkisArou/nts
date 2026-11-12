@@ -17,8 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
-#[path = "support/node_deps.rs"]
-mod node_deps;
+use crate::node_deps;
 
 /// Compile an example to C, link it with a harness, run it.
 ///

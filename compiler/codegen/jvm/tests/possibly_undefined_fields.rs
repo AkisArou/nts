@@ -11,8 +11,7 @@ use nts_jvm_emitter::{class::access, read};
 use nts_semantic_schema::{Origin, TypeId};
 use std::process::Command;
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 fn origin() -> Origin {
     Origin::source(nts_diagnostics::Location {

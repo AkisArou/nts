@@ -1,12 +1,11 @@
 //! The native literal contract is executed by an independent C caller through
 //! both emitters, including RC error-path cleanup under `ASan` and `UBSan`.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::scratch;
 use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
 
 fn checked(command: &mut Command) -> Vec<u8> {
     let output = command.output().unwrap();

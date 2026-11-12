@@ -1,8 +1,7 @@
 //! Native ABI agreement against a separately compiled C implementation.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-#[path = "../../../test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 use scratch::ScratchDir;
 
 use camino::Utf8Path;
@@ -44,8 +43,7 @@ mod native_lending;
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
-#[path = "../../common/test-support/c_symbols.rs"]
-mod c_symbols;
+use crate::c_symbols;
 use c_symbols::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {

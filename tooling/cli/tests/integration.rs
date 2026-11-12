@@ -1,6 +1,12 @@
 // Case ownership is checked by tooling/gate/test-layout.ts.
 // Add a case module here; Cargo never discovers one binary per file.
 
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod scratch;
+
+#[path = "../../../compiler/codegen/common/test-support/c_symbols.rs"]
+mod c_symbols;
+
 #[path = "arguments.rs"]
 mod arguments;
 
