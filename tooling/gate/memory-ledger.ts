@@ -129,7 +129,7 @@ import {assertStateVersion,assertWritableState} from './state-version.ts';
 // which of its keys were sized without a measurement of their own
 // (`unmeasured`), and which have held more than they reserved (`over`).
 import {hostObservations,hostObservationEnvironment,HostObservationError,parseMemory,parseProcessCharge,parseCgroupCharge,type HostObservations} from "./host-observations.ts";
-import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { spawn,spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -538,15 +538,7 @@ export function readLedger(dir: string = process.env[LEDGER_ENV] ?? LEDGER_DIR):
 export type LedgerLock = { release(): void };
 
 /** The ledger's lock, held until `release`; null while another holder has it. */
-export function lockLedger(dir: string,waitSeconds=0): LedgerLock | null {
-  mkdirSync(dir, { recursive: true });
-  const fd = openSync(join(dir, "lock"), "a", 0o600);
-  let locked: SpawnSyncReturns<string>;
-  try {
-    // flock(1) locks the open file description it is handed as fd 8, which
-    // this process shares; the lock outlives flock and ends when `fd` closes.
-    locked = spawnSync("flock", [...(waitSeconds>0?["-w",String(waitSeconds)]:["-n"]), "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
-  } catch (error) { closeSync(fd); throw error; }
+function ledgerLockAnswer(dir:string,fd:number,locked:{status:number|null;signal:NodeJS.Signals|null;error?:Error;stderr:string}):LedgerLock|null{
   if (locked.status === 0) {
     let held = true;
     return { release: () => { if (held) { held = false; closeSync(fd); } } };
@@ -555,6 +547,32 @@ export function lockLedger(dir: string,waitSeconds=0): LedgerLock | null {
   if (locked.status === 75) return null;
   throw new Error(`cannot lock the memory ledger in ${dir}: ${locked.error?.message ?? (locked.stderr.trim() || `flock ended ${locked.status ?? locked.signal}`)}`);
 }
+export function lockLedger(dir: string): LedgerLock | null {
+  mkdirSync(dir, { recursive: true });
+  const fd = openSync(join(dir, "lock"), "a", 0o600);
+  let locked: SpawnSyncReturns<string>;
+  try {
+    // flock(1) locks the open file description it is handed as fd 8, which
+    // this process shares; the lock outlives flock and ends when `fd` closes.
+    locked = spawnSync("flock", ["-n", "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
+  } catch (error) { closeSync(fd); throw error; }
+  return ledgerLockAnswer(dir,fd,locked);
+}
+
+/** Contention waits in flock's child, never in the broker's event loop. The
+ * parent retains the shared open file description after acquisition. */
+function waitLedgerLock(dir:string):Promise<LedgerLock|null>{
+  mkdirSync(dir,{recursive:true});const fd=openSync(join(dir,'lock'),'a',0o600);
+  return new Promise((resolve,reject)=>{
+    const child=spawn('flock',['-w',String(RELEASE_LOCK_WAIT_SECONDS),'-E','75','8'],{stdio:['ignore','ignore','pipe',null,null,null,null,null,fd]});
+    let stderr='',error:Error|undefined;
+    child.stderr!.setEncoding('utf8').on('data',(part:string)=>{stderr+=part;});
+    child.once('error',caught=>{error=caught;});
+    child.once('close',(status,signal)=>{
+      try{resolve(ledgerLockAnswer(dir,fd,{status,signal,error,stderr}));}catch(error){reject(error);}
+    });
+  });
+}
 
 // Cleanup must serialize with a newer writer too. A failed lock acquisition
 // leaves the entry for dead-owner reclamation; it never authorizes an unlink.
@@ -562,17 +580,22 @@ export function lockLedger(dir: string,waitSeconds=0): LedgerLock | null {
 // after the existing history-write allowance defers cleanup to reclamation.
 const RELEASE_LOCK_WAIT_SECONDS=10;
 export function releaseLedgerEntries(dir:string,ids:readonly {id:string;state:State}[],what:string,report:(line:string)=>void=console.error,
-  acquire:()=>LedgerLock|null=()=>lockLedger(dir,RELEASE_LOCK_WAIT_SECONDS)):void{
-  let lock:LedgerLock|null=null;
+  acquire?:()=>LedgerLock|null):Promise<void>{
+  const failed=(error:unknown)=>report(`memory: ${what} release cleanup failed; remaining entries left for dead-owner reclamation: ${error instanceof Error?error.message:String(error)}`);
+  const remove=(lock:LedgerLock|null)=>{
+    try{
+      if(!lock){report(`memory: ${what} release could not lock ${dir} within its cleanup bound; entries left for dead-owner reclamation`);return;}
+      const paths=ids.map(entry=>entryPath(dir,entry.state,entry.id));
+      for(const path of paths)assertWritableState(path,2);
+      for(const path of paths)removeQuietly(path);
+    }catch(error){failed(error);}finally{lock?.release();}
+  };
   try{
-    if(!existsSync(dir))return; // a closed fixture/run stays gone
-    lock=acquire();
-    if(!lock){report(`memory: ${what} release could not lock ${dir} within its cleanup bound; entries left for dead-owner reclamation`);return;}
-    const paths=ids.map(entry=>entryPath(dir,entry.state,entry.id));
-    for(const path of paths)assertWritableState(path,2);
-    for(const path of paths)removeQuietly(path);
-  }catch(error){report(`memory: ${what} release cleanup failed; remaining entries left for dead-owner reclamation: ${error instanceof Error?error.message:String(error)}`);}
-  finally{lock?.release();}
+    if(!existsSync(dir))return Promise.resolve(); // a closed fixture/run stays gone
+    const lock=acquire?acquire():lockLedger(dir);
+    if(lock||acquire){remove(lock);return Promise.resolve();}
+    return waitLedgerLock(dir).then(remove,failed);
+  }catch(error){failed(error);return Promise.resolve();}
 }
 
 // ---------------------------------------------------------------------------
@@ -699,7 +722,7 @@ export type Reservation = {
   noteOver(key: string): Promise<void>;
   /** Ends the reservation, withdrawing a growth that waits; a second call does nothing. */
   release(): void;
-  /** The sampler has replied and exited; ordinary reservations have no service. */
+  /** Release has finished its locked deletion, and any sampler has exited. */
   readonly closed: Promise<void>;
 };
 
@@ -1120,7 +1143,7 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
     }
   } catch (error) {
     // Nobody waits for it any more.
-    if (registered) releaseLedgerEntries(context.dir,[{id:self.id,state:"waiting"}],self.what,context.report);
+    if (registered) await releaseLedgerEntries(context.dir,[{id:self.id,state:"waiting"}],self.what,context.report);
     throw error;
   }
 }
@@ -1130,13 +1153,14 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   const { dir } = context;
   let bytes = self.bytes;
   let released = false;
+  let closed=Promise.resolve();
   let growing: { id: string; withdraw: AbortController } | null = null;
   // Writes the entry with what the handle holds now. A shrink gives back its
   // own part first, then what it drew on another reservation.
   const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null
     : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
-    id: self.id, ledger: dir, inherited: false, closed:Promise.resolve(), env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
+    id: self.id, ledger: dir, inherited: false, get closed(){return closed;}, env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
     active: () => !released && admittedEntry(dir, self.id) !== null,
     get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
@@ -1184,7 +1208,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       if (growing !== null) {
         growing.withdraw.abort(new Error(`memory: ${self.what}'s reservation was released while it waited to grow`));
       }
-      releaseLedgerEntries(dir,[...(growing?[{id:growing.id,state:"waiting" as const}]:[]),{id:self.id,state:"admitted"}],self.what,context.report);
+      closed=releaseLedgerEntries(dir,[...(growing?[{id:growing.id,state:"waiting" as const}]:[]),{id:self.id,state:"admitted"}],self.what,context.report);
     },
   };
 }
@@ -1418,11 +1442,12 @@ export async function reserveJob(request: JobRequest,
     const warning = writeCostHistory(sizing.history, { jobs: [{key:request.key,peak,basis:sizing.sampleBasis,width:sizing.units}] });
     if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
-  const finish=async()=>{release();try{await sampler.closed;}catch{/* the lifecycle already reported its named failure */}};
+  const closed=sampler.closed.then(()=>held.closed);
+  const finish=async()=>{release();try{await closed;}catch{/* the lifecycle already reported its named failure */}};
   process.once("beforeExit",finish);
   process.once("exit", release);
   return {
-    closed:sampler.closed,
+    closed,
     id: held.id, ledger: held.ledger, inherited: false, env: held.env,
     active: () => held.active(),
     get bytes() { return held.bytes; },

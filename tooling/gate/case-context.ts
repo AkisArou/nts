@@ -2,29 +2,50 @@
 // one controller may have many independent cases active at the same time.
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {connect} from 'node:net';
-import {spawnSync} from 'node:child_process';
+import {ToolingInstrumentError} from './step-result.ts';
 
 export const CASE_LEASE_ADDRESS='NTS_GATE_CASE_LEASE_ADDRESS';
 export const CASE_LEASE_ID='NTS_GATE_CASE_LEASE_ID';
 export type CaseReceipt={address:string;id:string};
 export type TokenRelease=(()=>void)&{case?:CaseReceipt;closed?:Promise<void>};
 const current=new AsyncLocalStorage<CaseReceipt>();
-const cleanups=new Map<string,Set<()=>void>>();
+const cleanups=new Map<string,Set<()=>void|Promise<void>>>();
 
-export function ownCaseWorker(receipt:CaseReceipt|undefined,close:()=>void):void{
+export function ownCaseWorker(receipt:CaseReceipt|undefined,close:()=>void|Promise<void>):void{
   if(!receipt)return;
   const owned=cleanups.get(receipt.id)??new Set<()=>void>();owned.add(close);cleanups.set(receipt.id,owned);
 }
-export function closeCaseWorkers(receipt:CaseReceipt):void{
-  const owned=cleanups.get(receipt.id);cleanups.delete(receipt.id);for(const close of owned??[])close();
+export async function closeCaseWorkers(receipt:CaseReceipt):Promise<void>{
+  const owned=cleanups.get(receipt.id);cleanups.delete(receipt.id);
+  const results=await Promise.allSettled([...owned??[]].map(async close=>close()));
+  const failure=results.find(result=>result.status==='rejected');
+  if(failure?.status==='rejected')throw failure.reason;
 }
-/** Capture the last peak before the owner removes a worker cgroup. Bash's
- * built-in socket avoids starting another Node process for this handshake. */
-export function retireCaseScope(receipt:CaseReceipt|undefined,group:string):void{
-  if(!receipt)return;
-  const source='address=$1; id=$2; group=$3; exec {fd}<>"/dev/tcp/${address%:*}/${address##*:}" || exit 1; printf "retire %s %s\\n" "$id" "$group" >&"$fd"; IFS= read -r answer <&"$fd" || exit 1; [ "$answer" = ready ] || { printf "%s\\n" "$answer" >&2; exit 1; }';
-  const result=spawnSync('bash',['--noprofile','--norc','--posix','-c',source,'case memory retirement',receipt.address,receipt.id,group],{encoding:'utf8',timeout:30_000});
-  if(result.status!==0)throw Error('case memory: cannot retire owned scope: '+(result.stderr||result.error?.message||result.signal));
+// A slow broker is not a case outcome. Five minutes detects a wedged peer,
+// well beyond loaded manager/ledger startup, and names the cleanup instrument.
+export const CASE_RETIRE_HANG_MS=5*60_000;
+/** Capture the last peak before the owner removes a worker cgroup. */
+export function retireCaseScope(receipt:CaseReceipt|undefined,group:string):Promise<void>{
+  if(!receipt)return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const label=`case memory: cannot retire lease ${receipt.id} group ${group} through broker ${receipt.address}`;
+    const socket=connect({host:'127.0.0.1',port:Number(receipt.address.split(':')[1])});
+    let text='',answered=false;
+    const timer=setTimeout(()=>fail('wedged broker did not answer within the five-minute cleanup backstop'),CASE_RETIRE_HANG_MS);
+    const fail=(reason:string)=>{
+      if(answered)return;answered=true;clearTimeout(timer);socket.destroy();
+      reject(new ToolingInstrumentError('tooling-cleanup',label+': '+reason));
+    };
+    socket.setEncoding('utf8');
+    socket.once('connect',()=>socket.write(`retire ${receipt.id} ${group}\n`));
+    socket.on('data',(part:string)=>{
+      text+=part;if(!text.includes('\n'))return;
+      if(text.split('\n')[0]!=='ready'){fail(text.trim());return;}
+      answered=true;clearTimeout(timer);socket.end();resolve();
+    });
+    socket.once('error',error=>fail(error.message));
+    socket.once('close',()=>fail('broker departed before acknowledging the final sample'));
+  });
 }
 
 export function caseReceipt(env:NodeJS.ProcessEnv=process.env):CaseReceipt|undefined{

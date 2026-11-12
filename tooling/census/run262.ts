@@ -92,7 +92,7 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
-serialRun({ memoryCapKb: Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000) });
+await serialRun({ memoryCapKb: Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000) });
 
 // Copied, and every `attempt` runs the copy: a run measures one binary even
 // though `target/release/nts` is the path everyone builds into. `pinCompiler`

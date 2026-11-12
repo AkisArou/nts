@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { PressureError, CaseBudgetError, ToolingInstrumentError } from "../gate/step-result.ts";
+import { PressureError, CaseBudgetError, ToolingInstrumentError,publishToolingFailure } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
@@ -198,6 +198,41 @@ function cappingSlice(): { slice: string; group: string;case:boolean } | undefin
   return { slice: workers, group,case:false };
 }
 
+class MemoryClose {
+  done=false;
+  problem:ToolingInstrumentError|undefined;
+  resolve!:()=>void;
+  reject!:(error:unknown)=>void;
+  readonly closed=new Promise<void>((resolve,reject)=>{this.resolve=resolve;this.reject=reject;});
+  constructor(){void this.closed.catch(()=>{});}
+  finish(cleanup:()=>void,previous?:unknown):ToolingInstrumentError|undefined{
+    let failure=previous;
+    try{cleanup();}catch(error){failure??=error;}
+    this.done=true;
+    if(failure){
+      const error=failure instanceof ToolingInstrumentError?failure:new ToolingInstrumentError('tooling-cleanup',String(failure),{cause:failure});
+      this.problem=error;publishToolingFailure(error);this.reject(error);return error;
+    }
+    this.resolve();
+  }
+}
+
+const openRuns=new Set<MemoryRun>();
+let drainHooks=false;
+function ownRun(run:MemoryRun):void{
+  openRuns.add(run);
+  if(drainHooks)return;drainHooks=true;
+  const finish=async()=>{
+    const runs=[...openRuns];
+    for(const run of runs)try{run.close();}catch{/* closed carries the same failure */}
+    const results=await Promise.allSettled(runs.map(run=>run.closed));
+    for(const result of results)if(result.status==='rejected'){console.error(String(result.reason));process.exitCode=2;}
+  };
+  process.on('beforeExit',finish);
+  for(const [signal,code] of [['SIGINT',130],['SIGTERM',143]] as const)
+    process.once(signal,()=>{void finish().finally(()=>process.exit(code));});
+}
+
 export class MemoryRun {
   readonly prefix: string;
   readonly slice: string;
@@ -206,6 +241,7 @@ export class MemoryRun {
   readonly directory: string;
   #workers: MemoryWorker[] = [];
   #closed = false;
+  #drain=new MemoryClose();
   #recordPeak = false;
   /** The step's sibling worker boundary, when it supplies the aggregate's cap. */
   #outer: string | undefined;
@@ -240,6 +276,7 @@ export class MemoryRun {
       // them loaded for ever (#633). No named unit, no binding: the count
       // finds what such a run leaves.
       this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes, ownUnit());
+      ownRun(this);
     } catch (error) {
       failedSetup(error, () => this.close());
     }
@@ -310,18 +347,28 @@ export class MemoryRun {
     return bytes;
   }
   /** Whether its round has ended: a closed run holds no slice and starts no worker. */
-  get closed() { return this.#closed; }
+  get closing() { return this.#closed; }
+  get closed():Promise<void>{return this.#drain.closed;}
   close() {
     if (this.#closed) return;
     this.#closed = true;
     let failure: unknown;
     for (const worker of this.#workers) {
       try { worker.close(); } catch (error) { failure ??= error; }
+      failure??=worker.cleanupFailure;
     }
-    if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
-    try { stopSlice(this.slice, this.group, "run"); } catch (error) { failure ??= error; }
-    rmSync(this.directory, { recursive: true, force: true });
-    if (failure) throw failure;
+    const finish=()=>this.#drain.finish(()=>{
+      try{
+        if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
+        stopSlice(this.slice, this.group, "run");
+      }finally{rmSync(this.directory, { recursive: true, force: true });openRuns.delete(this);}
+    },failure);
+    if(this.#workers.every(worker=>worker.drained)){
+      const error=finish();if(error)throw error;
+    }else void Promise.allSettled(this.#workers.map(worker=>worker.closed)).then(results=>{
+      for(const result of results)if(result.status==='rejected')failure??=result.reason;
+      finish();
+    });
   }
 }
 
@@ -331,6 +378,7 @@ export class MemoryWorker {
   readonly group: string;
   readonly bytes: number;
   #closed = false;
+  #drain=new MemoryClose();
   #scopes = new Set<MemoryScope>();
   #receipt:CaseReceipt|undefined;
   constructor(run: MemoryRun, slice: string, group: string, bytes: number) {
@@ -366,12 +414,18 @@ export class MemoryWorker {
     manager("StopUnit", "ss", scope.unit, "replace");
     rmSync(scope.ready, { force: true });
   }
+  get closed():Promise<void>{return this.#drain.closed;}
+  get drained():boolean{return this.#drain.done;}
+  get cleanupFailure():ToolingInstrumentError|undefined{return this.#drain.problem;}
   close() {
     if (this.#closed) return;
     this.#closed = true;
-    retireCaseScope(this.#receipt,this.group);
-    for (const scope of [...this.#scopes]) this.stop(scope);
-    stopSlice(this.slice, this.group, "worker");
+    const finish=(failure?:unknown)=>this.#drain.finish(()=>{
+      for (const scope of [...this.#scopes]) this.stop(scope);
+      stopSlice(this.slice, this.group, "worker");
+    },failure);
+    if(this.#receipt)void retireCaseScope(this.#receipt,this.group).then(()=>finish(),error=>finish(error));
+    else {const error=finish();if(error)throw error;}
   }
 }
 
@@ -401,9 +455,8 @@ export function inResidentWorker(): boolean {
  * another's cap.
  */
 let direct: { run: MemoryRun; idle: Map<string, MemoryWorker[]>; lanes: number } | undefined;
-let closesOnExit = false;
 /** Drain an existing serial/controller owner without creating another run. */
-export function closeMemoryRun(): void { direct?.run.close(); }
+export function closeMemoryRun(): Promise<void> { direct?.run.close();return direct?.run.closed??Promise.resolve(); }
 /**
  * The process's run, made on first use. Its aggregate's kernel cap is
  * `budgetBytes` when given -- a caller that runs several compiles at once
@@ -413,25 +466,18 @@ export function memoryRun(budgetBytes?: number): MemoryRun {
   // A round closes its run as it ends; a later round of the same process (a
   // writer's repeat) gets one of its own. The handlers below close whichever
   // run is current.
-  if (direct?.run.closed) direct = undefined;
+  if (direct?.run.closing) direct = undefined;
   if (direct && budgetBytes !== undefined && direct.run.budgetBytes !== budgetBytes) {
     throw new Error(`resident cap: this process's run holds ${direct.run.budgetBytes} bytes, not the ${budgetBytes} asked for`);
   }
   direct ??= { run: new MemoryRun(budgetBytes === undefined ? {} : { budgetBytes }), idle: new Map(), lanes: 0 };
-  if (!closesOnExit) {
-    closesOnExit = true;
-    process.on("exit", () => direct?.run.close());
-    for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
-      process.once(signal, () => { direct?.run.close(); process.exit(code); });
-    }
-  }
   return direct.run;
 }
 
 /** Re-enter a serial runner once inside one persistent scope for the whole run. */
 type CompilerTools = { memoryCapKb?: number };
 type MemoryResult<T> = T & { memoryKilled: boolean; residentLimitBytes: number; residentRunBytes: number };
-export function serialRun(tools: CompilerTools): void {
+export async function serialRun(tools: CompilerTools): Promise<void> {
   if (inResidentWorker()) return;
   const run = memoryRun();
   const worker = run.worker("serial", Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024);
@@ -454,6 +500,7 @@ export function serialRun(tools: CompilerTools): void {
   } finally {
     worker.stop(scope);
     run.close();
+    await run.closed;
   }
   if (result.error) throw result.error;
   process.exit(result.status ?? 1);
@@ -496,6 +543,7 @@ export function commandWorker(command: string, args: readonly string[], env: Nod
   const worker = memory.worker("command" + commandOrdinal++, Math.min(memory.budgetBytes,workerCapBytes(env)));
   const before = worker.counters(), aggregateBefore = memory.aggregateOoms();
   const scope = worker.scope(command, [...args], env);
+  ownCaseWorker(caseReceipt(env),()=>{worker.close();return worker.closed;});
   return {
     scope,
     ready() { return worker.ready(scope); },
@@ -505,6 +553,7 @@ export function commandWorker(command: string, args: readonly string[], env: Nod
       return cause ? { cause, limitBytes: worker.bytes } : undefined;
     },
     close() { worker.close(); },
+    get closed(){return worker.closed;},
   };
 }
 
@@ -531,7 +580,7 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
   const idle = lanes.idle.get(laneKey) ?? [];
   lanes.idle.set(laneKey, idle);
   let worker=idle.pop();
-  if(!worker){worker=run.worker(`direct${lanes.lanes++}`,bytes);const owned=worker;ownCaseWorker(receipt,()=>{owned.close();lanes.idle.delete(laneKey);});}
+  if(!worker){worker=run.worker(`direct${lanes.lanes++}`,bytes);const owned=worker;ownCaseWorker(receipt,()=>{owned.close();lanes.idle.delete(laneKey);return owned.closed;});}
   const scope = worker.scope("sh", noAddressLimit, options.env);
   const before = worker.counters();
   const aggregateBefore = worker.run.aggregateOoms();

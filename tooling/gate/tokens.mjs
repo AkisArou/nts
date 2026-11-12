@@ -80,8 +80,10 @@ export function tokenClient(where, step) {
         settle();
         let held = true;
         let ended=false;
+        let rejectClosed;
         /** @type {Promise<void>} */
         const closed=new Promise((resolve,reject)=>{
+          rejectClosed=reject;
           sock.once('end',()=>{ended=true;held?reject(new Error('tokens.mjs: the runner ended an active case lease')):resolve();});
           sock.once('error',reject);
           sock.once('close',()=>{if(!ended)reject(new Error('tokens.mjs: the runner ended before the case completion reply'));});
@@ -92,9 +94,9 @@ export function tokenClient(where, step) {
         const release=() => {
           if (!held) return;
           held = false;
-          try{if(lease)closeCaseWorkers({address:where,id:lease});}
-          catch(error){sock.destroy();throw error;}
-          sock.end('done\n');
+          void closeCaseWorkers({address:where,id:lease}).then(()=>sock.end('done\n'),error=>{
+            rejectClosed(error);sock.destroy();
+          });
         };
         if(lease)release.case={address:where,id:lease};
         release.closed=closed;

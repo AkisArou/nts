@@ -210,7 +210,7 @@ if (recordingPending) {
     process.exit(2);
   }
 }
-serialRun(TOOLS);
+await serialRun(TOOLS);
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
 mkdirSync(SCRATCH, { recursive: true });
 ownTemporary(SCRATCH);

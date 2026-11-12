@@ -170,5 +170,5 @@ runAsCommand(import.meta.url,async()=>{
       process.stdout.write(JSON.stringify(result)+'\n');
     }
   }catch(error){if(error instanceof CaseBudgetError&&'budget' in error)process.stdout.write(JSON.stringify({budget:error.budget})+'\n');else {if(error instanceof PressureError)publishPressure(error);process.stdout.write(JSON.stringify({instrument:{kind:error instanceof PressureError?'memory-pressure':'tooling-setup',reason:String(error)}})+'\n');}}
-  finally{closeMemoryRun();}
+  finally{await closeMemoryRun();}
 });

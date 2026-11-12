@@ -317,7 +317,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes, ${accepted} accepted, ${waiting} pending`);
     return changed ? 1 : 0;
   } finally {
-    try { closeMemoryRun(); }
+    try { await closeMemoryRun(); }
     finally { reservation?.release(); try { await reservation?.closed; } finally { rmSync(scratch, { recursive: true, force: true }); } }
   }
 }

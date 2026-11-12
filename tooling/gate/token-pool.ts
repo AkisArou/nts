@@ -82,8 +82,10 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         const words=buf.slice(0,nl).split(' ');buf=buf.slice(nl+1);
         if(words[0]==='retire'){
           w.step='registration';const [,id,group]=words;
+          if(!id||!group){sock.end('error: incomplete case scope retirement\n');return;}
           const owner=[...pool.active].find(entry=>entry.lease===id);
-          try{if(owner&&group)retire(owner,group);sock.end('ready\n');}catch(error){sock.end(`error: ${String(error)}\n`);}return;
+          if(!owner){sock.end(`error: case lease has ended (no live owner): ${id}\n`);return;}
+          try{retire(owner,group);sock.end('ready\n');}catch(error){sock.end(`error: ${String(error)}\n`);}return;
         }
         if(words[0]==='attach'){
           w.step='registration';const [,id,group,cap,scope]=words;

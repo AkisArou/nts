@@ -425,7 +425,7 @@ const {planAll}=await import(${JSON.stringify(new URL('../differential/record-or
 const {ORACLE_PLANNER_LIMITS}=await import(${JSON.stringify(new URL('../differential/oracle-execution.ts',import.meta.url).href)});
 import {serialRun,inResidentWorker,memoryRun,closeMemoryRun} from ${JSON.stringify(new URL('../census/worker-memory.ts',import.meta.url).href)};
 if(!inResidentWorker())writeFileSync(${JSON.stringify(sliceReceipt)},memoryRun().slice);
-serialRun({});
+await serialRun({});
 try{
   const collected={version:1,plans:[],unplanned:[],failures:[]};
   for(const name of ['slow','fine','early','quiet','broken']){

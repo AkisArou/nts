@@ -13,7 +13,7 @@ export async function activeCommand(command: string, args: readonly string[], op
     const result = await observeCommand("systemd-run", worker.scope.argv, { ...options, env: worker.scope.env, boundedEntry:{startupMs:options.boundedEntry?.startupMs??COMMAND_STARTUP_BOUND_MS,ready:()=>worker.ready()} });
     const memory = worker.observation(result);
     return memory ? { ...result, memory } : result;
-  } finally { worker.close(); }
+  } finally { worker.close();await worker.closed; }
 }
 
 

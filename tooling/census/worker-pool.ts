@@ -220,10 +220,12 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
     return pressure;
   } catch (error) {
     memory.close();
+    await memory.closed;
     await Promise.allSettled(tasks);
     throw error;
   } finally {
     memory.close();
+    await memory.closed;
   }
 }
 
@@ -237,26 +239,29 @@ export type ResidentPoolSummary = {
 export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<ResidentPoolSummary> {
   if(options.recycleAfterCases!==undefined&&(!Number.isSafeInteger(options.recycleAfterCases)||options.recycleAfterCases<1)){
     options.memory.close();
+    await options.memory.closed;
     throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive completed-case count');
   }
   if(options.recycleAboveBytes!==undefined&&(!Number.isSafeInteger(options.recycleAboveBytes)||options.recycleAboveBytes<1)){
     options.memory.close();
+    await options.memory.closed;
     throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive byte bound');
   }
   if (typeof options.token !== "function") {
     options.memory.close();
+    await options.memory.closed;
     throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit token policy");
   }
   const { paths, memory, report = () => {} } = options;
   let budgetBytes: number;
   try { budgetBytes = memory.effectiveBudgetBytes(); }
-  catch (error) { memory.close(); throw error; }
+  catch (error) { memory.close();await memory.closed; throw error; }
   let reservation: Reservation;
   try {
     reservation = await reserveJob({ key: options.key ?? "resident-workers", units: Math.max(1, options.jobs), atMostBytes: budgetBytes,
       what: options.what ?? `resident workers for ${paths.length} case(s)` }, { report });
   }
-  catch (error) { memory.close(); throw error; }
+  catch (error) { memory.close();await memory.closed; throw error; }
   try { return await rounds(options, budgetBytes, reservation); }
   // A reservation this pool made ends with it; one it ran inside is its job's.
   finally { if (!reservation.inherited) { reservation.release(); await reservation.closed; } }

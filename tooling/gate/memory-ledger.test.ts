@@ -24,6 +24,7 @@ import { testScratch } from "./test-scratch.ts";
 import { ownMemory,withoutHanded } from "./test-memory.ts";
 import {toolingSliceArgs} from './tooling-slice.ts';
 import {generatedJavaScript} from './generated-javascript.ts';
+import {createServer,connect} from 'node:net';
 
 const GiB = 2 ** 30;
 const ADMIT = fileURLToPath(new URL("admit.ts", import.meta.url));
@@ -1229,6 +1230,24 @@ test("release under a held directory lock reports and leaves reclamation to the 
   assert.equal(existsSync(path),false);
   assert.match(f.lines.join("\n"),/dropped blocked release's reservation.*has exited/);
   next.release();held.release();
+});
+
+test('a contended release keeps answering peer sockets and its closed boundary waits for locked deletion',async t=>{
+  const f=fixture(t),held=await f.ask({bytes:GiB,what:'asynchronous release'});
+  const path=join(f.dir,'admitted',held.id+'.json'),lock=lockLedger(f.dir);assert.ok(lock);
+  const server=createServer(socket=>socket.end('ready\n'));
+  server.listen(0,'127.0.0.1');await once(server,'listening');
+  t.after(()=>server.close());
+  let finished=false;
+  try{
+    held.release();void held.closed.then(()=>{finished=true;});
+    const address=server.address();assert.ok(address&&typeof address!=='string');
+    const socket=connect(address.port,'127.0.0.1');socket.setEncoding('utf8');
+    assert.deepEqual(await once(socket,'data'),['ready\n']);socket.destroy();
+    assert.equal(finished,false,'the socket answers while cleanup waits for its lock');
+    assert.ok(existsSync(path),'cleanup never unlinks without its lock');
+  }finally{lock.release();}
+  await held.closed;assert.equal(existsSync(path),false);assert.equal(f.lines.some(line=>line.includes('release could not lock')),false);
 });
 
 test("a unit signal during cleanup lock acquisition names the fallback and the next decision reclaims it",async t=>{

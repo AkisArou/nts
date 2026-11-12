@@ -204,7 +204,7 @@ mock.module(${JSON.stringify(activeModule)},{namedExports:{...real,activeCommand
 const {compileActive,inResidentWorker,serialRun}=await import(${JSON.stringify(memoryModule)});
 const tools={memoryCapKb:256*1024};
 // Enter the bounded scope before testing a case's short activity limits.
-serialRun(tools);
+await serialRun(tools);
 assert.ok(inResidentWorker());
 const env={...${testEnvironmentHandoff(["NTS_TOOLING_SLICE","NTS_GATE_SCOPE_EXPECTED","NTS_MEMORY_RESERVATION"])},NTS_GATE_STEP:'resident-bridge',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:${JSON.stringify(join(directory, "instrument.json"))}};
 expected={idleMs:real.COMMAND_IDLE_GUARD_MS,pollMs:50,cpuBudgetSeconds:0.1,onActivity(){},observations:commandObservationFixture().observations};
@@ -690,7 +690,7 @@ test("an exclusive case exceeding its step aggregate is a named failure, never p
   const directory = scratch(); t.after(() => rmSync(directory, { recursive: true, force: true }));
   const script = join(directory, "exclusive.ts");
   writeFileSync(script, `import {serialRun,compileSync} from ${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)};
-serialRun({memoryCapKb:1024*1024});
+await serialRun({memoryCapKb:1024*1024});
 compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024**2); print(len(held))", "named-budget-case"], {encoding:"utf8"});
 `);
   const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...fixtureEnvironment(t),

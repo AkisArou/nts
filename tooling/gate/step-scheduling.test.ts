@@ -612,7 +612,7 @@ esac
       assert.equal(spawnTest("mkfifo", [fifo], { encoding: "utf8" }).status, 0);
       writeFileSync(join(own, "repo/tooling/gate/census-case.ts"), `import { compileSync, serialRun } from ${JSON.stringify(new URL("../census/worker-memory.ts", import.meta.url).href)};
 const cap = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB);
-serialRun({ memoryCapKb: cap });
+await serialRun({ memoryCapKb: cap });
 const held = compileSync({ memoryCapKb: cap }, "python3", ["-c", "import sys; held = bytes([1]) * (750 * 2 ** 20); open(sys.argv[1]).read(); print(len(held))", ${JSON.stringify(fifo)}], { encoding: "utf8" });
 if (held.status !== 0 || held.memoryKilled) throw new Error("the case did not run to its end: " + held.stderr);
 `);

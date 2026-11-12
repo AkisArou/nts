@@ -26,7 +26,7 @@ import {workspace} from ${JSON.stringify(join(root, "tooling/census/project.ts")
 import {serialRun} from ${JSON.stringify(join(root, "tooling/census/worker-memory.ts"))};
 const [nts,backend,scratch] = process.argv.slice(2);
 const tools={nts,backend,cc:"cc",language:"ts",memoryCapKb:6000000,objectCache:${JSON.stringify(join(homedir(), ".cache/nts/c-objects"))}};
-serialRun(tools);
+await serialRun(tools);
 const dir=workspace(scratch,"ts");
 const source=(array,text,method="log")=>\
   "const values="+array+"; console."+method+"(values[0]); const text="+text+\

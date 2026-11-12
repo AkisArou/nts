@@ -29,7 +29,7 @@ export async function tokenCommand(argv:readonly string[]):Promise<{status:numbe
         throw cause==='own-limit'?new CaseBudgetError(message):new PressureError(message);
       }
       return result;
-    }finally{memory.close();}
+    }finally{memory.close();await memory.closed;}
   },{project,backend});
 }
 
