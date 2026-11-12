@@ -84,7 +84,8 @@ import { moduleGraph } from "./module-closure.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
-const USAGE = `usage: node tooling/gate/owed.mjs [--since <rev> | --commit <rev> | --range <base>..<tip>] [--run]
+const USAGE = `usage: node tooling/gate/owed.mjs [--since <rev> | --range <base>..<tip>] [--run]
+       node tooling/gate/owed.mjs --commit <rev>
        node tooling/gate/owed.mjs --self-test
        node tooling/gate/owed.mjs --full-census [--record [--initialize]] [--json]
        node tooling/gate/owed.mjs   (working-tree and untracked changes)
@@ -116,6 +117,7 @@ export function validateArguments(argv) {
     if (seen.has("--self-test") && seen.size !== 1) throw new Error("--self-test cannot be combined with other arguments");
     const selectors = [...seen].filter(arg => VALUE_ARGUMENTS.has(arg));
     if (selectors.length > 1) throw new Error(`${selectors.join(" and ")} select different changes; choose one`);
+    if (seen.has("--run") && seen.has("--commit")) throw new Error("--run with --commit would gate today's tree for another commit's change");
   }
 }
 
@@ -2143,11 +2145,6 @@ function main() {
     process.exit(0);
   }
 
-  // The gate runs the tree as it stands, which is not the tree of a past commit.
-  if (argv.includes("--run") && argv.includes("--commit")) {
-    console.log("  --run with --commit would gate today's tree for another commit's change; check that commit out in a worktree and run from there");
-    process.exit(2);
-  }
   const changes = changedPaths(argv);
   if (changes.length === 0) {
     console.log(`  no change in ${TREE}: nothing owed`);

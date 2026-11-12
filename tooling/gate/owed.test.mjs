@@ -9,13 +9,64 @@ import {testEnvironment,fixtureEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 import * as policy from "./owed.mjs";
 import {auditTestHost} from "./test-host-audit.ts";
+import {spawnTest} from './test-wait.ts';
+
+test('unknown or incomplete CLI requests fail before the first Git call',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-arguments-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const bin=join(root,'bin'),marker=join(root,'git-called');mkdirSync(bin);
+  const trap=join(bin,'git-trap.cjs');
+  writeFileSync(trap,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.exit(97);\n`,{mode:0o755});
+  symlinkSync(trap,join(bin,'git'));
+  const env=fixtureEnvironment(t,{PATH:bin+':'+fixtureEnvironment(t).PATH});
+  /** @type {[string[],string][]} */
+  const invalid=[
+    [['--no-such-flag'],'--no-such-flag'],[['unexpected'],'unexpected'],
+    [['--since'],'--since'],[['--commit'],'--commit'],[['--range'],'--range'],
+    [['--since','--no-such-flag'],'--since'],[['--full-census','--no-such-flag'],'--no-such-flag'],
+    [['--record'],'--record'],[['--full-census','--initialize'],'--initialize'],
+    [['--commit','HEAD','--run'],'--run'],[['--since','HEAD','--commit','HEAD'],'--since'],
+  ];
+  for(const [args,named] of invalid){
+    const result=spawnTest(process.execPath,[fileURLToPath(new URL('./owed.mjs',import.meta.url)),...args],{cwd:root,env,encoding:'utf8'});
+    assert.equal(result.status,2,result.stdout+result.stderr);
+    assert.ok(result.stderr.includes(named),result.stderr);assert.match(result.stderr,/usage:.*owed.mjs/);
+    assert.match(result.stderr,/--self-test/);assert.match(result.stderr,/--full-census/);
+    assert.equal(result.stdout,'');assert.equal(existsSync(marker),false,'invalid requests perform no Git work');
+  }
+});
+
+test('every documented argument form is accepted without rewriting its tokens',()=>{
+  const forms=[[],['--run'],['--since','HEAD'],['--since','HEAD','--run'],['--commit','HEAD'],
+    ['--range','HEAD^..HEAD'],['--range','HEAD^..HEAD','--run'],['--self-test'],
+    ['--full-census'],['--full-census','--json'],['--full-census','--record'],
+    ['--full-census','--record','--initialize'],['--full-census','--record','--initialize','--json']];
+  for(const args of forms){const before=[...args];assert.doesNotThrow(()=>policy.validateArguments(args));assert.deepEqual(args,before);}
+});
+
+test('the census CLI retains its initializer, writer and JSON forms in an owned repository',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-census-arguments-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ name,/** @type {string} */ value)=>{mkdirSync(join(root,name,'..'),{recursive:true});writeFileSync(join(root,name),value);};
+  put('Cargo.toml','[package]\nname="owed-arguments"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('tooling/gate/all.sh','#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" build tooling; exit; fi\nstep "tooling" node tooling/entry.test.ts\n');
+  put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/entry.test.ts','');
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
+    const result=spawnTest('git',args,{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  }
+  for(const args of [['--record','--initialize','--json'],[],['--json'],['--record'],['--record','--json']]){
+    const result=spawnTest(process.execPath,[fileURLToPath(new URL('./owed.mjs',import.meta.url)),'--full-census',...args],{cwd:root,env,encoding:'utf8'});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    if(args.includes('--json')){const report=JSON.parse(result.stdout);assert.ok(report.census.tracked>0);assert.deepEqual(report.problems,[]);}
+    else assert.match(result.stdout,/gate input placement:.*tracked files/);
+  }
+});
 
 test("input ancestry queries retain declaration order after replacement and reinsertion", () => {
   const inputs = stepInputs(), paths = ["__input_query__/a/b", "__input_query__", "__input_query__/a", "__input_query_other__"];
