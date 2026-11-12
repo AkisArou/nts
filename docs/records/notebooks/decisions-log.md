@@ -2462,3 +2462,13 @@ set's result. Attribution stays per step: if c2 breaks A and c5 breaks B, a
 main fix for A cannot turn c2 into B's culprit by filtering the union result.
 A remaining step with no established culprit gets its own search, reusing
 only established observations. No memo survives the search. #754.
+
+## Contributor proof uses the prepared inner loop (11-12)
+
+Contributors run `inner.ts --no-agree` for the Rust proof. It seals the oracle
+environment, builds the compiler and sets NTS_BIN, installs the scratch runner,
+and passes the touched crates plus all backends to the shared test invocation
+owner with NTS_CHECKERS=1 and --no-fail-fast. The direct invocation owner does
+not prepare runtime services, so its former documentation produced differential
+test failures for missing setup. The dependency fixture also declares its
+normal standalone oracle setup hook. Part of #753.

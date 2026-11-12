@@ -8,11 +8,13 @@ import {spawnSync,execFileSync} from 'node:child_process';
 import {chmodSync,cpSync,copyFileSync,readdirSync,renameSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,utimesSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
-import {test} from 'node:test';
+import {before,test} from 'node:test';
+import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage} from './oracle-dependencies.ts';
 import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
+before(setupOracleTestEnvironment);
 test('dependency protection rejects external inodes before any chmod and private copies leave the origin unchanged',t=>{
   const root=mkdtempSync(join(tmpdir(),'oracle-dependency-inodes-')),image=join(root,'image');mkdirSync(image);
   t.after(()=>{chmodSync(image,0o755);rmSync(root,{recursive:true,force:true});});

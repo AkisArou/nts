@@ -188,13 +188,14 @@ full check holds it to (all.sh's `test262_cases`, `test262_builtins_cases`,
 against a pin). They take minutes, and they caught seventeen regressions that
 fixtures, examples and blockers did not.
 
-Before you land, run the gate's own commands, not look-alikes:
-`cargo fmt`; `node tooling/gate/clippy.ts`;
-`node tooling/gate/test-profile.ts inner -p <crate> ...` over every crate you
-touched *and the backend crates* (`-p nts-codegen-{c,llvm,jvm}`); the owner
-sets `NTS_CHECKERS=1` to bound each test process's checker pool and memory
-and keeps `--no-fail-fast`; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
-you edited. A core change that passes core's tests has broken a backend's more
+Before you land, run `node tooling/gate/inner.ts --no-agree`. It uses the gate's
+formatting and Clippy commands, builds a fresh compiler, seals the oracle
+capability and tests every crate you touched *and the backend crates*
+(`nts-codegen-{c,llvm,jvm}`). Its test owner sets `NTS_CHECKERS=1` to bound each
+test process's checker pool and memory, keeps `--no-fail-fast`, and installs
+the per-binary scratch runner. It also runs
+`clang-format --style=file --dry-run -Werror` on edited `runtime/c` files.
+A core change that passes core's tests has broken a backend's more
 than once. Frontend tests always run: an in-process capture failure is a
 failure, never a missing executable to skip. Without `--no-fail-fast` cargo stops at the first failing test binary and silently
 skips the rest. Every Rust test build uses `tooling/gate/test-profile.ts`: it owns
@@ -205,7 +206,7 @@ routes with different incremental settings kept duplicate artifacts.
 [`docs/workflow.md`](docs/workflow.md) gives the route details. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
-`node tooling/gate/inner.ts` runs all of these, then agree on the backends built today (C, LLVM and the JVM)
+Without `--no-agree`, `inner.ts` also runs agree on the backends built today (C, LLVM and the JVM)
 against main's pinned compiler, building the tests in the incremental
 `nts-dev` profile: the workspace's tests built cold in 6 minutes and ran in 8
 on 2026-10-22, where the release build took about 40 beside a gate. Every route builds Rust tests in `nts-dev`, including the gate. The inner

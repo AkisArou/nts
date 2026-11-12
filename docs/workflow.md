@@ -417,9 +417,12 @@ locked session on CPU 4 and keep the wall-time floor below.
 `tooling/gate/test-profile.ts` constructs and executes every Cargo test build.
 Its `workspace`, `inner`, `frontend` and `doctests` routes select the complete
 workspace, explicit crates, the frontend's ignored native invariants, and
-rustdoc respectively. Contributors use `node tooling/gate/test-profile.ts inner
--p <crate> ...`, through the normal heavy-job admission. `inner.ts`, the shell
-frontend step, the workspace replay and the doctest step call the same owner.
+rustdoc respectively. Contributors use `node tooling/gate/inner.ts --no-agree`.
+It seals the canonical oracle environment, builds a fresh compiler, sets
+`NTS_BIN`, installs the per-binary scratch runner and admits its heavy phases.
+It selects the touched crates plus all three backend crates. `inner.ts`, the
+shell frontend step, the workspace replay and the doctest step call the same
+invocation owner.
 
 The profile is `nts-dev`: no debug info, incremental compilation, overflow
 checks and debug assertions. The owner validates the manifest, refuses
@@ -681,6 +684,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Contributor proof uses the prepared inner loop.** `inner.ts` prepares the
+  oracle seal, builds the compiler and owns the per-binary runner before
+  invoking the shared Cargo owner with the touched crates and all backends
+  ([log](records/notebooks/decisions-log.md#contributor-proof-uses-the-prepared-inner-loop-11-12)).
 
 - **A revert requires a fresh as-is main probe.** A historical red can already
   be fixed forward. Search only steps still red on newest main, carry its
