@@ -17,7 +17,7 @@ import type {OracleFilesystem} from "../differential/oracle-filesystem.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 export const OUTCOMES = join(HERE, "../../tests/outcomes");
-export const OUTCOME_ORACLE_PRELOADS=Object.freeze([join(HERE,'outcomes-node-preload.ts')]);
+export const OUTCOME_ORACLE_PRELOADS=Object.freeze([fileURLToPath(new URL('./outcomes-node-preload.ts',import.meta.url))]);
 
 /**
  * How a fixture reaches the runtime's own sources: `@nts/runtime/<path>` is
@@ -101,7 +101,7 @@ export function materialise(scratch: string, name: string, sources: string, mode
   );
   if (mode === "build") {
     const main = join(dir, "src/main.ts");
-    writeFileSync(main, `${read(join(HERE, "outcomes-harness.ts"))}\n${readFileSync(main, "utf8")}`);
+    writeFileSync(main, `${read(fileURLToPath(new URL("./outcomes-harness.ts",import.meta.url)))}\n${readFileSync(main, "utf8")}`);
   }
   return dir;
 }

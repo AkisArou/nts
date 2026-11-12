@@ -49,7 +49,7 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const KNOWN = join(HERE, "assembles.known");
+const KNOWN = fileURLToPath(new URL("./assembles.known",import.meta.url));
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const LLVM_AS = process.env.NTS_LLVM_AS ?? "llvm-as";
 

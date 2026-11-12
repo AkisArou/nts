@@ -673,11 +673,11 @@ function classify(row) {
 // a sample or a recorded run reads the committed file, because its positives
 // are too few to say what valid JavaScript draws.
 
-const EVIDENCE_FILE = join(HERE, "test262-evidence-codes.json");
+const EVIDENCE_FILE = fileURLToPath(new URL("./test262-evidence-codes.json",import.meta.url));
 
 // Codes that are evidence although valid JavaScript draws them, each because of
 // a named gap in the pinned native checker's parser -- the file's header has the rules.
-const OVERRIDES_FILE = join(HERE, "test262-evidence-overrides.json");
+const OVERRIDES_FILE = fileURLToPath(new URL("./test262-evidence-overrides.json",import.meta.url));
 const OVERRIDES = existsSync(OVERRIDES_FILE) ? JSON.parse(readFileSync(OVERRIDES_FILE, "utf8")).overrides : [];
 /** The complete native checker identity printed by the compiled binary. */
 const CHECKER_PIN = checkerPin(execFileSync(PINNED, ["version"], { encoding: "utf8" }));

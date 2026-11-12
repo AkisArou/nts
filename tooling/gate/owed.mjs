@@ -568,6 +568,26 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "the standalone agreement reader, outside the gate; migrate/table.ts names destinations only", run: "node tooling/conformance/agreement.mjs" }],
   },
   {
+    name: "benchmark comparator harnesses",
+    when: (/** @type {string} */ p) => p.startsWith("benchmarks/common/"),
+    settled: true,
+    steps: ["benches", "bench-agree"],
+    arms: [],
+  },
+  {
+    name: "standalone benchmark subjects and transcription checks",
+    when: (/** @type {string} */ p) => p.startsWith("benchmarks/") && !p.startsWith("benchmarks/cases/"),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "answers", asks: "nightly nts-bench and standalone benchmark checks, outside the gate", run: "nts-bench; node --test benchmarks/*.test.ts; benchmarks/gtk/run.sh; benchmarks/interop-copy/run.sh; benchmarks/interop-facade/run.sh" }],
+  },
+  {
+    name: "shared Rust test fixtures",
+    when: (/** @type {string} */ p) => p.startsWith("compiler/test-support/"),
+    steps: ["tests"],
+    arms: [{ kind: "valid", asks: "shared source included by integration-test harnesses across crates", run: "the workspace tests" }],
+  },
+  {
     name: "reference counting",
     when: (p) => /^compiler\/core\/src\/hir\/(rc|own)\.rs$/.test(p),
     steps: ["rc", "llvm-rc", "memory"],

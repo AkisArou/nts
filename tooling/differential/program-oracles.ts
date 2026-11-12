@@ -43,7 +43,7 @@ export const OUTCOME_CONTROLS=Object.freeze([
 /** The JVM arm checks this generated program before its fixture corpus. Keep
  * generation in the producer, so the consumer has no uncaptured extra project. */
 export function sweepOracleTask(directory:string):ProgramOracleTask{
-  const fs=new OracleFilesystem(),generator=join(REPOSITORY,'tooling/sweep/sweep.mjs');
+  const fs=new OracleFilesystem(),generator=fileURLToPath(new URL('../sweep/sweep.mjs',import.meta.url));
   if(!fs.readBytes(generator))throw new ToolingInstrumentError('tooling-setup','JVM sweep generator is missing');
   const generated=spawnSync(process.execPath,[generator],{encoding:'utf8',maxBuffer:16*1024**2});
   if(generated.error||generated.status!==0)throw new ToolingInstrumentError('tooling-setup','JVM sweep generation failed: '+String(generated.error??generated.stderr));
