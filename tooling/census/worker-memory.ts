@@ -214,6 +214,7 @@ class MemoryClose {
       this.problem=error;publishToolingFailure(error);this.reject(error);return error;
     }
     this.resolve();
+    return undefined;
   }
 }
 

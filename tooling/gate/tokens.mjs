@@ -80,7 +80,8 @@ export function tokenClient(where, step) {
         settle();
         let held = true;
         let ended=false;
-        let rejectClosed;
+        /** @type {(reason?:unknown)=>void} */
+        let rejectClosed=()=>{};
         /** @type {Promise<void>} */
         const closed=new Promise((resolve,reject)=>{
           rejectClosed=reject;
