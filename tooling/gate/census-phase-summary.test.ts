@@ -9,6 +9,17 @@ test('unrelated steps do not open census observations or enable child wrappers',
   }),undefined);
 });
 
+test('an unavailable worker observation preserves the work and stays unknown in its phase',()=>{
+  const costs=new CensusPhaseCosts('fixture','c','typescript-c',()=>{throw Error('supplied CPU unavailable');});
+  assert.equal(costs.measure('materialization',()=>27),27);
+  const frame=costs.finish(),summary=censusPhaseSummary([frame],[],5);
+  assert.match(frame.unmeasured.join('\n'),/supplied CPU unavailable/);
+  assert.equal(summary.status,'partial');
+  assert.equal(summary.rows.find(row=>row.phase==='materialization')?.cpu_s,null);
+  assert.equal(summary.rows.find(row=>row.phase==='materialization')?.wall_s,null);
+  assert.equal(summary.attributed_cpu_s,0);assert.equal(summary.unattributed_cpu_s,5);
+});
+
 test('supplied disjoint phases reconcile to scope CPU with an explicit remainder',()=>{
   const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_observations:[],unmeasured:[],phases:[
     {phase:'materialization',wall_s:2,self_cpu_s:2,child_cpu_s:0},

@@ -10,6 +10,7 @@ type CompilerPhase=Pick<Check,'phases'|'complete'|'observation'>;
 
 export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:readonly CompilerPhase[],stepCpu:number|undefined,expectedProjects:readonly string[]=frames.map(frame=>frame.project)){
   const rows=new Map<Name,CensusPhaseRow>();
+  const unknownWorkerRows=new Set<Name>();
   for(const name of Object.keys(GROUPS) as Name[])rows.set(name,{phase:name,cases:0,cpu_s:0,known_cpu_s:0,wall_s:0,self_cpu_s:0,child_cpu_s:0,missing_observations:0});
   let observations=0;
   const add=(row:CensusPhaseRow,wall:number,self:number|null,child:number|null)=>{
@@ -19,6 +20,7 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
   };
   for(const frame of frames)for(const phase of frame.phases){
     const row=rows.get(phase.phase)!;row.cases=(row.cases??0)+1;add(row,phase.wall_s,phase.self_cpu_s,phase.child_cpu_s);
+    if(frame.unmeasured.length){row.missing_observations++;unknownWorkerRows.add(phase.phase);}
   }
   const caseForObservation=new Map(frames.flatMap((frame,index)=>frame.compiler_observations.map(id=>[id,index] as const)));
   const compilerCases=new Map<Name,Set<string>>();
@@ -30,7 +32,7 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
     cases.add(frame===undefined?'compiler:'+index:'frame:'+frame);row.cases=cases.size;
     for(const phase of parts)add(row,phase.wall_s,phase.self_cpu_s,phase.child_cpu_s);
   }
-  for(const row of rows.values())row.cpu_s=row.missing_observations?null:row.known_cpu_s;
+  for(const [name,row] of rows){row.cpu_s=row.missing_observations?null:row.known_cpu_s;if(unknownWorkerRows.has(name))row.wall_s=null;}
   const attributed=[...rows.values()].reduce((sum,row)=>sum+row.known_cpu_s,0);
   const total=typeof stepCpu==='number'&&Number.isFinite(stepCpu)&&stepCpu>=0?stepCpu:null;
   const remainder=total===null?null:total-attributed;

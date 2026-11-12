@@ -48,10 +48,17 @@ export class CensusPhaseCosts {
     return row;
   }
   #advance():void{
-    const now=this.#clock();
+    let now:PhaseSample;
+    try{now=this.#clock();}
+    catch(error){this.frame.unmeasured.push(`worker phase observation unavailable: ${String(error)}`);this.#last=undefined;return;}
+    if(![now.wall,now.user,now.sys].every(value=>Number.isFinite(value)&&value>=0)){
+      this.frame.unmeasured.push('worker phase clock or CPU is invalid');this.#last=undefined;return;
+    }
     if(this.#current&&this.#last){
       const row=this.#row(this.#current),wall=now.wall-this.#last.wall,cpu=(now.user-this.#last.user)+(now.sys-this.#last.sys);
-      if(wall<0||cpu<0||![wall,cpu].every(Number.isFinite))this.frame.unmeasured.push('worker phase clock or CPU moved backwards');
+      if(wall<0||cpu<0||![wall,cpu].every(Number.isFinite)){
+        this.frame.unmeasured.push('worker phase clock or CPU moved backwards');this.#last=undefined;return;
+      }
       else{row.wall_s+=wall;row.self_cpu_s+=cpu;}
     }
     this.#last=now;
@@ -86,8 +93,10 @@ export class CensusPhaseCosts {
 export function censusPhaseCosts(project:string,backend:string,env:NodeJS.ProcessEnv=process.env):CensusPhaseCosts|undefined{
   const directory=env.NTS_GATE_CASE_COSTS_DIR,step=env.NTS_GATE_STEP;
   if(!directory||!step||!CENSUS_PHASE_STEPS.has(step))return;
-  const host=hostObservations(env);
-  return new CensusPhaseCosts(project,backend,step,()=>{
-    const cpu=host.ownCpu();return {wall:host.now()/1000,user:cpu.userUsec/1e6,sys:cpu.systemUsec/1e6};
-  },existsSync(join(directory,'phase-child'))?{directory,binary:join(directory,'phase-child')}:undefined);
+  let clock:PhaseClock;
+  try{
+    const host=hostObservations(env);
+    clock=()=>{const cpu=host.ownCpu();return {wall:host.now()/1000,user:cpu.userUsec/1e6,sys:cpu.systemUsec/1e6};};
+  }catch(error){clock=()=>{throw error;};}
+  return new CensusPhaseCosts(project,backend,step,clock,existsSync(join(directory,'phase-child'))?{directory,binary:join(directory,'phase-child')}:undefined);
 }
