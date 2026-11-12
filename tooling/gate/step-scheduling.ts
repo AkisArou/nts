@@ -1,4 +1,4 @@
-import {futureStateVersion,type FutureStateVersionError} from './state-version.ts';
+import {assertWritableState,futureStateVersion,type FutureStateVersionError} from './state-version.ts';
 import {lockStateFile as lockHistory,STATE_LOCK_WAIT_SECONDS as LOCK_WAIT_SECONDS} from './state-file.ts';
 import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // Scheduling history is an optimization. Missing or corrupt history uses the
@@ -352,7 +352,7 @@ export function caseHistoryFile(step: string, env: NodeJS.ProcessEnv = process.e
 
 /** Version one used subject paths for program-oracles. Migrate once at the
  * reader boundary; every writer publishes only composite version-two keys. */
-export function readCaseHistory(file: string): CaseHistory {
+export function readCaseHistory(file: string,report:(warning:string)=>void=console.error): CaseHistory {
   let value: unknown;
   let source: string;
   try { source = readFileSync(file, "utf8"); }
@@ -364,6 +364,7 @@ export function readCaseHistory(file: string): CaseHistory {
     catch { return new Map(); }
   }
   try { value = JSON.parse(source); } catch { return new Map(); }
+  const newer=futureStateVersion(value,2,file);if(newer){report(newer.message);return new Map();}
   if (!record(value) || (value.version!==1&&value.version!==2) || !keys(value, ["version", "cases"]) || !record(value.cases)) return new Map();
   const cases = new Map<string, readonly number[]>();
   for (const [key, peaks] of Object.entries(value.cases)) {
@@ -401,6 +402,7 @@ export function writeCaseHistory(file: string, observed: Iterable<CaseObservatio
     }
     unlock = lockHistory(file);
     if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
+    assertWritableState(file,2);
     const cases = new Map(readCaseHistory(file));
     for (const row of observed) {
       if (!compositeCaseKey(row.key) || !bytes(row.peak)) continue;

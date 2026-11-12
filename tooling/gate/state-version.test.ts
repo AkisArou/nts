@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {assertStateVersion,assertWritableState,futureStateVersion,FutureStateVersionError} from './state-version.ts';
 import {versionedRecord,withStateLock} from './state-file.ts';
-import {readCostHistory,writeCostHistory,unitReservation} from './step-scheduling.ts';
+import {readCostHistory,writeCostHistory,unitReservation,caseHistoryFile,caseMemoryKey,readCaseHistory,writeCaseHistory,caseReservation} from './step-scheduling.ts';
 import {STEP_CPU_MEASURE} from './step-time.ts';
 import {emptyState,readState,writeState} from '../full-check/state.ts';
 import {newJob,readOutcome,writeOutcome,start,type Units} from '../full-check/background.ts';
@@ -92,4 +92,22 @@ test('future run ownership refuses claiming, reaping, completion and close',t=>{
    ()=>owner.complete({group:'/unused',device:'1',inode:'1'}),()=>owner.close()]){
   assert.throws(action,/future state version 2/);assert.equal(readFileSync(file,'utf8'),future);
  }
+});
+
+
+test('v2 case history keeps its measured migration and a v3 file survives reads and publication',t=>{
+ const root=testScratch(t,'case-history-future'),env={NTS_GATE_COSTS_DIR:root};
+ const file=caseHistoryFile('program-oracles',env),legacy=join(root,'cases/program-oracles.json');
+ mkdirSync(join(root,'cases'));const path='tests/programs/control',key=caseMemoryKey({step:'program-oracles',backend:'node',path});
+ const old=json({version:1,cases:{[path]:[200*2**20]}});writeFileSync(legacy,old);
+ assert.equal(caseReservation(readCaseHistory(file),key),250*2**20);
+ assert.equal(writeCaseHistory(file,[{key,peak:300*2**20}]),undefined);
+ assert.equal(JSON.parse(readFileSync(file,'utf8')).version,2);
+ assert.equal(readFileSync(legacy,'utf8'),old,'migration never rewrites the old namespace');
+ assert.equal(caseReservation(readCaseHistory(file),key),375*2**20);
+ const future='{ "version": 3, "cases": "new-format", "opaque": true }\n',warnings:string[]=[];
+ writeFileSync(file,future);assert.equal(readCaseHistory(file,line=>warnings.push(line)).size,0);
+ assert.match(warnings.join('\n'),/future state version 3/);
+ assert.match(writeCaseHistory(file,[{key,peak:400*2**20}])??'',/future state version 3/);
+ assert.equal(readFileSync(file,'utf8'),future);assert.equal(readFileSync(legacy,'utf8'),old);
 });

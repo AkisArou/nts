@@ -1,6 +1,6 @@
 owner	state	supported_version	read_behavior	publication_or_deletion	proof
 step-scheduling.ts	steps.json step/job history	4	named empty read-only view	refuse under history flock	state-version.test.ts
-step-scheduling.ts	cases-v2/*.json case history	2	named empty read-only view	refuse under history flock; import absent v2 only from sibling cases/	case migration and future-version controls after #740 rebase
+step-scheduling.ts	cases-v2/*.json case history	2	named empty read-only view	refuse under history flock; import absent v2 only from sibling cases/	state-version.test.ts; #740 migration controls
 memory-ledger.ts	waiting/ and admitted/ ledger entries	2	refuse by name	guard update and deletion under directory flock; failed release leaves named report and entry	memory-ledger.test.ts
 landing/selection.ts; landing/service.ts	costs.json	2	named empty read-only view	refuse under costs file flock	state-version.test.ts
 landing/queue.ts	queue/ held/ results/ checking.json status.json	1	refuse by name	guard transitions and deletions under one queue directory mutex	queue.test.ts
