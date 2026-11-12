@@ -689,7 +689,7 @@ function boundOf(step) {
 const caseMemory=new CaseMemoryBroker({root:ROOT,env,host,
   boundary:name=>{
     const owned=running.get(name);if(!owned)throw Error(`case memory: ${name} has no running step`);
-    return {group:owned.scope.workerGroup,raise:bytes=>owned.scope.caseLimit(Math.max(bytes,Math.ceil((owned.charge??0)*1.25)))};
+    return {group:owned.scope.workerGroup,raise:bytes=>owned.scope.caseLimit(Math.max(bytes,Math.min(owned.scope.workerLimit,Math.ceil((owned.charge??0)*1.25))))};
   },report:message=>process.stderr.write(message+'\n')});
 const tok = createTokenPool({
   now:()=>host.now(),
@@ -1017,7 +1017,11 @@ function applyBound(name, r) {
   const held = r.scope.limits.max;
   let max = runawayBound(limitOf(name, r));
   if (max < held && r.charge + nearGrant(max) > max) max = held;
-  void r.scope.caseLimit(Math.max(caseMemory.caps(name),Math.ceil((r.charge??0)*1.25)))
+  const cases=caseMemory.caps(name);
+  // Retain a larger boundary until its charges drain, but only an admitted
+  // case cap or grant can raise it. Live use cannot outrun its runaway bound.
+  if(Math.max(max,cases)<r.scope.workerLimit)sampleStep(r);
+  void r.scope.caseLimit(Math.max(cases,Math.min(r.scope.workerLimit,Math.ceil((r.charge??0)*1.25))))
     .catch(error=>stop(`case memory: ${name} worker cap failed: ${error.message}`));
   if (max === held) return;
   r.scope.limit({ max })

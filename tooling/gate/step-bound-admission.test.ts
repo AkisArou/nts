@@ -16,6 +16,8 @@ import {moduleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import type {BoundWait} from "./step-bound.ts";
 import {ownMemory} from "./test-memory.ts";
+import {caseHistoryFile,writeCaseHistory} from './step-scheduling.ts';
+import {caseMemoryKey} from './case-memory.ts';
 import {newTestScratch} from "./test-scratch.ts";
 import {waitFor} from "./test-wait.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
@@ -98,6 +100,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
   writeFileSync(join(memory.NTS_GATE_COSTS_DIR,"steps.json"),JSON.stringify({version:3,steps:{[STEP]:{memory:{unit:"token",peaks:[Math.floor(2*GiB/1.25)]}}},
     jobs:{"oracle-dependency-capture":{unit:"worker",peaks:[1]}}}));
+  assert.equal(writeCaseHistory(caseHistoryFile(STEP,memory,root),[{key:caseMemoryKey({step:STEP,backend:'',path:'bound-control'}),peak:Math.floor(2*GiB/1.25)}]),undefined);
   mkdirSync(join(own,"target/release"),{recursive:true});
   writeFileSync(join(own,"target/release/nts"),"#!/bin/sh\nexit 0\n",{mode:0o755});
   const run=join(own,"run"),planned=gateEnvironment({...hostEnvironment(process.env),HOME:join(own,"home")},{run,owned:{
