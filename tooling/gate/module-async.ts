@@ -6,7 +6,7 @@ import {isAbsolute,join,relative,sep} from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import type {Node} from 'typescript/ast';
-import {moduleClosure} from './module-closure.ts';
+import {moduleClosure,type ModuleDeclarations} from './module-closure.ts';
 import {SourceFacts} from './source-facts.ts';
 
 export function topLevelAwaits(file:string,source:string,shared?:import('typescript/sync').API,root?:Node|SourceFacts):number[]{
@@ -70,7 +70,7 @@ export function inspectModuleAsync(rootDirectory:string,file:string,source:strin
   return {entries:[...entries],imports:[...imports],problems,awaits:facts.topLevelAwaits.map(node=>facts.line(node.pos))};
 }
 
-export function auditModuleAsync(root:string,parsed?:ReadonlyMap<string,ModuleAsyncFacts>):{entries:string[];modules:string[];problems:string[]}{
+export function auditModuleAsync(root:string,parsed?:ReadonlyMap<string,ModuleAsyncFacts>,declarations?:ReadonlyMap<string,ModuleDeclarations>):{entries:string[];modules:string[];problems:string[]}{
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   let api:import('typescript/sync').API|undefined;
   const facts=new Map(parsed),entries=new Set<string>(),problems:string[]=[];
@@ -86,7 +86,7 @@ export function auditModuleAsync(root:string,parsed?:ReadonlyMap<string,ModuleAs
   try{
     if(!parsed)visit('tooling');
     for(const row of facts.values()){for(const entry of row.entries)entries.add(entry);problems.push(...row.problems);}
-    const workers=new Set(entries.size?moduleClosure([...entries],{sourceRoot:root}):[]);
+    const workers=new Set(entries.size?moduleClosure([...entries],{sourceRoot:root,declarations}):[]);
     // The source inventory owns tooling modules, not generated node_modules
     // outputs or external package graphs a command provisions later.
     const imported=new Set([...facts.values()].flatMap(row=>row.imports).filter(file=>facts.has(file)));

@@ -10,7 +10,10 @@ import type {Node} from "typescript/ast";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 export type DirectoryDeclaration = {reader: string; directory: string; files: readonly string[]};
-export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void};
+export type ModuleDeclarations={imports:string[];assets:string[]};
+export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
+  /** A caller which already owns parsed source facts supplies detached edges. */
+  declarations?:ReadonlyMap<string,ModuleDeclarations>};
 const inside = (root: string, path: string) => {
   const part = relative(root, path);
   return part !== ".." && !part.startsWith(".." + sep) && !isAbsolute(part);
@@ -32,10 +35,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   const root = realpathSync(options.sourceRoot ?? SOURCE);
   const references = new Map<string, {imports: string[]; assets: string[]}>();
   let tracked: string[] | undefined;
-  const api = new API({cwd: root});
+  let api:import('typescript/sync').API|undefined;
   function parsed(path: string) {
     const known = references.get(path);
     if (known) return known;
+    const supplied=options.declarations?.get(relative(root,path).split(sep).join('/'));
+    if(supplied){references.set(path,supplied);return supplied;}
+    api??=new API({cwd:root});
     const lease = api.createSourceFile(path, readFileSync(path, "utf8"));
     try {
       const imports: string[] = [];
@@ -93,7 +99,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
     return [...visited].sort();
   }
-  return {closure, close: () => api.close()};
+  return {closure, close: () => api?.close()};
 }
 
 /** A public walk always gets a fresh graph, including fresh source bytes. */

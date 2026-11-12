@@ -92,9 +92,9 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
       sealedWrites.add(w);
     }
     for(const publisher of publishers)sealedPublisher(publisher);
-    const embedded=(node:Node):void=>{
+    const embedded=(node:Node,shell=false):void=>{
       const value=render(node);
-      if(value!==undefined)parse(value,offset+facts.line(node.pos)-1,true,depth+1);
+      if(value!==undefined){const origin=offset+facts.line(node.pos)-1;if(shell)generatedSources.shell(value,origin);else parse(value,origin,true,depth+1);}
     };
     function visit(node:Node):void{
       if(ast.isCallExpression(node)){
@@ -112,7 +112,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
         // containing "-e" or a returned template remains ordinary data.
         if(/^(?:child_process\.(?:spawn|spawnSync|execFile|execFileSync)|(?:.*\.)?(?:spawnTest|activeCommand|compileActive)|spawn|spawnSync)$/.test(name(node.expression))){
           for(const argument of node.arguments){const args=resolved(argument);if(!ast.isArrayLiteralExpression(args))continue;
-            for(let i=0;i+1<args.elements.length;i++){const flag=resolved(args.elements[i]!);if(ast.isStringLiteralLikeNode(flag)&&['-e','--eval','-p','--print'].includes(flag.text))embedded(args.elements[i+1]!);}
+            for(let i=0;i+1<args.elements.length;i++){const flag=resolved(args.elements[i]!);if(ast.isStringLiteralLikeNode(flag)){if(['-e','--eval','-p','--print'].includes(flag.text))embedded(args.elements[i+1]!);else if(flag.text==='-c')embedded(args.elements[i+1]!,true);}}
           }
         }
       }

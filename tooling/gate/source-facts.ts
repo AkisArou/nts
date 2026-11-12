@@ -32,6 +32,8 @@ export class SourceFacts {
   private readonly scopeAt=new Map<Node,Node>();
   private readonly bindings=new Map<Node,SourceBinding|null>();
   private readonly textCache=new Map<Node,string>();
+  private readonly nameCache=[new Map<Node,string>(),new Map<Node,string>()];
+  private shellCache:ShellCommands|undefined;
   private readonly callOrders:number[]=[];
   private readonly lines=[0];
   private ambientAliases:Map<string,string>|undefined;
@@ -83,6 +85,7 @@ export class SourceFacts {
     visit(root,root,0);
   }
   ofKind(kind:number):readonly Node[]{return this.kinds.get(kind)??[];}
+  get shell():ShellCommands{return this.shellCache??=shellCommands(this.source);}
   ofKinds(...kinds:number[]):readonly Node[]{return kinds.flatMap(kind=>this.ofKind(kind)).sort((a,b)=>this.ranges.get(a)!.start-this.ranges.get(b)!.start);}
   within(node:Node,kind:number):readonly Node[]{
     const range=this.ranges.get(node);if(!range)return [];
@@ -122,15 +125,19 @@ export class SourceFacts {
     const value=this.binding(node,functions);
     return value&&!value.member&&value.kind!=='parameter'?this.resolve(value.value,functions,seen):node;
   }
-  name(input:Node,functions=true,depth=0):string{
+  name(input:Node,functions=true):string{
+    const cache=this.nameCache[functions?1:0]!;let value=cache.get(input);
+    if(value===undefined){value=this.nameAt(input,functions,0);cache.set(input,value);}return value;
+  }
+  private nameAt(input:Node,functions:boolean,depth:number):string{
     const ast=this.ast,node=this.unwrap(input);if(depth>12)return this.code(node);
     if(ast.isIdentifier(node)){
       const value=this.binding(node,functions);
       if(value?.kind==='parameter')return node.text;
-      return value?this.name(value.value,functions,depth+1)+(value.member?'.'+value.member:''):this.importNames.get(node.text)??node.text;
+      return value?this.nameAt(value.value,functions,depth+1)+(value.member?'.'+value.member:''):this.importNames.get(node.text)??node.text;
     }
-    if(ast.isPropertyAccessExpression(node))return this.name(node.expression,functions,depth+1)+'.'+node.name.text;
-    if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return this.name(node.expression,functions,depth+1)+'.'+node.argumentExpression.text;
+    if(ast.isPropertyAccessExpression(node))return this.nameAt(node.expression,functions,depth+1)+'.'+node.name.text;
+    if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return this.nameAt(node.expression,functions,depth+1)+'.'+node.argumentExpression.text;
     if(ast.isCallExpression(node)&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0])&&
       (node.expression.kind===ast.SyntaxKind.ImportKeyword||ast.isIdentifier(node.expression)&&node.expression.text==='require'))return node.arguments[0].text.replace(/^node:/,'');
     return this.code(node);
@@ -157,6 +164,22 @@ export class SourceFacts {
     }
     return name(node);
   }
+  moduleDeclarations():{imports:string[];assets:string[]}{
+    const ast=this.ast,imports:string[]=[],assets:string[]=[];
+    for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
+      const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
+        :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
+        :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
+      if(specifier&&ast.isStringLiteralLikeNode(specifier)&&/^\.\.?\//.test(specifier.text))imports.push(specifier.text);
+    }
+    for(const node of this.constructions)if(ast.isIdentifier(node.expression)&&node.expression.text==='URL'&&node.arguments?.length===2){
+      const [literal,base]=node.arguments;
+      if(literal&&ast.isStringLiteralLikeNode(literal)&&literal.kind===ast.SyntaxKind.StringLiteral&&base&&ast.isPropertyAccessExpression(base)&&base.name.text==='url'
+        &&ast.isMetaProperty(base.expression)&&base.expression.keywordToken===ast.SyntaxKind.ImportKeyword&&base.expression.name.text==='meta'
+        &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..'))assets.push(literal.text);
+    }
+    return {imports,assets};
+  }
 }
 
 export type ShellSourceFacts={file:string;source:string;offset:number;shell:ShellCommands};
@@ -168,23 +191,26 @@ export class GeneratedSourceFacts {
   readonly api:import('typescript/sync').API;readonly file:string;
   private readonly rows=new Map<string,SourceFacts>();
   private readonly leases:import('typescript/sync').RetainedSourceFile[]=[];
+  readonly shells:ShellSourceFacts[]=[];
   constructor(api:import('typescript/sync').API,file:string){this.api=api;this.file=file;}
   get(source:string):SourceFacts{
     let facts=this.rows.get(source);if(facts)return facts;
     const lease=this.api.createSourceFile(this.file+'.generated.ts',source);this.leases.push(lease);
     facts=new SourceFacts(this.file,source,lease.sourceFile);this.rows.set(source,facts);return facts;
   }
+  shell(source:string,offset:number):void{if(!this.shells.some(row=>row.source===source&&row.offset===offset))this.shells.push(shellSourceFacts(this.file,source,offset));}
   close():void{for(const lease of this.leases)lease.dispose();this.leases.length=0;this.rows.clear();}
 }
 
 /** The public sync API batches retained-source requests through generators.
  * Inspect and release one bounded batch before reading the next one. */
-export function inspectSourceBatches(api:import('typescript/sync').API,inputs:readonly SourceInput[],inspect:(facts:SourceFacts)=>void):void{
-  for(let at=0;at<inputs.length;){
+export function inspectSourceBatches(api:import('typescript/sync').API,inputs:Iterable<SourceInput>,inspect:(facts:SourceFacts)=>void):void{
+  const iterator=inputs[Symbol.iterator]();let next=iterator.next();
+  while(!next.done){
     const batch:SourceInput[]=[];let bytes=0;
-    while(at<inputs.length&&batch.length<SOURCE_BATCH_MODULES){
-      const input=inputs[at]!,size=Buffer.byteLength(input.source);if(batch.length&&bytes+size>SOURCE_BATCH_BYTES)break;
-      batch.push(input);bytes+=size;at++;
+    while(!next.done&&batch.length<SOURCE_BATCH_MODULES){
+      const input=next.value,size=Buffer.byteLength(input.source);if(batch.length&&bytes+size>SOURCE_BATCH_BYTES)break;
+      batch.push(input);bytes+=size;next=iterator.next();
     }
     const leases=api.batch(...batch.map(input=>api.createSourceFile.gen(input.parseFile??input.file,input.source)));
     try{for(let i=0;i<batch.length;i++){const input=batch[i]!;inspect(new SourceFacts(input.file,input.source,leases[i]!.sourceFile));}}

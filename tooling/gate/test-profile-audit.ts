@@ -1,7 +1,7 @@
 // Test builders have one owner. Fixtures deliberately exercising Cargo's
 // obsolete artifact variants are the sole exception, in a private tiny crate.
 import type {Node} from 'typescript/ast';
-import {shellCommands} from './shell-commands.ts';
+import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {SourceFacts} from './source-facts.ts';
 
 export const CARGO_TEST_SOURCE_OWNERS={
@@ -25,9 +25,9 @@ export function inspectCargoTestCalls(file:string,source:string,root:Node|Source
   return problems;
 }
 
-export function inspectShellCargoTests(file:string,source:string):string[]{
+export function inspectShellCargoTests(file:string,source:string,shell:ShellCommands=shellCommands(source)):string[]{
   const problems:string[]=[];
-  for(const command of shellCommands(source).commands)if(/(?:^|\/)cargo$/.test(command.name)){
+  for(const command of shell.commands)if(/(?:^|\/)cargo$/.test(command.name)){
     const tail=source.slice(command.start).replace(/\\\n/g,'');
     if(/^(?:['"]?[^\s'"]+['"]?)\s+['"]?test(?:['"]?\s|['"]?$)/.test(tail))problems.push(file+':'+source.slice(0,command.start).split('\n').length+': cargo test must run through test-profile.ts');
   }

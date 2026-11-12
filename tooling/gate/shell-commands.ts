@@ -1,10 +1,11 @@
 // Literal shell command words, including commands inside substitutions.
 // Quoted arguments and heredoc data cannot turn prose into a command.
 export type ShellCommand={name:string;start:number};
-export type ShellCommands={commands:ShellCommand[];data:{start:number;end:number}[]};
+export type ShellRedirection={operator:string;target:string;dynamic:boolean;start:number;end:number};
+export type ShellCommands={commands:ShellCommand[];data:{start:number;end:number}[];redirections:ShellRedirection[]};
 
 export function shellCommands(source:string):ShellCommands {
-  const commands:ShellCommand[]=[],data:ShellCommands['data']=[];
+  const commands:ShellCommand[]=[],data:ShellCommands['data']=[],redirections:ShellRedirection[]=[];
   const prefixes=new Set(['if','then','elif','else','while','until','do','!','time','command','exec','builtin']);
   type Here={delimiter:string;quoted:boolean;tabs:boolean};
   function arithmetic(start:number,end:number):number {
@@ -31,11 +32,11 @@ export function shellCommands(source:string):ShellCommands {
     }
   }
   function scan(start:number,end:number,stop?:')'|'`'):number {
-    let i=start,command=true,word='',wordStart=start,dynamic=false,redirect=false,depth=0;
+    let i=start,command=true,word='',wordStart=start,dynamic=false,redirect=false,depth=0,redirectStart=0,redirectOperator='';
     const pending:Here[]=[];
     const finish=()=>{
       if(!word&&!dynamic)return;
-      if(redirect)redirect=false;
+      if(redirect){redirections.push({operator:redirectOperator,target:word,dynamic,start:redirectStart,end:i});redirect=false;}
       else if(command){
         if(!dynamic&&(/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)||prefixes.has(word))){/* The command follows. */}
         else {if(!dynamic)commands.push({name:word,start:wordStart});command=false;}
@@ -67,7 +68,9 @@ export function shellCommands(source:string):ShellCommands {
       }
       if(c==='#'&&!word&&!dynamic){while(i<end&&source[i]!=='\n')i++;continue;}
       if(c==='<'||c==='>'){
-        if(/^\d+$/.test(word))word='';else finish();
+        const descriptor=/^\d+$/.test(word)?word:'';
+        redirectStart=descriptor?wordStart:i;
+        if(descriptor)word='';else finish();
         if(source.startsWith('<<',i)&&source[i+2]!=='<'){
           i+=2;const tabs=source[i]==='-';if(tabs)i++;
           while(i<end&&/[ \t]/.test(source[i]!))i++;
@@ -82,7 +85,7 @@ export function shellCommands(source:string):ShellCommands {
             else delimiter+=source[i++]!;
           }
           pending.push({delimiter,quoted,tabs});
-        }else {i++;while(i<end&&source[i]===c)i++;redirect=true;}
+        }else {const operatorStart=i;i++;while(i<end&&source[i]===c)i++;redirectOperator=descriptor+source.slice(operatorStart,i);redirect=true;}
         continue;
       }
       if(c==='\n'){
@@ -112,5 +115,5 @@ export function shellCommands(source:string):ShellCommands {
     finish();return i;
   }
   scan(0,source.length);
-  return {commands:commands.sort((a,b)=>a.start-b.start),data};
+  return {commands:commands.sort((a,b)=>a.start-b.start),data,redirections};
 }
