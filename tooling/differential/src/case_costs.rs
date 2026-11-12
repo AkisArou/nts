@@ -99,12 +99,16 @@ fn self_peak_rss_kb() -> Option<u64> {
 pub(crate) fn event(mut value: serde_json::Value) {
     CONTEXT.with_borrow_mut(|context| {
         if let Some(context) = context.as_mut().filter(|context| !context.failed) {
-            value["project"] = context.project.clone().into();
-            value["step"] = context.step.clone().into();
-            value["pid"] = std::process::id().into();
-            value["version"] = 2.into();
-            value["cpu_measure"] = "getrusage-v1".into();
-            value["cpu_resolution_s"] = 0.000_001.into();
+            // One file has one context. Readers take identity and resolution
+            // from its case header; phases carry only their own observations.
+            if value["event"] == "case" {
+                value["project"] = context.project.clone().into();
+                value["step"] = context.step.clone().into();
+                value["pid"] = std::process::id().into();
+                value["version"] = 2.into();
+                value["cpu_measure"] = "getrusage-v1".into();
+                value["cpu_resolution_s"] = 0.000_001.into();
+            }
             // An unavailable/full metrics directory must never change the
             // command's output or status. The runner reports missing/partial
             // timing records independently from the product verdict.
@@ -324,6 +328,9 @@ mod tests {
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
+        assert_eq!(rows[0]["project"], "fixture");
+        assert_eq!(rows[0]["cpu_measure"], "getrusage-v1");
+        assert!(rows[1..].iter().all(|row| row.get("project").is_none()));
         assert!(
             rows.iter()
                 .any(|row| row["event"] == "child.result" && row["exit"] == 7)
