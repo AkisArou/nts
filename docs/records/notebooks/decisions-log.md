@@ -2273,3 +2273,19 @@ case classification. Fixtures inject runner results. A shared Worker bridge
 was rejected as unnecessary machinery for these synchronous questions; their
 existing APIs and product-specific case bounds remain intact. See
 [the contract](../../workflow.md#the-machine).
+## Pooled cases own memory admission (11-12)
+
+The benches A* LLVM compile and dex flight-planner emit-jvm were killed by
+forecast-derived step worker limits below their own case caps. Both were
+reported as system pressure, although the kernel named an ancestor cgroup.
+
+One runner-owned case lease now uses stable step, backend and source-path
+history. Known cases ask for their measured peaks; unknown cases are charged
+live use and the ledger margin. The token pool admits their sum inside the
+run reservation and requests growth for a case larger than the initial grant.
+A separate worker-boundary registration raises the enclosing worker subtree
+before execution without enlarging any real enclosing case cap. The lease
+keeps its token through final peak capture and worker drain. Local ancestor
+OOM counters identify the firing cgroup and both limits. JavaScript pools,
+resident feeds and shell pools share this owner. Governs
+[the machine](../../workflow.md#the-machine).

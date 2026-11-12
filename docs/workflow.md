@@ -456,6 +456,18 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   receipts preserve both bases; imported work records zero executed CPU and
   keeps its original measurement in `origin`. Combined summaries partition
   totals by basis. Separate build preparation still names its rusage basis.
+- **Pooled cases own their memory admission.** One case lease follows the
+  stable step, backend and source path; compiler and content identities do
+  not erase its measured peaks. A known case reserves its own peak with the
+  ledger's margin. An unknown case is charged live use and that margin.
+  Active case promises and fixed steps share the run's admitted reservation;
+  a case that needs more asks for admitted growth before starting. The hard
+  case cap is separate from this forecast. Before entry, the common worker
+  owner raises the worker subtree to hold its admitted case caps; nested
+  work cannot enlarge a real enclosing case cap. Each lease keeps its token
+  until its final peak is retained and its workers have drained. A kill by
+  an ancestor limit names that cgroup, its cap and the case cap, rather than
+  claiming host-wide memory pressure.
 - **Resource observations belong to the run.** `HostObservations`
   (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
   admission, oracle dependency capture, temporary pruning, the memory ledger,
@@ -548,6 +560,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Pooled cases carry their own measured memory**: stable per-case history
+  governs admission, while independent hard caps bound workers. Registration
+  verifies the kernel boundary before entry, and completion retains the
+  token through final observation and worker drain
+  ([log](records/notebooks/decisions-log.md#pooled-cases-own-memory-admission-11-12)).
 
 - **Declared readers place inputs; inference only adds reach:** module assets
   use parsed imports and named module-relative URLs. Anchors do not claim

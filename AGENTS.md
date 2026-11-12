@@ -322,6 +322,10 @@ silently ran zero tests after its test gained a module prefix.
   `test262-records` for the five test262 records (through `admit.ts`), and
   `perf-count` for instruction counts (through `with-lock.sh`). Put the
   issue and experiment in `--what` or the log name, never in these keys.
+  Pooled cases use the common case lease, keyed by step, backend and source
+  path. On 2026-11-12 step-average sizing killed A* and flight-planner below
+  their own caps. [The workflow](docs/workflow.md#the-machine) defines
+  per-case admission, hard boundaries and completion ownership.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the
