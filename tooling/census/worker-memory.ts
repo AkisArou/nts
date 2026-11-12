@@ -230,8 +230,6 @@ function ownRun(run:MemoryRun):void{
     for(const result of results)if(result.status==='rejected'){console.error(String(result.reason));process.exitCode=2;}
   };
   process.on('beforeExit',finish);
-  for(const [signal,code] of [['SIGINT',130],['SIGTERM',143]] as const)
-    process.once(signal,()=>{void finish().finally(()=>process.exit(code));});
 }
 
 export class MemoryRun {
