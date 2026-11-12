@@ -68,7 +68,8 @@ for await (const path of lines) {
     // never runs ahead of dispatch, and its snapshot closes before the row.
     let capture:TypeScriptOracleCapture|undefined;
     if(tools.language==='ts'&&!reference)sourceOracle??=new OracleWorker(join(scratch,'oracle-worker'),oracleToolchainLocation());
-    const reused=reference?.get(path,oracleResultHash(source));
+    const lookup=()=>reference?.get(path,oracleResultHash(source));
+    const reused=reference&&phaseCosts?phaseCosts.measure('comparison',lookup):lookup();
     if(reused)oracleOutput=reused.printed;
     const admitted = reused?.verdict??(tools.language === "ts" ? await oracle(source, dir, (stdout, stderr) => { oracleOutput = { stdout, stderr }; },sourceOracle,
       language==='oracle'?{projectDirectory:join(referenceInputs!,oracleResultHash(path)),outputDirectory:join(scratch,'reference-output'),record:value=>{capture=value;}}:undefined) : { ok: true as const });

@@ -40,7 +40,7 @@ import {cacheLocation} from '../gate/cache-capabilities.ts';
 // does for an archive the JVM will not map: the archive changes how fast a run
 // starts and nothing it answers.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync,type ExecFileSyncOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -74,13 +74,14 @@ const archives = new Map<string, string | null>();
 
 /** What `build` answers: the directory, a lasting failure, or another's lock. */
 type Built = string | null | "busy";
+type PreparationCommand=(command:string,args:readonly string[],options:ExecFileSyncOptions)=>unknown;
 
 function cacheRoot(): string {
   return cacheLocation('NTS_JVM_CDS_DIR',process.env,()=>join(homedir(), ".cache", "nts", "jvm-cds"));
 }
 
 /** The directory holding the archive for the runtime jar at `jar`, made if absent. */
-export function archiveFor(jar: string): string | null {
+export function archiveFor(jar: string,run:PreparationCommand=execFileSync): string | null {
   const bytes = readFileSync(jar);
   const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
   const known = archives.get(hash);
@@ -88,7 +89,7 @@ export function archiveFor(jar: string): string | null {
     return known;
   }
   const dir = join(cacheRoot(), hash);
-  const made: Built = existsSync(join(dir, "nts.jsa")) ? dir : build(dir, bytes);
+  const made: Built = existsSync(join(dir, "nts.jsa")) ? dir : build(dir, bytes,run);
   if (made === "busy") {
     return null;
   }
@@ -102,7 +103,7 @@ export function archiveFor(jar: string): string | null {
  * failure is written to `failed.txt` and not retried, so a JDK that cannot dump
  * costs one attempt, not one per case.
  */
-function build(dir: string, bytes: Buffer): Built {
+function build(dir: string, bytes: Buffer,run:PreparationCommand): Built {
   mkdirSync(dir, { recursive: true });
   if (existsSync(join(dir, "failed.txt"))) {
     return null;
@@ -122,13 +123,13 @@ function build(dir: string, bytes: Buffer): Built {
   try {
     const jar = join(dir, "nts-runtime.jar");
     writeFileSync(jar, bytes);
-    execFileSync("javac", [...vmToolFlags("javac"), "--release", "8", "-nowarn", "-d", work, join(HERE, "NtsCdsWarm.java")], {
+    run("javac", [...vmToolFlags("javac"), "--release", "8", "-nowarn", "-d", work, join(HERE, "NtsCdsWarm.java")], {
       stdio: ["ignore", "ignore", "pipe"],
     });
     const warm = join(dir, "warm.jar");
-    execFileSync("jar", [...vmToolFlags("jar"), "cf", warm, "-C", work, "NtsCdsWarm.class"], { stdio: ["ignore", "ignore", "pipe"] });
+    run("jar", [...vmToolFlags("jar"), "cf", warm, "-C", work, "NtsCdsWarm.class"], { stdio: ["ignore", "ignore", "pipe"] });
     const partial = join(dir, `nts.jsa.${process.pid}`);
-    execFileSync(
+    run(
       "java",
       [...FLAGS, `-XX:ArchiveClassesAtExit=${partial}`, "-cp", `${jar}:${warm}`, "NtsCdsWarm", jar],
       { stdio: ["ignore", "ignore", "pipe"] },
@@ -149,9 +150,9 @@ function build(dir: string, bytes: Buffer): Built {
  * args]`, as a runner's `run` answers. From the archive where it exists, and
  * the plain launch otherwise.
  */
-export function jvmRun(out: string): [string, string[]] {
+export function jvmRun(out: string,run:PreparationCommand=execFileSync): [string, string[]] {
   const jar = join(out, "nts-runtime.jar");
-  const dir = archiveFor(jar);
+  const dir = archiveFor(jar,run);
   if (dir === null) {
     return ["java", [...FLAGS, "-Xshare:auto", "-cp", `${out}:${jar}`, ...MAIN]];
   }

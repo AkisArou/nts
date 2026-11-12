@@ -19,7 +19,7 @@ import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
 import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/compile-diagnostics.ts";
 import { outputOracle } from "./output-oracle.ts";
-import {censusPhaseCosts,recordCensusPhaseFrame} from './phase-costs.ts';
+import {censusPhaseCosts,recordCensusPhaseFrame,type CensusPhaseCosts} from './phase-costs.ts';
 
 /**
  * What the compiler printed as it stopped, as it printed it: its panic, from
@@ -320,7 +320,7 @@ function linkC(stdout, out, tools) {
   let args = printed;
   let objects;
   try {
-    const bundled = printed.includes("-luv") ? bundledDependencies(tools.nts, ["uv"], [cc]) : null;
+    const bundled = printed.includes("-luv") ? bundledDependencies(tools.nts, ["uv"], [cc],tools.phaseCosts?.spawn.bind(tools.phaseCosts)) : null;
     const inputs = bundled
       ? [...bundled.include_flags, ...printed.filter(part => part !== "-luv")]
       : printed;
@@ -424,7 +424,7 @@ export const BACKENDS = {
   jvm: {
     emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out, "--main"],
     prepare: () => ({ objects: undefined }),
-    run: (out) => jvmRun(out),
+    run: (out,tools:{phaseCosts?:CensusPhaseCosts}) => jvmRun(out,tools.phaseCosts?(command,args,options)=>tools.phaseCosts!.exec(command,args,{...options,encoding:'utf8'}):undefined),
     capsItself: true,
   },
 };
@@ -560,7 +560,8 @@ async function attemptWithCosts(dir, body, tools, origin?) {
   const { objects } = prepared;
 
   try {
-    const [program, programArgs] = backend.run(out, tools);
+    const launch=()=>backend.run(out,tools);
+    const [program,programArgs]=tools.phaseCosts?tools.phaseCosts.measure('host_compile_link',launch):launch();
     const runTools = backend.capsItself ? { ...tools, memoryCapKb: 0 } : tools;
     const execute=()=>(tools.phaseCosts?.exec.bind(tools.phaseCosts)??execFileSync)("sh", capped(runTools, program, programArgs), {
       encoding: "utf8",
