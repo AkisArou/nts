@@ -91,6 +91,13 @@ test("input ancestry queries retain declaration order after replacement and rein
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
 
+test('the data declaration leaf and its project have an explicit tooling owner',()=>{
+  for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
+    const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');
+    assert.ok(rule?.when(path),path);assert.deepEqual(rule.steps,['tooling']);
+  }
+});
+
 test('an unplaced path owes the full gate whether or not the host audit reaches it',t=>{
   const root=mkdtempSync(join(tmpdir(),'nts-host-closure-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const directory of ['tooling/conformance','compiler','runtime'])mkdirSync(join(root,directory),{recursive:true});

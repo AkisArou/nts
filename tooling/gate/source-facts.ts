@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import type {ModuleDeclarations,ReaderInput} from './reader-inputs.ts';
+import type {ModuleDeclarations,ReaderInput} from './reader-inputs/main.ts';
 
 type Syntax=typeof import('typescript/ast');
 let syntax:Syntax|undefined;
@@ -188,7 +188,7 @@ export class SourceFacts {
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments.length===1&&parent.arguments[0]===node?this.name(parent.expression):'';
         const owner=/^(\.{1,2}\/.*)\.dataDirectory$/.exec(called)?.[1];
-        const data=owner&&posix.normalize(posix.join(posix.dirname(this.file),owner))==='tooling/gate/reader-inputs.ts';
+        const data=owner&&posix.normalize(posix.join(posix.dirname(this.file),owner))==='tooling/gate/reader-inputs/main.ts';
         assets.push({path:literal.text,kind:data?'data':'module'});
       }
     }

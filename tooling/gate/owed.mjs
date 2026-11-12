@@ -1055,6 +1055,12 @@ export const RULES = [
     arms: [{kind:"valid",asks:"read-only inferred-edge provenance, classification and lossless reproduction",run:"node tooling/gate/reader-census.ts reproduce <output directory>"}],
   },
   {
+    name: "reader input declaration ownership",
+    when: (/** @type {string} */ p) => /^tooling\/gate\/reader-inputs\/(?:main\.ts|tsconfig\.json)$/.test(p),
+    steps: ["tooling"],
+    arms: [{kind:"valid",asks:"data declarations retain lexical ownership and a one-file oracle project",run:"node --test tooling/gate/source-facts.test.ts tooling/gate/module-closure-fixture.test.ts"}],
+  },
+  {
     name: "Git observation ownership",
     when: (/** @type {string} */ p) => /^tooling\/gate\/(?:git-arguments\/(?:main\.ts|tsconfig\.json)|git-observations(?:\.test)?\.ts)$/.test(p),
     steps: ["tooling"],

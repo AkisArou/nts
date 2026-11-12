@@ -17,9 +17,9 @@ function fixture(t: TestContext) {
 
 function dataFixture(t:TestContext){
   const f=fixture(t);
-  f.write('tooling/gate/reader-inputs.ts','export const dataDirectory=(url:URL)=>url;');
+  f.write('tooling/gate/reader-inputs/main.ts','export const dataDirectory=(url:URL)=>url;');
   f.write('entry.ts',`import {readFileSync} from 'node:fs';
-import {dataDirectory} from './tooling/gate/reader-inputs.ts';
+import {dataDirectory} from './tooling/gate/reader-inputs/main.ts';
 const data=dataDirectory(new URL('./data/',import.meta.url));
 console.log(readFileSync(new URL('case.ts',data),'utf8'));`);
   // This is corpus source, not a module run by the host reader.
@@ -34,7 +34,7 @@ console.log(readFileSync(new URL('case.ts',data),'utf8'));`);
 test('a declared data directory copies all tracked data without parsing it as host modules',t=>{
   const f=dataFixture(t);f.write('data/untracked.txt','not an input');
   const files=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source});
-  assert.deepEqual(files,['data/case.ts','data/nested/second.txt','entry.ts','tooling/gate/reader-inputs.ts']);
+  assert.deepEqual(files,['data/case.ts','data/nested/second.txt','entry.ts','tooling/gate/reader-inputs/main.ts']);
   for(const name of files)assert.deepEqual(readFileSync(join(f.destination,name)),readFileSync(join(f.source,name)));
   assert.equal(existsSync(join(f.destination,'data/untracked.txt')),false);
   assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false);
@@ -43,7 +43,7 @@ test('a declared data directory copies all tracked data without parsing it as ho
 test('a fixture data namespace stages its reader without reading the replaced production bytes',t=>{
   const f=dataFixture(t);f.privateData();rmSync(join(f.source,'data/case.ts'));
   const files=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'synthetic cases'}});
-  assert.deepEqual(files,['entry.ts','tooling/gate/reader-inputs.ts']);
+  assert.deepEqual(files,['entry.ts','tooling/gate/reader-inputs/main.ts']);
   assert.equal(existsSync(join(f.destination,'data/nested/second.txt')),false);
   const manifest=JSON.parse(readFileSync(join(f.destination,FIXTURE_INPUT_MANIFEST),'utf8')) as unknown;
   assert.deepEqual(manifest,{version:1,data:[{directory:'data',fixtureOwner:'synthetic cases',readers:['entry.ts']}]});
@@ -86,7 +86,7 @@ for(const edge of ['entry','import','asset']as const)test(`a ${edge} module rema
 });
 
 test('a manifest merges declaring readers but refuses a changed owner or future version',t=>{
-  const f=dataFixture(t);f.privateData();f.write('second.ts',"import {dataDirectory} from './tooling/gate/reader-inputs.ts';const data=dataDirectory(new URL('./data/',import.meta.url));");
+  const f=dataFixture(t);f.privateData();f.write('second.ts',"import {dataDirectory} from './tooling/gate/reader-inputs/main.ts';const data=dataDirectory(new URL('./data/',import.meta.url));");
   const options={sourceRoot:f.source,dataNamespaces:{data:'owner'}};
   copyModuleClosure(['entry.ts'],f.destination,options);
   assert.throws(()=>copyModuleClosure(['second.ts'],f.destination,{sourceRoot:f.source}),/repeat its explicit grant: data/);
@@ -127,7 +127,7 @@ test('an exact production data-directory link is read-only and retains complete 
   const f=dataFixture(t),before=readFileSync(join(f.source,'data/case.ts'));
   mkdirSync(f.destination);symlinkSync(join(f.source,'data'),join(f.destination,'data'),'dir');
   const options={sourceRoot:f.source,reuseSourceLinks:true};
-  for(let pass=0;pass<2;pass++)assert.deepEqual(copyModuleClosure(['entry.ts'],f.destination,options),['data/case.ts','data/nested/second.txt','entry.ts','tooling/gate/reader-inputs.ts']);
+  for(let pass=0;pass<2;pass++)assert.deepEqual(copyModuleClosure(['entry.ts'],f.destination,options),['data/case.ts','data/nested/second.txt','entry.ts','tooling/gate/reader-inputs/main.ts']);
   assert.equal(lstatSync(join(f.destination,'data')).isSymbolicLink(),true);
   assert.deepEqual(readFileSync(join(f.source,'data/case.ts')),before);
   assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{...options,dataNamespaces:{data:'private cases'}}),/not an owned directory/);
@@ -183,7 +183,7 @@ test('exact source file and directory links cannot declare untracked input membe
 test('nested data declarations share one granted namespace and reject ambiguous grants',t=>{
   for(const directory of ['data','data/nested']){
     const f=dataFixture(t);f.privateData();
-    f.write('nested-reader.ts',"import {dataDirectory} from './tooling/gate/reader-inputs.ts';const data=dataDirectory(new URL('./data/nested/',import.meta.url));");
+    f.write('nested-reader.ts',"import {dataDirectory} from './tooling/gate/reader-inputs/main.ts';const data=dataDirectory(new URL('./data/nested/',import.meta.url));");
     mkdirSync(join(f.destination,'data/nested'));writeFileSync(join(f.destination,'data/nested/private.txt'),'synthetic nested data');
     assert.throws(()=>copyModuleClosure(['entry.ts','nested-reader.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'parent','data/nested':'child'}}),/overlapping fixture data namespaces/);
     assert.equal(existsSync(join(f.destination,'entry.ts')),false);
@@ -203,7 +203,7 @@ test('fixture namespaces refuse symlinked directories, parents, members and mani
     const f=dataFixture(t),foreign=join(dirname(f.destination),'foreign');mkdirSync(foreign);mkdirSync(f.destination);
     if(shape==='directory')symlinkSync(foreign,join(f.destination,'data'),'dir');
     else if(shape==='parent'){
-      f.write('entry.ts',"import {dataDirectory} from './tooling/gate/reader-inputs.ts';const data=dataDirectory(new URL('./parent/data/',import.meta.url));");
+      f.write('entry.ts',"import {dataDirectory} from './tooling/gate/reader-inputs/main.ts';const data=dataDirectory(new URL('./parent/data/',import.meta.url));");
       f.write('parent/data/case.txt','production');const added=spawnTest('git',gitArguments(['add','.']),{cwd:f.source,encoding:'utf8'});assert.equal(added.status,0,added.stderr);
       mkdirSync(join(foreign,'data'));symlinkSync(foreign,join(f.destination,'parent'),'dir');
     }else {f.privateData();if(shape==='member')symlinkSync(join(f.source,'data/case.ts'),join(f.destination,'data/link.ts'));

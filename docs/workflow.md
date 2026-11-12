@@ -153,7 +153,7 @@ tracked file beneath it when it resolves to a directory. The census names
 each directory declaration, its reader and its breadth. Conservative path
 inference may add checks; it cannot place a path or remove its full fallback.
 `dataDirectory(new URL("directory/", import.meta.url))`, from
-`tooling/gate/reader-inputs.ts`, declares a data directory: its tracked members
+`tooling/gate/reader-inputs/main.ts`, declares a data directory: its tracked members
 are inputs, not host modules to parse. Entry modules, imports and unbranded
 URL assets retain their own production bytes even inside a data directory.
 The declaration rows are independent of source language; other reader adapters

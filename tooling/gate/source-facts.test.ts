@@ -1,9 +1,25 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {SourceFacts,GeneratedSourceFacts,inspectSourceBatches,SOURCE_BATCH_BYTES,SOURCE_BATCH_MODULES} from './source-facts.ts';
+import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
+
+test('the oracle compiles the data declaration leaf under its own one-file project',()=>{
+  const entry=fileURLToPath(new URL('./reader-inputs/main.ts',import.meta.url));
+  const project=new OracleFilesystem().projectFor(entry);
+  assert.equal(project,fileURLToPath(new URL('./reader-inputs/tsconfig.json',import.meta.url)));
+  const api=new API();
+  try{
+    const parsed=api.parseConfigFile(project!);assert.deepEqual(parsed.fileNames,[entry]);
+    const program=api.createProgram(parsed.fileNames,parsed.options);
+    try{assert.deepEqual([...parsed.errors,...program.getProgramDiagnostics(),...program.getGlobalDiagnostics(),
+      ...program.getSyntacticDiagnostics(),...program.getBindDiagnostics(),...program.getSemanticDiagnostics()],[]);}
+    finally{program.dispose();}
+  }finally{api.close();}
+});
 
 test('one structural pass supplies lexical bindings, parents, subtree calls and detached edges',()=>{
   const api=new API(),source=`import {writeFileSync as write} from 'node:fs';
@@ -37,8 +53,8 @@ test('generated source is parsed once per parent session and shares its structur
 });
 
 test('data directories are recognized by their lexical owner, including aliases but not shadows',()=>{
-  const api=new API(),source=`import {dataDirectory as data} from './reader-inputs.ts';
-import * as inputs from './reader-inputs.ts';
+  const api=new API(),source=`import {dataDirectory as data} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
 import {dataDirectory as other} from './lookalike.ts';
 const alias=data;const {dataDirectory:destructured}=inputs;
 data(new URL('./direct/',import.meta.url));alias(new URL('./alias/',import.meta.url));

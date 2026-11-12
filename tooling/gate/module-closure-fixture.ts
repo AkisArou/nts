@@ -7,7 +7,7 @@ import {createRequire} from "node:module";
 import {moduleGraph, type ModuleClosureOptions} from "./module-closure.ts";
 import {OracleFilesystem} from "../differential/oracle-filesystem.ts";
 import {outsideSource} from "./source-containment.ts";
-import type {InputSnapshot} from './reader-inputs.ts';
+import type {InputSnapshot} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 export {moduleClosure} from "./module-closure.ts";

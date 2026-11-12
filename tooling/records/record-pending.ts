@@ -72,7 +72,7 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // merged what applies, 1 for a delta it cannot read or that names a record
 // no recorder writes (before writing anything), and it does not commit.
 import assert from "node:assert/strict";
-import {dataDirectory} from '../gate/reader-inputs.ts';
+import {dataDirectory} from '../gate/reader-inputs/main.ts';
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";

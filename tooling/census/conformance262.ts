@@ -135,7 +135,7 @@ import {cacheLocation} from '../gate/cache-capabilities.ts';
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
 import {hostObservations} from "../gate/host-observations.ts";
-import {dataDirectory} from '../gate/reader-inputs.ts';
+import {dataDirectory} from '../gate/reader-inputs/main.ts';
 import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";

@@ -8,8 +8,8 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
-import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind} from './reader-inputs.ts';
-export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs.ts';
+import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind} from './reader-inputs/main.ts';
+export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
