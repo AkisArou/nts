@@ -6,7 +6,7 @@ import {newTestScratch} from './test-scratch.ts';
 import {toolingSliceArgs,toolingSlicePrefix} from './tooling-slice.ts';
 import {waitFor} from './test-wait.ts';
 import assert from 'node:assert/strict';
-import {existsSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {test} from 'node:test';
 import {inspectRecordPublications} from './test-readiness.ts';
@@ -78,15 +78,15 @@ test('the host audit can lend its root without another source parse',()=>{
 });
 
 test('a paused half-write stays private until the owner publishes the whole record',async t=>{
-  const root=newTestScratch('record-half-write'),target=join(root,'record.json'),ready=join(root,'half-ready'),release=join(root,'release');
+  const root=newTestScratch('record-half-write'),target=join(root,'record.json'),ready=join(root,'half-ready');
   const unit=toolingSlicePrefix('record-publication-'+randomUUID()),env=fixtureEnvironment(t);
   t.after(()=>{spawnSync('systemctl',['--user','stop',unit],{env,stdio:'ignore'});rmSync(root,{recursive:true,force:true});});
   const source=`import * as fs from 'node:fs';
 import {mock} from 'node:test';
-const [target,ready,release]=process.argv.slice(1);
+const [target,ready]=process.argv.slice(1);
 const put=(fd,bytes)=>{
  const half=Math.floor(bytes.length/2);fs.writeSync(fd,bytes.slice(0,half));fs.writeFileSync(ready,'half written');
- const pause=new Int32Array(new SharedArrayBuffer(4));while(!fs.existsSync(release))Atomics.wait(pause,0,0,10);
+ fs.readSync(0,Buffer.alloc(1),0,1,null);
  fs.writeSync(fd,bytes.slice(half));
 };
 mock.module('node:fs',{namedExports:{closeSync:fs.closeSync,fsyncSync:fs.fsyncSync,mkdirSync:fs.mkdirSync,openSync:fs.openSync,renameSync:fs.renameSync,rmSync:fs.rmSync,writeFileSync:put}});
@@ -94,14 +94,14 @@ const {durableRecord}=await import(${JSON.stringify(new URL('./durable-record.ts
 durableRecord(target,{ready:true,payload:'complete bytes'});`;
   const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--quiet',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0','-p','RuntimeMaxSec=300s',
     ...Object.entries(env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
-    process.execPath,'--experimental-test-module-mocks','--input-type=module','-e',source,target,ready,release],{env,stdio:['ignore','pipe','pipe']});
+    process.execPath,'--experimental-test-module-mocks','--input-type=module','-e',source,target,ready],{env,stdio:['pipe','pipe','pipe']});
   let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
   const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
   await waitFor('the owner to pause after writing half its temporary',()=>existsSync(ready));
   assert.equal(existsSync(target),false,'the reader cannot see the unfinished record');
   const pending=readdirSync(root).filter(name=>name.startsWith('record.json.'));assert.equal(pending.length,1);
   assert.throws(()=>JSON.parse(readFileSync(join(root,pending[0]!), 'utf8')),'the control really stopped halfway through JSON');
-  writeFileSync(release,'finish publication');assert.equal(await closed,0,output);
+  child.stdin.end('finish publication');assert.equal(await closed,0,output);
   assert.deepEqual(JSON.parse(readFileSync(target,'utf8')),{ready:true,payload:'complete bytes'});
   assert.deepEqual(readdirSync(root).filter(name=>name.startsWith('record.json.')),[]);
 });

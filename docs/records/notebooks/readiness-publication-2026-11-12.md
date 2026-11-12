@@ -46,3 +46,10 @@ audit inside the loaded suite is not a standalone comparison.
 
 Detailed logs and the native-parser reduction remain in
 ~/.cache/nts-handover/codex-helper/readiness-730/. No upstream report was sent.
+
+The first landing ran 1,948 tests (1,945 pass, one failure, two standing
+Unicode todos). Its one failure was the timing audit catching this change's
+polling sleep in the half-write control. The control now blocks on stdin and
+the parent releases it with a byte. All 14 publication/timing controls pass,
+and strict checking passes after that change. Test-focused proof includes the
+timing audit from here on.
