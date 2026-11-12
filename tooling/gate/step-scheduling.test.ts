@@ -15,7 +15,7 @@ import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
-import {RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
+import {COST_HISTORY_VERSION,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
@@ -146,7 +146,7 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
   const baseline = fixtureBaseline("tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n");
   writeFileSync(join(gate, "times.tsv"), baseline);
   // The run's history is the test's own, as its memory is.
-  const memory = ownMemory(join(own, "memory"),{cpu:{kind:"fixed",default:{usageUsec:5_000_000,userUsec:4_000_000,systemUsec:1_000_000}}}), historyFile = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
+  const memory = ownMemory(join(own, "memory"),{cpu:{kind:"fixed",default:{usageUsec:5_000_000,userUsec:4_000_000,systemUsec:1_000_000}}}), historyFile = schedulingHistoryFile(memory);
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
   writeFileSync(historyFile, JSON.stringify({version:4,cpu_measure:STEP_CPU_MEASURE,jobs:{},steps:{tests:{cpu:100},"typescript-c":{cpu:8000},"typescript-oracles":{cpu:16000}}}) + "\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
@@ -185,7 +185,7 @@ fi
   // canonical alone and not inside a gate, whose variables make it an experiment.
   const measured = summary.steps.find(step => step.name === "typescript-c")?.cpu;
   const written = summary.environment?.canonical === true && typeof measured === "number" && measured > 0;
-  assert.equal(JSON.parse(readFileSync(historyFile, "utf8")).version,4);
+  assert.equal(JSON.parse(readFileSync(historyFile, "utf8")).version,COST_HISTORY_VERSION);
   assert.equal(stepCpu(readCostHistory(historyFile)).get("typescript-c"), written ? measured : 8000,
     "a canonical run records the step's measured CPU; any other run leaves the history as it was");
 });
@@ -295,7 +295,7 @@ else
 fi
 `);
   const memory = ownMemory(join(own, "memory"), { availableKiB, totalKiB,resident:liveResident?{kind:"live"}:{kind:"fixed",defaultBytes:2**20} });
-  const history = join(memory.NTS_GATE_COSTS_DIR, "steps.json");
+  const history = schedulingHistoryFile(memory);
   mkdirSync(memory.NTS_GATE_COSTS_DIR);
   writeFileSync(history, JSON.stringify({ version: 3, jobs: {}, steps: Object.fromEntries(Object.entries(rows).flatMap(([name, row]) => row.reserve === undefined ? []
     : [[name, { memory: { unit: row.elastic ? "token" : "step", peaks: [peakFor(row.reserve * GiB)] } }]])) }) + "\n");
@@ -779,7 +779,7 @@ test('the CPU instrument migration keeps memory peaks but resets legacy CPU and 
   assert.equal(writeCostHistory(file,{steps:[{name:'tests',verdict:'PASS',cpu:4,cpu_measure:STEP_CPU_MEASURE}]}),undefined);
   assert.equal(stepCpu(readCostHistory(file)).get('tests'),4);
   assert.deepEqual(readCostHistory(file).steps.get('tests')!.memory,memory);
-  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,COST_HISTORY_VERSION);
 });
 
 test('the runner never classifies an accounting switch as a CPU regression',t=>{
