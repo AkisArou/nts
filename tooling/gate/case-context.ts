@@ -24,24 +24,27 @@ export async function closeCaseWorkers(receipt:CaseReceipt):Promise<void>{
 // A slow broker is not a case outcome. Five minutes detects a wedged peer,
 // well beyond loaded manager/ledger startup, and names the cleanup instrument.
 export const CASE_RETIRE_HANG_MS=5*60_000;
+export type CaseRetirementClock={arm:(callback:()=>void,milliseconds:number)=>()=>void};
 /** Capture the last peak before the owner removes a worker cgroup. */
-export function retireCaseScope(receipt:CaseReceipt|undefined,group:string):Promise<void>{
+export function retireCaseScope(receipt:CaseReceipt|undefined,group:string,clock?:CaseRetirementClock):Promise<void>{
   if(!receipt)return Promise.resolve();
+  const deadline=clock??{arm:(callback:()=>void,milliseconds:number)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);}};
+  if(typeof deadline.arm!=='function')throw new TypeError('case retirement clock is incomplete');
   return new Promise((resolve,reject)=>{
     const label=`case memory: cannot retire lease ${receipt.id} group ${group} through broker ${receipt.address}`;
     const socket=connect({host:'127.0.0.1',port:Number(receipt.address.split(':')[1])});
-    let text='',answered=false;
-    const timer=setTimeout(()=>fail('wedged broker did not answer within the five-minute cleanup backstop'),CASE_RETIRE_HANG_MS);
+    let text='',answered=false,cancel=()=>{};
     const fail=(reason:string)=>{
-      if(answered)return;answered=true;clearTimeout(timer);socket.destroy();
+      if(answered)return;answered=true;cancel();socket.destroy();
       reject(new ToolingInstrumentError('tooling-cleanup',label+': '+reason));
     };
+    cancel=deadline.arm(()=>fail('wedged broker did not answer within the five-minute cleanup backstop'),CASE_RETIRE_HANG_MS);
     socket.setEncoding('utf8');
     socket.once('connect',()=>socket.write(`retire ${receipt.id} ${group}\n`));
     socket.on('data',(part:string)=>{
       text+=part;if(!text.includes('\n'))return;
       if(text.split('\n')[0]!=='ready'){fail(text.trim());return;}
-      answered=true;clearTimeout(timer);socket.end();resolve();
+      answered=true;cancel();socket.end();resolve();
     });
     socket.once('error',error=>fail(error.message));
     socket.once('close',()=>fail('broker departed before acknowledging the final sample'));

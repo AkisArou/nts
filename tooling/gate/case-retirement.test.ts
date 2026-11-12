@@ -4,7 +4,7 @@ import {createServer,type Socket} from 'node:net';
 import {once} from 'node:events';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {CASE_RETIRE_HANG_MS,retireCaseScope} from './case-context.ts';
+import {CASE_RETIRE_HANG_MS,retireCaseScope,type CaseRetirementClock} from './case-context.ts';
 import {ToolingInstrumentError,publishToolingFailure,readStepInstrument} from './step-result.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseMemoryLease} from './case-memory.ts';
@@ -25,6 +25,12 @@ async function broker(t:{after(fn:()=>void|Promise<void>):void}){
   return {receipt:{address:'127.0.0.1:'+address.port,id:'owned-retirement'},requested};
 }
 
+function retirementClock(){
+  let fire=()=>{},elapsed=0,bound=Infinity,cancelled=false;
+  const clock:CaseRetirementClock={arm(callback,milliseconds){fire=callback;bound=milliseconds;return()=>{cancelled=true;};}};
+  return {clock,advance(milliseconds:number){elapsed+=milliseconds;if(!cancelled&&elapsed>=bound)fire();}};
+}
+
 test('a slow live broker retains the worker and its parent until the last peak is captured',async t=>{
   const b=await broker(t),root=testScratch(t,'case-retirement');
   const env=ownMemory(join(root,'observations'),{resident:{kind:'live'},scopePeak:{kind:'fixed',bytes:16*2**20,resettable:true}});
@@ -39,11 +45,10 @@ test('a slow live broker retains the worker and its parent until the last peak i
   worker.scope(process.execPath,['-e',''],{...env,NTS_GATE_CASE_LEASE_ADDRESS:b.receipt.address,NTS_GATE_CASE_LEASE_ID:b.receipt.id});
   let socket:Socket|undefined;
   t.after(async()=>{socket?.end('ready\n');worker.close();run.close();await Promise.allSettled([worker.closed,run.closed]);lease.close(false);});
-  t.mock.timers.enable({apis:['setTimeout']});
   worker.close();run.close();socket=await b.requested;
   let finished=false;void run.closed.then(()=>{finished=true;});
-  t.mock.timers.tick(45_000);await Promise.resolve();
-  assert.equal(finished,false,'forty-five seconds of broker delay is still pending, not a case failure');
+  await Promise.resolve();
+  assert.equal(finished,false,'the parent stays owned until the broker acknowledges its sample');
   assert.ok(host.cgroupCharge(worker.group)>=0);assert.ok(host.cgroupCharge(run.group)>=0);
   const packet=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS!,'utf8'));packet.scopePeak.bytes=96*2**20;
   writeFileSync(env.NTS_HOST_OBSERVATIONS!,JSON.stringify(packet));
@@ -64,9 +69,17 @@ test('a departed broker is a named cleanup instrument, never a product failure',
 });
 
 test('a live but wedged broker names the lease and group at its five-minute instrument backstop',async t=>{
-  const b=await broker(t);t.mock.timers.enable({apis:['setTimeout']});
-  const pending=retireCaseScope(b.receipt,'/owned/wedged.slice');
+  const b=await broker(t),clock=retirementClock();
+  const pending=retireCaseScope(b.receipt,'/owned/wedged.slice',clock.clock);
   const rejected=assert.rejects(pending,error=>error instanceof ToolingInstrumentError&&error.kind==='tooling-cleanup'
     &&/owned-retirement.*\/owned\/wedged.slice.*five-minute/.test(error.message));
-  await b.requested;t.mock.timers.tick(CASE_RETIRE_HANG_MS);await rejected;
+  await b.requested;clock.advance(CASE_RETIRE_HANG_MS);await rejected;
+});
+
+test('a supplied clock crosses the old thirty-second deadline while the broker still owns the reply',async t=>{
+  const b=await broker(t),clock=retirementClock();
+  const pending=retireCaseScope(b.receipt,'/owned/delayed.slice',clock.clock);
+  let finished=false;void pending.then(()=>{finished=true;});
+  const socket=await b.requested;clock.advance(45_000);await Promise.resolve();
+  assert.equal(finished,false);socket.end('ready\n');await pending;assert.equal(finished,true);
 });
