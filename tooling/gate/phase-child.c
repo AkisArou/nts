@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
                          : posix_spawnp(&child, argv[3], NULL, &attributes,
                                         argv + 3, environ);
   posix_spawnattr_destroy(&attributes);
+  if (exec_error)
+    child = 0;
   child_pid = child;
   struct sigaction action = {.sa_handler = forward};
   sigemptyset(&action.sa_mask);
