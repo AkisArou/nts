@@ -208,8 +208,10 @@ file left untracked is a commit nobody can build.
 `node tooling/gate/inner.ts` runs all of these, then agree on the backends built today (C, LLVM and the JVM)
 against main's pinned compiler, building the tests in the incremental
 `nts-dev` profile: the workspace's tests built cold in 6 minutes and ran in 8
-on 2026-10-22, where the release build took about 40 beside a gate. The gate
-still builds release; this is so the gate is not where you find out.
+on 2026-10-22, where the release build took about 40 beside a gate. Every route builds Rust tests in `nts-dev`, including the gate. The inner
+loop and landing check also build the compiler they drive in `nts-dev`; the
+full gate drives `target/release/nts`, and compiler pins and benchmarks stay
+in `release`.
 
 **Every tooling module is checked strictly by the gate.** `tooling/tsconfig.json`
 owns all tooling TypeScript and the remaining `.mjs` modules with `checkJs`.

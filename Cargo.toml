@@ -108,7 +108,9 @@ codegen-units = 1
 # gate, but built the way a debug build is -- incremental, sixteen code
 # generation units, no link-time optimization -- so a change to one crate
 # rebuilds that crate and its dependents rather than the workspace in one
-# unit. Compiler pins and benchmarks keep `release`.
+# unit. All Rust tests, including the gate's, use this profile. The inner loop
+# and landing check build the compiler they drive here too. The full gate
+# drives target/release/nts; compiler pins and benchmarks keep `release`.
 [profile.nts-dev]
 inherits = "release"
 debug = 0

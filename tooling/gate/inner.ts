@@ -12,11 +12,11 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 // # Why
 //
 // AGENTS.md asks for the gate's commands before a landing: `cargo fmt`, clippy
-// over the workspace, `cargo test --no-fail-fast` over every crate touched and
-// the four backends with one checker per process, and `agree.mjs` on all four backends.
-// Run as the gate builds -- release, one code generation unit, thin LTO -- the
-// tests alone took 30 to 45 minutes beside a gate (2026-10-22), and the gate
-// then built them again. This runs the same tests in the `nts-dev` profile
+// over the workspace, the shared test owner over every crate touched and
+// the three backends with one checker per process, and `agree.mjs`.
+// Release settings with one code generation unit and thin LTO made the tests
+// alone take 30 to 45 minutes beside a gate (2026-10-22), which then built
+// them again. Every route now runs the same tests in the `nts-dev` profile
 // (Cargo.toml): optimized, incremental, with the gate test profile's overflow
 // checks and debug assertions, so a change to one crate rebuilds
 // that crate and what depends on it. It is not a gate and does not replace
@@ -28,7 +28,7 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 //    runtime C the change edited.
 // 2. `cargo clippy --workspace --all-targets -- -D warnings`.
 // 3. Build this tree's `nts-dev` compiler, including with `--no-agree`.
-// 4. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
+// 4. `test-profile.ts inner` (--no-fail-fast) over the touched crates
 //    and the three backends, with the frontend compiled into this tree's binary.
 // 5. `agree.mjs` on c, llvm and jvm, main's pinned compiler before and
 //    this tree's `nts-dev` build after -- and with `NTS_RC=1` on c and llvm
