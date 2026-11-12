@@ -22,6 +22,8 @@ import { peakReservation, readCostHistory } from "./step-scheduling.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import { ownMemory,withoutHanded } from "./test-memory.ts";
+import {toolingSliceArgs} from './tooling-slice.ts';
+import {generatedJavaScript} from './generated-javascript.ts';
 
 const GiB = 2 ** 30;
 const ADMIT = fileURLToPath(new URL("admit.ts", import.meta.url));
@@ -1227,4 +1229,47 @@ test("release under a held directory lock reports and leaves reclamation to the 
   assert.equal(existsSync(path),false);
   assert.match(f.lines.join("\n"),/dropped blocked release's reservation.*has exited/);
   next.release();held.release();
+});
+
+test("a unit signal during cleanup lock acquisition names the fallback and the next decision reclaims it",async t=>{
+  const f=fixture(t),root=testScratch(t,'ledger-lock-signal'),bin=join(root,'bin'),ready=join(root,'lock-ready'),pipe=join(root,'barrier');
+  mkdirSync(bin);
+  const fifo=spawnTest('mkfifo',[pipe],{encoding:'utf8'});assert.equal(fifo.status,0,fifo.stderr);
+  // Only cleanup's blocking acquisition pauses. No lock is held behind this
+  // barrier: the parent still owns fd 8, but flock has not acquired it yet.
+  writeFileSync(join(bin,'flock'),`#!/bin/sh
+if [ "$1" = -w ]; then
+  printf ready > ${JSON.stringify(ready)}
+  read barrier_byte < ${JSON.stringify(pipe)}
+fi
+exec /usr/bin/flock "$@"
+`,{mode:0o755});
+  const script=join(root,'release.ts');
+  writeFileSync(script,generatedJavaScript(`
+import {reserve} from ${JSON.stringify(LEDGER)};
+process.on('SIGTERM',()=>{});
+const held=await reserve({bytes:2**30,what:'signal release control'});
+held.release();
+console.log('release finished');
+`));
+  const env=fixtureEnvironment(t,f.env);env.PATH=bin+':'+env.PATH;
+  const unit='nts-test-ledger-release-'+randomUUID()+'.service';
+  const child=spawn('systemd-run',['--user',...toolingSliceArgs(env),'--unit='+unit,'--collect','--quiet','--wait','--pipe',
+    '-p','LimitCORE=0','-p','Nice=19','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=120s',
+    ...Object.entries(env).filter((row):row is [string,string]=>row[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
+    process.execPath,script],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
+  const closed=once(child,'close');let output='';
+  child.stdout!.on('data',bytes=>{output+=bytes;});child.stderr!.on('data',bytes=>{output+=bytes;});
+  t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
+  await waitFor('cleanup flock to reach its acquisition barrier',()=>existsSync(ready),{stopped:()=>child.exitCode!==null?output:undefined});
+  const free=lockLedger(f.dir);assert.ok(free,'the directory lock is free at the barrier');free.release();
+  const killed=spawnTest('systemctl',['--user','kill','--signal=SIGTERM',unit],{encoding:'utf8'});assert.equal(killed.status,0,killed.stderr);
+  assert.deepEqual(await closed,[0,null],output);
+  assert.match(output,/signal release control release cleanup failed; remaining entries left for dead-owner reclamation:.*flock ended SIGTERM/);
+  assert.match(output,/release finished/);
+  const abandoned=readLedger(f.dir).admitted;assert.equal(abandoned.length,1);assert.equal(abandoned[0]!.live,false);
+  const next=await f.ask({bytes:GiB,what:'after signalled cleanup'});next.release();
+  assert.deepEqual(readLedger(f.dir),{waiting:[],admitted:[]});
+  assert.match(f.lines.join('\n'),/dropped signal release control's reservation.*has exited/);
+  t.diagnostic(JSON.stringify({freeAtBarrier:free!==null,abandoned:abandoned.length,output,reclamation:f.lines.filter(line=>line.includes('signal release control'))}));
 });

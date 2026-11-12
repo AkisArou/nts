@@ -509,7 +509,7 @@ child.release();
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
   let output='',terminal:{code:number|null;signal:NodeJS.Signals|null}|undefined;
   child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
-  child.on('exit',(code,signal)=>{terminal={code,signal};});
+  child.on('close',(code,signal)=>{terminal={code,signal};});
   return {root,directory,memory,looked,unit,child,output:()=>output,terminal:()=>terminal};
 }
 test("a priority recheck during oracle capture leaves the run live for its first token",async t=>{
@@ -570,7 +570,17 @@ for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'wai
   assert.equal(summary.interrupted,'signal SIGTERM');
   assert.equal(summary.steps[0].verdict,'NOT RUN');
   assert.equal(existsSync(join(root,'step-launched')),false);
-  assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn, or its reservation released');
+  const remaining=readLedger(memory.NTS_MEMORY_LEDGER);
+  if(remaining.waiting.length||remaining.admitted.length){
+    assert.match(output(),/memory: gate run .* release (?:could not lock .*within its cleanup bound|cleanup failed; remaining entries left for dead-owner reclamation: cannot lock the memory ledger .*flock ended SIGTERM)/,
+      'a deferred cancellation names its lock failure\n'+output());
+    ownMemory(dirname(memory.NTS_MEMINFO),{availableKiB:32*2**20,totalKiB:64_000_000});
+    const reports:string[]=[];
+    const next=await reserve({bytes:128*2**20,what:'after cancelled runner'},{env:memory,report:line=>reports.push(line)});
+    next.release();
+    assert.match(reports.join('\n'),/dropped gate run .*has exited/,'the next decision reclaims the named fallback');
+  }
+  assert.deepEqual(readLedger(memory.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]},'its request withdrawn, released or reclaimed\n'+output());
 });
 
 // A runner whose launcher has gone writes to a pipe with no reader. Its first

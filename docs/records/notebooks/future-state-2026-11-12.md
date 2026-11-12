@@ -22,6 +22,16 @@ control uses an actual competing flock and a supplied nonblocking acquisition,
 so its verdict does not depend on how long a machine takes. It verifies a named
 report, unchanged bytes, then owner exit and reclamation by the next decision.
 
+A landing exposed another allowed fallback: a unit-wide SIGTERM can interrupt
+the flock helper during acquisition. The parent already owns the open file
+description, so a held lock survives the helper; only acquisition is exposed.
+The deterministic control blocks the helper before acquisition, proves the
+directory lock is free, signals the unit, and observes the named acquisition
+failure. The entry remains with a dead owner and the next decision reclaims it.
+The runner wiring control accepts this only with the named report and that
+reclamation; an unexplained leftover still fails. It waits for output pipes to
+close and includes the complete runner output in its failure diagnostic.
+
 The guard protects the next format change, when this implementation becomes
 the older reader. It cannot constrain older code already deployed; #740's
 separate cases-v2/ namespace was still necessary for that mixed-version window.
