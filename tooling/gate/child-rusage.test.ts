@@ -32,7 +32,7 @@ test('the waited-child observer preserves streams, failure status, signals and l
 
 test('private waited accounting cannot consume the product output buffer',t=>{
   const root=newTestScratch('waited-child-buffer');t.after(()=>rmSync(root,{recursive:true,force:true}));
-  const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error);
+  const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error??'the observer compiled');
   const options={env,encoding:'utf8' as const,maxBuffer:10};
   const ordinary=spawnSync('sh',['-c','printf 1234567890'],options);
   const observed=observedSpawnSync('sh',['-c','printf 1234567890'],options,prepared.observer,(row,error)=>{assert.equal(error,undefined);assert.ok(row);});
