@@ -20,6 +20,15 @@ test('an unavailable worker observation preserves the work and stays unknown in 
   assert.equal(summary.attributed_cpu_s,0);assert.equal(summary.unattributed_cpu_s,5);
 });
 
+test('one CPU channel cannot hide another channel moving backwards',()=>{
+  let sample:PhaseSample={wall:0,user:10,sys:0};
+  const costs=new CensusPhaseCosts('fixture','c','typescript-c',()=>sample);
+  const close=costs.span('comparison');sample={wall:1,user:9,sys:3};close();
+  const summary=censusPhaseSummary([costs.finish()],[],5);
+  assert.equal(summary.status,'partial');assert.equal(summary.attributed_cpu_s,0);
+  assert.equal(summary.rows.find(row=>row.phase==='comparison')?.cpu_s,null);
+});
+
 test('supplied disjoint phases reconcile to scope CPU with an explicit remainder',()=>{
   const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_observations:[],unmeasured:[],phases:[
     {phase:'materialization',wall_s:2,self_cpu_s:2,child_cpu_s:0},

@@ -55,8 +55,8 @@ export class CensusPhaseCosts {
       this.frame.unmeasured.push('worker phase clock or CPU is invalid');this.#last=undefined;return;
     }
     if(this.#current&&this.#last){
-      const row=this.#row(this.#current),wall=now.wall-this.#last.wall,cpu=(now.user-this.#last.user)+(now.sys-this.#last.sys);
-      if(wall<0||cpu<0||![wall,cpu].every(Number.isFinite)){
+      const row=this.#row(this.#current),wall=now.wall-this.#last.wall,user=now.user-this.#last.user,sys=now.sys-this.#last.sys,cpu=user+sys;
+      if(wall<0||user<0||sys<0||![wall,cpu].every(Number.isFinite)){
         this.frame.unmeasured.push('worker phase clock or CPU moved backwards');this.#last=undefined;return;
       }
       else{row.wall_s+=wall;row.self_cpu_s+=cpu;}
