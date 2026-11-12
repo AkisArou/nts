@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "source": "8fb557705c4cdfb8802f91e3df71c24c818ccca7",
+  "run": "/home/akisarou/.cache/nts-landing/runs/here-8fb557705c4c-1794523935900",
+  "observed": {
+    "event": "pool.state",
+    "memory": {
+      "reserved_bytes": 10737418240,
+      "used_bytes": 0,
+      "withheld_bytes": 0,
+      "wanted_bytes": 11781799936,
+      "token_short_bytes": 0,
+      "growing_bytes": 11811160064
+    },
+    "used": {
+      "slots": 0,
+      "fe": 0
+    },
+    "slots": 24,
+    "frontends": 24,
+    "withhold": 8,
+    "held": {},
+    "waiting": [],
+    "running": [],
+    "fixed_grants": {},
+    "runner_cpu": {
+      "userCPUTime": 1637913,
+      "systemCPUTime": 2159836,
+      "maxRSS": 317528,
+      "sharedMemorySize": 0,
+      "unsharedDataSize": 0,
+      "unsharedStackSize": 0,
+      "minorPageFault": 343076,
+      "majorPageFault": 0,
+      "swappedOut": 0,
+      "fsRead": 181976,
+      "fsWrite": 22504,
+      "ipcSent": 0,
+      "ipcReceived": 0,
+      "signalsCount": 0,
+      "voluntaryContextSwitches": 13487,
+      "involuntaryContextSwitches": 368
+    },
+    "epoch": 1794524336.296
+  },
+  "admission": "memory ledger /home/akisarou/.cache/nts-gate/admission at 2026-11-12T22:58:56.550Z\n  machine: 31.0 GiB, 22.6 GiB available; 10.0 GiB promised to running jobs, 2.0 GiB kept for the system; room for 10.6 GiB\n  admitted (1):\n    agent        10.0 GiB, using    2.6 MiB  pid 1741493  since 22:52:18  gate run /home/akisarou/.cache/nts-landing/runs/here-8fb557705c4c-1794523935900\n      over (held more than it reserved): old-paths\n  waiting (1):\n     1. agent      grows by 11.0 GiB  waited 393 s  pid 1741493  gate run /home/akisarou/.cache/nts-landing/runs/here-8fb557705c4c-1794523935900\n",
+  "usefulGrowthBytes": 1073741824,
+  "proof": {
+    "tests": 157,
+    "pass": 157,
+    "fail": 0
+  }
+}

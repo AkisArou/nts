@@ -604,6 +604,10 @@ A leaf that an oracle preload reaches lives in its own directory with a one-file
   its active grants, withheld memory and slack before giving bytes back.
   It never releases the promise before publishing growth, so a later
   neighbour cannot enter between those two operations.
+  A pending growth ticket cannot exceed the current rounded, capacity-limited
+  gap. If work drains, an excessive ticket is withdrawn before a replacement
+  is scheduled. A smaller useful ticket may finish as a partial grant. A grant
+  racing cancellation is counted once, and surplus bytes are returned normally.
 - **Future state versions are read-only.** Every shared versioned state owner
   checks a recognizable newer numeric version before validating its schema.
   A history gives a named empty view and records nothing; operational state
@@ -1048,6 +1052,12 @@ the first node task.
   job. Higher-rank yield still returns everything except live use and its
   margin
   ([log](records/notebooks/decisions-log.md#step-handoffs-retain-the-next-demand-11-12)).
+- **Pending growth follows current demand.** The runner withdraws an oversized
+  ticket when running work drains, then recomputes its replacement after the
+  old request settles. Useful partial grants keep their place; cancellation
+  cannot duplicate a grant. Otherwise a fitting next step can wait forever
+  behind a stale request that needs more memory than the machine can provide
+  ([log](records/notebooks/decisions-log.md#pending-growth-follows-current-demand-11-13)).
 - **Memory limits guard against runaways only.** A step's supervisor and
   workers have separate sibling boundaries, each with only a MemoryMax,
   about twice what the step was measured to hold and never

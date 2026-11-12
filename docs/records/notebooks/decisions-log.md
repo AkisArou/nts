@@ -2573,3 +2573,16 @@ either copying a real corpus into every small fixture or reviving dependency
 lists. Shell/Python launches retain the parsed JavaScript continuation while
 inferred edges remain unable to discharge an unknown path's full gate.
 Part of #728.
+
+## Pending growth follows current demand (11-13)
+
+A supported local check had finished its running steps and needed one more
+GiB, but its queued growth still asked for eleven GiB from when Rust was
+running. The larger request could not fit, so the empty run waited for itself.
+The runner computes the rounded, capacity-limited current gap before inspecting
+the pending ticket, withdraws an excess, and schedules a replacement only after
+the old promise settles. Useful partial grants remain queued. A grant racing
+cancellation is retained once and its excess is returned through normal shrink.
+The admitted ancestor's rank and order remain unchanged. The private before
+replay fails on the observed stale state; the corrected runner completes without
+any host-memory change or elapsed-time verdict. Fixes #769.
