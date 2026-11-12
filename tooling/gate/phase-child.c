@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 
 static volatile sig_atomic_t child_pid;
+extern char **environ;
 
 static void forward(int signal) {
   if (child_pid > 0)
@@ -33,11 +35,6 @@ int main(int argc, char **argv) {
           stderr);
     return 125;
   }
-  int errors[2];
-  if (pipe2(errors, O_CLOEXEC)) {
-    perror("phase observation: exec error pipe");
-    return 125;
-  }
   int report = open(argv[1], O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
@@ -47,24 +44,24 @@ int main(int argc, char **argv) {
   sigaddset(&signals, SIGINT);
   sigaddset(&signals, SIGHUP);
   sigprocmask(SIG_BLOCK, &signals, &previous);
-  pid_t child = fork();
-  if (child < 0) {
-    perror("phase observation: fork");
+  // The spawn owner reports launch failure directly, without another error
+  // pipe or a copy of the observer's address space. The report is CLOEXEC;
+  // only this observer can keep it open or publish waited accounting.
+  posix_spawnattr_t attributes;
+  int error = posix_spawnattr_init(&attributes);
+  if (error) {
+    errno = error;
+    perror("phase observation: spawn attributes");
     return 125;
   }
-  if (!child) {
-    close(errors[0]);
-    if (report >= 0)
-      close(report);
-    sigprocmask(SIG_SETMASK, &previous, NULL);
-    execvp(argv[3], argv + 3);
-    int cause = errno;
-    if (write(errors[1], &cause, sizeof(cause)) < 0) {
-      // The parent may have been cancelled; the command still failed to exec.
-    }
-    _exit(127);
-  }
-  close(errors[1]);
+  error = posix_spawnattr_setsigmask(&attributes, &previous);
+  if (!error)
+    error = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGMASK);
+  pid_t child = 0;
+  int exec_error = error ? error
+                         : posix_spawnp(&child, argv[3], NULL, &attributes,
+                                        argv + 3, environ);
+  posix_spawnattr_destroy(&attributes);
   child_pid = child;
   struct sigaction action = {.sa_handler = forward};
   sigemptyset(&action.sa_mask);
@@ -72,9 +69,9 @@ int main(int argc, char **argv) {
   sigaction(SIGINT, &action, NULL);
   sigaction(SIGHUP, &action, NULL);
   sigprocmask(SIG_SETMASK, &previous, NULL);
-  int status;
-  struct rusage usage;
-  while (wait4(child, &status, 0, &usage) < 0) {
+  int status = 0;
+  struct rusage usage = {0};
+  while (!exec_error && wait4(child, &status, 0, &usage) < 0) {
     if (errno == EINTR)
       continue;
     perror("phase observation: wait4");
@@ -82,12 +79,6 @@ int main(int argc, char **argv) {
   }
   child_pid = 0;
   clock_gettime(CLOCK_MONOTONIC, &end);
-  int exec_error = 0;
-  ssize_t count;
-  do {
-    count = read(errors[0], &exec_error, sizeof(exec_error));
-  } while (count < 0 && errno == EINTR);
-  close(errors[0]);
   if (report >= 0) {
     dprintf(report,
             "{\"version\":1,\"cpu_measure\":\"wait4-rusage-v1\","
@@ -95,10 +86,12 @@ int main(int argc, char **argv) {
             "\"exit\":%d,\"signal\":%d,\"exec_errno\":%d}\n",
             child, seconds(end) - seconds(start), cpu_seconds(usage.ru_utime),
             cpu_seconds(usage.ru_stime),
-            WIFEXITED(status) ? WEXITSTATUS(status) : -1,
+            !exec_error && WIFEXITED(status) ? WEXITSTATUS(status) : -1,
             WIFSIGNALED(status) ? WTERMSIG(status) : 0, exec_error);
     close(report);
   }
+  if (exec_error)
+    return 127;
   if (WIFSIGNALED(status)) {
     int cause = WTERMSIG(status);
     signal(cause, SIG_DFL);

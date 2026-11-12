@@ -24,7 +24,8 @@ export function readChildUsage(value:unknown):ChildUsage{
   if(row.version!==1||row.cpu_measure!=='wait4-rusage-v1'
     ||!['pid','exit','signal','exec_errno'].every(key=>typeof row[key]==='number'&&Number.isSafeInteger(row[key]))
     ||!['wall_s','user_s','sys_s'].every(key=>typeof row[key]==='number'&&Number.isFinite(row[key])&&row[key]>=0)
-    ||Number(row.pid)<1||Number(row.exit)<-1||Number(row.signal)<0||Number(row.exec_errno)<0)
+    ||Number(row.pid)<0||(Number(row.pid)===0&&!(Number(row.exec_errno)>0&&row.exit===-1&&row.signal===0))
+    ||Number(row.exit)<-1||Number(row.signal)<0||Number(row.exec_errno)<0)
     throw Error('phase observation: invalid waited-child rusage');
   return row as ChildUsage;
 }

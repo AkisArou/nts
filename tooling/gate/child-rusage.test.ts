@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync,rmSync} from 'node:fs';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {test} from 'node:test';
 import {observedSpawnSync,prepareChildObserver,readChildUsage,type ChildUsage} from './child-rusage.ts';
 import {newTestScratch} from './test-scratch.ts';
@@ -19,12 +19,26 @@ test('the waited-child observer preserves streams, failure status, signals and l
   assert.equal(stopped.signal,'SIGTERM');assert.equal(rows.at(-1)?.signal,15);
   const missing=observedSpawnSync(root+'/absent',[],options,prepared.observer,record);
   assert.equal((missing.error as NodeJS.ErrnoException)?.code,'ENOENT');assert.equal(missing.status,null);
+  assert.equal(rows.at(-1)?.pid,0,'a failed spawn has no entered child');
+  const exit127=observedSpawnSync('sh',['-c','exit 127'],options,prepared.observer,record);
+  assert.equal(exit127.error,undefined);assert.equal(exit127.status,127);assert.ok(rows.at(-1)!.pid>0);
   assert.ok(rows.every(row=>row.cpu_measure==='wait4-rusage-v1'));
   let unmeasured:string|undefined;
   const noReport=observedSpawnSync('sh',['-c','printf preserved; exit 7'],options,{...prepared.observer,directory:root+'/absent'},(row,error)=>{
     assert.equal(row,undefined);unmeasured=error;
   });
   assert.equal(noReport.stdout,'preserved');assert.equal(noReport.status,7);assert.match(unmeasured??'',/ENOENT/,'missing telemetry does not invent a measured zero or replace the child result');
+});
+
+test('private waited accounting cannot consume the product output buffer',t=>{
+  const root=newTestScratch('waited-child-buffer');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error);
+  const options={env,encoding:'utf8' as const,maxBuffer:10};
+  const ordinary=spawnSync('sh',['-c','printf 1234567890'],options);
+  const observed=observedSpawnSync('sh',['-c','printf 1234567890'],options,prepared.observer,(row,error)=>{assert.equal(error,undefined);assert.ok(row);});
+  assert.equal(ordinary.error,undefined);assert.equal(observed.error,undefined);
+  assert.deepEqual({stdout:observed.stdout,stderr:observed.stderr,status:observed.status,signal:observed.signal},
+    {stdout:ordinary.stdout,stderr:ordinary.stderr,status:ordinary.status,signal:ordinary.signal});
 });
 
 test('cancellation reaches the exact waited child after observed readiness',async t=>{
