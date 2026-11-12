@@ -13,6 +13,7 @@ import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
+import {toolingSlice,toolingSliceArgs} from "../gate/tooling-slice.ts";
 
 // The pools here reserve their memory in a ledger of this file's own, against
 // an 8 GiB reading, never the machine's.
@@ -787,9 +788,14 @@ const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "killed633" });
 const worker = run.worker(0, 64 * 2 ** 20);
 writeFileSync(${JSON.stringify(ready)}, JSON.stringify({ slice: run.slice, worker: worker.slice }));
 setInterval(() => {}, 60_000);`;
-  const started = spawnTest("systemd-run", ["--user", `--unit=${unit}`, "--collect", "--quiet",
-    "-p", "LimitCORE=0", process.execPath, "--input-type=module", "-e", census], { encoding: "utf8" }, "the killed census's unit");
+  // The enclosing test slice stops this service if its test process aborts.
+  // The runtime bound also covers a plain node --test without a slice owner.
+  const started = spawnTest("systemd-run", ["--user", ...toolingSliceArgs(), `--unit=${unit}`, "--collect", "--quiet",
+    "-p", "RuntimeMaxSec=300s", "-p", "LimitCORE=0", process.execPath, "--input-type=module", "-e", census], { encoding: "utf8" }, "the killed census's unit");
   assert.equal(started.status, 0, started.stderr);
+  const parentSlice=toolingSlice();
+  if(parentSlice)assert.equal(show(unit,"Slice"),parentSlice,"the run owns the fixture even if its test aborts");
+  assert.equal(show(unit,"RuntimeMaxUSec"),"5min","a plain test run still has a lifetime bound");
   await waitFor("the census's slices named in its ready file", () => existsSync(ready));
   const named = JSON.parse(readFileSync(ready, "utf8")) as { slice: string; worker: string };
   slices = [named.slice, named.worker];

@@ -136,6 +136,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import {workerLifecycle} from "./worker-lifecycle.ts";
 import { historyFile, KEY, peakReservation, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
@@ -670,6 +671,8 @@ export type Reservation = {
   noteOver(key: string): Promise<void>;
   /** Ends the reservation, withdrawing a growth that waits; a second call does nothing. */
   release(): void;
+  /** The sampler has replied and exited; ordinary reservations have no service. */
+  readonly closed: Promise<void>;
 };
 
 function label(what: string): string {
@@ -786,7 +789,7 @@ function inside(parent: string | undefined, dir: string, pid: number, what: stri
   let held = bytes;
   const {priority} = reservationOrder(entry, liveReservations(dir));
   return {
-    id: entry.id, ledger: dir, inherited: true, env: reservationEnv(entry.id, dir, priority),
+    id: entry.id, ledger: dir, inherited: true, closed:Promise.resolve(), env: reservationEnv(entry.id, dir, priority),
     active: () => admittedEntry(dir, entry.id) !== null,
     get bytes() { return held; },
     grow: async more => { amount(more, what, "grows by"); held += more; },
@@ -1105,7 +1108,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
   const rewrite = () => rewriteEntry(dir, self.id, entry => released ? null
     : { ...entry, bytes, ...(entry.drawn === undefined ? {} : { drawn: Math.min(entry.drawn, bytes) }) }, context.every);
   return {
-    id: self.id, ledger: dir, inherited: false, env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
+    id: self.id, ledger: dir, inherited: false, closed:Promise.resolve(), env: reservationEnv(self.id, dir, reservationOrder(self, liveReservations(dir)).priority),
     active: () => !released && admittedEntry(dir, self.id) !== null,
     get bytes() { return self.liveUse ? peakReservation([Math.max(1, context.used(self, processTable, NONE))]) : bytes; },
     async grow(more, { signal }: { signal?: AbortSignal } = {}) {
@@ -1302,16 +1305,19 @@ export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: 
  * process is sampled all the same. `stop` ends it, and returns the most the
  * reservation's measure held, its own last sample included.
  */
-function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string, env:NodeJS.ProcessEnv): { stop(): number } {
+function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string, env:NodeJS.ProcessEnv,report:(line:string)=>void): { stop(): number;closed:Promise<void> } {
   const shared = new SharedArrayBuffer(8), cell = new BigInt64Array(shared);
   let worker: Worker | null = null, fixtureFailure:Error|undefined;
+  let lifecycle:ReturnType<typeof workerLifecycle>|undefined;
   try {
     worker = new Worker(WATCHER, { workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, observations:hostObservationEnvironment(env) } });
-    worker.unref();
+    lifecycle=workerLifecycle(worker,`memory: ${key} sampler`,report);
+    worker.postMessage({kind:"start"});
     // A sampler that fails leaves the job less measured, never stopped.
     worker.on("error", error => {if(error instanceof Error && error.name==="HostObservationError")fixtureFailure=error;});
-  } catch(error) { if(error instanceof HostObservationError)throw error;worker = null; }
+  } catch(error) { if(error instanceof HostObservationError)throw error;report(`memory: ${key} sampler did not start: ${String(error)}`);worker = null; }
   return {
+    closed:lifecycle?.closed??Promise.resolve(),
     stop() {
       let last = 0;
       try {
@@ -1320,7 +1326,7 @@ function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string
         if(fixtureFailure)throw fixtureFailure;
         return Math.max(last, Number(Atomics.load(cell, 0)));
       } catch(error) { if(error instanceof HostObservationError || (error as Error).name==="HostObservationError")throw error;return Number(Atomics.load(cell,0)); }
-      finally {void worker?.terminate();worker=null;}
+      finally {lifecycle?.stop();worker=null;}
     },
   };
 }
@@ -1351,7 +1357,7 @@ export async function reserveJob(request: JobRequest,
     { env, signal: options.signal, report });
   if (held.inherited) return held;
   let sampler:ReturnType<typeof samplePeak>;
-  try{sampler=samplePeak(held,request.key,env);}catch(error){held.release();throw error;}
+  try{sampler=samplePeak(held,request.key,env,report);}catch(error){held.release();throw error;}
   // What the environment named before, so that the release leaves it so: a
   // ledger the job was already given stays its ledger.
   const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
@@ -1362,6 +1368,7 @@ export async function reserveJob(request: JobRequest,
     if (released) return;
     released = true;
     process.off("exit", release);
+    process.off("beforeExit",finish);
     let peak:number;
     try{peak=sampler.stop();}
     finally {
@@ -1377,8 +1384,11 @@ export async function reserveJob(request: JobRequest,
     const warning = writeCostHistory(sizing.history, { jobs: [{ key: request.key, peak: Math.ceil(peak / sizing.units) }] });
     if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
+  const finish=async()=>{release();try{await sampler.closed;}catch{/* the lifecycle already reported its named failure */}};
+  process.once("beforeExit",finish);
   process.once("exit", release);
   return {
+    closed:sampler.closed,
     id: held.id, ledger: held.ledger, inherited: false, env: held.env,
     active: () => held.active(),
     get bytes() { return held.bytes; },

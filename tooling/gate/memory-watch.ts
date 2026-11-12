@@ -23,7 +23,7 @@
 import { resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { isMainThread, workerData } from "node:worker_threads";
+import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
 import {HostObservationError} from "./host-observations.ts";
 import { KEY, writeCostHistory } from "./step-scheduling.ts";
@@ -54,21 +54,33 @@ export async function watchReservation(ledger: string, id: string, key: string, 
   }
 }
 
-if (!isMainThread) {
-  const { ledger, id, key, peak,observations } = workerData as { ledger: string; id: string; key: string; peak: SharedArrayBuffer;observations:NodeJS.ProcessEnv };
-  const cell = new BigInt64Array(peak);
-  await watchReservation(ledger, id, key, { env:observations,seen: bytes => Atomics.store(cell, 0, BigInt(bytes)) });
-} else if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [ledger, id, history, key, workers] = process.argv.slice(2);
-  const units = Number(workers);
-  if (!ledger || !id || !history || !key || !KEY.test(key) || !Number.isSafeInteger(units) || units < 1) {
-    process.stderr.write("usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers>\n");
-    process.exit(2);
-  }
-  // A unit may terminate its remaining processes when the command exits.
-  // Keep the last observed peak in that path too, before closing its output.
-  const ending = new AbortController();
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => ending.abort());
-  const most = await watchReservation(ledger, id, key, { exclude: process.pid, signal: ending.signal });
-  if (most > 0) writeCostHistory(history, { jobs: [{ key, peak: Math.ceil(most / units) }] });
+// Register the service before accepting work. A stop queued during module
+// loading is handled normally, after the synchronous module graph evaluates.
+function startThread():void {
+  const port=parentPort;
+  if(!port)throw new Error('memory sampler has no parent port');
+  const {ledger,id,key,peak,observations}=workerData as {ledger:string;id:string;key:string;peak:SharedArrayBuffer;observations:NodeJS.ProcessEnv};
+  const cell=new BigInt64Array(peak),ending=new AbortController();
+  let started=false;
+  port.on('message',(message:{kind:string})=>{
+    if(message.kind==='stop')ending.abort();
+    else if(message.kind==='start'){
+      if(started)throw new Error('memory sampler started twice');started=true;
+      void watchReservation(ledger,id,key,{env:observations,signal:ending.signal,seen:bytes=>Atomics.store(cell,0,BigInt(bytes))}).then(most=>{
+        port.postMessage({kind:'stopped',peak:most});port.close();
+      },error=>{port.close();throw error;});
+    }else throw new Error('memory sampler received an unknown message');
+  });
 }
+async function main():Promise<void> {
+  const [ledger,id,history,key,workers]=process.argv.slice(2),units=Number(workers);
+  if(!ledger||!id||!history||!key||!KEY.test(key)||!Number.isSafeInteger(units)||units<1)
+    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers>');
+  const ending=new AbortController();
+  for(const signal of ['SIGINT','SIGTERM','SIGHUP'] as const)process.on(signal,()=>ending.abort());
+  const most=await watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
+  if(most>0)writeCostHistory(history,{jobs:[{key,peak:Math.ceil(most/units)}]});
+}
+if(!isMainThread)startThread();
+else if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
+  void main().catch(error=>{console.error(String(error));process.exitCode=2;});

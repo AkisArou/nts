@@ -6,6 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {shellCommands} from './shell-commands.ts';
 import type {Node} from 'typescript/ast';
+import {auditWorkerModules,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
 
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
@@ -25,7 +26,7 @@ const inside=(root:string,path:string)=>{const part=relative(root,path);return !
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
-export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API):{reads:HostRead[];references:string[]} {
+export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:Node)=>void):{reads:HostRead[];references:string[]} {
   const require=createRequire(import.meta.url);
   const {API}=require('typescript/sync') as typeof import('typescript/sync');
   const ast=require('typescript/ast') as typeof import('typescript/ast');
@@ -84,7 +85,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       if(ast.isTemplateExpression(node))literal(node.head.text+node.templateSpans.map(span=>'__fixture_expression'+span.literal.text).join(''),node);
       node.forEachChild(visit);
     }
-    try{visit(lease.sourceFile);}finally{lease.dispose();}
+    try{if(!generated)inspectRoot?.(file,text,lease.sourceFile);visit(lease.sourceFile);}finally{lease.dispose();}
   }
   try {
     if(file.endsWith('.sh')){
@@ -136,14 +137,15 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
 
 export function auditTestHost(root:string,debt?:HostDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
-  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>();
+  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>();
+  const inspect=(file:string,source:string,node:Node)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file))moduleFacts.set(file,inspectModuleAsync(root,file,source,node));};
   try {
   const visit=(directory:string,rustOnly=false):void=>{
     for(const entry of readdirSync(join(root,directory),{withFileTypes:true})){
       if(entry.name==='node_modules')continue;
       const file=directory+'/'+entry.name;
       if(entry.isDirectory())visit(file,rustOnly);
-      else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file)))sources.set(file,inspectHostSource(file,readFileSync(join(root,file),'utf8'),api));
+      else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file)))sources.set(file,inspectHostSource(file,readFileSync(join(root,file),'utf8'),api,inspect));
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
   const reach=(file:string,seen:Set<string>):void=>{
@@ -163,7 +165,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
-  return {files:sources.size,closures,reads,problems:hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt)};
+  return {files:sources.size,closures,reads,problems:[...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditWorkerModules(root,moduleFacts).problems]};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

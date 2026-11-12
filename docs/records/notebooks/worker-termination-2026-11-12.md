@@ -1,0 +1,91 @@
+# Worker termination during async module evaluation
+
+## Observation and reduction
+
+Node 26.13.0 (V8 14.6.202.34-node.40) aborted in loaded
+`tooling/census/worker-memory.test.ts` runs at base `fef93db92283` 3/75
+and #721 `9bc14851c543` 2/74. Eight cancelled subjects are excluded.
+The first matched checkpoint was 2/52 on each pin. The abort was pre-existing.
+
+A standalone builtins-only reduction reproduced the same abort in 16/16
+processes. The control completed 100 terminations per process in 16/16
+processes, with zero aborts. Every experiment used `LimitCORE=0`, excluded
+CPUs 4–5, and ran in a named unit. No report has been sent upstream.
+
+The three files below form the reproduction. Save them together, run
+`ulimit -c 0`, then `node parent.mjs`. The control changes only the dependency's
+body from `await 0;` to `export {};`.
+
+```js
+// dependency.mjs
+await 0;
+```
+
+```js
+// worker.mjs
+import './dependency.mjs';
+import {parentPort} from 'node:worker_threads';
+parentPort.postMessage('ready');
+while (true) {}
+```
+
+```js
+// parent.mjs
+import {Worker} from 'node:worker_threads';
+for (let i = 0; i < 100; i++) {
+  const worker = new Worker(new URL('./worker.mjs', import.meta.url));
+  await new Promise((resolve, reject) => {
+    worker.once('message', () => worker.terminate().then(resolve, reject));
+    worker.once('error', reject);
+    worker.once('exit', resolve);
+  });
+}
+```
+
+Representative stack, identical to the loaded tooling abort:
+
+```text
+Fatal error in , line 0
+Check failed: !is_null().
+1: 0xa9e161 [node]
+2: 0x29452b1 V8_Fatal(char const*, ...) [node]
+3: 0x12b5ff1 SourceTextModule::AsyncModuleExecutionFulfilled [node]
+4: 0xd32a9a Builtin_CallAsyncModuleFulfilled [node]
+```
+
+Local disassembly places the failing check on the async module completion
+path executing a synchronous importing module. Worker termination interrupts
+that execution without a catchable exception; the path checks the empty
+exception handle. The reproduction uses the documented Worker lifecycle API
+and no nts modules.
+
+## nts ownership
+
+`reserveJob` starts a sampler Worker on `memory-watch.ts`. Its old synchronous
+release called `terminate()` without waiting. The Worker module awaited its
+sampling loop at top level. Short jobs and loaded startup made that graph's
+evaluation overlap termination. The replacement is a message-started service,
+with synchronous final parent accounting and a separate acknowledged shutdown.
+The source audit rejects top-level await in Worker entry closures.
+
+The Worker closure contains memory-watch, memory-ledger, host-observations,
+cache-capabilities, step-scheduling, step-time and the shutdown helper. Other
+CLI top-level awaits found in the main test process's larger graph were
+oracle-emit, oracle-dependencies, oracle-resolution and dependency-inputs;
+those are separate work (#737).
+
+## Other observations
+
+Deliberately loaded sweeps overlapped #721's landing check. Its next refused
+run had no native abort, but held a concurrent stale-pin preflight at its
+300-second inactivity guard and two capability probes at their 10-second
+spawnSync timeout. Future load experiments check landing status between
+batches and wait while a landing is checking.
+
+A fixture's externally launched `nts-test-633-killed` unit survived a killed
+test. Nine such units were stopped by their exact names. The fixture now
+joins the test's slice and has its own runtime bound.
+
+The same refused run's CLI live-memory check saw a published 160 MiB peak
+but no matching final history row. That route uses a detached watcher
+process, not reserveJob's Worker; the exact flush failure is not yet reduced.

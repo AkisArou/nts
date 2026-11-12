@@ -626,6 +626,14 @@ the first node task.
   the entry point, without an outer memory admission. A measurement inside
   an ancestor's job shares its reservation
   ([log](records/notebooks/decisions-log.md#measurement-admission-takes-memory-and-cpus-together-11-10)).
+- **Sampler services have an explicit lifecycle.** A reservation's release
+  takes its final reading, records the peak and returns memory synchronously.
+  Its sampler starts and stops by message, replies with its final sample and
+  exits itself. `closed` certifies that shutdown; a missing reply or a wedged
+  drain is named, and forced termination is only the bounded fallback. Worker
+  entries and their module closures contain no top-level await; command bodies
+  belong behind main() entry guards. The test-host source audit checks this
+  contract ([evidence](records/notebooks/worker-termination-2026-11-12.md)).
 - **Reservations are measured peaks** (11-09): a step or job reserves 1.25
   times the largest of its last five peaks, sampled on the ledger's own
   basis and kept in its tree's scheduling history. A step never measured
