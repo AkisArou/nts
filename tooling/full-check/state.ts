@@ -79,7 +79,7 @@ export type RunRecord = {
 };
 
 /** What the controller is doing now, written before it starts and removed when it ends. */
-export type Doing = { doing: Part | "probe" | "records" | "benchmarks"; commit: string; since: string };
+export type Doing = { doing: Part | "probe" | "records" | "benchmarks" | "restarting"; commit: string; since: string };
 
 /** A commit the culprit search found, and what the service did about it. */
 export type Culprit = {

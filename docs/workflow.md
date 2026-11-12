@@ -255,6 +255,13 @@ landing checks' and agents', so those come first.
   while the unit runs, lands what it made once it ends, and starts it once
   more, never beside a running one, when it ended without saying how.
 
+When the controller must adopt a newer `verified`, restart takes precedence
+over scheduling. It checks at the cycle boundary and immediately before every
+core, wide or culprit-probe launch. A busy controller-tree lock leaves the
+status at `restarting for verified <sha>` and starts no run. A run already in
+flight finishes normally; background units remain adoptable after restart.
+A restart request is neither a held run nor evidence against a commit.
+
 The landing receipt names the checked commit and tree, actual outcomes and
 coverage, environment identity, producer profile and binary identities.
 It is durable before main advances and survives pruning of the original
@@ -689,6 +696,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Controller adoption precedes scheduling.** A pending move to newer verified
+  prevents new runs even while the controller waits for its tree lock. The
+  restarted controller adopts independent background units; completed runs
+  keep their measured verdicts.
 
 - **Contributor proof uses the prepared inner loop.** `inner.ts` prepares the
   oracle seal, builds the compiler and owns the per-binary runner before

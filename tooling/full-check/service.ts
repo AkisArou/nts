@@ -111,6 +111,8 @@ export type Effects = {
   queue: LandingQueue;
   /** A live higher-priority memory request, or null when none waits. */
   memoryWaiter: () => string | null;
+  /** A newer verified the controller must adopt before starting more work. */
+  restartTarget: () => string | null;
   /** Whether changes between these commits reach any of the failed steps. */
   reaches: (base: string, tip: string, steps: string[]) => boolean;
   /** The units the full check's background work runs in: each part's records unit (background.ts). */
@@ -138,8 +140,33 @@ const short = (sha: string) => sha.slice(0, 12);
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /** One cycle: the first due piece of work, or nothing. */
-export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "idle"> {
+export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "idle" | "restart"> {
   const state = readState(fx.layout.state);
+  try {
+    beforeRun(fx);
+    if (state.now?.doing === "restarting") { delete state.now; writeState(fx.layout.state, state); }
+    return await scheduleCycle(fx, state);
+  } catch (error) {
+    if (!(error instanceof ControllerRestart)) throw error;
+    if (state.now?.doing !== "restarting" || state.now.commit !== error.commit) {
+      state.now = {doing:"restarting",commit:error.commit,since:fx.now().toISOString()};
+      fx.log(`restarting for verified ${error.commit}`);
+    }
+    writeState(fx.layout.state, state);
+    return "restart";
+  }
+}
+
+class ControllerRestart extends Error {
+  constructor(readonly commit:string) { super(`restarting for verified ${commit}`); }
+}
+
+function beforeRun(fx: Effects):void {
+  const target = fx.restartTarget();
+  if (target) throw new ControllerRestart(target);
+}
+
+async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records" | "benchmarks" | "idle"> {
   housekeeping(fx, state);
   if (await followRecords(fx, state)) return "records";
   if (await followBenchmarks(fx, state)) return "benchmarks";
@@ -229,6 +256,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   }
   const m = doing(fx, state, part, commit, () => {
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
+    beforeRun(fx);
     return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core" });
   }, at);
   const failed = steps.filter(step => m.steps[step] === "FAIL");
@@ -435,8 +463,11 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     // found at the commit that added it.
     const present = steps.filter(step => all.includes(step));
     if (!present.length) return result("green", "", []);
-    const m = doing(fx, state, "probe", commit, () => fx.gate.run(commit, present, `${part}-probe`, state[part].last_green,
-      { reuseLanding: part === "core" && !fresh }));
+    const m = doing(fx, state, "probe", commit, () => {
+      beforeRun(fx);
+      return fx.gate.run(commit, present, `${part}-probe`, state[part].last_green,
+        { reuseLanding: part === "core" && !fresh });
+    });
     const at = fx.now().toISOString();
     for (const step of present) {
       // Imported observations are cheap to revalidate against the candidate's
@@ -1263,6 +1294,7 @@ function production(options: { schedule: Schedule }): Effects {
     gate: pinnedGate(layout, ROOT, stamp),
     queue: landingQueue(),
     memoryWaiter: () => wideMemoryWaiter(readLedger().waiting),
+    restartTarget: () => controllerTarget(git, layout),
     reaches: (base, tip, steps) => rangeReaches(git, base, tip, steps),
     // Each unit at the controller's own priority and on its own CPUs, never the measurement pair.
     units: systemdUnits(lowPriority(gateCpus(inheritedCpus()))),
@@ -1325,6 +1357,13 @@ function takeLock(lock: string): void {
 }
 
 let unfollowed: string | undefined;
+/** A pending move prevents scheduling even while the controller lock is busy. */
+export function controllerTarget(git: Git, layout: Layout, root = ROOT): string | null {
+  if (resolve(root) !== resolve(layout.controller)) return null;
+  const verified = git.commit("refs/heads/verified"), head = git.commit("HEAD");
+  return verified && head && verified !== head && git.isAncestor(head, verified) ? verified : null;
+}
+
 /**
  * The unit runs the service from its controller tree, at `verified`: code
  * that passed the full check runs the full check. When verified moves past it,
@@ -1337,9 +1376,8 @@ let unfollowed: string | undefined;
  * tree follows on a later cycle.
  */
 export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: Inputs): boolean {
-  if (resolve(root) !== resolve(layout.controller)) return false;
-  const verified = git.commit("refs/heads/verified"), head = git.commit("HEAD");
-  if (!verified || !head || verified === head || !git.isAncestor(head, verified)) return false;
+  const verified = controllerTarget(git, layout, root), head = git.commit("HEAD");
+  if (!verified || !head) return false;
   if (git.run(["status", "--porcelain", "--untracked-files=no"])) return false;
   const alone = GateResource.tryAcquire(layout.controllerLock);
   if (!alone) return false;
@@ -1440,7 +1478,8 @@ export function statusText(s: FullCheckStatus): string {
   const run = (r: RunRecord | null) => r ? `${r.verdict} at ${short(r.commit)} (${r.at})${r.failed.length ? `: ${r.failed.join(", ")}` : ""}${r.reason ? `: ${r.reason}` : ""}; ${r.run}` : "none";
   const records = (r: PartStatus["records"]) => `${r.listed ? `${r.listed.pending} pending and ${r.listed.accepted} accepted listed` : "none listed"}`
     + `; last ${r.last ? `${short(r.last.commit)} ${r.last.outcome ? `${r.last.outcome}: ` : ""}${r.last.result}` : "none"}`;
-  const doing = s.now ? `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
+  const doing = s.now ? s.now.doing === "restarting" ? `restarting for verified ${s.now.commit} for ${minutes(s.now.seconds)}`
+    : `${s.now.doing} at ${short(s.now.commit)} for ${minutes(s.now.seconds)}` : "between cycles";
   return [
     `controller: ${s.controller.running ? `running (pid ${s.controller.pid}); ${doing}` : "not running"}`,
     `core: last ${run(s.core.last_run)}`, `      green ${run(s.core.last_green)}`,
@@ -1574,7 +1613,8 @@ async function main(argv: readonly string[]): Promise<number> {
       continue;
     }
     if (options.once) return 0;
-    if (did === "idle") Atomics.wait(nap, 0, 0, 60_000);
+    if (did === "restart" && followVerified(fx.git, layout)) return 0;
+    if (did === "idle" || did === "restart") Atomics.wait(nap, 0, 0, 60_000);
   }
 }
 

@@ -16,7 +16,7 @@ import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
 import {applyEveryRow, assertMessage, checkoutIn, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
-import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, countOnce, cycle, rangeReaches, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
+import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, controllerTarget, countOnce, cycle, rangeReaches, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
 import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
@@ -50,6 +50,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     queue,
     // Core controls own a waiting agent; wide/benchmark controls select idle explicitly.
     memoryWaiter: options.memoryWaiter ?? (() => options.idle ? null : "fixture agent memory request waits"),
+    restartTarget: () => null,
     reaches: () => true,
     submitted: queue.submitted,
     withdrawn: queue.withdrawn,
@@ -1358,6 +1359,80 @@ test("the controller moves to verified only while no count reads its tree", t =>
   const after = GateResource.tryAcquire(layout.controllerLock);
   assert.ok(after, "and the controller let it go");
   after.close();
+});
+
+test("a pending restart waits for the controller lock without starting a run or recording a hold", async t => {
+  const repo=repository(t),first=repo.commit({"a.txt":"1\n"},"first"),second=repo.commit({"a.txt":"2\n"},"second");
+  repo.git.run(["branch","verified",second]);
+  repo.git.run(["checkout","-q","--detach",first]);
+  const gate=fakeGate(repo),fx=harness(repo,gate);
+  fx.layout={...repo.layout,controller:repo.dir};
+  fx.restartTarget=()=>controllerTarget(repo.git,fx.layout,repo.dir);
+  const count=GateResource.tryAcquire(fx.layout.controllerLock);
+  assert.ok(count);
+  try {
+    assert.equal(followVerified(repo.git,fx.layout,repo.dir,()=>assert.fail("locked")),false);
+    assert.equal(await cycle(fx),"restart");
+    assert.equal(await cycle(fx),"restart");
+    assert.deepEqual(gate.measured,[]);
+    const state=readState(repo.layout.state);
+    assert.equal(state.core.last_run,undefined);
+    assert.equal(state.wide.last_run,undefined);
+    assert.deepEqual(state.now,{doing:"restarting",commit:second,since:fx.now().toISOString()});
+    const status=fullCheckStatus(state,{main:second,verified:second,unverified:[],landedAt:()=>fx.now().toISOString(),controller:{pid:42,alive:true},count:null,now:fx.now()});
+    assert.ok(statusText(status).includes(`restarting for verified ${second}`));
+    assert.equal(fx.lines.filter(line=>line.startsWith("restarting for verified")).length,1);
+  } finally { count.close(); }
+  assert.equal(followVerified(repo.git,fx.layout,repo.dir,()=>{}),true);
+  assert.equal(controllerTarget(repo.git,fx.layout,repo.dir),null);
+});
+
+for(const part of ["core","wide"] as const)test(`verified moving during ${part} preparation restarts before the gate launch`,async t=>{
+  const repo=repository(t),first=repo.commit({"a.txt":"1\n"},"first"),second=repo.commit({"a.txt":"2\n"},"second");
+  repo.git.run(["branch","verified",first]);
+  repo.git.run(["checkout","-q","--detach",first]);
+  const gate=fakeGate(repo),fx=harness(repo,gate,{idle:part==="wide"});
+  fx.layout={...repo.layout,controller:repo.dir};
+  fx.restartTarget=()=>controllerTarget(repo.git,fx.layout,repo.dir);
+  const steps=gate.steps;
+  gate.steps=commit=>{repo.git.run(["update-ref","refs/heads/verified",second]);return steps(commit);};
+  assert.equal(await cycle(fx),"restart");
+  assert.deepEqual(gate.measured,[]);
+  assert.equal(readState(repo.layout.state)[part].last_run,undefined);
+  assert.equal(readState(repo.layout.state).now?.doing,"restarting");
+});
+
+test("verified moving before a culprit probe restarts without a probe or a false held result",async t=>{
+  const repo=repository(t),first=repo.commit({"a.txt":"1\n"},"first"),gate=fakeGate(repo),fx=harness(repo,gate);
+  assert.equal(await cycle(fx),"core");
+  const red=repo.commit({"RED/tests":"red\n"},"red");
+  repo.git.run(["checkout","-q","--detach",first]);
+  fx.layout={...repo.layout,controller:repo.dir};
+  fx.restartTarget=()=>controllerTarget(repo.git,fx.layout,repo.dir);
+  const steps=gate.steps;let preparations=0;
+  gate.steps=commit=>{if(++preparations===2)repo.git.run(["update-ref","refs/heads/verified",red]);return steps(commit);};
+  assert.equal(await cycle(fx),"restart");
+  assert.deepEqual(gate.measured.map(row=>row.label),["core","core"]);
+  const state=readState(repo.layout.state);
+  assert.equal(state.core.last_run?.verdict,"red","the completed red is preserved");
+  assert.equal(state.core.last_run?.search,undefined,"no held search was fabricated");
+  assert.equal(state.now?.doing,"restarting");
+});
+
+test("an in-flight core finishes normally when verified moves and the next run waits for restart",async t=>{
+  const repo=repository(t),first=repo.commit({"a.txt":"1\n"},"first"),second=repo.commit({"a.txt":"2\n"},"second");
+  repo.git.run(["branch","verified",first]);
+  repo.git.run(["checkout","-q","--detach",first]);
+  const gate=fakeGate(repo),fx=harness(repo,gate);
+  fx.layout={...repo.layout,controller:repo.dir};
+  fx.restartTarget=()=>controllerTarget(repo.git,fx.layout,repo.dir);
+  const run=gate.run;
+  gate.run=(...args)=>{repo.git.run(["update-ref","refs/heads/verified",second]);return run(...args);};
+  assert.equal(await cycle(fx),"core");
+  assert.equal(readState(repo.layout.state).core.last_run?.verdict,"green");
+  assert.equal(await cycle(fx),"restart");
+  assert.equal(gate.measured.length,1);
+  assert.equal(readState(repo.layout.state).core.last_run?.verdict,"green");
 });
 
 test("a culprit its own part is green after is cleared and its waiting revert withdrawn, though the other part was never green", async t => {

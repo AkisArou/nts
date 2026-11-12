@@ -2486,3 +2486,13 @@ owner with NTS_CHECKERS=1 and --no-fail-fast. The direct invocation owner does
 not prepare runtime services, so its former documentation produced differential
 test failures for missing setup. The dependency fixture also declares its
 normal standalone oracle setup hook. Part of #753.
+
+## Controller adoption precedes scheduling (11-12)
+
+The follow-verified check could decline to move a locked controller tree and
+then let the old controller start another run. Its later planned exit left
+that run with a false held verdict. Pending adoption now stops scheduling
+independently of the tree move: each cycle and core, wide or probe launch
+checks it. The status names the verified target while the lock is busy.
+In-flight work finishes, and independent records and benchmark units remain
+adoptable. A restart request produces no held result. Fixes #755.
