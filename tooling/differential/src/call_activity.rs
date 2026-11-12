@@ -248,11 +248,38 @@ fn ticks() -> Result<u32> {
 }
 
 #[derive(Debug)]
+enum CleanupState {
+    Pending,
+    Finished,
+    Failed(String),
+}
+impl CleanupState {
+    fn run(&mut self, group: u32, action: impl FnOnce() -> Result<()>) -> Result<()> {
+        match self {
+            Self::Finished => return Ok(()),
+            Self::Failed(reason) => anyhow::bail!(reason.clone()),
+            Self::Pending => {}
+        }
+        match action() {
+            Ok(()) => {
+                *self = Self::Finished;
+                Ok(())
+            }
+            Err(error) => {
+                let reason = format!("compiled cleanup INSTRUMENT: owned group {group}: {error:#}");
+                *self = Self::Failed(reason.clone());
+                anyhow::bail!(reason)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 struct OwnedChild {
     child: Option<Child>,
     pid: u32,
     identity: Option<(u64, u32)>,
-    finished: bool,
+    cleanup: CleanupState,
 }
 
 impl OwnedChild {
@@ -260,39 +287,37 @@ impl OwnedChild {
         self.finish_with(&mut LiveCleanup)
     }
     fn finish_with(&mut self, cleanup: &mut impl CleanupObserver) -> Result<()> {
-        if self.finished {
-            return Ok(());
-        }
         let group = self.pid;
-        // The waiter can already have reaped the leader. Surviving members
-        // retain this PGID, preventing its number from being reused; always
-        // finish that owned group even after the leader's exit event.
-        if let Some(now) = process_at(group)? {
-            ensure!(
-                now.group == group
-                    && self
-                        .identity
-                        .is_none_or(|identity| (now.started, now.session) == identity),
-                "refusing a changed child group"
-            );
-        }
-        let remaining = group_remains(group)?;
-        if remaining {
-            let killed = Command::new("kill")
-                .args(["-KILL", "--", &format!("-{group}")])
-                .output()?;
-            if !killed.status.success() {
-                // A group that exited between observation and kill needs no
-                // signal. A live group must never be silently left behind.
-                ensure!(!group_remains(group)?, "cannot stop owned compiled group");
+        let identity = self.identity;
+        let child = &mut self.child;
+        self.cleanup.run(group, || {
+            // The waiter can already have reaped the leader. Surviving members
+            // retain this PGID, preventing its number from being reused; always
+            // finish that owned group even after the leader's exit event.
+            if let Some(now) = process_at(group)? {
+                ensure!(
+                    now.group == group
+                        && identity.is_none_or(|identity| (now.started, now.session) == identity),
+                    "refusing a changed child group"
+                );
             }
-        }
-        wait_for_cleanup(group, cleanup)?;
-        if let Some(child) = &mut self.child {
-            child.wait()?;
-        }
-        self.finished = true;
-        Ok(())
+            let remaining = group_remains(group)?;
+            if remaining {
+                let killed = Command::new("kill")
+                    .args(["-KILL", "--", &format!("-{group}")])
+                    .output()?;
+                if !killed.status.success() {
+                    // A group that exited between observation and kill needs no
+                    // signal. A live group must never be silently left behind.
+                    ensure!(!group_remains(group)?, "cannot stop owned compiled group");
+                }
+            }
+            wait_for_cleanup(group, cleanup)?;
+            if let Some(child) = child {
+                child.wait()?;
+            }
+            Ok(())
+        })
     }
 }
 
@@ -409,7 +434,7 @@ fn wait_for_cleanup(group: u32, observer: &mut impl CleanupObserver) -> Result<(
                 .collect::<Vec<_>>()
                 .join(", ");
             anyhow::bail!(
-                "compiled cleanup INSTRUMENT: owned group {group} remains after {elapsed:?}; wedged-cleanup bound {CLEANUP_WEDGE_BOUND:?}; remaining {remaining}"
+                "wedged-cleanup bound {CLEANUP_WEDGE_BOUND:?} reached after {elapsed:?}; remaining {remaining}"
             );
         }
         observer.pause();
@@ -752,7 +777,7 @@ impl Running {
             child: Some(child),
             pid,
             identity: None,
-            finished: false,
+            cleanup: CleanupState::Pending,
         };
         let identity = process_at(owned.pid)?.context("supervised program has no identity")?;
         ensure!(
@@ -1118,6 +1143,34 @@ mod tests {
         assert!(matches!(result.kind, IncompleteKind::Runaway));
         assert!(result.reason.contains("owned command group"));
     }
+    #[test]
+    fn cleanup_success_and_failure_are_terminal_without_observing_again() {
+        for failure in [false, true] {
+            let mut state = CleanupState::Pending;
+            let mut attempts = 0;
+            let first = state
+                .run(42, || {
+                    attempts += 1;
+                    if failure {
+                        anyhow::bail!("retained cause");
+                    }
+                    Ok(())
+                })
+                .err()
+                .map(|error| error.to_string());
+            let second = state
+                .run(42, || panic!("terminal cleanup observed or waited again"))
+                .err()
+                .map(|error| error.to_string());
+            assert_eq!(first, second);
+            assert_eq!(attempts, 1);
+            if let Some(error) = first {
+                for expected in ["INSTRUMENT", "group 42", "retained cause"] {
+                    assert!(error.contains(expected));
+                }
+            }
+        }
+    }
     struct CleanupScript {
         at: Instant,
         steps: std::collections::VecDeque<(Duration, Vec<RemainingProcess>)>,
@@ -1162,7 +1215,10 @@ mod tests {
             steps: [(CLEANUP_WEDGE_BOUND, vec![member])].into(),
             pauses: 0,
         };
-        let error = wait_for_cleanup(42, &mut stuck).unwrap_err().to_string();
+        let error = CleanupState::Pending
+            .run(42, || wait_for_cleanup(42, &mut stuck))
+            .unwrap_err()
+            .to_string();
         for expected in [
             "INSTRUMENT",
             "group 42",
@@ -1207,7 +1263,7 @@ else:
             pid: child.id(),
             child: Some(child),
             identity: None,
-            finished: false,
+            cleanup: CleanupState::Pending,
         };
         let output = owned.child.as_mut().unwrap().stdout.take().unwrap();
         let mut ready = String::new();
@@ -1260,7 +1316,7 @@ else:
         };
         owned.finish_with(&mut observer).unwrap();
         assert!(observer.observed_late);
-        assert!(owned.finished);
+        assert!(matches!(owned.cleanup, CleanupState::Finished));
         assert!(group_members(owned.pid).unwrap().is_empty());
         assert!(
             process_at(descendant)
