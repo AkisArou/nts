@@ -169,6 +169,7 @@ export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, 
       { ...options, env: { ...(worker?.scope.env ?? options.env ?? process.env), ...FIXED_AMBIENT } });
   } catch (error) { worker?.close(); throw error; }
   const measurement = new Promise((resolve) => {
+    /** @type {string | undefined} */
     let launchError;
     child.on("error", (error) => { launchError = error.message; });
     child.on("close", (status, signal) => {
@@ -183,7 +184,7 @@ export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, 
       let boundaryError;
       try {
         try {
-          const memory = worker?.observation();
+          const memory = worker?.observation({status,signal,...(launchError?{error:new Error(launchError)}:{})});
           if (memory) row.memory = memory;
         } finally { worker?.close(); }
       } catch (error) { boundaryError = `counter worker boundary: ${String(error)}`; }

@@ -481,7 +481,11 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   `tooling/gate/command-liveness.ts` decides from output, CPU counters,
   busy/sleep state and monotonic time. `active-process.ts` owns the process
   group and pipes and supplies one complete `CommandObservations` capability:
-  clock, CPU frequency, initial CPU baseline and activity watch. An injected
+  clock, CPU frequency, initial CPU baseline, activity watch and bounded-entry
+  readiness. Startup has its own wedged-launcher guard; execution inactivity
+  begins only after the worker enters its kernel boundary. Startup exhaustion
+  is a tooling-setup failure with no measured case outcome. A pre-entry failure
+  retains its actual launcher diagnostic. An injected
   capability supplies every field; none falls back to the live sampler. Group
   birth identity remains a live safety check. Decision tests replay fixed
   sequences without children. Real-process controls prove sampling, pipes and
@@ -603,6 +607,9 @@ the first node task.
   ([log](records/notebooks/decisions-log.md#tests-own-their-view-of-the-host-11-11)).
   Command liveness is a pure decision over a complete supplied activity/clock
   capability; kernel group identity and readiness-based wiring stay separate.
+  Bounded launch and execution are separate phases: readiness arms inactivity,
+  and an exhausted startup guard fails the instrument rather than a case
+  ([log](records/notebooks/decisions-log.md#bounded-entry-precedes-execution-inactivity-11-12)).
   The gate checks ownership across dependencies and generated launches, and
   runs tooling entries with strict fixture observations and ambient poison.
 

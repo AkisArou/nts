@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {existsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {activeCommand,type CommandObservations} from './active-command.ts';
+import {activeCommand,type CommandObservations,type BoundedEntry} from './active-command.ts';
 import {commandObservationFixture} from './command-observations-fixture.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
@@ -46,7 +46,7 @@ for(const kind of ['hung','runaway','timeout'] as const)test('the bridge publish
 
 test('every missing command observation fails before any live process can be started',async t=>{
   const f=fixture(t),control=commandObservationFixture();
-  for(const name of ['now','frequency','initialCpu','watch'] as const){
+  for(const name of ['now','frequency','initialCpu','entryReady','watch'] as const){
     const partial={...control.observations,[name]:undefined} as unknown as CommandObservations;
     await assert.rejects(activeCommand('/must-not-be-started',[],{cwd:f.root,env:f.env,observations:partial}),/command observation/);
     assert.equal(f.frame()?.kind,'tooling-setup');
@@ -61,4 +61,26 @@ test('the bridge takes its initial CPU counter from the supplied capability',asy
     control.sample(300,{cpu:12});
     assert.equal(f.frame()?.kind,'hung','an unchanged initial counter supplies no progress');
   }finally{writeFileSync(f.release,'release');await running;}
+});
+
+test('boundedEntry that never becomes ready ends only as a setup instrument failure',async t=>{
+  const f=fixture(t),control=commandObservationFixture();control.entry(false);
+  const running=activeCommand(process.execPath,['--input-type=module','-e',f.body,f.ready,f.release],{
+    cwd:f.root,env:f.env,idleMs:50,boundedEntry:{startupMs:60_000,ready:()=>false},observations:control.observations});
+  const failed=assert.rejects(running,/bounded worker did not enter within its 60000 ms startup bound/);
+  await control.attached;await ready(f,running);
+  control.sample(60_000);
+  await failed;
+  assert.equal(f.frame()?.kind,'tooling-setup');
+  assert.equal(f.frame()?.verdict,'INSTRUMENT');
+});
+
+
+test('a bounded entry cannot omit readiness or its startup bound',async t=>{
+  const f=fixture(t);
+  for(const boundedEntry of [{startupMs:60_000},{ready:()=>true}]){
+    await assert.rejects(activeCommand('/must-not-start-with-incomplete-entry',[],{
+      cwd:f.root,env:f.env,boundedEntry:boundedEntry as unknown as BoundedEntry}),/bounded entry capability is incomplete/);
+    assert.equal(f.frame()?.kind,'tooling-setup');
+  }
 });

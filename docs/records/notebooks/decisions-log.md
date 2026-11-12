@@ -2216,3 +2216,19 @@ is separate work (#728). #723 retains its additive reach. A new exact reader
 may retire an old fallback; shared selector, toolchain and supervision policy
 keeps full reach explicitly. Governs
 [landing selection](../../workflow.md#landing-the-landing-check).
+
+## Bounded entry precedes execution inactivity (11-12)
+
+The benchmark build tests installed a real 200 ms inactivity window around
+systemd startup. A controlled 600 ms launcher delay reproduced the pre-entry
+failure three times on unchanged main, although entry writes readiness before
+exec. The generic failure then discarded the supervisor's reason.
+
+CommandLiveness now consumes bounded readiness as an observation. Its startup
+phase has a separate wedged-launcher bound, and execution inactivity starts
+only at entry. Startup exhaustion is tooling-setup, NOT MEASURED, and a failed
+launcher retains its actual diagnostic. Both plain bounded commands and
+standalone compiler scopes use the same phases. Build decision fixtures replay
+fixed counters and clocks through the shared model. Kernel wiring controls
+explicitly select live observations and release a launcher barrier after it
+has outlasted its execution idle window. Governs [the machine](../../workflow.md#the-machine).

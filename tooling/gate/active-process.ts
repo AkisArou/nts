@@ -6,7 +6,7 @@ import {CommandLiveness,validateCommandPolicy} from "./command-liveness.ts";
 import {hostObservations} from "./host-observations.ts";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
-export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS} from "./command-liveness.ts";
+export {COMMAND_IDLE_GUARD_MS,COMMAND_CPU_BUDGET_SECONDS,COMMAND_STARTUP_BOUND_MS} from "./command-liveness.ts";
 export const COMMAND_ACTIVITY_POLL_MS=5000;
 /** One case's compile: its command's own CPU, not its children's. Far above any
  * healthy case, since the compile-time tripwire guards modules that are only
@@ -123,10 +123,15 @@ export class CommandActivitySampler {
 const activitySampler=new CommandActivitySampler();
 
 /** One complete observation capability; fixtures never merge with a live one. */
-export type CommandObservations={now:()=>number;frequency:number;initialCpu:(pid:number)=>number;watch:(watch:ActivityWatch)=>()=>void};
-export function liveCommandObservations(env:NodeJS.ProcessEnv):CommandObservations{
+export type CommandObservations={now:()=>number;frequency:number;initialCpu:(pid:number)=>number;entryReady:()=>boolean;watch:(watch:ActivityWatch)=>()=>void};
+export type BoundedEntry={startupMs:number;ready:()=>boolean};
+function validateBoundedEntry(value:BoundedEntry|undefined):void{
+  if(value!==undefined&&(typeof value.ready!=='function'||!Number.isFinite(value.startupMs)||value.startupMs<=0))throw Error('bounded entry capability is incomplete');
+}
+export function liveCommandObservations(env:NodeJS.ProcessEnv,boundedEntry?:BoundedEntry):CommandObservations{
+  validateBoundedEntry(boundedEntry);
   const host=hostObservations(env);
-  return {now:()=>host.now(),frequency:clockTicks(),initialCpu:pid=>processAt(pid)?.cpu??0,watch:watch=>activitySampler.watch(watch)};
+  return {now:()=>host.now(),frequency:clockTicks(),entryReady:()=>boundedEntry===undefined||boundedEntry.ready(),initialCpu:pid=>processAt(pid)?.cpu??0,watch:watch=>activitySampler.watch(watch)};
 }
 
 export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
@@ -135,7 +140,7 @@ export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null
 // bound independently to every process in a build session (a driver can wait
 // while its linker spends CPU). Past it the command is stopped and `timeout` says
 // so; nothing is published, because a timeout is the case's outcome, not a hold.
-export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;captureBytes?:boolean;observations?:CommandObservations;
+export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;captureBytes?:boolean;observations?:CommandObservations;boundedEntry?:BoundedEntry;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -144,13 +149,15 @@ export type ActiveOptions={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollM
  */
 export function activeCommand(command:string,args:readonly string[],options:ActiveOptions):Promise<ActiveResult>{
   return new Promise((resolve,reject)=>{
-    validateCommandPolicy(options);
+    const policy={...options,startupMs:options.boundedEntry?.startupMs};
+    validateCommandPolicy(policy);
     if(options.maxBuffer!==undefined&&(!Number.isSafeInteger(options.maxBuffer)||options.maxBuffer<1))throw new Error("command capture budget must be a positive integer");
     let observations:CommandObservations,liveness:CommandLiveness;
     try{
-      observations=options.observations===undefined?liveCommandObservations(options.env):options.observations;
-      if(!observations||typeof observations.now!=='function'||typeof observations.watch!=='function'||typeof observations.initialCpu!=='function')throw Error('command observation capability is incomplete');
-      liveness=new CommandLiveness(command,options,observations.now(),observations.frequency);
+      validateBoundedEntry(options.boundedEntry);
+      observations=options.observations===undefined?liveCommandObservations(options.env,options.boundedEntry):options.observations;
+      if(!observations||typeof observations.now!=='function'||typeof observations.watch!=='function'||typeof observations.initialCpu!=='function'||typeof observations.entryReady!=='function')throw Error('command observation capability is incomplete');
+      liveness=new CommandLiveness(command,policy,observations.now(),observations.frequency);
     }catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]});
     let out="",stdout="",stderr="",started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,timeout:string|undefined,instrument:ToolingInstrumentError|undefined;
@@ -164,7 +171,7 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
     };
     const broken=(cause:unknown)=>{
       if(instrument)return;
-      instrument=new ToolingInstrumentError("tooling-setup",`cannot observe activity for ${command}: ${String(cause)}`);
+      instrument=cause instanceof ToolingInstrumentError?cause:new ToolingInstrumentError("tooling-setup",`cannot observe activity for ${command}: ${String(cause)}`);
       publishToolingFailure(instrument,options.env);
       cancelActivity();
       try{stop();}catch(error){instrument=new ToolingInstrumentError("tooling-cleanup",`${instrument.message}; ${String(error)}`);publishToolingFailure(instrument,options.env);}
@@ -221,8 +228,9 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
       cancelActivity=observations.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy,processOwn)=>{
         try{
           const now=observations.now(),previous=liveness.cpu;
-          const decision=liveness.sample({now,cpu:measured,own,busy,processOwn});
+          const decision=liveness.sample({now,cpu:measured,own,busy,processOwn,entered:observations.entryReady()});
           if(decision){
+            if(decision.kind==='startup'){broken(new ToolingInstrumentError('tooling-setup',decision.reason));return;}
             if(decision.kind==='timeout')timeout=decision.reason;
             else if(decision.kind==='runaway'){runaway=decision.reason;publishRunaway(runaway,options.env);}
             else{hung=decision.reason;publishHung(hung,options.env);}

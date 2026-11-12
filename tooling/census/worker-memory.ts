@@ -7,11 +7,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
+import { PressureError, CaseBudgetError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
-import { activeCommand, CommandNotMeasuredError } from "../gate/active-process.ts";
+import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
@@ -439,6 +439,14 @@ export function supervisorWorkerBoundary() {
 
 let commandOrdinal = 0;
 
+type EntryResult = { error?: Error; hung?: string; runaway?: string; timeout?: string;
+  stderr?: string | Buffer; status?: number | null; signal?: NodeJS.Signals | null };
+function entryFailure(label: string, result: EntryResult): never {
+  const reason = result.error?.message || result.hung || result.runaway || result.timeout ||
+    String(result.stderr ?? "").trim() || (result.signal ? `signal ${result.signal}` : `exit ${result.status ?? "unknown"}`);
+  throw new ToolingInstrumentError("tooling-setup", `${label} failed before bounded entry: ${reason}`);
+}
+
 /** Plain commands launched by a step supervisor use the same worker boundary
  * as resident pools. An explicit resident launch already owns its scope. */
 export function commandWorker(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env) {
@@ -460,8 +468,9 @@ export function commandWorker(command: string, args: readonly string[], env: Nod
   const scope = worker.scope(command, [...args], env);
   return {
     scope,
-    observation() {
-      if (!worker.ready(scope)) throw new Error("worker command failed before bounded entry");
+    ready() { return worker.ready(scope); },
+    observation(result: EntryResult) {
+      if (!worker.ready(scope)) entryFailure("worker command", result);
       const cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms());
       return cause ? { cause, limitBytes: worker.bytes } : undefined;
     },
@@ -478,7 +487,7 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
     const before = events(boundary);
     const aggregateBefore = events(aggregate, true).oom;
     if (process.env.NTS_CENSUS_ACTIVE_CASE) writeFileSync(process.env.NTS_CENSUS_ACTIVE_CASE, `${[command, ...args].join(" ")}`);
-    return {command:"sh",args:noAddressLimit,options,close:()=>{},finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
+    return {command:"sh",args:noAddressLimit,options,entryReady:undefined,close:()=>{},finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
       const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
       const memoryKilled = compileMemoryResult(cause, process.env.NTS_CENSUS_CASE_CONCURRENCY === "exclusive", command, args, Number(process.env.NTS_CENSUS_RUN_MAX_BYTES), Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES));
       return { ...result, memoryKilled, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
@@ -497,9 +506,9 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
   let closed=false;
   // The lane is idle again once its scope is stopped, for the next compile of its cap.
   const close=()=>{if(!closed){closed=true;worker.stop(scope);idle.push(worker);}};
-  return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},close,finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
+  return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},entryReady:()=>worker.ready(scope),close,finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
     try{
-      if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);
+      if (!worker.ready(scope)) entryFailure("compiler scope", result);
     }finally{close();}
     const cause = memoryCause(before, worker.counters(), aggregateBefore, worker.run.aggregateOoms());
     const memoryKilled = compileMemoryResult(cause, true, command, args, worker.run.budgetBytes, worker.bytes);
@@ -521,7 +530,8 @@ export async function compileActive(tools: CompilerTools, command: string, args:
   if("timeout" in options)throw new Error("compileActive does not accept wall-clock verdict deadlines");
   const invocation=compilerInvocation(tools,command,args,options);
   try{
-    const result=await activeCommand(invocation.command,invocation.args,{...options,cwd:options.cwd??process.cwd(),env:invocation.options.env??process.env});
+    const result=await activeCommand(invocation.command,invocation.args,{...options,cwd:options.cwd??process.cwd(),env:invocation.options.env??process.env,
+      ...(invocation.entryReady?{boundedEntry:{startupMs:options.boundedEntry?.startupMs??COMMAND_STARTUP_BOUND_MS,ready:invocation.entryReady}}:{})});
     const measured=invocation.finish(result);
     if(!measured.memoryKilled&&(result.hung||result.runaway))throw new CommandNotMeasuredError(result);
     return measured;

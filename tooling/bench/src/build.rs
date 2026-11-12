@@ -110,15 +110,37 @@ mod tests {
             .join("tooling/gate/active-command.ts")
             .canonicalize_utf8()?;
         let active = serde_json::to_string(&format!("file://{active}"))?;
+        let observations = root
+            .join("tooling/gate/command-observations-fixture.ts")
+            .canonicalize_utf8()?;
+        let observations = serde_json::to_string(&format!("file://{observations}"))?;
         let preload = dir.join("bound.mjs");
         std::fs::write(
             &preload,
             format!(
                 r"import {{mock}} from 'node:test';
+import {{writeFileSync}} from 'node:fs';
 const real=await import({active});
-mock.module({active},{{namedExports:{{...real,activeCommand:(command,args,options)=>{{
+const {{scriptedCommand,commandSample}}=await import({observations});
+mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,options)=>{{
   if(options.eachProcessCpuSeconds!==real.COMPILE_CPU_BOUND_SECONDS)throw Error('build did not request the shared compile bound');
-  return real.activeCommand(command,args,{{...options,eachProcessCpuSeconds:0.3,idleMs:200,pollMs:20}});
+  if(options.idleMs!==real.COMMAND_IDLE_GUARD_MS)throw Error('build did not request the shared inactivity guard');
+  const [driver,marker,mode]=args;
+  if(!driver.endsWith('fake-toolchain.py'))throw Error('build changed the tool arguments');
+  let samples=[commandSample(0)],result={{}};
+  if(mode==='spin'){{
+    const ticks=(real.COMPILE_CPU_BOUND_SECONDS+1)*100;
+    samples=[commandSample(1,{{cpu:ticks,processOwn:{{pid:51,cpu:ticks}}}})];
+    result={{stderr:'partial compiler diagnostic'}};
+  }}else if(mode==='idle'){{
+    samples=[commandSample(real.COMMAND_IDLE_GUARD_MS)];
+    result={{stderr:'partial compiler diagnostic'}};
+  }}else if(mode.startsWith('exit')){{
+    result={{status:Number(mode.slice(4)),stderr:'ordinary compiler failure\n'}};
+  }}else if(mode==='complete'){{
+    writeFileSync(marker,options.env.BUILD_SENTINEL+'|'+options.cwd+'|'+String('HOME' in options.env).replace('false','False'));
+  }}else throw Error('unknown fixed build observation '+mode);
+  return scriptedCommand(command,options,samples,result);
 }}}}}});
 "
             ),
@@ -145,23 +167,11 @@ mock.module({active},{{namedExports:{{...real,activeCommand:(command,args,option
             std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))?;
         }
         let driver = dir.join("fake-toolchain.py");
+        // Decision fixtures never execute a tool: the shared liveness model
+        // consumes their supplied counters and clock above.
         std::fs::write(
             &driver,
-            r"import os, pathlib, subprocess, sys
-marker = pathlib.Path(sys.argv[1])
-if sys.argv[2] == 'spin':
-    print('partial compiler diagnostic',file=sys.stderr,end='',flush=True)
-    subprocess.run([sys.executable, '-c', 'import os,pathlib,sys\npathlib.Path(sys.argv[1]).write_text(str(os.getpid()))\nwhile True: pass', str(marker.with_suffix('.pid'))], check=True)
-elif sys.argv[2] == 'idle':
-    print('partial compiler diagnostic',file=sys.stderr,end='',flush=True)
-    import time
-    time.sleep(60)
-elif sys.argv[2].startswith('exit'):
-    print('ordinary compiler failure', file=sys.stderr)
-    sys.exit(int(sys.argv[2][4:]))
-else:
-    marker.write_text(os.environ['BUILD_SENTINEL'] + '|' + os.getcwd() + '|' + str('HOME' in os.environ))
-",
+            "raise RuntimeError('decision fixture executed a real tool')\n",
         )?;
         Ok(own)
     }
@@ -203,17 +213,6 @@ else:
                         .is::<Timeout>(),
                     "{result:?}"
                 );
-                let pid = std::fs::read_to_string(marker.with_extension("pid"))?;
-                match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-                    Ok(stat) => assert!(
-                        stat.rsplit_once(") ")
-                            .expect("kernel stat has a process name")
-                            .1
-                            .starts_with("Z "),
-                        "the timed-out linker is still alive: {stat}"
-                    ),
-                    Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::NotFound),
-                }
             } else {
                 assert!(
                     result

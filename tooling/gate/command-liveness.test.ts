@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {CommandLiveness,type CommandSample} from './command-liveness.ts';
+import {CommandLiveness,COMMAND_STARTUP_BOUND_MS,type CommandSample} from './command-liveness.ts';
 const reading=(now:number,values:Partial<Omit<CommandSample,'now'>>={}):CommandSample=>({now,cpu:0,own:0,busy:false,processOwn:{pid:51,cpu:0},...values});
 
 test('silence expires at its supplied monotonic boundary',()=>{
@@ -56,4 +56,22 @@ test('invalid or backwards observations fail instead of consulting another clock
   assert.throws(()=>subject.sample(reading(100,{processOwn:{pid:71,cpu:NaN}})),/process CPU/);
   assert.throws(()=>subject.sample(reading(100,{busy:undefined as unknown as boolean})),/busy state/);
   assert.throws(()=>new CommandLiveness('compiler',{},0,NaN),/CPU clock frequency/);
+});
+
+test('bounded startup can take several seconds before the execution idle window arms',()=>{
+  const subject=new CommandLiveness('compiler',{idleMs:50,startupMs:COMMAND_STARTUP_BOUND_MS},0,100);
+  for(const now of [0,5_000,20_000])assert.equal(subject.sample(reading(now,{entered:false})),undefined);
+  assert.equal(subject.sample(reading(25_000,{entered:true})),undefined);
+  assert.equal(subject.sample(reading(25_049)),undefined);
+  assert.equal(subject.sample(reading(25_050))?.kind,'hung');
+});
+test('a wedged startup is an instrument decision even when the launcher is busy',()=>{
+  const subject=new CommandLiveness('compiler',{idleMs:50,startupMs:COMMAND_STARTUP_BOUND_MS},0,100);
+  assert.equal(subject.sample(reading(COMMAND_STARTUP_BOUND_MS-1,{entered:false,busy:true})),undefined);
+  assert.deepEqual(subject.sample(reading(COMMAND_STARTUP_BOUND_MS,{entered:false,busy:true})),{
+    kind:'startup',reason:'compiler: bounded worker did not enter within its 60000 ms startup bound'});
+});
+test('a bounded command requires its readiness observation',()=>{
+  const subject=new CommandLiveness('compiler',{startupMs:COMMAND_STARTUP_BOUND_MS},0,100);
+  assert.throws(()=>subject.sample(reading(0)),/bounded entry is missing/);
 });
