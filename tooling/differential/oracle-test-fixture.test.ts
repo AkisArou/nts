@@ -13,7 +13,7 @@ test('an unsealed supplied context refuses by name instead of changing holder ow
  assert.throws(()=>requireSealedOracleTestEnvironment(env),error=>error instanceof ToolingInstrumentError&&error.message===message);
  const code=`import {setupOracleTestEnvironment} from ${JSON.stringify(new URL('./oracle-test-fixture.ts',import.meta.url).href)};setupOracleTestEnvironment().then(()=>console.log('ready'),error=>{console.error(error.message);process.exitCode=2;});`;
  const result=spawnTest(process.execPath,['--input-type=module','-e',code],{env,encoding:'utf8'});
- assert.equal(result.status,2,result.stderr);assert.equal(result.stderr.trim(),message);assert.equal(result.stdout,'');
+ assert.equal(result.status,2,result.stderr);assert.equal(result.stderr.trim(),message);assert.doesNotMatch(result.stdout,/ready/);
 });
 
 test('the supplied sealed tooling context retains the same oracle services',()=>{

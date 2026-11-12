@@ -38,10 +38,11 @@ const executions=new Set<ReturnType<typeof newOracleExecution>>();
 function oracleExecution(...args:Parameters<typeof newOracleExecution>){const execution=newOracleExecution(...args);executions.add(execution);return execution;}
 afterEach(()=>{const close=Reflect.get(oracleOwner,'closeOracleExecution');if(typeof close==='function')for(const execution of executions)close(execution);executions.clear();});
 
-function fixture(t:TestContext){
+function fixture(t:TestContext,{runner=false}:{runner?:boolean}={}){
   const root=mkdtempSync(join(tmpdir(),'nts-node-preloads-'));t.after(()=>removeOracleSnapshot(root));
   const write=(file:string,body:string)=>{file=join(root,file);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,body);};
-  write('tooling/conformance/run-one.mjs',"export {};\n");
+  if(runner)copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  else write('tooling/conformance/run-one.mjs',"export {};\n");
   for(const name of ['subject','sibling']){write(`runtime/node/${name}/src/main.ts`,'export const value:number=1;\n');write(`runtime/node/${name}/tsconfig.json`,'{"files":["src/main.ts"]}');}
   return {root,write};
 }
@@ -103,14 +104,14 @@ test('unknown global groups retain the runtime error and are rejected by prepara
 
 
 test('the actual runner drains nested loader events and keeps the following file independent',t=>{
-  const {root,write}=fixture(t);
+  const {root,write}=fixture(t,{runner:true});
   // A closed failure is an evictable cache. This fixture owns its registry;
   // concurrent real runs must never decide whether its retained image exists.
   const home=join(root,'home'),neighbor=join(root,'neighbor-home');
   mkdirSync(home);mkdirSync(neighbor);
   const env={...fixtureEnvironment(t),HOME:home};
   // These are the production consumers, not a fake launcher or status reader.
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});
@@ -198,8 +199,8 @@ test('a newly nearer project config invalidates the prepared discovery decision'
 });
 
 test('a no-execArgv child validates copied infrastructure before its top-level code runs',async t=>{
-  const {root,write}=fixture(t);
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  const {root,write}=fixture(t,{runner:true});
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});mkdirSync(join(root,'third_party/node/test/fixtures'),{recursive:true});
@@ -263,8 +264,8 @@ test('all Node harness plans enroll each declared TS entry in its nearest ordina
 
 
 test('a distinct sibling child receives exact scope through its private parent handle',async t=>{
-  const {root,write}=fixture(t);
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  const {root,write}=fixture(t,{runner:true});
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});mkdirSync(join(root,'third_party/node/test/fixtures'),{recursive:true});
@@ -292,8 +293,8 @@ test('a distinct sibling child receives exact scope through its private parent h
 
 
 test('the actual runner retains a complete pre-result failure beside its short summary',t=>{
-  const {root,write}=fixture(t),message='pre-result cause '+'.'.repeat(160)+' exact-terminal-cause';
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  const {root,write}=fixture(t,{runner:true}),message='pre-result cause '+'.'.repeat(160)+' exact-terminal-cause';
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});
@@ -309,8 +310,8 @@ test('the actual runner retains a complete pre-result failure beside its short s
 
 
 test('the prepared runner preserves authored origins and infrastructure source identity',t=>{
-  const {root,write}=fixture(t);
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  const {root,write}=fixture(t,{runner:true});
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});
@@ -340,8 +341,8 @@ test('the prepared runner preserves authored origins and infrastructure source i
 
 test('the module runner finalizes the original snapshot before any measured report',async t=>{
   for(const mutation of ['none','original-source','original-listing','omit-finalizer'] as const)await t.test(mutation,()=>{
-    const {root,write}=fixture(t);
-    copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+    const {root,write}=fixture(t,{runner:true});
+
     for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
     symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
     mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});
@@ -376,8 +377,8 @@ test('the module runner finalizes the original snapshot before any measured repo
 });
 
 function workerFixture(t:TestContext){
-  const {root,write}=fixture(t);
-  copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
+  const {root,write}=fixture(t,{runner:true});
+
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
   symlinkSync(join(REPOSITORY,'node_modules'),join(root,'node_modules'));
   mkdirSync(join(root,'third_party/node/test/parallel'),{recursive:true});
