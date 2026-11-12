@@ -21,7 +21,7 @@ import {MemoryRun} from '../census/worker-memory.ts';
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 
 test('the verifier environment alone cannot start a user scope; infrastructure is a separate handoff',t=>{
-  const parent=fixtureEnvironment(t),java=join(parent.JAVA_HOME!,'bin/java'),runtime=verifierEnvironment(java,parent);
+  const parent=fixtureEnvironment(t),java=parent.JAVA_HOME?join(parent.JAVA_HOME,'bin/java'):'java',runtime=verifierEnvironment(java,parent);
   for(const name of HOST_INFRASTRUCTURE)assert.equal(runtime[name],undefined);
   assert.deepEqual(hostInfrastructure({}),{});
   assert.deepEqual(hostInfrastructure({XDG_RUNTIME_DIR:'/owned',DBUS_SESSION_BUS_ADDRESS:'unix:path=/owned/bus',BASH_ENV:'/not-an-input'}),
@@ -36,7 +36,7 @@ test('the common worker handoff adds only declared infrastructure to a filtered 
   try{
     const supplied={PATH:'/usr/bin:/bin',OWNED_VALUE:'retained'};
     const scope=worker.scope(process.execPath,['-e',"process.stdout.write(process.env.OWNED_VALUE)"],supplied);
-    const transport={...scope.env};
+    const transport:NodeJS.ProcessEnv={...scope.env};
     for(const name of ['NTS_CENSUS_WORKER_GROUP','NTS_CENSUS_WORKER_MAX_BYTES','NTS_CENSUS_RUN_GROUP','NTS_CENSUS_RUN_MAX_BYTES'])delete transport[name];
     assert.deepEqual(transport,{...supplied,...hostInfrastructure(process.env)});
     const child=spawn('systemd-run',scope.argv,{env:scope.env,stdio:['ignore','pipe','pipe']});
