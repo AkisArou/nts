@@ -235,6 +235,8 @@ type MemoryFixture = {
   acknowledgeYield?: boolean;
   /** Pause only the staged runner between giving back and publishing growth. */
   handoffBarrier?:'before'|'after';
+  /** Observe excessive positive growth only in the private staged runner. */
+  excessGrowth?:'before'|'after';
 };
 
 /**
@@ -244,7 +246,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield,handoffBarrier }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield,handoffBarrier,excessGrowth }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -260,6 +262,17 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/run.mjs") {
       let source = readFileSync(original, "utf8");
+      if(excessGrowth){
+        const condition='bytes < growth.bytes && !growth.withdrawn';
+        const end='    return;\n  }\n  if (bytes <= 0 || yielding) return;';
+        assert.ok(source.includes(condition)&&source.includes(end),'the growth replay follows the current ticket owner');
+        if(excessGrowth==='before')source=source.replace(condition,'need <= 0 && !growth.withdrawn');
+        source=source.replace(end,`    if(u.bytes===0 && bytes>0 && growth.bytes>bytes){
+      writeFileSync(${JSON.stringify(join(own,'growth-observed.json'))},JSON.stringify({reserved:reserved(),wanted:memoryWanted,queued:growth.bytes,useful:bytes,withdrawn:growth.withdrawn}));
+      if(!growth.withdrawn)stop('control: stale queued growth exceeds current demand');
+    }
+`+end);
+      }
       if(handoffBarrier){
         const entry='function adjustMemory() {',shrink='reservation.shrink(back).catch',growth='  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());';
         const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK';
@@ -340,7 +353,7 @@ fi
       steps_grown: number; steps_killed: number };
   };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
-  return { result, summary, step, output: result.stdout + result.stderr, history, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
+  return { own,result, summary, step, output: result.stdout + result.stderr, history, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
 }
 
 test("steps whose memory together is more than the run can reserve run one after the other", t => {
@@ -366,6 +379,26 @@ esac
   assert.deepEqual([summary.memory.priority, summary.memory.peak_bytes, summary.memory.growths, summary.memory.withdrawn], ["agent", 3 * GiB, 1, 1],
     "one block, grown by 2 for format; the growth for records withdrawn once format's memory came back");
   for (const row of [format, records]) assert.ok(row.memory_peak_bytes === null || row.memory_peak_bytes > 0, `${row.name}'s measured peak`);
+});
+
+for(const arm of ['before','after']as const)test(`excess queued growth is replaced after running work drains (${arm})`,t=>{
+  const {own,result,summary,output}=memoryRun(t,{
+    steps:'format records',availableKiB:22.5*2**20,excessGrowth:arm,
+    rows:{format:{slots:1,reserve:10,bound:60},records:{slots:1,reserve:11,bound:60}},
+    times:'format\t100\t200\t1\nrecords\t100\t100\t1\n',
+    payload:`case $1 in
+  format) exec node "$(dirname "$0")/until.mjs" "$2/memory/ledger/waiting" --entry ;;
+  records) : > "$2/records-ran" ;;
+esac\n`,
+  });
+  const seen=JSON.parse(readFileSync(join(own,'growth-observed.json'),'utf8')) as {reserved:number;wanted:number;queued:number;useful:number;withdrawn:boolean};
+  assert.deepEqual(seen,{reserved:10*GiB,wanted:11*GiB,queued:11*GiB,useful:GiB,withdrawn:arm==='after'});
+  if(arm==='before'){
+    assert.notEqual(result.status,0,output);assert.match(output,/control: stale queued growth exceeds current demand/);
+  }else{
+    assert.equal(result.status,0,output);assert.equal(summary.verdict,'green');
+    assert.equal(summary.memory.peak_bytes,11*GiB);assert.equal(summary.memory.withdrawn,1);
+  }
 });
 
 test("a fixed step waiting for memory is not starved by an elastic step's tokens", t => {
