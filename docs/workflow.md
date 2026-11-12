@@ -147,6 +147,8 @@ declares no input. A named asset declares the file it resolves to, or every
 tracked file beneath it when it resolves to a directory. The census names
 each directory declaration, its reader and its breadth. Conservative path
 inference may add checks; it cannot place a path or remove its full fallback.
+Generated outputs use path operations from positional anchors instead of
+declaring named module-relative input URLs.
 A traced area with no gate reader has a settled rule naming its standalone
 reader. An untraced path keeps the full fallback. `gate-inputs` holds the
 tool-written inventory in `results/gate/full-gate.json`: a newly full path
@@ -455,7 +457,8 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   memory ledger and scheduling history (`ownMemory` in
   `tooling/gate/test-memory.ts`). Children and peak samplers retain the same
   capability. It supplies disk bytes and inodes, machine memory and paging,
-  process and cgroup resident charge, cgroup CPU counters, machine width, load and a monotonic
+  process and cgroup resident charge, cgroup CPU counters, per-descriptor scope
+  peak meters, machine width, load and a monotonic
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.

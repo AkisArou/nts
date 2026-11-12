@@ -75,7 +75,8 @@ checker is compiled into nts, and every tree shares the object store.
   `tooling/gate/test-memory.ts`'s `ownMemory` (`NTS_HOST_OBSERVATIONS`,
   `NTS_MEMORY_LEDGER` and `NTS_GATE_COSTS_DIR`) through `gateEnvironment`'s
   owned values. The complete `HostObservations` capability supplies disk
-  bytes and inodes, memory, paging, resident charge, cgroup CPU counters, machine width, load and
+  bytes and inodes, memory, paging, resident charge, cgroup CPU counters,
+  per-descriptor scope peak meters, machine width, load and
   a monotonic clock to the runner, its dependencies and its samplers. A
   missing observation fails by name; it never falls back to the host. Pure
   decision tests supply observations; kernel wiring controls explicitly
@@ -127,6 +128,8 @@ directory. Keep directory claims as narrow as the actual reader. Text inference
 may add checks but never discharge a full fallback. The `gate-inputs` step
 holds the tool-written full-gate inventory; `owed.mjs --full-census --record`
 can only retire entries, and the census lists directory readers and breadth.
+Build output paths from positional anchors; named module-relative URLs declare
+source inputs, not generated output locations.
 
 **After landing, the full check** (`nts-full-check`) runs the core on every
 new `main` and the wide steps on `verified` a few times a day. A red there is
