@@ -1337,7 +1337,7 @@ export function tsconfigInputs(config, seen = new Set()) {
 export function interopInputs() {
   return once("interop-inputs", () => {
     const map = new InputMap();
-    const add = (input, project) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(project); };
+    const add = (input, project) => { map.add(input, project); };
     for (const dir of kids("tests/interop")) {
       if (!existsSync(join(TREE, dir, "build.sh"))) continue;
       const project = dir.split("/")[2];
@@ -1353,7 +1353,7 @@ export function interopInputs() {
 export function corpusInputs() {
   return once("corpora", () => {
     const map = new InputMap();
-    const add = (input, corpus) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(corpus); };
+    const add = (input, corpus) => { map.add(input, corpus); };
     for (const c of CORPORA) {
       for (const dir of c.dirs()) {
         const config = existsSync(join(TREE, dir, "tsconfig.json")) ? `${dir}/tsconfig.json` : null;
@@ -1433,7 +1433,7 @@ function stepInputGraph() {
     const map = new InputMap();
     const declared = new Set();
     const directories = new Map();
-    const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
+    const add = (input, step) => { map.add(input, step); };
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1];
       const command = m[2].trim();
@@ -1548,6 +1548,11 @@ class InputMap extends Map {
     if (!this.has(input)) this.#positions.set(input, this.#next++);
     return super.set(input, names);
   }
+  add(/** @type {string} */ input, /** @type {string} */ name) {
+    const names = this.get(input);
+    if (names) names.add(name);
+    else this.set(input, new Set([name]));
+  }
   delete(/** @type {string} */ input) {
     this.#positions.delete(input);
     return super.delete(input);
@@ -1600,8 +1605,7 @@ export function embedded() {
       for (const t of targets) {
         const dir = dirname(rel(t));
         if (dir === crate || dir.startsWith(`${crate}/`) || dir.startsWith("..")) continue;
-        if (!map.has(dir)) map.set(dir, new Set());
-        map.get(dir).add(crate);
+        map.add(dir, crate);
       }
     }
     return map;
