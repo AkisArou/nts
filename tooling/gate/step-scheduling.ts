@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // Scheduling history is an optimization. Missing or corrupt history uses the
 // committed baseline and the machine's shares; it never changes which checks
 // run or their verdicts.
@@ -92,7 +93,7 @@ function parsePeaks(value: unknown, units: readonly MemoryUnit[]): Peaks | null 
 }
 
 /**
- * The history in `file`: version 3, or version 2's CPU seconds alone. A file
+ * The history in `file`: version 4 CPU, with earlier memory history retained. A file
  * that is missing, corrupt or of another version is an empty history.
  */
 export function readCostHistory(file: string): CostHistory {
@@ -103,16 +104,17 @@ export function readCostHistory(file: string): CostHistory {
     if (!keys(value, ["version", "steps"]) || !record(value.steps)) return empty();
     const entries = Object.entries(value.steps);
     if (entries.some(([name, cpu]) => !KEY.test(name) || !measured(cpu))) return empty();
-    return { steps: new Map(entries.map(([name, cpu]) => [name, { cpu: cpu as number }])), jobs: new Map() };
+    return empty(); // Legacy wait4 CPU cannot seed cgroup CPU history.
   }
-  if (value.version !== 3 || !keys(value, ["version", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
+  if (![3,4].includes(Number(value.version)) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
   const steps = new Map<string, StepCosts>(), jobs = new Map<string, Peaks>();
   for (const [name, row] of Object.entries(value.steps)) {
     if (!KEY.test(name) || !record(row) || !keys(row, ["cpu", "memory"])) return empty();
     if (row.cpu !== undefined && !measured(row.cpu)) return empty();
     const memory = row.memory === undefined ? undefined : parsePeaks(row.memory, ["step", "token"]);
     if (memory === null || (row.cpu === undefined && memory === undefined)) return empty();
-    steps.set(name, { ...(row.cpu !== undefined ? { cpu: row.cpu as number } : {}), ...(memory ? { memory } : {}) });
+    const cpu=value.version===4&&value.cpu_measure===STEP_CPU_MEASURE?row.cpu:undefined;
+    if(cpu!==undefined||memory)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{})});
   }
   for (const [key, row] of Object.entries(value.jobs)) {
     const memory = KEY.test(key) ? parsePeaks(row, ["worker"]) : null;
@@ -132,14 +134,14 @@ export function stepCpu(history: CostHistory): ReadonlyMap<string, number> {
 export function readPreviousStepCpu(file: string): ReadonlyMap<string, number> {
   try {
     const row = JSON.parse(readFileSync(file, "utf8")) as {
-      schema?: number; environment?: { canonical?: boolean }; steps?: { name: string; verdict: string; cpu?: number }[];
+      schema?: number; environment?: { canonical?: boolean }; steps?: { name: string; verdict: string; cpu?: number;cpu_measure?:string }[];
     };
     if (row.schema !== 1 || row.environment?.canonical !== true || !Array.isArray(row.steps)) return new Map();
     const seen = new Set<string>(), result = new Map<string, number>();
     for (const step of row.steps) {
       if (!step || typeof step.name !== "string" || !KEY.test(step.name) || seen.has(step.name)) return new Map();
       seen.add(step.name);
-      if (step.verdict === "PASS" && measured(step.cpu)) result.set(step.name, step.cpu);
+      if (step.verdict === "PASS" && measured(currentStepCpu(step))) result.set(step.name,step.cpu!);
     }
     return result;
   } catch { return new Map(); }
@@ -265,7 +267,7 @@ export function historyFile(env: NodeJS.ProcessEnv = process.env, root: string =
 }
 
 export type StepObservation = {
-  name: string; verdict?: string; cpu?: number;
+  name: string; verdict?: string; cpu?: number;cpu_measure?:string;
   /** The most it held, per unit: present only for a step that ran to its own end. */
   memory?: { unit: "step" | "token"; peak: number };
 };
@@ -315,13 +317,13 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
     for (const row of observed.steps ?? []) {
       if (!KEY.test(row.name)) continue;
       const was = steps.get(row.name) ?? {};
-      const cpu = row.verdict === "PASS" && measured(row.cpu) ? row.cpu : was.cpu;
+      const cpu = row.verdict === "PASS" && measured(currentStepCpu(row)) ? row.cpu : was.cpu;
       const memory = row.memory && bytes(row.memory.peak) ? appended(was.memory, row.memory.unit, row.memory.peak) : was.memory;
       if (cpu !== undefined || memory !== undefined) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}) });
     }
     for (const row of observed.jobs ?? []) if (KEY.test(row.key) && bytes(row.peak)) jobs.set(row.key, appended(jobs.get(row.key), "worker", row.peak));
     const sorted = <T>(map: ReadonlyMap<string, T>) => Object.fromEntries([...map].sort(([a], [b]) => nameOrder(a, b)));
-    writeFileSync(pending, JSON.stringify({ version: 3, steps: sorted(steps), jobs: sorted(jobs) }) + "\n", { flag: "wx", mode: 0o600 });
+    writeFileSync(pending, JSON.stringify({ version: 4,cpu_measure:STEP_CPU_MEASURE,steps: sorted(steps), jobs: sorted(jobs) }) + "\n", { flag: "wx", mode: 0o600 });
     renameSync(pending, file);
     return;
   } catch (error) { return error instanceof Error ? error.message : String(error); }

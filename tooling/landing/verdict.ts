@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,GNU_CPU_MEASURE,validGnuTime} from '../gate/step-time.ts';
 // Durable step evidence from the service's actual checked tip. Queue answers
 // and log retention can change independently of this portable receipt.
 import { readFileSync } from "node:fs";
@@ -92,6 +93,8 @@ function checkedReceipt(value: unknown): value is LandingVerdict {
     receipt.steps.every(step => step && ["full", "selected"].includes(step.coverage) &&
       step.outcome && typeof step.outcome.name === "string" && /^[a-z][a-z0-9-]*$/.test(step.outcome.name) && successful(step.outcome) &&
       (step.outcome.binaries === undefined || binaryIdentities(step.outcome.binaries)) &&
+      (step.outcome.cpu_measure===undefined||[STEP_CPU_MEASURE,GNU_CPU_MEASURE].includes(step.outcome.cpu_measure))&&
+      (step.outcome.gnu_time===undefined||validGnuTime(step.outcome.gnu_time))&&
       Array.isArray(step.notices) && step.notices.every(line => typeof line === "string" && isListedLine(line)) &&
       Array.isArray(step.platforms) && step.platforms.every(platform => platform &&
         typeof platform.platform === "string" && typeof platform.line === "string" && typeof platform.accepted === "boolean"));

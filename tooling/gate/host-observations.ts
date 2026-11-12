@@ -9,11 +9,13 @@ export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NT
 export class HostObservationError extends Error { override name='HostObservationError'; }
 export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
+export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
 export type HostObservationFixture = {
   version:1;
   memory:{file:string};
   paging:{file:string};
   disk:DiskSpace;
+  cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
   resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>}|{kind:'live'};
   width:{logical:number;available:number};
   load:[number,number,number];
@@ -28,6 +30,7 @@ export interface HostObservations {
   disk(path:string):DiskSpace;
   processCharge(pid:number):number;
   cgroupCharge(path:string):number;
+  cgroupCpu(path:string):CgroupCpu;
   machineWidth():number;
   availableWidth():number;
   now():number;
@@ -59,6 +62,21 @@ export function parseCgroupCharge(current:string,stat:string):number {
   };
   return Math.max(0,Number(current.trim())-read('active_file')-read('inactive_file')-read('slab_reclaimable'));
 }
+function cpuCounters(value:unknown,name:string):CgroupCpu {
+  if(typeof value!=='object'||value===null)throw new HostObservationError(`host observation ${name} is missing or invalid`);
+  const row=value as Record<string,unknown>;
+  const counter=(key:string):number=>{const n=number(row[key],`${name}.${key}`);if(!Number.isSafeInteger(n))throw new HostObservationError(`host observation ${name}.${key} is not a whole microsecond counter`);return n;};
+  return {usageUsec:counter('usageUsec'),userUsec:counter('userUsec'),systemUsec:counter('systemUsec')};
+}
+export function parseCgroupCpu(text:string):CgroupCpu {
+  const counter=(name:string):number=>{
+    const values=[...text.matchAll(new RegExp(`^${name} (\\d+)$`,'gm'))];
+    if(values.length!==1)throw new HostObservationError(`host observation cpu.stat ${name} is missing or duplicated`);
+    const value=Number(values[0]![1]);if(!Number.isSafeInteger(value))throw new HostObservationError(`host observation cpu.stat ${name} is invalid`);return value;
+  };
+  return {usageUsec:counter('usage_usec'),userUsec:counter('user_usec'),systemUsec:counter('system_usec')};
+}
+function liveCgroupCpu(path:string):CgroupCpu { return parseCgroupCpu(readFileSync(`/sys/fs/cgroup${path}/cpu.stat`,'utf8')); }
 function memory(file:string):MachineMemory {
   const result=parseMemory(readFileSync(file,'utf8'));
   if(result===null)throw new Error(`${file} names no MemAvailable and MemTotal`);
@@ -96,6 +114,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       if(!Array.isArray(value.load)||value.load.length!==3)throw new HostObservationError('host observation load is missing or invalid');
       value.load.forEach((part,index)=>number(part,`load.${index}`));
       number(value.width?.logical,'width.logical');number(value.width?.available,'width.available');
+      if(value.cpu?.kind==='fixed')cpuCounters(value.cpu.default,'cpu.default');
+      else if(value.cpu?.kind!=='live')throw new HostObservationError('host observation cpu is missing or invalid');
       if(value.resident?.kind==='fixed')number(value.resident.defaultBytes,'resident.defaultBytes');
       else if(value.resident?.kind!=='live')throw new HostObservationError('host observation resident is missing or invalid');
       if(value.clock?.kind==='fixed')number(value.clock.now,'clock.now');
@@ -118,6 +138,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       disk:()=>{const value=read().disk;return {freeBytes:number(value?.freeBytes,'disk.freeBytes'),freeInodes:number(value?.freeInodes,'disk.freeInodes')};},
       processCharge:pid=>charge('processes',String(pid)),
       cgroupCharge:path=>charge('cgroups',path),
+      cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
       machineWidth:()=>number(read().width?.logical,'width.logical'),
       availableWidth:()=>number(read().width?.available,'width.available'),
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
@@ -134,6 +155,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     disk:path=>{const value=statfsSync(path);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,
+    cgroupCpu:liveCgroupCpu,
     machineWidth:()=>cpus().length,
     availableWidth:()=>availableParallelism(),
     now:()=>performance.now(),

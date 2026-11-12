@@ -1,3 +1,4 @@
+import {STEP_CPU_MEASURE,GNU_CPU_MEASURE,readStepBaseline} from '../gate/step-time.ts';
 // What a change's landing check runs, and what it leaves to the full check.
 //
 // The rules (tooling/gate/owed.mjs) say which gate steps a change owes. Each
@@ -227,15 +228,15 @@ const positive = (value: unknown): value is number => typeof value === "number" 
 /** A measured CPU: a check that takes no measurable time measured 0. */
 const measuredCpu = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-/** The landing check's own record: `{ version: 1, steps: { "<step>" | "<step>:<kind>": { cpu, wall } } }`. */
+/** The landing check's own record: `{ version: 2, steps: { "<step>" | "<step>:<kind>": { cpu, wall } } }`. */
 export function readLandingCosts(file: string): Map<string, Measured> {
   try {
     const value = JSON.parse(readFileSync(file, "utf8")) as { version?: unknown; steps?: Record<string, unknown> };
-    if (value.version !== 1 || !value.steps || typeof value.steps !== "object") return new Map();
+    if (value.version !== 2 || !value.steps || typeof value.steps !== "object") return new Map();
     const out = new Map<string, Measured>();
     for (const [key, row] of Object.entries(value.steps)) {
-      const r = row as { cpu?: unknown; wall?: unknown };
-      if (!/^[a-z][a-z0-9-]*(?::(?:rust|other))?$/.test(key) || !measuredCpu(r?.cpu)) continue;
+      const r = row as { cpu?: unknown; wall?: unknown;cpu_measure?:unknown };
+      if (!/^[a-z][a-z0-9-]*(?::(?:rust|other))?$/.test(key) || !measuredCpu(r?.cpu)||r.cpu_measure!==landingCpuMeasure(key)) continue;
       out.set(key, positive(r.wall) ? { cpu: r.cpu, wall: r.wall } : { cpu: r.cpu });
     }
     return out;
@@ -248,15 +249,9 @@ export function costKey(step: string, kind: ChangeKind): string {
 }
 
 /** The committed baseline: `step  wall  cpu  slots`, `#` comments. */
+export function landingCpuMeasure(key:string):string { return key.split(':')[0]==='build'?GNU_CPU_MEASURE:STEP_CPU_MEASURE; }
 export function readBaseline(text: string): Map<string, Measured> {
-  const out = new Map<string, Measured>();
-  for (const line of text.split("\n")) {
-    if (line === "" || line.startsWith("#")) continue;
-    const [name, wall, cpu] = line.split("\t");
-    if (!name || cpu === undefined || cpu.trim() === "" || !measuredCpu(Number(cpu))) continue;
-    out.set(name, positive(Number(wall)) ? { cpu: Number(cpu), wall: Number(wall) } : { cpu: Number(cpu) });
-  }
-  return out;
+  return new Map([...readStepBaseline(text)].filter(([name,row])=>row.cpu_measure===landingCpuMeasure(name)).map(([name,row])=>[name,{cpu:row.cpu,...(positive(row.wall)?{wall:row.wall}:{})}]));
 }
 
 /**

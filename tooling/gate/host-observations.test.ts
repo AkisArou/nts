@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations} from './host-observations.ts';
+import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu} from './host-observations.ts';
 import {gateEnvironment,hostEnvironment,assertLandingEnvironment} from './canonical-environment.ts';
 import {TemporaryAdmission} from './admission.ts';
 import {reserveJob,readLedger} from './memory-ledger.ts';
@@ -38,7 +38,7 @@ test('one complete owned view supplies every resource, including child observati
 test('an omitted or unreadable observation fails by name, without a host fallback',t=>{
   const root=testScratch(t,'host-observations-omitted'),env=ownMemory(root);
   const file=env.NTS_HOST_OBSERVATIONS,complete=JSON.parse(readFileSync(file,'utf8'));
-  for(const [parent,key,name] of [['disk','freeBytes','disk.freeBytes'],['disk','freeInodes','disk.freeInodes'],['memory','file','memory.file'],['paging','file','paging.file'],['resident','defaultBytes','resident.defaultBytes'],['width','logical','width.logical'],['width','available','width.available'],['clock','kind','clock'],['','load','load']] as const){
+  for(const [parent,key,name] of [['disk','freeBytes','disk.freeBytes'],['disk','freeInodes','disk.freeInodes'],['memory','file','memory.file'],['paging','file','paging.file'],['resident','defaultBytes','resident.defaultBytes'],['width','logical','width.logical'],['width','available','width.available'],['clock','kind','clock'],['','load','load'],['','cpu','cpu']] as const){
     const broken=structuredClone(complete);
     delete (parent?broken[parent]:broken)[key];
     writeFileSync(file,JSON.stringify(broken));
@@ -95,4 +95,19 @@ test('the fixture CLI supplies every shared environment field and gate classific
     assert.equal(planned.report.canonical,false,field);
     assert.ok(planned.report.experiments.some(item=>item.name===field),field);
   }
+});
+
+
+test('CPU observations own all three counters, and an omission cannot select the live kernel',t=>{
+  const root=testScratch(t,'host-cpu'),env=ownMemory(root,{cpu:{kind:'fixed',default:{usageUsec:100,userUsec:60,systemUsec:40},cgroups:{'/owned':{usageUsec:300,userUsec:200,systemUsec:100}}}});
+  const host=hostObservations(env);
+  assert.deepEqual(host.cgroupCpu('/owned'),{usageUsec:300,userUsec:200,systemUsec:100});
+  assert.deepEqual(host.cgroupCpu('/does-not-exist'),{usageUsec:100,userUsec:60,systemUsec:40});
+  const data=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS,'utf8'));delete data.cpu.default.userUsec;writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify(data));
+  assert.throws(()=>host.cgroupCpu('/does-not-exist'),/cpu.default.userUsec/);
+});
+
+test('cpu.stat requires one whole nonnegative counter of each kind',()=>{
+  assert.deepEqual(parseCgroupCpu('usage_usec 600\nuser_usec 400\nsystem_usec 200\nnice_usec 15\n'),{usageUsec:600,userUsec:400,systemUsec:200});
+  for(const text of ['user_usec 1\nsystem_usec 0\n','usage_usec -1\nuser_usec 1\nsystem_usec 0\n','usage_usec 1\nuser_usec 1\nuser_usec 1\nsystem_usec 0\n'])assert.throws(()=>parseCgroupCpu(text),/cpu.stat/);
 });

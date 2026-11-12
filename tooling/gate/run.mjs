@@ -109,6 +109,7 @@ import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
+import {STEP_CPU_MEASURE,parseGnuTime,measuredStepTime,readStepBaseline,currentStepCpu} from './step-time.ts';
 import {gib, machineMemory, priorityOf, reservationPriority, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
 import {workerCapBytes} from "../census/worker-memory.ts";
 import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
@@ -305,14 +306,7 @@ function requested() {
 // nothing noticed for two days; this is what notices.
 // ---------------------------------------------------------------------------
 function readTimes() {
-  const times = new Map();
-  if (!existsSync(TIMES_FILE)) return times;
-  for (const line of readFileSync(TIMES_FILE, "utf8").split("\n")) {
-    if (line === "" || line.startsWith("#")) continue;
-    const [name, wall, cpu, slots] = line.split("\t");
-    times.set(name, { wall: Number(wall), cpu: Number(cpu), slots: Number(slots) });
-  }
-  return times;
+  return existsSync(TIMES_FILE)?readStepBaseline(readFileSync(TIMES_FILE,'utf8')):new Map();
 }
 const BASE = readTimes();
 const estimate = (name) => BASE.get(name)?.wall ?? 60;
@@ -323,7 +317,7 @@ const COSTS_DIR = resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs"));
 const HISTORY_FILE = join(COSTS_DIR, "steps.json");
 const HISTORY = readCostHistory(HISTORY_FILE);
 const CPU_HISTORY = new Map([...readPreviousStepCpu(join(dirname(RUN_DIR), "latest", "summary.json")), ...stepCpu(HISTORY)]);
-const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => BASE.get(name)?.cpu, STEP_SUCCESSORS);
+const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => currentStepCpu(BASE.get(name)), STEP_SUCCESSORS);
 
 // ---------------------------------------------------------------------------
 // Identities, so a summary says which binary and which tree it is about.
@@ -674,7 +668,7 @@ let withhold = 0;
 // A step's work in CPU seconds: its own last passing run, else its share of a
 // predecessor's (step-successors.ts), else the committed baseline.
 function workEstimate(name) {
-  const own = CPU_HISTORY.get(name) ?? INHERITED_WORK.get(name) ?? BASE.get(name)?.cpu;
+  const own = CPU_HISTORY.get(name) ?? INHERITED_WORK.get(name) ?? currentStepCpu(BASE.get(name));
   if (own > 0) return own;
   return estimate(name) * width(name);
 }
@@ -1193,7 +1187,7 @@ function start(step, slots, rider = false) {
     report(step.name); stop(`step scope setup failed: ${error.message}`); return;
   }
   const log = join(RUN_DIR, `${step.name}.log`);
-  const timeFile = join(RUN_DIR, `${step.name}.time`);
+  const timeFile = join(RUN_DIR, `${step.name}.gnu-time`);
   rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
   const fd = openSync(log, "w");
   let cmd = ["sh", join(HERE, "all.sh"), "--call", step.name];
@@ -1271,14 +1265,13 @@ function start(step, slots, rider = false) {
     }
     running.delete(step.name);
     const wall = (Date.now() - started) / 1000;
-    let cpu, user, sys, maxrss;
-    try {
-      const t = readFileSync(timeFile, "utf8").trim().split("\n").pop().split(" ").map(Number);
-      if (t.length === 4 && t.every(Number.isFinite)) {
-        [, user, sys, maxrss] = t;
-        cpu = user + sys;
-      }
-    } catch {}
+    let gnuTime,measurement;
+    try { gnuTime=parseGnuTime(readFileSync(timeFile,'utf8')); } catch {}
+    if(drained){
+      measurement=measuredStepTime(drained.cpu,wall,gnuTime);
+      writeFileSync(join(RUN_DIR,`${step.name}.time`),JSON.stringify(measurement)+'\n');
+    }
+    const {cpu,user,sys,maxrss_kb:maxrss}=measurement??{};
     // After the drain, so no process of the step can still write over it.
     if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}\n`, { flag: "a" });
     if (owned.overBound) writeFileSync(log, `\n${boundFailure}: stopped through its scope\n`, { flag: "a" });
@@ -1303,7 +1296,7 @@ function start(step, slots, rider = false) {
       killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0 };
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
-    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
+    const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
       memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
       bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
     if (oracleCapture) extra.oracle_capture = oracleCapture;
@@ -1439,7 +1432,7 @@ function slower() {
     if (!r || !b || r.verdict === "NOT RUN") continue;
     // CPU when both sides have it, wall otherwise. Twice the baseline and a
     // minute more is the warning; a step that took 3 s instead of 1 s is not.
-    const kind = r.cpu !== undefined && b.cpu > 0 ? "cpu" : "wall";
+    const kind = r.cpu_measure===b.cpu_measure && r.cpu !== undefined && b.cpu > 0 ? "cpu" : "wall";
     const now = kind === "cpu" ? r.cpu : r.wall;
     const was = kind === "cpu" ? b.cpu : b.wall;
     if (now >= 2 * was && now - was >= 60) out.push({ name, kind, now, was, ratio: now / was });
@@ -1524,6 +1517,7 @@ function done() {
 
   const summary = {
     schema: 1,
+    cpu_measure:STEP_CPU_MEASURE,
     environment: normalized.report,
     temporary,
     oracle_setup: oracleSetup,
@@ -1570,7 +1564,7 @@ function done() {
   if (normalized.report.canonical) {
     const warning = writeCostHistory(HISTORY_FILE, { steps: plan.map(name => {
       const r = results.get(name);
-      return { name, verdict: r.verdict, cpu: r.cpu, memory: observations.get(name) };
+      return { name, verdict: r.verdict, cpu: r.cpu, cpu_measure:r.cpu_measure,memory: observations.get(name) };
     }) }, CPU_HISTORY);
     if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
   }
@@ -1582,17 +1576,17 @@ function recordTimes() {
   for (const name of plan) {
     const r = results.get(name);
     if (r.verdict !== "PASS" || r.wall === undefined) continue;
-    merged.set(name, { wall: r.wall, cpu: r.cpu ?? 0, slots: r.slots });
+    merged.set(name, { wall: r.wall, cpu: r.cpu ?? 0, slots: r.slots,cpu_measure:r.cpu_measure });
   }
   const head = [
-    "# Per-step cost on a healthy run: step, wall s, cpu s (user+sys of the step's",
-    "# process tree), slots it ran with. run.mjs orders steps by wall and warns when",
+    "# Per-step cost on a healthy run: step, wall s, cpu s, slots, CPU measure.",
+    "# CPU trends compare only matching measures. run.mjs orders steps by wall and warns when",
     "# a step's cpu is 2x this and a minute more. Rewrite with NTS_GATE_RECORD_TIMES=1",
     `# on a run you have checked is healthy. Last written at ${identities.commit ?? "?"}.`,
   ];
   const rows = STEPS.filter((s) => merged.has(s.name)).map((s) => {
     const t = merged.get(s.name);
-    return [s.name, t.wall.toFixed(1), (t.cpu ?? 0).toFixed(1), t.slots ?? ""].join("\t");
+    return [s.name, t.wall.toFixed(1), (t.cpu ?? 0).toFixed(1), t.slots ?? "",t.cpu_measure].join("\t");
   });
   writeFileSync(TIMES_FILE, head.concat(rows).join("\n") + "\n");
   process.stdout.write(`  times written to ${TIMES_FILE}\n`);

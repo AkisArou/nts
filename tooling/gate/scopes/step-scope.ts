@@ -11,9 +11,12 @@ import { readStepEntry, type StepEntry } from "./step-entry.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
 
+import {hostObservations,type HostObservations,type CgroupCpu} from '../host-observations.ts';
+import {STEP_CPU_MEASURE} from '../step-time.ts';
+
 const CGROUP = "/sys/fs/cgroup";
 const DRAIN_HANG_MS = 30_000;
-export type ScopeDrain = { version: 1; slice: string; unit: string; group: string; device: string; inode: string; populated: 0; observed_at: string };
+export type ScopeDrain = { version: 1; slice: string; unit: string; group: string; device: string; inode: string; populated: 0; observed_at: string; cpu_measure:typeof STEP_CPU_MEASURE; cpu:CgroupCpu };
 const checked = (command: string, args: string[]): string => {
   const result = spawnSync(command, args, { encoding: "utf8", timeout: DRAIN_HANG_MS });
   if (result.error || result.signal || result.status !== 0) throw new Error(`${command} ${args[0]}: ${result.stderr || result.error?.message || result.signal || result.status}`);
@@ -147,11 +150,14 @@ export class StepScope {
   private readonly nonce = randomUUID();
   private readonly entryPath: string;
   private peak: number | null = null;
+  private cpu: CgroupCpu | null = null;
+  private readonly host: HostObservations;
   private events: MemoryEvents | null = null;
   private limiting: Promise<void> | null = null;
   private wanted: StepLimits;
   private held: StepLimits;
   constructor(root: GateScopes, limits: StepLimits) {
+    this.host=root.host;
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = checkedUnitName(`nts-${unitComponent("s")}.scope`);
     this.supervisorSlice = childSlice(this.slice, "s");
@@ -229,14 +235,17 @@ export class StepScope {
   kill(): void { if (!this.closed) control("kill", "--kill-whom=all", "--signal=SIGKILL", this.slice); }
   /** The step's measured peak: the slice's memory.peak, which `drain` reads once its last process has exited; null before, or unread. */
   get memoryPeakBytes(): number | null { return this.peak; }
+  /** Live counters for explicit kernel controls, final counters after drain. */
+  cpuCounters():CgroupCpu { return this.cpu??this.host.cgroupCpu(this.group); }
   async drain(): Promise<ScopeDrain> {
     if (this.closed) throw new Error("step scope drained twice");
     if (populated(this.group)) this.kill();
     await waitForEmptyCgroup(() => populated(this.group));
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     if (identity.dev !== this.device || identity.ino !== this.inode) throw new Error("step cgroup identity changed before drain");
+    this.cpu=this.host.cgroupCpu(this.group);
     const proof: ScopeDrain = { version: 1, slice: this.slice, unit: this.unit, group: this.group,
-      device: String(this.device), inode: String(this.inode), populated: 0, observed_at: new Date().toISOString() };
+      device: String(this.device), inode: String(this.inode), populated: 0, observed_at: new Date().toISOString(),cpu_measure:STEP_CPU_MEASURE,cpu:this.cpu };
     // Nothing of the step runs any more, and stopping the slice removes its cgroup.
     this.peak = memoryPeak(this.group);
     this.events = this.boundaryEvents();
@@ -247,12 +256,14 @@ export class StepScope {
 }
 
 export class GateScopes {
+  readonly host:HostObservations;
   readonly slice: string;
   readonly group: string;
   readonly directory: string;
   private readonly temporary: boolean;
   private readonly owner: ReturnType<typeof claimRunOwner> | undefined;
   constructor(env: NodeJS.ProcessEnv, ownerFile?: string) {
+    this.host=hostObservations(env);
     for (const name of ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]) if (!env[name]) throw new Error(`step scopes require host capability ${name}; launch with the canonical host environment`);
     this.temporary = !env.NTS_GATE_RUN_DIR;
     const parent = join(homedir(), ".cache/nts/gate-scope-entries");

@@ -1,3 +1,4 @@
+import {GNU_CPU_MEASURE,type GnuTime} from '../gate/step-time.ts';
 // Run a change's landing steps in a tree: the gate's own steps, through its own
 // runner, in the landing check's profile.
 //
@@ -53,7 +54,7 @@ export const PROFILE = "nts-dev";
 type BinaryIdentities = Record<string, string | null>;
 export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
-  cpu?: number; wall?: number; log?: string; accepted?: boolean; attempt?: number;
+  cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number };
   binaries?: BinaryIdentities;
 };
@@ -247,7 +248,7 @@ function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.Proce
     const [e, u, s] = readFileSync(time, "utf8").trim().split("\n").pop()!.split(" ").map(Number);
     if ([e, u, s].every(Number.isFinite)) { wall = e; cpu = u! + s!; }
   } catch { /* unmeasured */ }
-  const measured = { ...(cpu !== undefined ? { cpu } : {}), ...(wall !== undefined ? { wall } : {}), log };
+  const measured = { ...(cpu !== undefined ? { cpu,cpu_measure:GNU_CPU_MEASURE } : {}), ...(wall !== undefined ? { wall } : {}), log };
   // Killed rather than failed: the machine's doing (an OOM kill), not the change's.
   if (r.error || r.signal) return { name: "build", verdict: "INSTRUMENT", reason: `the build was ${r.signal ? `killed by ${r.signal}` : `not started: ${r.error?.message}`}`, ...measured };
   if (r.status !== 0) return { name: "build", verdict: "FAIL", reason: `exit ${r.status}`, ...measured };

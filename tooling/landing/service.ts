@@ -31,7 +31,7 @@ import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
 import { LANDING_HOME, Queue, type Checking, type Entry, type Result } from "./queue.ts";
 import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
-import { costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
+import { landingCpuMeasure, costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
 import { durableRecord } from "../gate/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
 import { linkTree } from "../inputs/linker.ts";
@@ -211,12 +211,12 @@ function finishLanding(config: Config, queue: Queue, entry: Entry, base: string,
 /** The steps that passed, by what they cost, for the next estimate (selection.ts's costs). */
 export function recordCosts(home: string, ran: Ran, kind: ChangeKind): void {
   const file = join(home, "costs.json");
-  const steps = Object.fromEntries(readLandingCosts(file));
+  const steps = Object.fromEntries([...readLandingCosts(file)].map(([key,row])=>[key,{...row,cpu_measure:landingCpuMeasure(key)}]));
   for (const step of ran.steps) {
-    if (step.verdict !== "PASS" || !(typeof step.cpu === "number" && Number.isFinite(step.cpu) && step.cpu >= 0)) continue;
-    steps[costKey(step.name, kind)] = { cpu: step.cpu, ...(typeof step.wall === "number" && step.wall > 0 ? { wall: step.wall } : {}) };
+    if (step.verdict !== "PASS" || step.cpu_measure!==landingCpuMeasure(step.name)||!(typeof step.cpu === "number" && Number.isFinite(step.cpu) && step.cpu >= 0)) continue;
+    steps[costKey(step.name, kind)] = { cpu: step.cpu,cpu_measure:step.cpu_measure, ...(typeof step.wall === "number" && step.wall > 0 ? { wall: step.wall } : {}) };
   }
-  durableRecord(file, { version: 1, steps: Object.fromEntries(Object.entries(steps).sort(([a], [b]) => a < b ? -1 : 1)) });
+  durableRecord(file, { version: 2, steps: Object.fromEntries(Object.entries(steps).sort(([a], [b]) => a < b ? -1 : 1)) });
 }
 
 /** Delete run directories older than `days`. */
