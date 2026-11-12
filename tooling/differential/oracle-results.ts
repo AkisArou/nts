@@ -27,7 +27,10 @@ export const RECIPE_SOURCES=[...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-
 const readerSourceHash=()=>resultHash(readFileSync(new URL('./oracle-results.ts',import.meta.url)));
 function publishReaderRuntime(directory:string):ReaderRuntime{
   const here=dirname(fileURLToPath(import.meta.url)),runtime=join(directory,'reader');mkdirSync(runtime,{recursive:true});
-  for(const name of RECIPE_SOURCES)writeFileSync(join(runtime,name),readFileSync(join(here,name)),{flag:'wx',mode:0o444});
+  for(const name of RECIPE_SOURCES){
+    const file=join(runtime,name);mkdirSync(dirname(file),{recursive:true});
+    writeFileSync(file,readFileSync(join(here,name)),{flag:'wx',mode:0o444});
+  }
   writeFileSync(join(runtime,'package.json'),'{"type":"module"}\n',{flag:'wx',mode:0o444});
   const assets:Record<string,string>={};
   for(const name of READER_MODULES){

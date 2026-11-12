@@ -36,6 +36,14 @@ test('an unsettled command fails at event-loop drain with the top-level-await ex
  assert.equal(result.stdout,'');assert.match(result.stderr,/INSTRUMENT: command entry .*unsettled\.mjs: main did not settle before the event loop drained/);
 });
 
+test('a command settled by a beforeExit listener completes like top-level await',t=>{
+ const root=testScratch(t,'command-entry-drain-completion'),file=join(root,'completion.mjs'),control=join(root,'top-level.mjs');
+ const body="await new Promise(resolve=>process.once('beforeExit',resolve));";
+ writeFileSync(control,body);
+ writeFileSync(file,`import {runAsCommand} from ${JSON.stringify(helper)};runAsCommand(import.meta.url,async()=>{${body}});`);
+ for(const path of [control,file]){const result=run(path);assert.equal(result.status,0,result.stderr);assert.equal(result.stderr,'');}
+});
+
 test('an imported command remains synchronous and does not run its body; symlink entry semantics are explicit',t=>{
  const root=testScratch(t,'command-entry-import'),subject=join(root,'subject.mjs'),loader=join(root,'loader.cjs'),alias=join(root,'alias.mjs');
  const source=(realpath:boolean)=>`import {runAsCommand} from ${JSON.stringify(helper)};runAsCommand(import.meta.url,async()=>{process.stdout.write('ran');return 7;},{realpath:${realpath}});`;

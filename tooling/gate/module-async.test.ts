@@ -6,12 +6,13 @@ import {createRequire} from 'node:module';
 import {newTestScratch} from './test-scratch.ts';
 import {auditModuleAsync,topLevelAwaits,inspectModuleAsync} from './module-async.ts';
 
-test('top-level await is syntax, including false branches and for-await, never nested async work',()=>{
+test('top-level await is syntax, including false branches, for-await and await-using, never nested async work',()=>{
   assert.equal(topLevelAwaits('sample.ts',`if(false) await 0;
 for await(const x of []) {}
+await using resource = value;
 async function main(){await 0;}
 const f=async()=>await 0;
-class C{async m(){await 0;}}`).length,2);
+class C{async m(){await 0;}}`).length,3);
   assert.deepEqual(topLevelAwaits('control.ts','async function main(){await 0;} void main(); // await 0'),[]);
 });
 for(const binding of ["import{Worker as Thread}from'node:worker_threads';", "const{Worker:Thread}=require('node:worker_threads');", "import * as threads from 'node:worker_threads';", "const threads=require('node:worker_threads');"]){

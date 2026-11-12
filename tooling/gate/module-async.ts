@@ -14,7 +14,8 @@ export function topLevelAwaits(file:string,source:string,shared?:import('typescr
   const functions=new Set([ast.SyntaxKind.FunctionDeclaration,ast.SyntaxKind.FunctionExpression,ast.SyntaxKind.ArrowFunction,ast.SyntaxKind.MethodDeclaration,ast.SyntaxKind.Constructor,ast.SyntaxKind.GetAccessor,ast.SyntaxKind.SetAccessor]);
   function visit(node:Node):void{
     if(functions.has(node.kind))return;
-    if(ast.isAwaitExpression(node)||ast.isForOfStatement(node)&&node.awaitModifier)lines.push(source.slice(0,node.pos).split('\n').length);
+    if(ast.isAwaitExpression(node)||ast.isForOfStatement(node)&&node.awaitModifier
+      ||ast.isVariableDeclarationList(node)&&(node.flags&ast.NodeFlags.AwaitUsing)===ast.NodeFlags.AwaitUsing)lines.push(source.slice(0,node.pos).split('\n').length);
     node.forEachChild(visit);
   }
   try{visit(root??lease!.sourceFile);return lines;}finally{lease?.dispose();if(!shared)api?.close();}
