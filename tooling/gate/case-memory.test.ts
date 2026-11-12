@@ -89,7 +89,10 @@ globalThis.bytes=Buffer.alloc(32*1024**2,7);watch(${JSON.stringify(root)},()=>{}
     await waitFor('the owned worker allocation',()=>existsSync(ready),{stopped:()=>ended?output||'worker exited':undefined});
     lease.attach(worker.group,256*MiB);assert.ok(lease.peak>=32*MiB);
     const peak=lease.peak;worker.close();await closed;
-    await waitFor('the owned worker cgroup removal',()=>!existsSync('/sys/fs/cgroup'+worker.group));
+    await waitFor('the owned worker cgroup removal',()=>{
+      try{host.cgroupCharge(worker.group);return false;}
+      catch(error){if(error instanceof CgroupDeparted&&error.group===worker.group)return true;throw error;}
+    });
     lease.sample();lease.close();assert.deepEqual(lease.groups,[]);
     assert.equal(observed.length,1);assert.ok(observed[0]!.peak>=peak);
     assert.throws(()=>host.scopeMemoryPeak(worker.group),/cannot open own memory.peak/,'an unopened missing group is fatal');
