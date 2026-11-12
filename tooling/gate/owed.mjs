@@ -1522,6 +1522,12 @@ function stepInputGraph() {
 
 export function stepInputs() { return stepInputGraph().reach; }
 
+export function inputDirectoryDeclarations() {
+  return [...stepInputGraph().directories.values()].map(row => ({
+    reader: row.reader, directory: row.directory, files: row.files.length, steps: [...row.steps].sort(),
+  })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
+}
+
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
 export function covering(map, path) {
   const out = new Set();
