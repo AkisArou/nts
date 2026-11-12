@@ -123,10 +123,15 @@ export class Queue {
   /** Answer `entry`: its result is durable before it leaves `checking.json`. */
   answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task">): Result {
     return this.mutate(()=>{
+      // Validate every existing destination before publishing any part of a
+      // transition; an incompatible checking/held record cannot leave an answer.
+      const checking=this.checking();
+      for(const path of [this.path("results",`${entry.id}.json`),this.path("withdraw",entry.id),
+        ...(result.state==="held"?[this.path("held",`${entry.id}.json`)]:[])])assertWritableState(path,1);
       const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result };
       this.record(this.path("results", `${entry.id}.json`), full);
       if (result.state === "held") this.record(this.path("held", `${entry.id}.json`), entry);
-      if (this.checking()?.id === entry.id) this.remove(this.path("checking.json"));
+      if (checking?.id === entry.id) this.remove(this.path("checking.json"));
       this.remove(this.path("withdraw", entry.id));
       return full;
     });

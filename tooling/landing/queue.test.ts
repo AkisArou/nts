@@ -139,7 +139,9 @@ test("future queue state refuses reads, transitions and deletions byte for byte"
     [status,[()=>q.status(),()=>q.setStatus({state:"idle"})]],
   ] as const){
     writeFileSync(path,future);
+    if(path===checking)assert.equal(existsSync(result),false);
     for(const action of actions){assert.throws(action,/future state version 2/);assert.equal(readFileSync(path,"utf8"),future);}
+    if(path===checking)assert.equal(existsSync(result),false,"an incompatible transition publishes no partial result");
     rmSync(path);
   }
   const held=join(q.home,"held",entry.id+".json");writeFileSync(held,future);
