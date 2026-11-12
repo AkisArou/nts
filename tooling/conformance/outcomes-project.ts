@@ -31,7 +31,9 @@ export const OUTCOME_ORACLE_PRELOADS=Object.freeze([fileURLToPath(new URL('./out
  * wrong answers for weeks until 7f7bf5340.
  */
 export const RUNTIME_SPECIFIER = "@nts/runtime/";
-export const RUNTIME_ROOT = fileURLToPath(dataDirectory(new URL("../../runtime/",import.meta.url)));
+// A resolver anchor, not a population: each fixture's imports select its
+// runtime sources. This helper never enumerates the whole runtime tree.
+export const RUNTIME_ROOT = join(fileURLToPath(new URL("../..",import.meta.url)), "runtime");
 export const outcomeSourceAssets=(root=RUNTIME_ROOT)=>[
   {root:join(root,'node'),depth:1,name:'bindings.node.mjs'},
   {root,depth:1,name:'bindings.node.mjs'},
