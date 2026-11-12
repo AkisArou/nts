@@ -398,6 +398,15 @@ improvements and refuses a rise. The fixture base excludes its own tooling
 subtree, while each child fixture still discovers its own sources. Imported
 compiler and runtime sources retain their own projects and diagnostic policy.
 
+Imported tooling modules evaluate synchronously. The test-host audit rejects
+top-level await in runtime-imported modules and Worker entry closures; a
+type-only import does not evaluate its target. A module that is also a command
+uses `runAsCommand(import.meta.url, main)` from `tooling/gate/command-entry.ts`.
+The shared entry owner starts its command only at entry, retains command-owned
+diagnostics and statuses, and gives unhandled errors one stderr/exit policy.
+Asynchronous fixture setup belongs in a test hook. Pure command entry scripts
+outside Worker closures may use top-level await.
+
 
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
   `main`, warm first: its build folder is kept, so the build is incremental
@@ -606,6 +615,11 @@ the first node task.
   receipt reuse preserves the original CPU basis
   ([log](records/notebooks/decisions-log.md#step-cpu-is-versioned-cgroup-accounting-11-12)).
 
+- **Imported modules evaluate synchronously:** commands share one entry owner
+  without top-level await, and fixture initialization runs in test hooks.
+  Runtime imports and Worker closures are checked from parsed syntax, while
+  type-only imports do not evaluate their targets
+  ([log](records/notebooks/decisions-log.md#imported-tooling-modules-evaluate-synchronously-11-12)).
 - **One strict project checks every tooling module:** the gate validates the
   project flags and complete module inventory, and a tool-written per-module
   diagnostic ceiling accepts improvements while refusing increases

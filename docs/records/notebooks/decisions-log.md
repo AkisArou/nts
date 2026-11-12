@@ -2339,4 +2339,12 @@ before first publication: historical candidates can still write their old
 namespace. Compatible step rows survive. Legacy job observations have no
 recoverable basis or width, so the migration names how many it rejected and
 each job measures one live-accounting run. Governs
+## Imported tooling modules evaluate synchronously (11-12)
+
+A guarded top-level await still makes every importer's graph asynchronous.
+The no-await source rule therefore covers runtime imports as well as Worker
+closures. Commands share `runAsCommand`, preserving their own handled
+diagnostics and exit codes; asynchronous fixture setup belongs in test hooks.
+Import-for-execution becomes an explicit exported function call. Type-only
+imports are erased and do not make an execution graph asynchronous. Governs
 [the machine](../../workflow.md#the-machine).
