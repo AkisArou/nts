@@ -1517,10 +1517,11 @@ function stepInputGraph() {
     const map = new InputMap();
     const declared = new Set();
     const directories = new Map();
-    const add = (input, step) => { map.add(input, step); };
+    const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
-      const step = m[1];
-      const command = m[2].trim();
+      const step = m[1], rawCommand = m[2];
+      if(!step||rawCommand===undefined)throw new Error("canonical gate step has no name or command");
+      const command = rawCommand.trim();
       // Dynamic collection is an execution input just like a literal script
       // argument. Start from those exact entries so their imports/readers keep
       // their step reach after all.sh stops naming fixed folder globs.
