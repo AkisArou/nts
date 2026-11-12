@@ -149,3 +149,11 @@ oracle-execution bridge invoke file entries. Before the fix, the failed
 sampler lost transient peaks, but stop() could still record its synchronous
 final resident reading; a handover ending the entry first could leave no row.
 There is no evidence here of a production history made empty by this flag.
+
+
+After building the matching nts, nts-suite and oracle-plan from this tree,
+all 19 sampler, landing-hold and program-oracle controls passed. The flag
+inheritance mutation failed by name; the other 150 tests in the preceding
+focused run passed. Host audit was 1.987 seconds and strict checking ran last,
+with 746 modules and no diagnostic rise. The discarded mismatched-planner
+refusal in that preceding run was proof setup, not a passing observation.
