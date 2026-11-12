@@ -139,3 +139,13 @@ file-backed Workers inherited an eval parent's --input-type or preload flags.
 Awaiting closed reported the invalid input mode in program-oracles and
 run-holds, instead of discarding it. The sampler now supplies its own empty
 execArgv. Controls cover both input-type forms and a parent-only preload.
+
+
+The confirmed eval-parent call paths were produceProgramOracles through the
+worker pool (program-oracles) and runLanding (landing-build), in private test
+histories. No current production gate route starts a reserveJob owner from
+an input-type eval parent: even nts-bench's host-columns and the native
+oracle-execution bridge invoke file entries. Before the fix, the failed
+sampler lost transient peaks, but stop() could still record its synchronous
+final resident reading; a handover ending the entry first could leave no row.
+There is no evidence here of a production history made empty by this flag.
