@@ -65,7 +65,6 @@ test("the compile CLI records one compile at a time and four at once alike, chec
     if (entry === "build-records.ts") copyFileSync(join(repository, "tooling/bench", entry), join(root, "tooling/bench", entry));
     else symlinkSync(join(repository, "tooling/bench", entry), join(root, "tooling/bench", entry));
   }
-  copyModuleClosure(['tooling/bench/build-records.ts'],root,{reuseSourceLinks:true});
   symlinkSync(join(repository, "node_modules"), join(root, "node_modules"));
   writeFileSync(join(root, "tsconfig.fixtures.json"), '{"compilerOptions":{"target":"ESNext","noEmit":true}}');
   for (const name of ["control", "subject", "root-coverage"]) {
@@ -73,6 +72,8 @@ test("the compile CLI records one compile at a time and four at once alike, chec
     writeFileSync(join(root, "benchmarks/cases", name, "case.ts"), "export function run() { return 1; }");
   }
   writeFileSync(join(root, "benchmarks/cases/root-coverage/unimported.ts"), "export const sibling = 1;\n");
+  copyModuleClosure(['tooling/bench/build-records.ts'],root,{reuseSourceLinks:true,dataNamespaces:{"benchmarks/cases":"benchmark compile CLI control"}});
+  assert.deepEqual(readdirSync(join(root,"benchmarks/cases")).sort(),["control","root-coverage","subject"]);
   const git = (args: string[]) => {
     const result = spawnSync("git", gitArguments(args), {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" }); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim();
   };

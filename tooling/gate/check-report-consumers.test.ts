@@ -1,7 +1,7 @@
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnTest} from "./test-wait.ts";
-import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {tmpdir} from "node:os";
 import {basename, dirname, join, relative} from "node:path";
@@ -24,22 +24,24 @@ function sandbox(t: TestContext) {
     copyFileSync(script, join(root, "tooling/gate", basename(fileURLToPath(script))));
   }
   copyFileSync(new URL("../jvm/agrees-with-c.sh",import.meta.url), join(root, "tooling/jvm/agrees-with-c.sh"));
+  writeFileSync(join(root, "tooling/conformance/web-platform/compiled/tsconfig.json"), "{}");
+  for (const name of ["control", "invalid", "unsupported"]) {
+    writeFileSync(join(root, "tests/programs", name, "tsconfig.json"), "{}");
+  }
+  writeFileSync(join(root, "benchmarks/cases/control/case.ts"), "export function work(n: number): number { return n; }");
   copyModuleClosure([
     new URL("../differential/check-consumers.ts",import.meta.url),new URL("../differential/oracle-toolchain.json",import.meta.url),
     new URL("../conformance/pin.ts",import.meta.url),new URL("../npm-survey/verdict.ts",import.meta.url),
-  ].map(url=>relative(join(source,"../.."),fileURLToPath(url))), root);
+  ].map(url=>relative(join(source,"../.."),fileURLToPath(url))), root,{dataNamespaces:{"tests/programs":"check consumer controls","benchmarks/cases":"check consumer controls","tooling/conformance/web-platform/compiled":"compiled web controls"}});
+  assert.deepEqual(readdirSync(join(root,"tests/programs")).sort(),["control","invalid","unsupported"]);
+  assert.deepEqual(readdirSync(join(root,"benchmarks/cases")),["control"]);
   // Package imports use the same provisioned toolchain as the real entry.
   symlinkSync(join(source, "../../node_modules"), join(root, "node_modules"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
   copyFileSync(join(source, "../conformance/web-platform/compiled/check.sh"), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
   writeFileSync(join(root, "tooling/gate/tokens.mjs"), "export async function withToken(fn) { return fn(); }\n");
   writeFileSync(join(root, "tooling/sweep/sweep.mjs"), "console.log('export function work(n: number): number { return n; }');\n");
-  writeFileSync(join(root, "tooling/conformance/web-platform/compiled/tsconfig.json"), "{}");
   writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
-  for (const name of ["control", "invalid", "unsupported"]) {
-    writeFileSync(join(root, "tests/programs", name, "tsconfig.json"), "{}");
-  }
-  writeFileSync(join(root, "benchmarks/cases/control/case.ts"), "export function work(n: number): number { return n; }");
   const compiler = join(root, "compiler.mjs");
   writeFileSync(compiler, `#!/usr/bin/env node
 import {basename, dirname} from 'node:path';

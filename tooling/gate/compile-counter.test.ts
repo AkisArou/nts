@@ -164,7 +164,9 @@ test("the real tripwire fails missed and legacy readings and stale rows, and lis
   mkdirSync(kept);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
-  copyModuleClosure(["tooling/gate/compile-time.mjs"], root);
+  for(const input of ["tests/compile-time","runtime/web-platform"])mkdirSync(join(root,input),{recursive:true});
+  copyModuleClosure(["tooling/gate/compile-time.mjs"], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
+  assert.deepEqual(compileTimeModules(root),["runtime/node/subject"],"the counter sees only its private project");
   const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
   const meta = { work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
   const table = `# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
@@ -359,7 +361,9 @@ test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns 
   mkdirSync(gate, { recursive: true }); mkdirSync(kept); mkdirSync(results);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
-  copyModuleClosure(["tooling/gate/compile-time.mjs"], root);
+  for(const input of ["tests/compile-time","runtime/web-platform"])mkdirSync(join(root,input),{recursive:true});
+  copyModuleClosure(["tooling/gate/compile-time.mjs"], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
+  assert.deepEqual(compileTimeModules(root),["runtime/node/subject"],"the counter sees only its private project");
   const commands = join(root, "commands.jsonl"), nts = join(root, "nts");
   writeFileSync(nts, `#!/usr/bin/env node
 require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({args:process.argv.slice(2), ambient:Object.fromEntries(${JSON.stringify([...Object.keys(FIXED_AMBIENT), "RAYON_NUM_THREADS"])}.map(key=>[key,process.env[key]]))})+'\\n');
