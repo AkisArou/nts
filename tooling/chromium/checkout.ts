@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Where the lane's inputs that no commit carries are. A lane works in its own
 // worktree (docs/workflow.md), and there Chromium's source -- a submodule of
 // tens of gigabytes -- is an empty directory, and depot_tools (gitignored) is
@@ -13,7 +14,7 @@ import { dirname, resolve } from "node:path";
  * directory is its `.git`, from the checkout itself or from any worktree.
  */
 export function sharedCheckout(root: string): string {
-  const common = execFileSync("git", ["-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
+  const common = execFileSync("git", gitArguments(["-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"]), { encoding: "utf8" }).trim();
   return dirname(common);
 }
 

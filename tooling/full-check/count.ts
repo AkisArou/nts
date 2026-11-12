@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The count step (docs/workflow.md, The machine: "the full check counts
 // them"). Red when a branch is named by no open issue nor docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json

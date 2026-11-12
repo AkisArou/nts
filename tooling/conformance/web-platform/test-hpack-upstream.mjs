@@ -1,3 +1,4 @@
+import {gitArguments} from "../../gate/git-arguments/main.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -33,7 +34,7 @@ const corpusRoot = resolve(corpusArgument);
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
 function git(...args) {
-  const result = spawnSync("git", ["-C", corpusRoot, ...args], { encoding: "utf8" });
+  const result = spawnSync("git", gitArguments(["-C", corpusRoot, ...args]), { encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(result.stderr.trim() || `git ${args.join(" ")} failed`);
   }

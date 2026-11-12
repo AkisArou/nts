@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Remove this bridge once no pinned compiler or stored record predates the
 // introduction of the per-fixture oracle authority. The pin's own commit,
 // never its executable name or the candidate's version, decides whether the
@@ -10,10 +11,10 @@ import { linkTree } from "../inputs/linker.ts";
 import { GENERATOR, fixtureOf, parseGenerator, parseLegacyTable, readRecords, readRecordsAt } from "./oracle-records.ts";
 
 function git(root: string, args: string[], input?: Buffer): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", input, maxBuffer: 256 * 1024 * 1024 });
+  return execFileSync("git", gitArguments(args), { cwd: root, encoding: "utf8", input, maxBuffer: 256 * 1024 * 1024 });
 }
 function ancestor(root: string, before: string, after: string): boolean {
-  const result = spawnSync("git", ["merge-base", "--is-ancestor", before, after], { cwd: root });
+  const result = spawnSync("git", gitArguments(["merge-base", "--is-ancestor", before, after]), { cwd: root });
   if (result.status !== 0 && result.status !== 1) throw new Error("cannot establish oracle migration ancestry");
   return result.status === 0;
 }
@@ -64,7 +65,7 @@ export function comparisonOracleRoot(root: string, binaries: string[], cache: st
       git(snapshot, ["checkout", "--quiet", "--detach", head]);
       // Both compilers get precisely the candidate's current fixture bytes,
       // including a contributor's uncommitted tracked and untracked sources.
-      const diff = execFileSync("git", ["diff", "--binary", head, "--"], { cwd: root, maxBuffer: 256 * 1024 * 1024 });
+      const diff = execFileSync("git", gitArguments(["diff", "--binary", head, "--"]), { cwd: root, maxBuffer: 256 * 1024 * 1024 });
       if (diff.length) git(snapshot, ["apply", "--binary", "-"], diff);
       const untracked = git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
       for (const path of untracked) {

@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Discover test entries, rather than maintaining a second catalogue of folders.
 import {execFileSync} from "node:child_process";
 import {readdirSync,readFileSync} from "node:fs";

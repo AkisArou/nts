@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The worktree pool, elastic (docs/workflow.md, "The machine"). A task takes a
 // free tree, warm with the cargo target the task before it built; when every
 // tree is held, the pool grows by one, as long as the disk can hold another
@@ -105,7 +105,7 @@ export class PoolFull extends Error {
 }
 
 function run(git: Git, args: readonly string[], cwd: string) {
-  const r = spawnSync("git",gitArguments( args), { cwd, env: git.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20 });
+  const r = spawnSync("git", gitArguments(args), { cwd, env: git.env ?? process.env, encoding: "utf8", maxBuffer: 64 << 20 });
   return { status: r.status ?? 1, stdout: (r.stdout ?? "").trim(), stderr: (r.stderr ?? "").trim() };
 }
 function checked(git: Git, args: readonly string[], cwd: string): string {

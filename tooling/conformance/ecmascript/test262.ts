@@ -1,3 +1,4 @@
+import {gitArguments} from "../../gate/git-arguments/main.ts";
 // Host validation of shared ECMAScript builtins using the pinned Test262
 // corpus. This does not claim compiled builtin conformance: the compiler lane's
 // ordinary Test262 runner owns that. Regexp literals are adapted so they
@@ -693,7 +694,7 @@ for (const row of rows) counts[row.verdict] = (counts[row.verdict] ?? 0) + 1;
 console.log(
   JSON.stringify({
     mode: "adapted-Test262-host",
-    suiteRevision: execFileSync("git", ["-C", suite, "rev-parse", "HEAD"], {
+    suiteRevision: execFileSync("git", gitArguments(["-C", suite, "rev-parse", "HEAD"]), {
       encoding: "utf8",
     }).trim(),
     under,

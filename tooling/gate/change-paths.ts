@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 import {execFileSync} from "node:child_process";
 import {lstatSync,readFileSync} from "node:fs";
 import {join} from "node:path";

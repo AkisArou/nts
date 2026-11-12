@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {bundledDependencies} from './node-deps.mjs';
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 // The minimal reproductions, re-measured against whatever compiler is current.
@@ -215,7 +216,7 @@ function run(args) {
 // that directory's main.ts failed the step with ENOENT (2026-10-14, six GTK
 // fixtures of a change that had not landed). Outside a checkout, the directory.
 const tracked = (() => {
-  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: FIXTURES, encoding: "utf8" });
+  const listed = spawnSync("git", gitArguments(["ls-files", "-z", "--", "."]), { cwd: FIXTURES, encoding: "utf8" });
   return listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;
 })();
 const names = readdirSync(FIXTURES, { withFileTypes: true })
@@ -876,7 +877,7 @@ if (worker) {
   // Committed fixtures are not re-judged: the gate's own `integrity` step does.
   const pending = [
     ...new Set(
-      spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"], { cwd: ROOT, encoding: "utf8" })
+      spawnSync("git", gitArguments(["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"]), { cwd: ROOT, encoding: "utf8" })
         .stdout.split("\n")
         .map((l) => /tests\/refusals\/([^/]+)\//.exec(l)?.[1])
         .filter((n) => n !== undefined && names.includes(n)),

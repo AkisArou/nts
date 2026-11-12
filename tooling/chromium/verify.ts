@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "../gate/git-arguments/main.ts";
 /**
  * The Chromium runtime's verification, as one command: everything that says
  * it still agrees with V8, on both backends. tooling/gate/owed.mjs settles
@@ -48,7 +49,7 @@ const profile = buildProfile(root, options.length ? options : ["--profile", "per
 // Name the tree this run verifies, so a log says which commit its
 // verdict belongs to whoever runs it.
 const git = (args: string[]): string =>
-  execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+  execFileSync("git", gitArguments(["-C", root, ...args]), { encoding: "utf8" }).trim();
 const dirty = git(["--no-optional-locks", "status", "--porcelain"]) ? " (dirty)" : "";
 console.log(`verify: ${git(["rev-parse", "HEAD"])}${dirty}, profile ${profile.name}`);
 const engine = resolve(chromiumSource(root), profile.directory);

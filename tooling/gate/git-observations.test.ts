@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {readFileSync,writeFileSync,statSync,utimesSync} from 'node:fs';
 import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {SourceFacts,GeneratedSourceFacts} from './source-facts.ts';
 import {shellCommands} from './shell-commands.ts';
 import {inspectGitInvocations,inspectShellGit,inspectPythonGit,inspectGeneratedGitShells,recordGitDebt,parseGitDebt,gitInvocationProblems,type GitInvocation} from './git-observations.ts';
-import {gitArguments} from './git-arguments.ts';
+import {gitArguments} from './git-arguments/main.ts';
 import {inspectRecordPublications} from './test-readiness.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest} from './test-wait.ts';
@@ -15,6 +15,7 @@ import {generatedJavaScript} from './generated-javascript.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {Pool} from '../landing/pool.ts';
+import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
 function inspect(source:string){const api=new API(),lease=api.createSourceFile('tooling/gate/control.ts',source);
@@ -26,8 +27,22 @@ test('the leaf disables optional refresh and preserves mutation arguments',()=>{
   assert.deepEqual(gitArguments(gitArguments(['commit','-m','message'])),['--no-optional-locks','commit','-m','message']);
 });
 
+test('the oracle compiles the Git leaf under its own one-file project',()=>{
+  const entry=fileURLToPath(new URL('./git-arguments/main.ts',import.meta.url));
+  const project=new OracleFilesystem().projectFor(entry);
+  assert.equal(project,fileURLToPath(new URL('./git-arguments/tsconfig.json',import.meta.url)));
+  const api=new API();
+  try{
+    const parsed=api.parseConfigFile(project!);assert.deepEqual(parsed.fileNames,[entry]);
+    const program=api.createProgram(parsed.fileNames,parsed.options);
+    try{assert.deepEqual([...parsed.errors,...program.getProgramDiagnostics(),...program.getGlobalDiagnostics(),
+      ...program.getSyntacticDiagnostics(),...program.getBindDiagnostics(),...program.getSemanticDiagnostics()],[]);}
+    finally{program.dispose();}
+  }finally{api.close();}
+});
+
 test('command positions include aliases, arbitrary forwarders, vectors and probe objects',()=>{
-  const rows=inspect(`import {gitArguments as protect} from './git-arguments.ts';
+  const rows=inspect(`import {gitArguments as protect} from './git-arguments/main.ts';
 const git='git';run(git,protect(['status']));command('git',['diff']);
 const vector=['git',...protect(['log'])],bad=['git','status'];
 probe({command:git,args:protect(['rev-parse','HEAD'])});probe({command:'git',args:['status']});`);
@@ -84,7 +99,7 @@ test('observing a pool leaves every index byte and write statistic unchanged whi
   const root=testScratch(t,'git-observation-stages');
   for(const [name,protect]of [['control',false],['protected',true]]as const){
     const stage=join(root,name);copyModuleClosure(['tooling/landing/pool.ts'],stage);
-    if(!protect)writeFileSync(join(stage,'tooling/gate/git-arguments.ts'),'export function gitArguments(argv:readonly string[]){return [...argv];}');
+    if(!protect)writeFileSync(join(stage,'tooling/gate/git-arguments/main.ts'),'export function gitArguments(argv:readonly string[]){return [...argv];}');
     utimesSync(join(tree.path,'tracked.txt'),protect?2:1,protect?2:1);
     const bytes=readFileSync(index),before=writeStat();
     const program=generatedJavaScript(`const {Pool}=await import(${JSON.stringify(pathToFileURL(join(stage,'tooling/landing/pool.ts')).href)});new Pool(process.argv[1],{root:process.argv[2]}).trees();`);

@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Archive and program first-build costs, using the same real CLI plan as users.
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';

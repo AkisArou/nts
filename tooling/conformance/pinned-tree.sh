@@ -27,13 +27,13 @@ cd "$(dirname "$0")/../.."
 root=$PWD
 
 name=${1:-pinned}
-commit=${2:-$(git rev-parse HEAD)}
+commit=${2:-$(git --no-optional-locks rev-parse HEAD)}
 tree="$HOME/.cache/nts-node-$name"
 
 if [ -d "$tree" ]; then
-  git worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
+  git --no-optional-locks worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
 fi
-git worktree add --detach "$tree" "$commit" > /dev/null
+git --no-optional-locks worktree add --detach "$tree" "$commit" > /dev/null
 
 # Read-only, and deliberately not pinned: these are pinned by other means (a
 # submodule sha, a built binary) and copying them would cost far more than the
@@ -64,4 +64,4 @@ done
 # the same module mid-run silently substitutes the artifact under test.
 echo "export NTS_PINNED_TREE=$tree"
 echo "export NTS_CHECKERS=1"
-echo "# pinned at $(git rev-parse --short "$commit"); cd \$NTS_PINNED_TREE to run"
+echo "# pinned at $(git --no-optional-locks rev-parse --short "$commit"); cd \$NTS_PINNED_TREE to run"

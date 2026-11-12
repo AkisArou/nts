@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Exercise the actual content_shell under Xvfb, directly with pinned Node.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -66,8 +67,8 @@ const mixedObserver = `(() => {
     jobs.setAttribute('data-jobs', ''); observer.takeRecords(); window.mixedTrace=[];
   };
 })()`;
-const chromiumRevision = execFileSync("git", ["-C", chromiumTree, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const sourceDiff = execFileSync("git", ["-C", chromiumTree, "diff", "HEAD", "--binary"], { encoding: "utf8" });
+const chromiumRevision = execFileSync("git", gitArguments(["-C", chromiumTree, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
+const sourceDiff = execFileSync("git", gitArguments(["-C", chromiumTree, "diff", "HEAD", "--binary"]), { encoding: "utf8" });
 assert.equal(sourceDiff, "", "The baseline/public-client experiment requires unmodified tracked Chromium source");
 assert.equal(basename(executable), probeBackend ? "nts_shell" : "content_shell");
 const gnArgs = await readFile(resolve(dirname(executable), "args.gn"), "utf8");

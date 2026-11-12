@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "../gate/git-arguments/main.ts";
 /** Opt-in Chromium checkout/build; run directly with pinned Node. */
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -24,7 +25,7 @@ const hash = sha256File;
 interface Pin { url: string; revision: string; version?: string }
 interface Lock { chromium: Pin; depot_tools: Pin }
 const settings = (): Lock => JSON.parse(readFileSync(resolve(root, "third_party/chromium/upstream.lock.json"), "utf8"));
-const revision = (path: string): string => execFileSync("git", ["-C", path, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const revision = (path: string): string => execFileSync("git", gitArguments(["-C", path, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
 const freeGiB = (): number => {
   const stats = statfsSync(vendor);
   return stats.bavail * stats.bsize / 1024 ** 3;
@@ -83,18 +84,18 @@ function clonePinned(name: keyof Lock, path: string): void {
   if (existsSync(path) && readdirSync(path).length) throw new Error(`Existing non-repository directory: ${path}`);
   if (name === "chromium") {
     const submodule = relative(root, path);
-    const tracked = execFileSync("git", ["ls-files", "--stage", "--", submodule], { cwd: root, encoding: "utf8" });
+    const tracked = execFileSync("git", gitArguments(["ls-files", "--stage", "--", submodule]), { cwd: root, encoding: "utf8" });
     if (tracked.startsWith("160000 ")) {
-      run(["git", "submodule", "update", "--init", "--depth", "1", "--", submodule]);
+      run(["git", ...gitArguments(["submodule", "update", "--init", "--depth", "1", "--", submodule])]);
     } else {
       if (!pin.version) throw new Error("Chromium lock needs a release version");
-      run(["git", "clone", "--depth", "1", "--no-tags", "--branch", pin.version, pin.url, path]);
+      run(["git", ...gitArguments(["clone", "--depth", "1", "--no-tags", "--branch", pin.version, pin.url, path])]);
     }
   } else {
-    run(["git", "init", path]);
-    run(["git", "remote", "add", "origin", pin.url], path);
-    run(["git", "fetch", "--depth", "1", "origin", pin.revision], path);
-    run(["git", "checkout", "--detach", "FETCH_HEAD"], path);
+    run(["git", ...gitArguments(["init", path])]);
+    run(["git", ...gitArguments(["remote", "add", "origin", pin.url])], path);
+    run(["git", ...gitArguments(["fetch", "--depth", "1", "origin", pin.revision])], path);
+    run(["git", ...gitArguments(["checkout", "--detach", "FETCH_HEAD"])], path);
   }
   if (revision(path) !== pin.revision) throw new Error(`Downloaded ${name} does not match the source lock`);
 }

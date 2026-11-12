@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Summaries of what nts measured, as JSON: the benchmark results, and the
 // conformance records per backend. The dashboard that runs nts's agents
 // (signalbox) shows nts's progress from them, and agents read them too. nts
@@ -160,7 +161,7 @@ const backendOf = (column: BackendColumn): Backend => BACKENDS.find(backend => C
 
 /** The envelope every summary shares. */
 function envelope(kind: Kind, root: string) {
-  const asked = spawnSync("git", ["rev-parse", "--show-toplevel", "HEAD"], { cwd: root, encoding: "utf8" });
+  const asked = spawnSync("git", gitArguments(["rev-parse", "--show-toplevel", "HEAD"]), { cwd: root, encoding: "utf8" });
   const [top, head] = asked.status === 0 ? asked.stdout.trim().split("\n") : [];
   const commit = top && head && realpathSync(top) === realpathSync(root) ? head : null;
   return { version: VERSION, kind, at: new Date().toISOString(), read: { root: resolve(root), commit } };

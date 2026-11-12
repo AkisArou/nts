@@ -15,7 +15,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 # git's common directory is the shared checkout's `.git`, from the checkout
 # itself or from any worktree.
 SHARED = os.path.dirname(subprocess.run(
-    ["git", "-C", ROOT, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    ["git", "--no-optional-locks", "-C", ROOT, "rev-parse", "--path-format=absolute", "--git-common-dir"],
     check=True, capture_output=True, text=True).stdout.strip())
 
 CHROMIUM_SRC = os.path.abspath(os.environ.get("NTS_CHROMIUM_SRC")

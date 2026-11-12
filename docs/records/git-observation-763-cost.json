@@ -1,0 +1,300 @@
+{
+  "initial": {
+    "before": "caf74c3bd0083170c12fce11022cf5b57af01333",
+    "after": "a068e285cae7602cfe26804515e9c7a22ff8ab56",
+    "source": "a068e285cae7602cfe26804515e9c7a22ff8ab56",
+    "sourceRoot": "/home/akisarou/.cache/nts-pool/4/target/763-investigation/source",
+    "beforeRoot": "/home/akisarou/.cache/nts-pool/4/target/763-investigation/before",
+    "afterRoot": "/home/akisarou/.cache/nts-pool/4/target/763-investigation/after",
+    "node": "v26.13.0",
+    "commonInventorySha256": "535f03abef5c795e5a5495d90a2a661a179908b3c19a9a004613251804b9fb69",
+    "rows": [
+      {
+        "arm": "before",
+        "wallMs": 4517.915584,
+        "cpuMs": 4279.204,
+        "peakBytes": 393048064,
+        "load": [
+          24.97,
+          37.22,
+          42.72
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 50395070855,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "after",
+        "wallMs": 4624.03755,
+        "cpuMs": 4582.537,
+        "peakBytes": 406769664,
+        "load": [
+          26.9,
+          37.41,
+          42.76
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 52604937186,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "after",
+        "wallMs": 4486.725101,
+        "cpuMs": 4458.996,
+        "peakBytes": 399142912,
+        "load": [
+          27.14,
+          37.29,
+          42.69
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 52087161734,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "before",
+        "wallMs": 4402.247449,
+        "cpuMs": 4375.102,
+        "peakBytes": 406028288,
+        "load": [
+          28.25,
+          37.35,
+          42.68
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 50646537211,
+        "counter": "cpu_core/instructions/u"
+      }
+    ]
+  },
+  "indexAttempt": {
+    "source": "a068e285cae7602cfe26804515e9c7a22ff8ab56",
+    "engines": {
+      "before": "caf74c3bd0083170c12fce11022cf5b57af01333",
+      "landed": "a206a10d8d9f7c7ba7d4df57ae7cac0242438ce6",
+      "indexed": "2095df6737f58c55ae0829e04dabe139b7e582f3"
+    },
+    "node": "v26.13.0",
+    "commonInventorySha256": "535f03abef5c795e5a5495d90a2a661a179908b3c19a9a004613251804b9fb69",
+    "gitInventorySha256": "80db99cb84d2acedf720b9919aec2a5a62dde21f8da323d529a1571608824ec2",
+    "rows": [
+      {
+        "arm": "before",
+        "wallMs": 3674.653097,
+        "cpuMs": 3661.674,
+        "peakBytes": 343810048,
+        "load": [
+          8.27,
+          14.68,
+          28.85
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 50721131490,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "indexed",
+        "wallMs": 3780.057531,
+        "cpuMs": 3765.618,
+        "peakBytes": 347148288,
+        "load": [
+          8.27,
+          14.68,
+          28.85
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 51761905694,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "indexed",
+        "wallMs": 3767.305238,
+        "cpuMs": 3753.368,
+        "peakBytes": 365170688,
+        "load": [
+          8.25,
+          14.56,
+          28.74
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 51824920778,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "before",
+        "wallMs": 3737.7951399999997,
+        "cpuMs": 3723.736,
+        "peakBytes": 383053824,
+        "load": [
+          7.99,
+          14.41,
+          28.61
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 50873316109,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "landed",
+        "wallMs": 3745.829326,
+        "cpuMs": 3731.929,
+        "peakBytes": 370475008,
+        "load": [
+          7.99,
+          14.3,
+          28.5
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 51816556885,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "indexed",
+        "wallMs": 3781.810679,
+        "cpuMs": 3767.866,
+        "peakBytes": 367902720,
+        "load": [
+          8.39,
+          14.28,
+          28.42
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 52089014484,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "indexed",
+        "wallMs": 3781.847279,
+        "cpuMs": 3763.9,
+        "peakBytes": 361111552,
+        "load": [
+          8.39,
+          14.28,
+          28.42
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 52002599237,
+        "counter": "cpu_core/instructions/u"
+      },
+      {
+        "arm": "landed",
+        "wallMs": 3865.549879,
+        "cpuMs": 3851.173,
+        "peakBytes": 377655296,
+        "load": [
+          8.52,
+          14.21,
+          28.32
+        ],
+        "files": 1866,
+        "closures": 251,
+        "reads": 412,
+        "problems": [],
+        "instructions": 52889592243,
+        "counter": "cpu_core/instructions/u"
+      }
+    ]
+  },
+  "tables": {
+    "initial": {
+      "after": {
+        "instructions": 52346049460,
+        "cpuMs": 4520.7665,
+        "wallMs": 4555.3813255000005,
+        "peakBytes": 406769664,
+        "load": [
+          26.9,
+          27.14
+        ]
+      },
+      "before": {
+        "instructions": 50520804033,
+        "cpuMs": 4327.153,
+        "wallMs": 4460.0815165,
+        "peakBytes": 406028288,
+        "load": [
+          24.97,
+          28.25
+        ]
+      }
+    },
+    "indexVsPreGit": {
+      "before": {
+        "instructions": 50797223799.5,
+        "cpuMs": 3692.705,
+        "wallMs": 3706.2241185,
+        "peakBytes": 383053824,
+        "load": [
+          8.27,
+          7.99
+        ]
+      },
+      "indexed": {
+        "instructions": 51793413236,
+        "cpuMs": 3759.493,
+        "wallMs": 3773.6813844999997,
+        "peakBytes": 365170688,
+        "load": [
+          8.27,
+          8.25
+        ]
+      }
+    },
+    "indexVsLanded": {
+      "indexed": {
+        "instructions": 52045806860.5,
+        "cpuMs": 3765.883,
+        "wallMs": 3781.828979,
+        "peakBytes": 367902720,
+        "load": [
+          8.39,
+          8.39
+        ]
+      },
+      "landed": {
+        "instructions": 52353074564,
+        "cpuMs": 3791.551,
+        "wallMs": 3805.6896025,
+        "peakBytes": 377655296,
+        "load": [
+          7.99,
+          8.52
+        ]
+      }
+    }
+  },
+  "decision": "Keep the landed inspector. The command-index prototype has no counted win beyond the approximately two-percent arm spread and adds machinery."
+}

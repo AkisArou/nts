@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Build a Test262 file, run it, and report what happened. A conformance run.
 //
 //   node tooling/census/run262.ts [--under <prefix>] [--slice1] [--limit N]

@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Separate main-thread instruction counts for matched native task handlers.
 // Run under with-lock.sh --wait; these counts do not supply bar wall times.
 import assert from "node:assert/strict";
@@ -22,8 +23,8 @@ assert.equal(process.env.NTS_BENCH_CPUS, "4", "Run the count sitting under with-
 const output = resolve(destination), executable = resolve(engine);
 const fixture = pathToFileURL(resolve(root, "runtime/chromium/benchmarks/pages/kernels/index.html")).href;
 await mkdir(output, { recursive: true });
-const commit = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-assert.equal(execFileSync("git", ["-C", root, "status", "--porcelain"], { encoding: "utf8" }).trim(), "", "Count a committed clean tree");
+const commit = execFileSync("git", gitArguments(["-C", root, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
+assert.equal(execFileSync("git", gitArguments(["-C", root, "status", "--porcelain"]), { encoding: "utf8" }).trim(), "", "Count a committed clean tree");
 assert.equal(activeChromiumBuild(root), undefined);
 const argsText = await readFile(resolve(dirname(executable), "args.gn"), "utf8");
 assert(!/is_debug\s*=\s*true/.test(argsText) && argsText.includes('nts_probe_backend = "c"'), "Use the optimized C probe");

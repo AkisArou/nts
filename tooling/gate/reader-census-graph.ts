@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Read-only investigation of a selected source tree. Instrumentation belongs
 // only to this private copy; it cannot alter the selector used for a verdict.
 import {readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';

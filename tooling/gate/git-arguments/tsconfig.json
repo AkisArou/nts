@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "rootDir": ".",
+    "composite": false
+  },
+  "files": ["main.ts"],
+  "include": []
+}

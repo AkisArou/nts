@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {childTemporary,oracleToolchainLocation} from "../gate/canonical-environment.ts";
 // Explicit recording only. Plans come from the checker's actual population;
 // a partial oracle can never publish a smaller promise.
@@ -514,7 +515,7 @@ async function recordNamed(names: string[]) {
     const mask = spawnSync("taskset", ["-pc", "0-3,6-31", String(process.pid)], { encoding: "utf8" });
     if (mask.status !== 0) throw new Error(`cannot restrict recorder affinity: ${mask.stderr}`);
   }
-  const git = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  const git = spawnSync("git", gitArguments(["rev-parse", "--show-toplevel"]), { encoding: "utf8" });
   if (git.status !== 0) throw new Error("record named fixtures from their repository checkout");
   const root = git.stdout.trim();
   const cache = join(homedir(), ".cache/nts-oracle-record");

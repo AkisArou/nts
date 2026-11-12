@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.

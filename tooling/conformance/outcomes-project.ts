@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // An outcomes fixture as a compilable project: the one definition of how
 // `tests/outcomes/<name>` becomes something `nts` can read.
 //
@@ -46,7 +47,7 @@ export const outcomeBindingPath=(source:string,root=RUNTIME_ROOT)=>sourceAssetPa
  */
 export const outcomeFixtures = (directory = OUTCOMES) => {
   if (!existsSync(directory)) return [];
-  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: directory, encoding: "utf8" });
+  const listed = spawnSync("git", gitArguments(["ls-files", "-z", "--", "."]), { cwd: directory, encoding: "utf8" });
   const tracked = listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;
   return readdirSync(directory, { withFileTypes: true })
     .filter((e) => e.isDirectory() && (tracked === null || tracked.has(e.name)))

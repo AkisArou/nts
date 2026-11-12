@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
 //
@@ -1056,7 +1056,7 @@ export const RULES = [
   },
   {
     name: "Git observation ownership",
-    when: (/** @type {string} */ p) => /^tooling\/gate\/git-(?:arguments|observations)(?:\.test)?\.ts$/.test(p),
+    when: (/** @type {string} */ p) => /^tooling\/gate\/(?:git-arguments\/(?:main\.ts|tsconfig\.json)|git-observations(?:\.test)?\.ts)$/.test(p),
     steps: ["tooling"],
     arms: [{kind:"valid",asks:"Git command ownership and unchanged observer indexes",run:"node --test tooling/gate/git-observations.test.ts"}],
   },

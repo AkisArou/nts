@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import type {Node} from 'typescript/ast';
 import {SourceFacts,GeneratedSourceFacts,inspectSourceBatches,type ShellSourceFacts,type SourceInput} from './source-facts.ts';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
-import {GIT_NO_OPTIONAL_LOCKS} from './git-arguments.ts';
+import {GIT_NO_OPTIONAL_LOCKS} from './git-arguments/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion,assertWritableState} from './state-version.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -31,7 +31,7 @@ export function inspectGitInvocations(facts:SourceFacts,offset=0):GitInvocation[
   const owner=(node:Node|undefined):boolean=>{
     const v=value(node);if(!v||!ast.isCallExpression(v))return false;
     const called=facts.name(v.expression),match=/^(\.{1,2}\/.*)\.gitArguments$/.exec(called);
-    return !!match&&posix.normalize(posix.join(posix.dirname(facts.file),match[1]!))==='tooling/gate/git-arguments.ts';
+    return !!match&&posix.normalize(posix.join(posix.dirname(facts.file),match[1]!))==='tooling/gate/git-arguments/main.ts';
   };
   const protectedArgs=(node:Node|undefined):boolean=>{
     if(owner(node))return true;

@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Measure the complete cold inner build set, without running its test cases.
 // Only declared Cargo output roots enter the record; target scratch/evidence
 // never does. --cold explicitly discards these idle build caches through Cargo.

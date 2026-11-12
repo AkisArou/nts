@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 /** Official nts-bench bridge to the shared immutable record authority. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -71,7 +72,7 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
   const identity = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   const bridge = spawnSync(
     "git",
-    ["grep", "-n", "-F", "@scriptc/node", "--", "benchmarks/cases", "benchmarks/common"],
+    gitArguments(["grep", "-n", "-F", "@scriptc/node", "--", "benchmarks/cases", "benchmarks/common"]),
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(

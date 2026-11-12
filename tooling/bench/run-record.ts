@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -717,7 +718,7 @@ export function consoleRow(row: Row): string {
   ].join("\t");
 }
 function git(root: string, args: string[]): string {
-  const r = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  const r = spawnSync("git", gitArguments(args), { cwd: root, encoding: "utf8" });
   check(r.status === 0, "git " + args.join(" ") + ": " + r.stderr);
   return r.stdout.trim();
 }

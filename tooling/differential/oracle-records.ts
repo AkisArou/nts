@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The tracked authority is one record per fixture, plus the generator header.
 // A flat table is an interchange value in memory, never a second authority.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -330,7 +331,7 @@ export function writeRecords(root: string, table: OracleTable, selected?: Readon
 
 /** Read a pin's own committed authority, never the candidate's generated view. */
 export function readRecordsAt(root: string, revision: string): OracleTable {
-  const git = (...args: string[]): string => execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const git = (...args: string[]): string => execFileSync("git", gitArguments(args), { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   const commit = git("rev-parse", "--verify", `${revision}^{commit}`).trim();
   const paths = new Set(git("ls-tree", "-rz", "--name-only", commit).split("\0").filter(Boolean));
   const read = (path: string): unknown => JSON.parse(git("show", `${commit}:${path}`));

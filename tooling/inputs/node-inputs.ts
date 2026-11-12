@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Offline consumers select one verified immutable pair. Only explicit acquire
 // copies a supplied, authenticated release; a lookup never uses shared clones.
 import {createHash,randomUUID} from 'node:crypto';
@@ -16,7 +17,7 @@ type Entry={sha256:string;execute:number}|{link:string};
 type Inventory=Record<string,Entry>;
 type Manifest={version:1;release:string;identity:Identity;node:Inventory;source:Inventory};
 const sha=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
-const git=(root:string,...args:string[])=>execFileSync('git',['-C',root,...args],{encoding:'utf8',maxBuffer:32<<20}).trim();
+const git=(root:string,...args:string[])=>execFileSync('git',gitArguments(['-C',root,...args]),{encoding:'utf8',maxBuffer:32<<20}).trim();
 export const inputCache=()=>cacheLocation('NTS_NODE_INPUTS_CACHE',process.env,()=>join(homedir(),'.cache/nts-node-inputs'));
 export function records():Records{return JSON.parse(readFileSync(new URL('./node-inputs.json',import.meta.url),'utf8'));}
 function expected(release:string,table:Records):Identity{

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.

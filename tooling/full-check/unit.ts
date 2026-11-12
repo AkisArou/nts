@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The full check's systemd user units: the controller, one long-running
 // service at low priority from a controller worktree of its own at `verified`;
 // the hourly count, a service its own timer starts; and each part's records

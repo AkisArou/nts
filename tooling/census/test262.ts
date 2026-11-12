@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Why the compiler refuses each Test262 file. A census, never a verdict.
 //
 //   node tooling/census/test262.ts [--under <prefix>] [--slice1] [--limit N]

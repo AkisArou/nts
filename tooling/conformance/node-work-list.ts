@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // A migration starts with upstream imports, not with the files already ported.
 // This is an inventory, not a prediction of tests or compiler reach.
 //
@@ -30,7 +31,7 @@ export function gitSource(directory: string, ref: string): Source {
   const env = {...process.env, GIT_NO_LAZY_FETCH: "1"};
   const git = (...args: string[]) => {
     try {
-      return execFileSync("git", ["-C", root, ...args], {
+      return execFileSync("git", gitArguments(["-C", root, ...args]), {
         env, encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "pipe"],
       });
     } catch (error) {

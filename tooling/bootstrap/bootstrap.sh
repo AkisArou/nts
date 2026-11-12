@@ -44,11 +44,11 @@ clone_sparse() {
   if have "$path/.git"; then
     echo "  already cloned"
   elif [ -n "$branch" ]; then
-    git clone --depth 1 --filter=blob:none --sparse --branch "$branch" "$url" "$path"
+    git --no-optional-locks clone --depth 1 --filter=blob:none --sparse --branch "$branch" "$url" "$path"
   else
-    git clone --depth 1 --filter=blob:none --sparse "$url" "$path"
+    git --no-optional-locks clone --depth 1 --filter=blob:none --sparse "$url" "$path"
   fi
-  (cd "$path" && git sparse-checkout set "$@")
+  (cd "$path" && git --no-optional-locks sparse-checkout set "$@")
 }
 
 # The node version, in one place.
@@ -126,7 +126,7 @@ clone_sparse third_party/node https://github.com/nodejs/node.git "v$node_pin" \
 # that takes minutes and wrong for a *version* -- so the tag is checked rather
 # than assumed. Reported rather than repaired: moving it is a fetch, and doing
 # that silently under someone mid-task is worse than telling them.
-at=$(git -C third_party/node describe --tags --exact-match 2>/dev/null || echo "unknown")
+at=$(git --no-optional-locks -C third_party/node describe --tags --exact-match 2>/dev/null || echo "unknown")
 if [ "$at" != "v$node_pin" ]; then
   echo "  note: checked out at $at, pin is v$node_pin"
   echo "        git -C third_party/node fetch --depth 1 origin tag v$node_pin && git -C third_party/node checkout v$node_pin"
@@ -160,7 +160,7 @@ if have third_party/test262/.git; then
   # Reported rather than repaired, exactly as the node checkout above: moving it
   # is a fetch, and doing that silently under someone mid-task is worse than
   # telling them. What is new is that it is *checked* at all.
-  at=$(git -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
+  at=$(git --no-optional-locks -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
   if [ "$at" = "$test262_pin" ]; then
     echo "  already cloned, at the pin"
   else
@@ -169,9 +169,9 @@ if have third_party/test262/.git; then
     echo "        git -C third_party/test262 checkout --detach ${test262_pin}"
   fi
 else
-  git clone --filter=blob:none --no-checkout \
+  git --no-optional-locks clone --filter=blob:none --no-checkout \
     https://github.com/tc39/test262.git third_party/test262
-  git -C third_party/test262 checkout --detach "$test262_pin"
+  git --no-optional-locks -C third_party/test262 checkout --detach "$test262_pin"
 fi
 
 say "third_party/typescript (tests only, at the native checker's TypeScript pin)"

@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // One capacity equation for pool leases and temporary admission. Git owns a
 // lease; declared build outputs consume its measured promise. No folder size
 // outside those outputs, and no free checkout, enters that promise.

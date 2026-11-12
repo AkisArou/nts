@@ -44,7 +44,7 @@ nts=${NTS_BIN:-"$here/target/release/nts"}
 file="$project/src/refused.ts"
 
 [ -f "$file" ] || { echo "check-refusals: no $file"; exit 0; }
-if [ -n "$(cd "$here" && git status --porcelain -- "$file")" ]; then
+if [ -n "$(cd "$here" && git --no-optional-locks status --porcelain -- "$file")" ]; then
   echo "check-refusals: $file has uncommitted changes; restoring would discard them"
   exit 1
 fi

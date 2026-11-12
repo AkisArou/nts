@@ -2553,3 +2553,11 @@ The control forces a stale index with optional locks explicitly enabled,
 proves a private before variant refreshes it, then checks unchanged bytes and
 write statistics with the argv owner. Production owners are the first slice.
 Part of #763.
+
+## Oracle-preload leaves own one-file projects (11-12)
+
+The pure Git argument owner moves to its own directory and project, as
+command-entry did. An import from oracle-dependencies otherwise compiles the
+whole gate project and reaches cross-directory roots outside its rootDir.
+Shared leaves reached by an oracle preload each own a one-file tsconfig.
+Part of #763.

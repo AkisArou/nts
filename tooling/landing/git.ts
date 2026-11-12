@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The git half of landing a change: rebase it onto the newest main, move main
 // to it, push main, and delete the change's branch where nothing on it is lost.
 // Every operation names its repository and environment; none touches a

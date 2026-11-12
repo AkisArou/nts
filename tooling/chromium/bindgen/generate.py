@@ -166,7 +166,7 @@ def presence_asked():
     dictionary answers its zero for one never set); one that is asked may
     not. By name alone, whatever dictionary the call is on: a name some
     other dictionary's code asks is taken as asked here too."""
-    found = subprocess.run(["git", "-C", SRC, "grep", "-h", "-o", "-E", r"(->|\.)has[A-Z][A-Za-z0-9]*\(\)", "--",
+    found = subprocess.run(["git", "--no-optional-locks", "-C", SRC, "grep", "-h", "-o", "-E", r"(->|\.)has[A-Z][A-Za-z0-9]*\(\)", "--",
                             "third_party/blink/renderer/*.cc", "third_party/blink/renderer/*.h"],
                            capture_output=True, text=True, check=True).stdout
     return {name[0].lower() + name[1:] for name in re.findall(r"has([A-Z][A-Za-z0-9]*)\(\)", found)}

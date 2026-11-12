@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // A compiler binary that says where it came from.
 //
 //   node tooling/conformance/pin.ts <rev>                      build <rev> as committed
@@ -52,7 +53,7 @@ const TREE = join(PINS, "tree");
 const TARGET = join(PINS, "target");
 const LOCK = join(PINS, "build.lock");
 
-const git = (args: string[], cwd = ROOT, input?: string) => execFileSync("git", args, { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+const git = (args: string[], cwd = ROOT, input?: string) => execFileSync("git", gitArguments(args), { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
 /** A pin's directory name: the commit, and the applied diff's hash when there is one. */
@@ -159,7 +160,7 @@ function appliedDiff(sha, opts) {
     // commits behind pinned 19 files and 517 deletions as a 3-line change, and
     // the binary built fine. Ahead of `rev` is the worktree's own commits.
     const head = git(["rev-parse", "HEAD"], opts.worktree).trim();
-    const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", sha, head], { cwd: opts.worktree }).status === 0;
+    const ancestor = spawnSync("git", gitArguments(["merge-base", "--is-ancestor", sha, head]), { cwd: opts.worktree }).status === 0;
     if (!ancestor) {
       const reverted = git(["rev-list", "--count", `${head}..${sha}`], opts.worktree).trim();
       throw new Error(`${opts.worktree}'s HEAD ${head.slice(0, 12)} does not descend from ${sha.slice(0, 12)}: its diff against it would revert ${reverted} commit(s). Pin ${head.slice(0, 12)} with --worktree, or rebase the worktree onto ${sha.slice(0, 12)}`);

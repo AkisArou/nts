@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Content-provider census, from a committed worktree and an explicit compiler.
 //   NTS_BIN=<nts> node tooling/census/contents.ts collect <fresh-raw-dir> [programs/name|benchmarks/name ...]
 //   node tooling/census/contents.ts record <raw-dir>

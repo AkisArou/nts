@@ -50,12 +50,12 @@ if [ "$#" -gt 0 ]; then
         fi
         ;;
       *)
-        if ! git ls-files --error-unmatch -- "$source" >/dev/null 2>&1; then
+        if ! git --no-optional-locks ls-files --error-unmatch -- "$source" >/dev/null 2>&1; then
           echo "sabotage-run: REFUSING -- $source is untracked, so \`git diff\` cannot see a" >&2
           echo "  mutation in it. Pass it as $source=<pristine-copy> instead." >&2
           exit 1
         fi
-        if git diff --quiet -- "$source"; then
+        if git --no-optional-locks diff --quiet -- "$source"; then
           echo "sabotage-run: REFUSING -- $source is unchanged, so the mutation did not apply." >&2
           echo "  A patch that failed to match reports a survivor against untouched source." >&2
           exit 1
@@ -63,7 +63,7 @@ if [ "$#" -gt 0 ]; then
         ;;
     esac
   done
-elif git diff --quiet -- runtime/web-platform/src; then
+elif git --no-optional-locks diff --quiet -- runtime/web-platform/src; then
   echo "sabotage-run: REFUSING -- no source under runtime/web-platform/src is modified." >&2
   echo "  Nothing is sabotaged, so whatever the tests say is about the unmutated tree." >&2
   exit 1

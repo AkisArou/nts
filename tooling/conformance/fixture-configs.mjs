@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Every `tsconfig.json` in this repository, checked for one thing: that its
 // `extends` names a file that exists.
 //
@@ -53,7 +54,7 @@ const ROOT = resolve(HERE, "../..");
  * because the example was untracked. A copied-template mistake is *always*
  * untracked at the moment it is made, so tracked-only is blind for precisely
  * the window in which a person could still be told. */
-const configs = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*tsconfig.json", "*tsconfig.*.json"], {
+const configs = execFileSync("git", gitArguments(["ls-files", "--cached", "--others", "--exclude-standard", "*tsconfig.json", "*tsconfig.*.json"]), {
   cwd: ROOT,
   encoding: "utf8",
 })

@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "./command-entry/main.ts";
 // One run-owned, offline dependency image. The existing pinned pnpm provisioner
 // owns registry integrity; an application installation is never a fallback.
@@ -26,7 +27,7 @@ export type DependencyCapability={seal?:DependencyRunSeal;version:1;source:strin
 type Entry={path:string;kind:'directory';mode:number}|{path:string;kind:'file';mode:number;bytes:number;sha256:string}|{path:string;kind:'link';target:string};
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
 export type DependencyImage={version:1;source:string;sourceRevision:string;inputSet:InstallInputs;lockfileSha256:string;treeSha256:string;manager:ReturnType<typeof managerPin>;entries:Entry[];ownerStep:string|null;cost:{wallMs:number;selectionWallMs:number;userSeconds:number;systemSeconds:number;bytes:number;allocatedBytes:number;peakBytes:number;residentBudgetBytes:number;cpuBudgetSeconds:number;reservedBytes:number}};
-function git(root:string,...args:string[]){return execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:Infinity}).trim();}
+function git(root:string,...args:string[]){return execFileSync('git',gitArguments(args),{cwd:root,encoding:'utf8',maxBuffer:Infinity}).trim();}
 const CAPTURE_BYTES=2*2**30,CAPTURE_CPU_SECONDS=300;
 // Actual independent-copy capture allocated 518,709,248 bytes. Reserve the
 // next GiB before building; a larger image holds instead of publishing.
@@ -38,7 +39,7 @@ export function dependencyCapability(source:string,directory:string,admission:Te
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input
   // projection below determines the source image, never HEAD's whole tree.
-  const sourceRevision=execFileSync('git',['rev-parse','HEAD'],{cwd:source,env,encoding:'utf8'}).trim();
+  const sourceRevision=execFileSync('git',gitArguments(['rev-parse','HEAD']),{cwd:source,env,encoding:'utf8'}).trim();
   return {version:1,source,sourceRevision,lockfileSha256:hash(readFileSync(join(source,'pnpm-lock.yaml'))),
     helperSha256:hash(readFileSync(fileURLToPath(import.meta.url))),producerSha256:producerIdentity(source),directory:resolve(directory),admission,ownerStep};
 }
@@ -252,7 +253,7 @@ async function build(capability:DependencyCapability,inputSha256:string){
   execFileSync('tar',['-xf',archive,'-C',tree]);rmSync(archive);
   // The existing offline installer enumerates tracked module paths. A fresh
   // archive has none yet; all workspace importers still come from pnpm itself.
-  execFileSync('git',['init','--quiet',tree]);
+  execFileSync('git',gitArguments(['init','--quiet',tree]));
   const common=resolve(capability.source,git(capability.source,'rev-parse','--git-common-dir')),shared=dirname(common);
   if(await installDependencies(shared,tree,{managerWorkers:1,packageImportMethod:'copy',expectedIdentityKey:inputSet.identity.key})!==inputSet.identity.key)throw Error('oracle dependency installed input identity mismatch');
   rmSync(join(tree,'.git'),{recursive:true});

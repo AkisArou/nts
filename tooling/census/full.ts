@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The full run: the gate steps a landing leaves out, on a pin of main.
 //
 //   node tooling/census/full.ts            # main's tip

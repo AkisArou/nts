@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Narrowing is optional. Lexer errors and unsupported syntax retain the
 // ordinary path-based gate. A broken tool is a named instrument failure.
 // Never run a preprocessor: #if 0 is code.

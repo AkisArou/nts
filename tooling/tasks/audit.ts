@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Read-only project issue audit, run at coordinator checkpoints, never a timer.
 //   node tooling/tasks/audit.ts [--json] [--snapshot <file>] [--protect N,N]
 // Exit 0: complete without errors; 1: drift; 2: incomplete measurement.
@@ -163,7 +164,7 @@ export function capture(run: Gh = gh, now = new Date().toISOString(), refs: read
 {}
 /** Local task branches and cited pins share the repository's object store. */
 export function localRefs(root: string): string[] {
-  const result=spawnSync("git",["-C",root,"for-each-ref","--format=%(refname)%09%(refname:short)","refs/heads","refs/cited","refs/archive"],{encoding:"utf8"});
+  const result=spawnSync("git",gitArguments(["-C",root,"for-each-ref","--format=%(refname)%09%(refname:short)","refs/heads","refs/cited","refs/archive"]),{encoding:"utf8"});
   if(result.error||result.status!==0)throw new Error("local branch/ref inventory is incomplete");
   return result.stdout.trim().split("\n").filter(Boolean).flatMap(line=>line.split("\t"));
 }

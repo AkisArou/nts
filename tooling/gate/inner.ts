@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
 import {clippyTarget} from "./build-targets.ts";

@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Fail if anything is still where the corpora used to be.
 //
 //   node tooling/migrate/old-paths.ts
@@ -19,13 +20,13 @@ import { fileURLToPath } from "node:url";
 
 import { OLD_ROOTS, references } from "./table.ts";
 
-const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+const root = execFileSync("git", gitArguments(["rev-parse", "--show-toplevel"]), { encoding: "utf8" }).trim();
 
 /** Text files a path could be written in. */
 const TEXT = /\.(ts|tsx|mts|mjs|js|cjs|json|jsonc|ya?ml|toml|sh|bash|py|rs|md|txt|known|tsv|cfg|mk)$|(^|\/)(Makefile|Dockerfile|\.gitignore|\.gitattributes)$/;
 
 function tracked(): string[] {
-  const out = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: Infinity });
+  const out = execFileSync("git", gitArguments(["ls-files", "-z"]), { cwd: root, encoding: "utf8", maxBuffer: Infinity });
   return out.split("\0").filter(Boolean);
 }
 

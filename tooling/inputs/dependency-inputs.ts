@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // Registry bytes are acquired before submission; every reader installs frozen
 // and offline into its own tree. No installed tree is an input of another.
@@ -20,7 +21,7 @@ export function dependencyCache(root:string):string {
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);
 function git(repo:string,...args:string[]):string {
   // Repository inventories grow with the corpus, not a subprocess buffer cap.
-  return execFileSync("git",args,{cwd:repo,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]}).trim();
+  return execFileSync("git",gitArguments(args),{cwd:repo,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]}).trim();
 }
 function hasDependencies(tree:string):boolean {
   if(!existsSync(join(tree,"pnpm-lock.yaml"))) {
@@ -60,7 +61,7 @@ function assertPrivate(root:string,tree:string):void {
   if(realpathSync(root)===realpathSync(tree))throw failure("prepare a private tree; the shared checkout is never an installation target");
 }
 function removeModules(tree:string,importers:string[]):void {
-  const files=execFileSync("git",["ls-files","-z"],{cwd:tree,encoding:"utf8",maxBuffer:Infinity}).split("\0").filter(Boolean);
+  const files=execFileSync("git",gitArguments(["ls-files","-z"]),{cwd:tree,encoding:"utf8",maxBuffer:Infinity}).split("\0").filter(Boolean);
   const owners=new Set(importers),tracked=new Set<string>();
   for(const file of files) {
     const parts=file.split("/");

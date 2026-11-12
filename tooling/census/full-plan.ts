@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { gateEnvironment } from "../gate/canonical-environment.ts";

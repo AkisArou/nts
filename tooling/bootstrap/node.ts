@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // Prepare Node's unedited dependency sources. Recipe resolution is bootstrap-only.
 import {createHash} from 'node:crypto';
@@ -10,7 +11,7 @@ const ROOT=resolve(import.meta.dirname,'../..');
 export const DEPENDENCIES=['openssl','brotli','zlib','zstd','uv'] as const;
 export const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 export function nodePin(root=ROOT,revision?:string):string {
- const text=revision===undefined?readFileSync(join(root,'.tool-versions'),'utf8'):execFileSync('git',['-C',root,'show',revision+':.tool-versions'],{encoding:'utf8'});
+ const text=revision===undefined?readFileSync(join(root,'.tool-versions'),'utf8'):execFileSync('git',gitArguments(['-C',root,'show',revision+':.tool-versions']),{encoding:'utf8'});
  const entries=text.split('\n').filter(line=>/^nodejs\s/.test(line));
  const pin=entries.length===1?/^nodejs\s+(\d+\.\d+\.\d+)\s*$/.exec(entries[0])?.[1]:undefined;
  if(!pin)throw Error('.tool-versions must name exactly one Node release');

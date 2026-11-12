@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The upstream test corpus follows the TypeScript commit the native checker ports.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
@@ -5,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const git = (cwd: string, args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 1 << 24, stdio: ["ignore", "pipe", "pipe"] }).trim();
+const git = (cwd: string, args: string[]) => execFileSync("git", gitArguments(args), { cwd, encoding: "utf8", maxBuffer: 1 << 24, stdio: ["ignore", "pipe", "pipe"] }).trim();
 
 export function corpusPin(root = ROOT): string {
   const source = readFileSync(join(root, "tooling/suite/src/test262_runner/mod.rs"), "utf8");

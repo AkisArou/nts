@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Does this change alter any answer? The examples differential, without the gate.
 //
 //   node tooling/differential/agree.mjs <nts>                 every example against node
@@ -448,7 +449,7 @@ function incompleteExit(records, completedFailures) {
 // A count over this glob is a fact about the working tree, not a commit: say
 // which examples only this tree has.
 const tracked = new Set(
-  execFileSync("git", ["ls-files", "-z", "tests/programs/*/tsconfig.json"], { cwd: ROOT, encoding: "utf8" })
+  execFileSync("git", gitArguments(["ls-files", "-z", "tests/programs/*/tsconfig.json"]), { cwd: ROOT, encoding: "utf8" })
     .split("\0").filter(Boolean).map((path) => path.split("/")[2]),
 );
 const untracked = examples.filter((name) => !tracked.has(name));

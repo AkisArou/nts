@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // A scratch repository for the landing check's tests: a local bare `origin`,
 // a clone with main checked out (the shared checkout), and git configured

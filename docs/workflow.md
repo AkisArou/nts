@@ -492,6 +492,8 @@ The shared entry owner starts its command only at entry, retains command-owned
 diagnostics and statuses, and gives unhandled errors one stderr/exit policy.
 Asynchronous fixture setup belongs in a test hook. Pure command entry scripts
 outside Worker closures may use top-level await.
+A leaf that an oracle preload reaches lives in its own directory with a one-file
+`tsconfig.json`, so importing it never compiles an unrelated aggregate project.
 
 
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
@@ -522,7 +524,7 @@ outside Worker closures may use top-level await.
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
 - **Git observers preserve the owner's index.** Git arguments run through
-  `tooling/gate/git-arguments.ts`, which prepends `--no-optional-locks` for
+  `tooling/gate/git-arguments/main.ts`, which prepends `--no-optional-locks` for
   observations and mutations alike. Required mutation locks remain enabled.
   The shared source-facts audit checks literal or constant-bound Git command
   positions: a call's first argument, an argv vector's first element, a
@@ -750,6 +752,11 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Oracle-preload leaves own one-file projects:** shared pure helpers reached by
+  an oracle preload live in their own directory with a one-file `tsconfig.json`.
+  Their callers use the same source bytes without pulling an unrelated tooling
+  project into the public TypeScript compilation.
 
 - **Every Git invocation disables optional index refresh.** One argv owner
   protects command positions without a classification of which subcommands

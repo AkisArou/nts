@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The git the full check needs: first-parent ranges of main, the reverts a
 // range already holds, and a commit with culprits reverted, made in the object
 // store alone (`merge-tree` and `commit-tree`), so composing one never touches

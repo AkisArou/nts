@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Measure the first real crypto program, its warm rebuilds and the dependency
 // validator separately. Raw outputs and exec-inherited counters are retained.
 import assert from 'node:assert/strict';

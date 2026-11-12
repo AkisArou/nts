@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Renderer-local architecture measurements; CDP stays outside timed loops.
 import assert from "node:assert/strict";
 import { openPage } from "./browser.ts";
@@ -101,7 +102,7 @@ const debugEngine = /is_debug\s*=\s*true/.test(argsText);
 assert(allowDebug || !debugEngine, "Debug engine timings are diagnostic only; pass --allow-debug explicitly or use the optimized profile");
 assert(argsText.includes(`nts_probe_backend = "${backend}"`));
 assert.equal(activeChromiumBuild(root), undefined, "Finish the active build before benchmarking");
-assert.equal(execFileSync("git", ["-C", source, "diff", "HEAD", "--binary"], {encoding:"utf8"}), "");
+assert.equal(execFileSync("git", gitArguments(["-C", source, "diff", "HEAD", "--binary"]), {encoding:"utf8"}), "");
 const hash = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
 // The build record, with the shared checkout (checkout.ts).
 const evidenceDirectory = sealedBuild ?? (dirname(executable).endsWith("/NtsPerf") ? resolve(chromiumState(root), "perf") : chromiumState(root));
@@ -454,7 +455,7 @@ const provenance = {observedAt:new Date().toISOString(),workload,todoSource:work
   scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
   argsText,cpu,runs,buildRecord,executable,executableSha256:sha256File(executable),fixtureSha256:hash(await readFile(fixturePath)),
   v8Executable,v8ExecutableSha256:sha256File(v8Executable),v8FixtureSha256:hash(await readFile(v8FixturePath)),
-  chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(manifestPath)),
+  chromiumRevision:execFileSync("git",gitArguments(["-C",source,"rev-parse","HEAD"]),{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(manifestPath)),
   sealedBuild, compilerCheck:JSON.parse(await readFile(sealedBuild ? resolve(sealedBuild,"compiler-check.json") : resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
   cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"})};
 if (workload === "todo") {

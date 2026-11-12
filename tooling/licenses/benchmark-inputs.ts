@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // CC-BY-4.0 is admitted only as opaque benchmark input. In particular, an
 // unpacker is executable code even when its package calls it a data package.
 // Each case owns input-licenses.json; no central row needs to be merged when
@@ -79,7 +80,7 @@ function decode(value: unknown, at: string): Input[] {
 
 /** The index defines the audited source set, including staged additions. */
 export function trackedFiles(root: string): string[] {
-  return execFileSync("git", ["ls-files", "-z"], {cwd: root, maxBuffer: 64 << 20, encoding: "utf8"})
+  return execFileSync("git", gitArguments(["ls-files", "-z"]), {cwd: root, maxBuffer: 64 << 20, encoding: "utf8"})
     .split("\0").filter(Boolean).sort();
 }
 

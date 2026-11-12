@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // Move every corpus under `tests/` and every benchmark under `benchmarks/`:
 // one mechanical commit, made by this table rather than by hand.
 //
@@ -38,7 +39,7 @@ import { fileURLToPath } from "node:url";
 
 import { bareRootPattern, mapPath, MOVES, newRootOf, references } from "./table.ts";
 
-const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+const root = execFileSync("git", gitArguments(["rev-parse", "--show-toplevel"]), { encoding: "utf8" }).trim();
 
 /** Every directory `git mv` moves, old and new, from the table. */
 function planned(): Array<[string, string]> {
@@ -59,7 +60,7 @@ function planned(): Array<[string, string]> {
 
 /** Tracked files under a directory, repository-relative. */
 function tracked(dir: string): string[] {
-  const out = execFileSync("git", ["ls-files", "-z", "--", dir], { cwd: root, encoding: "utf8" });
+  const out = execFileSync("git", gitArguments(["ls-files", "-z", "--", dir]), { cwd: root, encoding: "utf8" });
   return out.split("\0").filter(Boolean);
 }
 
@@ -143,7 +144,7 @@ const TEXT =
  * `$ROOT/benchmarks`. Run after the move, over every tracked file including
  * the moved ones, whose prose and scripts name each other by root path. */
 function referenceRewrites(): Change[] {
-  const files = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
+  const files = execFileSync("git", gitArguments(["ls-files", "-z"]), { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
   const changes: Change[] = [];
   for (const file of files) {
     if (file.startsWith("docs/records/") || file.startsWith("third_party/") || !TEXT.test(file)) continue;
@@ -185,7 +186,7 @@ function resortKnown(): void {
 
 /** Every line holding an old root bare between quotes, for a person. */
 function bareRoots(): string[] {
-  const files = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
+  const files = execFileSync("git", gitArguments(["ls-files", "-z"]), { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
   const found: string[] = [];
   for (const file of files) {
     if (file.startsWith("docs/records/") || file.startsWith("third_party/") || !TEXT.test(file)) continue;
@@ -205,7 +206,7 @@ function bareRoots(): string[] {
 
 function main(): void {
   const dryRun = process.argv.includes("--dry-run");
-  const status = execFileSync("git", ["status", "--porcelain", "--ignore-submodules=all", "--untracked-files=no"], {
+  const status = execFileSync("git", gitArguments(["status", "--porcelain", "--ignore-submodules=all", "--untracked-files=no"]), {
     cwd: root,
     encoding: "utf8",
   });
@@ -237,7 +238,7 @@ function main(): void {
   applyInside(inside);
   for (const [from, to] of pairs) {
     execFileSync("mkdir", ["-p", dirname(join(root, to))]);
-    execFileSync("git", ["mv", from, to], { cwd: root });
+    execFileSync("git", gitArguments(["mv", from, to]), { cwd: root });
   }
   const references = referenceRewrites();
   resortKnown();

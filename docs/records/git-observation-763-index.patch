@@ -1,0 +1,159 @@
+diff --git a/tooling/gate/git-observations.ts b/tooling/gate/git-observations.ts
+index 4a4fdb9c8..c64f01ffc 100644
+--- a/tooling/gate/git-observations.ts
++++ b/tooling/gate/git-observations.ts
+@@ -27,7 +27,7 @@ const key=(row:Pick<GitInvocation,'file'|'kind'|'source'>)=>JSON.stringify([row.
+ export function inspectGitInvocations(facts:SourceFacts,offset=0):GitInvocation[]{
+   const ast=facts.ast,rows:GitInvocation[]=[];
+   const value=(node:Node|undefined)=>node&&facts.resolve(node);
+-  const literal=(node:Node|undefined)=>{const v=value(node);return v&&ast.isStringLiteralLikeNode(v)?v.text:undefined;};
++  const literal=(node:Node|undefined)=>facts.stringValue(node);
+   const owner=(node:Node|undefined):boolean=>{
+     const v=value(node);if(!v||!ast.isCallExpression(v))return false;
+     const called=facts.name(v.expression),match=/^(\.{1,2}\/.*)\.gitArguments$/.exec(called);
+@@ -38,20 +38,11 @@ export function inspectGitInvocations(facts:SourceFacts,offset=0):GitInvocation[
+     const v=value(node);return !!v&&ast.isArrayLiteralExpression(v)&&literal(v.elements[0])===GIT_NO_OPTIONAL_LOCKS;
+   };
+   const add=(node:Node,kind:GitInvocation['kind'],protected_:boolean)=>rows.push({file:facts.file,line:offset+facts.line(node.pos),kind,source:facts.code(node).replace(/\s+/g,' '),protected:protected_});
+-  for(const call of facts.calls)if(isGit(literal(call.arguments[0])))add(call,'call',protectedArgs(call.arguments[1]));
+-  for(const node of facts.ofKind(ast.SyntaxKind.ArrayLiteralExpression))if(ast.isArrayLiteralExpression(node)&&isGit(literal(node.elements[0]))){
+-    const next=node.elements[1];add(node,'argv',literal(next)===GIT_NO_OPTIONAL_LOCKS||!!next&&ast.isSpreadElement(next)&&owner(next.expression));
+-  }
+-  for(const node of facts.ofKind(ast.SyntaxKind.ObjectLiteralExpression))if(ast.isObjectLiteralExpression(node)){
+-    let command:Node|undefined,args:Node|undefined;
+-    for(const property of node.properties){
+-      if(ast.isPropertyAssignment(property)){
+-        const name=ast.isIdentifier(property.name)||ast.isStringLiteralLikeNode(property.name)?property.name.text:undefined;
+-        if(name==='command')command=property.initializer;else if(name==='args')args=property.initializer;
+-      }else if(ast.isShorthandPropertyAssignment(property)&&ast.isIdentifier(property.name)&&property.name.text==='args')args=property.name;
+-    }
+-    if(isGit(literal(command)))add(node,'probe',protectedArgs(args));
++  for(const row of facts.stringCommands('call'))if(isGit(row.command))add(row.node,'call',protectedArgs(row.args));
++  for(const row of facts.stringCommands('argv'))if(isGit(row.command)){
++    const next=row.args;add(row.node,'argv',literal(next)===GIT_NO_OPTIONAL_LOCKS||!!next&&ast.isSpreadElement(next)&&owner(next.expression));
+   }
++  for(const row of facts.stringCommands('probe'))if(isGit(row.command))add(row.node,'probe',protectedArgs(row.args));
+   return rows;
+ }
+ 
+diff --git a/tooling/gate/source-facts.test.ts b/tooling/gate/source-facts.test.ts
+index 76db24b77..0e89ebd95 100644
+--- a/tooling/gate/source-facts.test.ts
++++ b/tooling/gate/source-facts.test.ts
+@@ -36,6 +36,24 @@ test('generated source is parsed once per parent session and shares its structur
+   }finally{generated.close();api.close();}
+ });
+ 
++test('command indices share cached lexical strings and keep shadowed and cyclic names unknown',()=>{
++  const api=new API(),source=`const executable='git',alias=(executable as string),args=['status'];
++run(alias,args);function local(executable:string){run(executable,args);}
++const cycle=other,other=cycle;run(cycle,[]);run(makeCommand(),[]);
++const vector=[alias,...args];
++probe({command:'discarded',command:alias,args});probe({command:alias,command:makeCommand(),args});
++const data={nested:{command:'cargo',args:['test']},command:alias,args};`;
++  const lease=api.createSourceFile('commands.ts',source);
++  try{
++    const facts=new SourceFacts('commands.ts',source,lease.sourceFile);
++    const calls=facts.stringCommands('call');assert.equal(facts.stringCommands('call'),calls);
++    assert.equal(calls.map(row=>row.command).join(','),'git');
++    assert.equal(facts.stringCommands('argv').map(row=>row.command).join(','),'status,git,test');
++    assert.equal(facts.stringCommands('probe').map(row=>row.command).join(','),'git,git,cargo');
++    for(const row of facts.stringCommands('probe'))assert.ok(row.args);
++  }finally{lease.dispose();api.close();}
++});
++
+ test('source leases are batched by both module count and bytes, with an oversized module alone',()=>{
+   const api=new API(),large='/*'+'x'.repeat(SOURCE_BATCH_BYTES)+'*/';
+   const inputs=[{file:'small.ts',source:'export const small=1;'}, {file:'large.ts',source:large},
+diff --git a/tooling/gate/source-facts.ts b/tooling/gate/source-facts.ts
+index 4bb94dcb6..e9c11446f 100644
+--- a/tooling/gate/source-facts.ts
++++ b/tooling/gate/source-facts.ts
+@@ -10,6 +10,8 @@ let syntax:Syntax|undefined;
+ export function sourceSyntax():Syntax{return syntax??=createRequire(import.meta.url)('typescript/ast') as Syntax;}
+ export type SourceBinding={value:Node;member?:string;kind:'value'|'parameter'|'function'};
+ export type SourceInput={file:string;source:string;parseFile?:string};
++export type StringCommandKind='call'|'argv'|'probe';
++export type StringCommand={node:Node;command:string;args:Node|undefined};
+ /** At most sixteen source leases and two MiB of leased source text per batch.
+  * One larger module runs alone; the iterator also holds one pending input. */
+ export const SOURCE_BATCH_MODULES=16;
+@@ -33,6 +35,8 @@ export class SourceFacts {
+   private readonly bindings=new Map<Node,SourceBinding|null>();
+   private readonly textCache=new Map<Node,string>();
+   private readonly nameCache=[new Map<Node,string>(),new Map<Node,string>()];
++  private readonly stringCache=new Map<Node,string|null>();
++  private readonly commandCache=new Map<StringCommandKind,readonly StringCommand[]>();
+   private shellCache:ShellCommands|undefined;
+   private readonly callOrders:number[]=[];
+   private readonly lines=[0];
+@@ -131,6 +135,47 @@ export class SourceFacts {
+     const value=this.binding(node,functions);
+     return value&&!value.member&&value.kind!=='parameter'?this.resolve(value.value,functions,seen):node;
+   }
++  /** A lexical string value needs no general expression resolution. Cache
++   * misses as well as values: command inspectors ask about the same inputs. */
++  stringValue(input:Node|undefined):string|undefined{
++    if(!input)return;
++    const cached=this.stringCache.get(input);if(cached!==undefined)return cached??undefined;
++    this.stringCache.set(input,null); // Cyclic aliases have no literal value.
++    const ast=this.ast;let value:string|undefined;
++    if(ast.isStringLiteralLikeNode(input))value=input.text;
++    else if(ast.isIdentifier(input)){
++      const binding=this.binding(input,false);
++      if(binding?.kind==='value'&&!binding.member)value=this.stringValue(binding.value);
++    }else if(ast.isAwaitExpression(input)||ast.isParenthesizedExpression(input)||ast.isAsExpression(input)||ast.isNonNullExpression(input)||ast.isSatisfiesExpression(input))value=this.stringValue(input.expression);
++    this.stringCache.set(input,value??null);return value;
++  }
++  /** Syntactic command positions, shared by the Cargo and Git rules. Probe
++   * candidates come from indexed command properties, not another object walk. */
++  stringCommands(kind:StringCommandKind):readonly StringCommand[]{
++    const cached=this.commandCache.get(kind);if(cached)return cached;
++    const ast=this.ast,rows:StringCommand[]=[];
++    const add=(node:Node,command:Node|undefined,args:Node|undefined)=>{const value=this.stringValue(command);if(value!==undefined)rows.push({node,command:value,args});};
++    if(kind==='call')for(const call of this.calls)add(call,call.arguments[0],call.arguments[1]);
++    else if(kind==='argv')for(const node of this.ofKind(ast.SyntaxKind.ArrayLiteralExpression)){
++      if(ast.isArrayLiteralExpression(node))add(node,node.elements[0],node.elements[1]);
++    }else{
++      const commands=new Map<Node,Node>();
++      for(const node of this.ofKind(ast.SyntaxKind.PropertyAssignment))if(ast.isPropertyAssignment(node)&&
++        (ast.isIdentifier(node.name)||ast.isStringLiteralLikeNode(node.name))&&node.name.text==='command'){
++        const parent=this.parents.get(node);if(parent&&ast.isObjectLiteralExpression(parent))commands.set(parent,node.initializer);
++      }
++      for(const [node,command]of commands)if(this.stringValue(command)!==undefined&&ast.isObjectLiteralExpression(node)){
++        let args:Node|undefined;
++        for(const property of node.properties){
++          if(ast.isPropertyAssignment(property)&&(ast.isIdentifier(property.name)||ast.isStringLiteralLikeNode(property.name))&&property.name.text==='args')args=property.initializer;
++          else if(ast.isShorthandPropertyAssignment(property)&&ast.isIdentifier(property.name)&&property.name.text==='args')args=property.name;
++        }
++        add(node,command,args);
++      }
++      rows.sort((a,b)=>this.ranges.get(a.node)!.start-this.ranges.get(b.node)!.start);
++    }
++    this.commandCache.set(kind,rows);return rows;
++  }
+   name(input:Node,functions=true):string{
+     const cache=this.nameCache[functions?1:0]!;let value=cache.get(input);
+     if(value===undefined){value=this.nameAt(input,functions,0);cache.set(input,value);}return value;
+diff --git a/tooling/gate/test-profile-audit.ts b/tooling/gate/test-profile-audit.ts
+index e596d59f4..2bd858a0a 100644
+--- a/tooling/gate/test-profile-audit.ts
++++ b/tooling/gate/test-profile-audit.ts
+@@ -13,13 +13,12 @@ export function inspectCargoTestCalls(file:string,source:string,root:Node|Source
+   if(file in CARGO_TEST_SOURCE_OWNERS)return [];
+   const facts=root instanceof SourceFacts?root:new SourceFacts(file,source,root),ast=facts.ast,problems:string[]=[];
+   const value=(node:Node|undefined):Node|undefined=>node&&facts.resolve(node,false);
+-  const literal=(node:Node|undefined):string|undefined=>{const item=value(node);return item&&ast.isStringLiteralLikeNode(item)?item.text:undefined;};
+   const add=(node:Node)=>problems.push(file+':'+(offset+facts.line(node.pos))+': cargo test must run through test-profile.ts');
+-  for(const node of facts.calls){
+-    if(ast.isCallExpression(node)&&literal(node.arguments[0])==='cargo'){
+-      const args=value(node.arguments[1]),first=args&&ast.isArrayLiteralExpression(args)?literal(args.elements[0]):undefined;
++  for(const row of facts.stringCommands('call')){
++    if(row.command==='cargo'){
++      const args=value(row.args),first=args&&ast.isArrayLiteralExpression(args)?facts.stringValue(args.elements[0]):undefined;
+       // Unknown command arrays cannot certify that the helper excludes tests.
+-      if(first===undefined||first==='test')add(node);
++      if(first===undefined||first==='test')add(row.node);
+     }
+   }
+   return problems;

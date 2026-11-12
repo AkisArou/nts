@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {withStateWrite} from '../gate/state-file.ts';
 // The landing service: the queue drained one change at a time, against the
 // newest main (docs/workflow.md, "Landing: the landing check").

@@ -71,7 +71,7 @@ stamp=$tree/PINNED
 # absolute from a worktree, so the `cd` is done in two steps rather than
 # concatenated -- the one-step spelling resolves the relative answer against
 # whatever the caller's cwd happened to be.
-main=$(CDPATH= cd -- "$root" && CDPATH= cd -- "$(git rev-parse --git-common-dir)/.." && pwd)
+main=$(CDPATH= cd -- "$root" && CDPATH= cd -- "$(git --no-optional-locks rev-parse --git-common-dir)/.." && pwd)
 
 # **Both a date and a distance, because they answer different questions.** The
 # commit count says how much has happened since; the authored date says whether
@@ -84,7 +84,7 @@ report() {
   sed 's/^/  /' "$stamp"
   pinned=$(sed -n 's/^commit: //p' "$stamp")
   [ -n "$pinned" ] || return 0
-  behind=$(git -C "$main" rev-list --count "$pinned..HEAD" 2>/dev/null || echo "?")
+  behind=$(git --no-optional-locks -C "$main" rev-list --count "$pinned..HEAD" 2>/dev/null || echo "?")
   echo "  ${behind} commit(s) behind the current HEAD"
   # The emissions are what a sweep actually reads, and they can be older than
   # the pin: a re-pin that kept them leaves classes from before it.
@@ -108,19 +108,19 @@ fi
 
 commit=$1
 keep=${2:-}
-sha=$(git -C "$main" rev-parse "$commit")
-short=$(git -C "$main" rev-parse --short "$commit")
+sha=$(git --no-optional-locks -C "$main" rev-parse "$commit")
+short=$(git --no-optional-locks -C "$main" rev-parse --short "$commit")
 
 [ -d "$tree" ] || {
   echo "creating the worktree at $tree"
-  git -C "$main" worktree add --detach "$tree" "$sha"
+  git --no-optional-locks -C "$main" worktree add --detach "$tree" "$sha"
 }
 
 # Named before the attempt rather than discovered in git's error, because three
 # sessions share this tree and whose edit it is matters more than that there is
 # one. Reported, never discarded: a benchmark worktree is scratch to this
 # script and may not be to whoever left something in it.
-dirty=$(git -C "$tree" status --porcelain --untracked-files=no 2>/dev/null | head -5)
+dirty=$(git --no-optional-locks -C "$tree" status --porcelain --untracked-files=no 2>/dev/null | head -5)
 if [ -n "$dirty" ]; then
   echo "note: the worktree has local changes, which will block a checkout if"
   echo "  any of them differ between the two commits:"
@@ -131,7 +131,7 @@ fi
 # anyone will want from this script is provenance for a worktree that already
 # has none, and clearing that tree's emissions to record where it already is
 # would be a strange way to help. Same sha, so the emissions match it.
-at=$(git -C "$tree" rev-parse HEAD 2>/dev/null || echo none)
+at=$(git --no-optional-locks -C "$tree" rev-parse HEAD 2>/dev/null || echo none)
 
 # Same rule as a measurement, and for the same reason -- but only when the tree
 # would actually move. Refusing to *record* where a tree already is, because
@@ -169,16 +169,16 @@ fi
 #     control 2   dirty tree   refused, and stamp and tree both still 4a5ccc47
 #
 # Before this, control 2 stamped `e7342345` over a tree sitting at `4a5ccc47`.
-if ! failure=$(git -C "$tree" checkout --detach "$sha" 2>&1); then
+if ! failure=$(git --no-optional-locks -C "$tree" checkout --detach "$sha" 2>&1); then
   echo "refusing: the worktree would not move to $short" >&2
   echo "$failure" | sed 's/^/  /' >&2
   echo "  nothing was stamped. Resolve the tree at $tree and run this again." >&2
   exit 1
 fi
-landed=$(git -C "$tree" rev-parse HEAD)
+landed=$(git --no-optional-locks -C "$tree" rev-parse HEAD)
 if [ "$landed" != "$sha" ]; then
   echo "refusing: checkout reported success and the tree is at" >&2
-  echo "  $(git -C "$tree" rev-parse --short HEAD), not $short. Nothing stamped." >&2
+  echo "  $(git --no-optional-locks -C "$tree" rev-parse --short HEAD), not $short. Nothing stamped." >&2
   exit 1
 fi
 # **After the checkout, not before.** This block used to run first, so a pin
@@ -196,8 +196,8 @@ elif [ -d "$tree/target/bench" ]; then
   echo "  a sweep across it now compares two programs. Re-emit before trusting it."
 fi
 
-subject=$(git -C "$main" log -1 --format=%s "$sha")
-when=$(git -C "$main" log -1 --format=%ci "$sha")
+subject=$(git --no-optional-locks -C "$main" log -1 --format=%s "$sha")
+when=$(git --no-optional-locks -C "$main" log -1 --format=%ci "$sha")
 
 cat > "$stamp" <<EOF
 commit: $sha

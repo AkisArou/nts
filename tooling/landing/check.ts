@@ -1,4 +1,4 @@
-import {gitArguments} from "../gate/git-arguments.ts";
+import {gitArguments} from "../gate/git-arguments/main.ts";
 // The landing check (docs/workflow.md, "Landing: the landing check").
 //
 //   node tooling/landing/check.ts <commit>             queue it, and wait for its answer

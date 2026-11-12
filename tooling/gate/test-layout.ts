@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Cargo targets own harnesses; each harness owns its case files. Test bodies
 // stay at their paths. The compiled --list inventory proves a layout change
 // preserves every test identity and its multiplicity, including nested tests.

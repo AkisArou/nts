@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // The full check's recorder (docs/workflow.md, Records: "The full check writes
 // them. Nobody records by hand."). A case whose source exists and whose record
@@ -535,7 +536,7 @@ function filesUnder(root: string, paths: readonly string[]): Map<string, string[
     return under;
   }
   // One listing of the whole tree, each file then given to the path it is under.
-  const listed = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+  const listed = spawnSync("git", gitArguments(["ls-files", "-z"]), { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
   if (listed.status !== 0) throw new Error(`git ls-files in ${root}: ${(listed.stderr ?? listed.error?.message ?? "").trim()}`);
   for (const file of listed.stdout.split("\0").filter(Boolean)) {
     for (let at = file; ; at = at.slice(0, at.lastIndexOf("/"))) {
@@ -580,7 +581,7 @@ export function sourceDigests(root: string, cases: readonly { kind: Kind; name: 
 /** The commit a checkout is at, or null outside one. */
 function headCommit(root: string): string | null {
   if (!inCheckout(root)) return null;
-  const head = spawnSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: root, encoding: "utf8" });
+  const head = spawnSync("git", gitArguments(["rev-parse", "--verify", "HEAD"]), { cwd: root, encoding: "utf8" });
   return head.status === 0 ? head.stdout.trim() : null;
 }
 

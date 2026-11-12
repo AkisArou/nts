@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // Portable identity of the canonical environment in which a step was checked.
 // Run allocations belong in the original report, while this identity survives
 // moving the same checked commit between the landing and full-check trees.

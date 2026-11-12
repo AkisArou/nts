@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 /** Compile-only benchmark observations. This command never executes a workload. */
 import assert from "node:assert/strict";
@@ -208,11 +209,11 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const binary = resolve(process.env.NTS_BIN ?? join(ROOT, "target/release/nts"));
   assert.ok(existsSync(binary), `benchmark compiler missing: ${binary}; set NTS_BIN`);
   const compiler = hash(readFileSync(binary)), pin = provenanceOf(binary);
-  let commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+  let commit = execFileSync("git", gitArguments(["rev-parse", "HEAD"]), { cwd: ROOT, encoding: "utf8" }).trim();
   if (mode !== "--check") {
     assert.ok(pin?.clean && !pin.applied && /^[0-9a-f]{40}$/.test(pin.sha), `${mode} requires a clean, unpatched pin of main; build it with tooling/conformance/pin.ts`);
     assert.equal(pin.binary_sha256, compiler, `${mode} pin binary differs from its recorded bytes`);
-    execFileSync("git", ["merge-base", "--is-ancestor", pin.sha, "main"], { cwd: ROOT, stdio: "pipe" }); commit = pin.sha;
+    execFileSync("git", gitArguments(["merge-base", "--is-ancestor", pin.sha, "main"]), { cwd: ROOT, stdio: "pipe" }); commit = pin.sha;
   }
   const recordFile = (backend: Backend) => join(output, backend, "outcomes.tsv");
   const shown = (file: string) => { const local = relative(ROOT, file); return local.startsWith("..") || isAbsolute(local) ? file : local; };

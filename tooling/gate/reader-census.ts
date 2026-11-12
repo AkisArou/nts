@@ -1,4 +1,4 @@
-import {gitArguments} from "./git-arguments.ts";
+import {gitArguments} from "./git-arguments/main.ts";
 // A repeatable, read-only reader census, with its classification kept in the
 // reviewed record rather than in executable selector policy.
 import {mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';

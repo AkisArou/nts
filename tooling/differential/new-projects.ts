@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments/main.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { isRecordedBinary, provenanceOf } from "../conformance/pin.ts";
 
@@ -5,15 +6,15 @@ const projectOf=(source:string)=>/^tests\/programs\/([^/]+)\//.exec(source)?.[1]
 
 /** Git-added project directories, relative to an explicit, verified clean before pin. */
 export function candidateAddedProjects(root:string,before:string,base:string):Set<string> {
-  const commit=execFileSync("git",["rev-parse","--verify",`${base}^{commit}`],{cwd:root,encoding:"utf8"}).trim();
+  const commit=execFileSync("git",gitArguments(["rev-parse","--verify",`${base}^{commit}`]),{cwd:root,encoding:"utf8"}).trim();
   const record=provenanceOf(before);
   if(!record || record.sha!==commit || record.clean!==true || record.applied!==null || !isRecordedBinary(before,commit)) {
     throw new Error("new-project comparison needs verified clean before-pin provenance matching --base");
   }
-  if(spawnSync("git",["merge-base","--is-ancestor",commit,"HEAD"],{cwd:root}).status!==0) {
+  if(spawnSync("git",gitArguments(["merge-base","--is-ancestor",commit,"HEAD"]),{cwd:root}).status!==0) {
     throw new Error("new-project comparison base is not an ancestor of the candidate");
   }
-  const gitPaths=(args:string[])=>execFileSync("git",args,{cwd:root,encoding:"utf8"}).split("\0").filter(Boolean);
+  const gitPaths=(args:string[])=>execFileSync("git",gitArguments(args),{cwd:root,encoding:"utf8"}).split("\0").filter(Boolean);
   const prior=new Set(gitPaths(["ls-tree","-r","-z","--name-only",commit,"--","tests/programs/"])
     .map(projectOf).filter(Boolean));
   const added=new Set<string>();

@@ -8,159 +8,15 @@
       "count": 1
     },
     {
-      "file": "tooling/bench/build-records.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"merge-base\", \"--is-ancestor\", pin.sha, \"main\"], { cwd: ROOT, stdio: \"pipe\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/build-records.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"rev-parse\", \"HEAD\"], { cwd: ROOT, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" log -1 --format=%ci \"$sha\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" log -1 --format=%s \"$sha\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" rev-list --count \"$pinned..HEAD\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" rev-parse --short \"$commit\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" rev-parse \"$commit\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$main\" worktree add --detach \"$tree\" \"$sha\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$tree\" checkout --detach \"$sha\" 2>&1); then",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$tree\" rev-parse --short HEAD",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$tree\" rev-parse HEAD",
-      "count": 2
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git -C \"$tree\" status --porcelain --untracked-files=no",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/pin.sh",
-      "kind": "shell",
-      "source": "git rev-parse --git-common-dir",
-      "count": 1
-    },
-    {
       "file": "tooling/bench/run-record.test.ts",
       "kind": "call",
       "source": "spawnSync(\"git\", args, {env:testEnvironment(), cwd: root, encoding: \"utf8\" })",
       "count": 1
     },
     {
-      "file": "tooling/bench/run-record.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", args, { cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/bench/run-session.ts",
-      "kind": "call",
-      "source": "spawnSync( \"git\", [\"grep\", \"-n\", \"-F\", \"@scriptc/node\", \"--\", \"benchmarks/cases\", \"benchmarks/common\"], { cwd: root, encoding: \"utf8\" }, )",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git -C third_party/node describe --tags --exact-match",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git -C third_party/test262 checkout --detach \"$test262_pin\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git -C third_party/test262 rev-parse HEAD",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git clone --depth 1 --filter=blob:none --sparse --branch \"$branch\" \"$url\" \"$path\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git clone --depth 1 --filter=blob:none --sparse \"$url\" \"$path\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git clone --filter=blob:none --no-checkout \\ https://github.com/tc39/test262.git third_party/test262",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/bootstrap.sh",
-      "kind": "shell",
-      "source": "git sparse-checkout set \"$@\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/node.ts",
-      "kind": "call",
-      "source": "execFileSync('git',['-C',root,'show',revision+':.tool-versions'],{encoding:'utf8'})",
-      "count": 1
-    },
-    {
       "file": "tooling/bootstrap/typescript.test.ts",
       "kind": "call",
       "source": "execFileSync(\"git\", args, {env:testEnvironment(), cwd: root, encoding: \"utf8\", stdio: [\"ignore\", \"pipe\", \"pipe\"] })",
-      "count": 1
-    },
-    {
-      "file": "tooling/bootstrap/typescript.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", args, { cwd, encoding: \"utf8\", maxBuffer: 1 << 24, stdio: [\"ignore\", \"pipe\", \"pipe\"] })",
       "count": 1
     },
     {
@@ -212,297 +68,15 @@
       "count": 1
     },
     {
-      "file": "tooling/chromium/benchmark.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", source, \"diff\", \"HEAD\", \"--binary\"], {encoding:\"utf8\"})",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/benchmark.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\",[\"-C\",source,\"rev-parse\",\"HEAD\"],{encoding:\"utf8\"})",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/bindgen/checkout.py",
-      "kind": "argv",
-      "source": "[\"git\", \"-C\", ROOT, \"rev-parse\", \"--path-format=absolute\", \"--git-common-dir\"]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/bindgen/generate.py",
-      "kind": "argv",
-      "source": "[\"git\", \"-C\", SRC, \"grep\", \"-h\", \"-o\", \"-E\", r\"(->|\\.)has[A-Z][A-Za-z0-9]*\\(\\)\", \"--\", \"third_party/blink/renderer/*.cc\", \"third_party/blink/renderer/*.h\"]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/checkout.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", root, \"rev-parse\", \"--path-format=absolute\", \"--git-common-dir\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"checkout\", \"--detach\", \"FETCH_HEAD\"]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"clone\", \"--depth\", \"1\", \"--no-tags\", \"--branch\", pin.version, pin.url, path]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"fetch\", \"--depth\", \"1\", \"origin\", pin.revision]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"init\", path]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"remote\", \"add\", \"origin\", pin.url]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "argv",
-      "source": "[\"git\", \"submodule\", \"update\", \"--init\", \"--depth\", \"1\", \"--\", submodule]",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", path, \"rev-parse\", \"HEAD\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/chromium.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"--stage\", \"--\", submodule], { cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/kernel-count.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", root, \"rev-parse\", \"HEAD\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/kernel-count.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", root, \"status\", \"--porcelain\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/probe.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", dir, \"rev-parse\", \"HEAD\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/probe.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", source, \"diff\", \"HEAD\", \"--binary\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/probe.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", source, \"rev-parse\", \"--path-format=absolute\", \"--git-path\", \"info/exclude\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/smoke.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", chromiumTree, \"diff\", \"HEAD\", \"--binary\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/smoke.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", chromiumTree, \"rev-parse\", \"HEAD\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/chromium/verify.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", root, ...args], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/blockers-check.mjs",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"ls-files\", \"-z\", \"--\", \".\"], { cwd: FIXTURES, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/blockers-check.mjs",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"status\", \"--porcelain\", \"--untracked-files=all\", \"--\", \"tests/refusals\"], { cwd: ROOT, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/ecmascript/test262.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", suite, \"rev-parse\", \"HEAD\"], { encoding: \"utf8\", })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/fixture-configs.mjs",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"--cached\", \"--others\", \"--exclude-standard\", \"*tsconfig.json\", \"*tsconfig.*.json\"], { cwd: ROOT, encoding: \"utf8\", })",
-      "count": 1
-    },
-    {
       "file": "tooling/conformance/node-work-list.test.ts",
       "kind": "call",
       "source": "execFileSync(\"git\", [\"-C\", root, ...args], {env:fixtureEnvironment(t),encoding: \"utf8\"})",
       "count": 1
     },
     {
-      "file": "tooling/conformance/node-work-list.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"-C\", root, ...args], { env, encoding: \"utf8\", maxBuffer: 64 << 20, stdio: [\"ignore\", \"pipe\", \"pipe\"], })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/outcomes-project.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"ls-files\", \"-z\", \"--\", \".\"], { cwd: directory, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pin.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", args, { cwd, encoding: \"utf8\", input, maxBuffer: 1 << 28, stdio: [input === undefined ? \"ignore\" : \"pipe\", \"pipe\", \"pipe\"] })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pin.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"merge-base\", \"--is-ancestor\", sha, head], { cwd: opts.worktree })",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pinned-tree.sh",
-      "kind": "shell",
-      "source": "git rev-parse --short \"$commit\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pinned-tree.sh",
-      "kind": "shell",
-      "source": "git rev-parse HEAD",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pinned-tree.sh",
-      "kind": "shell",
-      "source": "git worktree add --detach \"$tree\" \"$commit\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/pinned-tree.sh",
-      "kind": "shell",
-      "source": "git worktree remove --force \"$tree\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/web-platform/sabotage-run.sh",
-      "kind": "shell",
-      "source": "git diff --quiet -- \"$source\"",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/web-platform/sabotage-run.sh",
-      "kind": "shell",
-      "source": "git diff --quiet -- runtime/web-platform/src",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/web-platform/sabotage-run.sh",
-      "kind": "shell",
-      "source": "git ls-files --error-unmatch -- \"$source\" >/dev/null 2>&1; then",
-      "count": 1
-    },
-    {
-      "file": "tooling/conformance/web-platform/test-hpack-upstream.mjs",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"-C\", corpusRoot, ...args], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/agree.mjs",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"-z\", \"tests/programs/*/tsconfig.json\"], { cwd: ROOT, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/legacy-oracle-root.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"diff\", \"--binary\", head, \"--\"], { cwd: root, maxBuffer: 256 * 1024 * 1024 })",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/legacy-oracle-root.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", args, { cwd: root, encoding: \"utf8\", input, maxBuffer: 256 * 1024 * 1024 })",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/legacy-oracle-root.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"merge-base\", \"--is-ancestor\", before, after], { cwd: root })",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/new-projects.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\",[\"rev-parse\",\"--verify\",`${base}^{commit}`],{cwd:root,encoding:\"utf8\"})",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/new-projects.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\",args,{cwd:root,encoding:\"utf8\"})",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/new-projects.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\",[\"merge-base\",\"--is-ancestor\",commit,\"HEAD\"],{cwd:root})",
-      "count": 1
-    },
-    {
       "file": "tooling/differential/oracle-dependencies.test.ts",
       "kind": "call",
       "source": "execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{env:fixtureEnvironment(t),cwd:root,encoding:'utf8'})",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/oracle-dependencies.ts",
-      "kind": "call",
-      "source": "// The existing offline installer enumerates tracked module paths. A fresh // archive has none yet; all workspace importers still come from pnpm itself. execFileSync('git',['init','--quiet',tree])",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/oracle-dependencies.ts",
-      "kind": "call",
-      "source": "execFileSync('git',['rev-parse','HEAD'],{cwd:source,env,encoding:'utf8'})",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/oracle-dependencies.ts",
-      "kind": "call",
-      "source": "execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:Infinity})",
       "count": 1
     },
     {
@@ -518,21 +92,9 @@
       "count": 1
     },
     {
-      "file": "tooling/differential/oracle-records.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", args, { cwd: root, encoding: \"utf8\", maxBuffer: 64 * 1024 * 1024 })",
-      "count": 1
-    },
-    {
       "file": "tooling/differential/oracle-workspace-fixture.ts",
       "kind": "call",
       "source": "execFileSync('git',['-C',root,...args],{encoding:'utf8',env:{...fixtureEnvironment(t), GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_NAME:'Oracle workspace fixture',GIT_AUTHOR_EMAIL:'oracle-fixture@invalid', GIT_COMMITTER_NAME:'Oracle workspace fixture',GIT_COMMITTER_EMAIL:'oracle-fixture@invalid'}})",
-      "count": 1
-    },
-    {
-      "file": "tooling/differential/record-oracles.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" })",
       "count": 1
     },
     {
@@ -782,18 +344,6 @@
       "count": 1
     },
     {
-      "file": "tooling/inputs/dependency-inputs.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\",[\"ls-files\",\"-z\"],{cwd:tree,encoding:\"utf8\",maxBuffer:Infinity})",
-      "count": 1
-    },
-    {
-      "file": "tooling/inputs/dependency-inputs.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\",args,{cwd:repo,encoding:\"utf8\",maxBuffer:Infinity,stdio:[\"ignore\",\"pipe\",\"pipe\"]})",
-      "count": 1
-    },
-    {
       "file": "tooling/inputs/node-inputs-test-fixture.ts",
       "kind": "call",
       "source": "execFileSync('git',['-C',node,...args],{env:testEnvironment(),encoding:'utf8'})",
@@ -803,18 +353,6 @@
       "file": "tooling/inputs/node-inputs.test.ts",
       "kind": "call",
       "source": "execFileSync('git',args,{env:fixtureEnvironment(t),cwd:tree,encoding:'utf8'})",
-      "count": 1
-    },
-    {
-      "file": "tooling/inputs/node-inputs.ts",
-      "kind": "call",
-      "source": "execFileSync('git',['-C',root,...args],{encoding:'utf8',maxBuffer:32<<20})",
-      "count": 1
-    },
-    {
-      "file": "tooling/jvm/check-refusals.sh",
-      "kind": "shell",
-      "source": "git status --porcelain -- \"$file\"",
       "count": 1
     },
     {
@@ -836,87 +374,15 @@
       "count": 1
     },
     {
-      "file": "tooling/licenses/benchmark-inputs.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"-z\"], {cwd: root, maxBuffer: 64 << 20, encoding: \"utf8\"})",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/corpora.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"-z\", \"--\", dir], { cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/corpora.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"-z\"], { cwd: root, encoding: \"utf8\" })",
-      "count": 2
-    },
-    {
-      "file": "tooling/migrate/corpora.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"mv\", from, to], { cwd: root })",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/corpora.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/corpora.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"status\", \"--porcelain\", \"--ignore-submodules=all\", \"--untracked-files=no\"], { cwd: root, encoding: \"utf8\", })",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/old-paths.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"ls-files\", \"-z\"], { cwd: root, encoding: \"utf8\", maxBuffer: Infinity })",
-      "count": 1
-    },
-    {
-      "file": "tooling/migrate/old-paths.ts",
-      "kind": "call",
-      "source": "execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
       "file": "tooling/records/record-pending-outcomes.test.ts",
       "kind": "call",
       "source": "execFileSync(\"git\",[\"-C\",root,...args],{encoding:\"utf8\",env:{...testEnvironment(),GIT_CONFIG_GLOBAL:\"/dev/null\", GIT_AUTHOR_NAME:\"Records fixture\",GIT_AUTHOR_EMAIL:\"records-fixture@invalid\",GIT_COMMITTER_NAME:\"Records fixture\",GIT_COMMITTER_EMAIL:\"records-fixture@invalid\"}})",
       "count": 1
     },
     {
-      "file": "tooling/records/record-pending.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"ls-files\", \"-z\"], { cwd: root, encoding: \"utf8\", maxBuffer: 1 << 28 })",
-      "count": 1
-    },
-    {
-      "file": "tooling/records/record-pending.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"rev-parse\", \"--verify\", \"HEAD\"], { cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
       "file": "tooling/records/summary.test.ts",
       "kind": "call",
       "source": "spawnSync(\"git\", [\"-c\", \"user.name=summary\", \"-c\", \"user.email=summary@example.invalid\", \"-c\", \"commit.gpgsign=false\", ...args], {env:fixtureEnvironment(t), cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/records/summary.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\", [\"rev-parse\", \"--show-toplevel\", \"HEAD\"], { cwd: root, encoding: \"utf8\" })",
-      "count": 1
-    },
-    {
-      "file": "tooling/tasks/audit.ts",
-      "kind": "call",
-      "source": "spawnSync(\"git\",[\"-C\",root,\"for-each-ref\",\"--format=%(refname)%09%(refname:short)\",\"refs/heads\",\"refs/cited\",\"refs/archive\"],{encoding:\"utf8\"})",
       "count": 1
     }
   ]

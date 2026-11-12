@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "../gate/git-arguments/main.ts";
 /** Stage the checked native fixture and generate its opt-in renderer build. */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -32,7 +33,7 @@ const activeBuild = activeChromiumBuild(root);
 if (activeBuild) throw new Error(`Build ${activeBuild} is running; finish it before staging the probe`);
 
 const hash = sha256File;
-const revision = (dir: string): string => execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const revision = (dir: string): string => execFileSync("git", gitArguments(["-C", dir, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
 const lock = JSON.parse(readFileSync(resolve(root, "third_party/chromium/upstream.lock.json"), "utf8")) as { chromium: { revision: string }; depot_tools: { revision: string } };
 if (revision(source) !== lock.chromium.revision || revision(depot) !== lock.depot_tools.revision) throw new Error("Checkout differs from source/tool lock");
 const baseline = JSON.parse(readFileSync(resolve(chromiumState(root), "baseline-smoke/result.json"), "utf8")) as { chromiumRevision: string; probeBackend?: string; sourceDiffSha256: string };
@@ -41,7 +42,7 @@ if (baseline.chromiumRevision !== lock.chromium.revision || baseline.probeBacken
   throw new Error("Record a successful unmodified baseline smoke at this pin first");
 }
 
-if (execFileSync("git", ["-C", source, "diff", "HEAD", "--binary"], { encoding: "utf8" }) !== "") {
+if (execFileSync("git", gitArguments(["-C", source, "diff", "HEAD", "--binary"]), { encoding: "utf8" }) !== "") {
   throw new Error("The public-client experiment requires unmodified tracked Chromium source");
 }
 
@@ -106,7 +107,7 @@ mkdirSync(blinkStaging, { recursive: true });
 copyFileSync(resolve(lane, "adapter/blink.BUILD.gn"), resolve(blinkStaging, "BUILD.gn"));
 files["third_party/blink/renderer/nts/BUILD.gn"] = hash(resolve(blinkStaging, "BUILD.gn"));
 writeFileSync(manifestFile, `${JSON.stringify({ chromiumRevision: lock.chromium.revision, integration: "owned-shell-client-factories-and-blink-target", filesRelativeTo: "chromium", files }, null, 2)}\n`);
-const exclude = execFileSync("git", ["-C", source, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], { encoding: "utf8" }).trim();
+const exclude = execFileSync("git", gitArguments(["-C", source, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"]), { encoding: "utf8" }).trim();
 const existing = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
 const exclusions = ["/nts/", "/third_party/blink/renderer/nts/"];
 const missing = exclusions.filter(path => !existing.split("\n").includes(path));
