@@ -40,7 +40,8 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const put = (/** @type {string} */ path, /** @type {string} */ text) => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); };
   const env = fixtureEnvironment(t);
-  const git = (.../** @type {string[]} */ args) => {
+  /** @param {...string} args */
+  const git = (...args) => {
     const result = spawnSync('git', args, { cwd: root, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
