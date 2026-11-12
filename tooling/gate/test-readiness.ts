@@ -27,6 +27,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
         if(names){if(ast.isNamespaceImport(names))imports.set(names.name.text,module);
           else for(const entry of names.elements)imports.set(entry.name.text,module+'.'+(entry.propertyName?.text??entry.name.text));}
       }
+      if(ast.isParameterDeclaration(node)&&ast.isIdentifier(node.name))bindings.set(node.name.text,{value:node.name});
       if(ast.isVariableDeclaration(node)&&node.initializer){
         if(ast.isIdentifier(node.name))bindings.set(node.name.text,{value:node.initializer});
         else if(ast.isObjectBindingPattern(node.name))for(const entry of node.name.elements)if(entry.name&&ast.isIdentifier(entry.name))bindings.set(entry.name.text,{value:node.initializer,member:entry.propertyName?code(entry.propertyName):entry.name.text});
@@ -138,8 +139,10 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     };
     function visit(node:Node):void{
       if(ast.isCallExpression(node)){
-        if(generated&&isWrite(node.expression)&&node.arguments[0]&&node.arguments[1]&&
-          (jsonValue(node.arguments[1])||pathKind(node.arguments[0],/\.json(?:\.|$)/))&&!sealedWrites.has(node)){
+        if(generated&&node.arguments[0]&&!sealedWrites.has(node)&&
+          (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|appendFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&!pathKind(node.arguments[0],/\.jsonl$/)&&
+            (jsonValue(node.arguments[1])||pathKind(node.arguments[0],/\.json(?:\.|$)/))||
+           /^(?:fs|fs\/promises)\.(?:open(?:Sync)?|createWriteStream)$/.test(name(node.expression))&&pathKind(node.arguments[0],/\.json(?:\.|$)/))){
           const line=offset+text.slice(0,node.pos).split('\n').length,source=code(node).replace(/\s+/g,' '),key=line+':'+source;
           if(!seen.has(key)){seen.add(key);found.push({file,line,source});}
         }

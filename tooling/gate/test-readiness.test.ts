@@ -1,5 +1,12 @@
+import {spawn,spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {join} from 'node:path';
+import {fixtureEnvironment} from './test-environment.ts';
+import {newTestScratch} from './test-scratch.ts';
+import {toolingSliceArgs,toolingSlicePrefix} from './tooling-slice.ts';
+import {waitFor} from './test-wait.ts';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {test} from 'node:test';
 import {inspectRecordPublications} from './test-readiness.ts';
@@ -22,6 +29,9 @@ test('script files, inline invocations, aliases and local source helpers reach t
 test('generated fs promises and require aliases cannot bypass the publication owner',()=>{
   for(const source of [
     `const {writeFileSync:put}=require('node:fs');put('ready.json','{}');`,
+    `import {openSync} from 'node:fs';openSync('ready.json','w');`,
+    `import {createWriteStream} from 'node:fs';createWriteStream('ready.json');`,
+    `import {writeSync} from 'node:fs';writeSync(fd,JSON.stringify({ready:true}));`,
     `import fs from 'node:fs';const put=fs.writeFileSync;put(path,JSON.stringify({ok:true}));`,
     `const {writeFile:put}=await import('node:fs/promises');await put('ready.json',bytes);`,
     `import * as fs from 'node:fs';await fs.promises.writeFile('ready.json.partial',JSON.stringify({ok:true}));`,
@@ -36,7 +46,7 @@ const sample=${JSON.stringify(writer)};`),[]);
   const good=`import{durableRecord}from'./durable-record.ts';durableRecord('ready.json',{ok:true});
 import{appendFileSync}from'node:fs';appendFileSync('events.jsonl',JSON.stringify({event:1})+'\\n');`;
   assert.deepEqual(inspect(`import{spawnSync}from'node:child_process';spawnSync(node,['-e',${JSON.stringify(good)}]);`),[]);
-  assert.equal(generatedJavaScript(writer),writer,'the source brand is a pure identity');
+  assert.equal(generatedJavaScript('console.log(1)'), 'console.log(1)','the source brand is a pure identity');
 });
 
 test('bindings belong to their lexical fixture, including repeated helper names',()=>{
@@ -64,4 +74,33 @@ test('the host audit can lend its root without another source parse',()=>{
   let rows;
   try{rows=inspectRecordPublications('tooling/fixture.ts',source,api,lease.sourceFile);}finally{lease.dispose();api.close();}
   assert.equal(rows!.length,1);assert.equal(JSON.parse(JSON.stringify(rows))[0].file,'tooling/fixture.ts');
+});
+
+test('a paused half-write stays private until the owner publishes the whole record',async t=>{
+  const root=newTestScratch('record-half-write'),target=join(root,'record.json'),ready=join(root,'half-ready'),release=join(root,'release');
+  const unit=toolingSlicePrefix('record-publication-'+randomUUID()),env=fixtureEnvironment(t);
+  t.after(()=>{spawnSync('systemctl',['--user','stop',unit],{env,stdio:'ignore'});rmSync(root,{recursive:true,force:true});});
+  const source=`import * as fs from 'node:fs';
+import {mock} from 'node:test';
+const [target,ready,release]=process.argv.slice(1);
+const put=(fd,bytes)=>{
+ const half=Math.floor(bytes.length/2);fs.writeSync(fd,bytes.slice(0,half));fs.writeFileSync(ready,'half written');
+ const pause=new Int32Array(new SharedArrayBuffer(4));while(!fs.existsSync(release))Atomics.wait(pause,0,0,10);
+ fs.writeSync(fd,bytes.slice(half));
+};
+mock.module('node:fs',{namedExports:{closeSync:fs.closeSync,fsyncSync:fs.fsyncSync,mkdirSync:fs.mkdirSync,openSync:fs.openSync,renameSync:fs.renameSync,rmSync:fs.rmSync,writeFileSync:put}});
+const {durableRecord}=await import(${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)});
+durableRecord(target,{ready:true,payload:'complete bytes'});`;
+  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--quiet',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0','-p','RuntimeMaxSec=300s',
+    ...Object.entries(env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
+    process.execPath,'--experimental-test-module-mocks','--input-type=module','-e',source,target,ready,release],{env,stdio:['ignore','pipe','pipe']});
+  let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
+  const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+  await waitFor('the owner to pause after writing half its temporary',()=>existsSync(ready));
+  assert.equal(existsSync(target),false,'the reader cannot see the unfinished record');
+  const pending=readdirSync(root).filter(name=>name.startsWith('record.json.'));assert.equal(pending.length,1);
+  assert.throws(()=>JSON.parse(readFileSync(join(root,pending[0]!), 'utf8')),'the control really stopped halfway through JSON');
+  writeFileSync(release,'finish publication');assert.equal(await closed,0,output);
+  assert.deepEqual(JSON.parse(readFileSync(target,'utf8')),{ready:true,payload:'complete bytes'});
+  assert.deepEqual(readdirSync(root).filter(name=>name.startsWith('record.json.')),[]);
 });
