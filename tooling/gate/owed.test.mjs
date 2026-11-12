@@ -185,24 +185,30 @@ test('each program consumer owes one shared producer before native execution',()
   }
 });
 
-for(const launcher of ['sh','py'])test(`an inferred ${launcher} to JavaScript handoff keeps its parsed closure without placing it`,t=>{
+for(const launcher of ['direct','sh','py'])test(`a ${launcher} JavaScript entry retains data without traversing it as host code`,t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-launcher-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
   put('Cargo.toml','[package]\nname="launcher-fixture"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
-  put('tooling/gate/all.sh',`#!/bin/sh\nif [ "$1" = --list ]; then printf '%s\\n' proof; exit; fi\nstep "proof" ${launcher==='sh'?'bash':'python'} tooling/launcher.${launcher}\n`);
+  const command=launcher==='direct'?'node tooling/private/entry.ts':`${launcher==='sh'?'bash':'python'} tooling/launcher.${launcher}`;
+  put('tooling/gate/all.sh',`#!/bin/sh\nif [ "$1" = --list ]; then printf '%s\\n' proof; exit; fi\nstep "proof" ${command}\n`);
   put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');
   put('tooling/empty.test.ts','');
   put('tooling/launcher.'+launcher,launcher==='sh'?'node tooling/private/entry.ts\n':"import subprocess\nsubprocess.run(['node', 'tooling/private/entry.ts'])\n");
   put('tooling/private/entry.ts',"export * from './middle.ts';\n");
-  put('tooling/private/middle.ts',"const leaf=new URL('./payload.bin',import.meta.url);\n");
+  put('tooling/private/middle.ts',"import {dataDirectory} from '../gate/reader-inputs/main.ts';const leaf=new URL('./payload.bin',import.meta.url);const data=dataDirectory(new URL('./data/',import.meta.url));\n");
   put('tooling/private/payload.bin','declared leaf');
+  put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;');
+  put('tooling/private/data/case.ts',"const note='tooling/census/not-an-input.ts';\n");
+  put('tooling/census/not-an-input.ts','');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const script=`import {stepInputs,covering,owed} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
-const path='tooling/private/payload.bin';console.log(JSON.stringify({reach:[...covering(stepInputs(),path)],full:owed([{path,added:true}]).some(row=>row.full)}));`;
+const path='tooling/private/payload.bin',inputs=stepInputs();console.log(JSON.stringify({reach:[...covering(inputs,path)],data:[...covering(inputs,'tooling/private/data/case.ts')],unexpected:[...covering(inputs,'tooling/census/not-an-input.ts')],full:owed([{path,added:true}]).some(row=>row.full)}));`;
   const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
   assert.equal(result.status,0,result.stdout+result.stderr);
-  const row=JSON.parse(result.stdout);assert.ok(row.reach.includes('proof'));assert.equal(row.full,true,'a parsed continuation cannot turn an inferred launch into placement');
+  const row=JSON.parse(result.stdout);assert.ok(row.reach.includes('proof'));assert.ok(row.data.includes('proof'));
+  assert.ok(!row.unexpected.includes('proof'),'a declared corpus does not turn its data strings into host readers');
+  assert.equal(row.full,launcher!=='direct','a parsed continuation cannot turn an inferred launch into placement');
 });
 
 test('each TypeScript backend owes its shared reference exactly once',()=>{

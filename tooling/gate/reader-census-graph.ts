@@ -34,10 +34,11 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     let source=readFileSync(join(scratch,'tooling/gate/owed.mjs'),'utf8');
     source='export const legacyReferences=new Map(),legacyHandoffs=new Map();\n'+source;
     source+=`\nexport function collectInvestigationCensus(){return collectFullGateCensus(trackedFiles(),path=>{const rules=owed([{path,added:false}]);return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};},inputDirectoryDeclarations());}\n`;
+    const separatesData=source.includes('const launchedInputs=modules.describe(launched);');
     source=replace(source,'const body = readFileSync(abs, "utf8");',`const body = readFileSync(abs, "utf8");
         if (NO_MODULE_TEXT && /\\.[cm]?[jt]sx?$/.test(input)) {
-          references={named:[],other:modules.closure([input])};
-          inferred.set(input,references);queue.push(...references.other);continue;
+          ${separatesData?'const snapshot=modules.describe([input]);references={named:[],other:snapshot.ownedFiles,data:snapshot.files};':'references={named:[],other:modules.closure([input])};'}
+          inferred.set(input,references);${separatesData?'for(const data of references.data??[])add(data,step);':''}queue.push(...references.other);continue;
         }`);
     source=replace(source,'references={named:named(body),other:[...imports(input,body),...beside]};\n        inferred.set(input,references);',`references={named:named(body),other:[...imports(input,body),...beside]};
         inferred.set(input,references);
@@ -46,7 +47,7 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
           imports:[...body.matchAll(/(?:from\\s+|import\\s*\\(\\s*|require\\(\\s*)["'](\\.{1,2}\\/[^"']+)["']/g)].map(match=>({literal:match[1],targets:[rel(resolve(TREE,dirname(input),match[1]))]})),
           beside:[...code(body).matchAll(/["']([A-Za-z0-9_.-]+\\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)].map(match=>({literal:match[1],targets:[dirname(input)+"/"+match[1]]})).filter(row=>row.targets.some(target=>references.other.includes(target)))
         });`);
-    const handoff='references.other.push(...modules.closure(launched));';
+    const handoff=separatesData?'const launchedInputs=modules.describe(launched);':'references.other.push(...modules.closure(launched));';
     if(source.includes(handoff))source=replace(source,handoff,`legacyHandoffs.set(input,new Map(launched.map(entry=>[entry,modules.closure([entry])])));
           ${handoff}`);
     const engines:{name:string;owner:Selector;map:Map<string,Set<string>>;full:FullGateCensus}[]=[];

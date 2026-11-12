@@ -1650,7 +1650,7 @@ function stepInputGraph() {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    /** @type {Map<string,{named:string[],other:string[]}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[]}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1698,10 +1698,14 @@ function stepInputGraph() {
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        for (const input of modules.closure(batch, row => directory(row,step))) {
+        const snapshot=modules.describe(batch, row => directory(row,step));
+        for (const input of snapshot.files) {
           if (placed.has(input)) continue;
-          placed.add(input); declared.add(input); add(input, step); queue.push(input);
+          placed.add(input); declared.add(input); add(input, step);
         }
+        // Corpus bytes are inputs, not host modules: their quoted paths and
+        // imports must never turn into readers of unrelated repository data.
+        queue.push(...snapshot.ownedFiles);
       }
       const seen = new Set();
       while (queue.length) {
@@ -1737,7 +1741,9 @@ function stepInputGraph() {
         // an inferred launcher edge never discharges an unknown path's fallback.
         if (/\.(?:sh|py)$/.test(input)) {
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
-          references.other.push(...modules.closure(launched));
+          const launchedInputs=modules.describe(launched);
+          references.other.push(...launchedInputs.ownedFiles);
+          references.data=launchedInputs.files.filter(path=>!launchedInputs.ownedFiles.includes(path));
         }
         }
         // These tooling controls supply private fixture roots to the record
@@ -1749,6 +1755,7 @@ function stepInputGraph() {
         const fixtureBenchmarks = step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
             || /^tooling\/full-check\/(?:bench|repository-fixture)\.ts$/.test(input));
         const referenced = references.named.filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
+        for(const data of references.data??[])add(data,step);
         queue.push(...referenced, ...references.other);
       }
     }
