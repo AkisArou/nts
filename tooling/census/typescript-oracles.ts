@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // A run's three backend steps share one measured Node answer per case. Only
 // original inputs and authenticated evidence survive each admitted attempt;
 // its executable snapshot is finalized and removed before the next dispatch.

@@ -1,4 +1,4 @@
-import {runAsCommand} from "./command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Test events decide results. Silence can only fail to measure a file.
 import {run} from "node:test";
 import {spec} from "node:test/reporters";

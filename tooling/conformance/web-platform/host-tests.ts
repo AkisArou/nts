@@ -1,4 +1,4 @@
-import {runAsCommand} from "../../gate/command-entry.ts";
+import {runAsCommand} from "../../differential/command-entry/main.ts";
 // One owner drains host test events before publishing web liveness evidence.
 
 

@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Prepare Node's unedited dependency sources. Recipe resolution is bootstrap-only.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';

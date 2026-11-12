@@ -7,7 +7,7 @@ import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
 
 // Recipe identity is shared with result-only consumers. It reads pinned source
 // bytes and records, never the preparation graph or a compiler API.
-export const ORACLE_EXECUTION_FILES=['oracle-execution.ts','oracle-execution-policy.ts','oracle-batch.ts'] as const;
+export const ORACLE_EXECUTION_FILES=['oracle-execution.ts','oracle-execution-policy.ts','oracle-batch.ts','command-entry/main.ts'] as const;
 // The phase a case's oracle stopped in: planning its population, preparing its
 // program, or executing it. Only a planned population has a driver.
 export type OracleBudget={phase:'plan'|'prepare'|'execute';outcome:'timeout'|'memory-cap';bound:number;signal:string|null;reason:string};

@@ -401,7 +401,7 @@ compiler and runtime sources retain their own projects and diagnostic policy.
 Imported tooling modules evaluate synchronously. The test-host audit rejects
 top-level await in runtime-imported modules and Worker entry closures; a
 type-only import does not evaluate its target. A module that is also a command
-uses `runAsCommand(import.meta.url, main)` from `tooling/gate/command-entry.ts`.
+uses `runAsCommand(import.meta.url, main)` from `tooling/differential/command-entry/main.ts`.
 The shared entry owner starts its command only at entry, retains command-owned
 diagnostics and statuses, and gives unhandled errors one stderr/exit policy.
 Asynchronous fixture setup belongs in a test hook. Pure command entry scripts

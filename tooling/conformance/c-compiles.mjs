@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Compile the generated C for every runtime project, including web-platform.
 //
 //   NTS_BIN=<pin> node tooling/conformance/c-compiles.mjs [project ...]

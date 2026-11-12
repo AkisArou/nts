@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Registry bytes are acquired before submission; every reader installs frozen
 // and offline into its own tree. No installed tree is an input of another.
 import {createHash} from "node:crypto";

@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Cross-version contract: the candidate's tooling/gate/canonical-environment.ts
 // exports gateEnvironment. No other version creates its environment or grants.
 // Keep this process alive while the command runs: it owns resolutionOwner.

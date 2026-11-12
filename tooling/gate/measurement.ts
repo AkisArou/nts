@@ -1,4 +1,4 @@
-import {runAsCommand} from "./command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Admission to a timed run depends on the reserved physical core, not on
 // load average or other cores. The measurement mutex is owned by with-lock.sh.
 import { readFileSync } from "node:fs";

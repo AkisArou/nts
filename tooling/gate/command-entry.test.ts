@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {testScratch} from './test-scratch.ts';
 import {testEnvironment} from './test-environment.ts';
 
-const helper=new URL('./command-entry.ts',import.meta.url).href;
+const helper=new URL('../differential/command-entry/main.ts',import.meta.url).href;
 function run(file:string){return spawnSync(process.execPath,[file],{env:testEnvironment(),encoding:'utf8'});}
 
 test('the shared entry accepts sync and async statuses and preserves a command-owned status',t=>{

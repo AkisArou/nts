@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // One run-owned, offline dependency image. The existing pinned pnpm provisioner
 // owns registry integrity; an application installation is never a fallback.
 import {createHash} from 'node:crypto';

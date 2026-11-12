@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // The full check owns the wall ceiling even when it measures an old runner.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";

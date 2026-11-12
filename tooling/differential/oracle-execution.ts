@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // The recorder and the native differential execute the same population under
 // one CPU allowance and the census's resident-memory owner. Virtual address
 // reservations are not memory consumption, and a signal alone proves no cap.

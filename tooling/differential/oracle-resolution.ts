@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // Parent-only Node resolution service. It never evaluates a subject module.
 import {createHash,randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';

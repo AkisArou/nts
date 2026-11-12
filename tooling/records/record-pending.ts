@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // The full check's recorder (docs/workflow.md, Records: "The full check writes
 // them. Nobody records by hand."). A case whose source exists and whose record
 // has no row yet is pending: every record check lists it and does not fail on

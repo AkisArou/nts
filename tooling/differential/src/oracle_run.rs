@@ -58,6 +58,7 @@ pub(super) fn execution_identity() -> Result<String> {
         super::oracle_emit::digest(include_bytes!("../oracle-execution.ts")),
         super::oracle_emit::digest(include_bytes!("../oracle-execution-policy.ts")),
         super::oracle_emit::digest(include_bytes!("../oracle-batch.ts")),
+        super::oracle_emit::digest(include_bytes!("../command-entry/main.ts")),
     ])?))
 }
 
@@ -152,6 +153,11 @@ fn request_owned(mode: &str, request: &Value, root: &Utf8Path) -> Result<Value> 
     ensure!(
         root.is_absolute() && std::fs::read(&helper)? == include_bytes!("../oracle-execution.ts"),
         "oracle execution helper identity changed"
+    );
+    ensure!(
+        std::fs::read(root.join("tooling/differential/command-entry/main.ts"))?
+            == include_bytes!("../command-entry/main.ts"),
+        "oracle command entry identity changed"
     );
     ensure!(
         std::fs::read(root.join("tooling/differential/oracle-execution-policy.ts"))?

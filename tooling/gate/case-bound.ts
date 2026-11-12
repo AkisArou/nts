@@ -1,4 +1,4 @@
-import {runAsCommand} from "./command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // One case's command under the shared supervisor (active-command.ts), for a
 // runner written in shell or a tool that runs one command at a time.
 //

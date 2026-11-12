@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 /** Compile-only benchmark observations. This command never executes a workload. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";

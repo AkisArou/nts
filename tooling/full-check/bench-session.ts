@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // The session owns a unit for everything it starts, including nested build
 // supervisors. A budget ends that unit before the durable prefix is sealed.
 import assert from "node:assert/strict";

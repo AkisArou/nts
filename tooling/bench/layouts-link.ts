@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 // Relink immutable ThinLTO inputs with seeded function orders. Caller owns the
 // bounded build scope; no workload executes here. Keep shipping flags intact.
 import {spawnSync} from "node:child_process";

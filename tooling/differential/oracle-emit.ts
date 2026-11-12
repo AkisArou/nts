@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
 import {createHash} from 'node:crypto';
@@ -1527,7 +1527,9 @@ export class OracleWorker{
     const pending:OraclePrepared[]=[];
     for(const job of jobs){
       const {directory}=job,assets=join(directory,'assets');mkdirSync(assets);
-      for(const file of [...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-assets.ts','oracle-toolchain.json'])writeFileSync(join(assets,file),readFileSync(join(HERE,file)));
+      for(const file of [...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-assets.ts','oracle-toolchain.json']){
+        const target=join(assets,file);mkdirSync(dirname(target),{recursive:true});writeFileSync(target,readFileSync(join(HERE,file)));
+      }
       writeFileSync(join(assets,'package.json'),'{"type":"module"}\n');
       const outputs:Record<string,string>={};
       const tree=trees.get(job)!,sources=tree.sources;

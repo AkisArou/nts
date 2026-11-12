@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // Versioned check decoding is shared by every machine consumer.
 import assert from 'node:assert/strict';
 import {statSync} from 'node:fs';

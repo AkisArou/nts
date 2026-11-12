@@ -1,4 +1,4 @@
-import {runAsCommand} from "../gate/command-entry.ts";
+import {runAsCommand} from "./command-entry/main.ts";
 // One producer owns the SDK; consumers read authenticated answers after it
 // exits. A bounded warm pool amortizes SDK startup without retaining its heaps.
 import {mkdirSync,writeFileSync} from 'node:fs';

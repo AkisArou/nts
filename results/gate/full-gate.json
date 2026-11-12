@@ -207,6 +207,18 @@
       ]
     },
     {
+      "path": "tooling/differential/command-entry/main.ts",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/differential/command-entry/tsconfig.json",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
       "path": "tooling/gate/all.sh",
       "reasons": [
         "shared selector and toolchain policy",

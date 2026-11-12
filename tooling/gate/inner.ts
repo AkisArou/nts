@@ -1,4 +1,4 @@
-import {runAsCommand} from "./command-entry.ts";
+import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
