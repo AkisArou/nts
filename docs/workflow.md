@@ -669,6 +669,17 @@ the first node task.
   The gate checks ownership across dependencies and generated launches, and
   runs tooling entries with strict fixture observations and ambient poison.
 
+- **Fixture tooling comes from its declared closure.** A private test repository
+  stages command entries through `copyModuleClosure`, including their imports
+  and named assets. Private mutations follow staging. Package installations,
+  data and shell entry scripts remain explicit inputs. The source audit rejects
+  selected dependency lists, manual tails and ad-hoc import discovery, including
+  in shared helpers. Complete discovered namespace mirrors and byte-only
+  identity fixtures are classified separately; a standalone-entry exclusion is
+  checked to have no relative dependency. Supplied oracle test contexts must
+  already be sealed with `sealOracleRun`, so captures retain the run's holder
+  ownership ([log](records/notebooks/decisions-log.md#fixture-tooling-follows-declared-closures-11-12)).
+
 - **Child records publish atomically.** Generated producers use the same
   durable record owner as their parents. The source audit follows actual
   script and eval inputs and explicit source-factory brands; it rejects raw

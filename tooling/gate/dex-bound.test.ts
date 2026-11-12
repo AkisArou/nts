@@ -28,7 +28,7 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   copyFileSync(join(ROOT, "runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
-  copyModuleClosure(["tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);
+  copyModuleClosure(["tooling/gate/token-command.ts","tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);
   copyFileSync(new URL('./token.sh',import.meta.url),join(root, "tooling/gate/token.sh"));
   // d8 refuses what a `*-refused` target emits and accepts the rest; javap
   // names one method of each class.

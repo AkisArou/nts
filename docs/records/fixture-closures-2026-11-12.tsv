@@ -1,0 +1,21 @@
+file	line	class	why
+tooling/bench/run-session.test.ts	86	file dependency list	mutant run-session entry plus five linked helpers
+tooling/gate/benchmark-inputs.test.ts	215	file dependency list	licenses entry plus benchmark-inputs helper
+tooling/gate/records.test.ts	30	file dependency list	records entry and run-record/groups dependency chain
+tooling/gate/native-case-result.test.ts	49	file dependency list	native shell entry and result/step-result dependency chain
+tooling/gate/owed-range.test.ts	331	file dependency list	endpoint entry plus checks/change-paths/linker helpers
+tooling/differential/oracle-emit-execution.test.ts	473	file dependency list	oracle execution shared list plus seven extra assets; repeated cleanup list is the same fixture
+tooling/conformance/node-preloads.test.ts	111	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	200	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	265	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	294	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	311	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	342	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/conformance/node-preloads.test.ts	378	selected tooling directory list	seven distinct fixture setups copy conformance/gate/differential/inputs/census
+tooling/gate/dex-bound.test.ts	33	manual tail after closure	already stages a module closure, then adds four manual module/directory links
+tooling/gate/agree-new-projects.test.ts	40	regex discovery	private agreement command imports discovered one level by regex
+tooling/bench/run-record.test.ts	354	file dependency list	renderer mutant plus a copied groups.ts helper
+tooling/census/audit.test.ts	14	stale standalone entry	named assets added after the hand inventory; no longer builtin-only
+tooling/gate/step-bound-admission.test.ts	38	manual tail	run closure plus separately copied tokens entry
+tooling/gate/tooling-runner.test.ts	327	mutant rewrite	relative imports rewritten by regex instead of staging the graph
+tooling/gate/tooling-runner.test.ts	376	mutant rewrite	second runner mutant rewrote the same import graph

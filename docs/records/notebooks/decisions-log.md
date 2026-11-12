@@ -2317,3 +2317,14 @@ dead-owner reclamation when its lock cannot be acquired. See
 [the inventory](../future-state-2026-11-12.tsv) and
 [the replay](future-state-2026-11-12.md). Governs
 [the machine](../../workflow.md#the-machine).
+## Fixture tooling follows declared closures (11-12)
+
+#743 replaces fixture dependency lists and one-level import discovery with
+`copyModuleClosure`, then applies private mutations. The source audit follows
+raw copy/write inputs through parsed bindings, including shared helpers.
+Whole-namespace mirrors are exempt only at their discovered namespace; standalone
+entry exceptions expire when an import or asset is added. Closure staging exposed
+undeclared Node launch drivers, now declared at their readers for #728. The oracle
+recipe owner remains byte-identical because it hashes its own source. A supplied
+unsealed oracle context now refuses by name instead of silently changing holder
+ownership. Governs [the workflow](../../workflow.md#decisions).

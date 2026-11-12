@@ -254,6 +254,15 @@ process-keyed test resources and direct filtered self-spawns. On 2026-11-12,
 merged cases shared a PID-keyed D8 directory, and a bare self-spawn filter
 silently ran zero tests after its test gained a module prefix.
 
+Tooling test repositories stage executable modules with
+`tooling/gate/module-closure-fixture.ts`'s `copyModuleClosure`, then apply their
+private mutations. Declare command entries and use the production owner's input
+list for protected recipe assets; never maintain a second dependency list in a
+fixture. The host audit checks raw copies and shared helpers. On 2026-11-12,
+new imports were omitted by fixture lists in #704 and #742 and refused landings.
+An oracle test's supplied canonical environment is already sealed with
+`sealOracleRun`; an unsealed context changes run-holder reuse and is refused.
+
 ## Compiler contracts
 
 - A change to the semantic schema (a field added, removed or retyped in
