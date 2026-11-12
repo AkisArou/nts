@@ -13,6 +13,8 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts'
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
 import {caseMemoryKey} from './case-memory.ts';
 import {tokenCommand} from './token-command.ts';
+import {gateEnvironment} from './canonical-environment.ts';
+const environment=gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR,owned:{NTS_GATE_TOKEN_HELD:'1'}}).env;
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url)),GiB=2**30,MiB=2**20;
 type QueueEvent={event:string;request?:number;context?:string;memory?:{reserved_bytes:number;used_bytes:number}};
@@ -46,7 +48,7 @@ const events=()=>readFileSync(queue,'utf8').trim().split('\\n').filter(Boolean).
 const requested=path=>events().some(row=>row.event==='token.request'&&row.context?.startsWith('json64:')&&JSON.parse(Buffer.from(row.context.slice(7),'base64url').toString()).project===path);
 const waitForRequest=path=>new Promise(resolve=>{const watcher=watch(queue,()=>{if(requested(path)){watcher.close();resolve();}});if(requested(path)){watcher.close();resolve();}});
 const compile=async(lease,bytes)=>runWithToken(lease,async()=>{
-  const result=await compileActive({memoryCapKb:2*2**30/1024},process.execPath,['-e','const value=Buffer.alloc('+bytes+',1);process.stdout.write(String(value.at(-1)))'],{cwd:process.cwd(),env:process.env,ownCpuSeconds:30});
+  const result=await compileActive({memoryCapKb:2*2**30/1024},process.execPath,['-e','const value=Buffer.alloc('+bytes+',1);process.stdout.write(String(value.at(-1)))'],{cwd:process.cwd(),env:environment,ownCpuSeconds:30});
   assert.equal(result.status,0,JSON.stringify(result));assert.equal(result.memoryKilled,false);assert.equal(result.stdout,'1');
 });
 ${payload}
@@ -131,7 +133,7 @@ test('shell and stream readers share the lease while preserving command status a
   const f=runFixture(t,{payload:`
 const release=await acquireToken({project:'tests/fixture/stream',backend:'node'});assert.ok(release);
 try{await runWithToken(release,()=>new Promise((resolve,reject)=>{
-  const child=scopedSpawn(process.execPath,['-e','const a=Buffer.alloc(120*2**20,1);process.stdout.write("stream "+a.at(-1));process.exitCode=7'],{cwd:process.cwd(),env:process.env,stdio:['ignore','pipe','pipe']});
+  const child=scopedSpawn(process.execPath,['-e','const a=Buffer.alloc(120*2**20,1);process.stdout.write("stream "+a.at(-1));process.exitCode=7'],{cwd:process.cwd(),env:environment,stdio:['ignore','pipe','pipe']});
   let out='',err='';child.stdout.on('data',chunk=>{out+=chunk;});child.stderr.on('data',chunk=>{err+=chunk;});child.once('error',reject);
   child.once('close',status=>{try{assert.equal(status,7,err);assert.equal(out,'stream 1');resolve();}catch(error){reject(error);}});
 }));}finally{release();}

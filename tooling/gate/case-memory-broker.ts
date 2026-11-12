@@ -2,10 +2,10 @@
 // The token pool transports leases; pooled readers do not size themselves.
 import {spawn} from 'node:child_process';
 import {basename} from 'node:path';
-import {readFileSync} from 'node:fs';
 import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,KEPT_PEAKS,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
+import {readLimits} from './scopes/step-scope.ts';
 
 export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
 type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};
@@ -64,8 +64,8 @@ export class CaseMemoryBroker {
     // real case keeps its bound; no nested child can enlarge its parent.
     for(let at=group.slice(0,group.lastIndexOf('/'));at!==boundary.group;at=at.slice(0,at.lastIndexOf('/'))){
       if(!under(boundary.group,at))throw Error('case memory: invalid worker ancestry');
-      const text=readFileSync('/sys/fs/cgroup'+at+'/memory.max','utf8').trim();
-      if(text!=='max'&&Number(text)<cap)throw Error(`case memory: case cap ${cap} exceeds enclosing ${at} cap ${text}`);
+      const limit=readLimits(at).max;
+      if(limit<cap)throw Error(`case memory: case cap ${cap} exceeds enclosing ${at} cap ${limit}`);
     }
     lease.attach(group,cap);
     const active=this.#active.get(request.step)??new Set<CaseMemoryLease>();active.add(lease);this.#active.set(request.step,active);
@@ -73,7 +73,7 @@ export class CaseMemoryBroker {
     await property(basename(group),cap);
     await property(basename(scope),cap);
     for(const at of [group,scope]){
-      const actual=Number(readFileSync('/sys/fs/cgroup'+at+'/memory.max','utf8'));
+      const actual=readLimits(at).max;
       if(actual>cap||actual<cap-4096)throw Error('case memory: kernel did not enforce registered case cap');
     }
   }

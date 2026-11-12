@@ -2,6 +2,7 @@
 // Sized tokens account for their case; old unsized clients retain the protocol.
 import {createServer,type Server,type Socket} from 'node:net';
 import type {CaseMemoryLease} from './case-memory.ts';
+import {hostObservations} from './host-observations.ts';
 
 export type TokenRequest={sock:Socket;id:number;step:string;pid:number;context:string;since:number;granted:boolean;gone:boolean;answered?:boolean;bytes?:number;lease?:string;memory?:CaseMemoryLease};
 type TokenEvent={event:string;request?:number;step?:string;pid?:number;context?:string;bytes?:number};
@@ -16,6 +17,7 @@ type TokenOptions={
   completed?(request:TokenRequest):void|Promise<void>;
   retire?(request:TokenRequest,group:string):void;
   failed?(error:unknown):void;
+  now?():number;
 };
 export type TokenPool={
   addr:string|null;server:Server|null;held:Map<string,number>;sized:Map<string,{count:number;bytes:number}>;
@@ -23,8 +25,8 @@ export type TokenPool={
   account():void;grant():void;start():Promise<string|null>;close():void;
 };
 
-export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null,known=()=>true,released=()=>{},observe=()=>{},prepare=()=>{},attach=async()=>{},completed=()=>{},retire=()=>{},failed=error=>{throw error;}}:TokenOptions):TokenPool{
-  const pool:TokenPool={addr:null,server:null,held:new Map(),sized:new Map(),peak:new Map(),used:new Map(),total:0,waiting:[],active:new Set(),last:Date.now(),
+export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null,known=()=>true,released=()=>{},observe=()=>{},prepare=()=>{},attach=async()=>{},completed=()=>{},retire=()=>{},failed=error=>{throw error;},now=hostObservations().now}:TokenOptions):TokenPool{
+  const pool:TokenPool={addr:null,server:null,held:new Map(),sized:new Map(),peak:new Map(),used:new Map(),total:0,waiting:[],active:new Set(),last:now(),
     account:()=>{},grant:()=>{},start:async()=>null,close:()=>{pool.server?.close();}};
   let requests=0;
   const trace=(event:string,w?:TokenRequest)=>{
@@ -34,7 +36,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     for(const w of [...pool.waiting,...pool.active])if(w.memory){w.memory.sample();w.bytes=w.memory.bytes;}
     for(const step of pool.sized.keys())pool.sized.set(step,{count:0,bytes:0});
     for(const w of pool.active)if(w.bytes!==undefined){const row=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:row.count+1,bytes:row.bytes+w.bytes});}
-    const now=Date.now(),dt=(now-pool.last)/1000;pool.last=now;
+    const at=now(),dt=(at-pool.last)/1000;pool.last=at;
     for(const [step,n] of pool.held)pool.used.set(step,(pool.used.get(step)??0)+n*dt);
   };
   const candidates=()=>{
@@ -49,10 +51,10 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     return {oldest,chosen};
   };
   pool.grant=()=>{
-    pool.account();const now=Date.now();
+    pool.account();const at=now();
     while(pool.waiting.length&&free()>0){
       const {oldest,chosen}=candidates();let best:{w:TokenRequest;c:number}|null=null;
-      for(const [step,w] of chosen){const c=claim(step,{held:pool.held.get(step)??0,used:pool.used.get(step)??0,waitedS:(now-oldest.get(step)!)/1000});if(!best||c>best.c)best={w,c};}
+      for(const [step,w] of chosen){const c=claim(step,{held:pool.held.get(step)??0,used:pool.used.get(step)??0,waitedS:(at-oldest.get(step)!)/1000});if(!best||c>best.c)best={w,c};}
       if(!best)break;
       const w=best.w;pool.waiting.splice(pool.waiting.indexOf(w),1);trace('token.grant',w);
       w.granted=true;pool.active.add(w);
@@ -67,7 +69,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
   };
   pool.start=()=>new Promise(resolve=>{
     const server=createServer({allowHalfOpen:true},sock=>{
-      const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:Date.now(),granted:false,gone:false};
+      const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
       sock.on('data',(data:string)=>{
         if(w.step!==''){
@@ -96,7 +98,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
           w.bytes=bytes;rest=rest.slice(1);
         }
         if(rest[0]?.startsWith('lease:')){w.lease=rest[0].slice(6);if(!/^[-a-zA-Z0-9]{1,64}$/.test(w.lease)){sock.destroy();return;}rest=rest.slice(1);}
-        w.context=rest.join(' ');w.step=known(step)?step:'?';w.since=Date.now();
+        w.context=rest.join(' ');w.step=known(step)?step:'?';w.since=now();
         try{prepare(w);if(w.memory)w.bytes=w.memory.bytes;}catch(error){sock.end(`error: ${String(error)}\n`);return;}
         pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');
       });
