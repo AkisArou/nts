@@ -2,12 +2,13 @@
 // Cargo's JSON reports prove the files came from the selected profile; the
 // manifest and environment checks also cover settings absent from that report.
 import {spawn} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {accessSync,constants,readFileSync,statSync} from 'node:fs';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {ToolingInstrumentError} from './step-result.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
+import {ENVIRONMENT_CONTEXT,requireSealedOracleRun} from './canonical-environment.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
@@ -83,6 +84,7 @@ export function assertTestArtifact(invocation:TestInvocation,value:unknown):bool
 
 export async function runTestProfile(route:TestRoute,selection:readonly string[]=[],env:NodeJS.ProcessEnv=process.env,cwd=process.cwd()):Promise<number> {
   const invocation=testInvocation(route,selection,env,cwd);
+  assertPreparedInnerTests(invocation);
   assertTestProfileManifest(readFileSync(resolve(cwd,'Cargo.toml'),'utf8'));
   // Validate the exact values handed to spawn, not a separate policy projection.
   assertTestInvocation(invocation);
@@ -116,6 +118,23 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
   return status;
   }finally{release();}
+}
+
+/** inner.ts owns preparation; this module owns only the Cargo invocation.
+ * Compile-only invocations need neither an oracle nor an executable. */
+export function assertPreparedInnerTests(invocation:TestInvocation):void{
+  const stop=invocation.args.indexOf('--'),cargo=stop<0?invocation.args:invocation.args.slice(0,stop);
+  if(invocation.route!=='inner'||cargo.includes('--no-run'))return;
+  const command='node tooling/gate/inner.ts --no-agree';
+  const missing=[ENVIRONMENT_CONTEXT,'NTS_ORACLE_DEPENDENCIES','NTS_BIN'].filter(name=>!invocation.env[name]);
+  if(missing.length)fail('inner tests need prepared '+missing.join(', ')+'; run '+command);
+  try{requireSealedOracleRun(invocation.env);}
+  catch(error){fail('inner tests need a sealed oracle capability: '+String(error)+'; run '+command);}
+  const compiler=resolve(invocation.profileDirectory,'nts');
+  if(!isAbsolute(invocation.env.NTS_BIN!)||resolve(invocation.env.NTS_BIN!)!==compiler)
+    fail('inner NTS_BIN must name the compiler built by '+command+' at '+compiler);
+  try{if(!statSync(compiler).isFile())throw Error('not a file');accessSync(compiler,constants.X_OK);}
+  catch(error){fail('inner NTS_BIN is unavailable at '+compiler+': '+String(error)+'; run '+command);}
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

@@ -527,7 +527,9 @@ It seals the canonical oracle environment, builds a fresh compiler, sets
 `NTS_BIN`, installs the per-binary scratch runner and admits its heavy phases.
 It selects the touched crates plus all three backend crates. `inner.ts`, the
 shell frontend step, the workspace replay and the doctest step call the same
-invocation owner.
+invocation owner. An executing inner invocation without those prepared
+capabilities refuses before Cargo starts and names the contributor command.
+Compile-only `--no-run` invocations need no runtime preparation.
 
 The profile is `nts-dev`: no debug info, incremental compilation, overflow
 checks and debug assertions. The owner validates the manifest, refuses

@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {copyFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
-import {assertTestArtifact,assertTestInvocation,assertTestProfileManifest,testInvocation,TEST_PROFILE_MANIFEST,TEST_ROUTES} from './test-profile.ts';
+import {assertTestArtifact,assertTestInvocation,assertTestProfileManifest,assertPreparedInnerTests,testInvocation,TEST_PROFILE_MANIFEST,TEST_ROUTES} from './test-profile.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
@@ -41,6 +41,7 @@ test('manifest and caller conflicts cannot silently select another build',()=>{
 });
 
 for(const route of TEST_ROUTES)test(route+' executes Cargo through the owner with artifact evidence',t=>{
+  const selection=route==='inner'?['--no-run']:[];
   const root=newTestScratch('test-profile-route');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const bin=join(root,'bin'),capture=join(root,'capture.json');mkdirSync(bin);
   writeFileSync(join(root,'Cargo.toml'),'[workspace]\n'+manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]')));
@@ -49,17 +50,17 @@ const {durableRecord}=require(${JSON.stringify(new URL('./durable-record.ts',imp
 console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(root,'target/nts-dev/deps/private'))}],profile:{test:true,debuginfo:0}}));
 process.exit(7);
 `,{mode:0o755});
-  const result=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_TEST_PROFILE:undefined,CARGO_INCREMENTAL:undefined,CARGO_TARGET_DIR:join(root,'target')}});
+  const result=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route,...selection],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_TEST_PROFILE:undefined,CARGO_INCREMENTAL:undefined,CARGO_TARGET_DIR:join(root,'target')}});
   assert.equal(result.status,7,result.stdout+result.stderr);
   const actual=JSON.parse(readFileSync(capture,'utf8'));
-  assert.deepEqual(actual,{args:testInvocation(route,[],{}).args,incremental:'1',checkers:'1'});
+  assert.deepEqual(actual,{args:testInvocation(route,selection,{}).args,incremental:'1',checkers:'1'});
   rmSync(capture);
   const refused=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:'0'}});
   assert.equal(refused.status,2,refused.stdout+refused.stderr);
   assert.match(refused.stderr,/CARGO_INCREMENTAL=1/);
   assert.equal(existsSync(capture),false,'a conflict refuses before Cargo starts');
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nprocess.exit(0);\n`,{mode:0o755});
-  const empty=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:undefined}});
+  const empty=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route,...selection],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:undefined}});
   assert.equal(empty.status,2,empty.stdout+empty.stderr);
   assert.match(empty.stderr,/produced no compiler-artifact evidence/);
 });
@@ -88,10 +89,29 @@ test('real Cargo artifact reports end before a test can print its own JSON',t=>{
   writeFileSync(join(root,'Cargo.toml'),'[package]\nname="profile-output"\nversion="0.0.0"\nedition="2024"\n'+profile);
   const output='{"reason":"compiler-artifact","filenames":["/subject-output"],"profile":{"debuginfo":2}}';
   writeFileSync(join(root,'src/lib.rs'),'#[test] fn prints_json() { println!("\\n{}", r#"'+output+'"#); }\n');
-  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'inner','--','--nocapture'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined}});
+  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'workspace','--','--nocapture'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined}});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);
   assert.ok(ran.stdout.includes(output),ran.stdout);
   assert.equal(existsSync(join(root,'target/debug')),false);
+});
+
+test('an unprepared inner differential invocation names its setup before Cargo or disk admission',t=>{
+  const root=newTestScratch('unprepared-inner');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const bin=join(root,'bin'),capture=join(root,'cargo.json');mkdirSync(bin);
+  writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nconst {durableRecord}=require(${JSON.stringify(new URL('./durable-record.ts',import.meta.url).pathname)});durableRecord(${JSON.stringify(capture)},{started:true});\n`,{mode:0o755});
+  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'inner','-p','nts-differential'],{
+    cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_GATE_ENV_CONTEXT:undefined,NTS_ORACLE_DEPENDENCIES:undefined,NTS_BIN:undefined},
+  });
+  assert.equal(ran.status,2,ran.stdout+ran.stderr);
+  assert.match(ran.stderr,/NOT MEASURED.*inner tests need prepared NTS_GATE_ENV_CONTEXT, NTS_ORACLE_DEPENDENCIES, NTS_BIN/);
+  assert.match(ran.stderr,/node tooling\/gate\/inner\.ts --no-agree/);
+  assert.equal(existsSync(capture),false,'preparation refuses before invoking Cargo');
+});
+
+test('compile-only inner builds do not need runtime preparation and a test filter cannot pretend to be no-run',()=>{
+  assert.doesNotThrow(()=>assertPreparedInnerTests(testInvocation('inner',['--no-run'],{})));
+  assert.throws(()=>assertPreparedInnerTests(testInvocation('inner',['--','--no-run'],{})),/inner tests need prepared/);
+  assert.throws(()=>assertPreparedInnerTests(testInvocation('inner',[],{NTS_GATE_ENV_CONTEXT:'{}',NTS_ORACLE_DEPENDENCIES:'{}',NTS_BIN:'/missing'})),/sealed oracle capability.*inner\.ts --no-agree/);
 });
 
 test('the source rule follows invocation values and wrappers, and parses shell commands',()=>{

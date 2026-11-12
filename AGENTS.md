@@ -212,6 +212,9 @@ the incremental `nts-dev` profile with no debug info, and checks Cargo's emitted
 artifact paths. The source audit rejects direct test builds elsewhere. On
 2026-11-11 the frontend check built a second debug artifact set, and test
 routes with different incremental settings kept duplicate artifacts.
+The invocation owner refuses an unprepared inner test run before Cargo starts;
+on 2026-11-12 its formerly documented direct command failed differential tests
+without the sealed oracle and fresh compiler that `inner.ts` prepares.
 [`docs/workflow.md`](docs/workflow.md) gives the route details. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
