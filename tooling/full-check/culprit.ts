@@ -142,6 +142,9 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
     const steps = input.steps.filter(step => current.failed.includes(step));
     if (!steps.length) return held(`newest main ${commit.slice(0, 12)} was red without naming a failed step`);
     const result = searchHistory({ ...input, steps }, measure, current);
+    if (result.kind === "culprit" && commit === input.candidates.at(-1)) {
+      result.flaky = [...new Set([...result.flaky, ...input.steps.filter(step => !current.failed.includes(step))])];
+    }
     probes.push(...result.probes.filter(p => p !== current));
     validity = advanced();
     if ("held" in validity) return validity.held;
