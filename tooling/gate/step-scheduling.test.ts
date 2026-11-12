@@ -377,29 +377,24 @@ esac
   assert.ok(summary.memory.peak_bytes < 7 * GiB, `format's 3 GiB came from tokens returned, not beside four of them: ${summary.memory.peak_bytes}`);
 });
 
-// A neighbour's job in the run's ledger: it asks for 6 GiB once the run's
-// first step says so, and gives them back once the run waits to grow behind it.
-const NEIGHBOUR = `import { existsSync, readdirSync, readFileSync, watch } from "node:fs";
+// A later neighbour waits for the admitted run's next step to finish, then
+// receives its memory. Readiness files establish the order without deadlines.
+const NEIGHBOUR = `import { existsSync, watch } from "node:fs";
 import { join } from "node:path";
 const [ledger, observations, own, module] = process.argv.slice(1);
 const { reserve } = await import(module);
 const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
-const growing = () => readdirSync(join(ledger, "waiting")).some(name => {
-  try { return name.endsWith(".json") && JSON.parse(readFileSync(join(ledger, "waiting", name), "utf8")).grows !== null; } catch { return false; }
-});
 await until(own, () => existsSync(join(own, "ask")));
 const held = await reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 });
-await until(join(ledger, "waiting"), growing);
+if (!existsSync(join(own, "records-ran"))) throw new Error("later neighbour ran before the admitted run's next step");
 held.release();
 `;
 
-test("a run that waits to grow gives back what it does not use, so a request queued before its growth is not held by it", async t => {
-  // 10 GiB available, 2 kept for the system. The run holds 3 for format, and
-  // the neighbour's 6 do not fit beside them, so they wait. Then records needs
-  // 8: the run gives back what it no longer uses beyond two blocks, which
-  // lets the neighbour in ahead of the run's growth, and the growth follows
-  // once the neighbour is done. Holding the 3 it does not use, the run would
-  // wait behind a neighbour waiting for those 3, for ever.
+test("an admitted run grows to finish its next step before a later neighbour starts", async t => {
+  // 10 GiB available, 2 kept for the system. The run holds 3 for format,
+  // which blocks the later neighbour's 6. Records then needs 8: growth keeps
+  // the run's admission place and takes exactly what is available. The
+  // neighbour receives its 6 once the admitted work releases its promise.
   let neighbour: ReturnType<typeof spawn> | undefined;
   t.after(() => { if (neighbour && neighbour.exitCode === null && neighbour.signalCode === null) neighbour.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
@@ -408,8 +403,8 @@ test("a run that waits to grow gives back what it does not use, so a request que
     times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
     payload: `
 case $1 in
-  # Holding its memory, it lets the neighbour ask, and ends once the neighbour waits.
   format) : > "$2/ask"; exec node "$(dirname "$0")/until.mjs" "$2/memory/ledger/waiting" --entry ;;
+  records) : > "$2/records-ran" ;;
 esac
 `,
     before: (own, memory) => {
@@ -421,11 +416,8 @@ esac
   });
   assert.equal(result.status, 0, output);
   assert.equal(summary.verdict, "green");
-  // Behind the neighbour's request, or after it if the neighbour's next look
-  // came first: either way the neighbour had memory the run no longer used.
-  assert.match(output, /memory: gate run .* waits to grow by 6\.0 GiB to 8\.0 GiB \(agent\)/);
-  assert.ok(summary.memory.shrinks >= 1, JSON.stringify(summary.memory));
-  assert.deepEqual(await once(neighbour!, "exit"), [0, null], "the neighbour had its memory and gave it back");
+  assert.equal(summary.memory.peak_bytes,8*GiB);
+  assert.deepEqual(await once(neighbour!, "exit"),[0,null],"the later neighbour starts only after the admitted step");
 });
 
 // The landing check in the run's ledger: once the run's reservation has grown
