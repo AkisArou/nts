@@ -363,6 +363,8 @@ it pending for fresh recording. A measured row carries no body-only digest,
 so a function-body edit alone keeps its population promise. The check names
 the remaining identity inputs that require native plans instead of claiming
 to have validated them. Budget provenance separately schedules refreshes.
+Missing fixture records appear in the shared pending format, so the controller
+starts the core recorder even when no other suite requests those fixtures.
 
 Benchmark run updates are independent by case. The recorder publishes each
 completed pending row and accepted update before reporting another case's

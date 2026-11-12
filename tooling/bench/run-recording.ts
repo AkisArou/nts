@@ -18,7 +18,7 @@ type Incomplete = {entry:Entry;error:unknown};
 export type RunPlan = {backend:RunBackend;file:string;record:RunRecord|null;pending:Set<string>;recordPending:boolean};
 type RecordingOptions = {
   binary:string;
-  env:NodeJS.ProcessEnv;
+  parentEnv:NodeJS.ProcessEnv;
   log?:(line:string)=>void;
   write?:(rows:ReadonlyMap<string,BenchmarkRun>)=>Promise<void>;
 };
@@ -60,7 +60,7 @@ export async function finishBenchmarks(plan: RunPlan, all: readonly Entry[], com
   }
   if (incomplete.length) {
     const chosen = incomplete.find(row => checkFailurePolicy(row.error, changed).disposition !== "verdict") ?? incomplete[0]!;
-    return reportCheckFailure(chosen.error, options.env, changed);
+    return reportCheckFailure(chosen.error, options.parentEnv, changed);
   }
   return changed ? 1 : 0;
 }

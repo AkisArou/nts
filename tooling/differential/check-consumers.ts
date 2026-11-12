@@ -126,7 +126,7 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
   }));
   completed.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
   incomplete.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
-  if (plan) return finishBenchmarks(plan, all, completed, incomplete, {binary,env});
+  if (plan) return finishBenchmarks(plan, all, completed, incomplete, {binary,parentEnv:process.env});
   const failures = summary(mode, completed, incomplete);
   if (incomplete.length) {
     // Setup/pressure evidence retains its shared hold policy. With only
