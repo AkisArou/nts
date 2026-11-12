@@ -7,6 +7,7 @@ import {createRequire} from 'node:module';
 import {shellCommands} from './shell-commands.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import type {Node} from 'typescript/ast';
+import {SourceFacts,GeneratedSourceFacts,inspectSourceBatches,sourceSyntax,type SourceInput} from './source-facts.ts';
 import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-fixture-copies.ts';
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
 import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
@@ -29,51 +30,26 @@ const inside=(root:string,path:string)=>{const part=relative(root,path);return !
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
-export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:Node)=>void):{reads:HostRead[];references:string[]} {
+export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts):{reads:HostRead[];references:string[]} {
   const require=createRequire(import.meta.url);
   const {API}=require('typescript/sync') as typeof import('typescript/sync');
-  const ast=require('typescript/ast') as typeof import('typescript/ast');
-  const api=shared??new API(),reads:HostRead[]=[],references=new Set<string>();
-  function parse(text:string,offset=0,generated=false,depth=0):void {
-    const lease=api.createSourceFile(file+(generated?'.generated.ts':''),text),aliases=new Map<string,string>();
-    const code=(node:Node)=>text.slice(node.pos,node.end).trim();
-    const name=(node:Node):string=>{
-      if(ast.isIdentifier(node))return aliases.get(node.text)??node.text;
-      if(ast.isPropertyAccessExpression(node))return name(node.expression)+'.'+node.name.text;
-      if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return name(node.expression)+'.'+node.argumentExpression.text;
-      if(ast.isCallExpression(node)&&['require','createRequire(import.meta.url)'].includes(name(node.expression))&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0]))return node.arguments[0].text.replace(/^node:/,'');
-      return code(node);
-    };
-    function declarations(node:Node):void {
-      if(ast.isImportDeclaration(node)&&ast.isStringLiteralLikeNode(node.moduleSpecifier)){
-        const module=node.moduleSpecifier.text.replace(/^node:/,''),clause=node.importClause;
-        references.add(node.moduleSpecifier.text);
-        if(clause?.name)aliases.set(clause.name.text,module);
-        const bindings=clause?.namedBindings;
-        if(bindings){if(ast.isNamespaceImport(bindings))aliases.set(bindings.name.text,module);
-          else for(const item of bindings.elements)aliases.set(item.name.text,module+'.'+(item.propertyName?.text??item.name.text));}
-      }
-      node.forEachChild(declarations);
-    }
-    declarations(lease.sourceFile);
-    for(let pass=0;pass<3;pass++){
-      const bind=(node:Node):void=>{
-        if(ast.isVariableDeclaration(node)&&node.initializer){
-          const value=name(node.initializer);
-          if(ast.isIdentifier(node.name)&&/^(?:process|fs|fs\/promises|os|performance|Date)(?:\.|$)/.test(value))aliases.set(node.name.text,value);
-          if(ast.isObjectBindingPattern(node.name))for(const element of node.name.elements)if(element.name&&ast.isIdentifier(element.name))aliases.set(element.name.text,value+'.'+(element.propertyName?code(element.propertyName):element.name.text));
-        }
-        node.forEachChild(bind);
-      };bind(lease.sourceFile);
-    }
-    const add=(kind:HostReadKind,node:Node)=>reads.push({file,line:offset+text.slice(0,node.pos).split('\n').length,kind,source:code(node).replace(/\s+/g,' ').slice(0,240),generated});
+  const ast=sourceSyntax();
+  const api=shared??new API(),generatedSources=new GeneratedSourceFacts(api,file),reads:HostRead[]=[],references=new Set<string>();
+  function parse(text:string,offset=0,generated=false,depth=0,borrowed?:SourceFacts):void {
+    const lease=!borrowed&&!generated?api.createSourceFile(file,text):undefined;
+    const facts=borrowed??(generated?generatedSources.get(text):new SourceFacts(file,text,lease!.sourceFile));
+    const code=(node:Node)=>facts.code(node),name=(node:Node)=>facts.ambientName(node);
+    for(const declaration of facts.imports)if(ast.isStringLiteralLikeNode(declaration.moduleSpecifier))references.add(declaration.moduleSpecifier.text);
+    const add=(kind:HostReadKind,node:Node)=>reads.push({file,line:offset+facts.line(node.pos),kind,source:code(node).replace(/\s+/g,' ').slice(0,240),generated});
     const literal=(value:string,node:Node):void=>{
       if(/^\/(?:proc(?:\/|$)|sys\/fs\/cgroup)/.test(value))add('kernel',node);
       if(/^(?:\.\.?\/|tooling\/|runtime\/)/.test(value)&&/\.(?:[cm]?[jt]s|sh)$/.test(value))references.add(value);
       // Parse code strings, not arbitrary prose mentioning an API.
-      if(depth<3&&/(?:\b(?:process|performance|Date)\.|\brequire\s*\(|\bfrom\s*['"]node:|\bstatfs|\/proc\/|\/sys\/fs\/cgroup)/.test(value)&&/[;{}=()]|\n/.test(value))parse(value,offset+text.slice(0,node.pos).split('\n').length-1,true,depth+1);
+      if(depth<3&&/(?:\b(?:process|performance|Date)\.|\brequire\s*\(|\bfrom\s*['"]node:|\bstatfs|\/proc\/|\/sys\/fs\/cgroup)/.test(value)&&/[;{}=()]|\n/.test(value))parse(value,offset+facts.line(node.pos)-1,true,depth+1);
     };
-    function visit(node:Node):void {
+    const candidates=facts.ofKinds(ast.SyntaxKind.CallExpression,ast.SyntaxKind.SpreadAssignment,ast.SyntaxKind.PropertyAssignment,
+      ast.SyntaxKind.StringLiteral,ast.SyntaxKind.NoSubstitutionTemplateLiteral,ast.SyntaxKind.TemplateExpression);
+    const visit=(node:Node):void=>{
       if(ast.isCallExpression(node)){
         const called=name(node.expression);
         if(/^(?:fs|fs\/promises)(?:\.promises)?\.statfs(?:Sync)?$/.test(called))add('disk',node);
@@ -86,9 +62,8 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       if(ast.isPropertyAssignment(node)&&code(node.name)==='env'&&name(node.initializer)==='process.env')add('environment',node);
       if(ast.isStringLiteralLikeNode(node))literal(node.text,node);
       if(ast.isTemplateExpression(node))literal(node.head.text+node.templateSpans.map(span=>'__fixture_expression'+span.literal.text).join(''),node);
-      node.forEachChild(visit);
-    }
-    try{if(!generated)inspectRoot?.(file,text,lease.sourceFile);visit(lease.sourceFile);}finally{lease.dispose();}
+    };
+    try{if(!generated)inspectRoot?.(file,text,facts,generatedSources);for(const node of candidates)visit(node);}finally{lease?.dispose();}
   }
   try {
     if(file.endsWith('.sh')){
@@ -103,13 +78,13 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
         for(const match of line.matchAll(/(?:tooling|runtime)\/[\w./-]+\.(?:[cm]?[jt]s|sh)\b/g))references.add(match[0]);
       }
       // Shell heredocs and node -e payloads are code, including their aliases.
-      parse(source,0,true);
+      parse(source,0,true,0,rootFacts);
     } else if(file.endsWith('.rs')) {
       // Rust test fixtures must ask the TypeScript fixture owner for the packet.
       for(const [index,line] of source.split('\n').entries())if(/\.env\s*\(\s*"NTS_(?:MEMINFO|VMSTAT|HOST_OBSERVATIONS)"/.test(line))reads.push({file,line:index+1,kind:'fixture-constructor',source:line.trim(),generated:false});
-    } else parse(source);
+    } else parse(source,0,false,0,rootFacts);
     return {reads,references:[...references]};
-  } finally {if(!shared)api.close();}
+  } finally {generatedSources.close();if(!shared)api.close();}
 }
 
 export function hostReadProblems(reads:readonly HostRead[],debt:HostDebt,owners=HOST_READ_OWNERS):string[] {
@@ -141,14 +116,15 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
 export function auditTestHost(root:string,debt?:HostDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
-  const inspect=(file:string,source:string,node:Node)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
+  const inspect=(file:string,source:string,node:SourceFacts,generated:GeneratedSourceFacts)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node,
-      (text,tree,offset)=>testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset))));
+      (text,tree,offset)=>testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset)),generated));
   }};
   try {
+  const inputs:SourceInput[]=[];
   const visit=(directory:string,rustOnly=false):void=>{
     for(const entry of readdirSync(join(root,directory),{withFileTypes:true})){
       if(entry.name==='node_modules')continue;
@@ -157,10 +133,12 @@ export function auditTestHost(root:string,debt?:HostDebt){
       else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file))){
         const source=readFileSync(join(root,file),'utf8');
         if(file.endsWith('.sh'))testProfiles.push(...inspectShellCargoTests(file,source));
-        sources.set(file,inspectHostSource(file,source,api,inspect));
+        if(file.endsWith('.rs'))sources.set(file,inspectHostSource(file,source,api));
+        else inputs.push({file,source,...(file.endsWith('.sh')?{parseFile:file+'.generated.ts'}:{})});
       }
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
+  inspectSourceBatches(api,inputs,facts=>sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts)));
   const reach=(file:string,seen:Set<string>):void=>{
     if(seen.has(file))return;seen.add(file);
     for(const reference of sources.get(file)?.references??[]){

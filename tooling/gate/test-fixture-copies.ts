@@ -1,10 +1,10 @@
 // Fixture module inputs belong to copyModuleClosure, including private mutants.
 // Inspect the host audit's existing AST; strings used as test data are not code.
-import {createRequire} from 'node:module';
 import {dirname,extname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {moduleClosure} from './module-closure.ts';
 import type {Node} from 'typescript/ast';
+import {SourceFacts} from './source-facts.ts';
 
 // These fixtures copy a complete discovered namespace or compare bytes without
 // executing the copies. They have no selected dependency list to go stale.
@@ -23,50 +23,15 @@ const STANDALONE_ENTRIES:Readonly<Record<string,readonly string[]>>={
  'tooling/apple/ios-readiness.test.ts':['tooling/gate/costs.mjs'],
 };
 export type FixtureCopy={file:string;line:number;source:string;input:string};
-type Binding={value:Node;member?:string};
 
-export function inspectFixtureCopies(rootDirectory:string,file:string,text:string,tree:Node):FixtureCopy[]{
+export function inspectFixtureCopies(rootDirectory:string,file:string,text:string,tree:Node|SourceFacts):FixtureCopy[]{
  if(file==='tooling/gate/module-closure-fixture.ts')return [];
- const ast=createRequire(import.meta.url)('typescript/ast') as typeof import('typescript/ast');
- const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Binding>>(),imports=new Map<string,string>(),calls:Node[]=[];
- const code=(node:Node)=>text.slice(node.pos,node.end).trim();
- const isScope=(node:Node)=>ast.isSourceFile(node)||ast.isBlock(node)||ast.isForStatement(node)||ast.isForOfStatement(node)||
-  [ast.SyntaxKind.FunctionDeclaration,ast.SyntaxKind.FunctionExpression,ast.SyntaxKind.ArrowFunction,ast.SyntaxKind.MethodDeclaration].includes(node.kind);
- function gather(node:Node,scope:Node):void{
-  if(isScope(node)){scope=node;scopes.set(scope,new Map());}
-  const values=scopes.get(scope)!;
-  if(ast.isCallExpression(node))calls.push(node);
-  if(ast.isImportDeclaration(node)&&ast.isStringLiteralLikeNode(node.moduleSpecifier)){
-   const module=node.moduleSpecifier.text.replace(/^node:/,''),clause=node.importClause,names=clause?.namedBindings;
-   if(clause?.name)imports.set(clause.name.text,module);
-   if(names){if(ast.isNamespaceImport(names))imports.set(names.name.text,module);
-    else for(const item of names.elements)imports.set(item.name.text,module+'.'+(item.propertyName?.text??item.name.text));}
-  }
-  if(ast.isParameterDeclaration(node)&&node.name&&ast.isIdentifier(node.name))values.set(node.name.text,{value:node.name});
-  if(ast.isVariableDeclaration(node)&&node.initializer){
-   if(ast.isIdentifier(node.name))values.set(node.name.text,{value:node.initializer});
-   else if(ast.isObjectBindingPattern(node.name))for(const item of node.name.elements)if(item.name&&ast.isIdentifier(item.name))values.set(item.name.text,{value:node.initializer,member:item.propertyName?code(item.propertyName):item.name.text});
-  }
-  if(ast.isForOfStatement(node)&&ast.isVariableDeclarationList(node.initializer))for(const item of node.initializer.declarations)
-   if(ast.isIdentifier(item.name))values.set(item.name.text,{value:node.expression});
-  node.forEachChild(child=>{parents.set(child,node);gather(child,scope);});
- }
- gather(tree,tree);
- const binding=(node:Node):Binding|undefined=>{
-  if(!ast.isIdentifier(node))return;
-  let at:Node|undefined=node;
-  while(at){const value=scopes.get(at)?.get(node.text);if(value)return value;at=parents.get(at);}
-  return;
- };
- const unwrap=(input:Node):Node=>{let node=input;while(ast.isParenthesizedExpression(node)||ast.isAsExpression(node)||ast.isNonNullExpression(node)||ast.isAwaitExpression(node))node=node.expression;return node;};
- const name=(input:Node,depth=0):string=>{
-  const node=unwrap(input);if(depth>12)return '';
-  if(ast.isIdentifier(node)){const value=binding(node);return value?name(value.value,depth+1)+(value.member?'.'+value.member:''):imports.get(node.text)??node.text;}
-  if(ast.isPropertyAccessExpression(node))return name(node.expression,depth+1)+'.'+node.name.text;
-  if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return name(node.expression,depth+1)+'.'+node.argumentExpression.text;
-  if(ast.isCallExpression(node)&&ast.isIdentifier(node.expression)&&node.expression.text==='require'&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0]))return node.arguments[0].text.replace(/^node:/,'');
-  return code(node);
- };
+ const facts=tree instanceof SourceFacts?tree:new SourceFacts(file,text,tree),ast=facts.ast;
+ const {parents,calls}=facts;
+ const code=(node:Node)=>facts.code(node);
+ const binding=(node:Node)=>facts.binding(node,false);
+ const unwrap=(node:Node)=>facts.unwrap(node);
+ const name=(node:Node)=>facts.name(node,false);
  const product=(groups:string[][]):string[][]=>groups.reduce<string[][]>((all,group)=>all.flatMap(prefix=>group.map(value=>[...prefix,value])),[[]]);
  const paths=(input:Node,depth=0):string[]=>{
   const node=unwrap(input);if(depth>16)return ['__unknown__'];
@@ -96,7 +61,22 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   if(ast.isIdentifier(node)){const value=binding(node);return value?reads(value.value,depth+1):[];}
   if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')return [];
   if(ast.isCallExpression(node)&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(node.expression))&&node.arguments[0])return paths(node.arguments[0]);
-  const found:string[]=[];node.forEachChild(child=>{found.push(...reads(child,depth+1));});return found;
+  const found:string[]=[];
+  for(const call of facts.callsWithin(node)){
+   if(call===node)continue;
+   let hidden=false;
+   for(const parent of facts.ancestors(call)){
+    if(parent===node)break;
+    if(ast.isCallExpression(parent)&&name(parent.expression)==='JSON.stringify'){hidden=true;break;}
+   }
+   if(!hidden&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(call.expression))&&call.arguments[0])found.push(...paths(call.arguments[0],depth+1));
+  }
+  for(const identifier of facts.within(node,ast.SyntaxKind.Identifier)){
+   let hidden=false;
+   for(const parent of facts.ancestors(identifier)){if(parent===node)break;if(ast.isCallExpression(parent)&&name(parent.expression)==='JSON.stringify'){hidden=true;break;}}
+   if(!hidden){const value=binding(identifier);if(value&&value.kind!=='parameter')found.push(...reads(value.value,depth+1));}
+  }
+  return found;
  };
  const found:FixtureCopy[]=[],seen=new Set<string>();
  for(const call of calls){
@@ -135,7 +115,7 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
     if(whole)continue;
    }
    const key=String(call.pos)+':'+input;if(seen.has(key))continue;seen.add(key);
-   found.push({file,line:text.slice(0,call.pos).split('\n').length,source:code(call).replace(/\s+/g,' ').slice(0,240),input:part});
+   found.push({file,line:facts.line(call.pos),source:code(call).replace(/\s+/g,' ').slice(0,240),input:part});
   }
  }
  return found;

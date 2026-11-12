@@ -2,72 +2,25 @@
 // different phase; only source that reaches a script/eval sink is parsed.
 import {createRequire} from 'node:module';
 import type {Node} from 'typescript/ast';
+import {SourceFacts,GeneratedSourceFacts,sourceSyntax} from './source-facts.ts';
 
 export type RecordPublication={file:string;line:number;source:string};
-type Binding={value:Node;member?:string};
 
 /** Consume the host audit's leased root, and retain only detached findings. */
-export function inspectRecordPublications(file:string,source:string,shared?:import('typescript/sync').API,root?:Node,inspectGenerated?:(source:string,root:Node,offset:number)=>void):RecordPublication[]{
+export function inspectRecordPublications(file:string,source:string,shared?:import('typescript/sync').API,root?:Node|SourceFacts,inspectGenerated?:(source:string,root:SourceFacts,offset:number)=>void,generatedFacts?:GeneratedSourceFacts):RecordPublication[]{
   const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
-  const ast=require('typescript/ast') as typeof import('typescript/ast');
-  const api=shared??new API(),found:RecordPublication[]=[],seen=new Set<string>(),parsed=new Set<string>();
-  function parse(text:string,offset=0,generated=false,depth=0,borrowed?:Node):void{
+  const ast=sourceSyntax();
+  const api=shared??new API(),generatedSources=generatedFacts??new GeneratedSourceFacts(api,file),found:RecordPublication[]=[],seen=new Set<string>(),parsed=new Set<string>();
+  function parse(text:string,offset=0,generated=false,depth=0,borrowed?:Node|SourceFacts):void{
     if(depth>6)return;
     if(generated){if(parsed.has(text))return;parsed.add(text);}
-    const lease=borrowed?undefined:api.createSourceFile(file+(generated?'.generated.ts':''),text),tree=borrowed??lease!.sourceFile;
-    const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Binding>>(),imports=new Map<string,string>(),calls:Node[]=[],publishers:Node[]=[],bindingsByNode=new Map<Node,Binding|null>();
-    const code=(node:Node)=>text.slice(node.pos,node.end).trim();
-    const isScope=(node:Node)=>ast.isSourceFile(node)||ast.isBlock(node)||[ast.SyntaxKind.FunctionDeclaration,ast.SyntaxKind.FunctionExpression,ast.SyntaxKind.ArrowFunction,ast.SyntaxKind.MethodDeclaration,ast.SyntaxKind.Constructor,ast.SyntaxKind.GetAccessor,ast.SyntaxKind.SetAccessor].includes(node.kind)||ast.isForStatement(node)||ast.isForOfStatement(node);
-    function gather(node:Node,scope:Node):void{
-      if(isScope(node)){scope=node;scopes.set(scope,new Map());}
-      const bindings=scopes.get(scope)!;
-      if(ast.isCallExpression(node))calls.push(node);
-      if(ast.isFunctionDeclaration(node)&&node.name?.text==='publishOracleTerminal')publishers.push(node);
-      if(ast.isImportDeclaration(node)&&ast.isStringLiteralLikeNode(node.moduleSpecifier)){
-        const module=node.moduleSpecifier.text.replace(/^node:/,''),clause=node.importClause,names=clause?.namedBindings;
-        if(clause?.name)imports.set(clause.name.text,module);
-        if(names){if(ast.isNamespaceImport(names))imports.set(names.name.text,module);
-          else for(const entry of names.elements)imports.set(entry.name.text,module+'.'+(entry.propertyName?.text??entry.name.text));}
-      }
-      if(ast.isParameterDeclaration(node)&&ast.isIdentifier(node.name))bindings.set(node.name.text,{value:node.name});
-      if(ast.isVariableDeclaration(node)&&node.initializer){
-        if(ast.isIdentifier(node.name))bindings.set(node.name.text,{value:node.initializer});
-        else if(ast.isObjectBindingPattern(node.name))for(const entry of node.name.elements)if(entry.name&&ast.isIdentifier(entry.name))bindings.set(entry.name.text,{value:node.initializer,member:entry.propertyName?code(entry.propertyName):entry.name.text});
-      }
-      // Function declarations belong to the surrounding scope, not their body.
-      node.forEachChild(child=>{
-        parents.set(child,node);
-        if(ast.isFunctionDeclaration(child)&&child.name)bindings.set(child.name.text,{value:child});
-        gather(child,scope);
-      });
-    }
-    gather(tree,tree);
-    const binding=(node:Node):Binding|undefined=>{
-      if(!ast.isIdentifier(node))return undefined;
-      const known=bindingsByNode.get(node);if(known!==undefined)return known??undefined;
-      let at:Node|undefined=node;
-      while(at){const value=scopes.get(at)?.get(node.text);if(value){bindingsByNode.set(node,value);return value;}at=parents.get(at);}
-      bindingsByNode.set(node,null);return undefined;
-    };
-    const unwrap=(node:Node):Node=>{
-      while(ast.isAwaitExpression(node)||ast.isParenthesizedExpression(node)||ast.isAsExpression(node)||ast.isNonNullExpression(node)||ast.isSatisfiesExpression(node))node=node.expression;
-      return node;
-    };
-    const name=(input:Node,steps=0):string=>{
-      const node=unwrap(input);if(steps>10)return code(node);
-      if(ast.isIdentifier(node)){
-        const value=binding(node);return value?name(value.value,steps+1)+(value.member?'.'+value.member:''):imports.get(node.text)??node.text;
-      }
-      if(ast.isPropertyAccessExpression(node))return name(node.expression,steps+1)+'.'+node.name.text;
-      if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return name(node.expression,steps+1)+'.'+node.argumentExpression.text;
-      if(ast.isCallExpression(node)&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0])&&
-        (node.expression.kind===ast.SyntaxKind.ImportKeyword||ast.isIdentifier(node.expression)&&node.expression.text==='require'))return node.arguments[0].text.replace(/^node:/,'');
-      return code(node);
-    };
-    const resolved=(input:Node,steps=0):Node=>{
-      const node=unwrap(input);if(steps>10)return node;
-      const value=binding(node);return value&&!value.member?resolved(value.value,steps+1):node;
-    };
+    const lease=!borrowed&&!generated?api.createSourceFile(file,text):undefined;
+    const facts=borrowed instanceof SourceFacts?borrowed:borrowed?new SourceFacts(file,text,borrowed):generated?generatedSources.get(text):new SourceFacts(file,text,lease!.sourceFile);
+    const {calls}=facts,publishers=facts.ofKind(ast.SyntaxKind.FunctionDeclaration);
+    const code=(node:Node)=>facts.code(node);
+    const unwrap=(node:Node)=>facts.unwrap(node);
+    const name=(node:Node)=>facts.name(node);
+    const resolved=(node:Node)=>facts.resolve(node);
     const returned=(node:Node):Node|undefined=>{
       const value=resolved(node);
       if(ast.isFunctionDeclaration(value)||ast.isFunctionExpression(value)||ast.isArrowFunction(value)){
@@ -141,7 +94,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     for(const publisher of publishers)sealedPublisher(publisher);
     const embedded=(node:Node):void=>{
       const value=render(node);
-      if(value!==undefined)parse(value,offset+text.slice(0,node.pos).split('\n').length-1,true,depth+1);
+      if(value!==undefined)parse(value,offset+facts.line(node.pos)-1,true,depth+1);
     };
     function visit(node:Node):void{
       if(ast.isCallExpression(node)){
@@ -149,7 +102,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
           (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&!pathKind(node.arguments[0],/\.jsonl$/)&&
             (jsonValue(node.arguments[1])||pathKind(node.arguments[0],/\.json(?:\.|$)/))||
            (/^(?:fs|fs\/promises)\.createWriteStream$/.test(name(node.expression))||/^(?:fs|fs\/promises)\.open(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&render(node.arguments[1])!=='r')&&pathKind(node.arguments[0],/\.json(?:\.|$)/))){
-          const line=offset+text.slice(0,node.pos).split('\n').length,source=code(node).replace(/\s+/g,' '),key=line+':'+source;
+          const line=offset+facts.line(node.pos),source=code(node).replace(/\s+/g,' '),key=line+':'+source;
           if(!seen.has(key)){seen.add(key);found.push({file,line,source});}
         }
         if(isWrite(node.expression)&&node.arguments[0]&&node.arguments[1]&&
@@ -164,8 +117,8 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
         }
       }
     }
-    try{if(generated)inspectGenerated?.(text,tree,offset);for(const call of calls)visit(call);}finally{lease?.dispose();}
+    try{if(generated)inspectGenerated?.(text,facts,offset);for(const call of calls)visit(call);}finally{lease?.dispose();}
   }
-  try{parse(source,0,false,0,root);}finally{if(!shared)api.close();}
+  try{parse(source,0,false,0,root);}finally{if(!generatedFacts)generatedSources.close();if(!shared)api.close();}
   return found;
 }
