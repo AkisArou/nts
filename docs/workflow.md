@@ -359,6 +359,8 @@ A move inside that range is unresolved. A JIT's tiering can move outside a
 previous cohort's range, so its spread is informational in the real wiring
 test; native columns still have a tight repeatability check. Supplied-count
 tests prove the classification without making a landing depend on load.
+Count claims use the native nts columns; a JIT column's range describes its
+cohort, not a limit for before-and-after claims.
 Timed rows still come from a
 locked session on CPU 4 and keep the wall-time floor below.
 
