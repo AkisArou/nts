@@ -63,17 +63,19 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   };
   put('Cargo.toml', '[package]\nname="selector-fixture"\nversion="0.0.0"\nedition="2021"\n');
   put('src/lib.rs', '');
-  put('tooling/gate/all.sh', '#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tooling proof; exit; fi\nstep "tooling" node tooling/runner.ts\nstep "proof" node tooling/census/exact.ts tooling/census/partial{a,b}.ts\n');
+  put('tooling/gate/all.sh', '#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tooling proof; exit; fi\nstep "tooling" node tooling/runner.ts\nstep "proof" node tooling/census/exact.ts tooling/census/partial{a,b}.ts tooling/data\n');
   put('tooling/gate/run.mjs', '');
   put('tooling/gate/tooling-test-exclusions.json', '[]');
   put('tooling/runner.ts', '');
   put('tooling/entry.test.ts', '');
   put('tooling/census/exact.ts', 'import "./dependency.ts";\n');
   put('tooling/census/dependency.ts', '');
+  put('tooling/data/program.ts', "const applicationAsset=new URL('./absent.bin',import.meta.url);\n");
   const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts', 'tooling/census/partial'];
   for (const path of [...unknown, 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh']) put(path, '');
   git('init', '--quiet', '--initial-branch=main');
-  const paths = [...unknown, 'tooling/census/exact.ts', 'tooling/census/dependency.ts', 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh'];
+  git('add', 'tooling/data/program.ts');
+  const paths = [...unknown, 'tooling/census/exact.ts', 'tooling/census/dependency.ts', 'tooling/data/program.ts', 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh'];
   /** @returns {{path:string, full:boolean, steps:string[], reach:string[]}[]} */
   const snapshot = () => {
     const script = `import {owed,gateSteps,stepInputs,covering} from ${JSON.stringify(new URL('./owed.mjs', import.meta.url).href)};
@@ -94,7 +96,7 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
     assert.ok(row.reach.includes('tooling'), path + ' gained inferred reach');
     assert.ok(row.full, path + ' retained its full fallback');
   }
-  for (const path of ['tooling/census/exact.ts', 'tooling/census/dependency.ts']) {
+  for (const path of ['tooling/census/exact.ts', 'tooling/census/dependency.ts', 'tooling/data/program.ts']) {
     const row = after.find(row => row.path === path);
     assert.ok(row);
     assert.equal(row.full, false, path + ' is a declared entry or static dependency');
