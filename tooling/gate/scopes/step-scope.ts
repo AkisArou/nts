@@ -156,7 +156,10 @@ export class StepScope {
   private limiting: Promise<void> | null = null;
   private wanted: StepLimits;
   private held: StepLimits;
+  private caseFloor=0;
+  private workerMax:number;
   constructor(root: GateScopes, limits: StepLimits) {
+    this.workerMax=limits.max;
     this.host=root.host;
     this.slice = newToolingSlice(false, { NTS_TOOLING_SLICE: root.slice });
     this.unit = checkedUnitName(`nts-${unitComponent("s")}.scope`);
@@ -184,6 +187,14 @@ export class StepScope {
   }
   /** The limits the kernel holds the slice to: the last ones it was seen to take. */
   get limits(): StepLimits { return this.held; }
+  get workerLimit():number{return this.workerMax;}
+  /** Only worker caps contribute here. A supervisor keeps its own runaway
+   * bound, and forecasts never lower an admitted case's hard budget. */
+  caseLimit(bytes:number):Promise<void>{
+    if(!Number.isSafeInteger(bytes)||bytes<0)throw Error('invalid admitted case cap total');
+    this.caseFloor=bytes;
+    return this.limit(this.wanted);
+  }
   /**
    * Moves the slice's runaway bound to `limits`, through the user manager,
    * without waiting the caller: one change at a time, the latest asked for
@@ -195,11 +206,12 @@ export class StepScope {
     return this.limiting;
   }
   private async apply(): Promise<void> {
-    while (!this.closed && this.wanted.max !== this.held.max) {
+    while (!this.closed && (this.wanted.max !== this.held.max||Math.max(this.wanted.max,this.caseFloor)!==this.workerMax)) {
       const want = this.wanted;
-      for (const slice of [this.supervisorSlice, this.workerSlice]) {
+      const workerMax=Math.max(want.max,this.caseFloor);
+      for (const [slice,max] of [[this.supervisorSlice,want.max],[this.workerSlice,workerMax]] as const) {
         await new Promise<void>((resolve, reject) => {
-          const child = spawn("systemctl", ["--user", "set-property", "--runtime", slice, `MemoryMax=${want.max}`], { stdio: ["ignore", "ignore", "pipe"] });
+          const child = spawn("systemctl", ["--user", "set-property", "--runtime", slice, `MemoryMax=${max}`], { stdio: ["ignore", "ignore", "pipe"] });
           let err = "";
           child.stderr.setEncoding("utf8").on("data", (data: string) => { err += data; });
           child.on("error", reject);
@@ -207,10 +219,11 @@ export class StepScope {
         });
       }
       if (this.closed) return;
-      if (!enforced(this.supervisorGroup, want) || !enforced(this.workerGroup, want)) {
+      if (!enforced(this.supervisorGroup, want) || !enforced(this.workerGroup, {max:workerMax})) {
         throw new Error(`the kernel does not hold the step's sibling boundaries to MemoryMax=${want.max}`);
       }
       this.held = want;
+      this.workerMax=workerMax;
     }
   }
   /** The slice's memory events so far: read live while it runs, and once more as `drain` empties it. */

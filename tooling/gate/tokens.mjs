@@ -21,6 +21,9 @@
 // function call -- a resident worker's case, answered later on its stdout --
 // so it hands back the release instead of running a callback.
 import { connect } from "node:net";
+import {randomUUID} from 'node:crypto';
+import {runWithToken} from './case-context.ts';
+export {runWithToken} from './case-context.ts';
 
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
 const STEP = process.env.NTS_GATE_STEP ?? "?";
@@ -43,6 +46,7 @@ export function tokenClient(where, step) {
     if (bytes !== undefined && !(Number.isSafeInteger(bytes) && bytes > 0)) return Promise.reject(new Error(`tokens.mjs: a token's size is a positive whole number of bytes, not ${bytes}`));
     if (signal?.aborted) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
+      const lease=context?.project===undefined?undefined:randomUUID();
       const sock = connect(address);
       let settled = false;
       let buf = "";
@@ -65,8 +69,8 @@ export function tokenClient(where, step) {
       signal?.addEventListener("abort", abort, { once: true });
       sock.setEncoding("utf8");
       sock.on("connect", () => {
-        const label = process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
-        sock.write(`want ${step} ${process.pid}${bytes === undefined ? "" : ` bytes:${bytes}`}${label}\n`);
+        const label = context || process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
+        sock.write(`want ${step} ${process.pid}${bytes === undefined ? "" : ` bytes:${bytes}`}${lease?` lease:${lease}`:''}${label}\n`);
       });
       sock.on("data", (d) => {
         buf += d;
@@ -74,11 +78,13 @@ export function tokenClient(where, step) {
         if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
         settle();
         let held = true;
-        resolve(() => {
+        const release=() => {
           if (!held) return;
           held = false;
           sock.destroy();
-        });
+        };
+        if(lease)release.case={address:where,id:lease};
+        resolve(release);
       });
       sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
       sock.on("close", () => fail("went away before granting a token"));
@@ -102,7 +108,7 @@ export async function withToken(fn, context) {
   if (!ENABLED) return fn();
   const release = await acquireToken(context);
   try {
-    return await fn();
+    return await runWithToken(release,fn);
   } finally {
     release();
   }

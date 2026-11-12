@@ -109,6 +109,7 @@ import {dirname, join, resolve, relative, isAbsolute, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createTokenPool} from "./tokenpool.mjs";
 import {CaseCosts} from "./case-costs.ts";
+import {CaseMemoryBroker} from './case-memory-broker.ts';
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";
 import {STEP_CPU_MEASURE,parseGnuTime,measuredStepTime,readStepBaseline,currentStepCpu} from './step-time.ts';
 import {gib, machineMemory, priorityOf, reservationPriority, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
@@ -685,7 +686,15 @@ function boundOf(step) {
   return stepBound(step, workEstimate(step.name), width(step.name), { cost: plan.reduce((sum, name) => sum + workEstimate(name), 0), slots: SLOTS }, STEP_CEILING);
 }
 
+const caseMemory=new CaseMemoryBroker({root:ROOT,env,host,
+  boundary:name=>{
+    const owned=running.get(name);if(!owned)throw Error(`case memory: ${name} has no running step`);
+    return {group:owned.scope.workerGroup,raise:bytes=>owned.scope.caseLimit(Math.max(bytes,Math.ceil((owned.charge??0)*1.25)))};
+  },report:message=>process.stderr.write(message+'\n')});
 const tok = createTokenPool({
+  prepare:request=>caseMemory.prepare(request),
+  attach:(request,scope)=>caseMemory.attach(request,scope),
+  completed:request=>{try{caseMemory.completed(request);}catch(error){stop(`case memory: final observation failed: ${error.message}`);}},
   // `used()` counts the tokens held in an elastic step's share.
   free: () => stopping ? 0 : SLOTS - used().slots - withhold,
   claim: (step, { held, used: spent, waitedS }) => {
@@ -969,6 +978,7 @@ function watchMemory() {
     stop(`memory: gate run reservation ${reservation.id} ended while the run was active`);
     return;
   }
+  account();
   const yielding = reservation !== null && outranked();
   for (const [name, r] of running) {
     if (r.draining) continue;
@@ -1001,6 +1011,8 @@ function applyBound(name, r) {
   const held = r.scope.limits.max;
   let max = runawayBound(limitOf(name, r));
   if (max < held && r.charge + nearGrant(max) > max) max = held;
+  void r.scope.caseLimit(Math.max(caseMemory.caps(name),Math.ceil((r.charge??0)*1.25)))
+    .catch(error=>stop(`case memory: ${name} worker cap failed: ${error.message}`));
   if (max === held) return;
   r.scope.limit({ max })
     .catch(error => process.stderr.write(`run.mjs: ${name}'s runaway bound stays at ${gib(r.scope.limits.max)}: ${error.message}\n`));
@@ -1086,7 +1098,7 @@ function adjustMemory() {
     memoryRecord.shrinks++;
     reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
   }
-  let need = Math.max(memoryWanted - reserved(), tokenShort(u));
+  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());
   // Past what the machine could ever give, what waits fits only once running
   // work ends: a growth toward it would be slack the next pass gives back, and
   // asking again would spin.
@@ -1302,13 +1314,14 @@ function start(step, slots, rider = false) {
     let events = null;
     try { events = scope.memoryEvents(); } catch { /* the slice was never read */ }
     const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: peak !== null && peak > reservedBytes, basis: sized.basis,
-      grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, bound_bytes: scope.limits.max,
+      grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, bound_bytes: scope.workerLimit,supervisor_bound_bytes:scope.limits.max,
       killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0 };
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
       memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
       bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
+    caseMemory.flush(step.name);
     if (oracleCapture) extra.oracle_capture = oracleCapture;
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;

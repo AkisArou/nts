@@ -11,7 +11,7 @@ import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { createFeed, type CaseToken } from "../gate/admission.ts";
 import { reserveJob, type JobRequest } from "../gate/memory-ledger.ts";
-import { acquireToken } from "../gate/tokens.mjs";
+import { acquireToken,runWithToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
@@ -163,7 +163,7 @@ export async function compileCells(cells: readonly CompileCell[], lanes: number,
       await feed.feed({ write: (entry, release) => { taken = { cell: Number(entry), release }; }, end: () => {}, exited: () => failure !== undefined, signal: stop.signal });
       if (taken === undefined) return;
       try {
-        const outcome = await compile(cells[taken.cell]!, index);
+        const outcome = await runWithToken(taken.release,()=>compile(cells[taken.cell]!, index));
         outcomes[taken.cell] = outcome;
         ended(cells[taken.cell]!, outcome);
       } catch (error) {

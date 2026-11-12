@@ -29,7 +29,7 @@ import { createServer } from "node:net";
  * `known(step)`     whether the name is a step; unknown names pool as "?"
  * `released()`  called after a granted token comes back
  */
-export function createTokenPool({ free, claim, eligible = () => true, answering = () => null, known = () => true, released = () => {}, observe = () => {} }) {
+export function createTokenPool({ free, claim, eligible = () => true, answering = () => null, known = () => true, released = () => {}, observe = () => {}, prepare = () => {}, attach = async () => {}, completed = () => {} }) {
   const pool = {
     addr: null,
     held: new Map(), // step -> tokens held now
@@ -38,6 +38,7 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
     used: new Map(), // step -> token-seconds so far
     total: 0,
     waiting: [], // { sock, step, since, granted, gone, bytes }
+    active:new Set(),
     last: Date.now(),
     server: null,
   };
@@ -49,6 +50,11 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
   let requests = 0;
 
   pool.account = () => {
+    // Live leases change their charge while work runs. The same sized-token
+    // totals feed both eligibility and the runner's reservation accounting.
+    for(const w of [...pool.waiting,...pool.active])if(w.memory){w.memory.sample();w.bytes=w.memory.bytes;}
+    pool.sized.clear();
+    for(const w of pool.active)if(w.bytes!==undefined){const row=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:row.count+1,bytes:row.bytes+w.bytes});}
     const now = Date.now();
     const dt = (now - pool.last) / 1000;
     pool.last = now;
@@ -65,7 +71,7 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
       if (!oldest.has(w.step)) oldest.set(w.step, w.since);
       if (chosen.has(w.step)) continue;
       const key = `${w.step}\0${w.bytes ?? ""}`;
-      if (!asked.has(key)) asked.set(key, eligible(w.step, w.bytes));
+      if (!asked.has(key)) asked.set(key, eligible(w.step, w.bytes,w));
       if (asked.get(key)) chosen.set(w.step, w);
     }
     return { oldest, chosen };
@@ -90,6 +96,7 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
       pool.waiting.splice(pool.waiting.indexOf(w), 1);
       trace("token.grant", w);
       w.granted = true;
+      pool.active.add(w);
       const n = (pool.held.get(w.step) ?? 0) + 1;
       pool.held.set(w.step, n);
       if (w.bytes !== undefined) {
@@ -101,7 +108,7 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
       const ready = w.bytes === undefined ? null : answering(w.step, w);
       if (ready) {
         const go = () => { if (!w.gone) w.sock.write("go\n"); };
-        ready.then(go, go);
+        ready.then(go,error=>w.sock.end(`error: ${error.message}\n`));
       } else w.sock.write("go\n");
       trace("pool.change");
     }
@@ -118,6 +125,15 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
         const nl = buf.indexOf("\n");
         if (nl < 0) return;
         const words = buf.slice(0, nl).split(" ");
+        if(words[0]==='attach'){
+          w.step='registration';
+          const [,id,group,cap,scope]=words;
+          const owner=[...pool.active].find(entry=>entry.lease===id);
+          if(!owner){sock.end('error: case lease has ended\n');return;}
+          Promise.resolve().then(()=>attach(owner,{group,cap:Number(cap),scope})).then(()=>sock.end('ready\n'),error=>sock.end(`error: ${error.message}\n`));
+          return;
+        }
+        if(words[0]!=='want'){sock.destroy();return;}
         const step = words[1] ?? "?";
         w.pid = Number(words[2]);
         let rest = words.slice(3);
@@ -127,9 +143,16 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
           w.bytes = bytes;
           rest = rest.slice(1);
         }
+        if(rest[0]?.startsWith('lease:')){
+          w.lease=rest[0].slice(6);
+          if(!/^[-a-zA-Z0-9]{1,64}$/.test(w.lease)){sock.destroy();return;}
+          rest=rest.slice(1);
+        }
         w.context = rest.join(" ");
         w.step = known(step) ? step : "?";
         w.since = Date.now();
+        try{prepare(w);if(w.memory)w.bytes=w.memory.bytes;}
+        catch(error){sock.end(`error: ${error.message}\n`);return;}
         pool.waiting.push(w);
         trace("token.request", w);
         pool.grant();
@@ -141,6 +164,8 @@ export function createTokenPool({ free, claim, eligible = () => true, answering 
         trace(w.granted ? "token.release" : "token.cancel", w);
         if (w.granted) {
           pool.account();
+          pool.active.delete(w);
+          completed(w);
           pool.held.set(w.step, pool.held.get(w.step) - 1);
           if (w.bytes !== undefined) {
             const s = pool.sized.get(w.step);

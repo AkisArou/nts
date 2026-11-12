@@ -21,6 +21,7 @@ import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledge
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
+import {registerCaseScope,type TokenRelease} from '../gate/case-context.ts';
 
 export type ResidentPoolOptions = {
   paths: string[];
@@ -123,13 +124,16 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           reject(error);
         };
         const feed = () => queue.feed({
-          write: (entry, granted) => {
+          write: async (entry, granted) => {
             if (active !== undefined) {
               granted();
               throw new Error(`worker ${index} already owns ${active.path}`);
             }
             // Owned before anything here can throw, so a failure returns it.
             release = granted;
+            const group=readFileSync(scope.ready,'utf8').trim().replace(/^0::/,'');
+            await registerCaseScope((granted as TokenRelease).case,bound.group,bound.bytes,group);
+            if(exited||restarting){returnToken();return;}
             before = bound.counters();
             aggregateBefore = memory.aggregateOoms();
             active = work[Number(entry)]!;

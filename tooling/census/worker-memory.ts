@@ -12,6 +12,7 @@ import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
+import {caseEnvironment} from '../gate/case-context.ts';
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
@@ -129,6 +130,14 @@ const ENTRY = [
   "scope_current=; IFS= read -r scope_current < /proc/self/cgroup",
   'case "$scope_current" in "0::$scope_boundary/"*) ;; *) echo "resident cap: worker outside its scope" >&2; exit 125 ;; esac',
   'scope_path="/sys/fs/cgroup${scope_current#0::}"',
+  'if [ -n "${NTS_GATE_CASE_LEASE_ID:-}" ]; then',
+  '  lease_address=${NTS_GATE_CASE_LEASE_ADDRESS:?case memory: missing broker address}',
+  '  exec {lease_socket}<>"/dev/tcp/${lease_address%:*}/${lease_address##*:}" || { echo "case memory: broker unreachable" >&2; exit 125; }',
+  '  printf "attach %s %s %s %s\\n" "$NTS_GATE_CASE_LEASE_ID" "$scope_boundary" "$scope_max" "${scope_current#0::}" >&"$lease_socket"',
+  '  IFS= read -r lease_answer <&"$lease_socket" || { echo "case memory: broker ended before bounded entry" >&2; exit 125; }',
+  '  [ "$lease_answer" = ready ] || { echo "case memory: $lease_answer" >&2; exit 125; }',
+  '  exec {lease_socket}>&-',
+  'fi',
   'scope_limit=; IFS= read -r scope_limit < "$scope_path/memory.max"',
   'case "$scope_limit" in max|*[!0-9]*|"") echo "resident cap: worker has no finite MemoryMax" >&2; exit 125 ;; esac',
   '[ "$scope_limit" -le "$scope_max" ] || { echo "resident cap: worker MemoryMax exceeds budget" >&2; exit 125; }',
@@ -266,7 +275,8 @@ export class MemoryRun {
     const slice = childSlice(this.slice, `w${this.#workers.length.toString(36)}`);
     // A worker slice binds to its run's aggregate, as a step slice binds
     // to its run's root: stopping the aggregate stops every worker.
-    const group = this.#slice(slice, limit, this.slice, this.group);
+    const bootstrap=Math.min(limit,this.effectiveBudgetBytes());
+    const group = this.#slice(slice, bootstrap, this.slice, this.group);
     const worker = new MemoryWorker(this, slice, group, limit);
     this.#workers.push(worker);
     return worker;
@@ -322,10 +332,12 @@ export class MemoryWorker {
     // Scope names do not encode ancestry. The explicit --slice owns it.
     const unit = checkedUnitName(`nts-${unitComponent("c")}.scope`);
     const ready = join(this.run.directory, `${unit}.ready`);
+    const childEnvironment=caseEnvironment(environment);
+    const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
     const scope = {
       unit, ready,
-      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${this.bytes}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "sh", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
-      env: { ...environment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
+      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${bootstrap}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "bash", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
+      env: { ...childEnvironment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);
     return scope;
