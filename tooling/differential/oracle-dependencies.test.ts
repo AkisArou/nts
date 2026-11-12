@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import * as dependencyOwner from './oracle-dependencies.ts';
 import {fileURLToPath} from 'node:url';
@@ -62,6 +63,7 @@ function installFixture(t:import('node:test').TestContext){
     writable(parent);rmSync(parent,{recursive:true,force:true});
   });
   cpSync(join(fileURLToPath(new URL('../../',import.meta.url)),'tooling'),join(root,'tooling'),{recursive:true});
+  copyModuleClosure(['tooling/differential/oracle-dependencies.ts'],root);
   const write=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
   const git=(...args:string[])=>execFileSync('git',['-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{env:fixtureEnvironment(t),cwd:root,encoding:'utf8'}).trim();
   write('package.json',JSON.stringify({private:true,type:'module',packageManager:JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json',import.meta.url)),'utf8')).packageManager}));

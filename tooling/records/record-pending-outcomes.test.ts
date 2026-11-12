@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // The records run records tests/outcomes through record-pending.ts in a
 // canonical environment of its own, as the full check's records unit runs it.
@@ -40,6 +41,7 @@ function recordsRun(t:{after(fn:()=>void):void}){
   // outcomes preload, and what it imports, inside the tooling projects that
   // own them, and checks each of those projects whole.
   cpSync(join(SOURCE,"tooling"),join(root,"tooling"),{recursive:true});
+  copyModuleClosure(['tooling/records/record-pending.ts'],root);
   for(const file of ["tsconfig.base.json","tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }

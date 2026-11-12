@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
@@ -63,6 +64,7 @@ test("the compile CLI records one compile at a time and four at once alike, chec
     if (entry === "build-records.ts") copyFileSync(join(repository, "tooling/bench", entry), join(root, "tooling/bench", entry));
     else symlinkSync(join(repository, "tooling/bench", entry), join(root, "tooling/bench", entry));
   }
+  copyModuleClosure(['tooling/bench/build-records.ts'],root,{reuseSourceLinks:true});
   symlinkSync(join(repository, "node_modules"), join(root, "node_modules"));
   writeFileSync(join(root, "tsconfig.fixtures.json"), '{"compilerOptions":{"target":"ESNext","noEmit":true}}');
   for (const name of ["control", "subject", "root-coverage"]) {

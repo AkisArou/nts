@@ -13,6 +13,28 @@ function fixture(t: TestContext) {
   return {source, destination, write};
 }
 
+test('a namespace mirror reuses exact source links and copies declared assets outside it',t=>{
+  const f=fixture(t);
+  f.write('tooling/entry.ts',"export const input=new URL('../results/input.json',import.meta.url);");
+  f.write('results/input.json','{"owned":true}\n');
+  mkdirSync(f.destination);symlinkSync(join(f.source,'tooling'),join(f.destination,'tooling'),'dir');
+  const before=readFileSync(join(f.source,'tooling/entry.ts'));
+  assert.throws(()=>copyModuleClosure(['tooling/entry.ts'],f.destination,{sourceRoot:f.source}),/parent is not a directory/);
+  assert.deepEqual(copyModuleClosure(['tooling/entry.ts'],f.destination,{sourceRoot:f.source,reuseSourceLinks:true}),['results/input.json','tooling/entry.ts']);
+  assert.equal(lstatSync(join(f.destination,'results/input.json')).isSymbolicLink(),false);
+  assert.deepEqual(readFileSync(join(f.destination,'results/input.json')),readFileSync(join(f.source,'results/input.json')));
+  assert.deepEqual(readFileSync(join(f.source,'tooling/entry.ts')),before,'the linked source was never written');
+});
+
+test('namespace reuse never writes a missing input through a linked parent',t=>{
+  const f=fixture(t),foreign=join(dirname(f.destination),'foreign');
+  f.write('entry.ts',"export const input=new URL('./results/input.json',import.meta.url);");
+  f.write('results/input.json','{}');
+  mkdirSync(f.destination);mkdirSync(foreign);symlinkSync(foreign,join(f.destination,'results'),'dir');
+  assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,reuseSourceLinks:true}),/parent is not a directory/);
+  assert.equal(existsSync(join(foreign,'input.json')),false);
+});
+
 test("the public parser follows transitive imports, re-exports, type imports and cycles", t => {
   const f = fixture(t);
   f.write("entry.ts", `import './side.ts'; import type {T} from './types.ts'; export * from './middle.ts';

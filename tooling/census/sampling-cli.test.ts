@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Saved observations exercise the actual consumer's selection and comparison
 // without recompiling the sample or changing a checked-in case or record.
@@ -31,6 +32,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
     if(name==='conformance262.ts')copyFileSync(fileURLToPath(new URL('./conformance262.ts',import.meta.url)),to);else symlinkSync(from,to);
   }
   for(const name of readdirSync(join(repository,'tooling')))if(name!=='census')symlinkSync(join(repository,'tooling',name),join(fixture,'tooling',name));
+  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true});
   mkdirSync(join(fixture,'tests/typescript/private'),{recursive:true});
   for(const value of [1,2])writeFileSync(join(fixture,'tests/typescript/private',value+'.ts'),`assert.sameValue(${value},${value});\n`);
   const git=(args:string[])=>{const result=spawnSync('git',args,{env:fixtureEnvironment(t),cwd:fixture,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};

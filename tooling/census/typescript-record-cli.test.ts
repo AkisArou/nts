@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // Exercise the real consumer with versioned saved observations. No source case
 // or checked-in record is mutated; the compiler still runs its own self-checks.
@@ -59,6 +60,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   }
   for (const name of readdirSync(join(sourceRoot, "tooling"))) if (name !== "census")
     symlinkSync(join(sourceRoot, "tooling", name), join(fixture, "tooling", name));
+  copyModuleClosure(['tooling/census/conformance262.ts'],fixture,{reuseSourceLinks:true});
   const familyPath = "tests/typescript/record-protocol";
   mkdirSync(join(fixture, familyPath), { recursive: true });
   const fixturePaths = ["control", "subject"].map(name => `${familyPath}/${name}.ts`);
@@ -190,6 +192,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   symlinkSync(join(root,'tests'),join(copied,'tests'),'dir');
   symlinkSync(join(sourceRoot,'third_party'),join(copied,'third_party'),'dir');
   symlinkSync(join(sourceRoot,'runtime'),join(copied,'runtime'),'dir');
+  copyModuleClosure(['tooling/census/conformance262.ts'],copied,{reuseSourceLinks:true});
   // The real report records its consumer repository's HEAD. Bind the actual
   // copied files in this isolated fixture, without borrowing the author's Git.
   execFileSync('git',['init','--quiet',copied], {env:fixtureEnvironment(t)});

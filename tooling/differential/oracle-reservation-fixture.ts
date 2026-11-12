@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // A real library test's oracle preparation inside the tests step runs in the
 // run's reservation, whatever the host reads: it neither waits nor refuses for
@@ -25,6 +26,7 @@ const cleanup:(()=>void)[]=[];
 const unit='nts-oracle-reservation-'+randomUUID()+'.scope';
 try{
   mkdirSync(tree);cpSync(join(SOURCE,'tooling'),join(tree,'tooling'),{recursive:true});
+  copyModuleClosure(['tooling/gate/run.mjs'],tree);
   // An archived helper is used only by the retained before control. The real
   // library binary authenticates its own implementation bytes in either arm.
   if(previousHelper)writeFileSync(join(tree,'tooling/differential/oracle-execution.ts'),readFileSync(previousHelper));

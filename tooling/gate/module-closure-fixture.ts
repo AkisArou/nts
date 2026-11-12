@@ -15,7 +15,10 @@ const info = (path: string) => {
   catch (error) {if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error;}
 };
 
-export type FixtureClosureOptions = ModuleClosureOptions & {link?: boolean; owningProject?: boolean};
+export type FixtureClosureOptions = ModuleClosureOptions & {link?: boolean; owningProject?: boolean;
+  /** A whole namespace mirror already links these exact source inputs. Reuse
+   * them read-only; missing inputs still require owned, real parent folders. */
+  reuseSourceLinks?:boolean};
 
 /** The oracle owns project discovery; the pinned parser owns config inheritance,
  * include/exclude expansion and declared roots. Observe its actual config reads
@@ -76,6 +79,7 @@ export function copyModuleClosure(entries: readonly string[], root: string, opti
   for (const name of files) {
     const from = resolve(source, name), to = resolve(destination, name);
     if (to === from) throw new Error("fixture destination is the source: " + name);
+    if(options.reuseSourceLinks&&info(to)&&realpathSync(to)===from)continue;
     let parent = destination;
     for (const part of ["", ...relative(destination, dirname(to)).split(sep).filter(Boolean)]) {
       parent = join(parent, part);
