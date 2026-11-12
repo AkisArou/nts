@@ -2,6 +2,7 @@
 // independent hard cap decides whether the case exhausted its budget.
 import {isAbsolute,relative,resolve} from 'node:path';
 import {caseMemoryKey,caseReservation,peakReservation,type CaseIdentity,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
+import {CgroupDeparted} from './host-observations.ts';
 
 export type CaseMemoryMeter={charge():number;peak():number;close():void};
 export type CaseMemoryEffects={
@@ -73,16 +74,33 @@ export class CaseMemoryLease {
   sample():void{
     if(this.#closed)return;
     let charge=0;
-    for(const [,scope] of this.#roots()){
-      const current=scope.meter.charge(),peak=scope.meter.peak();
-      if(!Number.isSafeInteger(current)||current<0||!Number.isSafeInteger(peak)||peak<0)throw Error('case memory: worker observation is invalid');
-      charge+=current;this.#peak=Math.max(this.#peak,peak);
+    for(const [group,scope] of this.#roots()){
+      try{
+        const current=scope.meter.charge();
+        if(!Number.isSafeInteger(current)||current<0)throw Error('case memory: worker observation is invalid');
+        this.#observePeak(current);this.#observePeak(scope.meter.peak());charge+=current;
+      }catch(error){
+        if(!(error instanceof CgroupDeparted)||error.group!==group)throw error;
+        // The retained peak descriptor may still report the final peak after
+        // pathname removal. If the kernel has retired it too, keep the peak
+        // already observed, never fabricate a zero or suppress another error.
+        try{this.#observePeak(scope.meter.peak());}
+        catch(peakError){if(!(peakError instanceof CgroupDeparted)||peakError.group!==group)throw peakError;}
+        this.#discard(group);
+      }
     }
     this.#charge=charge;this.#peak=Math.max(this.#peak,charge);
   }
   retire(group:string):void{
-    const scope=this.#scopes.get(group);if(!scope)return;
-    this.sample();scope.meter.close();this.#scopes.delete(group);
+    if(!this.#scopes.has(group))return;
+    this.sample();this.#discard(group);
+  }
+  #observePeak(peak:number):void{
+    if(!Number.isSafeInteger(peak)||peak<0)throw Error('case memory: worker observation is invalid');
+    this.#peak=Math.max(this.#peak,peak);
+  }
+  #discard(group:string):void{
+    for(const [path,scope] of this.#scopes)if(contains(group,path)){scope.meter.close();this.#scopes.delete(path);}
   }
   close(record=true):void{
     if(this.#closed)return;

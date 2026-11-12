@@ -7,6 +7,12 @@ import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR'] as const;
 export class HostObservationError extends Error { override name='HostObservationError'; }
+/** A cgroup counter's object has ended. Only an owner which already opened
+ * that exact group may interpret this as retirement rather than failure. */
+export class CgroupDeparted extends HostObservationError {
+  readonly group:string;
+  constructor(group:string,cause:unknown){super(`host observation cgroup has departed: ${group}`,{cause});this.group=group;}
+}
 export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
 export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
@@ -86,10 +92,10 @@ function liveCgroupCpu(path:string):CgroupCpu { return parseCgroupCpu(readFileSy
  * Retain the descriptor for the whole case stream and discover reset support
  * before a caller can mistake a whole-scope peak for a per-case measurement. */
 function liveScopeMemoryPeak(requestedGroup?:string):ScopeMemoryPeak {
-  let fd:number;
+  let fd:number,group:string;
   try {
     const current=requestedGroup===undefined?readFileSync('/proc/self/cgroup','utf8').trim():'';
-    const group=requestedGroup??(current.startsWith('0::/')?current.slice(3):'');
+    group=requestedGroup??(current.startsWith('0::/')?current.slice(3):'');
     if(!group||group==='/'||group.split('/').includes('..')||group.includes('\n'))throw Error('own scope identity is invalid');
     fd=openSync(`/sys/fs/cgroup${group}/memory.peak`,'r+');
   } catch(error) {throw new HostObservationError(`host observation scopePeak cannot open own memory.peak: ${String(error)}`);}
@@ -98,7 +104,7 @@ function liveScopeMemoryPeak(requestedGroup?:string):ScopeMemoryPeak {
   const opened=()=>{if(closed)throw new HostObservationError('host observation scopePeak meter is closed');};
   return {resettable,
     reset:()=>{opened();if(!resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');try{writeSync(fd,'reset\n');}catch(error){throw new HostObservationError(`host observation scopePeak reset failed: ${String(error)}`);}},
-    read:()=>{opened();const buffer=Buffer.alloc(32);let size:number;try{size=readSync(fd,buffer,0,buffer.length,0);}catch(error){throw new HostObservationError(`host observation scopePeak read failed: ${String(error)}`);}const text=buffer.toString('utf8',0,size).trim();if(!/^\d+$/.test(text))throw new HostObservationError('host observation scopePeak counter is invalid');return number(Number(text),'scopePeak.bytes');},
+    read:()=>{opened();const buffer=Buffer.alloc(32);let size:number;try{size=readSync(fd,buffer,0,buffer.length,0);}catch(error){if((error as NodeJS.ErrnoException).code==='ENODEV')throw new CgroupDeparted(group,error);throw new HostObservationError(`host observation scopePeak read failed: ${String(error)}`);}const text=buffer.toString('utf8',0,size).trim();if(!/^\d+$/.test(text))throw new HostObservationError('host observation scopePeak counter is invalid');return number(Number(text),'scopePeak.bytes');},
     close:()=>{if(!closed){closed=true;closeSync(fd);}},
   };
 }
@@ -203,7 +209,10 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
 }
 
 function liveProcessCharge(pid:number):number { return parseProcessCharge(readFileSync(`/proc/${pid}/status`,'utf8')); }
-function liveCgroupCharge(path:string):number { return parseCgroupCharge(readFileSync(`/sys/fs/cgroup${path}/memory.current`,'utf8'),readFileSync(`/sys/fs/cgroup${path}/memory.stat`,'utf8')); }
+function liveCgroupCharge(path:string):number {
+  try{return parseCgroupCharge(readFileSync(`/sys/fs/cgroup${path}/memory.current`,'utf8'),readFileSync(`/sys/fs/cgroup${path}/memory.stat`,'utf8'));}
+  catch(error){if(['ENOENT','ENODEV'].includes((error as NodeJS.ErrnoException).code??''))throw new CgroupDeparted(path,error);throw error;}
+}
 
 /** Only this owned grant crosses a sampler boundary; its data paths live in the grant. */
 export function hostObservationEnvironment(env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
