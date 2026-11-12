@@ -121,7 +121,7 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
       try {
         // A case past its bound is a recorded timeout, and the next case runs.
         const {record, exitCode} = await withToken(() => runConsumer(binary, entry.project, entry.consumer, {cwd: ROOT, timeoutOutcome: true,
-          env: entry.backend ? {...env, NTS_BACKEND: entry.backend} : env}), {project: entry.project,backend:entry.backend??'c'});
+          env: entry.backend ? {...env, NTS_BACKEND: entry.backend} : env}), {project: entry.fixture??entry.project,backend:entry.backend??env.NTS_BACKEND??'c'});
         const contradiction = exitCode === 4 ? pendingContradiction(ROOT, entry.fixture) : null;
         completed.push(contradiction ? {entry, record: {...record, first: contradiction}, disposition: 1} : {entry, record, disposition: exitCode});
       } catch (error) { incomplete.push({entry, error}); }

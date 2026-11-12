@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {withToken} from './tokens.mjs';
 import {MemoryRun,memoryCause,workerCapBytes} from '../census/worker-memory.ts';
-import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
+import {PressureError,CaseBudgetError,ToolingInstrumentError,publishPressure,publishToolingFailure} from './step-result.ts';
 
 export async function tokenCommand(argv:readonly string[]):Promise<{status:number|null;signal:NodeJS.Signals|null}>{
   const args=[...argv];
@@ -24,7 +24,10 @@ export async function tokenCommand(argv:readonly string[]):Promise<{status:numbe
       });
       if(!worker.ready(scope))throw Error('case memory: shell worker failed before bounded entry');
       const cause=memoryCause(before,worker.counters(),aggregate,memory.aggregateOoms());
-      if(cause)throw new ToolingInstrumentError('memory-pressure',`case memory: ${project} was killed by ${cause} under its ${worker.bytes} byte case cap`);
+      if(cause){
+        const message=`case memory: ${project} was killed by ${cause} under its ${worker.bytes} byte case cap`;
+        throw cause==='own-limit'?new CaseBudgetError(message):new PressureError(message);
+      }
       return result;
     }finally{memory.close();}
   },{project,backend});
@@ -35,6 +38,7 @@ async function main():Promise<void>{
     const result=await tokenCommand(process.argv.slice(2));
     if(result.signal)process.kill(process.pid,result.signal);else process.exitCode=result.status??1;
   }catch(error){
+    if(error instanceof PressureError||error instanceof CaseBudgetError){publishPressure(error);console.error(error.message);process.exitCode=124;return;}
     const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error));
     publishToolingFailure(failure);console.error(failure.message);process.exitCode=124;
   }

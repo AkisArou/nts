@@ -3,7 +3,7 @@
 import {spawn,type SpawnOptions} from 'node:child_process';
 import {caseReceipt} from './case-context.ts';
 import {commandWorker} from '../census/worker-memory.ts';
-import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
+import {PressureError,ToolingInstrumentError,publishPressure,publishToolingFailure} from './step-result.ts';
 
 function scoped(command:string,args:readonly string[]|SpawnOptions=[],options?:SpawnOptions){
   const argv=Array.isArray(args)?args as string[]:[];
@@ -13,10 +13,11 @@ function scoped(command:string,args:readonly string[]|SpawnOptions=[],options?:S
   if(worker)child.once('close',(status,signal)=>{
     try{
       const pressure=worker.observation({status,signal});
-      if(pressure)throw new ToolingInstrumentError('memory-pressure',`case memory: ${command} was killed by ${pressure.cause} under its ${pressure.limitBytes} byte case cap`);
+      if(pressure)throw new PressureError(`case memory: ${command} was killed by ${pressure.cause} under its ${pressure.limitBytes} byte case cap`);
     }catch(error){
-      const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error));
-      publishToolingFailure(failure,supplied?.env);child.emit('error',failure);
+      const failure=error instanceof ToolingInstrumentError||error instanceof PressureError?error:new ToolingInstrumentError('tooling-setup',String(error));
+      if(failure instanceof PressureError)publishPressure(failure,supplied?.env);else publishToolingFailure(failure,supplied?.env);
+      child.emit('error',failure);
     }finally{worker.close();}
   });
   return child;
