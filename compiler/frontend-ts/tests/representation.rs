@@ -8,7 +8,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{
     PropertyRecord, SemanticSnapshot, TupleElementKind, TupleType, TypeKind,

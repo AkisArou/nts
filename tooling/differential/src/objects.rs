@@ -269,7 +269,8 @@ mod tests {
             let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!(
                 "nts-objects-same-{name}"
             ));
-            let dir = Utf8PathBuf::from_path_buf(dir).expect("utf-8 temp dir");
+            let dir =
+                dir.map(|p| Utf8PathBuf::from_path_buf(p.clone()).expect("UTF-8 test scratch"));
             std::fs::create_dir_all(&dir).expect("temp dir");
             std::fs::write(dir.join("r.h"), "#define R 1\n").expect("temp file");
             std::fs::write(
@@ -297,7 +298,7 @@ mod tests {
     #[test]
     fn a_header_two_levels_down_changes_the_key() {
         let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-objects-key");
-        let dir = Utf8PathBuf::from_path_buf(dir).expect("utf-8 temp dir");
+        let dir = dir.map(|p| Utf8PathBuf::from_path_buf(p.clone()).expect("UTF-8 test scratch"));
         std::fs::create_dir_all(dir.join("sub")).expect("temp dir");
         let include = dir.join("inc");
         std::fs::create_dir_all(&include).expect("temp dir");

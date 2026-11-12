@@ -145,12 +145,8 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let scratch = super::super::Scratch::holding(
-            camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-                .unwrap()
-                .join(format!("nts-oracle-catalog-{}", std::process::id())),
-        );
-        std::fs::create_dir_all(&scratch.path).unwrap();
+        let scratch = crate::scratch::ScratchDir::path_in_target("nts-oracle-catalog");
+        std::fs::create_dir_all(&scratch).unwrap();
         let mut source = Frontend::new(&root);
         let mut grouped = BTreeMap::<Utf8PathBuf, Vec<Rule>>::new();
         for rule in parse(CATALOG).unwrap() {
@@ -158,7 +154,7 @@ mod tests {
         }
         let mut unmatched = Vec::new();
         for (index, (path, rules)) in grouped.into_iter().enumerate() {
-            let config = scratch.path.join(format!("fixture-{index}.json"));
+            let config = scratch.join(format!("fixture-{index}.json"));
             std::fs::write(
                 &config,
                 serde_json::to_vec(&serde_json::json!({

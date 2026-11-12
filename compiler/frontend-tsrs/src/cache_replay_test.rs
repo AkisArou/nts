@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU16;
 
-use camino::Utf8PathBuf;
 use tsrs_vfs::FS;
 
 use crate::*;
@@ -27,11 +26,6 @@ impl Scratch {
         self.write("tsconfig.json", config);
         self.write("main.ts", source);
         ProjectSpec::new("tsconfig.json")
-    }
-}
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("remove only test scratch");
     }
 }
 

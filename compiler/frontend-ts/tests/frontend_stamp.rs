@@ -120,11 +120,7 @@ fn stamp_names_content_and_configuration_but_not_copy_metadata() {
 #[test]
 fn source_discovery_tracks_files_and_ignores_checkout_and_mtime() {
     struct Scratch(crate::scratch::StdScratchDir);
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
+
     let scratch = Scratch(crate::scratch::StdScratchDir::path_in_std_target(
         "stamp-inputs",
     ));

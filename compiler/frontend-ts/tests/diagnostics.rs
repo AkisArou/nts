@@ -4,7 +4,7 @@
 
 use crate::scratch;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_diagnostics::Severity;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;

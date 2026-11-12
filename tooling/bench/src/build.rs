@@ -88,15 +88,11 @@ mod tests {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     struct Fixture {
         root: Utf8PathBuf,
-        dir: Utf8PathBuf,
+        dir: crate::scratch::ScratchDir,
         bin: Utf8PathBuf,
         driver: Utf8PathBuf,
     }
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            std::fs::remove_dir_all(&self.dir).expect("remove private build fixture");
-        }
-    }
+
     fn fixture() -> Result<Fixture> {
         let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dir = crate::scratch::ScratchDir::path_in_target(&format!(
@@ -106,7 +102,7 @@ mod tests {
         std::fs::create_dir(&dir)?;
         let own = Fixture {
             root: root.clone(),
-            dir: dir.clone(),
+            dir: dir.share(),
             bin: dir.join("bin"),
             driver: dir.join("fake-toolchain.py"),
         };

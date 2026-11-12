@@ -16,21 +16,18 @@ impl Project {
             "nts-provider-reached-{name}"
         ));
         std::fs::create_dir_all(&root).unwrap();
-        let root = Utf8PathBuf::from_path_buf(root)
-            .unwrap()
-            .canonicalize_utf8()
-            .unwrap();
+        let root = root.map(|p| {
+            Utf8PathBuf::from_path_buf(p.clone())
+                .unwrap()
+                .canonicalize_utf8()
+                .unwrap()
+        });
         std::fs::write(root.join("main.ts"), source).unwrap();
         std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"ESNext","lib":["ESNext","DOM"],"types":[]},"files":["main.ts"]}"#).unwrap();
         Self(root)
     }
     fn capture(&self) -> SemanticSnapshot {
         capture(&self.0)
-    }
-}
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
 fn capture(root: &Utf8Path) -> SemanticSnapshot {

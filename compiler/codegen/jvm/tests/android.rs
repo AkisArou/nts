@@ -418,8 +418,11 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
             // A rename within one directory is atomic, so the entry is either
             // absent or complete. The temporary is per-process so two binaries
             // do not collide on it either.
-            let partial =
-                crate::scratch::StdScratchDir::path_in_std_target(&format!(".{name}.partial"));
+            let namespace = crate::scratch::ScratchDir::new(
+                camino::Utf8Path::from_path(&cache).expect("UTF-8 Android cache"),
+                "download",
+            );
+            let partial = namespace.hold(namespace.join(format!(".{name}.partial")));
             let fetched = nts_codegen_jvm::toolchain::command(&curl)
                 .args(["-sSfL", "--max-time", "120", "-o"])
                 .arg(&partial)

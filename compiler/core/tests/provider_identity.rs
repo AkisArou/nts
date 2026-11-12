@@ -17,10 +17,12 @@ impl Project {
             "nts-provider-identity-{name}"
         ));
         std::fs::create_dir_all(&path).unwrap();
-        let root = Utf8PathBuf::from_path_buf(path)
-            .unwrap()
-            .canonicalize_utf8()
-            .unwrap();
+        let root = path.map(|p| {
+            Utf8PathBuf::from_path_buf(p.clone())
+                .unwrap()
+                .canonicalize_utf8()
+                .unwrap()
+        });
         std::fs::write(root.join("main.ts"), source).unwrap();
         std::fs::write(root.join("tsconfig.json"),r#"{"compilerOptions":{"strict":true,"target":"ESNext","lib":["ESNext","DOM"],"types":[]},"files":["main.ts"]}"#).unwrap();
         Self(root)
@@ -32,11 +34,6 @@ impl Project {
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         snapshot
-    }
-}
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
 fn symbol(snapshot: &SemanticSnapshot, name: &str, library: Option<&Library>) -> SymbolId {

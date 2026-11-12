@@ -70,11 +70,6 @@ fn no_emit_does_not_hide_a_real_type_error() {
 }
 
 struct Directory(crate::scratch::ScratchDir);
-impl Drop for Directory {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).expect("remove only test directory");
-    }
-}
 
 #[test]
 fn effective_no_emit_stays_true_through_checking_without_rewriting_the_config() {

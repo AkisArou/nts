@@ -2896,10 +2896,6 @@ fn human(ns: f64) -> String {
 }
 
 #[cfg(test)]
-#[path = "../../../compiler/test-support/scratch.rs"]
-mod symbol_scratch;
-
-#[cfg(test)]
 mod tests {
     use super::{REFUSES_TODAY, Row, driver_entries, missing_entry, refusal_drift};
     use anyhow::Context;
@@ -2910,7 +2906,7 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .expect("workspace");
-        let dir = super::symbol_scratch::ScratchDir::new(
+        let dir = super::scratch::ScratchDir::new(
             &root.join("target/bench-symbol-tests"),
             "private-symbols",
         );
@@ -2977,24 +2973,24 @@ mod tests {
             assert_eq!(super::default_timed_cpus("0-31", actual.trim())?, expected);
             // An explicit measurement request remains distinct from a default.
             // Check its spelling without occupying the reserved core in a test.
-            let explicit = std::process::Command::new(std::env::current_exe()?)
-                .args(["--exact", "tests::an_explicit_measurement_cpu_is_kept"])
-                .env("NTS_BENCH_CPUS", "4")
-                .status()?;
-            assert!(explicit.success());
+            crate::self_test::run("tests::an_explicit_measurement_cpu_is_kept", |command| {
+                command.env("NTS_BENCH_CPUS", "4");
+            });
             return Ok(());
         }
-        let child = std::process::Command::new("taskset")
-            .args(["-c", "0-3,6-31"])
-            .arg(std::env::current_exe()?)
-            .args([
-                "--exact",
-                "tests::a_default_timed_child_keeps_the_gate_cpu_reservation",
-                "--nocapture",
-            ])
-            .env_remove("NTS_BENCH_CPUS")
-            .env("NTS_BENCH_AFFINITY_CHILD", "1")
-            .output()?;
+        let child = crate::self_test::run_through(
+            "tests::a_default_timed_child_keeps_the_gate_cpu_reservation",
+            |test| {
+                let mut command = std::process::Command::new("taskset");
+                command
+                    .args(["-c", "0-3,6-31"])
+                    .arg(test.get_program())
+                    .args(test.get_args())
+                    .env_remove("NTS_BENCH_CPUS")
+                    .env("NTS_BENCH_AFFINITY_CHILD", "1");
+                command
+            },
+        );
         assert!(
             child.status.success(),
             "{}{}",
@@ -3327,3 +3323,7 @@ mod tests {
 #[cfg(test)]
 #[path = "../../../compiler/test-support/scratch.rs"]
 mod scratch;
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/self_test.rs"]
+mod self_test;

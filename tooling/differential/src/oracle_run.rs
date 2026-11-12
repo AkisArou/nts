@@ -240,11 +240,20 @@ mod tests {
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let output = Command::new("node")
-            .arg(root.join("tooling/differential/oracle-reservation-fixture.ts"))
-            .arg(std::env::current_exe().unwrap())
-            .output()
-            .unwrap();
+        let output = crate::self_test::run_through(
+            "source_contracts::tests::unavailable_bindings_do_not_compare_unexecuted_module_output",
+            |test| {
+                let argv: Vec<_> = std::iter::once(test.get_program())
+                    .chain(test.get_args())
+                    .map(|arg| arg.to_str().expect("UTF-8 test argv"))
+                    .collect();
+                let mut command = Command::new("node");
+                command
+                    .arg(root.join("tooling/differential/oracle-reservation-fixture.ts"))
+                    .arg(serde_json::to_string(&argv).unwrap());
+                command
+            },
+        );
         assert!(
             output.status.success(),
             "{}{}",

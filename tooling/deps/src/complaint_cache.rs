@@ -160,7 +160,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    struct Fixture(Utf8PathBuf);
+    struct Fixture(crate::scratch::ScratchDir);
     impl Fixture {
         fn new(main: &str) -> Self {
             static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -200,11 +200,6 @@ mod tests {
                 .into_iter()
                 .map(|diagnostic| diagnostic.code)
                 .collect()
-        }
-    }
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            std::fs::remove_dir_all(&self.0).unwrap();
         }
     }
 

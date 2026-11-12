@@ -2110,15 +2110,12 @@ mod tests {
     fn owned_event_descriptors_close_on_all_paths() {
         const CONTROL: &str = "NTS_ORACLE_EVENT_FD_CONTROL";
         if std::env::var_os(CONTROL).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "oracle_emit::tests::owned_event_descriptors_close_on_all_paths",
-                    "--test-threads=1",
-                ])
-                .env(CONTROL, "1")
-                .output()
-                .unwrap();
+            let output = crate::self_test::run(
+                "oracle_emit::tests::owned_event_descriptors_close_on_all_paths",
+                |command| {
+                    command.env(CONTROL, "1");
+                },
+            );
             assert!(
                 output.status.success(),
                 "{}",

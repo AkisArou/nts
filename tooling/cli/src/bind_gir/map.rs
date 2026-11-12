@@ -5463,7 +5463,7 @@ mod tests {
             );
         }
     }
-    fn raw_pointer_fixture() -> (std::path::PathBuf, super::Repository) {
+    fn raw_pointer_fixture() -> (crate::scratch::StdScratchDir, super::Repository) {
         use std::fmt::Write as _;
         let dir = crate::scratch::StdScratchDir::path_in_std_target("nts-gir-raw");
         std::fs::create_dir_all(&dir).expect("fixture directory");

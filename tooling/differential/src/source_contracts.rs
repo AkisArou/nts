@@ -474,7 +474,10 @@ mod tests {
     use nts_frontend_ts::Frontend;
     use std::fmt::Write;
 
-    fn project(label: &str, source: &str) -> (crate::Scratch, camino::Utf8PathBuf, Frontend) {
+    fn project(
+        label: &str,
+        source: &str,
+    ) -> (crate::scratch::ScratchDir, camino::Utf8PathBuf, Frontend) {
         let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-source-plan-{label}"));
         std::fs::create_dir_all(&path).unwrap();
         let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -490,7 +493,7 @@ mod tests {
         .unwrap();
         std::fs::write(path.join("main.ts"), source).unwrap();
         let frontend = Frontend::new(&path).with_checkers(std::num::NonZeroU16::MIN);
-        (crate::Scratch::holding(path), config, frontend)
+        (path, config, frontend)
     }
 
     // Manufacture a refusal at the eval language boundary. Its one-difference

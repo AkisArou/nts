@@ -22,11 +22,25 @@ test('production identity, locks and safety are outside the test rule',()=>{
 
 test('comments and raw product-source literals cannot become resource constructors',()=>{
   const source='/* nested /* std::process::id() */ */ fn test(){let source=r###"format!(\"fixture-{}\", std::process::id())"###;}';
-  assert.deepEqual(inspectRustPidPaths('sample/tests/case.rs',source),{paths:[],reads:[]});
+  assert.deepEqual(inspectRustPidPaths('sample/tests/case.rs',source),{paths:[],reads:[],selfSpawns:[]});
   assert.throws(()=>inspectRustPidPaths('sample/tests/case.rs','fn test(){let x=r#"unfinished;'),/unterminated/);
 });
 
 test('kernel observations and diagnostic text are not private resource names',()=>{
   const source='fn control(){let pid=std::process::id();let stat=format!("/proc/{pid}/stat");Err(format!("pid={pid} diagnostic"));}';
   assert.equal(inspectRustPidPaths('sample/tests/case.rs',source).paths.length,0);
+});
+
+test("file contents can report a PID while its path remains owned",()=>{
+  const source='#[test] fn report() { let pid = std::process::id(); std::fs::write("status", format!("pid={pid}")).unwrap(); std::fs::write(format!("file-{pid}"), "contents").unwrap(); }';
+  const result=inspectRustPidPaths('src/lib.rs',source);
+  assert.equal(result.paths.length,1);
+  assert.equal(result.paths[0]?.source,'format!("file-{pid}")');
+});
+
+test('filtered self-spawns belong to the shared exact-test owner',()=>{
+  for(const source of ['fn case(){let exe=std::env::current_exe().unwrap();}', 'fn case(){Command::new(binary).args(["--exact","old_name"]);}']){
+    assert.equal(inspectRustPidPaths('sample/tests/case.rs',source).selfSpawns.filter(site=>site.test).length,1);
+    assert.equal(inspectRustPidPaths('sample/src/lib.rs',source).selfSpawns.filter(site=>site.test).length,0);
+  }
 });

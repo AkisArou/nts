@@ -44,12 +44,10 @@ fn native_checker_errors_keep_their_count_diagnostics_and_exit() {
 
 #[test]
 fn frontend_load_failure_is_distinct_from_completed_diagnostics() {
+    let missing = scratch::StdScratchDir::path_in_std_target("missing-frontend-status-config.json");
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("frontend")
-        .arg(repository().join(format!(
-            "target/missing-frontend-status-config-{}.json",
-            std::process::id()
-        )))
+        .arg(&missing)
         .arg("--no-acquire")
         .output()
         .expect("frontend load failure");

@@ -455,17 +455,16 @@ mod tests {
                 ("llvm", true),
             ] {
                 eprintln!("native prefix arm starts: {backend}, RC={rc}");
-                let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-                command
-                    .args(["--exact", NAME, "--nocapture"])
-                    .env("NTS_OUTPUT_PREFIX_ARM", backend)
-                    .env("NTS_BACKEND", backend);
-                if rc {
-                    command.env("NTS_RC", "1");
-                } else {
-                    command.env_remove("NTS_RC");
-                }
-                let output = command.output().unwrap();
+                let output = crate::self_test::run(NAME, |command| {
+                    command
+                        .env("NTS_OUTPUT_PREFIX_ARM", backend)
+                        .env("NTS_BACKEND", backend);
+                    if rc {
+                        command.env("NTS_RC", "1");
+                    } else {
+                        command.env_remove("NTS_RC");
+                    }
+                });
                 assert!(
                     output.status.success(),
                     "{backend}, RC={rc}: child exit {}; stdout: {}; stderr: {}",
@@ -477,10 +476,10 @@ mod tests {
             return;
         }
         let path = crate::scratch::ScratchDir::path_in_target("nts-output-prefix");
-        let scratch = super::super::Scratch::holding(path);
-        std::fs::create_dir_all(scratch.path.join("src")).unwrap();
-        let main = scratch.path.join("src/main.ts");
-        let config = scratch.path.join("tsconfig.json");
+        let scratch = path;
+        std::fs::create_dir_all(scratch.join("src")).unwrap();
+        let main = scratch.join("src/main.ts");
+        let config = scratch.join("tsconfig.json");
         let base =
             camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsconfig.fixtures.json");
         std::fs::write(
@@ -489,7 +488,7 @@ mod tests {
         )
         .unwrap();
         let mut frontend =
-            nts_frontend_ts::Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
+            nts_frontend_ts::Frontend::new(&scratch).with_checkers(std::num::NonZeroU16::MIN);
         let source = |index: usize, wrong_print: bool, errors: bool| {
             format!(
                 "export function probe(n:number):number {{ const printed={}; console.{}(printed[0]); const values=[n]; const result=values[{index}]; console.{}('after'); return result; }}",

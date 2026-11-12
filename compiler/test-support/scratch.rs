@@ -50,11 +50,12 @@ impl ScratchDir {
 #[allow(dead_code)]
 fn target_parent() -> Utf8PathBuf {
     std::env::var("NTS_TEST_SCRATCH_ROOT").map_or_else(
-        |_| match option_env!("CARGO_TARGET_TMPDIR") {
-            Some(parent) => parent.into(),
-            None => {
-                // Cargo defines CARGO_TARGET_TMPDIR only for integration
-                // targets. Library tests still own scratch in their tree.
+        |_| {
+            if let Some(parent) = option_env!("CARGO_TARGET_TMPDIR") {
+                parent.into()
+            } else {
+                // Cargo sets CARGO_TARGET_TMPDIR only for integration targets.
+                // Library tests still own scratch inside their pool tree.
                 let manifest = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
                 let workspace = manifest
                     .ancestors()
@@ -183,6 +184,12 @@ impl<T> ScratchValue<T> {
     #[allow(dead_code)]
     pub(crate) fn map<U>(&self, map: impl FnOnce(&T) -> U) -> ScratchValue<U> {
         self.hold(map(&self.state.value))
+    }
+}
+
+impl<T: std::fmt::Display> std::fmt::Display for ScratchValue<T> {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.state.value.fmt(out)
     }
 }
 

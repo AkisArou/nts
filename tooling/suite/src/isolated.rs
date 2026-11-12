@@ -200,8 +200,6 @@ mod tests {
 
     #[test]
     fn a_dead_child_is_recorded_and_the_following_case_runs() {
-        let cache = std::env::var("TMPDIR")
-            .unwrap_or_else(|_| format!("{}/.cache", std::env::var("HOME").expect("home")));
         let root = crate::scratch::ScratchDir::path_in_target("nts-corpus-respawn");
         std::fs::create_dir_all(&root).expect("private scratch");
         let trace = root.join("starts");

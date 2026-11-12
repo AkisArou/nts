@@ -339,7 +339,6 @@ fn deep_builtin_bases_keep_reached_calls_and_source_owned_callbacks() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();
-    std::fs::remove_dir_all(directory).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     assert!(!snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"));
     assert!(
@@ -401,14 +400,13 @@ fn protocol_snapshot(name: &str, text: &str) -> crate::scratch::ScratchValue<Sem
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();
-    std::fs::remove_dir_all(directory).unwrap();
     assert!(!snapshot.has_errors(), "{name}: {:?}", snapshot.diagnostics);
     assert!(
         !snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"),
         "{name}: budget"
     );
     assert!(unrequested(&snapshot).is_empty(), "{name}: unrequested");
-    dir.hold(snapshot)
+    directory.hold(snapshot)
 }
 
 fn contract(snapshot: &SemanticSnapshot, ty: TypeId) -> SignatureId {

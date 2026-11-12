@@ -10,11 +10,6 @@ use nts_core::hir::{
 use nts_frontend_ts::Frontend;
 
 struct Directory(crate::scratch::StdScratchDir);
-impl Drop for Directory {
-    fn drop(&mut self) {
-        drop(std::fs::remove_dir_all(&self.0));
-    }
-}
 
 fn method(receiver: &str, member: &str, args: &str) -> String {
     format!("return {receiver}.{member}({args});")
@@ -264,10 +259,6 @@ fn global_witness(name: &str, use_kind: Use) -> String {
 #[test]
 fn every_published_member_has_a_surviving_lowering_witness() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let cache = std::env::var_os("TMPDIR").map_or_else(
-        || root.join("target").into_std_path_buf(),
-        std::path::PathBuf::from,
-    );
     let path = crate::scratch::StdScratchDir::path_in_std_target("compiler-provider-witnesses");
     std::fs::create_dir_all(&path).expect("create provider witness project");
     let directory = Directory(path);

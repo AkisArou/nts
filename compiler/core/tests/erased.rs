@@ -268,6 +268,7 @@ fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
         .join(relative)
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
+    let written;
     let tsconfig = if directory.join("tsconfig.json").exists() {
         directory.join("tsconfig.json")
     } else {
@@ -279,7 +280,8 @@ fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
         // erased array cost 11% against a typed one, and this asserts the pass
         // that closed it still fires on *that* program. A copy would answer the
         // same question about a different file and would drift in silence.
-        written_for(&directory)?
+        written = written_for(&directory)?;
+        written.to_owned()
     };
     let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)

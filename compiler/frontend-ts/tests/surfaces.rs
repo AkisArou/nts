@@ -5,7 +5,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{SemanticSnapshot, SnapshotError};
 

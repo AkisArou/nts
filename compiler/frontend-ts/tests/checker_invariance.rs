@@ -3,7 +3,6 @@
 
 use std::num::NonZeroU16;
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 
 #[test]

@@ -95,8 +95,9 @@ export function assertTestLayout(root:string,packages:readonly CargoPackage[]=ca
   if(listed.error||listed.status!==0)throw Error('Rust test resource inventory: '+(listed.stderr||listed.error?.message||listed.status));
   const owned=packages.map(pkg=>normalize(relative(root,dirname(pkg.manifest_path)))+'/');
   for(const file of listed.stdout.split('\0').filter(Boolean)){
-    if(file==='compiler/test-support/scratch.rs'||!owned.some(directory=>file.startsWith(directory)))continue;
-    const source=readFileSync(join(root,file),'utf8');if(!/process\s*::\s*id|getpid|\{pid/.test(source))continue;
+    if(['compiler/test-support/scratch.rs','compiler/test-support/self_test.rs'].includes(file)||!owned.some(directory=>file.startsWith(directory)))continue;
+    const source=readFileSync(join(root,file),'utf8');if(!/process\s*::\s*id|getpid|\{pid|current_exe|--exact/.test(source))continue;
+    for(const site of inspectRustPidPaths(file,source).selfSpawns)if(site.test)layout.problems.push(file+':'+site.line+': use the self_test owner for an exact self-spawn and its libtest count');
     for(const site of inspectRustPidPaths(file,source).paths)if(site.test)layout.problems.push(file+':'+site.line+': test resource is keyed by a process ID; use a per-test scratch owner');
   }
   if(layout.problems.length)throw Error(layout.problems.join('\n'));

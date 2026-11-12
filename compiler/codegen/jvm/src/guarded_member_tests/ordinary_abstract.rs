@@ -1,6 +1,6 @@
 //! An ordinary abstract class must not shadow a marked interface's default.
 //! This test is independently usable on the production code before the fix.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nts_core::hir::{HirType, ManagedType, Program};
 use nts_jvm_emitter::class::access;

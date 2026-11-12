@@ -850,25 +850,14 @@ fn write_corpus_result(root: &Utf8Path, totals: &Totals) -> Result<Utf8PathBuf> 
 #[cfg(test)]
 mod corpus_input_tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub(super) struct Scratch(pub(super) crate::scratch::ScratchDir);
 
     impl Scratch {
         pub(super) fn open() -> Self {
-            static NEXT: AtomicUsize = AtomicUsize::new(0);
-            let cache = std::env::var("TMPDIR").unwrap_or_else(|_| {
-                format!("{}/.cache", std::env::var("HOME").expect("home directory"))
-            });
             let root = crate::scratch::ScratchDir::path_in_target("nts-suite-input");
             std::fs::create_dir(&root).expect("private scratch");
             Self(root)
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 

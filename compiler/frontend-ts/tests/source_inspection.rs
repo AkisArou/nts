@@ -38,12 +38,6 @@ impl Project {
     }
 }
 
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.root).unwrap();
-    }
-}
-
 #[derive(Debug)]
 struct Rewrite {
     back_off: bool,

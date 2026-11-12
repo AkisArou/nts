@@ -1,6 +1,6 @@
 //! Source-interface method ownership is separate from physical JVM inheritance.
 //! All programs here are owned HIR; no frontend or preparation invocation.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nts_core::hir::{
     Callee, ClassIdentity, Field, Func, HirType, InterfaceIdentity, Layout, ManagedType, Op,

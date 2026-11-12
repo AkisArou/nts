@@ -6,9 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::num::NonZeroU16;
-use std::sync::OnceLock;
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{
     Accessor, DeclarationModifiers, LiteralValue, MemberKind, NodeId, PropertyRecord,
@@ -140,7 +138,8 @@ fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &str) -> &'a P
 
 #[test]
 fn struct_brands_and_accessor_mutability_are_owned_declaration_facts() {
-    let snapshot = snapshot();
+    let owned = snapshot();
+    let snapshot = &*owned;
     let point = named_type(snapshot, "point");
     let rect = named_type(snapshot, "rect");
     for ty in [point, rect] {
@@ -172,7 +171,8 @@ fn struct_brands_and_accessor_mutability_are_owned_declaration_facts() {
 
 #[test]
 fn kind_constructors_and_fixed_c_array_arguments_keep_their_types() {
-    let snapshot = snapshot();
+    let owned = snapshot();
+    let snapshot = &*owned;
     let scalar_ref = named_type(snapshot, "scalarRef");
     let scalar_args = &snapshot.type_arguments[&scalar_ref];
     assert_eq!(scalar_args.len(), 1);
@@ -199,7 +199,8 @@ fn kind_constructors_and_fixed_c_array_arguments_keep_their_types() {
 
 #[test]
 fn foreign_callable_and_handle_arguments_remain_inspectable() {
-    let snapshot = snapshot();
+    let owned = snapshot();
+    let snapshot = &*owned;
     let handle = named_type(snapshot, "handle");
     let arguments = &snapshot.type_arguments[&handle];
     assert_eq!(arguments.len(), 1);
@@ -236,7 +237,8 @@ fn foreign_callable_and_handle_arguments_remain_inspectable() {
 
 #[test]
 fn a_stale_ref_flow_read_stays_distinct_from_its_declared_member_type() {
-    let snapshot = snapshot();
+    let owned = snapshot();
+    let snapshot = &*owned;
     let before = named_type(snapshot, "beforeGuard");
     let after = named_type(snapshot, "afterCWrite");
     assert!(matches!(

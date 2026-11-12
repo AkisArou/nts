@@ -9,12 +9,6 @@ use crate::common;
 
 struct Scratch(crate::scratch::StdScratchDir);
 
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[test]
 fn the_real_stream_constructor_prepares_with_both_ambient_contracts() {
     let root = common::repository();

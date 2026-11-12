@@ -51,3 +51,6 @@ mod settled_globals;
 
 #[path = "test_scratch.rs"]
 mod test_scratch;
+
+#[path = "../../test-support/self_test.rs"]
+mod self_test;

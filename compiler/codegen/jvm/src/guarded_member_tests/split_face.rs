@@ -10,7 +10,7 @@ use nts_core::hir::{
 };
 use nts_jvm_emitter::class::access;
 use nts_semantic_schema::{PropertyKey, TypeId};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn stateful(program: &mut Program) {
     let face = program

@@ -4,10 +4,6 @@ use super::{
     SourceLocations, diagnostic_line, original_offset, transform_name, where_it_is, where_it_spans,
 };
 use crate::{Diagnostic, Digest, Location, RewrittenSegment, SourceFile, SourceId, Span};
-use camino::Utf8PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-static NEXT_FILE: AtomicUsize = AtomicUsize::new(0);
 
 struct Scratch(crate::scratch::ScratchDir);
 
@@ -31,12 +27,6 @@ impl Scratch {
             rewritten_map: Vec::new(),
             root: false,
         }
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
     }
 }
 

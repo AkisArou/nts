@@ -139,7 +139,7 @@ mod tests {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&path).unwrap();
-        let root = camino::Utf8PathBuf::from_path_buf(path).unwrap();
+        let root = path.map(|p| camino::Utf8PathBuf::from_path_buf(p.clone()).unwrap());
         std::fs::write(root.join("ref.cpp"), "int value = 1;\n").unwrap();
         action(&root);
         std::fs::remove_dir_all(root).unwrap();

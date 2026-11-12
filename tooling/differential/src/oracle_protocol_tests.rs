@@ -3,10 +3,10 @@
 use super::*;
 use std::time::Duration;
 
-fn directory(label: &str) -> Scratch {
+fn directory(label: &str) -> crate::scratch::ScratchDir {
     let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-oracle-protocol-{label}"));
     std::fs::create_dir_all(&path).unwrap();
-    Scratch::holding(path)
+    path
 }
 
 fn case(name: &str, asynchronous: bool) -> Testable {
@@ -45,7 +45,7 @@ fn execute(dir: &Utf8Path, module: &str, cases: &[Testable]) -> oracle_run::Fini
 #[test]
 fn ready_results_are_counted_before_protocol_completion() {
     let scratch = directory("ready");
-    let dir = &scratch.path;
+    let dir = &scratch;
     let finished = execute(
         dir,
         r#"
@@ -71,7 +71,7 @@ export function lingering() { setTimeout(() => { throw new Error("outside protoc
 fn protocol_exit_flushes_buffered_program_output() {
     let scratch = directory("output");
     let finished = execute(
-        &scratch.path,
+        &scratch,
         r#"
 export function output() {
   process.stdout.write("x".repeat(2 * 1024 * 1024));
@@ -85,14 +85,14 @@ export function output() {
     assert!(finished.output.status.success());
     assert_eq!(finished.output.stdout, vec![b'x'; 2 * 1024 * 1024]);
     assert_eq!(finished.output.stderr, vec![b'y'; 2 * 1024 * 1024]);
-    let rows = std::fs::read_to_string(scratch.path.join("results.txt")).unwrap();
+    let rows = std::fs::read_to_string(scratch.join("results.txt")).unwrap();
     assert!(rows.ends_with("done 1\n"));
 }
 
 #[test]
 fn work_that_never_settles_cannot_reach_done_or_pass_as_a_prefix() {
     let scratch = directory("pending");
-    let dir = &scratch.path;
+    let dir = &scratch;
     let finished = execute(
         dir,
         r#"

@@ -65,10 +65,7 @@ mod tests {
     #[cfg(feature = "measurements")]
     #[test]
     fn host_declarations_typecheck_with_the_native_frontend() {
-        let root = camino::Utf8PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| {
-            format!("{}/.cache", std::env::var("HOME").expect("home directory"))
-        }))
-        .join(format!("nts-test262-host-{}", std::process::id()));
+        let root = crate::scratch::ScratchDir::path_in_target("nts-test262-host");
         std::fs::create_dir_all(&root).expect("private scratch");
         let declarations =
             camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test262/host.d.ts");

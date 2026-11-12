@@ -1,20 +1,19 @@
 //! Scope metadata identifies checked bindings, not a builtin implementation.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{
     PropertyKey, SCHEMA_VERSION, SemanticSnapshot, SymbolFlags, SymbolRecord,
 };
 use std::num::NonZeroU16;
 
-struct Project(Utf8PathBuf);
+struct Project(crate::scratch::ScratchDir);
 impl Project {
     fn new(name: &str, main: &str) -> Self {
         let root =
             crate::scratch::ScratchDir::path_in_target(&format!("nts-global-bindings-{name}"));
         std::fs::create_dir_all(&root).unwrap();
-        let project = Self(root.canonicalize_utf8().unwrap());
+        let project = Self(root.map(|p| p.canonicalize_utf8().unwrap()));
         project.write("main.ts", main);
         project.write("tsconfig.json", r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"commonjs","types":[],"noEmit":true},"include":["*.ts"]}"#);
         project
@@ -29,11 +28,6 @@ impl Project {
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         snapshot
-    }
-}
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
 fn symbols<'s>(snapshot: &'s SemanticSnapshot, name: &str) -> Vec<&'s SymbolRecord> {

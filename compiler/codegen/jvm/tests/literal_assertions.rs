@@ -61,7 +61,7 @@ fn erased_literal_membership_is_checked_from_a_foreign_caller() {
     }
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
-    let classpath = format!("{dir}:{jar}", dir = &*dir);
+    let classpath = format!("{dir}:{jar}");
     std::fs::write(
         dir.join("Drive.java"),
         include_str!("../../common/test-support/literal-assertions/Drive.java"),

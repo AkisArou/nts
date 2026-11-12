@@ -1,7 +1,7 @@
 //! Small owned-HIR controls; no frontend/native capture in this module.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nts_core::hir::{
     Absent, BinOp, Block, Callee, Field, Func, GuardedDispatch, HirType, Layout, ManagedType, Op,

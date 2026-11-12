@@ -798,7 +798,7 @@ fn generic_signatures_are_rendered() {
 }
 
 /// Resolves a class out of a directory of compiled class files.
-struct FromDirectory(PathBuf);
+struct FromDirectory(crate::scratch::StdScratchDir);
 
 impl nts_jvm_emitter::bind::Resolve for FromDirectory {
     fn find(&self, binary_name: &str) -> Option<nts_jvm_emitter::read::ClassFile> {
@@ -829,7 +829,7 @@ fn inherited_members_are_surfaced_through_a_resolver() {
     // control: it proves the next assertion is about resolution and not about
     // the flag.
     let only_fixture =
-        nts_jvm_emitter::bind::declarations_with(&kind, &FromDirectory(classes.clone()))
+        nts_jvm_emitter::bind::declarations_with(&kind, &FromDirectory(classes.share()))
             .expect("renders");
     assert!(
         !only_fixture.contains("ordinal()"),
@@ -1104,28 +1104,6 @@ fn a_body_that_only_throws_is_not_evidence() {
 /// Skips without a JDK holding `java.base`, because the SDK cannot supply this:
 /// `android.jar` has no bodies at all, which is the point of the test beside it.
 /// Removes the extracted `java.base` on every exit, including the ones that skip.
-///
-/// The test below extracts the whole of `java.base.jmod` -- about 7,800 files --
-/// and did not delete it. Four other tests in this file call `remove_dir_all`;
-/// this one did not, and the difference shows up as a failure nowhere.
-///
-/// What it cost: 122 of these accumulated under `/tmp` at ~7,800 inodes each,
-/// about 956K of the filesystem's 1M, and `/tmp` ran out of **inodes** while
-/// `df -h` still reported 4.4G free. A gate then failed on `could not create
-/// parent directories`, which reads as a race or a permission problem and is
-/// neither. `du -s --inodes /tmp/* | sort -rn` named it in one command.
-///
-/// A guard rather than a call at the end, because the early returns are the
-/// paths that leaked: three of that test's six exits are `SKIP`s, and a machine
-/// without `jmod` takes the one that has already created the directory.
-struct Extracted(PathBuf);
-
-impl Drop for Extracted {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[test]
 fn an_unmodelled_instruction_fails_closed() {
     let Some(java_home) = std::env::var("JAVA_HOME").ok().map(PathBuf::from) else {
@@ -1140,7 +1118,6 @@ fn an_unmodelled_instruction_fails_closed() {
     // The `exists()` check is kept and is now only ever false: the path carries
     // this process's pid, so it could never be reused across runs, and within
     // one run this is the only test that names it.
-    let _extracted = Extracted(out.clone());
     if !out
         .join("classes/java/io/FilterOutputStream.class")
         .exists()
@@ -1454,7 +1431,7 @@ fn an_inherited_method_renders_exactly_as_its_declared_form() {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
 
     let base = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
         .expect("Widget renders");
@@ -1514,7 +1491,7 @@ fn a_superinterface_is_inherited_and_counted() {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
 
     let pressable = nts_jvm_emitter::bind::declarations_with(
         &read("com/example/ui/Widget$Pressable"),
@@ -1567,7 +1544,7 @@ fn an_interface_constant_becomes_a_merged_namespace() {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
     let task =
         nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Task"), &resolve)
             .expect("renders");
@@ -1630,7 +1607,7 @@ fn an_interface_inherits_constants_but_not_static_methods() {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
 
     let pressable = nts_jvm_emitter::bind::declarations_with(
         &read("com/example/ui/Widget$Pressable"),
@@ -1873,7 +1850,7 @@ fn protected_is_surfaced_and_travels_with_inheritance() {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
 
     let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
         .expect("renders");
@@ -1967,7 +1944,7 @@ fn declaration_contracts_validate_descriptors_and_retention() {
 #[test]
 fn generated_members_carry_their_jvm_contracts() {
     let ui = android_shape().expect("android-shape fixture builds");
-    let resolve = FromDirectory(ui.clone());
+    let resolve = FromDirectory(ui.share());
     let mut bodies = Vec::new();
     for name in [
         "com/example/ui/Rect",

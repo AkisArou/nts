@@ -163,13 +163,12 @@ fn all_three_results_agree_on_every_backend() {
     const TEST: &str = "table_membership_tests::all_three_results_agree_on_every_backend";
     if std::env::var_os("NTS_TABLE_MEMBERSHIP_ARM").is_none() {
         for backend in ["c", "llvm", "jvm"] {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", TEST, "--nocapture"])
-                .env("NTS_TABLE_MEMBERSHIP_ARM", backend)
-                .env("NTS_BACKEND", backend)
-                .env_remove("NTS_RC")
-                .output()
-                .unwrap();
+            let output = crate::self_test::run(TEST, |command| {
+                command
+                    .env("NTS_TABLE_MEMBERSHIP_ARM", backend)
+                    .env("NTS_BACKEND", backend)
+                    .env_remove("NTS_RC");
+            });
             assert!(
                 output.status.success(),
                 "{backend}: {}{}",
@@ -217,13 +216,13 @@ fn all_three_results_agree_on_every_backend() {
         .collect();
     let path = crate::scratch::ScratchDir::path_in_target("nts-table-membership");
     std::fs::create_dir_all(&path).unwrap();
-    let scratch = Scratch::holding(path);
+    let scratch = path;
     let mut refused = Vec::new();
     let mut aborts = Vec::new();
     let mut timeouts = 0;
     let run = match backend {
         Backend::C | Backend::Llvm => run_native(
-            &scratch.path,
+            &scratch,
             &program,
             &[],
             &testable,
@@ -232,7 +231,7 @@ fn all_three_results_agree_on_every_backend() {
             &mut timeouts,
         ),
         Backend::Jvm => run_jvm(
-            &scratch.path,
+            &scratch,
             &program,
             &[],
             &testable,

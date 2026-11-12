@@ -2,7 +2,6 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use camino::Utf8PathBuf;
 use nts_frontend_ts::{Frontend, transform::NodeReferences};
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SnapshotError, syntax};
 use std::fmt::Write;
@@ -64,12 +63,6 @@ impl Project {
             .into_iter()
             .flatten()
             .collect()
-    }
-}
-
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.root).unwrap();
     }
 }
 

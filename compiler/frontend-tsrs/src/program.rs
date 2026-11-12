@@ -1968,28 +1968,25 @@ export const callable = (value: number) => value;
 
     #[test]
     fn shared_graph_environment_preserves_one_and_four_checker_facts() {
-        let exe = std::env::current_exe().expect("native test binary");
         let mut facts = Vec::new();
         let mut identities = Vec::new();
         for (shared, rayon) in [(false, false), (true, false), (false, true), (true, true)] {
-            let mut command = std::process::Command::new(&exe);
-            command.args([
-                "--ignored",
-                "--exact",
+            let output = crate::self_test::run(
                 "program::tests::shared_graph_environment_probe",
-                "--nocapture",
-            ]);
-            if shared {
-                command.env("TSRS_SHARED_GRAPH", "1");
-            } else {
-                command.env_remove("TSRS_SHARED_GRAPH");
-            }
-            if rayon {
-                command.env("RAYON_NUM_THREADS", "2");
-            } else {
-                command.env_remove("RAYON_NUM_THREADS");
-            }
-            let output = command.output().expect("native environment child");
+                |command| {
+                    command.arg("--ignored");
+                    if shared {
+                        command.env("TSRS_SHARED_GRAPH", "1");
+                    } else {
+                        command.env_remove("TSRS_SHARED_GRAPH");
+                    }
+                    if rayon {
+                        command.env("RAYON_NUM_THREADS", "2");
+                    } else {
+                        command.env_remove("RAYON_NUM_THREADS");
+                    }
+                },
+            );
             assert!(
                 output.status.success(),
                 "native environment child failed: {}",

@@ -5711,7 +5711,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         assert_eq!(class_side("    get row(): Int;"), None);
     }
 
-    fn fake_request(test: &str) -> Request {
+    fn fake_request(test: &str) -> crate::scratch::ScratchValue<Request> {
         let root =
             crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-bind-objc-{test}"));
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
@@ -5721,7 +5721,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         std::fs::write(headers.join("Fake.h"), FAKE).unwrap();
         std::fs::write(symbols.join("Fake.symbols.json"), graph()).unwrap();
         std::fs::write(symbols.join("ObjectiveC.symbols.json"), r#"{"symbols":[]}"#).unwrap();
-        Request {
+        root.hold(Request {
             frameworks: vec!["Fake".to_owned()],
             module: "objc:Fake".to_owned(),
             classes: Vec::new(),
@@ -5736,7 +5736,7 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             lent: Lent::default(),
             provided: BTreeSet::new(),
             project: None,
-        }
+        })
     }
 
     /// A graph extracted at every access level: a declaration Swift refines
@@ -5799,15 +5799,17 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     /// declare is an error that says which.
     #[test]
     fn a_program_names_what_it_binds_as_swift_does() {
-        let by_objc = Request {
+        let by_objc_fixture = fake_request("objc-names");
+        let by_objc = by_objc_fixture.map(|request| Request {
             classes: vec!["Circle".to_owned()],
             protocols: vec!["ShapeDelegate".to_owned()],
-            ..fake_request("objc-names")
-        };
-        let by_swift = Request {
+            ..request.clone()
+        });
+        let by_swift_fixture = fake_request("swift-names");
+        let by_swift = by_swift_fixture.map(|request| Request {
             names: vec!["Round".to_owned(), "ShapeWatching".to_owned()],
-            ..fake_request("swift-names")
-        };
+            ..request.clone()
+        });
         let (objc, swift) = match (run(&by_objc), run(&by_swift)) {
             (Ok(objc), Ok(swift)) => (objc.binding, swift.binding),
             (Err(error), _) | (_, Err(error))
@@ -5819,10 +5821,11 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             (Err(error), _) | (_, Err(error)) => panic!("{error:#}"),
         };
         assert_eq!(objc, swift);
-        let missing = Request {
+        let missing_fixture = fake_request("missing-name");
+        let missing = missing_fixture.map(|request| Request {
             names: vec!["Round".to_owned(), "Square".to_owned()],
-            ..fake_request("missing-name")
-        };
+            ..request.clone()
+        });
         let error = run(&missing)
             .err()
             .map(|error| format!("{error:#}"))

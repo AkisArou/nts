@@ -1193,7 +1193,7 @@ mod entry_tests {
         label: &str,
         roots: serde_json::Value,
         files: &[(&str, &str)],
-    ) -> (super::Scratch, Utf8PathBuf, Frontend) {
+    ) -> (crate::scratch::ScratchDir, Utf8PathBuf, Frontend) {
         let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-entry-{label}"));
         for (name, text) in files {
             let file = path.join(name);
@@ -1212,7 +1212,7 @@ mod entry_tests {
         let tsconfig = path.join("tsconfig.json");
         std::fs::write(&tsconfig, config.to_string()).unwrap();
         let frontend = Frontend::new(&path).with_checkers(std::num::NonZeroU16::MIN);
-        (super::Scratch::holding(path), tsconfig, frontend)
+        (path, tsconfig, frontend)
     }
 
     /// The entry and the exports of `case.ts`'s project, with its helper at `helper`.
@@ -3580,12 +3580,11 @@ mod structural_cast_array_stop {
             // Each runner reads its backend from the environment. Child test
             // processes keep that choice isolated from concurrent tests.
             for backend in ["c", "llvm", "jvm"] {
-                let output = std::process::Command::new(std::env::current_exe().unwrap())
-                    .args(["--exact", TEST, "--nocapture"])
-                    .env("NTS_CAST_STOP_ARM", backend)
-                    .env("NTS_BACKEND", backend)
-                    .output()
-                    .unwrap();
+                let output = crate::self_test::run(TEST, |command| {
+                    command
+                        .env("NTS_CAST_STOP_ARM", backend)
+                        .env("NTS_BACKEND", backend);
+                });
                 assert!(
                     output.status.success(),
                     "{backend}: {}{}",
@@ -3626,17 +3625,17 @@ mod structural_cast_array_stop {
     fn check_case(label: &str, source: &str, expected: &str) {
         let path = crate::scratch::ScratchDir::path_in_target(&format!("nts-cast-stop-{label}"));
         std::fs::create_dir_all(path.join("src")).unwrap();
-        let scratch = Scratch::holding(path);
-        let main = scratch.path.join("src/main.ts");
+        let scratch = path;
+        let main = scratch.join("src/main.ts");
         std::fs::write(&main, source).unwrap();
-        let config = scratch.path.join("tsconfig.json");
+        let config = scratch.join("tsconfig.json");
         let base = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsconfig.fixtures.json");
         std::fs::write(
             &config,
             serde_json::json!({"extends": base, "include": ["src/main.ts"]}).to_string(),
         )
         .unwrap();
-        let mut frontend = Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
+        let mut frontend = Frontend::new(&scratch).with_checkers(std::num::NonZeroU16::MIN);
         let control = check(&config, &mut frontend).unwrap();
         assert_eq!((control.functions, control.checked), (1, 29));
         assert!(control.agreed(), "{control:?}");
@@ -3967,7 +3966,6 @@ mod tests {
 #[cfg(test)]
 mod result_channel {
     use super::collect_restarting;
-    use camino::Utf8PathBuf;
     use std::os::unix::process::ExitStatusExt;
 
     fn scratch(name: &str) -> crate::scratch::ScratchDir {
@@ -4332,3 +4330,7 @@ mod table_membership_tests;
 #[cfg(test)]
 #[path = "../../../compiler/test-support/scratch.rs"]
 mod scratch;
+
+#[cfg(test)]
+#[path = "../../../compiler/test-support/self_test.rs"]
+mod self_test;

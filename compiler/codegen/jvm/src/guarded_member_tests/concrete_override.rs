@@ -1,5 +1,5 @@
 //! A newly qualified interface call must keep an old concrete-base override.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nts_core::hir::{GuardedDispatch, HirType, ManagedType, Program};
 use nts_jvm_emitter::class::access;

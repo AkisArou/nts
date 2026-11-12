@@ -41,7 +41,7 @@ fn lowered(name: &str) -> (hir::Program, crate::scratch::StdScratchDir) {
     lowered_from(name, SOURCE)
 }
 
-fn lowered_from(name: &str, source: &str) -> (hir::Program, std::path::PathBuf) {
+fn lowered_from(name: &str, source: &str) -> (hir::Program, crate::scratch::StdScratchDir) {
     let dir =
         crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-dead-closures-{name}"));
     let _ = std::fs::remove_dir_all(&dir);

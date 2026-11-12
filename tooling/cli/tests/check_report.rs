@@ -51,12 +51,6 @@ impl Project {
     }
 }
 
-impl Drop for Project {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 // Eval is a permanent language boundary, not a feature awaiting implementation.
 const REFUSED: &str =
     "export function refused(n: number): number { return eval('n + 1') as number; }";

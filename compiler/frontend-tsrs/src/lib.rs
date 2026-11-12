@@ -94,9 +94,9 @@ fn exported_checker_identity_matches_the_vendored_provenance() {
 mod yield_diagnostics_tests;
 
 #[cfg(test)]
-#[path = "test_scratch.rs"]
-mod test_scratch;
-
-#[cfg(test)]
 #[path = "../../test-support/scratch.rs"]
 mod scratch;
+
+#[cfg(test)]
+#[path = "../../test-support/self_test.rs"]
+mod self_test;

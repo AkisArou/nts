@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {cpSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {hostEnvironment,gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
 import {removable} from '../gate/run-temporary.ts';
@@ -16,8 +16,10 @@ import {spawnTest} from '../gate/test-wait.ts';
 import {oracleWorkspaceFixture} from './oracle-workspace-fixture.ts';
 
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
-const [library,previousHelper]=process.argv.slice(2);
-assert.ok(library,'the library test executable is required');
+const [serialized,previousHelper]=process.argv.slice(2);
+assert.ok(serialized,"the exact library test argv is required");
+const library=JSON.parse(serialized) as string[];
+assert.ok(Array.isArray(library)&&library.every(arg=>typeof arg==="string"));
 const own=newTestScratch('oracle-reservation'),tree=join(own,'tree'),run=join(own,'run'),home=join(own,'home');
 const cleanup:(()=>void)[]=[];
 const unit='nts-oracle-reservation-'+randomUUID()+'.scope';
@@ -45,7 +47,7 @@ elif [ "$2" = tests ]; then
   export NTS_HOST_OBSERVATIONS=${quote(low)}
   # No held token either: the reservation is the step's, not the token's.
   unset NTS_GATE_TOKEN_HELD
-  exec ${quote(resolve(library))} --exact source_contracts::tests::unavailable_bindings_do_not_compare_unexecuted_module_output --nocapture
+  exec ${library.map(quote).join(" ")}
 else exit 1
 fi
 `);
@@ -58,6 +60,7 @@ fi
   assert.ok(step,result.stdout+result.stderr);
   const log=readFileSync(join(run,'tests.log'),'utf8');
   console.log(JSON.stringify({status:result.status,step:step.verdict}));
+  process.stdout.write(log);
   assert.equal(step.verdict,'PASS',log);assert.equal(step.exit,0,log);
   assert.match(log,/unavailable_bindings_do_not_compare_unexecuted_module_output .*ok/);
   assert.match(log,/test result: ok\. 1 passed/);

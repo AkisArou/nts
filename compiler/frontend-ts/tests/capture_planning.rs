@@ -15,14 +15,14 @@ use nts_frontend_ts::{
 };
 use nts_semantic_schema::{DeclarationIdentity, NodeId, SnapshotError, syntax};
 
-struct Project(Utf8PathBuf);
+struct Project(crate::scratch::ScratchDir);
 
 impl Project {
     fn new(name: &str, main: &str) -> Self {
         let root =
             crate::scratch::ScratchDir::path_in_target(&format!("nts-capture-planning-{name}"));
         std::fs::create_dir_all(&root).unwrap();
-        let project = Self(root.canonicalize_utf8().unwrap());
+        let project = Self(root.map(|p| p.canonicalize_utf8().unwrap()));
         project.write("main.ts", main);
         project.write("tsconfig.json", r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","noEmit":true,"types":[]},"files":["main.ts"]}"#);
         project
@@ -37,12 +37,6 @@ impl Project {
     }
     fn frontend(&self) -> Frontend {
         Frontend::new(&self.0).with_checkers(NonZeroU16::MIN)
-    }
-}
-
-impl Drop for Project {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
 

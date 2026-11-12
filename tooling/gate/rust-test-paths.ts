@@ -3,7 +3,7 @@
 // product snippets inside raw strings are not the test's resource constructors.
 export type RustToken={text:string;start:number;end:number;literal?:boolean;children?:RustToken[]};
 export type RustPidSite={start:number;end:number;line:number;test:boolean;source:string};
-export type RustPidInspection={paths:RustPidSite[];reads:RustPidSite[]};
+export type RustPidInspection={paths:RustPidSite[];reads:RustPidSite[];selfSpawns:RustPidSite[]};
 
 export function rustTokens(source:string):RustToken[]{
   let at=0;
@@ -51,7 +51,7 @@ const systemPath=(literal:string)=>/^(?:b|c)?(?:r#*)?"\/(?:proc(?:\/|\")|sys\/fs
 const conventional=(file:string)=>/(?:^|\/)(?:tests|test-support)\/|_tests?(?:\/|\.rs$)|\/tests?\.rs$/.test(file);
 
 export function inspectRustPidPaths(file:string,source:string):RustPidInspection{
-  const roots=rustTokens(source),paths:RustPidSite[]=[],reads:RustPidSite[]=[];
+  const roots=rustTokens(source),paths:RustPidSite[]=[],reads:RustPidSite[]=[],selfSpawns:RustPidSite[]=[];
   const site=(start:number,end:number,test:boolean):RustPidSite=>({start,end,test,line:source.slice(0,start).split('\n').length,source:source.slice(start,end)});
   function walk(tokens:readonly RustToken[],inTest:boolean,inherited:ReadonlySet<string>=new Set(),reporting=false):void{
     let test=inTest,pendingTest=false;
@@ -77,6 +77,8 @@ export function inspectRustPidPaths(file:string,source:string):RustPidInspection
         }
       }
       const next=tokens[index+1],args=tokens[index+2];
+      if(token.text==='current_exe'&&next?.text==='(')selfSpawns.push(site(token.start,next.end,test||pendingTest));
+      if(['arg','args'].includes(token.text)&&next?.children&&literals(next.children).some(value=>value.text==='"--exact"'))selfSpawns.push(site(token.start,next.end,test||pendingTest));
       if(token.text==='process'&&next?.text==='::'&&args?.text==='id'&&tokens[index+3]?.text==='(')
         reads.push(site(token.start,tokens[index+3]!.end,test||pendingTest));
       if(token.text==='getpid'&&next?.text==='(')reads.push(site(token.start,next.end,test||pendingTest));
@@ -88,11 +90,17 @@ export function inspectRustPidPaths(file:string,source:string):RustPidInspection
       if(['join','push','with_extension','bind','listen'].includes(token.text)&&next?.children&&(containsPid(next.children)||references(next.children))
         &&!paths.some(path=>path.start>=next.start&&path.end<=next.end))paths.push(site(token.start,next.end,test||pendingTest));
       if(token.children){const caller=tokens[index-1]?.text==='!'?tokens[index-2]?.text:tokens[index-1]?.text;
-        walk(token.children,test||pendingTest,aliases,reporting||['Err','println','eprintln','panic'].includes(caller??''));}
+        if(/(?:^|::)fs::write$/.test(code(tokens.slice(0,index)))){
+          // write(path, bytes): a formatted diagnostic in the contents is
+          // reporting; only the first argument constructs a resource path.
+          const comma=token.children.findIndex(child=>child.text===',');
+          walk(token.children.slice(0,comma),test||pendingTest,aliases,reporting);
+          walk(token.children.slice(comma+1),test||pendingTest,aliases,true);
+        }else walk(token.children,test||pendingTest,aliases,reporting||['Err','println','eprintln','panic'].includes(caller??''));}
       if(token.text===';'||token.text==='{')pendingTest=false;
     }
   }
   walk(roots,conventional(file));
   const unique=(sites:RustPidSite[])=>[...new Map(sites.map(item=>[item.start,item])).values()];
-  return {paths:unique(paths).filter(path=>!unique(paths).some(other=>other.start>path.start&&other.end<path.end)),reads:unique(reads)};
+  return {paths:unique(paths).filter(path=>!unique(paths).some(other=>other.start>path.start&&other.end<path.end)),reads:unique(reads),selfSpawns:unique(selfSpawns)};
 }

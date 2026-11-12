@@ -8059,7 +8059,6 @@ impl ObjectCache {
 #[allow(clippy::unwrap_used)]
 mod module_cache_tests {
     use super::{Entry, ObjectCache, Toolchain, compile_one};
-    use camino::Utf8PathBuf;
 
     /// A no-SONAME dependency records its argv spelling in `DT_NEEDED`.
     #[cfg(target_os = "linux")]

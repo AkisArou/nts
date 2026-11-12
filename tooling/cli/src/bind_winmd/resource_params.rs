@@ -261,7 +261,10 @@ mod tests {
         }
     }
 
-    fn header_fixture(label: &str, header: &str) -> (std::path::PathBuf, Vec<Vec<String>>) {
+    fn header_fixture(
+        label: &str,
+        header: &str,
+    ) -> (crate::scratch::StdScratchDir, Vec<Vec<String>>) {
         let dir =
             crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-resource-{label}"));
         std::fs::create_dir_all(&dir).unwrap();

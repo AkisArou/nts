@@ -106,7 +106,7 @@ pub fn runtime_source() -> String {
 #[cfg(test)]
 mod tests {
     use super::{BEGIN, END, hash_units, runtime_source};
-    use std::{fs, path::PathBuf, process::Command};
+    use std::{fs, process::Command};
 
     #[test]
     fn runtime_source_is_current() {
@@ -121,11 +121,6 @@ mod tests {
     }
 
     struct ProbeDir(crate::scratch::StdScratchDir);
-    impl Drop for ProbeDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
 
     #[test]
     fn c_and_rust_hash_the_same_utf16_corpus_in_both_widths() {

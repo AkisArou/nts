@@ -579,20 +579,16 @@ mod tests {
         }
     }
 
-    fn fixture(label: &str) -> (super::super::Scratch, Utf8PathBuf, SemanticSnapshot) {
+    fn fixture(label: &str) -> (crate::scratch::ScratchDir, Utf8PathBuf, SemanticSnapshot) {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize_utf8()
             .unwrap();
-        let scratch = super::super::Scratch::holding(
-            Utf8PathBuf::from_path_buf(std::env::temp_dir())
-                .unwrap()
-                .join(format!("nts-domains-{label}-{}", std::process::id())),
-        );
-        std::fs::create_dir_all(&scratch.path).unwrap();
-        let entry = scratch.path.join("case.ts");
+        let scratch = crate::scratch::ScratchDir::path_in_target(&format!("nts-domains-{label}"));
+        std::fs::create_dir_all(&scratch).unwrap();
+        let entry = scratch.join("case.ts");
         std::fs::write(&entry, "export const seed = 3; export function bounded(n: number, text: string): number { return n + text.length; } export function other(n: number): number { return n; }").unwrap();
-        let config = scratch.path.join("tsconfig.json");
+        let config = scratch.join("tsconfig.json");
         std::fs::write(
             &config,
             json!({"extends":root.join("tsconfig.fixtures.json"),"files":[entry]}).to_string(),
@@ -644,8 +640,8 @@ mod tests {
                 .functions
                 .is_empty()
         );
-        let config = scratch.path.join("tsconfig.json");
-        let mut frontend = Frontend::new(scratch.path.clone());
+        let config = scratch.join("tsconfig.json");
+        let mut frontend = Frontend::new(scratch.clone());
         let baseline = crate::oracle_plan(&config, &mut frontend, Backend::C).unwrap();
         let contract = json!({"version":1,"functions":{"bounded":{"n":{"min":-2,"max":2,"allowNaN":true,"reason":"exercise small bounds"}}}});
         std::fs::write(entry.with_extension("domains.json"), contract.to_string()).unwrap();

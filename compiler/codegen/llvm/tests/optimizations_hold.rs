@@ -57,7 +57,7 @@ fn read_only_literals_carry_settled_native_hashes() {
 }
 
 /// The LLVM module for one small program, and the HIR behind it.
-fn rendered(case: &str, source: &str) -> (String, hir::Program) {
+fn rendered(case: &str, source: &str) -> (String, crate::scratch::ScratchValue<hir::Program>) {
     // Per case, because `cargo test` runs these in parallel.
     let dir = crate::scratch::StdScratchDir::path_in_std_target(&format!("nts-opt-{case}"));
     let src = dir.join("src");
@@ -90,7 +90,7 @@ fn rendered(case: &str, source: &str) -> (String, hir::Program) {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    (emitted.text, prepared.program)
+    (emitted.text, dir.hold(prepared.program))
 }
 
 /// Optimize the module the way `tooling/bench` does and hand back the assembly.
