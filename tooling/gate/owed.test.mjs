@@ -89,7 +89,8 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   const before = snapshot();
   put('tooling/census/basename.test.ts', "const fixtureProject='tsconfig.json';\n");
   const basename = snapshot().find(row => row.path === 'tooling/census/tsconfig.json');
-  assert.ok(basename?.reach.includes('tooling'), 'a quoted basename adds inferred reach');
+  assert.ok(basename, 'the private basename has a measured selection');
+  assert.ok(basename.reach.includes('tooling'), 'a quoted basename adds inferred reach');
   assert.ok(basename.full, 'a quoted basename cannot place private fixture data');
   // The exact literal that broke #722 is data owned by this private fixture.
   put('tooling/entry.test.ts', 'const config={exclude:["${configDir}/tooling/**/*"]};\nconst ancestor="tooling/census/fixtures";\nconst body="import \'./census/data-only.ts\'";\n');
