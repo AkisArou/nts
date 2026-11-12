@@ -2,6 +2,8 @@
 // registry. No npm, no install, no lifecycle scripts: this reads metadata.
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import {join} from "node:path";
+import {fileURLToPath} from "node:url";
 
 type Version = [major: number, minor: number, patch: number];
 
@@ -22,7 +24,8 @@ export interface Resolved {
   depth: number;
 }
 
-const CACHE = new URL("./meta/", import.meta.url).pathname;
+const HERE = fileURLToPath(new URL("./", import.meta.url));
+const CACHE = join(HERE,"meta");
 await mkdir(CACHE, { recursive: true });
 
 const parse = (v: string): Version => {
@@ -63,7 +66,7 @@ function semverMax(versions: string[], range: string): string | undefined {
 }
 
 async function packument(name: string): Promise<Packument> {
-  const file = CACHE + encodeURIComponent(name) + ".json";
+  const file = join(CACHE,encodeURIComponent(name) + ".json");
   if (existsSync(file)) return JSON.parse(await readFile(file, "utf8")) as Packument;
   const res = await fetch(`https://registry.npmjs.org/${name}`, {
     // The abbreviated document: versions, dependencies and dist, without the
@@ -115,6 +118,6 @@ while (queue.length) {
 }
 
 const out = [...seen.entries()].map(([key, r]) => ({ ...r, depth: depth.get(key)! }));
-await writeFile(new URL("./closure.json", import.meta.url), JSON.stringify(out, null, 1));
+await writeFile(join(HERE,"closure.json"), JSON.stringify(out, null, 1));
 console.error(`resolved ${out.length} packages, ${failed.length} failures`);
 for (const f of failed.slice(0, 10)) console.error("  " + f);
