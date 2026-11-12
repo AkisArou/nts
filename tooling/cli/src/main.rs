@@ -9338,6 +9338,7 @@ fn emit_llvm(
     emission: Emission,
     platform: nts_codegen_llvm::Platform,
 ) -> Result<()> {
+    let _costs = nts_differential::case_costs::session(tsconfig);
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     let (prepared, metadata) =
@@ -9352,6 +9353,7 @@ fn emit_llvm_prepared(
     platform: nts_codegen_llvm::Platform,
     report: &mut EmissionReport,
 ) {
+    let _emission = nts_differential::case_costs::span("llvm.emit");
     let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
@@ -9388,6 +9390,7 @@ fn emit_jvm(
     text: bool,
     emission: Emission,
 ) -> Result<JvmWrote> {
+    let _costs = nts_differential::case_costs::session(tsconfig);
     nts_codegen_common::provider::host_gc("jvm", rc_requested()).map_err(anyhow::Error::msg)?;
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
@@ -9411,6 +9414,7 @@ fn emit_jvm_prepared(
     emission: Emission,
     report: &mut EmissionReport,
 ) -> Result<JvmWrote> {
+    let _emission = nts_differential::case_costs::span("jvm.emit");
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, "jvm");
     let mut locations = SourceLocations::new(sources);
     for diagnostic in &mismatches {
@@ -9600,6 +9604,7 @@ impl Wrote {
 }
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
+    let _costs = nts_differential::case_costs::session(tsconfig);
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     emit_c_opened(input, out, emission, &mut report)
@@ -9646,6 +9651,7 @@ fn emit_c_prepared(
     emission: Emission,
     report: &mut EmissionReport,
 ) -> Result<Wrote> {
+    let _emission = nts_differential::case_costs::span("c.emit");
     let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));

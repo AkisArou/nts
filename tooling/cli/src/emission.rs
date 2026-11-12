@@ -7,6 +7,7 @@ use camino::Utf8Path;
 use nts_codegen_common::Backend;
 use nts_core::hir;
 use nts_diagnostics::{Severity, SourceFile, SourceLocations};
+use nts_differential::case_costs;
 
 use super::{
     Emission, configured_surface_to, foreign_tables, frontend_for, provider_for, selected_roots,
@@ -187,10 +188,13 @@ impl Input {
         emission: Emission<'_>,
         report: &mut Report,
     ) -> Result<Self> {
+        let capture = case_costs::span("capture");
         let mut source = frontend_for(tsconfig)?;
         let snapshot = super::capture_project(&mut source, tsconfig)?;
         drop(source);
         snapshot_diagnostics(&snapshot, report)?;
+        drop(capture);
+        let _lower = case_costs::span("lower");
         let entry = selected_roots(emission.shape);
         let (entry_files, configured) =
             match configured_surface_to(tsconfig, &snapshot, emission, report)? {
@@ -215,6 +219,7 @@ impl Input {
         backend: Backend,
         report: &mut Report,
     ) -> Result<(hir::Prepared, Metadata)> {
+        let _prepare = case_costs::span("prepare");
         let options = self.metadata.options(emission, backend)?;
         let prepared = self
             .raw

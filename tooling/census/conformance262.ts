@@ -136,6 +136,7 @@ import {cacheLocation} from '../gate/cache-capabilities.ts';
 
 import {hostObservations} from "../gate/host-observations.ts";
 import {dataDirectory} from '../gate/reader-inputs/main.ts';
+import {recordCensusPhaseFrame} from './phase-costs.ts';
 import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -556,6 +557,7 @@ async function runAll(all) {
         args: (index) => [fileURLToPath(new URL("./attempt262-worker.ts", import.meta.url)), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
         report,
         onRow: (row) => {
+          recordCensusPhaseFrame(row.phase_costs);
           results.set(row.path, row);
           if (rowsFile) appendFileSync(rowsFile, `${JSON.stringify(row)}\n`);
           done += 1;

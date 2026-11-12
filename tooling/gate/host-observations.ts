@@ -18,6 +18,7 @@ export class CgroupDeparted extends HostObservationError {
 export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
 export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
+export type OwnCpu = {userUsec:number;systemUsec:number};
 export type ScopeMemoryPeak = {readonly resettable:boolean;reset():void;read():number;close():void};
 export type HostObservationFixture = {
   version:1;
@@ -26,6 +27,7 @@ export type HostObservationFixture = {
   disk:DiskSpace;
   allocated:{kind:'fixed';defaultBytes:number;paths?:Record<string,number>}|{kind:'live'};
   cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
+  selfCpu:{kind:'fixed';value:OwnCpu}|{kind:'live'};
   resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>}|{kind:'live'};
   scopePeak:{kind:'fixed';bytes:number;resettable:boolean}|{kind:'live'};
   width:{logical:number;available:number};
@@ -43,6 +45,7 @@ export interface HostObservations {
   processCharge(pid:number):number;
   cgroupCharge(path:string):number;
   cgroupCpu(path:string):CgroupCpu;
+  ownCpu():OwnCpu;
   ownScopeMemoryPeak():ScopeMemoryPeak;
   scopeMemoryPeak(group:string):ScopeMemoryPeak;
   machineWidth():number;
@@ -54,6 +57,13 @@ function number(value:unknown,name:string):number {
   if(typeof value!=='number'||!Number.isFinite(value)||value<0)throw new HostObservationError(`host observation ${name} is missing or invalid`);
   return value;
 }
+
+function ownCpu(value:unknown):OwnCpu{
+  if(typeof value!=='object'||value===null)throw new HostObservationError('host observation selfCpu.value is missing or invalid');
+  const row=value as Record<string,unknown>;
+  return {userUsec:number(row.userUsec,'selfCpu.value.userUsec'),systemUsec:number(row.systemUsec,'selfCpu.value.systemUsec')};
+}
+function liveOwnCpu():OwnCpu{const value=process.cpuUsage();return {userUsec:value.user,systemUsec:value.system};}
 function textFile(value:unknown,name:string):string {
   if(typeof value!=='string'||!value)throw new HostObservationError(`host observation ${name} is missing or invalid`);
   try{return readFileSync(value,'utf8');}catch(error){throw new HostObservationError(`cannot read host observation ${name}: ${String(error)}`);}
@@ -159,6 +169,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       number(value.width?.logical,'width.logical');number(value.width?.available,'width.available');
       if(value.cpu?.kind==='fixed')cpuCounters(value.cpu.default,'cpu.default');
       else if(value.cpu?.kind!=='live')throw new HostObservationError('host observation cpu is missing or invalid');
+      if(value.selfCpu?.kind==='fixed')ownCpu(value.selfCpu.value);
+      else if(value.selfCpu?.kind!=='live')throw new HostObservationError('host observation selfCpu is missing or invalid');
       if(value.allocated?.kind==='fixed')number(value.allocated.defaultBytes,'allocated.defaultBytes');
       else if(value.allocated?.kind!=='live')throw new HostObservationError('host observation allocated is missing or invalid');
       if(value.resident?.kind==='fixed')number(value.resident.defaultBytes,'resident.defaultBytes');
@@ -196,6 +208,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       processCharge:pid=>charge('processes',String(pid)),
       cgroupCharge:path=>charge('cgroups',path),
       cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
+      ownCpu:()=>{const value=read().selfCpu;return value.kind==='live'?liveOwnCpu():ownCpu(value.value);},
       ownScopeMemoryPeak:()=>scopePeak(),
       scopeMemoryPeak:group=>scopePeak(group),
       machineWidth:()=>number(read().width?.logical,'width.logical'),
@@ -216,6 +229,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,
     cgroupCpu:liveCgroupCpu,
+    ownCpu:liveOwnCpu,
     ownScopeMemoryPeak:liveScopeMemoryPeak,
     scopeMemoryPeak:liveScopeMemoryPeak,
     machineWidth:()=>cpus().length,

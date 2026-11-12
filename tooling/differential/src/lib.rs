@@ -45,7 +45,7 @@ use nts_frontend_ts::Frontend;
 
 mod artifact_shadow;
 mod call_activity;
-mod case_costs;
+pub mod case_costs;
 pub mod check_report;
 mod domains;
 mod objects;

@@ -1,6 +1,9 @@
 // Observations only: none of these values participates in admission or verdicts.
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {prepareChildObserver} from './child-rusage.ts';
+import {CENSUS_PHASE_STEPS,censusPhaseSummary} from './census-phase-summary.ts';
+import {readCensusPhaseFrame,type CensusPhaseFrame} from '../census/phase-costs.ts';
 
 /** The run's memory as run.mjs counts it: its reservation, what its running steps are counted for, and what waits. */
 export type MemoryState = {
@@ -19,7 +22,7 @@ export type Check = { project: string; binary_sha: string; pid: number; step: st
   wall_s: number; cpu_resolution_s: number | null; self_peak_rss_kb: number | null;
   child_peak_rss_kb: number | null; phases: Phase[]; complete: boolean };
 /** A step as the runner reports it: `memory.reserved_bytes` is the most it was counted for in the run's reservation. */
-export type TimedStep = { name: string; started_at?: string; wall?: number; memory?: { reserved_bytes?: number } };
+export type TimedStep = { name: string; started_at?: string; wall?: number; cpu?:number;cpu_measure?:string;memory?: { reserved_bytes?: number } };
 let aggregateCounter = 0;
 
 export function recordAggregatePeak(group: string, scopeBudgetBytes: number, env: NodeJS.ProcessEnv = process.env): void {
@@ -240,6 +243,13 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     }
   } catch (e) { errors.push(`reading artifact reuse: ${(e as Error).message}`); }
   const reqs = requests(events);
+  const census:CensusPhaseFrame[]=[];
+  try{
+    for(const name of readdirSync(root).filter(name=>/^census-\d+\.jsonl$/.test(name)))
+      for(const line of readFileSync(join(root,name),'utf8').split('\n').filter(Boolean)){
+        try{census.push(readCensusPhaseFrame(JSON.parse(line)));}catch(error){errors.push(`census phases ${name}: ${String(error)}`);}
+      }
+  }catch(error){errors.push(`reading census phases: ${String(error)}`);}
   const byStep: Record<string, unknown> = {};
   let missingChecks = 0;
   for (const step of steps) {
@@ -269,6 +279,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     const reuseRows = reuse.filter(row => row.step === step.name);
     const cpuValues = (field: string) => reuseRows.flatMap(row => typeof row[field] === "number" && Number.isFinite(row[field]) && (row[field] as number) >= 0 ? [row[field] as number] : []);
     byStep[step.name] = {
+      ...(CENSUS_PHASE_STEPS.has(step.name)?{census_phases:censusPhaseSummary(census.filter(frame=>frame.step===step.name),cases,
+        step.cpu_measure==='cgroup-v2-scope-v1'?step.cpu:undefined,tokens.filter(token=>token.grant!==undefined).length)}:{}),
       artifact_reuse: { fresh_runs: reuseRows.filter(row => row.status === "fresh").length,
         skipped_runs: reuseRows.filter(row => row.status === "reused").length,
         tool_cpu_s: distribution(cpuValues("tool_cpu_s")), matching_hit_cpu_s: distribution(cpuValues("matching_hit_cpu_s")),
@@ -332,6 +344,12 @@ export class CaseCosts {
     this.root = join(runDirectory, "costs");
     try { mkdirSync(this.root, { recursive: true }); }
     catch (e) { this.available = false; this.errors.push((e as Error).message); }
+  }
+
+  preparePhases(steps:readonly string[],env:NodeJS.ProcessEnv):void {
+    if(!this.available||!steps.some(step=>CENSUS_PHASE_STEPS.has(step)))return;
+    const result=prepareChildObserver(this.root,env);
+    if(result.error)this.errors.push(result.error);
   }
 
   record(event: { event: string; epoch?: number; [key: string]: unknown }): void {

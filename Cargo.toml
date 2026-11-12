@@ -64,6 +64,8 @@ camino = { version = "1", features = ["serde1"] }
 codespan-reporting = "0.12"
 hmac-sha256 = "1"
 miniz_oxide = "0.9.1"
+# Safe process-wide self and waited-child CPU observations for gate phase records.
+nix = { version = "0.31", default-features = false, features = ["resource"] }
 indexmap = { version = "2", features = ["serde"] }
 postcard = { version = "1", features = ["use-std"] }
 rustc-hash = "2"

@@ -38,6 +38,18 @@ test('one complete owned view supplies every resource, including child observati
   assert.deepEqual(JSON.parse(run.stdout),[{freeBytes:789,freeInodes:12},56,250]);
 });
 
+test('own CPU is supplied, advances with the capability, and refuses an omitted counter',t=>{
+  const root=testScratch(t,'host-own-cpu'),env=ownMemory(root),host=hostObservations(env);
+  assert.deepEqual(host.ownCpu(),{userUsec:0,systemUsec:0});
+  ownMemory(root,{selfCpu:{kind:'fixed',value:{userUsec:123,systemUsec:45}}});
+  assert.deepEqual(host.ownCpu(),{userUsec:123,systemUsec:45});
+  const complete=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS,'utf8'));
+  delete complete.selfCpu.value.systemUsec;writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify(complete));
+  assert.throws(()=>host.ownCpu(),/selfCpu.value.systemUsec/);
+  delete complete.selfCpu;writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify(complete));
+  assert.throws(()=>hostObservations(env),/selfCpu/);
+});
+
 test('an omitted or unreadable observation fails by name, without a host fallback',t=>{
   const root=testScratch(t,'host-observations-omitted'),env=ownMemory(root);
   const file=env.NTS_HOST_OBSERVATIONS,complete=JSON.parse(readFileSync(file,'utf8'));

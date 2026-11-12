@@ -1,6 +1,6 @@
-//! Gate-only observations of a standalone `nts check`, never a verdict input.
+//! Gate-only observations of standalone check and emit commands, never a verdict input.
 //! Linux CPU counters are process-wide and include waited children separately.
-//! Their tick resolution is recorded; unsupported hosts retain wall timings.
+//! getrusage reports microseconds; an unavailable observation stays unknown.
 //! `VmHWM` is the standalone process's lifetime self peak in KiB, excluding
 //! children. It is read once at check completion; child peaks remain unknown.
 
@@ -23,7 +23,6 @@ struct Context {
     file: std::fs::File,
     project: String,
     step: String,
-    hz: Option<f64>,
     failed: bool,
 }
 
@@ -34,30 +33,31 @@ struct Sample {
     cpu: Option<[f64; 4]>,
 }
 
-fn hz() -> Option<f64> {
-    let width = std::mem::size_of::<usize>();
-    let bytes = std::fs::read("/proc/self/auxv").ok()?;
-    bytes.chunks_exact(width * 2).find_map(|pair| {
-        let kind = usize::from_ne_bytes(pair[..width].try_into().ok()?);
-        // Clock ticks are a small integer; reject an unsupported wide value.
-        let value = usize::from_ne_bytes(pair[width..].try_into().ok()?);
-        let value = f64::from(u32::try_from(value).ok()?);
-        (kind == 17 && value > 0.0).then_some(value)
-    })
+#[cfg(unix)]
+fn cpu() -> Option<[f64; 4]> {
+    use nix::sys::resource::{UsageWho, getrusage};
+    let own = getrusage(UsageWho::RUSAGE_SELF).ok()?;
+    let children = getrusage(UsageWho::RUSAGE_CHILDREN).ok()?;
+    let seconds = |time: nix::sys::time::TimeVal| {
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "getrusage seconds fit an f64 for process lifetimes"
+        )]
+        {
+            time.tv_sec() as f64 + time.tv_usec() as f64 / 1_000_000.0
+        }
+    };
+    Some([
+        seconds(own.user_time()),
+        seconds(own.system_time()),
+        seconds(children.user_time()),
+        seconds(children.system_time()),
+    ])
 }
 
+#[cfg(not(unix))]
 fn cpu() -> Option<[f64; 4]> {
-    let text = std::fs::read_to_string("/proc/self/stat").ok()?;
-    let fields: Vec<_> = text
-        .get(text.rfind(')')? + 2..)?
-        .split_whitespace()
-        .collect();
-    Some([
-        fields.get(11)?.parse().ok()?,
-        fields.get(12)?.parse().ok()?,
-        fields.get(13)?.parse().ok()?,
-        fields.get(14)?.parse().ok()?,
-    ])
+    None
 }
 
 fn sample() -> Sample {
@@ -101,7 +101,9 @@ pub(crate) fn event(mut value: serde_json::Value) {
             value["project"] = context.project.clone().into();
             value["step"] = context.step.clone().into();
             value["pid"] = std::process::id().into();
-            value["cpu_resolution_s"] = context.hz.map(|hz| 1.0 / hz).into();
+            value["version"] = 2.into();
+            value["cpu_measure"] = "getrusage-v1".into();
+            value["cpu_resolution_s"] = 0.000_001.into();
             // An unavailable/full metrics directory must never change the
             // command's output or status. The runner reports missing/partial
             // timing records independently from the product verdict.
@@ -113,9 +115,9 @@ pub(crate) fn event(mut value: serde_json::Value) {
 }
 
 #[derive(Debug)]
-pub(crate) struct Span(Option<(&'static str, Sample)>);
+pub struct Span(Option<(&'static str, Sample)>);
 
-pub(crate) fn span(name: &'static str) -> Span {
+pub fn span(name: &'static str) -> Span {
     let enabled =
         CONTEXT.with_borrow(|context| context.as_ref().is_some_and(|context| !context.failed));
     let sample = enabled.then(sample);
@@ -129,10 +131,10 @@ impl Drop for Span {
     fn drop(&mut self) {
         if let Some((name, start)) = &self.0 {
             let end = sample();
-            let hz = CONTEXT.with_borrow(|context| context.as_ref().and_then(|context| context.hz));
-            let delta = start.cpu.zip(end.cpu).zip(hz).map(|((start, end), hz)| {
-                std::array::from_fn::<_, 4, _>(|i| (end[i] - start[i]) / hz)
-            });
+            let delta = start
+                .cpu
+                .zip(end.cpu)
+                .map(|(start, end)| std::array::from_fn::<_, 4, _>(|i| end[i] - start[i]));
             let mut record = serde_json::json!({"event":"end", "phase":name,
                 "epoch":end.epoch, "start_epoch":start.epoch,
                 "wall_s":end.at.duration_since(start.at).as_secs_f64(),
@@ -147,7 +149,7 @@ impl Drop for Span {
     }
 }
 
-pub(crate) fn measure<T>(name: &'static str, work: impl FnOnce() -> T) -> T {
+pub fn measure<T>(name: &'static str, work: impl FnOnce() -> T) -> T {
     let _span = span(name);
     work()
 }
@@ -178,16 +180,19 @@ pub(crate) fn child_result(name: &'static str, output: &std::process::Output) {
 }
 
 #[derive(Debug)]
-pub(crate) struct Session {
+pub struct Session {
     total: Option<Span>,
     previous: Option<Context>,
 }
 
-pub(crate) fn session(project: &camino::Utf8Path) -> Session {
+pub fn session(project: &camino::Utf8Path) -> Session {
     // Unit tests may run many checks concurrently in one process. Its
     // process-wide CPU counters cannot attribute those to individual tests.
     // Gate CLI children each execute one check and have unambiguous counters.
-    if std::env::args().nth(1).as_deref() != Some("check") {
+    if !matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("check" | "emit-c" | "emit-llvm" | "emit-jvm")
+    ) {
         return Session {
             total: None,
             previous: None,
@@ -222,7 +227,6 @@ fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) 
             file,
             project: project.to_string(),
             step,
-            hz: hz(),
             failed: false,
         })
     };

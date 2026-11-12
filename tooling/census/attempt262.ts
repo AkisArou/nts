@@ -7,11 +7,10 @@
 // disagreed, two reports would describe different programs under one corpus's
 // name. `project.ts` exists for the same reason one step earlier.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
 import { jvmRun } from "../jvm/launch.ts";
@@ -20,6 +19,7 @@ import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
 import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/compile-diagnostics.ts";
 import { outputOracle } from "./output-oracle.ts";
+import {censusPhaseCosts} from './phase-costs.ts';
 
 /**
  * What the compiler printed as it stopped, as it printed it: its panic, from
@@ -242,7 +242,7 @@ export function withCachedObjects(printed, out, tools) {
       // Written beside and renamed into place: eight workers can miss on the
       // same key at once, and a reader must never see half an object.
       const partial = join(out, `${source}.o`);
-      execFileSync(tools.cc, [...compileFlags, "-c", source, "-o", partial], {
+      (tools.phaseCosts?.exec.bind(tools.phaseCosts)??execFileSync)(tools.cc, [...compileFlags, "-c", source, "-o", partial], {
         cwd: out,
         encoding: "utf8",
         timeout: 180_000,
@@ -326,7 +326,7 @@ function linkC(stdout, out, tools) {
       : printed;
     ({ args, objects } = withCachedObjects(inputs, out, tools));
     if (bundled) args.push(...bundled.link_flags);
-    execFileSync(cc, args, {
+    (tools.phaseCosts?.exec.bind(tools.phaseCosts)??execFileSync)(cc, args, {
       cwd: out,
       encoding: "utf8",
       timeout: 180_000,
@@ -439,14 +439,24 @@ export const BACKENDS = {
  * mutable worker scratch instead, for checking materialization independently
  * of the immutable case-root store. Native capture runs anew in both modes.
  */
-export async function attempt(dir, body, tools, origin?) {
+export async function attempt(...args:Parameters<typeof attemptWithCosts>) {
+  const [dir,body,tools,origin]=args;
+  const costs=tools.phaseCosts??censusPhaseCosts(origin??dir,tools.backend??'c');
+  try{
+    const outcome=await attemptWithCosts(dir,body,{...tools,phaseCosts:costs},origin);
+    return costs?{...outcome,phase_costs:costs.finish()}:outcome;
+  }finally{costs?.finish();}
+}
+
+async function attemptWithCosts(dir, body, tools, origin?) {
   const { nts } = tools;
-  const project = tools.fresh
+  const materialize=()=>tools.fresh
     ? (materialise(dir, body, origin, tools.language), dir)
     : caseRoot((root) => {
         workspace(root, tools.language);
         materialise(root, body, origin, tools.language);
       }).root;
+  const project=tools.phaseCosts?tools.phaseCosts.measure('materialization',materialize):materialize();
   const out = join(dir, "out");
 
   // **`spawnSync`, because both streams have to be read on success.**
@@ -479,6 +489,10 @@ export async function attempt(dir, body, tools, origin?) {
     env: environment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  tools.phaseCosts?.compiler(emit.pid);
+  // The remaining worker work interprets diagnostics and program output.
+  // Nested host compilation and execution suspend this phase's own counters.
+  tools.phaseCosts?.span('comparison');
   if (emit.memoryKilled) return { bucket: "memory-cap", why: "emit resident scope", residentWorkerBytes: emit.residentLimitBytes, residentRunBytes: emit.residentRunBytes };
   const stdout = emit.stdout ?? "";
   const diagnostics = `${stdout}${emit.stderr ?? ""}`;
@@ -541,19 +555,21 @@ export async function attempt(dir, body, tools, origin?) {
   // status -- and *both* streams are the diagnostics.
   if (/NTS\d{4}/.test(diagnostics)) return refusal(diagnostics);
 
-  const prepared = backend.prepare(stdout, out, tools);
+  const prepare=()=>backend.prepare(stdout,out,tools);
+  const prepared=tools.phaseCosts?tools.phaseCosts.measure('host_compile_link',prepare):prepare();
   if (prepared.bucket) return prepared;
   const { objects } = prepared;
 
   try {
     const [program, programArgs] = backend.run(out, tools);
     const runTools = backend.capsItself ? { ...tools, memoryCapKb: 0 } : tools;
-    const printed = execFileSync("sh", capped(runTools, program, programArgs), {
+    const execute=()=>(tools.phaseCosts?.exec.bind(tools.phaseCosts)??execFileSync)("sh", capped(runTools, program, programArgs), {
       encoding: "utf8",
       timeout: 30_000,
       maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    const printed=tools.phaseCosts?tools.phaseCosts.measure('execution',execute):execute();
     if (!flagsOf(body).includes("async")) return { bucket: "strict-pass", objects };
     const verdict = asyncVerdict(printed, objects);
     return verdict.bucket === "threw"

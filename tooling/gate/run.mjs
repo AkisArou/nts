@@ -1688,6 +1688,7 @@ plan = requested();
 takeTreeLock();
 mkdirSync(RUN_DIR, { recursive: true });
 caseCosts = new CaseCosts(RUN_DIR);
+caseCosts.preparePhases(plan,env);
 identities.commit = git("rev-parse", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;

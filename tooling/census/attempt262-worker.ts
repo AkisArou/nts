@@ -31,6 +31,7 @@ import { OracleFilesystem } from '../differential/oracle-filesystem.ts';
 import type { TypeScriptOracleCapture } from './typescript-oracle-capture.ts';
 import { oracleResultHash,openTypeScriptOracleResults } from './typescript-oracle-results.ts';
 import { typescriptOracleIdentity } from './suites/typescript.ts';
+import {censusPhaseCosts} from './phase-costs.ts';
 
 const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend, fresh, language, referenceInputs] = process.argv.slice(2);
 const tools = {
@@ -56,6 +57,7 @@ try{
 for await (const path of lines) {
   if (path === "") continue;
   let outcome;
+  const phaseCosts=censusPhaseCosts(path,tools.backend);
   try {
     const sourceFiles=new OracleFilesystem(),source=sourceFiles.readFile(join(suite,path));
     if(source===null)throw new Error('case source is missing: '+path);
@@ -74,7 +76,7 @@ for await (const path of lines) {
       if(!capture||!oracleOutput||!admitted.ok&&!admitted.rejection)throw new Error('TypeScript oracle was not measured: '+(!admitted.ok?admitted.why:path));
       outcome={bucket:'oracle-reference',session:capture.session,result:{version:1,path,sourceSha256:oracleResultHash(source),verdict:admitted,printed:oracleOutput,
         observations:[...sourceFiles.captured(),...capture.observations],...(capture.dependencyObservations?{dependencyObservations:capture.dependencyObservations}:{})}};
-    }else outcome = admitted.ok ? await attempt(dir, source, { ...tools, oracleOutput }, join(suite, path))
+    }else outcome = admitted.ok ? await attempt(dir, source, { ...tools, oracleOutput,phaseCosts }, join(suite, path))
       : admitted.rejection ? {bucket:"oracle-rejected",why:admitted.why,rejection:admitted.rejection}
       : {bucket:"oracle",why:admitted.why};
   } catch (error) {
@@ -89,6 +91,6 @@ for await (const path of lines) {
   // The build directory holds a full runtime copy per case; `/tmp`-style
   // inode exhaustion is how a long run on this box dies, so it goes now.
   rmSync(join(dir, "out"), { recursive: true, force: true });
-  process.stdout.write(`${JSON.stringify({ path, ...outcome })}\n`);
+  process.stdout.write(`${JSON.stringify({ path, ...outcome,...(phaseCosts?{phase_costs:phaseCosts.finish()}:{}) })}\n`);
 }
 }finally{sourceOracle?.close();}
