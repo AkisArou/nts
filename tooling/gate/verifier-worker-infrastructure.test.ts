@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
-import {existsSync,writeFileSync} from 'node:fs';
+import {existsSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
@@ -14,7 +14,9 @@ import {gateEnvironment,sealOracleRun} from './canonical-environment.ts';
 import {verifierEnvironment} from './artifact-reuse.ts';
 import {assignTestValues,fixtureEnvironment} from './test-environment.ts';
 import {ownMemory} from './test-memory.ts';
-import {testScratch} from './test-scratch.ts';
+import {newTestScratch} from './test-scratch.ts';
+import {removable} from './run-temporary.ts';
+import {MemoryRun} from '../census/worker-memory.ts';
 
 const ROOT=fileURLToPath(new URL('../..',import.meta.url));
 
@@ -29,8 +31,24 @@ test('the verifier environment alone cannot start a user scope; infrastructure i
   assert.match(result.stderr,/DBUS_SESSION_BUS_ADDRESS.*XDG_RUNTIME_DIR|XDG_RUNTIME_DIR.*DBUS_SESSION_BUS_ADDRESS/);
 });
 
+test('the common worker handoff adds only declared infrastructure to a filtered caller environment',async()=>{
+  const run=new MemoryRun({id:'filtered-worker-infrastructure',budgetBytes:128*1024**2}),worker=run.worker('owned',128*1024**2);
+  try{
+    const supplied={PATH:'/usr/bin:/bin',OWNED_VALUE:'retained'};
+    const scope=worker.scope(process.execPath,['-e',"process.stdout.write(process.env.OWNED_VALUE)"],supplied);
+    const transport={...scope.env};
+    for(const name of ['NTS_CENSUS_WORKER_GROUP','NTS_CENSUS_WORKER_MAX_BYTES','NTS_CENSUS_RUN_GROUP','NTS_CENSUS_RUN_MAX_BYTES'])delete transport[name];
+    assert.deepEqual(transport,{...supplied,...hostInfrastructure(process.env)});
+    const child=spawn('systemd-run',scope.argv,{env:scope.env,stdio:['ignore','pipe','pipe']});
+    let out='',error='';child.stdout.on('data',part=>{out+=part;});child.stderr.on('data',part=>{error+=part;});
+    assert.deepEqual(await once(child,'close'),[0,null],error);assert.equal(out,'retained');
+  }finally{worker.close();run.close();}
+});
+
 test('a real jvm-verifies case reaches verification through a case lease without shell startup files',async t=>{
-  const root=testScratch(t,'leased-jvm-verifier'),run=join(root,'run'),trap=join(root,'startup-read');
+  const root=newTestScratch('leased-jvm-verifier'),run=join(root,'run'),trap=join(root,'startup-read');
+  let dispose=async()=>{};
+  t.after(async()=>{try{await dispose();}finally{removable(root);rmSync(root,{recursive:true,force:true});}});
   const memory=ownMemory(join(root,'host'),{resident:{kind:'live'},scopePeak:{kind:'live'}});
   const source=fixtureEnvironment(t,memory);
   const bin=process.env.NTS_BIN??join(ROOT,'target/nts-dev/nts');
@@ -45,7 +63,7 @@ test('a real jvm-verifies case reaches verification through a case lease without
     retire:(request,group)=>broker.retire(request,group),
     completed:async request=>{await broker.completed(request);completed++;},
   });
-  t.after(async()=>{pool.close();if(!drained)await step.drain();scopes.close();});
+  dispose=async()=>{pool.close();if(!drained)await step.drain();scopes.close();};
   const address=await pool.start();assert.ok(address);
   const startup=join(root,'bash-env');writeFileSync(startup,`printf read > '${trap}'\nexit 77\n`);
   assignTestValues(env,{NTS_TOOLING_SLICE:step.slice,NTS_GATE_STEP:'jvm-verifies',NTS_GATE_STEP_MEMORY_BYTES:String(2**30),NTS_GATE_TOKENS:address,BASH_ENV:startup});
