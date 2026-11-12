@@ -2,7 +2,7 @@
 // Run allocations belong in the original report, while this identity survives
 // moving the same checked commit between the landing and full-check trees.
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -85,16 +85,13 @@ export function verdictContract(report: EnvironmentReport, facts: Pick<VerdictCo
   return { version: 1, identity: contractIdentity(environment), environment };
 }
 
-function command(program: string, args: string[], tree: string, env: NodeJS.ProcessEnv): string {
-  const result = spawnSync(program, args, { cwd: tree, env, encoding: "utf8", timeout: 10000, maxBuffer: 64 << 20 });
-  if (result.error || result.signal || result.status !== 0) {
-    throw Error(`landing verdict identity ${program} ${args.join(" ")} failed: ${result.error?.message ?? result.signal ?? result.stderr.trim()}`);
-  }
+function command(program: string, args: string[], tree: string, env: NodeJS.ProcessEnv, probe:InfrastructureProbe): string {
+  const result = probe({purpose:"read landing verdict identity",command:program,args,cwd:tree,env,maxBuffer:64<<20});
   return (result.stdout + result.stderr).trim();
 }
 
 /** This command only reads identities. Dependency capture belongs to the run. */
-export function readVerdictContract(tree: string, env: NodeJS.ProcessEnv): VerdictContract {
+export function readVerdictContract(tree: string, env: NodeJS.ProcessEnv, probe:InfrastructureProbe=infrastructureProbe): VerdictContract {
   const report = gateEnvironment(env, { run: env.NTS_GATE_RUN_DIR!, oracleRoot: tree }).report;
   const inputs: Record<string, string | null> = {};
   for (const name of ["Cargo.lock", "rust-toolchain.toml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".tool-versions", "tooling/inputs/node-inputs.json", "tooling/differential/oracle-toolchain.json"]) {
@@ -107,14 +104,14 @@ export function readVerdictContract(tree: string, env: NodeJS.ProcessEnv): Verdi
     const directory = join(tree, "third_party", name);
     if (!existsSync(directory)) { inputs["third_party/" + name] = null; continue; }
     const root = realpathSync(directory);
-    const head = command("git", ["rev-parse", "HEAD"], root, env);
-    const dirty = command("git", ["status", "--porcelain=v1", "--untracked-files=normal"], root, env);
+    const head = command("git", ["rev-parse", "HEAD"], root, env, probe);
+    const dirty = command("git", ["status", "--porcelain=v1", "--untracked-files=normal"], root, env, probe);
     if (dirty) throw Error("landing verdict input has local changes: third_party/" + name);
     inputs["third_party/" + name] = head;
   }
   const tools: Record<string, string> = {};
   for (const [name, args] of [["rustc", ["-vV"]], ["cargo", ["--version"]], ["clang", ["--version"]], ["java", ["-version"]]] as const) {
-    tools[name] = command(name, [...args], tree, env);
+    tools[name] = command(name, [...args], tree, env, probe);
   }
   return verdictContract(report, { platform: platform(), arch: arch(), node: process.versions.node, tools, inputs });
 }

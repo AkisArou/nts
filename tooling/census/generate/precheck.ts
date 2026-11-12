@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe} from "../../gate/infrastructure-probe.ts";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -25,12 +25,12 @@ const require = createRequire(import.meta.url);
 const WORKER = fileURLToPath(new URL("./node-worker.ts", import.meta.url));
 
 /** Use this checkout's locked compiler; never a PATH/global TypeScript. */
-export function typecheck(directory: string): { ok: boolean; detail: string } {
+export function typecheck(directory: string, probe:InfrastructureProbe=infrastructureProbe): { ok: boolean; detail: string } {
   const compiler = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
   if (!existsSync(compiler)) throw new Error("repository TypeScript is missing; run pnpm install");
-  const result = spawnSync(process.execPath,
-    [compiler, "--project", join(directory, "tsconfig.json"), "--strict", "--noEmit", "--pretty", "false"],
-    { encoding: "utf8", timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
+  const result = probe({purpose:"typecheck a generated program",command:process.execPath,
+    args:[compiler,"--project",join(directory,"tsconfig.json"),"--strict","--noEmit","--pretty","false"],
+    maxBuffer:4*1024*1024,exits:'classify'});
   return { ok: result.status === 0 && !result.error,
     detail: `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`.trim().replaceAll(directory, "<program>") };
 }
@@ -68,9 +68,9 @@ function parseRuns(text: string, functions: FunctionSpec[]): Observation[][] {
   }
   return runs;
 }
-function runNode(directory: string, functions: FunctionSpec[]): { ok: true; runs: Observation[][] } | { ok: false; detail: string } {
-  const run = spawnSync(process.execPath, ["--no-warnings", WORKER, join(directory, "src", "main.ts")],
-    { encoding: "utf8", input: JSON.stringify(functions), timeout: 15_000, maxBuffer: 8 * 1024 * 1024 });
+function runNode(directory: string, functions: FunctionSpec[], probe:InfrastructureProbe): { ok: true; runs: Observation[][] } | { ok: false; detail: string } {
+  const run = probe({purpose:"observe a generated program in Node",command:process.execPath,args:["--no-warnings",WORKER,join(directory,"src","main.ts")],
+    input:JSON.stringify(functions),maxBuffer:8*1024*1024,exits:'classify'});
   if (run.status !== 0 || run.error) {
     return { ok: false, detail: `${run.stderr ?? ""}${run.error?.message ?? ""}`.trim().replaceAll(directory, "<program>") || `node exited ${run.status}` };
   }
@@ -80,7 +80,7 @@ function runNode(directory: string, functions: FunctionSpec[]): { ok: true; runs
 function same(left: unknown, right: unknown): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 
 /** Check (a)–(d), including every export and the module-control observation. No nts is run. */
-export function precheckProgram(directory: string, functions: FunctionSpec[]): PrecheckResult {
+export function precheckProgram(directory: string, functions: FunctionSpec[], probe:InfrastructureProbe=infrastructureProbe): PrecheckResult {
   const passed: CheckProgress = { strict: false, deterministic: false, twins: false, witness: false };
   const reject = (reason: WasteReason, detail: string): PrecheckResult => ({ ok: false, passed, reason, detail });
   const names = new Set(functions.map((fn) => fn.name));
@@ -90,12 +90,12 @@ export function precheckProgram(directory: string, functions: FunctionSpec[]): P
       || fn.counterpart !== undefined && !names.has(fn.counterpart))) {
     return reject("invalid-inventory", "exports need unique names, inputs, subjects, controls and valid counterparts");
   }
-  const checked = typecheck(directory);
+  const checked = typecheck(directory,probe);
   if (!checked.ok) return reject("typecheck", checked.detail);
   passed.strict = true;
-  const first = runNode(directory, functions);
+  const first = runNode(directory, functions,probe);
   if (!first.ok) return reject("node-error", first.detail);
-  const second = runNode(directory, functions);
+  const second = runNode(directory, functions,probe);
   if (!second.ok) return reject("node-error", second.detail);
   const observations = first.runs[0];
   if (!first.runs.concat(second.runs).every((run) => same(run, observations))) {

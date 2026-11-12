@@ -1,7 +1,7 @@
 import { HOST_CAPABILITIES, FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
 // Variables a detached gate unit must inherit, and the capabilities that
 // require them. The launcher and both gate entry points read this one list.
-import { spawnSync } from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -38,13 +38,8 @@ export function missingEnvironment(sites: readonly CapabilitySite[], env: NodeJS
 }
 
 /** Read declarations from the exact tree whose steps are about to run. */
-export function gateCapabilities(tree: string, requested: readonly string[] | "all", interop: string | null = null): CapabilitySite[] {
-  const queried = spawnSync(process.execPath, ["tooling/gate/run.mjs", "--capabilities"], {
-    cwd: tree, encoding: "utf8", timeout: 10000,
-  });
-  if (queried.error || queried.status !== 0) {
-    throw new Error(`cannot read gate capabilities: ${queried.error?.message ?? queried.stderr.trim()}`);
-  }
+export function gateCapabilities(tree: string, requested: readonly string[] | "all", interop: string | null = null, probe:InfrastructureProbe=infrastructureProbe): CapabilitySite[] {
+  const queried = probe({purpose:"read gate capability declarations",command:process.execPath,args:["tooling/gate/run.mjs", "--capabilities"],cwd:tree});
   const table = JSON.parse(queried.stdout) as Record<string, string[]>;
   const steps = requested === "all" ? Object.keys(table) : requested;
   const sites: CapabilitySite[] = steps.map(step => {
@@ -69,7 +64,7 @@ export function gateCapabilities(tree: string, requested: readonly string[] | "a
 }
 
 /** A named refusal, before enqueue/lock/setup rather than a late gate failure. */
-export function gateEnvironmentError(tree: string, steps: readonly string[] | "all", interop: string | null = null, env: NodeJS.ProcessEnv = process.env): string | null {
-  const missing = missingEnvironment(gateCapabilities(tree, steps, interop), env);
+export function gateEnvironmentError(tree: string, steps: readonly string[] | "all", interop: string | null = null, env: NodeJS.ProcessEnv = process.env, probe:InfrastructureProbe=infrastructureProbe): string | null {
+  const missing = missingEnvironment(gateCapabilities(tree, steps, interop, probe), env);
   return missing.length ? `${missing.join("; ")}. Start from a login shell with ${GATE_LAUNCHER}` : null;
 }

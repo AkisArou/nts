@@ -97,6 +97,9 @@ function scopeArgs(cpus: string): string[] {
   return ["--user", "--scope", ...toolingSliceArgs(), "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
 }
 
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
+import {ToolingInstrumentError} from "./step-result.ts";
+
 type Scope = { kind: "scope" | "inherited-cpuset" | "best-effort"; reason: string };
 
 /** Selection happens before work starts. A failed gate is never a probe. */
@@ -107,21 +110,21 @@ export function selectScope(cpus: string, ceiling: string | undefined, delegated
   return { kind: checked.ok ? "scope" : "best-effort", reason: checked.reason };
 }
 
-export function gateScope(cpus: string, pid: number = process.pid): Scope {
+export function gateScope(cpus: string, pid: number = process.pid, probe:InfrastructureProbe=infrastructureProbe): Scope {
   try {
     return selectScope(cpus, effectiveCeiling(pid), cpusetDelegated(pid), () => {
       const online = readFileSync("/sys/devices/system/cpu/online", "utf8").trim();
       // Deliberately widen inside the proposed scope. Only a kernel ceiling
       // can keep this grandchild inside cpus. It runs no gate work.
-      const probe = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", online, process.execPath, "-e",
-        'process.stdout.write(require("node:fs").readFileSync("/proc/self/status","utf8").match(/^Cpus_allowed_list:\\s*(.+)$/m)[1])'],
-        { encoding: "utf8", timeout: 10000 });
-      const mask = probe.stdout?.trim();
-      const ok = probe.status === 0 && !!mask && cpuSubset(mask, cpus);
-      const reason = ok ? `widening probe bounded to ${mask}` : `scope probe failed (${probe.error?.message ?? probe.signal ?? probe.status}): ${probe.stderr?.trim() || `allowed ${mask || "unknown"}`}`;
+      const result = probe({purpose:"verify the cpuset ceiling by widening",command:"systemd-run",args:[...scopeArgs(cpus), "taskset", "-c", online, process.execPath, "-e",
+        'process.stdout.write(require("node:fs").readFileSync("/proc/self/status","utf8").match(/^Cpus_allowed_list:\\s*(.+)$/m)[1])'],exits:'classify'});
+      const mask = result.stdout?.trim();
+      const ok = result.status === 0 && !!mask && cpuSubset(mask, cpus);
+      const reason = ok ? `widening probe bounded to ${mask}` : `scope probe failed (${result.status}): ${result.stderr?.trim() || `allowed ${mask || "unknown"}`}`;
       return { ok, reason: reason.replace(/\s+/g, " ").slice(0, 400) };
     });
   } catch (error) {
+    if(error instanceof ToolingInstrumentError)throw error;
     return { kind: "best-effort", reason: `cannot establish cpuset ceiling: ${error instanceof Error ? error.message : error}` };
   }
 }

@@ -1,21 +1,21 @@
-// Narrowing is optional. Lexer errors, unsupported syntax and missing tools
-// retain the ordinary path-based gate. Never run a preprocessor: #if 0 is code.
+// Narrowing is optional. Lexer errors and unsupported syntax retain the
+// ordinary path-based gate. A broken tool is a named instrument failure.
+// Never run a preprocessor: #if 0 is code.
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
+import {ToolingInstrumentError} from "./step-result.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
 const LIMIT = 4 * 1024 * 1024;
-const options = { encoding: "utf8" as const, timeout: 15000, maxBuffer: LIMIT * 12 };
-let rustLibrary: string | null | undefined;
-function rustLexer(): string | null {
-  if (rustLibrary !== undefined) return rustLibrary;
-  rustLibrary = null;
+const maxBuffer=LIMIT*12;
+const rustLibraries=new WeakMap<InfrastructureProbe,string|null>();
+function rustLexer(probe:InfrastructureProbe): string | null {
+  const saved=rustLibraries.get(probe);if(saved!==undefined)return saved;
   const source = new URL("./comment-tokens.rs", import.meta.url);
-  const version = spawnSync("rustc", ["-vV"], options);
-  if (version.status !== 0) return null;
+  const version = probe({purpose:"identify the Rust comment lexer compiler",command:"rustc",args:["-vV"],maxBuffer});
   const key = createHash("sha256").update(readFileSync(source)).update(version.stdout).digest("hex");
   const root = join(homedir(), ".cache/nts-tools/comment-lexer", key);
   const library = join(root, "libnts_comment_tokens.so");
@@ -24,15 +24,14 @@ function rustLexer(): string | null {
     const temporary = mkdtempSync(join(root, "build-"));
     try {
       const output = join(temporary, "lexer.so");
-      const build = spawnSync("rustc", ["--crate-type=proc-macro", "--crate-name=nts_comment_tokens", "--edition=2024", source.pathname, "-o", output], options);
-      if (build.status !== 0) return null;
+      probe({purpose:"build the Rust comment lexer",command:"rustc",args:["--crate-type=proc-macro","--crate-name=nts_comment_tokens","--edition=2024",source.pathname,"-o",output],maxBuffer});
       renameSync(output, library);
     } finally { rmSync(temporary, { recursive: true, force: true }); }
   }
-  return rustLibrary = library;
+  rustLibraries.set(probe,library);return library;
 }
 
-function rust(text: string): string | null {
+function rust(text: string,probe:InfrastructureProbe): string | null {
   // A proc macro can inspect raw source/comments, and location macros observe
   // comment line changes. Such files keep the ordinary gate. The compiler's
   // builtin attributes do not inspect comment prose; derives may be custom.
@@ -44,10 +43,10 @@ function rust(text: string): string | null {
   // cfg_attr may introduce an arbitrary procedural attribute.
   if (/\bcfg_attr\s*\(/.test(text)) return null;
   if (/#\s*\[\s*derive\b/.test(text)) return null;
-  const library = rustLexer();
+  const library = rustLexer(probe);
   if (!library) return null;
   const input = `extern crate nts_comment_tokens;\nnts_comment_tokens::comment_signature! {\n${text}\n}\n`;
-  const result = spawnSync("rustc", ["--crate-name=nts_comment_input", "--crate-type=lib", "--edition=2024", "--error-format=json", "--emit=metadata", "--extern", `nts_comment_tokens=${library}`, "-o", "/dev/null", "-"], { ...options, input });
+  const result = probe({purpose:"read Rust comment tokens",command:"rustc",args:["--crate-name=nts_comment_input","--crate-type=lib","--edition=2024","--error-format=json","--emit=metadata","--extern",`nts_comment_tokens=${library}`,"-o","/dev/null","-"],maxBuffer,input,exits:[0,1]});
   let signature: string | null = null;
   for (const line of (result.stderr ?? "").split("\n").filter(Boolean)) {
     let record;
@@ -101,11 +100,11 @@ function typescript(text: string): string | null {
   return null;
 }
 
-function c(text: string): string | null {
+function c(text: string,probe:InfrastructureProbe): string | null {
   // Translation-phase rewrites would make raw offsets ambiguous. __LINE__
   // and #line observe changes to comment layout.
   if (/\\\r?\n|\?\?|\b__LINE__\b|^\s*#\s*line\b/m.test(text)) return null;
-  const result = spawnSync("clang", ["-Xclang", "-dump-raw-tokens", "-fsyntax-only", "-x", "c", "-"], { ...options, input: text });
+  const result = probe({purpose:"read C comment tokens",command:"clang",args:["-Xclang","-dump-raw-tokens","-fsyntax-only","-x","c","-"],maxBuffer,input:text,exits:'classify'});
   if (result.status !== 0) return null;
   const rows = [...result.stderr.matchAll(/^(\w+)[^\n]*\bLoc=<<stdin>:(\d+):(\d+)>[^\n]*$/gm)];
   if (rows.length !== result.stderr.split("\n").filter(Boolean).length || !rows.length) return null;
@@ -128,34 +127,34 @@ function c(text: string): string | null {
   return withoutComments(text, ranges);
 }
 
-function changedLines(before: string, after: string): string[] | null {
+function changedLines(before: string, after: string,probe:InfrastructureProbe): string[] | null {
   const parent = join(homedir(), ".cache/nts-tools");
   mkdirSync(parent, { recursive: true });
   const directory = mkdtempSync(join(parent, "comment-diff-"));
   try {
     const old = join(directory, "before"), updated = join(directory, "after");
     writeFileSync(old, before); writeFileSync(updated, after);
-    const diff = spawnSync("git", ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=0", "--", old, updated], options);
+    const diff = probe({purpose:"read changed Rust comment lines",command:"git",args:["diff","--no-index","--no-ext-diff","--no-textconv","--no-color","--unified=0","--",old,updated],maxBuffer,exits:[0,1]});
     if (diff.status !== 1) return null;
     return diff.stdout.split("\n").filter(line => /^[+-]/.test(line) && !/^--- |^\+\+\+ /.test(line)).map(line => line.slice(1));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
 /** false includes unknown; it always retains the existing path obligation. */
-export function commentsOnly(path: string, before: string, after: string): boolean {
+export function commentsOnly(path: string, before: string, after: string,probe:InfrastructureProbe=infrastructureProbe): boolean {
   if (before === after || before.includes("\ufffd") || after.includes("\ufffd") || Buffer.byteLength(before) > LIMIT || Buffer.byteLength(after) > LIMIT) return false;
   const lex = path.endsWith(".rs") ? rust : path.endsWith(".ts") ? typescript : /\.(c|h)$/.test(path) ? c : null;
   if (!lex) return false;
   try {
-    const a = lex(before), b = lex(after);
+    const a = lex(before,probe), b = lex(after,probe);
     if (a === null || b === null || a !== b) return false;
     if (path.endsWith(".rs")) {
       if (before.includes("/*---") || after.includes("/*---")) return false;
-      const changed = changedLines(before, after);
+      const changed = changedLines(before, after,probe);
       // Only changed lines can be newly significant; unchanged Rust fields
       // such as name: String must not turn a prose edit into a compiler gate.
       if (!changed || changed.some(line => /\/\/[!/]?\s*[A-Za-z][\w-]*:\s|\/\*+\s*[A-Za-z][\w-]*:\s|^\s*(?:\*\s*)?[A-Za-z][\w-]*:\s/.test(line))) return false;
     }
     return true;
-  } catch { return false; }
+  } catch(error) {if(error instanceof ToolingInstrumentError)throw error;return false;}
 }

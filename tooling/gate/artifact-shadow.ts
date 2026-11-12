@@ -1,10 +1,11 @@
+import {ToolingInstrumentError} from "./step-result.ts";
+import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import { ORACLE_MANIFEST_DERIVED_FIELDS } from "../differential/oracle-runtime.ts";
 // Observe prospective cache hits. This module never executes or skips work.
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 type File = { name: string; path: string };
@@ -108,7 +109,7 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
   try {
     if (!/^[a-z0-9-]+$/.test(kind)) throw new Error("invalid shadow kind");
     key = keyOf(kind, inputs());
-  } catch (e) { error = String(e); }
+  } catch (e) {if(e instanceof ToolingInstrumentError)throw e;error = String(e); }
   return Object.assign((result: unknown): ShadowRow => {
     const row: ShadowRow = { event: "artifact.shadow", kind, step: env.NTS_GATE_STEP!, epoch: Date.now() / 1000,
       status: "unavailable", key, run: env.NTS_GATE_RUN_DIR ?? null, context,
@@ -156,7 +157,7 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
           }
         } catch (e) { row.evidence_error = String(e); }
       }
-    } catch (e) { row.error = String(e); }
+    } catch (e) {if(e instanceof ToolingInstrumentError)throw e;row.error = String(e); }
     try { appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR!, `shadow-${process.pid}-${counter++}.jsonl`), json(row) + "\n"); }
     catch { /* Observations cannot affect the fresh verdict. */ }
     return row;
@@ -165,8 +166,8 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
 
 // Cache version discovery within this run only, keyed by the tool's own bytes
 // and relevant environment. Artifact/result keys also include this identity.
-export function toolIdentity(command: string, childEnvironment?: NodeJS.ProcessEnv): unknown {
-  const located = command.includes("/") ? resolve(command) : spawnSync("sh", ["-c", 'command -v "$1"', "sh", command], { encoding: "utf8", env: childEnvironment }).stdout.trim();
+export function toolIdentity(command: string, childEnvironment?: NodeJS.ProcessEnv, probe:InfrastructureProbe=infrastructureProbe): unknown {
+  const located = command.includes("/") ? resolve(command) : probe({purpose:"locate tool "+command,command:"sh",args:["-c", 'command -v "$1"', "sh", command],env:childEnvironment}).stdout.trim();
   if (!located) throw new Error(`tool not found: ${command}`);
   const executable = realpathSync(located);
   const environment = childEnvironment ?? Object.fromEntries(["LANG", "LC_ALL", "TZ", "JAVA_HOME", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "LD_LIBRARY_PATH", "LD_PRELOAD", "NODE_OPTIONS"].map(k => [k, process.env[k] ?? null]));
@@ -176,8 +177,7 @@ export function toolIdentity(command: string, childEnvironment?: NodeJS.ProcessE
   const versionKey = digest(json(identity));
   const saved = process.env.NTS_GATE_RUN_DIR ? join(process.env.NTS_GATE_RUN_DIR, "share/shadow-tools", `${versionKey}.json`) : null;
   if (saved) { try { return JSON.parse(readFileSync(saved, "utf8")); } catch { /* Discover below. */ } }
-  const version = spawnSync(executable, [...vmToolFlags(command), "--version"], { encoding: "utf8", timeout: 10_000, env: childEnvironment });
-  if (version.error || version.status !== 0) throw new Error(`cannot identify ${command}: ${version.error ?? version.stderr}`);
+  const version = probe({purpose:"identify tool "+command,command:executable,args:[...vmToolFlags(command),"--version"],env:childEnvironment});
   const value = { ...identity, version: version.stdout + version.stderr };
   if (saved) publish(saved, value);
   return value;
@@ -217,5 +217,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         result => ({ ...result, log: normalizeInputPaths(result.log, invocationInputs()) }));
       observe({ status: Number(flag("--status")), log: readFileSync(output, "utf8"), outputs: artifactFiles(flag("--outputs")).map(f => ({ name: f.name, sha256: fileDigest(f.path) })) });
     }
-  } catch { /* A failed shell observation never changes the tool's verdict. */ }
+  } catch(error) {
+    if(error instanceof ToolingInstrumentError){console.error(error.message);process.exitCode=2;}
+    // An unavailable shadow observation changes no fresh result. A broken
+    // infrastructure probe has already published its instrument receipt.
+  }
 }

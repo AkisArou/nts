@@ -1,5 +1,5 @@
 // The full check owns the wall ceiling even when it measures an old runner.
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
@@ -8,7 +8,13 @@ import { ownUnit } from "../gate/scopes/bound-slice.ts";
 import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 
+import {infrastructureProbe,type InfrastructureProbe} from "../gate/infrastructure-probe.ts";
+
 export const MEASUREMENT_HOLD = "measurement-hold.txt";
+
+export function measurementGroup(slice:string,probe:InfrastructureProbe=infrastructureProbe):string{
+  return probe({purpose:"read the measurement cgroup for cleanup",command:"systemctl",args:["--user","show",slice,"-p","ControlGroup","--value"]}).stdout.trim();
+}
 
 async function measure(seconds: number, run: string, slice: string, command: string[]): Promise<number> {
   if (!toolingSlice({ NTS_TOOLING_SLICE: slice }) || !isAbsolute(run) || !Number.isFinite(seconds) || seconds <= 0 || !command.length) {
@@ -49,10 +55,8 @@ async function measure(seconds: number, run: string, slice: string, command: str
     // The candidate process owns resolution services. Give them time to
     // observe its exit and publish their cleanup before removing the slice.
     if (!expired) {
-      const group = spawnSync("systemctl", ["--user", "show", slice, "-p", "ControlGroup", "--value"],
-        { encoding: "utf8", timeout: 5000 });
-      if (group.status !== 0) throw new Error(group.stderr || group.error?.message || "cannot read the measurement cgroup");
-      if (group.stdout.trim()) await waitForEmptyCgroup(() => expired ? 0 : populated(group.stdout.trim()));
+      const group = measurementGroup(slice);
+      if (group) await waitForEmptyCgroup(() => expired ? 0 : populated(group));
     }
     if (status === 124) status = 1;
   } catch (error) {
