@@ -125,9 +125,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
 export function assertPreparedInnerTests(invocation:TestInvocation):void{
   const stop=invocation.args.indexOf('--'),cargo=stop<0?invocation.args:invocation.args.slice(0,stop);
   if(invocation.route!=='inner'||cargo.includes('--no-run'))return;
-  // Diagnostic text is not a runtime input. Keep the command's components
-  // separate so the legacy additive path scanner cannot declare a reader.
-  const command=['node',['tooling','gate','inner'].join('/')+'.ts','--no-agree'].join(' ');
+  const command='node tooling/gate/inner.ts --no-agree';
   const missing=[ENVIRONMENT_CONTEXT,'NTS_ORACLE_DEPENDENCIES','NTS_BIN'].filter(name=>!invocation.env[name]);
   if(missing.length)fail('inner tests need prepared '+missing.join(', ')+'; run '+command);
   try{assertSealedOracleRun(invocation.env);}
