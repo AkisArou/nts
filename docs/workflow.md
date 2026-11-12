@@ -642,6 +642,17 @@ A leaf that an oracle preload reaches lives in its own directory with a one-file
   receipts preserve both bases; imported work records zero executed CPU and
   keeps its original measurement in `origin`. Combined summaries partition
   totals by basis. Separate build preparation still names its rusage basis.
+- **Census phase CPU explains the retained step total.** TypeScript and
+  test262 backend steps publish disjoint materialization, native capture and
+  checking, lowering and preparation, emission, host compilation and linking,
+  execution, and comparison observations. Check and emit commands share one
+  compiler phase recorder. Worker self CPU comes through `HostObservations`;
+  each external tool's CPU comes from its waited-child rusage. Summed worker
+  wall is not step wall because workers overlap. The summary retains a signed
+  unattributed difference against scope CPU, with its quantization tolerance;
+  missing frames or compiler records stay unmeasured. These observations never
+  alter program verdicts or replace the step's cgroup accounting. Fixtures
+  supply self CPU explicitly, fixed or live; `ownMemory` defaults to fixed zero.
 - **Pooled cases own their memory admission.** One case lease follows the
   stable step, backend and source path; compiler and content identities do
   not erase its measured peaks. A known case reserves its own peak with the
@@ -853,6 +864,13 @@ the first node task.
   trends never compare unlike measures, memory histories remain valid, and
   receipt reuse preserves the original CPU basis
   ([log](records/notebooks/decisions-log.md#step-cpu-is-versioned-cgroup-accounting-11-12)).
+
+- **Census phases account for work before a cheaper design is chosen:**
+  compiler commands share one recorder, child CPU is waited rusage, and a
+  signed unattributed remainder reconciles known phases to scope CPU.
+  Missing observations remain unknown, while worker wall stays separate
+  from step wall
+  ([log](records/notebooks/decisions-log.md#census-phases-explain-scope-cpu-11-12)).
 
 - **Imported modules evaluate synchronously:** commands share one entry owner
   without top-level await, and fixture initialization runs in test hooks.

@@ -71,7 +71,7 @@ try {
 }
 `);
   execution=oracleExecution(snapshotOwner,driver);
-  const run = spawnSync("sh", bounded(process.execPath, [...execution.args,"--no-warnings", driver]), {
+  const run = (tools.phaseCosts?.spawn.bind(tools.phaseCosts)??spawnSync)("sh", bounded(process.execPath, [...execution.args,"--no-warnings", driver]), {
     encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024,env:{...process.env,...execution.env},
   });
   const snapshot=finishOracleSnapshot(snapshotOwner);finalized=true;

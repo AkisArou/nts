@@ -238,7 +238,7 @@ fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) 
     };
     let previous = CONTEXT.with_borrow_mut(|current| current.replace(context));
     event(
-        serde_json::json!({"event":"case", "binary_sha":std::env::var("NTS_GATE_CASE_BINARY_SHA").unwrap_or_default(), "backend":std::env::var("NTS_BACKEND").unwrap_or_else(|_| "c".into()),
+        serde_json::json!({"event":"case", "observation":std::env::var("NTS_GATE_COMPILER_OBSERVATION").unwrap_or_default(), "binary_sha":std::env::var("NTS_GATE_CASE_BINARY_SHA").unwrap_or_default(), "backend":std::env::var("NTS_BACKEND").unwrap_or_else(|_| "c".into()),
         "rc":std::env::var("NTS_RC").unwrap_or_else(|_| "0".into())}),
     );
     Session {

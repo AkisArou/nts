@@ -2586,3 +2586,15 @@ cancellation is retained once and its excess is returned through normal shrink.
 The admitted ancestor's rank and order remain unchanged. The private before
 replay fails on the observed stale state; the corrected runner completes without
 any host-memory change or elapsed-time verdict. Fixes #769.
+## Census phases explain scope CPU (11-12)
+
+The TypeScript and test262 backend steps had no phase attribution, leaving
+native analysis, emission, host compilation and execution indistinguishable.
+They now report exclusive phases from one compiler recorder and each
+worker's own CPU capability. External tool CPU is waited-child rusage.
+The step's retained cgroup total remains authoritative; the signed
+unattributed remainder exposes startup, dispatch, cleanup and missing
+observations, and negative excess is visible rather than clamped away.
+Summed worker wall overlaps and is not subtracted from step wall.
+Missing telemetry never changes a program's verdict. Fixture CPU is supplied,
+with fixed zero explicitly owned by ownMemory. #760.

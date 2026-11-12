@@ -19,7 +19,7 @@ import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
 import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/compile-diagnostics.ts";
 import { outputOracle } from "./output-oracle.ts";
-import {censusPhaseCosts} from './phase-costs.ts';
+import {censusPhaseCosts,recordCensusPhaseFrame} from './phase-costs.ts';
 
 /**
  * What the compiler printed as it stopped, as it printed it: its panic, from
@@ -486,10 +486,9 @@ async function attemptWithCosts(dir, body, tools, origin?) {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
-    env: environment(),
+    env: {...environment(),...tools.phaseCosts?.compilerEnvironment()},
     stdio: ["ignore", "pipe", "pipe"],
   });
-  tools.phaseCosts?.compiler(emit.pid);
   // The remaining worker work interprets diagnostics and program output.
   // Nested host compilation and execution suspend this phase's own counters.
   tools.phaseCosts?.span('comparison');
@@ -626,6 +625,9 @@ async function attemptWithCosts(dir, body, tools, origin?) {
 // takes a different path proves nothing about the one that matters.
 
 export async function selfChecks(scratch, tools, cannotMeasure) {
+  const costs=censusPhaseCosts('self-checks',tools.backend??'c');
+  tools={...tools,phaseCosts:costs};
+  try{
   const dir = workspace(join(scratch, "checks"));
   const control = await attempt(dir, `assert.sameValue(1 + 1, 2, "control");\n`, tools);
   if (control.bucket !== "strict-pass") {
@@ -692,6 +694,7 @@ export async function selfChecks(scratch, tools, cannotMeasure) {
     refused: `${refused.bucket}/${refused.why}`,
     async: `${done.bucket}, ${failed.bucket} ${failed.thrown}, ${silent.bucket} ${silent.thrown}`,
   };
+  }finally{if(costs)recordCensusPhaseFrame(costs.finish());}
 }
 
 /**

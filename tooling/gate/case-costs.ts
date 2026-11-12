@@ -18,7 +18,7 @@ export type Observation = {
   [key: string]: unknown;
 };
 type Phase = { phase: string; wall_s: number; self_cpu_s: number | null; child_cpu_s: number | null };
-export type Check = { project: string; binary_sha: string; pid: number; step: string; start: number; end: number;
+export type Check = { project: string; binary_sha: string; observation?:string;pid: number; step: string; start: number; end: number;
   wall_s: number; cpu_resolution_s: number | null; self_peak_rss_kb: number | null;
   child_peak_rss_kb: number | null; phases: Phase[]; complete: boolean };
 /** A step as the runner reports it: `memory.reserved_bytes` is the most it was counted for in the run's reservation. */
@@ -189,7 +189,7 @@ function readChecks(root: string, errors: string[]) {
         phase: r.phase as string, wall_s: r.wall_s as number,
         self_cpu_s: cpu(r, "self_user_s", "self_sys_s"), child_cpu_s: cpu(r, "child_user_s", "child_sys_s"),
       }));
-      checks.push({ project: String(first.project), binary_sha: String(first.binary_sha ?? ""), pid: Number(first.pid), step: String(first.step),
+      checks.push({ project: String(first.project), binary_sha: String(first.binary_sha ?? ""), observation:typeof first.observation==='string'?first.observation:undefined,pid: Number(first.pid), step: String(first.step),
         start: begin.epoch, end: typeof last?.epoch === "number" ? last.epoch : begin.epoch,
         wall_s: typeof last?.wall_s === "number" ? last.wall_s : 0,
         cpu_resolution_s: typeof first.cpu_resolution_s === "number" ? first.cpu_resolution_s : null,
@@ -250,7 +250,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
         try{census.push(readCensusPhaseFrame(JSON.parse(line)));}catch(error){errors.push(`census phases ${name}: ${String(error)}`);}
       }
   }catch(error){errors.push(`reading census phases: ${String(error)}`);}
-  const byStep: Record<string, unknown> = {};
+  const byStep: Record<string, {census_phases?:ReturnType<typeof censusPhaseSummary>;[key:string]:unknown}> = {};
   let missingChecks = 0;
   for (const step of steps) {
     const cases = checks.filter(c => c.step === step.name);
@@ -280,7 +280,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     const cpuValues = (field: string) => reuseRows.flatMap(row => typeof row[field] === "number" && Number.isFinite(row[field]) && (row[field] as number) >= 0 ? [row[field] as number] : []);
     byStep[step.name] = {
       ...(CENSUS_PHASE_STEPS.has(step.name)?{census_phases:censusPhaseSummary(census.filter(frame=>frame.step===step.name),cases,
-        step.cpu_measure==='cgroup-v2-scope-v1'?step.cpu:undefined,tokens.filter(token=>token.grant!==undefined).length)}:{}),
+        step.cpu_measure==='cgroup-v2-scope-v1'?step.cpu:undefined,tokens.filter(token=>token.grant!==undefined).map(token=>token.project))}:{}),
       artifact_reuse: { fresh_runs: reuseRows.filter(row => row.status === "fresh").length,
         skipped_runs: reuseRows.filter(row => row.status === "reused").length,
         tool_cpu_s: distribution(cpuValues("tool_cpu_s")), matching_hit_cpu_s: distribution(cpuValues("matching_hit_cpu_s")),
@@ -325,7 +325,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     notes: ["Phase/worker seconds overlap; step wall buckets are disjoint.",
       "Nested phase totals must not be added to their enclosing totals.",
       "Wait causes use policy events and 500 ms state samples; transitions between observations are approximate.",
-      "CPU is process-wide self and waited children, at the recorded clock-tick resolution; absent CPU is unknown.",
+      "CPU is process-wide self and waited children at the recorded resolution; new compiler records use getrusage microseconds, and absent CPU is unknown.",
       "Self peak RSS is Linux VmHWM in KiB at standalone check completion: lifetime process peak, excluding children; child peak RSS is currently unknown.",
       "RSS distributions count measured completed checks only; sums of per-check peaks are not simultaneous resident memory.",
       "Aggregate memory.peak is read before removing each real step's resident-worker cgroup; it includes that group's descendants, not its outside orchestrator.",

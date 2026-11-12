@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import {rmSync} from 'node:fs';
+import {readFileSync,rmSync} from 'node:fs';
+import {spawn} from 'node:child_process';
 import {test} from 'node:test';
 import {observedSpawnSync,prepareChildObserver,readChildUsage,type ChildUsage} from './child-rusage.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
+import {waitFor} from './test-wait.ts';
 
 test('the waited-child observer preserves streams, failure status, signals and launch errors',t=>{
   const root=newTestScratch('waited-child-rusage');t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -15,11 +17,34 @@ test('the waited-child observer preserves streams, failure status, signals and l
   assert.equal(rows.at(-1)?.exit,7);assert.ok(rows.at(-1)!.user_s+rows.at(-1)!.sys_s>0);
   const stopped=observedSpawnSync('sh',['-c','kill -TERM $$'],options,prepared.observer,record);
   assert.equal(stopped.signal,'SIGTERM');assert.equal(rows.at(-1)?.signal,15);
-  const forwarded=observedSpawnSync('sh',['-c','kill -TERM "$PPID"; while :; do :; done'],options,prepared.observer,record);
-  assert.equal(forwarded.signal,'SIGTERM','parent cancellation reaches its exact child');
   const missing=observedSpawnSync(root+'/absent',[],options,prepared.observer,record);
   assert.equal((missing.error as NodeJS.ErrnoException)?.code,'ENOENT');assert.equal(missing.status,null);
   assert.ok(rows.every(row=>row.cpu_measure==='wait4-rusage-v1'));
+  let unmeasured:string|undefined;
+  const noReport=observedSpawnSync('sh',['-c','printf preserved; exit 7'],options,{...prepared.observer,directory:root+'/absent'},(row,error)=>{
+    assert.equal(row,undefined);unmeasured=error;
+  });
+  assert.equal(noReport.stdout,'preserved');assert.equal(noReport.status,7);assert.match(unmeasured??'',/ENOENT/,'missing telemetry does not invent a measured zero or replace the child result');
+});
+
+test('cancellation reaches the exact waited child after observed readiness',async t=>{
+  const root=newTestScratch('waited-child-cancellation');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error??'the private observer was compiled');
+  const report=root+'/cancelled.json',child=spawn(prepared.observer.binary,[report,'--','sh','-c','printf ready; exec cat'],{env,stdio:['pipe','pipe','pipe']});
+  let output='',closed:{status:number|null;signal:NodeJS.Signals|null}|undefined,launchError:Error|undefined;
+  child.stdout.on('data',part=>{output+=part;});child.stderr.resume();
+  child.on('error',error=>{launchError=error;});child.on('close',(status,signal)=>{closed={status,signal};});
+  try{
+    await waitFor('waited child readiness',()=>output==='ready',{stopped:()=>launchError?.message??(closed?'child exited before readiness':undefined)});
+    child.kill('SIGTERM');
+    await waitFor('cancelled waited child exit',()=>closed!==undefined);
+    assert.deepEqual(closed,{status:null,signal:'SIGTERM'});
+    assert.equal(readChildUsage(JSON.parse(readFileSync(report,'utf8'))).signal,15);
+  }finally{
+    // EOF lets cat leave even if forwarding is broken, so a failing control
+    // cannot leave a spinning child or require a time window for cleanup.
+    child.stdin.end();if(!closed)await waitFor('waited child cleanup',()=>closed!==undefined);
+  }
 });
 
 test('malformed or missing child accounting cannot become a measured zero',()=>{

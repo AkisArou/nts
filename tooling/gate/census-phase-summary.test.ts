@@ -4,7 +4,7 @@ import {censusPhaseSummary} from './census-phase-summary.ts';
 import {CensusPhaseCosts,readCensusPhaseFrame,type PhaseSample} from '../census/phase-costs.ts';
 
 test('supplied disjoint phases reconcile to scope CPU with an explicit remainder',()=>{
-  const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_pids:[],unmeasured:[],phases:[
+  const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_observations:[],unmeasured:[],phases:[
     {phase:'materialization',wall_s:2,self_cpu_s:2,child_cpu_s:0},
     {phase:'host_compile_link',wall_s:8,self_cpu_s:1,child_cpu_s:9},
     {phase:'execution',wall_s:4,self_cpu_s:1,child_cpu_s:7},
@@ -50,8 +50,22 @@ test('nested worker phases pause the enclosing phase at supplied CPU and clock r
 
 test('a missing compiler record or worker frame stays visibly unmeasured',()=>{
   const costs=new CensusPhaseCosts('fixture','c','typescript-c',()=>({wall:0,user:0,sys:0}));
-  costs.compiler(123);
-  const summary=censusPhaseSummary([costs.finish()],[],5,2);
-  assert.equal(summary.status,'partial');assert.match(summary.unmeasured.join('\n'),/missing complete compiler phase record for 123/);
-  assert.match(summary.unmeasured.join('\n'),/missing census phase frames: 1 of 2/);
+  const id=costs.compilerEnvironment().NTS_GATE_COMPILER_OBSERVATION!;
+  const summary=censusPhaseSummary([costs.finish()],[],5,['fixture','other']);
+  assert.equal(summary.status,'partial');assert.ok(summary.unmeasured.some(error=>error.endsWith('missing complete compiler phase record for '+id)));
+  assert.match(summary.unmeasured.join('\n'),/missing census phase frame: other/);
+});
+
+test('equal nonzero CPU snapshots do not acquire a negative roundoff delta',()=>{
+  const costs=new CensusPhaseCosts('fixture','c','typescript-c',()=>({wall:1,user:0.000123,sys:0.000045}));
+  const close=costs.span('comparison');close();
+  assert.deepEqual(costs.finish().unmeasured,[]);assert.equal(costs.frame.phases[0]?.self_cpu_s,0);
+});
+
+test('a control lease may contain several compiler observations without hiding a missing case frame',()=>{
+  const costs=new CensusPhaseCosts('controls','c','typescript-c',()=>({wall:0,user:0,sys:0}));
+  const a=costs.compilerEnvironment().NTS_GATE_COMPILER_OBSERVATION,b=costs.compilerEnvironment().NTS_GATE_COMPILER_OBSERVATION;
+  const summary=censusPhaseSummary([costs.finish()],[a,b].map(observation=>({observation,complete:true,phases:[{phase:'capture',wall_s:1,self_cpu_s:1,child_cpu_s:0}]})),4,['controls','case']);
+  assert.equal(summary.rows.find(row=>row.phase==='native_capture_check')?.cases,1);
+  assert.match(summary.unmeasured.join('\n'),/missing census phase frame: case/);
 });

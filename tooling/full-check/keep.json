@@ -10,6 +10,7 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "760": { "kind": "kept", "why": "#760's full TypeScript instrumentation identity and counted overhead evidence, kept until #760 closes" },
     "728": { "kind": "kept", "why": "#728's reproducible reader-input edge index and census evidence, kept until #728 closes" },
     "mainclaude": { "kind": "kept", "why": "the coordinator's" },
     "chromium": { "kind": "kept", "why": "the Chromium task's, kept while the user has it paused" }

@@ -1520,6 +1520,10 @@ function done() {
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
   const wall = (Date.now() - startedAt) / 1000;
   const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" };
+  if('steps' in costsSummary)for(const name of plan){
+    const phases=costsSummary.steps[name]?.census_phases;
+    if(phases)results.get(name).phases=phases;
+  }
 
   const lines = [];
   lines.push("");

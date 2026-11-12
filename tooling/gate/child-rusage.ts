@@ -4,6 +4,7 @@ import {readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {getSystemErrorName} from 'node:util';
+import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export type ChildUsage={version:1;cpu_measure:'wait4-rusage-v1';pid:number;wall_s:number;user_s:number;sys_s:number;exit:number;signal:number;exec_errno:number};
 export type ChildObserver={binary:string;directory:string};
@@ -11,8 +12,10 @@ let ordinal=0;
 
 export function prepareChildObserver(directory:string,env:NodeJS.ProcessEnv):{observer?:ChildObserver;error?:string}{
   const binary=join(directory,'phase-child');
-  const built=spawnSync('cc',['-O2','-std=c11','-Wall','-Wextra','-Werror',fileURLToPath(new URL('./phase-child.c',import.meta.url)),'-o',binary],{env,encoding:'utf8'});
-  return built.status===0?{observer:{binary,directory}}:{error:`phase observer could not be built: ${built.error?.message??built.stderr??built.status}`};
+  try{
+    const built=infrastructureProbe({purpose:'build the waited-child phase observer',command:'cc',args:['-O2','-std=c11','-Wall','-Wextra','-Werror',fileURLToPath(new URL('./phase-child.c',import.meta.url)),'-o',binary],env});
+    return built.status===0?{observer:{binary,directory}}:{error:`phase observer could not be built: ${built.stderr||built.status}`};
+  }catch(error){return {error:`phase observer could not be built: ${String(error)}`};}
 }
 
 export function readChildUsage(value:unknown):ChildUsage{
@@ -33,7 +36,7 @@ export function observedSpawnSync(command:string,args:readonly string[],options:
   let usage:ChildUsage|undefined;
   try{usage=readChildUsage(JSON.parse(readFileSync(report,'utf8')));record(usage);}
   catch(error){record(undefined,String(error));}
-  finally{rmSync(report,{force:true});}
+  finally{try{rmSync(report,{force:true});}catch(error){record(undefined,`removing child observation: ${String(error)}`);}}
   if(usage){
     result.pid=usage.pid;
     if(usage.exec_errno){
