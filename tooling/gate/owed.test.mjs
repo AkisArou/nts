@@ -56,6 +56,7 @@ test('the census CLI retains its initializer, writer and JSON forms in an owned 
   put('Cargo.toml','[package]\nname="owed-arguments"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
   put('tooling/gate/all.sh','#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" build tooling; exit; fi\nstep "tooling" node tooling/entry.test.ts\n');
   put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/entry.test.ts','');
+  put('tooling/gate/run.mjs','');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
     const result=spawnTest('git',args,{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
