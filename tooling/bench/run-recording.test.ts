@@ -8,7 +8,8 @@ import {finishBenchmarks,type RunPlan} from "./run-recording.ts";
 import {parseRunRecord,serializeRunRecord,type BenchmarkRun} from "./run-outcomes.ts";
 
 const file="results/benchmarks/jvm/runs.tsv";
-const header='# nts-benchmark-runs '+JSON.stringify({version:1,backend:"jvm",commit:"a".repeat(40),compiler:"b".repeat(16),under:"benchmarks/cases"})+'\n';
+const metadata={version:1 as const,backend:"jvm" as const,commit:"a".repeat(40),compiler:"b".repeat(16),under:"benchmarks/cases" as const};
+const header='# nts-benchmark-runs '+JSON.stringify(metadata)+'\n';
 const entry=(name:string)=>({name,fixture:"benchmarks/cases/"+name});
 const check=(outcome:string)=>({outcome,first:"fixture result",report:{refusals:[],disagreements:[],aborts:outcome==="aborted"?["fixture crash"]:[],error:null}}) as unknown as DecodedCheck;
 
@@ -20,7 +21,7 @@ test("an incomplete benchmark leaves its own row pending and publishes completed
     [{entry:all[0]!,record:check("agrees"),disposition:0}],
     [{entry:all[1]!,error:new ToolingInstrumentError("tooling-setup","stale oracle population")}],
     {binary:"unused-supplied-writer",env:fixtureEnvironment(t),log:line=>lines.push(line),write:async rows=>{
-      const record={...parseRunRecord(header),rows:new Map(rows)};
+      const record={metadata,rows:new Map(rows)};
       assert.equal(auditRecord("benchmark-runs",file,null,serializeRunRecord(record),pending).length,1);
       writes.push(new Map(rows));
     }});
