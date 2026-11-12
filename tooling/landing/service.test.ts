@@ -24,6 +24,9 @@ import type { Ran, RunOptions } from "./run.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import { landingCpuMeasure,landingSelection, type Selection } from "./selection.ts";
 import { drain, prepareTree, prune, recordCosts, type Config } from "./service.ts";
+import {holder} from './lock.ts';
+import {lockChild} from './lock-fixture.ts';
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 
 function selection(steps: string[]): Selection {
   return landingSelection({ owed: { steps: [...steps, "integrity"] }, paths: [], catalogue: [...steps, "integrity"],
@@ -214,10 +217,24 @@ test("a landing of the landing check's own code stops the service so the new cod
   const a = f.task("fix/a", { "tooling/landing/check.ts": "// new\n" });
   const b = f.task("fix/b", { "src/b.txt": "b\n" });
   f.submit("fix/a", a.sha); f.submit("fix/b", b.sha);
+  // The deployed service publishes the old boot/pid/start format and removes
+  // it with its old release. The replacement must respect that live owner.
+  const path=join(f.config.home,'serve.lock');
+  const old=lockChild(t,generatedJavaScript(`import {openSync,writeSync,closeSync,readSync,readFileSync,rmSync} from 'node:fs';
+import {processIdentity} from ${JSON.stringify(new URL('./lock.ts',import.meta.url).href)};
+const path=process.argv[1],owner=processIdentity(process.pid),fd=openSync(path,'wx',0o600);
+try{writeSync(fd,owner+'\\n');}finally{closeSync(fd);}process.stdout.write('old-held\\n');
+readSync(0,Buffer.alloc(1),0,1,null);if(readFileSync(path,'utf8').trim()===owner)rmSync(path);`),[path]);
+  await old.wait('old-held');const oldBytes=readFileSync(path);
+  assert.equal(holder(path),old.child.pid);assert.equal((await drain(f.config)).state,'busy');
+  assert.deepEqual(readFileSync(path),oldBytes,'the new reader never rewrites an old live owner');
+  old.child.stdin.end();assert.equal(await old.closed,0,old.errors());assert.equal(existsSync(path),false);
   const first = await drain(f.config);
   assert.equal(first.state, "restart");
   assert.equal(first.answered.length, 1);
+  assert.equal(holder(path),null,'self-restart releases the service lock before the replacement starts');
   assert.equal((await drain(f.config)).answered[0]?.state, "landed");
+  assert.equal(holder(path),null);
 });
 
 test("a push origin refuses is reported, and the next landing pushes main", async t => {

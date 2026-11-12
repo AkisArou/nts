@@ -16,6 +16,10 @@ import {ownMemory} from '../gate/test-memory.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {completeBuild} from '../gate/build-completion.ts';
 import {generatedJavaScript} from '../gate/generated-javascript.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {testScratch} from '../gate/test-scratch.ts';
+import {lockChild,replaceOnce,LOCK_BARRIER} from './lock-fixture.ts';
+import {pathToFileURL} from 'node:url';
 
 const GB = 2 ** 30, DAY = 86_400_000;
 /** The tests' "now": git's clock and every idle time are read against it, never the machine's. */
@@ -134,6 +138,28 @@ catch(error){console.error(String(error));process.exitCode=error instanceof Pool
   assert.deepEqual(results.map(result=>result.status).sort((a,b)=>a!-b!),[0,0,75],JSON.stringify(results));
   assert.equal(p.room().reservedBytes,14*GB);
   assert.equal(p.trees().filter(tree=>tree.state==='held').length,2);
+});
+
+test('a cold take publishes its branch promise before a blocked neighbour decides',async t=>{
+  const {p,s,observe}=pool(t,2),observations=observe({freeBytes:47*GB,freeInodes:100});
+  const stage=join(testScratch(t,'pool-promise-barrier'),'stage');copyModuleClosure(['tooling/landing/pool.ts'],stage);
+  const poolFile=join(stage,'tooling/landing/pool.ts'),lockFile=join(stage,'tooling/landing/lock.ts');
+  let source=readFileSync(poolFile,'utf8');
+  source=replaceOnce(source,'if(!existsSync(path))this.grow(tree);',LOCK_BARRIER+'\n      if(!existsSync(path))this.grow(tree);');
+  writeFileSync(poolFile,"import {readSync as __lockRead} from 'node:fs';let __lockPaused=false;\n"+source);
+  writeFileSync(lockFile,replaceOnce(readFileSync(lockFile,'utf8'),'if(processIdentity(held.pid)===held.text)return null;',
+    "if(processIdentity(held.pid)===held.text){if(process.argv.includes('762-contender'))process.stdout.write('contended\\n');return null;}"));
+  const program=generatedJavaScript(`const {Pool,PoolFull}=await import(process.argv[1]);
+try{new Pool(process.argv[2],{root:process.argv[3]}).take(process.argv[4]);process.stdout.write('taken\\n');}
+catch(error){console.error(String(error));process.exitCode=error instanceof PoolFull?75:1;}`);
+  const args=[pathToFileURL(poolFile).href,p.dir,s.root],env={...s.env,...observations};
+  const first=lockChild(t,program,[...args,'first/take','762-pause'],env);await first.wait('barrier');
+  assert.equal(p.trees().filter(tree=>tree.state==='held').length,0,'the decision precedes the branch switch');
+  const second=lockChild(t,program,[...args,'second/take','762-contender'],env);await second.wait('contended');
+  assert.equal(second.output().includes('taken'),false);
+  first.child.stdin.write('x');assert.equal(await first.closed,0,first.errors());
+  assert.equal(await second.closed,75,second.output()+second.errors());
+  assert.equal(p.room().reservedBytes,7*GB);assert.equal(p.trees().filter(tree=>tree.state==='held').length,1);
 });
 
 test("giving a tree back detaches it at main, keeps the branch and the target; uncommitted work refuses it", t => {

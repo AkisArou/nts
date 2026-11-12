@@ -509,6 +509,18 @@ outside Worker closures may use top-level await.
   same remaining promise before admitting an allocation. Fixtures carry a
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
+- **Owner locks publish complete identities.** The landing service, its
+  observers, disk capacity and cache upkeep share `tooling/landing/lock.ts`.
+  A private complete boot/PID/start file is linked atomically to the lock
+  path. Normal ownership holds no inherited descriptor. Dead-owner reclamation
+  takes a short sibling flock, rereads the identity, and removes only the same
+  still-dead owner; its sibling inode remains in place. It also removes
+  unpublished candidates whose embedded PID is dead; a reused live PID delays
+  collection. Acquisition visits those candidates even when no public owner
+  exists. Empty or malformed
+  bytes fail by path and contents, with instructions to establish that no
+  named process is alive before removing the corrupt file. A process never
+  takes over an incompletely published or unparseable owner.
 - **One Clippy cache.** Contributors run `node tooling/gate/clippy.ts`. The
   gate and inner route use that same owner with an explicitly selected cache.
   `clippyTarget` declares `target/clippy`; no current test or Clippy route
@@ -715,6 +727,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Owner publication and reclamation are separate atomic operations.** A
+  complete hard-link publication prevents an empty owner becoming visible;
+  a short reclamation flock prevents a stale dead-owner read deleting a new
+  live owner. Normal ownership retains the existing process birth identity
+  and old-format compatibility
+  ([log](records/notebooks/decisions-log.md#owner-locks-publish-before-they-can-be-read-11-12)).
 
 - **Controller adoption precedes scheduling.** A pending move to newer verified
   prevents new runs even while the controller waits for its tree lock. The

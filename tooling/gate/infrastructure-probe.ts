@@ -10,6 +10,8 @@ export const INFRASTRUCTURE_PROBE_BOUND_MS=5*60_000;
 export type ProbeRequest={
   purpose:string;command:string;args:readonly string[];
   cwd?:string;env?:NodeJS.ProcessEnv;input?:string|Buffer;maxBuffer?:number;
+  /** A lock probe may inherit one explicitly owned open file description. */
+  stdio?:SpawnSyncOptionsWithStringEncoding['stdio'];
   /** Source/lexer checks classify ordinary exits themselves. Signals and
    * launch failures are always instrument failures, even on this route. */
   exits?:readonly number[]|'classify';
@@ -27,7 +29,7 @@ export function infrastructureProbes(runner:ProbeRunner=spawnSync):Infrastructur
     };
     let result:ProbeResult;
     try{result=runner(request.command,request.args,{cwd:request.cwd,env:request.env,input:request.input,
-      encoding:'utf8',timeout:INFRASTRUCTURE_PROBE_BOUND_MS,killSignal:'SIGKILL',maxBuffer:request.maxBuffer??16*1024*1024});}
+      encoding:'utf8',stdio:request.stdio,timeout:INFRASTRUCTURE_PROBE_BOUND_MS,killSignal:'SIGKILL',maxBuffer:request.maxBuffer??16*1024*1024});}
     catch(error){return failure(`could not start: ${error instanceof Error?error.message:String(error)}`,error);}
     if(result.error){
       if((result.error as NodeJS.ErrnoException).code==='ETIMEDOUT')return failure(`did not answer within the ${INFRASTRUCTURE_PROBE_BOUND_MS} ms wedged-probe bound`,result.error);

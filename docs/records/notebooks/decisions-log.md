@@ -2511,3 +2511,17 @@ its independently completed rows. Completed pending and accepted updates now
 publish before the batch reports its remaining failure. The parent already
 published audited deltas despite recorder errors; that behavior stays.
 #592.
+
+## Owner locks publish before they can be read (11-12)
+
+The wx-then-write owner file let a contender read an empty file and remove a
+live lock. Atomic link publication closes that window. A second barrier showed
+that publication alone still allowed a stale dead-owner read to unlink a new
+live owner. Reclamation now holds a short sibling flock, rereads, and removes
+only the same still-dead identity. Normal holders retain the boot/PID/start
+lifetime and hold no inherited descriptor. Malformed owners are named and
+preserved for explicit recovery. The old valid format remains readable across
+the landing service's restart. Unpublished candidates from dead PIDs are
+collected under the same reclamation flock, including when the crash happened
+before any public owner existed. A reused PID conservatively delays cleanup.
+Fixes #762.

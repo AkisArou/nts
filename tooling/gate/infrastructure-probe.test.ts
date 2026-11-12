@@ -18,15 +18,16 @@ const request:ProbeRequest={purpose:'read a declared identity',command:'/owned/t
 const named=(run:()=>unknown,word:string)=>assert.throws(run,(error:unknown)=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&error.message.includes(word));
 
 test('one owner preserves input, environment and output bounds without timing a fixture',()=>{
-  const input=Buffer.from('source bytes'),env={DECLARED:'value'};let calls=0,simulatedElapsed=0;
+  const input=Buffer.from('source bytes'),env={DECLARED:'value'},stdio:NonNullable<ProbeRequest['stdio']>=['ignore','pipe','pipe',9];let calls=0,simulatedElapsed=0;
   const probe=infrastructureProbes((command,args,options)=>{
     calls++;simulatedElapsed+=120_000;
     assert.equal(command,request.command);assert.deepEqual(args,request.args);
     assert.equal(options.timeout,INFRASTRUCTURE_PROBE_BOUND_MS);assert.equal(options.killSignal,'SIGKILL');assert.equal(options.encoding,'utf8');
     assert.equal(options.input,input);assert.equal(options.env,env);assert.equal(options.cwd,'/owned/tree');assert.equal(options.maxBuffer,12345);
+    assert.equal(options.stdio,stdio,'the inherited descriptor belongs to the request owner');
     return result();
   });
-  assert.equal(probe({...request,input,env,cwd:'/owned/tree',maxBuffer:12345}).stdout,'answer');
+  assert.equal(probe({...request,input,env,stdio,cwd:'/owned/tree',maxBuffer:12345}).stdout,'answer');
   assert.equal(calls,1);assert.equal(simulatedElapsed,120_000,'supplied slow completion remains an ordinary answer');
 });
 

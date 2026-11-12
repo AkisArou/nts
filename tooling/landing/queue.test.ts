@@ -123,7 +123,8 @@ test("one owner holds the lock; a dead owner's lock is taken over", t => {
   assert.ok(taken, "the dead owner's lock is taken over");
   taken!.release();
   writeFileSync(path, "garbage\n");
-  assert.ok(withLock(path, () => true), "an unreadable owner is no owner");
+  assert.throws(()=>withLock(path,()=>true),/malformed owner bytes.*garbage.*confirm.*remove this file/);
+  assert.equal(readFileSync(path,'utf8'),'garbage\n','corruption is not a dead owner');
 });
 
 
