@@ -17,6 +17,9 @@ import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./token-pool.ts";
 import { waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
+import {ownMemory} from './test-memory.ts';
+import {hostObservations} from './host-observations.ts';
+import {DiskCapacity} from './disk-capacity.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -33,8 +36,10 @@ function temporaryFixture(t: { after(fn: () => void): void }) {
 
 test("both capture contexts reserve above the temporary floor, and memory is not theirs to admit", t => {
   const { temporary, path } = temporaryFixture(t);
-  let freeBytes = 60 * 2 ** 30;
-  const options = { path, reservedBytes: 2 ** 30, readFreeBytes: () => freeBytes };
+  const observations=join(temporary.path,'observations');
+  const setFree=(freeBytes:number)=>ownMemory(observations,{disk:{freeBytes,freeInodes:100}});
+  const env=setFree(60*2**30),host=hostObservations(env),capacity=new DiskCapacity({env,host});
+  const options = { path, reservedBytes: 2 ** 30, host,capacity };
   const gate = new TemporaryAdmission({ ...options, context: { kind: "gate", temporary } });
   const standalone = new TemporaryAdmission({ ...options, context: { kind: "standalone" } });
   assert.equal(gate.check().admitted, true);
@@ -43,10 +48,10 @@ test("both capture contexts reserve above the temporary floor, and memory is not
   assert.equal(gate.check().requiredFreeBytes, 41 * 2 ** 30);
   assert.equal(standalone.check().diskFloorBytes,gate.check().diskFloorBytes);
   assert.equal(standalone.check().requiredFreeBytes,gate.check().requiredFreeBytes);
-  freeBytes = 40.5 * 2 ** 30;
+  setFree(40.5 * 2 ** 30);
   assert.equal(gate.check().admitted, false, "the image reservation is in addition to the gate temporary floor");
   assert.equal(standalone.check().admitted,false);
-  freeBytes = 41 * 2 ** 30;
+  setFree(41 * 2 ** 30);
   assert.equal(gate.check().admitted, true);
   assert.equal(standalone.check().admitted, true);
   assert.equal("availableGiB" in gate.check(), false, "a capture's memory is its job's reservation in the ledger");
@@ -54,7 +59,8 @@ test("both capture contexts reserve above the temporary floor, and memory is not
 
 test("gate policy rejects a replaced registration and outside or escaping capture roots", t => {
   const { run, temporary, path } = temporaryFixture(t);
-  const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, readFreeBytes: () => 60 * 2 ** 30 };
+  const env=ownMemory(join(run,'observations'),{disk:{freeBytes:60*2**30,freeInodes:100}}),host=hostObservations(env);
+  const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, host,capacity:new DiskCapacity({env,host}) };
   assert.throws(() => new TemporaryAdmission({ ...options, path: join(run, "outside") }), /outside the registered/);
   mkdirSync(join(run, "outside"));
   symlinkSync(join(run, "outside"), join(temporary.path, "link"));

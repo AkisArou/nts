@@ -12,6 +12,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { join } from "node:path";
 import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import { scratchRepo } from "./scratch-repo.ts";
+import {ownMemory} from '../gate/test-memory.ts';
+import {hostObservations} from '../gate/host-observations.ts';
+import {completeBuild} from '../gate/build-completion.ts';
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 
 const GB = 2 ** 30, DAY = 86_400_000;
 /** The tests' "now": git's clock and every idle time are read against it, never the machine's. */
@@ -20,21 +24,25 @@ const NOW = Date.parse("2026-11-06T12:00:00Z");
 function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptions = {}) {
   const s = scratchRepo(t, "landing-pool");
   // A tree's cargo target is ignored, as the repository's .gitignore has it.
-  s.commit({ ".gitignore": "target/\n" }, "ignore targets");
+  s.commit({ ".gitignore": "target/\n", "Cargo.toml":"[workspace]\n[profile.nts-dev]\ndebug=0\n" }, "ignore targets");
   const linked: string[] = [];
   const inputs = (tree: string) => { linked.push(tree); };
   /** Git's clock `ago` ms before NOW, for what a tree did then. */
   const clock = (ago: number) => ({ ...s.env, GIT_COMMITTER_DATE: `@${Math.floor((NOW - ago) / 1000)} +0000` });
-  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, { freeBytes: () => 1000 * GB, ...options });
+  const observationRoot=join(s.dir,'observations');
+  const observations=ownMemory(observationRoot,{disk:{freeBytes:1000*GB,freeInodes:2**30}});
+  const host=options.host??hostObservations({...s.env,...observations});
+  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {...options,host});
   if (size) p.init(size);
   /** The same pool, `ago` ms before NOW. */
-  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, { freeBytes: () => 1000 * GB, ...options });
+  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {...options,host});
   /** Free tree `name` was last given back `ago` ms before NOW: a task's branch on it, then main again. */
   const freedAt = (name: string, ago: number) => {
     const cwd = join(p.dir, name), env = clock(ago);
     for (const args of [["switch", "-q", "-c", `task-${name}`], ["switch", "-q", "--detach", "refs/heads/main"], ["branch", "-q", "-D", `task-${name}`]]) execFileSync("git", args, { cwd, env });
   };
-  return { s, p, linked, at, freedAt };
+  return { s, p, linked, at, freedAt,
+    observe:(disk: {freeBytes:number;freeInodes:number},paths:Record<string,number>={})=>ownMemory(observationRoot,{disk,allocated:{kind:'fixed',defaultBytes:0,paths}}) };
 }
 const names = (p: Pool) => p.trees().map(t => `${t.name} ${t.state}${t.branch ? ` ${t.branch}` : ""}`);
 
@@ -80,7 +88,7 @@ test("a task takes a free tree on its branch at the newest main, keeps it, and t
 
 test("a free tree with a warm target is taken before a cold one", t => {
   const { p } = pool(t, 3);
-  mkdirSync(join(p.dir, "3", "target/release"), { recursive: true });
+  for(const name of ['nts-dev','clippy'] as const){const output=join(p.dir,'3','target',name);mkdirSync(output,{recursive:true});completeBuild(join(p.dir,'3'),name,output);}
   assert.equal(p.take("fix/a").name, "3");
   assert.equal(p.take("fix/b").name, "1");
 });
@@ -91,31 +99,41 @@ test("a branch checked out outside the pool is not taken", t => {
   assert.throws(() => p.take("mine"), /checked out in .* outside the pool/);
 });
 
-test("the pool grows only while the disk can hold another tree's target and the gate's floor, and says why not", t => {
-  let free = 89 * GB, targets: Record<string, number> = {};
-  const { p } = pool(t, 1, { freeBytes: () => free, targetBytes: tree => targets[tree] ?? null });
-  p.take("fix/a");
-  // One tree still to build keeps a cold build's worth: 25 GB of 89, and 65 more are needed.
-  assert.equal(COLD_TARGET_BYTES, 25 * GB);
-  assert.equal(DISK_MARGIN_BYTES, 40 * GB);
-  const refused = (() => { try { p.take("fix/b"); } catch (error) { return error; } return null; })();
-  assert.ok(refused instanceof PoolFull, String(refused));
-  assert.equal(refused.room.reservedBytes, 25 * GB);
-  assert.equal(refused.room.floorBytes, 65 * GB);
-  assert.match(refused.message, /cannot host another tree: 89\.0 GB free, 25\.0 GB of it kept for 1 tree still to build; another tree needs 25\.0 GB for its target and 40\.0 GB must stay free beside it \(the gate's floor\), 65\.0 GB in all/);
-  assert.deepEqual(names(p), ["1 held fix/a"], "nothing was made");
-  free = 90 * GB;
-  assert.equal(p.take("fix/b").name, "2");
-  // Measured from the pool's own targets: the largest one is what a tree needs.
-  targets = { [join(p.dir, "1")]: 40 * GB };
-  free = 119 * GB;
-  assert.throws(() => p.take("fix/c"), (error: unknown) => error instanceof PoolFull && error.room.treeBytes === 40 * GB && error.room.reservedBytes === 40 * GB);
-  free = 120 * GB;
-  assert.equal(p.take("fix/c").name, "3");
-  // A free tree is reused whatever the disk says: it needs no new target.
-  p.give("fix/a");
-  free = 0;
-  assert.equal(p.take("fix/d").name, "1");
+test("only active cold leases promise the measured build, and take reserves atomically", t => {
+  const {p,observe}=pool(t,4);
+  assert.equal(COLD_TARGET_BYTES,7*GB);
+  assert.equal(DISK_MARGIN_BYTES,40*GB);
+  assert.equal(p.room().reservedBytes,0,'four free cold checkouts promise nothing');
+  observe({freeBytes:54*GB,freeInodes:100});
+  p.take('fix/a');p.take('fix/b');
+  assert.equal(p.room().reservedBytes,14*GB);
+  assert.equal(p.room().unbuilt,2);
+  assert.throws(()=>p.take('fix/c'),(error:unknown)=>error instanceof PoolFull&&error.room.reservedBytes===14*GB&&error.room.floorBytes===47*GB);
+  assert.deepEqual(names(p),['1 held fix/a','2 held fix/b','3 free','4 free'],'refused take switches no branch');
+  p.give('fix/a');
+  assert.equal(p.room().reservedBytes,7*GB,'giving a cold tree back returns its promise');
+  assert.equal(p.take('fix/c').name,'1');
+  const target=join(p.dir,'1','target');
+  observe({freeBytes:54*GB,freeInodes:100},{[join(target,'nts-dev')]:GB,[join(target,'evidence')]:77*GB,[join(target,'debug')]:40*GB});
+  assert.equal(p.room().reservedBytes,13*GB,'partial declared output consumes one GiB; evidence and obsolete debug consume no promise');
+  mkdirSync(join(target,'nts-dev'),{recursive:true});
+  assert.equal(p.room().reservedBytes,13*GB,'a directory alone does not prove completion');
+});
+
+test('concurrent cold takes cannot spend the same disk promise',async t=>{
+  const {p,s,observe}=pool(t,3);
+  const observations=observe({freeBytes:54*GB,freeInodes:100});
+  const source=generatedJavaScript(`import {Pool,PoolFull} from ${JSON.stringify(new URL('./pool.ts',import.meta.url).href)};
+try {new Pool(process.argv[1],{root:process.argv[2]}).take(process.argv[3]);}
+catch(error){console.error(String(error));process.exitCode=error instanceof PoolFull?75:1;}`);
+  const results=await Promise.all(['parallel/a','parallel/b','parallel/c'].map(branch=>new Promise<{status:number|null;output:string}>(done=>{
+    const child=spawn(process.execPath,['--input-type=module','-e',source,p.dir,s.root,branch],{env:{...s.env,...observations},stdio:['ignore','pipe','pipe']});
+    let output='';child.stdout.on('data',part=>output+=String(part));child.stderr.on('data',part=>output+=String(part));
+    child.once('close',status=>done({status,output}));
+  })));
+  assert.deepEqual(results.map(result=>result.status).sort((a,b)=>a!-b!),[0,0,75],JSON.stringify(results));
+  assert.equal(p.room().reservedBytes,14*GB);
+  assert.equal(p.trees().filter(tree=>tree.state==='held').length,2);
 });
 
 test("giving a tree back detaches it at main, keeps the branch and the target; uncommitted work refuses it", t => {
@@ -294,7 +312,7 @@ test("status shows each tree's state, task, idle time and target size, for a sch
   const json = statusJson(p.dir, trees, room, NOW);
   assert.equal(json.version, 1);
   assert.equal(json.room.ok, true);
-  assert.equal(json.room.tree_bytes, COLD_TARGET_BYTES, "24 GB measured is less than one cold build");
+  assert.equal(json.room.tree_bytes, COLD_TARGET_BYTES, "whole-target size never sets the build forecast");
   assert.equal(json.room.unbuilt, 1);
   assert.deepEqual(json.trees.map(tree => [tree.name, tree.state, tree.task, tree.target_bytes]), [["1", "held", "fix/a", 24 * GB], ["2", "free", null, null]]);
   assert.deepEqual(json.trees.map(tree => tree.idle_ms), [0, 0], "both trees moved at NOW");

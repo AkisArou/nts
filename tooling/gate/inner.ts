@@ -51,6 +51,7 @@ import { fileURLToPath } from "node:url";
 import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.ts";
 import { defaultSlots } from "./budget.ts";
 import {assertTestLayout} from './test-layout.ts';
+import {DiskCapacity} from './disk-capacity.ts';
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
 let launchEnvironment:NodeJS.ProcessEnv=process.env;
@@ -163,7 +164,7 @@ The gate's core commands, fast, before a change is queued: fmt, clippy, the
 tests over the touched crates and the three backends in the nts-dev profile,
 and agree.mjs on four backends against <rev>'s pinned compiler (main).`;
 
-function main(argv: readonly string[]): number {
+function main(argv: readonly string[],capacity:DiskCapacity): number {
   const known = new Set(["--base", "--no-agree", "--keep-going", "--help"]);
   const unknown = argv.filter((arg, at) => arg.startsWith("-") && !known.has(arg) && argv[at - 1] !== "--base");
   if (argv.includes("--help") || unknown.length > 0) {
@@ -209,9 +210,12 @@ function main(argv: readonly string[]): number {
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
     step("clippy", () => heavy({ key: "inner-clippy", what: "clippy", memoryMax: "14G", workers: CARGO_WORKERS }, process.execPath, [CLIPPY_OWNER,"--cache"],{CARGO_TARGET_DIR:clippyTarget(launchEnvironment.CARGO_TARGET_DIR??join(ROOT,"target"))})) &&
     step("build", () => {
+      const release=capacity.beginBuild({root:ROOT,target:launchEnvironment.CARGO_TARGET_DIR??join(ROOT,'target'),outputs:['nts-dev']});
+      try{
       const status = heavy({ key: "inner-build", what: "the compiler", memoryMax: "14G", workers: CARGO_WORKERS }, "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]);
       compilerReady = status === 0;
       return status;
+      }finally{release();}
     }) &&
     // Even --keep-going cannot authorize tests against a failed build's stale binary.
     compilerReady &&
@@ -254,7 +258,7 @@ function main(argv: readonly string[]): number {
 runAsCommand(import.meta.url,async()=>{
   const planned=gateEnvironment(process.env,{run:join(homedir(),'.cache/nts-inner',String(Date.now())+'-'+process.pid),standalone:!process.env.NTS_GATE_ENV_CONTEXT,oracleAdmissionContext:'gate'});
   let status=1;
-  try{const sealed=await sealOracleRun(planned);launchEnvironment=sealed.env;status=main(process.argv.slice(2));}
+  try{const sealed=await sealOracleRun(planned);launchEnvironment=sealed.env;status=main(process.argv.slice(2),new DiskCapacity({env:sealed.env}));}
   finally{finishRunTemporary(planned.temporary,planned.env.HOME!,status===0);}
   process.exitCode=status;
 },{realpath:true});

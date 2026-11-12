@@ -6,6 +6,8 @@ import {readFileSync} from 'node:fs';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {ToolingInstrumentError} from './step-result.ts';
+import {completeBuild} from './build-completion.ts';
+import {DiskCapacity} from './disk-capacity.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
@@ -84,6 +86,8 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   assertTestProfileManifest(readFileSync(resolve(cwd,'Cargo.toml'),'utf8'));
   // Validate the exact values handed to spawn, not a separate policy projection.
   assertTestInvocation(invocation);
+  const release=new DiskCapacity({env:invocation.env}).beginBuild({root:cwd,target:resolve(invocation.profileDirectory,'..'),outputs:['nts-dev']});
+  try{
   const child=spawn('cargo',invocation.args,{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
   let pending='',artifacts=0,buildFinished=false,problem:unknown;
   const line=(text:string)=>{
@@ -93,7 +97,11 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
     if(!buildFinished&&event&&typeof event==='object'&&['compiler-artifact','compiler-message','build-script-executed','build-finished'].includes(String(event.reason))){
       try{if(assertTestArtifact(invocation,event))artifacts++;}catch(error){problem??=error;}
       if(event.reason==='compiler-message'&&typeof event.message?.rendered==='string')process.stdout.write(event.message.rendered);
-      if(event.reason==='build-finished')buildFinished=true;
+      if(event.reason==='build-finished'){
+        buildFinished=true;
+        if((event as {success?:unknown}).success===true&&!problem&&artifacts&&route==='workspace'
+          &&selection.every(arg=>['--no-run','--locked','--offline','--frozen'].includes(arg)))completeBuild(cwd,TEST_PROFILE,invocation.profileDirectory);
+      }
     }else process.stdout.write(text+'\n');
   };
   child.stdout.setEncoding('utf8');
@@ -107,6 +115,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   if(status===0&&!artifacts)fail(route+' produced no compiler-artifact evidence');
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
   return status;
+  }finally{release();}
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

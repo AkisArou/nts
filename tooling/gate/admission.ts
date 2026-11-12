@@ -3,21 +3,22 @@
 // disk admission. Memory itself is the memory ledger's (memory-ledger.ts): a
 // job reserves it once, and no case reads the host's.
 import { existsSync, realpathSync } from "node:fs";
-import {hostObservations,type HostObservations} from "./host-observations.ts";
+import type {HostObservations} from "./host-observations.ts";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 import {releaseToken} from './case-context.ts';
+import {DiskCapacity} from './disk-capacity.ts';
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
 export type TemporaryAdmissionSnapshot = {
   context: TemporaryAdmissionContext["kind"]; freeBytes: number;
-  diskFloorBytes: number; reservedBytes: number; requiredFreeBytes: number; admitted: boolean;
+  diskFloorBytes: number; reservedBytes: number; buildPromisesBytes:number; requiredFreeBytes: number; admitted: boolean;
 };
 type TemporaryAdmissionOptions = {
-  path: string; context: TemporaryAdmissionContext; reservedBytes: number; readFreeBytes?: () => number; host?:HostObservations;
+  path: string; context: TemporaryAdmissionContext; reservedBytes: number; host?:HostObservations;capacity?:DiskCapacity;
 };
 
 /** One policy for an allocation into a run's registered temporary space:
@@ -52,11 +53,13 @@ export class TemporaryAdmission {
   check(): TemporaryAdmissionSnapshot {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
-    const freeBytes = (this.#options.readFreeBytes ?? (() => (this.#options.host??hostObservations()).disk(path).freeBytes))();
+    const capacity=this.#options.capacity??new DiskCapacity({host:this.#options.host});
+    const snapshot=capacity.snapshot(path),freeBytes=snapshot.freeBytes;
     if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
-    const requiredFreeBytes = diskFloorBytes + reservedBytes;
-    return { context: context.kind, freeBytes, diskFloorBytes, reservedBytes, requiredFreeBytes, admitted: freeBytes >= requiredFreeBytes };
+    const buildPromisesBytes=snapshot.reservedBytes;
+    const requiredFreeBytes = diskFloorBytes + reservedBytes + buildPromisesBytes;
+    return { context: context.kind, freeBytes, diskFloorBytes, reservedBytes, buildPromisesBytes,requiredFreeBytes, admitted: freeBytes >= requiredFreeBytes };
   }
 }
 

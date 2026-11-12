@@ -4,9 +4,10 @@ import {closeSync,existsSync,openSync,readFileSync,readSync,statfsSync,writeSync
 import {availableParallelism,cpus,loadavg} from 'node:os';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
+import {dirname,resolve} from 'node:path';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
-export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR'] as const;
+export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR','NTS_DISK_CAPACITY'] as const;
 export class HostObservationError extends Error { override name='HostObservationError'; }
 /** A cgroup counter's object has ended. Only an owner which already opened
  * that exact group may interpret this as retirement rather than failure. */
@@ -210,7 +211,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     paging:()=>paging('/proc/vmstat'),
     swap:()=>swap('/proc/meminfo'),
     load:()=>loadavg() as [number,number,number],
-    disk:path=>{const value=statfsSync(path);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},
+    disk:path=>{let existing=resolve(path);while(!existsSync(existing))existing=dirname(existing);const value=statfsSync(existing);return {freeBytes:value.bavail*value.bsize,freeInodes:value.ffree};},
     allocatedBytes:path=>liveAllocatedBytes(path,env),
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,

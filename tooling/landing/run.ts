@@ -39,6 +39,7 @@ import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-e
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
 import { TEST_PROFILE } from "../gate/test-profile.ts";
+import {DiskCapacity} from '../gate/disk-capacity.ts';
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
@@ -235,6 +236,14 @@ function finishSteps(options: RunOptions, node: string, launcher: NodeJS.Process
  * waited.
  */
 function buildCompiler(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
+  let release:(()=>void)|undefined;
+  try{
+    release=new DiskCapacity({env:{...launcher,...owned}}).beginBuild({root:options.tree,target:options.target,outputs:['nts-dev']});
+    return buildCompilerAdmitted(options,node,launcher,owned,attempt);
+  }catch(error){return {name:'build',verdict:'INSTRUMENT',reason:String(error),log:join(options.run,'build.log')};}
+  finally{release?.();}
+}
+function buildCompilerAdmitted(options: RunOptions, node: string, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, attempt: number): StepResult {
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;

@@ -29,6 +29,8 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
     scopePeak:scopePeak??previous?.scopePeak??{kind:'fixed',bytes:0,resettable:true},
     width:previous?.width??{logical:32,available:30},load:previous?.load??[0,0,0],clock:clock??previous?.clock??{kind:'live'}};
   writeFileSync(capability+'.next',JSON.stringify(observations)+'\n');renameSync(capability+'.next',capability);
-  return { [HOST_OBSERVATIONS]:capability, NTS_MEMINFO: meminfo, NTS_VMSTAT: vmstat, NTS_MEMORY_LEDGER: join(dir, "ledger"), NTS_GATE_COSTS_DIR: join(dir, "costs") };
+  const capacity=join(dir,'disk-capacity.json');
+  if(!existsSync(capacity))writeFileSync(capacity,JSON.stringify({version:1,pool:null})+'\n');
+  return { [HOST_OBSERVATIONS]:capability, NTS_MEMINFO: meminfo, NTS_VMSTAT: vmstat, NTS_MEMORY_LEDGER: join(dir, "ledger"), NTS_GATE_COSTS_DIR: join(dir, "costs"),NTS_DISK_CAPACITY:capacity };
 }
 

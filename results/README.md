@@ -6,6 +6,7 @@ commit it measured.
 
 | Path | Written by | What it holds |
 |---|---|---|
+| `builds/cold-inner.json` | `tooling/gate/build-footprint.ts --cold --output results/builds/cold-inner.json` | allocated-byte samples and peaks of the declared nts-dev and Clippy outputs from a committed cold inner build, with source and toolchain |
 | `test262/<backend>/<slice>.tsv` | `tooling/census/conformance262.ts --record` | the test262 cases of one slice (`language`, `builtins`, `annexb`, `staging`, `harness`) that ran to a verdict on one backend (`c`, `llvm`, `jvm`, `wasm`), and what each did |
 | `typescript/<backend>/cases.tsv` | `tooling/census/conformance262.ts --record` | the same for the TypeScript conformance cases (`tests/typescript`) |
 | `benchmarks/runs/<date>-<commit>-<sitting>.json` | `tooling/bench/run-record.ts`, shared by `nts-bench` and comparator sittings | one immutable versioned run, its complete inventory, per-cell timings/spreads/checksums/status, each backend's verdicts, exact builds, harness and machine conditions |

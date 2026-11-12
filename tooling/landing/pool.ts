@@ -30,16 +30,18 @@
 // naming the commit that landed (LANDED_REFS), and the next upkeep resets it
 // once nothing uses it and nothing is left in it.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statfsSync, statSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { TEMP_DISK_FLOOR_BYTES } from "../gate/run-temporary.ts";
 import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, type Git } from "./git.ts";
-import { withLock } from "./lock.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { issueBranch } from "../tasks/branch.ts";
 import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
+import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
+import {completedBuild} from '../gate/build-completion.ts';
+import type {HostObservations} from '../gate/host-observations.ts';
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Where a held tree's branch is marked landed, at the commit that landed: refs/nts/landed/<branch>. */
@@ -48,8 +50,8 @@ export const LANDED_REFS = "refs/nts/landed/";
 export const IDLE_LIMIT_MS = 3 * DAY;
 /** The free trees the upkeep always keeps, warm for the next tasks. */
 export const WARM_MINIMUM = 2;
-/** One cold build's target: what a tree is taken to need until the pool's own trees are larger. */
-export const COLD_TARGET_BYTES = 25 * GB;
+/** The measured declared build outputs, rounded once, never a target-folder guess. */
+export const COLD_TARGET_BYTES = coldBuildForecast().bytes;
 /** What must stay free beside a new tree's target: the gate's floor for its temporaries. */
 export const DISK_MARGIN_BYTES = TEMP_DISK_FLOOR_BYTES;
 
@@ -65,10 +67,9 @@ export type PoolTree = {
 /** A tree with its cargo target measured; null when it has none yet. */
 export type MeasuredTree = PoolTree & { targetBytes: number | null };
 /**
- * Whether the disk can host one more tree. A tree is taken to need the largest
- * target the pool holds, and at least one cold build; each tree that has not
- * built yet will need that much too, so it is reserved; and the gate's floor
- * must stay free beside them.
+ * Whether the disk can host another measured cold build above the hard floor
+ * and the unconsumed promises of active leases. Display-only target sizes do
+ * not enter admission; free checkouts promise nothing.
  */
 export type Room = {
   ok: boolean; freeBytes: number; treeBytes: number; unbuilt: number; reservedBytes: number; floorBytes: number;
@@ -79,8 +80,9 @@ export type Inputs = (tree: string) => void;
 export type PoolOptions = {
   /** Where `give --discard` deletes the task's branch too; null for nowhere. */
   remote?: string | null;
-  /** Free bytes on the pool's disk. */
-  freeBytes?: () => number;
+  /** A fixture owns the complete disk and allocated-byte observations. */
+  host?:HostObservations;
+  forecast?:BuildForecast;
   /** A tree's cargo target in bytes on disk, or null when it has none. */
   targetBytes?: (tree: string) => number | null;
 };
@@ -113,6 +115,7 @@ function checked(git: Git, args: readonly string[], cwd: string): string {
 const taskBranch = (branch: string) => /^[A-Za-z0-9._/-]+$/.test(branch) && branch !== "main" && !branch.startsWith("-") && !branch.includes("..");
 /** 1 for a tree with a cargo target, which a task reuses instead of building cold. */
 const warm = (tree: PoolTree) => existsSync(join(tree.path, "target")) ? 1 : 0;
+const compatible = (tree: PoolTree) => ['nts-dev','clippy'].every(name=>completedBuild(tree.path,name as 'nts-dev'|'clippy',join(tree.path,'target',name))) ? 1 : 0;
 
 /** A target's bytes on disk, as the gate measures its temporaries (`du -sx -B1`); null when there is no target. */
 export function duTarget(tree: string): number | null {
@@ -134,10 +137,10 @@ function writable(path: string): void {
 
 export class Pool {
   readonly dir: string; readonly git: Git; readonly inputs: Inputs; readonly remote: string | null;
-  private readonly free: () => number; private readonly target: (tree: string) => number | null;
+  readonly capacity:DiskCapacity;private readonly target: (tree: string) => number | null;
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
-    this.free = options.freeBytes ?? (() => { const s = statfsSync(this.dir); return s.bavail * s.bsize; });
+    this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git}});
     this.target = options.targetBytes ?? duTarget;
   }
 
@@ -180,22 +183,25 @@ export class Pool {
 
   /** Whether the disk can host one more tree (`Room`). */
   room(trees: readonly MeasuredTree[] = this.measured()): Room {
-    const built = trees.map(t => t.targetBytes).filter((bytes): bytes is number => bytes !== null);
-    const treeBytes = Math.max(COLD_TARGET_BYTES, ...built);
-    const unbuilt = trees.filter(t => t.state !== "missing" && t.targetBytes === null).length;
-    const reservedBytes = unbuilt * treeBytes, floorBytes = treeBytes + DISK_MARGIN_BYTES, freeBytes = this.free();
+    const snapshot=this.capacity.poolSnapshot(this.dir,this.leases(trees));
+    return this.roomFor(snapshot.freeBytes,snapshot.reservedBytes,snapshot.leases.filter(lease=>lease.remainingBytes>0).length,this.capacity.forecast.bytes);
+  }
+  private leases(trees:readonly PoolTree[]):BuildLease[]{return trees.filter(tree=>tree.state==='held').map(tree=>({root:tree.path,target:join(tree.path,'target')}));}
+  private roomFor(freeBytes:number,reservedBytes:number,unbuilt:number,treeBytes:number):Room {
+    const floorBytes = treeBytes + DISK_MARGIN_BYTES;
     const ok = freeBytes - reservedBytes >= floorBytes;
-    const why = ok ? null : `${gb(freeBytes)} free${unbuilt ? `, ${gb(reservedBytes)} of it kept for ${unbuilt} tree${unbuilt === 1 ? "" : "s"} still to build` : ""}; `
+    const why = ok ? null : `${gb(freeBytes)} free${unbuilt ? `, ${gb(reservedBytes)} of it promised to ${unbuilt} active cold lease${unbuilt === 1 ? "" : "s"}` : ""}; `
       + `another tree needs ${gb(treeBytes)} for its target and ${gb(DISK_MARGIN_BYTES)} must stay free beside it (the gate's floor), ${gb(floorBytes)} in all. `
       + `Wait for a tree to be given back, or free disk.`;
     return { ok, freeBytes, treeBytes, unbuilt, reservedBytes, floorBytes, why };
   }
 
-  private locked<T>(body: () => T): T { mkdirSync(this.dir, { recursive: true }); return withLock(join(this.dir, ".lock"), body); }
+  private locked<T>(body: () => T): T { return this.capacity.locked(body); }
 
   /** A new tree, detached at main, with its inputs, when the disk can host it. */
   private grow(name: string): void {
-    const room = this.room();
+    const snapshot=this.capacity.poolSnapshot(this.dir,this.leases(this.trees()));
+    const room=this.roomFor(snapshot.freeBytes,snapshot.reservedBytes,snapshot.leases.filter(lease=>lease.remainingBytes>0).length,0);
     if (!room.ok) throw new PoolFull(room);
     const path = join(this.dir, name);
     checked(this.git, ["worktree", "add", "-q", "--detach", path, "refs/heads/main"], this.git.root);
@@ -233,9 +239,14 @@ export class Pool {
       const elsewhere = worktrees(this.git).find(t => t.branch === branch);
       if (elsewhere) throw new Error(`${branch} is checked out in ${elsewhere.path}, outside the pool`);
       // A warm target saves the task a cold build.
-      let tree = trees.filter(t => t.state === "free").sort((a, b) => warm(b) - warm(a) || Number(a.name) - Number(b.name))[0]?.name;
-      if (!tree) { tree = this.nextName(); this.grow(tree); }
+      let tree = trees.filter(t => t.state === "free").sort((a, b) => compatible(b) - compatible(a) || Number(a.name) - Number(b.name))[0]?.name;
+      if (!tree)tree=this.nextName();
       const path = join(this.dir, tree);
+      const leases=this.leases(trees),before=this.capacity.poolSnapshot(this.dir,leases);
+      const after=this.capacity.poolSnapshot(this.dir,[...leases,{root:path,target:join(path,'target')}]);
+      const room=this.roomFor(before.freeBytes,before.reservedBytes,before.leases.filter(lease=>lease.remainingBytes>0).length,after.reservedBytes-before.reservedBytes);
+      if(!room.ok)throw new PoolFull(room);
+      if(!existsSync(path))this.grow(tree);
       const exists = run(this.git, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], this.git.root).status === 0;
       checked(this.git, exists ? ["switch", "-q", branch] : ["switch", "-q", "-c", branch, "refs/heads/main"], path);
       this.inputs(path);
@@ -410,7 +421,7 @@ export function describePool(trees: readonly (PoolTree | MeasuredTree)[], now = 
 }
 
 export function describeRoom(room: Room): string {
-  return room.ok ? `room for another tree (${gb(room.freeBytes)} free${room.unbuilt ? `, ${gb(room.reservedBytes)} kept for ${room.unbuilt} still to build` : ""}; ${gb(room.floorBytes)} needed)`
+  return room.ok ? `room for another tree (${gb(room.freeBytes)} free, ${gb(room.reservedBytes)} promised to ${room.unbuilt} active cold leases; ${gb(room.treeBytes)} for its declared build outputs, ${gb(DISK_MARGIN_BYTES)} floor)`
     : `no room for another tree: ${room.why}`;
 }
 

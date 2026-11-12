@@ -3,7 +3,7 @@
 // kernel reused -- is taken over rather than waited on forever.
 import { closeSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
 
-function identity(pid: number): string | null {
+export function processIdentity(pid: number): string | null {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
@@ -16,7 +16,7 @@ export type Lock = { path: string; owner: string; release: () => void };
 
 /** The lock at `path` for this process, or null while a live process holds it. */
 export function acquire(path: string): Lock | null {
-  const owner = identity(process.pid);
+  const owner = processIdentity(process.pid);
   if (!owner) throw new Error("this process has no identity in /proc");
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -28,7 +28,7 @@ export function acquire(path: string): Lock | null {
       let held = "";
       try { held = readFileSync(path, "utf8").trim(); } catch { continue; }
       const pid = Number(held.split(" ")[1]);
-      if (Number.isSafeInteger(pid) && pid > 0 && identity(pid) === held) return null;
+      if (Number.isSafeInteger(pid) && pid > 0 && processIdentity(pid) === held) return null;
       rmSync(path, { force: true }); // its owner is gone
     }
   }
@@ -40,7 +40,7 @@ export function holder(path: string): number | null {
   try {
     const held = readFileSync(path, "utf8").trim();
     const pid = Number(held.split(" ")[1]);
-    return Number.isSafeInteger(pid) && identity(pid) === held ? pid : null;
+    return Number.isSafeInteger(pid) && processIdentity(pid) === held ? pid : null;
   } catch { return null; }
 }
 

@@ -441,12 +441,35 @@ outside Worker closures may use top-level await.
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
   `main`, warm first: its build folder is kept, so the build is incremental
   rather than cold. When every tree is held, the pool grows by one, unless
-  the disk cannot hold another tree's target and the gate's 40 GB floor;
+  the disk cannot hold its remaining measured build promise and the gate's floor;
   then `take` says why and exits 75, so a scheduler waits and retries. A tree
   goes back warm when its task lands or is discarded, and the full check's
   hourly upkeep removes free trees idle over three days, keeping two warm.
   Agents do not make worktrees of their own. The shared checkout
   `~/Projects/nts` stays on `main`.
+- **One disk capacity owner.** `tooling/gate/disk-capacity.ts` keeps the
+  temporary hard floor free beside active build promises. A free checkout
+  promises nothing. Taking a cold tree checks and creates its Git lease under
+  the capacity lock; landing or giving it back ends that promise. The forecast
+  comes from `results/builds/cold-inner.json`, recorded by
+  `tooling/gate/build-footprint.ts`: the independently sampled peaks of
+  `target/nts-dev` and `target/clippy`, summed and rounded once. Allocated bytes
+  in those declared outputs consume the promise as a partial build proceeds.
+  Evidence, scratch, obsolete profiles and unrelated target contents never size
+  it. The full workspace test owner and Clippy owner record completed profile
+  generations; a directory alone and a selected-crate test build do not prove
+  completion. Profile values and the pinned toolchain define compatibility.
+  Non-pool test and Clippy builds hold claims for their selected outputs in the
+  same owner, with process birth identity and dead-owner reclamation. Claims
+  for one target merge with its pool promise. Temporary admission reads that
+  same remaining promise before admitting an allocation. Fixtures carry a
+  private `NTS_DISK_CAPACITY` namespace with their resource capability; an
+  absent grant never discovers the account's pool.
+- **One Clippy cache.** Contributors run `node tooling/gate/clippy.ts`. The
+  gate and inner route use that same owner with an explicitly selected cache.
+  `clippyTarget` declares `target/clippy`; no current test or Clippy route
+  builds the obsolete root `target/debug` profile. The cold inner measurement
+  covers both compiler/test artifacts and Clippy metadata.
 - **One branch per task, deleted when it lands.** A task works on one branch
   named after it. When the change lands, the landing check deletes the
   branch, on the machine and on GitHub, and resets the task's worktree to the
@@ -629,6 +652,13 @@ the first node task.
   while supplied observations prove its classification. A finite empirical
   range cannot make two real JIT draws a deterministic landing verdict.
   ([log](records/notebooks/decisions-log.md#count-bands-are-empirical-per-column-11-12)).
+
+- **Disk promises belong to active builders** (11-12): Git leases and
+  live build claims share the floor and measured declared-output forecast.
+  Free trees promise nothing; partial outputs consume their promise and
+  compatible completed builds release it. The same owner supplies temporary
+  admission. Clippy has one declared cache on every route.
+  ([log](records/notebooks/decisions-log.md#active-build-disk-promises-11-12)).
 
 - **Every Rust test route uses one profile owner.** The shared Cargo invocation
   uses incremental `nts-dev` without debug info; the manifest, invocation and

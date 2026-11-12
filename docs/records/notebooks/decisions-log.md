@@ -2377,3 +2377,12 @@ in `results/benchmarks/count-bands.json`.
 
 JIT tiering moved instruction counts with load and refused unrelated landings.
 Increasing a finite band would leave the same probabilistic verdict in place.
+
+## Active build disk promises (11-12)
+
+The disk capacity owner counts only active Git leases and live build claims.
+Its cold forecast is measured from the declared nts-dev and Clippy outputs;
+partial allocations consume it, completed compatible owners release it, and
+free checkouts promise nothing. Pool takes and build claims use the same lock;
+temporary admission reads the same floor and outstanding promises. All Clippy
+routes share target/clippy. [Contract](../../workflow.md#the-machine).
