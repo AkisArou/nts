@@ -21,12 +21,12 @@ function fixture(t: { after: (fn: () => void) => void }) {
 }
 function checkFile(root: string, id: number, binary = "new", start = 1, duration = 2, partial = false, unknownCpu = false, peak: unknown = undefined) {
   const fields = { project: "tests/programs/a/tsconfig.json", pid: id, step: "examples", binary_sha: binary, cpu_resolution_s: unknownCpu ? null : .01 };
-  const phase = (name: string, wall: number, self: number, child: number) => ({ ...fields, event: "end", phase: name, epoch: epoch + start + duration,
+  const phase = (name: string, wall: number, self: number, child: number) => ({ event: "end", phase: name, epoch: epoch + start + duration,
     wall_s: wall, self_user_s: unknownCpu ? null : self, self_sys_s: unknownCpu ? null : 0,
     child_user_s: unknownCpu ? null : child, child_sys_s: unknownCpu ? null : 0 });
   const rows = [
     { ...fields, event: "case" },
-    { ...fields, event: "begin", phase: "check.total", epoch: epoch + start },
+    { event: "begin", phase: "check.total", epoch: epoch + start },
     phase("capture", .2, .1, 0), phase("native.runtime_objects", .3, .01, .2), phase("native.runtime_objects", .4, .01, .3),
     ...(!partial ? [{...phase("check.total", duration, .3, 1), self_peak_rss_kb: peak, child_peak_rss_kb: null}] : []),
   ];
