@@ -1275,6 +1275,7 @@ export function changedPaths(argv) {
 const memo = new Map();
 const once = (key, f) => (memo.has(key) ? memo.get(key) : (memo.set(key, f()), memo.get(key)));
 const rel = (abs) => relative(TREE, abs).split("\\").join("/");
+const trackedFiles = () => once("tracked-files", () => execFileSync("git", ["ls-files", "-z", "--cached"], {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));
 
 /** Every step all.sh defines, in its order: what "the full gate" means. */
 export function allSteps() {
@@ -1315,9 +1316,11 @@ export function crates() {
 /** The crate a path is in (the longest crate directory above it), or null. */
 export function crateOf(path) {
   const all = crates();
-  let best = null;
-  for (const dir of all.keys()) if ((path === dir || path.startsWith(`${dir}/`)) && (!best || dir.length > best.length)) best = dir;
-  return best;
+  for (let input=path;;) {
+    if(all.has(input))return input;
+    const slash=input.lastIndexOf("/");if(slash<0)return null;
+    input=input.slice(0,slash);
+  }
 }
 
 /**
@@ -1393,6 +1396,7 @@ function kids(dir) {
 
 /** A tsconfig's JSON: comments and trailing commas allowed, as tsc allows them. */
 function readJsonc(path) {
+  return once("jsonc:"+path,()=>{
   const text = readFileSync(path, "utf8");
   let out = "";
   for (let i = 0, str = false; i < text.length; i++) {
@@ -1404,6 +1408,7 @@ function readJsonc(path) {
     out += c;
   }
   return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
+  });
 }
 
 /**
@@ -1565,7 +1570,14 @@ function stepInputGraph() {
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new InputMap();
     const declared = new Set();
+    const membership = new Set();
     const directories = new Map();
+    const directory = (row,step) => {
+      const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
+      const key=reader+"\0"+row.directory;
+      const declaration=directories.get(key)??{...row,reader,steps:new Set()};
+      declaration.steps.add(step);directories.set(key,declaration);
+    };
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1], rawCommand = m[2];
@@ -1595,15 +1607,21 @@ function stepInputGraph() {
       // The parser follows import/export declarations, never data strings
       // containing import-shaped text or paths quoted by a private fixture.
       const placed = new Set();
+      // A canonical directory argument is a corpus/data input. Its tracked
+      // members are not host tooling modules whose new URL expressions run.
+      const modules=[];
+      for(const input of new Set(entries)){
+        if(statSync(join(TREE,input)).isDirectory()){
+          const files=trackedFiles().filter(path=>path.startsWith(input+"/"));
+          directory({reader:"<entry>",directory:input,files},step);
+          membership.add(input);add(input,step);
+        }else modules.push(input);
+      }
+      entries.splice(0,entries.length,...modules);
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        for (const input of moduleClosure(batch, { sourceRoot: TREE, directory: row => {
-          const reader = row.reader === "<entry>" ? "tooling/gate/all.sh" : row.reader;
-          const key = reader + "\0" + row.directory;
-          const declaration = directories.get(key) ?? {...row, reader, steps: new Set()};
-          declaration.steps.add(step); directories.set(key, declaration);
-        } })) {
+        for (const input of moduleClosure(batch, { sourceRoot: TREE, directory: row => directory(row,step) })) {
           if (placed.has(input)) continue;
           placed.add(input); declared.add(input); add(input, step); queue.push(input);
         }
@@ -1653,11 +1671,22 @@ function stepInputGraph() {
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
     }
-    return { reach: map, declared, directories };
+    return { reach: map, declared, directories, membership, tracked:new Set(trackedFiles()) };
   });
 }
 
 export function stepInputs() { return stepInputGraph().reach; }
+
+function declaredInput(path) {
+  const graph=stepInputGraph();
+  if(graph.declared.has(path))return true;
+  if(!graph.tracked.has(path))return false;
+  for(let input=path;;){
+    if(graph.membership.has(input))return true;
+    const slash=input.lastIndexOf("/");if(slash<0)return false;
+    input=input.slice(0,slash);
+  }
+}
 
 export function inputDirectoryDeclarations() {
   return [...stepInputGraph().directories.values()].map(row => ({
@@ -1768,6 +1797,20 @@ export function embedded() {
  * A path owes the full gate when a rule says so, when none of these gave it a
  * step, or when it is an instrument the step map cannot place.
  */
+function rulesFor(path,added) {
+  const cache=once("matched-rules",()=>[new Map(),new Map()]),matches=cache[added?1:0];
+  if(!matches.has(path)){
+    const rules=RULES.filter(rule=>rule.when(path,added));
+    if(isToolingTest(path)){
+      const exclusions=once("tooling-test-exclusions",()=>readToolingTestExclusions(TREE,allSteps()));
+      const step=toolingTestStep(path,exclusions);
+      rules.push({name:"a tooling test entry",steps:[step],settled:true,wide:step!=="tooling",arms:[]});
+    }
+    matches.set(path,rules);
+  }
+  return matches.get(path);
+}
+
 export function owed(changes) {
   const out = [];
   // `projects`: the interop projects these steps owe, when the source can
@@ -1790,15 +1833,6 @@ export function owed(changes) {
     return r;
   };
   const full = [];
-  const rulesFor = (path, added) => {
-    const rules=RULES.filter((rule)=>rule.when(path,added));
-    if(isToolingTest(path)){
-      const exclusions=once("tooling-test-exclusions",()=>readToolingTestExclusions(TREE,allSteps()));
-      const step=toolingTestStep(path,exclusions);
-      rules.push({name:"a tooling test entry",steps:[step],settled:true,wide:step!=="tooling",arms:[]});
-    }
-    return rules;
-  };
   const all = crates();
 
   let ordinary = false;
@@ -1845,7 +1879,7 @@ export function owed(changes) {
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && !stepInputGraph().declared.has(path)) unrun = true;
+      if (rule.placedBy === "stepInputs" && !declaredInput(path)) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.
@@ -1897,7 +1931,7 @@ export function owed(changes) {
     }
 
     if (unplaced) full.push(`${path} (${unplaced})`);
-    else if (gave === 0 && !settled && !stepInputGraph().declared.has(path)) full.push(path);
+    else if (gave === 0 && !settled && !declaredInput(path)) full.push(path);
   }
 
   if (full.length) {
@@ -2026,7 +2060,7 @@ function main() {
   if (argv.includes("--full-census")) {
     if(argv.some(arg=>!["--full-census","--record","--initialize","--json"].includes(arg)))throw Error("usage: owed.mjs --full-census [--record [--initialize]] [--json]");
     const {census,problems}=runFullGateCensus(TREE,()=>{
-      const paths=execFileSync("git",["ls-files","-z","--cached"],{cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean);
+      const paths=trackedFiles();
       return collectFullGateCensus(paths,path=>{
         const rules=owed([{path,added:false}]);
         return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name)};

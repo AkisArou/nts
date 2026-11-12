@@ -121,15 +121,11 @@ and fixtures land the same way, in seconds. A new gate step needs a
 `LANDING` row in `owed.mjs`, and a new tooling directory a rule, so that a
 change owes only what it reaches.
 
-Modules declare reader inputs with static imports or
-`new URL("<relative asset>", import.meta.url)`. Dot-only positions are anchors;
-a named asset declares its resolved file, or the tracked files in its resolved
-directory. Keep directory claims as narrow as the actual reader. Text inference
-may add checks but never discharge a full fallback. The `gate-inputs` step
-holds the tool-written full-gate inventory; `owed.mjs --full-census --record`
-can only retire entries, and the census lists directory readers and breadth.
-Build output paths from positional anchors; named module-relative URLs declare
-source inputs, not generated output locations.
+Modules declare the inputs they read (static imports,
+`new URL(asset, import.meta.url)`); text inference only adds checks. On
+2026-11-12 a fixture's glob literal placed unknown paths and discharged their
+full fallback. [The workflow](docs/workflow.md#landing-the-landing-check)
+defines anchors, directory claims and the `gate-inputs` ratchet.
 
 **After landing, the full check** (`nts-full-check`) runs the core on every
 new `main` and the wide steps on `verified` a few times a day. A red there is
