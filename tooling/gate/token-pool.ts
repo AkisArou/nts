@@ -108,7 +108,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
           pool.account();await completed(w);trace('token.release',w);pool.active.delete(w);pool.held.set(w.step,(pool.held.get(w.step)??0)-1);
           if(w.bytes!==undefined){const s=pool.sized.get(w.step)!;pool.sized.set(w.step,{count:s.count-1,bytes:s.bytes-w.bytes});}
           pool.total--;released();pool.grant();trace('pool.change');
-        }else {trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);}
+        }else if(w.step!=='registration'){trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);}
       };
       // FIN is the completion acknowledgement. A normal client retains its
       // readable socket until the final meter and worker drain have finished.

@@ -13,7 +13,7 @@ import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gat
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
 import {caseEnvironment,caseReceipt,ownCaseWorker,retireCaseScope,type CaseReceipt} from '../gate/case-context.ts';
-import {readLimits} from '../gate/scopes/step-scope.ts';
+import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 
 const CGROUP = "/sys/fs/cgroup";
@@ -101,6 +101,9 @@ export function memoryCause(before: MemoryCounters, after: MemoryCounters, aggre
   if (after.oom < before.oom || after.kills < before.kills || aggregateAfter < aggregateBefore) throw new Error("resident cap: memory counters went backwards");
   if (after.oom > before.oom) return "own-limit";
   if (after.kills === before.kills) return undefined;
+  // A positively observed local aggregate OOM keeps its existing replay or
+  // exclusive-budget policy. Only an external ancestor needs attribution.
+  if(aggregateAfter>aggregateBefore)return 'aggregate-pressure';
   const ancestor=ancestorMemoryIncident(before.ancestors??[],after.ancestors??[]);
   if(ancestor)throw new PressureError(`resident ancestor-cap: cgroup ${ancestor.group} at cap ${ancestor.limit} bytes killed a worker whose case cap is ${after.limitBytes} bytes`);
   return aggregateAfter > aggregateBefore ? "aggregate-pressure" : "system-pressure";

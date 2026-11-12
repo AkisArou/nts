@@ -8,6 +8,7 @@ test('an ancestor kill names the firing cap rather than assigning a host-pressur
   const now={...old,kills:1,ancestors:[{...old.ancestors[0]!,oom:2}]};
   assert.throws(()=>memoryCause(old,now,0,0),error=>error instanceof Error&&/ancestor-cap/.test(error.message)&&error.message.includes('/owned/step/workers')&&error.message.includes(String(2*2**30))&&error.message.includes(String(6*2**30)));
   assert.equal(memoryCause({oom:0,kills:0},{oom:0,kills:1},0,0),'system-pressure');
+  assert.equal(memoryCause(old,now,0,1),'aggregate-pressure','an observed local aggregate keeps its replay/budget policy');
 });
 test('local counters choose the nearest firing ancestor and reject a backwards observation',()=>{
   const rows=memoryAncestors('/owned/step/case',group=>({max:group==='/owned/step'?200:1000,oom:0}));

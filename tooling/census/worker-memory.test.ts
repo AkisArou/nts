@@ -756,7 +756,9 @@ console.log("oom_group " + fs.readFileSync("/sys/fs/cgroup" + group + "/memory.o
 ${family ? 'require("node:child_process").spawnSync(process.execPath, ["-e", ' + JSON.stringify(allocation) + '], {stdio: "inherit"}); console.log("worker family survived");' : allocation}\`;
 const scope = worker.scope(process.execPath, ["-e", work]);
 const killed = spawnSync("systemd-run", scope.argv, { env: scope.env, encoding: "utf8" });
-const cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms());
+let cause;
+try { cause = memoryCause(before, worker.counters(), aggregateBefore, memory.aggregateOoms()); }
+catch (error) { if (!String(error).includes("resident ancestor-cap:")) throw error; cause = error.message; }
 worker.stop(scope);
 memory.close();
 console.log(JSON.stringify({ own, effective, status: killed.status, cause, group: memory.group,
@@ -777,7 +779,9 @@ console.log(JSON.stringify({ own, effective, status: killed.status, cause, group
   assert.ok(seen.group.startsWith(`${slice.group}/`));
   assert.equal(seen.effective, 256 * 2 ** 20, "the step's bound is its ceiling");
   assert.notEqual(seen.status, 0, "the case was killed");
-  assert.equal(seen.cause, "system-pressure", "killed by the step's bound: neither its own cap nor an aggregate's");
+  assert.match(seen.cause, /resident ancestor-cap:/);
+  assert.ok(seen.cause.includes(slice.workerGroup),seen.cause);
+  assert.match(seen.cause, /cap 268435456 bytes.*case cap is 268435456 bytes/);
   // A census given a budget of its own keeps its own cap, wherever it runs.
   const fixture = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "own-budget" });
   try { assert.notEqual(readFileSync(join(CGROUP, fixture.group, "memory.max"), "utf8").trim(), "max"); }

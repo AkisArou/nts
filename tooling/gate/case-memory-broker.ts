@@ -5,7 +5,7 @@ import {basename} from 'node:path';
 import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,KEPT_PEAKS,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
-import {readLimits} from './scopes/step-scope.ts';
+import {readLimits} from './scopes/memory-limits.ts';
 
 export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
 type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};

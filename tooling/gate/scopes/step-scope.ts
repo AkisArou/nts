@@ -13,6 +13,8 @@ import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
 
 import {hostObservations,type HostObservations,type CgroupCpu} from '../host-observations.ts';
 import {STEP_CPU_MEASURE} from '../step-time.ts';
+import {readLimits} from './memory-limits.ts';
+export {readLimits} from './memory-limits.ts';
 
 const CGROUP = "/sys/fs/cgroup";
 const DRAIN_HANG_MS = 30_000;
@@ -57,15 +59,6 @@ export function populated(group: string): 0 | 1 {
   const value = /^populated ([01])$/m.exec(readFileSync(`${CGROUP}${group}/cgroup.events`, "utf8"))?.[1];
   if (value === undefined) throw new Error("step cgroup lacks a populated answer");
   return value === "0" ? 0 : 1;
-}
-
-/** What a cgroup's memory limits are now: the kernel's, rounded down to pages; `Infinity` for none. */
-export function readLimits(group: string): StepLimits & { high: number; swap: number } {
-  const read = (name: string) => {
-    const text = readFileSync(`${CGROUP}${group}/${name}`, "utf8").trim();
-    return text === "max" ? Infinity : Number(text);
-  };
-  return { high: read("memory.high"), max: read("memory.max"), swap: read("memory.swap.max") };
 }
 
 /** Whether the kernel holds `group` to `limits`: its max finite, no more than asked and less than a page under it, no throttle below it, and no swap. */
