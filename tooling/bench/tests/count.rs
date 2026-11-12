@@ -3,10 +3,18 @@
 
 use anyhow::{Context, Result, ensure};
 
-/// The band the counted header states (`COUNT_NOISE_PERCENT` in main.rs),
-/// in basis points: bracketed counts vary only with background JIT/runtime
-/// threads.
-const NOISE_BAND_BASIS_POINTS: u64 = 300;
+struct Row {
+    names: Vec<String>,
+    counts: Vec<u64>,
+    bands: std::collections::BTreeMap<String, u64>,
+    native: Vec<String>,
+}
+
+/// A measured JIT spread describes the sample; it cannot refuse an unrelated
+/// landing. Native repeatability remains an instrument wiring requirement.
+fn refuses(a: u64, b: u64, band: u64, native: bool) -> bool {
+    native && u128::from(a.abs_diff(b)) * 10_000 > u128::from(a.min(b)) * u128::from(band)
+}
 
 fn root() -> Result<camino::Utf8PathBuf> {
     camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -26,7 +34,7 @@ fn count(args: &[&str]) -> Result<std::process::Output> {
         .context("running nts-bench --count")
 }
 
-fn counted_row() -> Result<Vec<u64>> {
+fn counted_row() -> Result<Row> {
     let output = count(&["--count", "fib"])?;
     ensure!(
         output.status.success(),
@@ -38,13 +46,54 @@ fn counted_row() -> Result<Vec<u64>> {
         .lines()
         .find(|line| line.starts_with("fib\t"))
         .context("no counted fib row")?;
-    row.split('\t')
+    let counts = row
+        .split('\t')
         .skip(1)
         .map(|cell| {
             cell.parse::<u64>()
                 .with_context(|| format!("counted cell {cell}"))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    let names = text
+        .lines()
+        .find_map(|line| line.strip_prefix("case\t"))
+        .context("no column names")?
+        .split('\t')
+        .map(str::to_owned)
+        .collect();
+    let bands = serde_json::from_str(
+        text.lines()
+            .find_map(|line| line.strip_prefix("noise bands (basis points): "))
+            .context("no measured column bands")?,
+    )?;
+    let native = text
+        .lines()
+        .find_map(|line| line.strip_prefix("native repeat checks: "))
+        .context("no native column declaration")?
+        .split(", ")
+        .map(str::to_owned)
+        .collect();
+    Ok(Row {
+        names,
+        counts,
+        bands,
+        native,
+    })
+}
+
+#[test]
+fn supplied_counts_refuse_native_drift_but_never_a_jit_tiering_draw() {
+    assert!(
+        refuses(1_000_000, 1_010_000, 1, true),
+        "a native 1% drift exceeds a tight measured band"
+    );
+    for (a, b) in [(8_989_882, 8_423_963), (8_009_434, 8_278_669)] {
+        assert!(
+            !refuses(a, b, 0, false),
+            "even a JIT draw outside the observed band is informational"
+        );
+    }
+    assert!(!refuses(1_000_000, 1_000_001, 1, true));
 }
 
 #[test]
@@ -60,7 +109,7 @@ fn an_unknown_group_refuses_before_setup() -> Result<()> {
 }
 
 #[test]
-fn a_small_case_counted_twice_agrees_within_the_stated_band() -> Result<()> {
+fn real_count_wiring_checks_every_column_and_only_native_repeatability() -> Result<()> {
     // perf is the instrument; where it cannot count, there is nothing to
     // agree about, and the compile-time gate step says so on its own.
     let probe = std::process::Command::new("perf")
@@ -72,15 +121,32 @@ fn a_small_case_counted_twice_agrees_within_the_stated_band() -> Result<()> {
     }
     let first = counted_row()?;
     let second = counted_row()?;
-    assert_eq!(first.len(), 9, "every column counted");
-    assert_eq!(first.len(), second.len());
-    for (index, (a, b)) in first.iter().zip(&second).enumerate() {
-        // Basis points of difference, in integers: the band is 3% = 300.
-        let basis = a.abs_diff(*b) * 10_000 / (*b).max(1);
+    assert_eq!(
+        first.counts.len(),
+        9,
+        "every column counted and its checksum accepted"
+    );
+    assert_eq!(first.names, second.names);
+    assert_eq!(first.bands, second.bands);
+    assert_eq!(first.native, ["nts C", "nts LLVM", "C++", "ScriptC"]);
+    assert_eq!(first.native, second.native);
+    for ((name, a), b) in first.names.iter().zip(&first.counts).zip(&second.counts) {
+        assert!(*a > 0 && *b > 0, "{name} produced no instruction count");
+        let band = *first
+            .bands
+            .get(name)
+            .context("a column has no recorded band")?;
+        let native = first.native.contains(name);
+        let basis = u128::from(a.abs_diff(*b)) * 10_000 / u128::from((*a).min(*b));
         assert!(
-            basis <= NOISE_BAND_BASIS_POINTS,
-            "column {index}: {a} vs {b} instructions/op differ by {basis} basis points, past the stated band"
+            !refuses(*a, *b, band, native),
+            "native {name}: {a} vs {b} differ by {basis} basis points, past measured {band}"
         );
+        if !native {
+            eprintln!(
+                "JIT {name}: observed repeat spread {basis} basis points; recorded {band}; informational"
+            );
+        }
     }
     Ok(())
 }

@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 mod build;
 mod capture;
 mod cli;
+mod count_noise;
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod execution;
 mod reference_link;
@@ -434,14 +435,58 @@ fn count_cases(
     cases: &[Utf8PathBuf],
     counting: &Counting,
 ) -> Result<()> {
+    let columns = [
+        ("nts C", Some(0), None, true),
+        ("nts LLVM", Some(3), None, true),
+        ("nts JVM", Some(4), None, false),
+        ("C++", Some(2), None, true),
+        ("Java", Some(5), None, false),
+        ("node", None, Some("node"), false),
+        ("Bun JIT", None, Some("Bun JIT"), false),
+        ("Bun AOT", None, Some("Bun AOT"), false),
+        ("ScriptC", None, Some("ScriptC"), true),
+    ];
+    let noise = count_noise::read(root, &columns.map(|(name, _, _, _)| name))?;
+    let bands = &noise.values;
+    for (name, _, _, native) in columns {
+        ensure!(
+            !native || bands[name] < 100,
+            "count bands: native {name} spread reaches 1%; investigate the cohort before recording it"
+        );
+    }
     println!(
         "instructions per op, counted on CPU {} (outside the measurement pair 4-5), no lock",
         counting.cpu
     );
     println!(
-        "noise band: two runs of an unchanged build agree within ±{COUNT_NOISE_PERCENT}%; a move inside it is no change"
+        "noise bands (basis points): {}",
+        serde_json::to_string(&bands)?
     );
-    println!("case\tnts C\tnts LLVM\tnts JVM\tC++\tJava\tnode\tBun JIT\tBun AOT\tScriptC");
+    println!(
+        "band cohort: {} runs of {} at {} (profile {}, CPU {})",
+        noise.provenance["runs"],
+        noise.provenance["case"].as_str().expect("validated case"),
+        noise.provenance["source_commit"]
+            .as_str()
+            .expect("validated commit"),
+        noise.provenance["profile"]
+            .as_str()
+            .expect("validated profile"),
+        noise.provenance["counter_cpu"]
+    );
+    println!(
+        "observed repeat ranges, rounded up: 1 basis point = 0.01%; JIT spread is informational, not a landing verdict"
+    );
+    println!(
+        "native repeat checks: {}",
+        columns
+            .iter()
+            .filter(|(_, _, _, native)| *native)
+            .map(|(name, _, _, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!("case\t{}", columns.map(|(name, _, _, _)| name).join("\t"));
     let lanes = wanted_lanes();
     let mut failed: Vec<String> = Vec::new();
     let mut row_failures = std::collections::BTreeMap::new();
@@ -460,17 +505,7 @@ fn count_cases(
         {
             continue;
         }
-        let cells = [
-            count_cell(&measured, Some(0), None),
-            count_cell(&measured, Some(3), None),
-            count_cell(&measured, Some(4), None),
-            count_cell(&measured, Some(2), None),
-            count_cell(&measured, Some(5), None),
-            count_cell(&measured, None, Some("node")),
-            count_cell(&measured, None, Some("Bun JIT")),
-            count_cell(&measured, None, Some("Bun AOT")),
-            count_cell(&measured, None, Some("ScriptC")),
-        ];
+        let cells = columns.map(|(_, variant, host, _)| count_cell(&measured, variant, host));
         println!("{}\t{}", measured.shown, cells.join("\t").as_str());
     }
     require_valid_rows(&failed)
@@ -2433,13 +2468,6 @@ fn compile(
 /// and a "best of" estimator answers that correctly only if it looks often
 /// enough to see the good one.
 const RUNS: usize = 5;
-
-/// The agreement two counted runs of an unchanged build stay inside, stated
-/// beside every counted row: bracketed instruction counts of fixed work vary
-/// only with background JIT and runtime threads inside the bracket (Bun JIT
-/// measured 1.85% apart on fib when this was written; the native columns
-/// were bit-identical).
-const COUNT_NOISE_PERCENT: u32 = 3;
 
 /// The CPUs a timed run is allowed on, or `None` to leave it to the scheduler.
 ///

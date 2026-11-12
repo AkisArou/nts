@@ -371,8 +371,9 @@ An oracle test's supplied canonical environment is already sealed with
   `nts-bench --count [case ...]` (or `--count --group <name>`) prints each
   row's instruction counts per column on any CPU outside 4–5, with no
   measurement lock, so agents count in parallel. A count is enough evidence when the change is in code
-  generation or front-end work and the count moves past the band the header
-  states; a timed row under the lock is needed when the claim is about
+  generation or front-end work and the count moves past that column's observed
+  band in the header. The bands come from a tool-written cohort in results;
+  JIT repeat spread is reported without deciding a landing's verdict. A timed row under the lock is needed when the claim is about
   wall time itself — scheduling, layout, cache or branch effects a count
   cannot see, or a benchmark row's standing against the bar.
 - Benchmark on CPU 4 with sibling 5 idle, from a worktree pinned to a

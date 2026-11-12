@@ -352,8 +352,14 @@ slows another in its group is seen in the same sitting.
 selected row's instruction counts per column: the drivers' own fixed work,
 calibrated once and counted inside perf's bracket on any CPU outside 4–5.
 It takes no measurement lock and publishes no run record, so agents count
-in parallel. Two runs of an unchanged build agree within the band the
-header states; a move inside it is no change. Timed rows still come from a
+in parallel. The header reads each column's observed repeat range from
+`results/benchmarks/count-bands.json`, written by
+`tooling/bench/count-bands.ts` from a complete cohort with its provenance.
+A move inside that range is unresolved. A JIT's tiering can move outside a
+previous cohort's range, so its spread is informational in the real wiring
+test; native columns still have a tight repeatability check. Supplied-count
+tests prove the classification without making a landing depend on load.
+Timed rows still come from a
 locked session on CPU 4 and keep the wall-time floor below.
 
 - **A measurement waits for CPU 4 with its sibling 5 idle, and for nothing
@@ -611,6 +617,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Count bands are empirical per column:** the calibration owner writes the
+  samples, observed ranges and cohort provenance into results. Native
+  repeatability stays an instrument check; JIT tiering spread is reported,
+  while supplied observations prove its classification. A finite empirical
+  range cannot make two real JIT draws a deterministic landing verdict.
+  ([log](records/notebooks/decisions-log.md#count-bands-are-empirical-per-column-11-12)).
 
 - **Every Rust test route uses one profile owner.** The shared Cargo invocation
   uses incremental `nts-dev` without debug info; the manifest, invocation and

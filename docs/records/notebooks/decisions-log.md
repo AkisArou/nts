@@ -2363,3 +2363,17 @@ The frontend's bare Cargo call built a second debug artifact set, and the
 workspace runner's incremental override made another variant of the same
 profile. One invocation owner prevents both from returning. Existing obsolete
 profile generations stay under the separately approved reclamation policy.
+ 
+## Count bands are empirical per column (11-12)
+
+The count header reads a tool-written results record, with retained samples
+and provenance, instead of one source constant shared by all columns. The
+recording owner derives each observed range from that column's own cohort.
+The real wiring control requires counts and accepted checksums from every
+column and tight native repeatability; it reports JIT spreads without refusing.
+Supplied-count controls prove that native drift refuses and JIT tiering draws
+do not. The initial cohort has twenty unchanged `fib` runs; its numbers live
+in `results/benchmarks/count-bands.json`.
+
+JIT tiering moved instruction counts with load and refused unrelated landings.
+Increasing a finite band would leave the same probabilistic verdict in place.
