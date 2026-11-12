@@ -1,0 +1,8 @@
+module	purpose	call_sites
+tooling/full-check/measure-command.ts	measurement cgroup cleanup	1
+tooling/gate/environment.ts	capability declarations	1
+tooling/gate/affinity.ts	cpuset widening verification	1
+tooling/gate/verdict-contract.ts	git and tool identity	1
+tooling/gate/artifact-shadow.ts	tool location and version	2
+tooling/census/generate/precheck.ts	type checking and Node observations	2
+tooling/gate/comment-changes.ts	rustc version/helper/tokens, clang tokens, git diff	5
