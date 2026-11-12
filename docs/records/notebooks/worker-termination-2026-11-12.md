@@ -132,3 +132,10 @@ The host audit took 3.340 seconds and strict checking found no diagnostic rise.
 Removing only runLanding's await of closed made its held-shutdown control fail
 with "landing returned before its owned sampler closed"; the committed owner
 passed. Strict checking ran last after that mutation control.
+
+
+The second landing exposed another previously unobserved sampler failure:
+file-backed Workers inherited an eval parent's --input-type or preload flags.
+Awaiting closed reported the invalid input mode in program-oracles and
+run-holds, instead of discarding it. The sampler now supplies its own empty
+execArgv. Controls cover both input-type forms and a parent-only preload.

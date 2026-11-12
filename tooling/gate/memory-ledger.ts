@@ -1310,7 +1310,9 @@ function samplePeak(reservation: Pick<Reservation, "id" | "ledger">, key: string
   let worker: Worker | null = null, fixtureFailure:Error|undefined;
   let lifecycle:ReturnType<typeof workerLifecycle>|undefined;
   try {
-    worker = new Worker(WATCHER, { workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, observations:hostObservationEnvironment(env) } });
+    // The file-backed sampler owns its flags. Eval modes and parent preloads
+    // describe the caller, and cannot be applied to this Worker entry.
+    worker = new Worker(WATCHER, { execArgv: [], workerData: { ledger: reservation.ledger, id: reservation.id, key, peak: shared, observations:hostObservationEnvironment(env) } });
     lifecycle=workerLifecycle(worker,`memory: ${key} sampler`,report);
     worker.postMessage({kind:"start"});
     // A sampler that fails leaves the job less measured, never stopped.
