@@ -1,5 +1,5 @@
 // The pool owns admission, tokens and this process's complete resident group.
-import {writeFileSync,mkdirSync,openSync,readFileSync,readSync,writeSync} from 'node:fs';
+import {writeFileSync,mkdirSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {createInterface} from 'node:readline';
 import {OracleWorker,REPOSITORY,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot,type OraclePrepared} from './oracle-emit.ts';
@@ -10,7 +10,8 @@ import {OracleFilesystem} from './oracle-filesystem.ts';
 import type {ProgramMemory,ProgramOracleTask} from './program-oracles.ts';
 import {captureProgramOracle} from './oracle-result-capture.ts';
 import {compileSync,inResidentWorker} from '../census/worker-memory.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {gateEnvironment,oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {hostObservations,HostObservationError} from '../gate/host-observations.ts';
 import {observeOutcomeNode} from '../conformance/outcomes-oracle.ts';
 import {OUTCOME_ORACLE_PRELOADS,outcomeSourceAssets} from '../conformance/outcomes-project.ts';
 
@@ -21,8 +22,7 @@ mkdirSync(scratch,{recursive:true});mkdirSync(executables,{recursive:true});
 // The run builds and pins siblings together, in its chosen Cargo profile.
 const planner=join(dirname(resolve(process.env.NTS_BIN??join(process.env.CARGO_TARGET_DIR??join(REPOSITORY,'target'),'release/nts'))),'oracle-plan');
 const tools={nts:process.env.NTS_BIN??'',cc:'cc',memoryCapKb:6_000_000};
-const worker=new OracleWorker(join(scratch,'sdk'),oracleToolchainLocation());
-const plannerEnv={...process.env,NTS_BACKEND:'c'};
+const plannerEnv=gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR??scratch,owned:{NTS_BACKEND:'c'}}).env;
 // The plan's supervisor bounds the Node execution it runs (oracle-execution.ts).
 function execute(args:string[]){
   const result=compileSync(tools,planner,['--execute',...args],{encoding:'utf8',maxBuffer:64*1024**2,env:plannerEnv});
@@ -32,14 +32,12 @@ function execute(args:string[]){
 // What this worker's scope holds at most over one program: its memory.peak,
 // reset for each program through a descriptor of its own (Linux 6.12 and
 // later); where the kernel cannot reset it, the program is not measured.
-const peakFile=join('/sys/fs/cgroup',readFileSync('/proc/self/cgroup','utf8').trim().replace(/^0::/,''),'memory.peak');
-let peakFd:number|null=null;
-try{peakFd=openSync(peakFile,'r+');}catch{peakFd=null;}
-const resetPeak=()=>{if(peakFd===null)return false;try{writeSync(peakFd,'reset\n');return true;}catch{return false;}};
-const readPeak=()=>{const buffer=Buffer.alloc(32);const n=readSync(peakFd!,buffer,0,buffer.length,0);return Number(buffer.toString('utf8',0,n).trim());};
+const peak=hostObservations(plannerEnv).ownScopeMemoryPeak();
+if(!peak.resettable){peak.close();throw new HostObservationError('program oracle worker requires a resettable scopePeak meter');}
+const worker=new OracleWorker(join(scratch,'sdk'),oracleToolchainLocation());
 try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infinity})){
   if(!path)continue;
-  const measuring=resetPeak();let oraclePeakBytes:number|null=null;
+  peak.reset();let oraclePeakBytes:number|null=null;
   let owner:OraclePrepared|undefined,directory:string|undefined,keep=false;
   try{
     const taskFiles=new OracleFilesystem(),taskText=taskFiles.readFile(path);
@@ -79,9 +77,9 @@ try{for await(const path of createInterface({input:process.stdin,crlfDelay:Infin
     // The warm SDK and its captured package bytes are never retained here.
     keep=answer.kind==='calls';
     if(!keep)removeOracleSnapshot(directory);
-    const scopePeakBytes=measuring?readPeak():0;
+    const scopePeakBytes=peak.read();
     const memory:ProgramMemory|undefined=Number.isSafeInteger(scopePeakBytes)&&scopePeakBytes>0?{scopePeakBytes,oraclePeakBytes}:undefined;
     process.stdout.write(JSON.stringify({path,bucket:'oracle-reference',answer,capture,...(memory?{memory}:{})})+'\n');
   }catch(error){process.stdout.write(JSON.stringify({path,bucket:'infrastructure-error',why:error instanceof Error?error.stack:String(error)})+'\n');}
   finally{if(directory&&!keep)removeOracleSnapshot(directory);}
-}}finally{worker.close();}
+}}finally{peak.close();worker.close();}

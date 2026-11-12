@@ -10,6 +10,7 @@ import {TemporaryAdmission} from './admission.ts';
 import {reserveJob,readLedger} from './memory-ledger.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
+import {compileActive,closeMemoryRun} from '../census/worker-memory.ts';
 
 test('one complete owned view supplies every resource, including child observations',t=>{
   const root=testScratch(t,'host-observations'),clock=join(root,'clock');
@@ -38,7 +39,7 @@ test('one complete owned view supplies every resource, including child observati
 test('an omitted or unreadable observation fails by name, without a host fallback',t=>{
   const root=testScratch(t,'host-observations-omitted'),env=ownMemory(root);
   const file=env.NTS_HOST_OBSERVATIONS,complete=JSON.parse(readFileSync(file,'utf8'));
-  for(const [parent,key,name] of [['disk','freeBytes','disk.freeBytes'],['disk','freeInodes','disk.freeInodes'],['memory','file','memory.file'],['paging','file','paging.file'],['resident','defaultBytes','resident.defaultBytes'],['width','logical','width.logical'],['width','available','width.available'],['clock','kind','clock'],['','load','load'],['','cpu','cpu']] as const){
+  for(const [parent,key,name] of [['disk','freeBytes','disk.freeBytes'],['disk','freeInodes','disk.freeInodes'],['memory','file','memory.file'],['paging','file','paging.file'],['resident','defaultBytes','resident.defaultBytes'],['scopePeak','bytes','scopePeak.bytes'],['scopePeak','resettable','scopePeak.resettable'],['width','logical','width.logical'],['width','available','width.available'],['clock','kind','clock'],['','load','load'],['','cpu','cpu'],['','scopePeak','scopePeak']] as const){
     const broken=structuredClone(complete);
     delete (parent?broken[parent]:broken)[key];
     writeFileSync(file,JSON.stringify(broken));
@@ -49,6 +50,40 @@ test('an omitted or unreadable observation fails by name, without a host fallbac
   rmSync(env.NTS_MEMINFO);
   assert.throws(()=>host.memory(),/host observation memory.file/);
   assert.throws(()=>hostObservations({NTS_MEMINFO:'/proc/meminfo'}),/require an owned HostObservations/);
+});
+
+test('an owned per-case peak meter advances only from its capability and closes by name',t=>{
+  const root=testScratch(t,'host-scope-peak'),env=ownMemory(root,{scopePeak:{kind:'fixed',bytes:123,resettable:true}});
+  const meter=hostObservations(env).ownScopeMemoryPeak();
+  assert.equal(meter.resettable,true);meter.reset();assert.equal(meter.read(),123);
+  ownMemory(root,{scopePeak:{kind:'fixed',bytes:456,resettable:true}});
+  assert.equal(meter.read(),456);
+  meter.reset();meter.close();meter.close();
+  assert.throws(()=>meter.read(),/scopePeak meter is closed/);
+  assert.throws(()=>meter.reset(),/scopePeak meter is closed/);
+  ownMemory(root,{scopePeak:{kind:'fixed',bytes:789,resettable:false}});
+  const unsupported=hostObservations(env).ownScopeMemoryPeak();
+  assert.equal(unsupported.resettable,false);
+  assert.throws(()=>unsupported.reset(),/scopePeak meter cannot reset/);
+  unsupported.close();
+});
+
+test('an explicitly live own-scope peak meter retains the worker descriptor',async t=>{
+  const root=testScratch(t,'host-scope-peak-live'),env=fixtureEnvironment(t,ownMemory(join(root,'observations'),{scopePeak:{kind:'live'}}));
+  // This kernel wiring control explicitly selects live counters in its own
+  // bounded worker. No timing interval or machine-wide resource decides it.
+  try {
+    const result=await compileActive({memoryCapKb:256*1024},process.execPath,['--input-type=module','-e',`
+import assert from 'node:assert/strict';
+import {hostObservations} from ${JSON.stringify(new URL('./host-observations.ts',import.meta.url).href)};
+const meter=hostObservations().ownScopeMemoryPeak();
+assert.equal(meter.resettable,true);
+const bytes=Buffer.alloc(16*1024**2,7);meter.reset();
+assert.ok(meter.read()>=bytes.length);assert.equal(bytes[0],7);
+meter.close();assert.throws(()=>meter.read(),/scopePeak meter is closed/);
+`],{env,maxBuffer:64*1024});
+    assert.equal(result.status,0,result.out);
+  } finally {closeMemoryRun();}
 });
 
 test('canonical children retain the owned bundle, while a launcher override cannot be landing evidence',t=>{

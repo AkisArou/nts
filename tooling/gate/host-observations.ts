@@ -1,6 +1,6 @@
 // Resource observations are a capability of a run. Tests provide a complete
 // owned view, including observations made by dependencies and child processes.
-import {readFileSync,statfsSync} from 'node:fs';
+import {closeSync,openSync,readFileSync,readSync,statfsSync,writeSync} from 'node:fs';
 import {availableParallelism,cpus,loadavg} from 'node:os';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 
@@ -10,6 +10,7 @@ export class HostObservationError extends Error { override name='HostObservation
 export type MachineMemory = {availableBytes:number;totalBytes:number};
 export type DiskSpace = {freeBytes:number;freeInodes:number};
 export type CgroupCpu = {usageUsec:number;userUsec:number;systemUsec:number};
+export type ScopeMemoryPeak = {readonly resettable:boolean;reset():void;read():number;close():void};
 export type HostObservationFixture = {
   version:1;
   memory:{file:string};
@@ -17,6 +18,7 @@ export type HostObservationFixture = {
   disk:DiskSpace;
   cpu:{kind:'fixed';default:CgroupCpu;cgroups?:Record<string,CgroupCpu>}|{kind:'live'};
   resident:{kind:'fixed';defaultBytes:number;processes?:Record<string,number>;cgroups?:Record<string,number>}|{kind:'live'};
+  scopePeak:{kind:'fixed';bytes:number;resettable:boolean}|{kind:'live'};
   width:{logical:number;available:number};
   load:[number,number,number];
   clock:{kind:'live'}|{kind:'fixed';now:number}|{kind:'file';file:string};
@@ -31,6 +33,7 @@ export interface HostObservations {
   processCharge(pid:number):number;
   cgroupCharge(path:string):number;
   cgroupCpu(path:string):CgroupCpu;
+  ownScopeMemoryPeak():ScopeMemoryPeak;
   machineWidth():number;
   availableWidth():number;
   now():number;
@@ -77,6 +80,26 @@ export function parseCgroupCpu(text:string):CgroupCpu {
   return {usageUsec:counter('usage_usec'),userUsec:counter('user_usec'),systemUsec:counter('system_usec')};
 }
 function liveCgroupCpu(path:string):CgroupCpu { return parseCgroupCpu(readFileSync(`/sys/fs/cgroup${path}/cpu.stat`,'utf8')); }
+
+/** memory.peak resets belong to an open descriptor, not to a cgroup path.
+ * Retain the descriptor for the whole case stream and discover reset support
+ * before a caller can mistake a whole-scope peak for a per-case measurement. */
+function liveScopeMemoryPeak():ScopeMemoryPeak {
+  let fd:number;
+  try {
+    const current=readFileSync('/proc/self/cgroup','utf8').trim(),group=current.startsWith('0::/')?current.slice(3):'';
+    if(!group||group==='/'||group.split('/').includes('..')||group.includes('\n'))throw Error('own scope identity is invalid');
+    fd=openSync(`/sys/fs/cgroup${group}/memory.peak`,'r+');
+  } catch(error) {throw new HostObservationError(`host observation scopePeak cannot open own memory.peak: ${String(error)}`);}
+  let resettable=false,closed=false;
+  try{writeSync(fd,'reset\n');resettable=true;}catch{}
+  const opened=()=>{if(closed)throw new HostObservationError('host observation scopePeak meter is closed');};
+  return {resettable,
+    reset:()=>{opened();if(!resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');try{writeSync(fd,'reset\n');}catch(error){throw new HostObservationError(`host observation scopePeak reset failed: ${String(error)}`);}},
+    read:()=>{opened();const buffer=Buffer.alloc(32);let size:number;try{size=readSync(fd,buffer,0,buffer.length,0);}catch(error){throw new HostObservationError(`host observation scopePeak read failed: ${String(error)}`);}const text=buffer.toString('utf8',0,size).trim();if(!/^\d+$/.test(text))throw new HostObservationError('host observation scopePeak counter is invalid');return number(Number(text),'scopePeak.bytes');},
+    close:()=>{if(!closed){closed=true;closeSync(fd);}},
+  };
+}
 function memory(file:string):MachineMemory {
   const result=parseMemory(readFileSync(file,'utf8'));
   if(result===null)throw new Error(`${file} names no MemAvailable and MemTotal`);
@@ -118,6 +141,10 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       else if(value.cpu?.kind!=='live')throw new HostObservationError('host observation cpu is missing or invalid');
       if(value.resident?.kind==='fixed')number(value.resident.defaultBytes,'resident.defaultBytes');
       else if(value.resident?.kind!=='live')throw new HostObservationError('host observation resident is missing or invalid');
+      if(value.scopePeak?.kind==='fixed'){
+        number(value.scopePeak.bytes,'scopePeak.bytes');
+        if(typeof value.scopePeak.resettable!=='boolean')throw new HostObservationError('host observation scopePeak.resettable is missing or invalid');
+      } else if(value.scopePeak?.kind!=='live')throw new HostObservationError('host observation scopePeak is missing or invalid');
       if(value.clock?.kind==='fixed')number(value.clock.now,'clock.now');
       else if(value.clock?.kind==='file'){if(!value.clock.file)throw new HostObservationError('host observation clock.file is missing or invalid');}
       else if(value.clock?.kind!=='live')throw new HostObservationError('host observation clock is missing or invalid');
@@ -139,6 +166,13 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       processCharge:pid=>charge('processes',String(pid)),
       cgroupCharge:path=>charge('cgroups',path),
       cgroupCpu:path=>{const cpu=read().cpu;if(cpu.kind==='live')return liveCgroupCpu(path);return cpuCounters(cpu.cgroups?.[path]??cpu.default,`cpu.cgroups.${path}`);},
+      ownScopeMemoryPeak:()=>{
+        const initial=read().scopePeak;
+        if(initial.kind==='live')return liveScopeMemoryPeak();
+        let closed=false;
+        const current=()=>{if(closed)throw new HostObservationError('host observation scopePeak meter is closed');const value=read().scopePeak;if(value.kind!=='fixed'||value.resettable!==initial.resettable)throw new HostObservationError('host observation scopePeak meter changed its kind or resettability');return value;};
+        return {resettable:initial.resettable,reset:()=>{current();if(!initial.resettable)throw new HostObservationError('host observation scopePeak meter cannot reset');},read:()=>number(current().bytes,'scopePeak.bytes'),close:()=>{closed=true;}};
+      },
       machineWidth:()=>number(read().width?.logical,'width.logical'),
       availableWidth:()=>number(read().width?.available,'width.available'),
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
@@ -156,6 +190,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     processCharge:liveProcessCharge,
     cgroupCharge:liveCgroupCharge,
     cgroupCpu:liveCgroupCpu,
+    ownScopeMemoryPeak:liveScopeMemoryPeak,
     machineWidth:()=>cpus().length,
     availableWidth:()=>availableParallelism(),
     now:()=>performance.now(),
