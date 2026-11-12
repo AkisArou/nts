@@ -1,0 +1,1010 @@
+{
+  "version": 1,
+  "base": {
+    "source": "972360283d344e74548d80b03d604b97d437394e",
+    "tracked": 28509,
+    "lostEdges": 298515,
+    "lostPaths": 24954,
+    "sites": 8014,
+    "withoutProvenance": 0,
+    "byStep": {
+      "old-paths": 8094,
+      "tooling": 20091,
+      "test-host": 20721,
+      "bench-agree": 3407,
+      "examples": 3407,
+      "rc": 3407,
+      "records": 3909,
+      "test262-cases": 13414,
+      "test262-builtins-cases": 13414,
+      "test262-rest-cases": 13414,
+      "test262-jvm": 13414,
+      "test262-llvm": 13414,
+      "test262-census-c": 13416,
+      "test262-census-llvm": 13416,
+      "test262-census-jvm": 13416,
+      "typescript-oracles": 13320,
+      "typescript-c": 1225,
+      "typescript-llvm": 1225,
+      "typescript-jvm": 1225,
+      "outcomes": 8245,
+      "expect-ir": 4562,
+      "integrity": 8248,
+      "compile-time": 8244,
+      "compile-time-rc": 3289,
+      "integrity-runtime": 8248,
+      "assembles": 3295,
+      "jvm-verifies": 4817,
+      "corpus": 1127,
+      "benches": 13325,
+      "sweep": 1127,
+      "llvm": 1131,
+      "llvm-rc": 1131,
+      "jvm": 1131,
+      "program-oracles": 4869,
+      "blockers": 8341,
+      "definitions": 8248,
+      "audit": 98,
+      "test262": 91,
+      "gate-inputs": 8,
+      "licenses": 84,
+      "frontend-tsrs": 89,
+      "addons": 9,
+      "tests": 2,
+      "interop": 194,
+      "dex": 12194,
+      "tooling-types": 1,
+      "types": 4360,
+      "c-compiles": 1275,
+      "config": 3383
+    }
+  },
+  "namespace": {
+    "source": "e2f119663683adb866a88ce572b2f3bbf70a6dca",
+    "tracked": 28510,
+    "lostEdges": 298553,
+    "lostPaths": 24959,
+    "sites": 8051,
+    "withoutProvenance": 0,
+    "byStep": {
+      "old-paths": 8094,
+      "tooling": 20091,
+      "test-host": 20723,
+      "bench-agree": 3408,
+      "examples": 3408,
+      "rc": 3408,
+      "records": 3912,
+      "test262-cases": 13415,
+      "test262-builtins-cases": 13415,
+      "test262-rest-cases": 13415,
+      "test262-jvm": 13415,
+      "test262-llvm": 13415,
+      "test262-census-c": 13417,
+      "test262-census-llvm": 13417,
+      "test262-census-jvm": 13417,
+      "typescript-oracles": 13320,
+      "typescript-c": 1226,
+      "typescript-llvm": 1226,
+      "typescript-jvm": 1226,
+      "outcomes": 8246,
+      "expect-ir": 4562,
+      "integrity": 8249,
+      "compile-time": 8245,
+      "compile-time-rc": 3290,
+      "integrity-runtime": 8249,
+      "assembles": 3298,
+      "jvm-verifies": 4821,
+      "corpus": 1127,
+      "benches": 13326,
+      "sweep": 1127,
+      "llvm": 1132,
+      "llvm-rc": 1132,
+      "jvm": 1132,
+      "program-oracles": 4869,
+      "blockers": 8342,
+      "definitions": 8249,
+      "audit": 98,
+      "test262": 91,
+      "gate-inputs": 9,
+      "licenses": 84,
+      "frontend-tsrs": 89,
+      "addons": 9,
+      "tests": 2,
+      "interop": 194,
+      "dex": 12194,
+      "tooling-types": 1,
+      "types": 4360,
+      "c-compiles": 1275,
+      "config": 3383
+    }
+  },
+  "fallback": {
+    "base": {
+      "before": {
+        "unplaced": 149,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 149,
+        "policy": 33
+      }
+    },
+    "namespace": {
+      "before": {
+        "unplaced": 149,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 149,
+        "policy": 33
+      }
+    }
+  },
+  "commonPathObligations": {
+    "lost": [],
+    "gained": [
+      [
+        "tooling/gate/memory-watch.ts",
+        "bench-agree"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "benches"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "dex"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "examples"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "rc"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "sweep"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "test-host"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "bench-agree"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "benches"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "blockers"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "compile-time"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "compile-time-rc"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "corpus"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "definitions"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "dex"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "examples"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "gate-inputs"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "integrity"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "integrity-runtime"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "jvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "llvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "llvm-rc"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "outcomes"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "program-oracles"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "rc"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "records"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "sweep"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-builtins-cases"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-cases"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-census-c"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-census-jvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-census-llvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-jvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-llvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "test262-rest-cases"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "typescript-c"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "typescript-jvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "typescript-llvm"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "typescript-oracles"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "bench-agree"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "benches"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "blockers"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "compile-time"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "compile-time-rc"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "corpus"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "definitions"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "dex"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "examples"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "gate-inputs"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "integrity"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "integrity-runtime"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "jvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "llvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "llvm-rc"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "outcomes"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "program-oracles"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "rc"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "records"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "sweep"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-builtins-cases"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-cases"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-census-c"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-census-jvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-census-llvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-jvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-llvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "test262-rest-cases"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "typescript-c"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "typescript-jvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "typescript-llvm"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "typescript-oracles"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "bench-agree"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "benches"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "blockers"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "compile-time"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "compile-time-rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "definitions"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "examples"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "gate-inputs"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "integrity"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "integrity-runtime"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "llvm-rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "outcomes"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test-host"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-builtins-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-c"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-rest-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-c"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-llvm"
+      ]
+    ]
+  },
+  "switchOffDelta": {
+    "removed": [],
+    "added": [
+      [
+        "tooling/gate/memory-watch.ts",
+        "test-host"
+      ],
+      [
+        "tooling/gate/reader-inputs.ts",
+        "records"
+      ],
+      [
+        "tooling/gate/reader-inputs.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/reader-inputs.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "records"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/shell-commands.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "records"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/source-facts.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-builtins-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-rest-cases"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-c"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test262-census-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-c"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "typescript-jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "outcomes"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "integrity"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "compile-time"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "compile-time-rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "test-host"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "gate-inputs"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "integrity-runtime"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "jvm-verifies"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "benches"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "llvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "llvm-rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "jvm"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "bench-agree"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "examples"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "rc"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "blockers"
+      ],
+      [
+        "tooling/inputs/node-inputs.json",
+        "definitions"
+      ]
+    ]
+  },
+  "firstLossSites": 626,
+  "firstLossReaders": 177,
+  "additionalClassifications": [
+    {
+      "key": [
+        "tooling/bench/run-recording.ts",
+        "named",
+        "benchmarks/cases"
+      ],
+      "role": "data",
+      "reason": "Record metadata names the population; it does not read the directory."
+    },
+    {
+      "key": [
+        "tooling/bench/run-recording.ts",
+        "named",
+        "tooling/conformance/pin.ts"
+      ],
+      "role": "data",
+      "reason": "The diagnostic prints the pin command; it does not execute it."
+    },
+    {
+      "key": [
+        "tooling/gate/reader-census-analysis.ts",
+        "named",
+        "tests/interop"
+      ],
+      "role": "data",
+      "reason": "A classification prefix is path data, not a repository read."
+    },
+    {
+      "key": [
+        "tooling/gate/records.test.ts",
+        "named",
+        "tests/programs"
+      ],
+      "role": "data",
+      "reason": "The fixture creates this directory under its private source root."
+    },
+    {
+      "key": [
+        "tooling/gate/records.test.ts",
+        "beside",
+        "tsconfig.json"
+      ],
+      "role": "data",
+      "reason": "The fixture writes a private project file, not a gate-directory config read."
+    }
+  ],
+  "sliceBudgets": [
+    {
+      "group": "test262-and-typescript",
+      "assignedEdges": 121912,
+      "remaining": 111216,
+      "sites": 20,
+      "readers": [
+        "tooling/census/audit.test.ts",
+        "tooling/census/conformance262.ts",
+        "tooling/census/generate/integration.test.ts",
+        "tooling/census/generate/precheck.ts",
+        "tooling/census/generate/reduce.test.ts",
+        "tooling/census/generate/writer.ts",
+        "tooling/census/sampling-cli.test.ts",
+        "tooling/census/typescript-oracles.ts",
+        "tooling/records/record-pending.ts"
+      ],
+      "byStep": {
+        "test262-cases": 12190,
+        "test262-builtins-cases": 12190,
+        "test262-rest-cases": 12190,
+        "test262-jvm": 12190,
+        "test262-llvm": 12190,
+        "test262-census-c": 12192,
+        "test262-census-llvm": 12192,
+        "test262-census-jvm": 12192,
+        "typescript-oracles": 12190,
+        "tooling": 12196
+      }
+    },
+    {
+      "group": "runtime-and-config",
+      "assignedEdges": 67447,
+      "remaining": 43769,
+      "sites": 85,
+      "readers": [
+        "runtime/node/internal/errors.ts",
+        "runtime/node/internal/utf8.ts",
+        "runtime/web-platform/test/wpt/versions.ts",
+        "tests/interop/native-compression/provider-loader.mjs",
+        "tests/interop/native-compression/verify.ts",
+        "tooling/census/definitions.ts",
+        "tooling/config/audit.mjs",
+        "tooling/conformance/assembles.ts",
+        "tooling/conformance/blockers-check.mjs",
+        "tooling/conformance/c-compiles.mjs",
+        "tooling/conformance/expect-ir.ts",
+        "tooling/conformance/fuzz-runtime.mjs",
+        "tooling/conformance/integrity.ts",
+        "tooling/conformance/jvm-verifies.ts",
+        "tooling/conformance/outcomes-check.ts",
+        "tooling/conformance/outcomes-project.ts",
+        "tooling/conformance/run.mjs",
+        "tooling/conformance/types-check.mjs",
+        "tooling/conformance/web-platform/unrouted.mjs"
+      ],
+      "byStep": {
+        "tooling": 3698,
+        "expect-ir": 4562,
+        "blockers": 7178,
+        "interop": 192,
+        "outcomes": 7096,
+        "integrity": 7096,
+        "definitions": 7096,
+        "compile-time": 7096,
+        "integrity-runtime": 7096,
+        "assembles": 2139,
+        "types": 4360,
+        "jvm-verifies": 3659,
+        "c-compiles": 1275,
+        "config": 3383,
+        "program-oracles": 1521
+      }
+    },
+    {
+      "group": "benches-and-oracles",
+      "assignedEdges": 41694,
+      "remaining": 2075,
+      "sites": 54,
+      "readers": [
+        "tooling/bench/build-records.ts",
+        "tooling/bench/groups.ts",
+        "tooling/bench/layouts-heap.test.ts",
+        "tooling/bench/run-record.ts",
+        "tooling/bench/run-session.ts",
+        "tooling/differential/agree.mjs",
+        "tooling/differential/check-consumers.ts",
+        "tooling/differential/oracle-emit.ts",
+        "tooling/differential/oracle-filesystem.ts",
+        "tooling/differential/oracle-records.ts",
+        "tooling/differential/oracle-runtime.ts",
+        "tooling/differential/program-oracles.ts",
+        "tooling/gate/compile-counter.test.ts",
+        "tooling/gate/compile-counter.ts"
+      ],
+      "byStep": {
+        "records": 3419,
+        "test262-cases": 1128,
+        "test262-builtins-cases": 1128,
+        "test262-rest-cases": 1128,
+        "test262-jvm": 1128,
+        "test262-llvm": 1128,
+        "test262-census-c": 1128,
+        "test262-census-llvm": 1128,
+        "test262-census-jvm": 1128,
+        "typescript-oracles": 1128,
+        "typescript-c": 1128,
+        "typescript-llvm": 1128,
+        "typescript-jvm": 1128,
+        "outcomes": 1140,
+        "compile-time-rc": 3281,
+        "assembles": 1159,
+        "jvm-verifies": 1154,
+        "benches": 1128,
+        "llvm": 1125,
+        "llvm-rc": 1125,
+        "jvm": 1125,
+        "bench-agree": 3347,
+        "program-oracles": 3346,
+        "examples": 3347,
+        "rc": 3347,
+        "tooling": 32,
+        "integrity": 16,
+        "compile-time": 16,
+        "integrity-runtime": 16,
+        "blockers": 16,
+        "definitions": 16,
+        "corpus": 1,
+        "sweep": 1,
+        "dex": 1
+      }
+    },
+    {
+      "group": "tooling",
+      "assignedEdges": 2075,
+      "remaining": 0,
+      "sites": 55,
+      "readers": [
+        "compiler/frontend-tsrs/names.test.ts",
+        "compiler/frontend-tsrs/roles.test.ts",
+        "compiler/frontend-tsrs/vendor.test.ts",
+        "compiler/frontend-tsrs/vendor.ts",
+        "tooling/android/dex-record.ts",
+        "tooling/bootstrap/node.ts",
+        "tooling/full-check/count.ts",
+        "tooling/gate/agree-new-projects.test.ts",
+        "tooling/gate/benchmark-inputs.test.ts",
+        "tooling/gate/blockers-log.test.ts",
+        "tooling/gate/blockers-pool.test.ts",
+        "tooling/gate/check-report-consumers.test.ts",
+        "tooling/gate/corpus.test.ts",
+        "tooling/gate/dex-bound.test.ts",
+        "tooling/gate/dex-shadow.test.ts",
+        "tooling/gate/environment.ts",
+        "tooling/gate/gate-resource.ts",
+        "tooling/gate/inner.ts",
+        "tooling/gate/jvm-launcher-audit.test.ts",
+        "tooling/gate/records.ts",
+        "tooling/gate/tooling-discovery.ts",
+        "tooling/gate/tooling-types.ts",
+        "tooling/inputs/linker.ts",
+        "tooling/inputs/node-inputs.ts",
+        "tooling/jvm/member-name.test.ts",
+        "tooling/licenses/licenses.ts",
+        "tooling/tasks/audit.ts"
+      ],
+      "byStep": {
+        "test262-cases": 7,
+        "test262-builtins-cases": 7,
+        "test262-rest-cases": 7,
+        "test262-jvm": 7,
+        "test262-llvm": 7,
+        "test262-census-c": 7,
+        "test262-census-llvm": 7,
+        "test262-census-jvm": 7,
+        "typescript-c": 7,
+        "typescript-llvm": 7,
+        "typescript-jvm": 7,
+        "outcomes": 8,
+        "tooling": 1333,
+        "gate-inputs": 9,
+        "jvm-verifies": 8,
+        "benches": 8,
+        "licenses": 84,
+        "llvm": 7,
+        "llvm-rc": 7,
+        "jvm": 7,
+        "frontend-tsrs": 3,
+        "records": 492,
+        "dex": 3,
+        "tooling-types": 1,
+        "test262": 1,
+        "addons": 1,
+        "typescript-oracles": 2,
+        "integrity": 2,
+        "compile-time": 2,
+        "compile-time-rc": 2,
+        "integrity-runtime": 2,
+        "corpus": 2,
+        "sweep": 2,
+        "bench-agree": 2,
+        "program-oracles": 2,
+        "examples": 2,
+        "rc": 2,
+        "blockers": 2,
+        "definitions": 2
+      }
+    }
+  ],
+  "index": {
+    "edges": 298553,
+    "bytes": 6810309,
+    "sha256": "d51510bbb7aeb974dda0dee15491ef775715c841ef625e905aa707bb3a912983"
+  },
+  "captures": {
+    "base": {
+      "provenance": "8c48acc16807fd9c0d13b5e08285157b1b423aa4ed744afd4ba5c4e0311d1c77",
+      "coverage": "1fc78260c1770370908933a65cfd937d8fcc03ebbe2835e4cffa48a88fc403fb"
+    },
+    "namespace": {
+      "provenance": "8a78dd621103b36f3d611d0f12b2795d7c2ff2ef9b9cd4dabbf8f92a63640875",
+      "coverage": "934980e2507772e966bcd4976ca7224c7516e91ba54e3790e107200ea6a3e03f"
+    }
+  },
+  "proof": {
+    "focused": {
+      "tests": 132,
+      "pass": 132
+    },
+    "consumers": {
+      "tests": 36,
+      "pass": 36
+    },
+    "host": {
+      "sources": 1869,
+      "closures": 252,
+      "reads": 412
+    },
+    "strict": {
+      "modules": 810,
+      "newDiagnostics": 0
+    },
+    "frozenIndexSha256": "0c409f453dee0c913ef9dcebadc2968a7361f295469f47f10c49dd37d64a5475"
+  }
+}
