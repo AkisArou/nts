@@ -80,7 +80,7 @@ import { selectRange, SelectionInfrastructureError, selectionInfrastructure, ste
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
-import { moduleClosure } from "./module-closure.ts";
+import { moduleGraph } from "./module-closure.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
@@ -1572,6 +1572,7 @@ function stepInputGraph() {
     const declared = new Set();
     const membership = new Set();
     const directories = new Map();
+    const modules = moduleGraph({sourceRoot:TREE});
     const directory = (row,step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
       const key=reader+"\0"+row.directory;
@@ -1579,7 +1580,7 @@ function stepInputGraph() {
       declaration.steps.add(step);directories.set(key,declaration);
     };
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
-    for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
+    try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1], rawCommand = m[2];
       if(!step||rawCommand===undefined)throw new Error("canonical gate step has no name or command");
       const command = rawCommand.trim();
@@ -1609,19 +1610,19 @@ function stepInputGraph() {
       const placed = new Set();
       // A canonical directory argument is a corpus/data input. Its tracked
       // members are not host tooling modules whose new URL expressions run.
-      const modules=[];
+      const moduleEntries=[];
       for(const input of new Set(entries)){
         if(statSync(join(TREE,input)).isDirectory()){
           const files=trackedFiles().filter(path=>path.startsWith(input+"/"));
           directory({reader:"<entry>",directory:input,files},step);
           membership.add(input);add(input,step);
-        }else modules.push(input);
+        }else moduleEntries.push(input);
       }
-      entries.splice(0,entries.length,...modules);
+      entries.splice(0,entries.length,...moduleEntries);
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        for (const input of moduleClosure(batch, { sourceRoot: TREE, directory: row => directory(row,step) })) {
+        for (const input of modules.closure(batch, row => directory(row,step))) {
           if (placed.has(input)) continue;
           placed.add(input); declared.add(input); add(input, step); queue.push(input);
         }
@@ -1672,6 +1673,7 @@ function stepInputGraph() {
       for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
     }
     return { reach: map, declared, directories, membership, tracked:new Set(trackedFiles()) };
+    } finally {modules.close();}
   });
 }
 
