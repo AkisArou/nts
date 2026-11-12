@@ -102,7 +102,7 @@ The previous condition fails that control, while the fixed file passes.
 
 The host audit took 4.097 seconds with separate parsing, 1.900 seconds with
 shared roots, and 2.799 seconds in the final focused run. Its Worker rule borrows
-the existing root before lease disposal and stores detached facts. The final
+the existing root before lease disposal and stores detached facts. The initial final
 focused proof passed 95 tests and strict checking with no diagnostic increase.
 The [tool-written summary](../worker-termination-2026-11-12.json) retains counts
 and production-source hashes.
@@ -126,3 +126,9 @@ oracle-batch, oracle-dependencies and bench/build-records. The other nine are
 process-lifetime jobs whose beforeExit handler drains the sampler. Natural
 completion with a final reply is clean. A reporter exception rejects closed
 by name and cannot escape a worker event callback.
+
+The reporter-lifetime proof passed 133 focused tests across ten affected files.
+The host audit took 3.340 seconds and strict checking found no diagnostic rise.
+Removing only runLanding's await of closed made its held-shutdown control fail
+with "landing returned before its owned sampler closed"; the committed owner
+passed. Strict checking ran last after that mutation control.
