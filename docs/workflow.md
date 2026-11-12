@@ -140,6 +140,11 @@ already maps them. Examples:
 A Chromium change never waits for the compiler's suites, and a compiler
 change never runs Chromium's.
 
+The decisions log is append-only: dated entries go at its end, and a correction
+or superseding decision adds a new entry referencing the old one. Its exact
+`.gitattributes` rule uses Git's built-in union merge driver, so concurrent
+appends keep both entries in landing order. Other documents use normal merges.
+
 Placement follows declared readers: canonical step inputs, collected tests,
 static module imports and module-relative `new URL("asset", import.meta.url)`
 expressions. A literal containing only `.` and `..` segments is an anchor and

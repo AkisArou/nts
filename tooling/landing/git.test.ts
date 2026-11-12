@@ -1,12 +1,57 @@
 // The git half of landing: rebase, fast-forward, push, branch deletion.
 //
 //   node --test tooling/landing/git.test.ts
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { advanceMain, changedPaths, deleteBranch, namingIssue, openPullBases, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
 import { scratchRepo } from "./scratch-repo.ts";
+
+const DECISIONS_LOG = "docs/records/notebooks/decisions-log.md";
+const ATTRIBUTES = readFileSync(new URL("../../.gitattributes", import.meta.url), "utf8");
+
+function concurrentAppends(t: TestContext, union: boolean, path = DECISIONS_LOG) {
+  const s = scratchRepo(t, "landing-appends"), git: Git = {root:s.root, env:s.env};
+  const base = "# Decisions\n\n## Existing decision\n\nThe existing entry stays.\n";
+  s.commit({".gitattributes":union?ATTRIBUTES:"", [path]:base}, "append policy and base");
+  s.git(["switch", "-q", "-c", "second-task"]);
+  const second = "\n## Second landing\n\nThe second task's decision.\n";
+  const change = s.commit({[path]:base+second}, "second task");
+  s.git(["switch", "-q", "main"]);
+  const first = "\n## First landing\n\nThe first task's decision.\n";
+  const main = s.commit({[path]:base+first}, "first task lands");
+  return {s,git,base,first,second,main,change};
+}
+
+test("only the decisions log selects Git's built-in union driver",t=>{
+  assert.equal(ATTRIBUTES,DECISIONS_LOG+" merge=union\n");
+  const s=scratchRepo(t,"landing-attributes");s.commit({".gitattributes":ATTRIBUTES},"merge policy");
+  assert.equal(s.git(["check-attr","merge","--",DECISIONS_LOG,"docs/workflow.md","README.md"]),
+    `${DECISIONS_LOG}: merge: union\ndocs/workflow.md: merge: unspecified\nREADME.md: merge: unspecified`);
+});
+
+test("landing replay keeps concurrent decisions-log appends in landing order",t=>{
+  const {s,git,base,first,second,main,change}=concurrentAppends(t,true);
+  const rebased=rebaseOnto(git,main,change);assert.ok("tip" in rebased,JSON.stringify(rebased));
+  assert.equal(s.git(["rev-parse",rebased.tip+"^"]),main);
+  assert.deepEqual(advanceMain(git,main,rebased.tip),{ok:true,via:s.root});
+  const contents=readFileSync(join(s.root,DECISIONS_LOG),"utf8");
+  // Union keeps the two entries in order and deduplicates their shared blank line.
+  // An ATX heading still starts its own CommonMark section without that blank.
+  assert.equal(contents,base+first+second.slice(1));
+  assert.doesNotMatch(contents,/^<{7}|^={7}|^>{7}/m);
+});
+
+test("without the union attribute the same appends refuse a landing",t=>{
+  const {git,main,change}=concurrentAppends(t,false);
+  assert.deepEqual(rebaseOnto(git,main,change),{conflict:change,files:[DECISIONS_LOG]});
+});
+
+test("another document's concurrent appends still refuse a landing",t=>{
+  const {git,main,change}=concurrentAppends(t,true,"docs/workflow.md");
+  assert.deepEqual(rebaseOnto(git,main,change),{conflict:change,files:["docs/workflow.md"]});
+});
 
 test("a change is replayed onto the newest main, skipping what main already has", t => {
   const s = scratchRepo(t), git: Git = { root: s.root, env: s.env };
