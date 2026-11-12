@@ -136,7 +136,7 @@ function lower(module) {
     const counted = spawnCounted(NTS, compileCommand(ARM, module), { cwd: ROOT, stdio: "ignore",
       env: measuredEnvironment, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
     return counted.measurement.then(row => ({ ...row, work_profile: COMPILE_WORK_PROFILE, work_settings }));
-  });
+  },{project:module,backend:'c'});
 }
 
 function kept(module) {

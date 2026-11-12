@@ -13,17 +13,16 @@ import {programOracleDirectory} from './oracle-result-scope.ts';
 export {programOracleDirectory} from './oracle-result-scope.ts';
 import {OUTCOMES,outcomeFixtures,runMode,materialise} from '../conformance/outcomes-project.ts';
 import {ownCensusScratch} from '../census/census-scratch.ts';
-import {memoryRun,closeMemoryRun} from '../census/worker-memory.ts';
+import {memoryRun,closeMemoryRun,workerCapBytes} from '../census/worker-memory.ts';
 import {runMemoryWorkers} from '../census/worker-pool.ts';
 import {ToolingInstrumentError,publishToolingFailure} from '../gate/step-result.ts';
-import {caseHistoryFile,caseReservation,readCaseHistory,writeCaseHistory,type CaseObservation} from '../gate/step-scheduling.ts';
 
 /**
  * What a program holds, measured as it runs: its worker's scope over the
  * program (the SDK, the planner and the supervisor, on the kernel's basis,
  * page cache included) and its oracle's own resident scope. Each program's
- * token asks for 1.25 times the largest of its last few (step-scheduling.ts,
- * "Cases"); one never measured asks for the step's unit.
+ * token is sized by the shared case lease: its measured history, or live use
+ * and margin before the first measurement.
  */
 export type ProgramMemory={scopePeakBytes:number;oraclePeakBytes:number|null};
 /** A program that leaves its worker holding more than this is followed by a fresh worker. */
@@ -122,31 +121,23 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
     if(!Number.isSafeInteger(jobs)||jobs<1)throw Error('invalid program oracle worker count');
     const subjects=new Map<string,string>();
     const paths=tasks.map(task=>{const file=join(inputs,resultHash(task.subject)+'.json');writeFileSync(file,JSON.stringify(task));subjects.set(file,task.subject);return file;});
-    // Each program's token is its own size, from what it held when it last ran here.
-    const caseFile=caseHistoryFile('program-oracles'),sizes=readCaseHistory(caseFile),measured:CaseObservation[]=[];
     const writer=createProgramOracleResults(results,oracleRecipeIdentity()),errors:string[]=[];
     let done=0,budgets=0;
     const report=(message:string)=>process.stderr.write('  '+message+'\n');
-    // Each worker holds an equal share of the job's memory: inside a gate
-    // step, what the step sizes its workers by (NTS_GATE_STEP_MEMORY_BYTES),
-    // never below one census worker's own cap; alone, the census budget the
-    // pool reserves within. A fixed size would decide which programs fit
-    // regardless of what the step may hold.
+    // Every worker keeps the case's hard budget; its lease separately sizes
+    // admission from measured peaks or live use, at every pool width.
     const memory=memoryRun(),workers=Math.min(jobs,paths.length);
-    await runMemoryWorkers({paths,jobs:workers,memory,workerBytes:Math.floor(memory.budgetBytes/Math.max(1,workers)),recycleAfterCases:16,recycleAboveBytes:PROGRAM_WORKER_RECYCLE_BYTES,
+    await runMemoryWorkers({paths,jobs:workers,memory,workerBytes:workerCapBytes(),recycleAfterCases:16,recycleAboveBytes:PROGRAM_WORKER_RECYCLE_BYTES,
       key:'program-oracles',what:'program oracle references',
-      token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal,caseReservation(sizes,subjects.get(path)!)),
+      token:(path,signal)=>acquireToken({project:subjects.get(path)!,backend:'node'},signal),
       args:index=>[fileURLToPath(new URL('./program-oracle-worker.ts',import.meta.url)),join(scratch,'w'+index),join(directory,'executables')],report,
       onRow:(row:{path:string;bucket:string;why?:string;answer?:ProgramAnswer;capture?:ProgramCapture;memory?:ProgramMemory})=>{
         if(row.bucket!=='oracle-reference'||!row.answer||!row.capture)errors.push(row.path+': '+(row.why??row.bucket));
         else {writer.add(row.answer,row.capture);if(row.answer.kind==='budget')budgets++;}
-        if(row.memory&&row.memory.scopePeakBytes>0)measured.push({key:subjects.get(row.path)!,peak:row.memory.scopePeakBytes+(row.memory.oraclePeakBytes??0)});
         if(++done%100===0)report(`${done}/${paths.length} program answers finalized`);
       }});
     if(errors.length)throw new ToolingInstrumentError('tooling-setup','program oracle references were not measured:\n'+errors.join('\n'));
     if(done!==paths.length)throw Error(`program oracle references incomplete: ${done}/${paths.length}`);
-    const unrecorded=writeCaseHistory(caseFile,measured);
-    if(unrecorded)report('program sizes not recorded: '+unrecorded);
     cleanup();const root=writer.publish();
     process.stdout.write(`  Program oracle references: ${root.count-budgets} measured once, ${budgets} loud budget outcomes; SDK workers drained before native execution\n`);
   }finally{cleanup();}

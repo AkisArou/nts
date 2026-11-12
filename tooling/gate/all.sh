@@ -364,7 +364,7 @@ profile() {
   sha256sum "${NTS_BIN:-$root/target/release/nts}" | cut -d" " -f1 > "$work/.emitted-by"
   # Each worker holds one of the gate's tokens while it runs (token.sh; see
   # "Tokens" in run.mjs). Outside the gate it only execs.
-  ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
+  ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" --case-last --backend c -- sh -c '
     m=$1
     name=$(basename "$(dirname "$m")")
     "'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
@@ -868,7 +868,7 @@ profile() {
   # Sorted afterwards rather than relying on the order they finish in, because
   # the name list is compared against `known_invalid` and a set written in a
   # different order is a different string.
-  invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
+  invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" --case-last --backend c -- sh -c '
       m=$1
       # A crash is not valid HIR. `grep -q "does NOT verify"` alone read a
       # panicking `nts hir` -- which prints no verdict at all -- as a module
@@ -968,7 +968,7 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 example_refusals() {
   table="$root/tooling/gate/example-refusals"
   results=$(mktemp)
-  ls tests/programs/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
+  ls tests/programs/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" --case-last --backend c -- sh -c '
     d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in invalid|unsupported) exit 0 ;; esac
@@ -2368,7 +2368,7 @@ interop() {
     # rest of the list, and every later macOS and iOS project ended "without
     # a verdict" (2026-10-07). With the VM down, ssh failed before reading,
     # which is why no gate had shown it.
-    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1 8>&- </dev/null); then
+    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" --case "$script" --backend interop -- sh "$script" "$out" 2>&1 8>&- </dev/null); then
       printf 'ok\n' > "$lanes/$project.status"
     else
       printf 'failed\n' > "$lanes/$project.status"

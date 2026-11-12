@@ -549,7 +549,7 @@ async function runAll(all) {
       await runMemoryWorkers({
         paths, jobs: workers, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024, key: `conformance262-${BACKEND}`, what: `conformance262 --backend ${BACKEND}: ${paths.length} case(s)`,
         // One gate token per in-flight case: an elastic step's share follows its work.
-        token: (path, signal) => acquireToken({ project: path, binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" }, signal),
+        token: (path, signal) => acquireToken({ project: path,backend:BACKEND }, signal),
         args: (index) => [fileURLToPath(new URL("./attempt262-worker.ts", import.meta.url)), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
         report,
         onRow: (row) => {
@@ -748,7 +748,7 @@ function judgeNegative(row, negative) {
 // their directory (`collectCaseRoots`). A root in use is never collected.
 if (!FRESH) collectCaseRoots();
 // The self-checks are this step's work too, one process at a time: one token.
-const checks = await withToken(() => selfChecks(SCRATCH, TOOLS, cannotMeasure), { project: "self-checks", binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" });
+const checks = await withToken(() => selfChecks(SCRATCH, TOOLS, cannotMeasure), { project: "self-checks",backend:BACKEND });
 
 const cases = population.map((record) => {
   const source = readFileSync(join(SUITE, record.path), "utf8");

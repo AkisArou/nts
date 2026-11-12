@@ -25,6 +25,16 @@
 #
 # The connection is inherited by what <command> starts, so a descendant that
 # outlives it keeps the token until it exits too: it is still the step's work.
+if [ "${1-}" = --case ] || [ "${1-}" = --case-last ]; then
+  if [ "$1" = --case-last ]; then case_path=${!#}; shift; else case_path=${2:?token.sh --case needs a path}; shift 2; fi
+  case_backend=""
+  if [ "${1-}" = --backend ]; then case_backend=${2:?token.sh --backend needs a name}; shift 2; fi
+  [ "${1-}" = -- ] || { echo "token.sh --case needs -- before its command" >&2; exit 2; }
+  shift
+  if [ -n "${NTS_GATE_TOKENS:-}" ] && [ -z "${NTS_GATE_TOKEN_HELD:-}" ]; then
+    exec node "$(dirname -- "$0")/token-command.ts" --case "$case_path" --backend "$case_backend" -- "$@"
+  fi
+fi
 if [ -z "${NTS_GATE_TOKENS:-}" ] || [ -n "${NTS_GATE_TOKEN_HELD:-}" ]; then
   exec "$@"
 fi

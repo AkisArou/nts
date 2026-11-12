@@ -126,7 +126,7 @@ async function main() {
           project, root: ROOT, compiler, env, cc,
           work: join(scratch, String(index)), cached: cachedEmission(project, cached, hash),
         });
-      });
+      },{project,backend:'c'});
       results.set(project, result);
       if (result.category === "hung" || result.category === "runaway") held = {kind:result.category,why:`${project}: ${result.why}`};
       timed[project] = (Date.now() - began) / 1000;

@@ -82,7 +82,8 @@ export function tokenClient(where, step) {
           if (!held) return;
           held = false;
           try{if(lease)closeCaseWorkers({address:where,id:lease});}
-          finally{sock.end('done\n');}
+          catch(error){sock.destroy();throw error;}
+          sock.end('done\n');
         };
         if(lease)release.case={address:where,id:lease};
         resolve(release);

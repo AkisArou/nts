@@ -32,7 +32,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
   };
   pool.account=()=>{
     for(const w of [...pool.waiting,...pool.active])if(w.memory){w.memory.sample();w.bytes=w.memory.bytes;}
-    pool.sized.clear();
+    for(const step of pool.sized.keys())pool.sized.set(step,{count:0,bytes:0});
     for(const w of pool.active)if(w.bytes!==undefined){const row=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:row.count+1,bytes:row.bytes+w.bytes});}
     const now=Date.now(),dt=(now-pool.last)/1000;pool.last=now;
     for(const [step,n] of pool.held)pool.used.set(step,(pool.used.get(step)??0)+n*dt);

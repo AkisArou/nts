@@ -39,7 +39,7 @@
 // Exit 0: every project read whole and clean. Exit 1: a violation, or a
 // project not measured. Exit 2: the tool could not start.
 
-import { spawn } from "node:child_process";
+import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -393,7 +393,7 @@ const queue = longestFirst(argv.includes("--examples") ? "types-examples" : "typ
 await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async () => {
   while (next < queue.length) {
     const project = queue[next++];
-    const r = await withToken(() => run(["types", project]));
+    const r = await withToken(() => run(["types", project]),{project,backend:'snapshot'});
     if (r.error || r.signal || r.status !== 0) {
       unmeasured.push(`${project}: nts types ${r.signal ?? r.error?.message ?? `exit ${r.status}`} -- ${r.err.trim().split("\n").pop()?.slice(0, 100) ?? ""}`);
       continue;

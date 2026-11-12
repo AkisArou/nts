@@ -100,7 +100,7 @@ import {sourceName, withoutRecordedMethods} from "../../compiler/codegen/jvm/mem
 // Exit 0: every module verifies or is known not to. Exit 1: a new failure, or
 // a module not measured. Exit 2: the tool could not start.
 
-import { spawn } from "node:child_process";
+import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -658,7 +658,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async 
     // One of the gate's tokens per project (tokens.mjs), timed from the moment
     // it holds it: the next run's order is by work, never by the wait.
     let began = 0;
-    await withToken(() => { began = Date.now(); return check(project, slot); });
+    await withToken(() => { began = Date.now(); return check(project, slot); },{project,backend:'jvm'});
     timed[project] = (Date.now() - began) / 1000;
   }
 }));

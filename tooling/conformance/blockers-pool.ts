@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { withToken } from "../gate/tokens.mjs";
 
 export type FixtureResult = { stdout: string; stderr: string; unexpected: number; retainRun: boolean };
@@ -45,7 +45,7 @@ export async function fixturePool(
       const index = next++, name = names[index];
       try {
         const result = await withToken(() => failed ? null : run(name, index), {
-          project: `tests/refusals/${name}/tsconfig.json`, binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "",
+          project: `tests/refusals/${name}/tsconfig.json`,backend:process.env.NTS_BACKEND??'c',
         });
         if (result !== null) {
           results[index] = { name, result };

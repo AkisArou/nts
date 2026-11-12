@@ -36,7 +36,7 @@
 // Exit 0: every module assembles or is known not to. Exit 1: a new failure,
 // or a module not measured. Exit 2: the tool could not start.
 
-import { spawn } from "node:child_process";
+import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -156,7 +156,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async 
     // One of the gate's tokens per project (tokens.mjs), timed from the moment
     // it holds it: the next run's order is by work, never by the wait.
     let began = 0;
-    await withToken(() => { began = Date.now(); return check(project, slot); });
+    await withToken(() => { began = Date.now(); return check(project, slot); },{project,backend:'llvm'});
     timed[project] = (Date.now() - began) / 1000;
   }
 }));

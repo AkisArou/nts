@@ -16,6 +16,8 @@ export function memoryAncestors(group:string,read:(group:string)=>{max:number;oo
   if(!group.startsWith('/')||group==='/'||group.split('/').includes('..'))throw Error('resident cap: invalid worker ancestry');
   const rows:AncestorMemory[]=[];
   for(let at=group.slice(0,group.lastIndexOf('/'))||'/';;at=at.slice(0,at.lastIndexOf('/'))||'/'){
-    const value=read(at);rows.push({group:at,limit:value.max,oom:value.oom});if(at==='/')return rows;
+    // The cgroup root has no memory.max and cannot impose an ancestor cap.
+    if(at==='/')return rows;
+    const value=read(at);rows.push({group:at,limit:value.max,oom:value.oom});
   }
 }

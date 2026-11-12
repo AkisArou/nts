@@ -161,11 +161,11 @@ export type MemoryScope = { unit: string; ready: string; argv: string[]; env: No
  * The kernel must place both beneath the caller's owned accounting root.
  * A worker hitting this boundary cannot make the supervisor an OOM victim.
  */
-function cappingSlice(): { slice: string; group: string } | undefined {
+function cappingSlice(): { slice: string; group: string;case:boolean } | undefined {
   // A nested worker stays within its enclosing case's cap.
   if (inResidentWorker()) {
     const group = process.env.NTS_CENSUS_WORKER_GROUP!;
-    return { slice: basename(group), group };
+    return { slice: basename(group), group,case:true };
   }
   const slice = toolingSlice();
   if (!slice) return undefined;
@@ -187,10 +187,10 @@ function cappingSlice(): { slice: string; group: string } | undefined {
       if (!parts[end - 1]?.endsWith(".slice")) continue;
       const candidate = parts.slice(0, end).join("/");
       const limit = Number(readFileSync(join(CGROUP, candidate, "memory.max"), "utf8"));
-      if (Number.isSafeInteger(limit) && limit > 0) return { slice: parts[end - 1]!, group: candidate };
+      if (Number.isSafeInteger(limit) && limit > 0) return { slice: parts[end - 1]!, group: candidate,case:true };
     }
   }
-  return { slice: workers, group };
+  return { slice: workers, group,case:false };
 }
 
 export class MemoryRun {
@@ -211,9 +211,10 @@ export class MemoryRun {
     // aggregate's own cap wherever it runs; the step's budget (the default)
     // is the step slice's to enforce inside a gate step.
     const stepBudget = budgetBytes === undefined;
-    this.budgetBytes = integer(budgetBytes ?? Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), "resident run budget");
-    this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     const boundary = cappingSlice();
+    const requested=integer(budgetBytes ?? Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), "resident run budget");
+    this.budgetBytes=boundary?.case?Math.min(requested,readLimits(boundary.group).max):requested;
+    this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     this.#parentCap = boundary?.group;
     // Slice names encode their ancestry. Keep labels in the description so
     // nested gates retain room for their worker slices under systemd's limit.
@@ -485,7 +486,7 @@ export function commandWorker(command: string, args: readonly string[], env: Nod
     return;
   }
   const memory = memoryRun();
-  const worker = memory.worker("command" + commandOrdinal++, memory.budgetBytes);
+  const worker = memory.worker("command" + commandOrdinal++, Math.min(memory.budgetBytes,workerCapBytes(env)));
   const before = worker.counters(), aggregateBefore = memory.aggregateOoms();
   const scope = worker.scope(command, [...args], env);
   return {

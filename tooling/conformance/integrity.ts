@@ -1313,7 +1313,7 @@ const run = (args) => slot(() => withToken(() => {
     return runIntegrityListing(NTS,timedRun?compileCommand("nogc",args.at(-1)):args,{cwd:ROOT,env:measuredEnvironment,
       ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll("/", "_")}.perf`)}:{})})
       .then(result=>({...(timedRun?{...result,work_settings}:result),own_s:(performance.now()-began)/1000}));
-  }));
+  },{project:args.at(-1),backend:args.includes('--backend')?args[args.indexOf('--backend')+1]:'c'}));
 
 const found = [];
 const unmeasured = [];

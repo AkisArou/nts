@@ -477,7 +477,7 @@ await Promise.all(Array.from({ length: Math.min(JOBS, examples.length) }, async 
     // Both binaries run the same example consecutively in one worker.
     const records = [];
     // One of the gate's tokens per check (tokens.mjs).
-    for (const p of pins) records.push(await withToken(() => check(p, example), { project: `tests/programs/${example}/tsconfig.json`, binary: p.hash }));
+    for (const p of pins) records.push(await withToken(() => check(p, example), { project: `tests/programs/${example}/tsconfig.json`,backend:process.env.NTS_BACKEND??'c', binary: p.hash }));
     runs.set(example, records);
   }
 }));

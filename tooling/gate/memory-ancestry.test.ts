@@ -11,7 +11,7 @@ test('an ancestor kill names the firing cap rather than assigning a host-pressur
 });
 test('local counters choose the nearest firing ancestor and reject a backwards observation',()=>{
   const rows=memoryAncestors('/owned/step/case',group=>({max:group==='/owned/step'?200:1000,oom:0}));
-  assert.deepEqual(rows.map(row=>row.group),['/owned/step','/owned','/']);
+  assert.deepEqual(rows.map(row=>row.group),['/owned/step','/owned']);
   assert.equal(ancestorMemoryIncident(rows,rows),undefined);
   assert.equal(ancestorMemoryIncident(rows,rows.map(row=>({...row,oom:1})))?.group,'/owned/step');
   assert.throws(()=>ancestorMemoryIncident([{group:'/owned',limit:100,oom:1}],[{group:'/owned',limit:100,oom:0}]),/went backwards/);

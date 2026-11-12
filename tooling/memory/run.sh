@@ -205,7 +205,7 @@ self="$PWD/tooling/memory/run.sh"
 # starting work when a worker dies by a signal and `set -e` would end this
 # script silently there; it is reported instead and the accounting decides.
 # Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-printf '%s\0' tests/memory/*/ | xargs -0 -P "$jobs" -I{} "$PWD/tooling/gate/token.sh" bash -c '
+printf '%s\0' tests/memory/*/ | xargs -0 -P "$jobs" -I{} "$PWD/tooling/gate/token.sh" --case {} --backend c -- bash -c '
   dir=$1; rows=$2
   name=$(basename "$dir")
   if "$0" --case "$dir" > "$rows/$name.row.part" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi

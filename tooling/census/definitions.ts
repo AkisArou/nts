@@ -43,7 +43,7 @@
 // nothing cleanly. So does a table row naming a module the tree no longer has,
 // and a module the table has no row for.
 
-import { spawn } from "node:child_process";
+import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -102,7 +102,7 @@ const run = (args) =>
 // every module has its listing. Anything else is NOT MEASURED, never a guess.
 let FROM = process.env.NTS_DEFINITIONS_FROM;
 async function listing(module) {
-  if (!FROM) return withToken(() => run(["hir", "--prepared", module]));
+  if (!FROM) return withToken(() => run(["hir", "--prepared", module]),{project:module,backend:'c'});
   const name = module.replaceAll("/", "_");
   if (!existsSync(join(FROM, `${name}.txt`)) || !existsSync(join(FROM, `${name}.json`))) {
     return { error: { message: `has no listing in ${FROM} -- integrity --runtime did not write one` }, out: "" };
