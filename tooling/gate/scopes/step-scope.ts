@@ -14,7 +14,6 @@ import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
 import {hostObservations,type HostObservations,type CgroupCpu} from '../host-observations.ts';
 import {STEP_CPU_MEASURE} from '../step-time.ts';
 import {readLimits} from './memory-limits.ts';
-export {readLimits} from './memory-limits.ts';
 
 const CGROUP = "/sys/fs/cgroup";
 const DRAIN_HANG_MS = 30_000;

@@ -210,7 +210,8 @@ test("a cancelled token wait leaves a reporting gap even when later fixtures com
       text+=chunk;
       if(parsed || !text.includes("\n")) return;
       parsed=true;
-      const encoded=text.trim().split(" ")[3].slice(7);
+      const label=text.trim().split(" ").find(word=>word.startsWith('json64:'));assert.ok(label);
+      const encoded=label.slice(7);
       const context=JSON.parse(Buffer.from(encoded,"base64url").toString());
       const name=context.project.split("/").at(-2);
       if(name==="c-gap") { blocked=socket;if(failureClosed) socket.write("go\n"); }

@@ -33,7 +33,7 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   for (const path of ["tooling/bench/outcomes.ts", "tooling/records", "tooling/census", "tooling/conformance"]) {
     if (!existsSync(join(root, path))) symlinkSync(join(ROOT, path), join(root, path));
   }
-  writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
+  copyFileSync(new URL('./token.sh',import.meta.url),join(root, "tooling/gate/token.sh"));
   // d8 refuses what a `*-refused` target emits and accepts the rest; javap
   // names one method of each class.
   writeFileSync(join(own, "sdk/build-tools/99.0.0/d8"), "#!/bin/sh\ncase \"$*\" in *-refused*) printf 'Error in x.class:\\ncom.android.tools.r8.internal.fx: Illegal class file: fake\\n'; exit 1 ;; esac\nexit 0\n", { mode: 0o755 });
@@ -58,7 +58,7 @@ const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(
       else { mkdirSync(join(root, "tests/programs", target), { recursive: true }); writeFileSync(join(root, "tests/programs", target, "tsconfig.json"), "{}"); }
     }
     return spawnTest("sh", [join(root, "tooling/android/dexes.sh"), ...(named ? targets.map(target => target.split("/").pop()!) : [])], { cwd: root, encoding: "utf8", env: {
-      ...fixtureEnvironment(t), PATH: `${join(own, "bin")}:${process.env.PATH}`, NTS_BIN: nts, ANDROID_HOME: join(own, "sdk"), NTS_GATE_JOBS: "1",
+      ...fixtureEnvironment(t), PATH: `${join(own, "bin")}:${process.env.PATH}`, NTS_BIN: nts, ANDROID_HOME: join(own, "sdk"), NTS_GATE_JOBS: "1",NTS_GATE_TOKEN_HELD:'1',
       NTS_ART_WORK: join(own, "work"), NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "bound", NTS_GATE_STEP_RESULT: frame, ...extra,
     } });
   };

@@ -44,7 +44,11 @@ export async function fixturePool(
     while (!failed && next < names.length) {
       const index = next++, name = names[index];
       try {
-        const result = await withToken(() => failed ? null : run(name, index), {
+        const result = await withToken(async () => {
+          if(failed)return null;
+          try{return await run(name,index);}
+          catch(error){failed=true;throw error;}
+        }, {
           project: `tests/refusals/${name}/tsconfig.json`,backend:process.env.NTS_BACKEND??'c',
         });
         if (result !== null) {
