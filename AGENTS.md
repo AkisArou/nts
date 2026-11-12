@@ -220,6 +220,13 @@ layout changes retain every test and its multiplicity. On 2026-11-11, hundreds
 of per-file binaries repeatedly linked the whole compiler; one giant core
 harness instead made a single-test edit expensive, so core uses topic harnesses.
 Cases in a harness share a process: keep mutable state private to each test.
+Paths and resource names use `compiler/test-support/scratch.rs`; a returned path
+or snapshot owns its scratch for as long as the value lives. A test that runs
+its own binary uses `compiler/test-support/self_test.rs` with its full module
+path: the owner requires exactly one passing test. `test-layout.ts` rejects
+process-keyed test resources and direct filtered self-spawns. On 2026-11-12,
+merged cases shared a PID-keyed D8 directory, and a bare self-spawn filter
+silently ran zero tests after its test gained a module prefix.
 
 The corpora are the specification: `tests/programs/` (compiled and compared with
 node), `tests/refusals/` (must refuse, with the `// expect:`
