@@ -233,6 +233,8 @@ type MemoryFixture = {
   /** A private runner acknowledges this actual charge through the fixture's FIFO. */
   acknowledgeCharge?: number;
   acknowledgeYield?: boolean;
+  /** Pause only the staged runner between giving back and publishing growth. */
+  handoffBarrier?:'before'|'after';
 };
 
 /**
@@ -242,7 +244,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield,handoffBarrier }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -258,6 +260,27 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/run.mjs") {
       let source = readFileSync(original, "utf8");
+      if(handoffBarrier){
+        const entry='function adjustMemory() {',shrink='reservation.shrink(back).catch',growth='  let need = Math.max(memoryWanted - reserved(), tokenShort(u),u.bytes+withholdBytes-reserved());';
+        const protectedBack='Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK';
+        assert.ok(source.includes(entry)&&source.includes(shrink)&&source.includes(growth)&&source.includes(protectedBack),'handoff control follows the real retention and growth');
+        // The before arm mutates this private closure copy, never the tree's
+        // runner. Commit the fix before running the retained negative control.
+        if(handoffBarrier==='before')source=source.replace(protectedBack,'Math.floor((reserved() - u.bytes - withholdBytes - 2 * BLOCK) / BLOCK) * BLOCK');
+        source=source.replace(entry,'let handoffEntered=false,handoffHeld=false;\nasync function adjustMemory() {\n  if(handoffHeld)return;')
+          .replace(shrink,'await '+shrink)
+          .replace(growth,`  if(!handoffEntered && memoryWanted === 8 * 2**30 && used().bytes === 0) {
+    handoffEntered=true;handoffHeld=true;
+    const {watch}=await import('node:fs');
+    await new Promise(resolve=>{
+      const done=()=>{if(existsSync(${JSON.stringify(join(own,'neighbour-decided'))})){watcher.close();resolve();}};
+      const watcher=watch(${JSON.stringify(own)},done);
+      writeFileSync(${JSON.stringify(join(own,'handoff-ready'))},'ready');done();
+    });
+    handoffHeld=false;
+  }
+`+growth);
+      }
       if (acknowledgeYield) {
         const observation = "memoryRecord.outranked++;";
         assert.ok(source.includes(observation), "the barrier follows the real priority observation");
@@ -388,26 +411,33 @@ esac
 
 // A later neighbour waits for the admitted run's next step to finish, then
 // receives its memory. Readiness files establish the order without deadlines.
-const NEIGHBOUR = `import { existsSync, watch } from "node:fs";
+const NEIGHBOUR = `import { existsSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const [ledger, observations, own, module] = process.argv.slice(1);
 const { reserve } = await import(module);
 const until = (dir, ready) => new Promise(resolve => { const watcher = watch(dir, () => { if (ready()) { watcher.close(); resolve(); } }); if (ready()) { watcher.close(); resolve(); } });
 await until(own, () => existsSync(join(own, "ask")));
-const held = await reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50 });
+let last,reported=false;
+const publish=()=>{if(last && !reported && existsSync(join(own,'handoff-ready'))){reported=true;writeFileSync(join(own,'neighbour-decided'),String(last.admitted));}};
+const asked = reserve({ bytes: 6 * 2 ** 30, what: "neighbour" }, { env: { NTS_HOST_OBSERVATIONS: observations, NTS_MEMORY_LEDGER: ledger }, everyMs: 50,
+  observe: decision=>{last=decision;publish();} });
+asked.catch(()=>writeFileSync(join(own,'neighbour-decided'),'instrument failed'));
+await until(own,()=>existsSync(join(own,'handoff-ready')));publish();
+const held=await asked;
 if (!existsSync(join(own, "records-ran"))) throw new Error("later neighbour ran before the admitted run's next step");
 held.release();
 `;
 
-test("an admitted run grows to finish its next step before a later neighbour starts", async t => {
+for(const arm of ['before','after'] as const)test(`an admitted run grows before a later neighbour at the forced handoff (${arm})`, async t => {
   // 10 GiB available, 2 kept for the system. The run holds 3 for format,
   // which blocks the later neighbour's 6. Records then needs 8: growth keeps
   // the run's admission place and takes exactly what is available. The
   // neighbour receives its 6 once the admitted work releases its promise.
   let neighbour: ReturnType<typeof spawn> | undefined;
+  let neighbourClosed:Promise<unknown[]>|undefined,neighbourOutput='';
   t.after(() => { if (neighbour && neighbour.exitCode === null && neighbour.signalCode === null) neighbour.kill("SIGKILL"); });
   const { result, summary, output } = memoryRun(t, {
-    steps: "format records", availableKiB: 10 * 2 ** 20,
+    steps: "format records", availableKiB: 10 * 2 ** 20,handoffBarrier:arm,
     rows: { format: { slots: 1, reserve: 3, bound: 60 }, records: { slots: 1, reserve: 8, after: ["format"], bound: 60 } },
     times: "format\t100\t200\t1\nrecords\t100\t100\t1\n",
     payload: `
@@ -420,13 +450,18 @@ esac
       const env: NodeJS.ProcessEnv = { ...fixtureEnvironment(t) };
       delete env.NTS_MEMORY_RESERVATION;
       neighbour = spawn(process.execPath, ["--input-type=module", "-e", NEIGHBOUR, memory.NTS_MEMORY_LEDGER, memory.NTS_HOST_OBSERVATIONS, own,
-        pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: "inherit" });
+        pathToFileURL(fileURLToPath(new URL("./memory-ledger.ts", import.meta.url))).href], { env, stdio: ['ignore','pipe','pipe'] });
+      neighbour.stdout!.on('data',part=>neighbourOutput+=String(part));neighbour.stderr!.on('data',part=>neighbourOutput+=String(part));
+      neighbourClosed=once(neighbour,'close');
     },
   });
   assert.equal(result.status, 0, output);
   assert.equal(summary.verdict, "green");
   assert.equal(summary.memory.peak_bytes,8*GiB);
-  assert.deepEqual(await once(neighbour!, "exit"),[0,null],"the later neighbour starts only after the admitted step");
+  assert.deepEqual(await neighbourClosed,[arm==='before'?1:0,null],neighbourOutput);
+  if(arm==='before')assert.match(neighbourOutput,/later neighbour ran before the admitted run's next step/,'the retained before control fails for the handoff ordering');
+  else assert.doesNotMatch(neighbourOutput,/later neighbour ran before/);
+  t.diagnostic(JSON.stringify({arm,neighbour:arm==='before'?'admitted inside the unprotected handoff':'blocked until records completed'}));
 });
 
 // The landing check in the run's ledger: once the run's reservation has grown

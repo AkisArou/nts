@@ -1099,8 +1099,11 @@ async function reserveMemory() {
 function adjustMemory() {
   if (stopping || summaryWritten || !reservation) return;
   const u = used(), yielding = outranked();
+  // Keep the next step's known need until its growth ticket is published.
+  // Releasing first lets a later neighbour decide inside the handoff gap,
+  // before the ledger can give this admitted run's growth its existing place.
   const back = yielding ? reserved() - Math.max(1, u.bytes)
-    : Math.floor((reserved() - u.bytes - withholdBytes - 2 * BLOCK) / BLOCK) * BLOCK;
+    : Math.floor((reserved() - Math.max(memoryWanted, u.bytes + withholdBytes + 2 * BLOCK)) / BLOCK) * BLOCK;
   if (back > 0) {
     memoryRecord.shrinks++;
     reservation.shrink(back).catch(error => process.stderr.write(`run.mjs: the memory ledger kept the ${gib(back)} the run gave back: ${error.message}\n`));
