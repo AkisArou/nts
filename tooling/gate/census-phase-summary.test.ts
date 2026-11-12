@@ -31,10 +31,10 @@ test('one CPU channel cannot hide another channel moving backwards',()=>{
 
 test('supplied disjoint phases reconcile to scope CPU with an explicit remainder',()=>{
   const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_observations:[],unmeasured:[],phases:[
-    {phase:'materialization',wall_s:2,self_cpu_s:2,child_cpu_s:0},
-    {phase:'host_compile_link',wall_s:8,self_cpu_s:1,child_cpu_s:9},
-    {phase:'execution',wall_s:4,self_cpu_s:1,child_cpu_s:7},
-    {phase:'comparison',wall_s:1,self_cpu_s:1,child_cpu_s:0},
+    {phase:'materialization',wall_s:2,self_cpu_s:2,child_cpu_s:0,counter_observations:1},
+    {phase:'host_compile_link',wall_s:8,self_cpu_s:1,child_cpu_s:9,counter_observations:1},
+    {phase:'execution',wall_s:4,self_cpu_s:1,child_cpu_s:7,counter_observations:1},
+    {phase:'comparison',wall_s:1,self_cpu_s:1,child_cpu_s:0,counter_observations:1},
   ]});
   const summary=censusPhaseSummary([frame],[{complete:true,phases:[
     {phase:'capture',wall_s:10,self_cpu_s:20,child_cpu_s:0},
@@ -86,6 +86,15 @@ test('equal nonzero CPU snapshots do not acquire a negative roundoff delta',()=>
   const costs=new CensusPhaseCosts('fixture','c','typescript-c',()=>({wall:1,user:0.000123,sys:0.000045}));
   const close=costs.span('comparison');close();
   assert.deepEqual(costs.finish().unmeasured,[]);assert.equal(costs.frame.phases[0]?.self_cpu_s,0);
+});
+
+test('aggregating several intervals does not lose their quantization observations',()=>{
+  let wall=0;
+  const costs=new CensusPhaseCosts('controls','c','typescript-c',()=>({wall,user:0,sys:0}));
+  for(let i=0;i<6;i++){const close=costs.span('comparison');wall++;close();}
+  const frame=costs.finish();assert.equal(frame.phases[0]?.counter_observations,6);
+  const summary=censusPhaseSummary([frame],[],0);
+  assert.equal(summary.status,'complete');assert.equal(summary.quantization_tolerance_s,49/1e6);
 });
 
 test('a control lease may contain several compiler observations without hiding a missing case frame',()=>{

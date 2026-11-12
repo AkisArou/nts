@@ -9,7 +9,7 @@ import {observedSpawnSync,type ChildObserver} from '../gate/child-rusage.ts';
 
 export type WorkerPhase='materialization'|'host_compile_link'|'execution'|'comparison';
 export const CENSUS_PHASE_STEPS=new Set(['typescript-c','typescript-llvm','typescript-jvm','test262-cases','test262-builtins-cases','test262-rest-cases','test262-jvm','test262-llvm']);
-export type PhaseCost={phase:WorkerPhase;wall_s:number;self_cpu_s:number;child_cpu_s:number};
+export type PhaseCost={phase:WorkerPhase;wall_s:number;self_cpu_s:number;child_cpu_s:number;counter_observations:number};
 export type CensusPhaseFrame={version:1;project:string;backend:string;step:string;compiler_observations:string[];phases:PhaseCost[];unmeasured:string[]};
 export type PhaseSample={wall:number;user:number;sys:number};
 export type PhaseClock=()=>PhaseSample;
@@ -20,7 +20,8 @@ export function readCensusPhaseFrame(value:unknown):CensusPhaseFrame{
     ||!Array.isArray(row.compiler_observations)||row.compiler_observations.some(id=>typeof id!=='string'||!id)
     ||!Array.isArray(row.unmeasured)||row.unmeasured.some(error=>typeof error!=='string')||!Array.isArray(row.phases)
     ||row.phases.some(phase=>!phase||!['materialization','host_compile_link','execution','comparison'].includes(phase.phase)
-      ||![phase.wall_s,phase.self_cpu_s,phase.child_cpu_s].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>=0)))
+      ||![phase.wall_s,phase.self_cpu_s,phase.child_cpu_s].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>=0)
+      ||!Number.isSafeInteger(phase.counter_observations)||phase.counter_observations<0))
     throw Error('invalid census phase frame');
   return row;
 }
@@ -44,7 +45,7 @@ export class CensusPhaseCosts {
   }
   #row(phase:WorkerPhase):PhaseCost{
     let row=this.frame.phases.find(row=>row.phase===phase);
-    if(!row){row={phase,wall_s:0,self_cpu_s:0,child_cpu_s:0};this.frame.phases.push(row);}
+    if(!row){row={phase,wall_s:0,self_cpu_s:0,child_cpu_s:0,counter_observations:0};this.frame.phases.push(row);}
     return row;
   }
   #advance():void{
@@ -59,7 +60,7 @@ export class CensusPhaseCosts {
       if(wall<0||user<0||sys<0||![wall,cpu].every(Number.isFinite)){
         this.frame.unmeasured.push('worker phase clock or CPU moved backwards');this.#last=undefined;return;
       }
-      else{row.wall_s+=wall;row.self_cpu_s+=cpu;}
+      else{row.wall_s+=wall;row.self_cpu_s+=cpu;row.counter_observations++;}
     }
     this.#last=now;
   }
@@ -78,7 +79,7 @@ export class CensusPhaseCosts {
     if(!this.#observer){this.frame.unmeasured.push(`wait4 observer missing: ${command}`);return spawnSync(command,[...args],options);}
     return observedSpawnSync(command,args,options,this.#observer,(usage,error)=>{
       if(!usage||!this.#current){this.frame.unmeasured.push(error??`child outside a phase: ${command}`);return;}
-      this.#row(this.#current).child_cpu_s+=usage.user_s+usage.sys_s;
+      const row=this.#row(this.#current);row.child_cpu_s+=usage.user_s+usage.sys_s;row.counter_observations++;
     });
   }
   exec(command:string,args:readonly string[],options:ExecFileSyncOptionsWithStringEncoding):string{

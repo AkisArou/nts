@@ -13,13 +13,13 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
   const unknownWorkerRows=new Set<Name>();
   for(const name of Object.keys(GROUPS) as Name[])rows.set(name,{phase:name,cases:0,cpu_s:0,known_cpu_s:0,wall_s:0,self_cpu_s:0,child_cpu_s:0,missing_observations:0});
   let observations=0;
-  const add=(row:CensusPhaseRow,wall:number,self:number|null,child:number|null)=>{
-    observations++;row.wall_s=(row.wall_s??0)+wall;
+  const add=(row:CensusPhaseRow,wall:number,self:number|null,child:number|null,count=1)=>{
+    observations+=count;row.wall_s=(row.wall_s??0)+wall;
     if(self===null||child===null)row.missing_observations++;
     row.self_cpu_s+=self??0;row.child_cpu_s+=child??0;row.known_cpu_s+=(self??0)+(child??0);
   };
   for(const frame of frames)for(const phase of frame.phases){
-    const row=rows.get(phase.phase)!;row.cases=(row.cases??0)+1;add(row,phase.wall_s,phase.self_cpu_s,phase.child_cpu_s);
+    const row=rows.get(phase.phase)!;row.cases=(row.cases??0)+1;add(row,phase.wall_s,phase.self_cpu_s,phase.child_cpu_s,phase.counter_observations);
     if(frame.unmeasured.length){row.missing_observations++;unknownWorkerRows.add(phase.phase);}
   }
   const caseForObservation=new Map(frames.flatMap((frame,index)=>frame.compiler_observations.map(id=>[id,index] as const)));
@@ -36,8 +36,10 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
   const attributed=[...rows.values()].reduce((sum,row)=>sum+row.known_cpu_s,0);
   const total=typeof stepCpu==='number'&&Number.isFinite(stepCpu)&&stepCpu>=0?stepCpu:null;
   const remainder=total===null?null:total-attributed;
-  // A phase subtracts four self/child CPU counters at two endpoints, plus
-  // one final microsecond scope counter. This is quantization, not cost drift.
+  // A compiler span subtracts four CPU counters at two endpoints. Workers
+  // count every self interval and waited child before aggregating their rows;
+  // eight microseconds per observation conservatively covers those too.
+  // The scope's final counter adds one microsecond. This is quantization.
   const tolerance=(8*observations+1)/1e6;
   const unmeasured=frames.flatMap(frame=>frame.unmeasured.map(error=>`${frame.project}: ${error}`));
   const compilerObservations=new Set(compilers.filter(row=>row.complete).map(row=>row.observation));
