@@ -624,6 +624,8 @@ outside Worker closures may use top-level await.
   process observations together. After killing an owned group, cleanup waits
   for observed exit under a generous wedged-instrument backstop. Expiry names
   the group and surviving process identities; it never becomes a case verdict.
+  The first cleanup result is final: later close and drop calls return it
+  without observing again or spending another guard interval.
 - **Test children receive an owned environment.** `fixtureEnvironment` in
   `tooling/gate/test-environment.ts` gives each test fixture private HOME, XDG,
   temporary and Git state, reused by its children and removed with the fixture.

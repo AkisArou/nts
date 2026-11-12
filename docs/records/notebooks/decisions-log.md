@@ -2412,3 +2412,12 @@ identities. Its clock is part of the process probe, and inactivity, progress,
 runaway and delayed-cleanup controls replay supplied observations. A real
 owned-group control crosses the former bound on supplied time after a readiness
 barrier; the C and JVM protocol controls retain generous hang guards. #744.
+
+
+## Compiled cleanup is one attempt (11-12)
+
+A close error can be followed by another close and then Drop. Re-entering the
+wedged-cleanup wait at each call would multiply the declared backstop. The
+compiled-child owner now retains the first cleanup success or named failure,
+and later calls return it without another observation, signal or wait. A
+supplied-state control checks both terminal outcomes. #744.
