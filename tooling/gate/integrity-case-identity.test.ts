@@ -44,6 +44,9 @@ if(args[0]==='hir')process.stdout.write('func control() -> void {\\n}\\n\\n1 fun
       NTS_GATE_TOKEN_HELD:'',NTS_INTEGRITY_JOBS:'1',CONTROL_COMMANDS:commands});
     const host=hostObservations(env);
     const broker=new CaseMemoryBroker({root,env,host,boundary:()=>{throw Error('no live boundary is used by this observation control');},report:message=>failures.push(message)});
+    // Only the meter is synthetic; prepare, token transport, completion and
+    // history publication are the production owners. Kernel cap wiring has
+    // separate controls and is not what this source-identity check measures.
     const group='/fixture/nts-test-integrity-'+randomUUID()+'.slice';
     const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>0,
       prepare:request=>{
