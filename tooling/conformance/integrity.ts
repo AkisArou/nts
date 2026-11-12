@@ -1303,7 +1303,7 @@ const slot = limiter(WORKERS);
 // Each process holds one of the gate's tokens while it runs (tokens.mjs), and
 // is timed from the moment it holds it: `own_s` is its own work, never its
 // wait for a worker or a token.
-const run = (args) => slot(() => withToken(() => {
+const run = (project: string, args: string[]) => slot(() => withToken(() => {
     const began = performance.now();
     // The native producer captures anew; there is no producer-cache mode.
     // Only a kept prepared listing supplies the compile-time step's counters.
@@ -1313,7 +1313,7 @@ const run = (args) => slot(() => withToken(() => {
     return runIntegrityListing(NTS,timedRun?compileCommand("nogc",args.at(-1)):args,{cwd:ROOT,env:measuredEnvironment,
       ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll("/", "_")}.perf`)}:{})})
       .then(result=>({...(timedRun?{...result,work_settings}:result),own_s:(performance.now()-began)/1000}));
-  },{project:args.at(-1),backend:args.includes('--backend')?args[args.indexOf('--backend')+1]:'c'}));
+  },{project,backend:args.includes('--backend')?args[args.indexOf('--backend')+1]:'c'}));
 
 const found = [];
 const unmeasured = [];
@@ -1347,8 +1347,8 @@ const cost = {};
 async function scan(project) {
   const listings = {};
   const at = pathOf.get(project) ?? project;
-  const commands = [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]];
-  const results = await Promise.all(commands.map(([, args]) => run(args).catch(error=>({error,stdout:"",stderr:""}))));
+  const commands: [string, string[]][] = [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]];
+  const results = await Promise.all(commands.map(([, args]) => run(project,args).catch(error=>({error,stdout:"",stderr:""}))));
   // A project's cost is its longest listing's own time, the critical path the
   // next run schedules longest first. Every scan starts at once and queues on
   // the pool, so a clock started here records when the project finished, and
