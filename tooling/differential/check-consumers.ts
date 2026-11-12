@@ -12,13 +12,11 @@ import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {checkFailurePolicy, reportCheckFailure, runConsumer} from "./check-report.ts";
 import type {CheckConsumer, DecodedCheck} from "./check-report-types.ts";
 import {pendingContradiction, recordPath} from "./oracle-records.ts";
-import {acceptedLine, pendingLine} from "../records/pending.ts";
-import {createHash} from "node:crypto";
-import {readFileSync, renameSync} from "node:fs";
-import {acceptedChange} from "../conformance/outcome-transition.ts";
+import {pendingLine} from "../records/pending.ts";
+import {readFileSync} from "node:fs";
 import {PROGRAM_DISAGREEMENTS} from "../gate/verdict-policy.ts";
-import {benchmarkRun, compareBenchmarkRun, mergeRunRecord, parseRunRecord, pendingRuns, runsRecord, serializeRunRecord,
-  type BenchmarkRun, type RunBackend, type RunRecord} from "../bench/run-outcomes.ts";
+import {parseRunRecord,pendingRuns,runsRecord,type RunBackend} from "../bench/run-outcomes.ts";
+import {finishBenchmarks,type RunPlan} from "../bench/run-recording.ts";
 
 type Mode = "programs" | "rc" | "benchmarks" | "compiled-web";
 type Entry = {name: string; project: string; consumer: CheckConsumer; backend?: string; fixture?: string};
@@ -92,7 +90,6 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
 }
 
 /** bench-agree's record for one backend (tooling/bench/run-outcomes.ts): which benchmarks it holds, and which it has no row for. */
-type RunPlan = {backend: RunBackend; file: string; record: RunRecord | null; pending: Set<string>; recordPending: boolean};
 function runPlan(all: Entry[], recordPending: boolean): RunPlan {
   const backend = (process.env.NTS_BACKEND ?? "jvm") as RunBackend, file = join(ROOT, runsRecord(backend));
   assert.ok(["c", "llvm", "jvm"].includes(backend), `unknown benchmark backend ${backend}`);
@@ -129,7 +126,7 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
   }));
   completed.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
   incomplete.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
-  if (plan) return finishBenchmarks(plan, all, completed, incomplete);
+  if (plan) return finishBenchmarks(plan, all, completed, incomplete, {binary,env});
   const failures = summary(mode, completed, incomplete);
   if (incomplete.length) {
     // Setup/pressure evidence retains its shared hold policy. With only
@@ -141,58 +138,6 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
   const compared = completed.filter(row => (row.disposition === 0 && row.entry.consumer !== "refusal") || namedDisagreement(row, mode)).length;
   if (compared === 0) { console.log("  no example was compared, which is not agreement"); return 1; }
   return 0;
-}
-
-/**
- * bench-agree against its record: each recorded benchmark's run held to its
- * row by the shared ratchet. Reproducing passes, a loud defect included; a
- * change the ratchet accepts passes and is listed; anything else is red. With
- * --record-pending (the full check's writer, after landing) every benchmark
- * runs, and from a clean comparison its pending rows and accepted changes are
- * written, every other line byte for byte.
- */
-async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Completed[], incomplete: Incomplete[]): Promise<number> {
-  const record = runsRecord(plan.backend), updates = new Map<string, BenchmarkRun>();
-  let reproduced = 0, changed = 0, accepted = 0;
-  for (const row of completed) {
-    const path = row.entry.fixture!;
-    // No oracle record yet: nothing compared, and nothing to record.
-    if (row.disposition === 4) { console.log(`  ${pendingLine(path, recordPath(path))}`); continue; }
-    if (row.disposition === 5) { console.log(`ORACLE BUDGET ${path}: ${row.record.first}`); continue; }
-    const now = benchmarkRun(row.record)!, before = plan.record?.rows.get(path);
-    if (!before) { updates.set(path, now); console.log(`  ${pendingLine(path, record)}`); continue; }
-    const change = compareBenchmarkRun(before, now);
-    if (!change.ok) { changed += 1; console.log(`${change.word}  ${path}: ${JSON.stringify(before)} -> ${JSON.stringify(now)}`); }
-    else if (acceptedChange(change)) { accepted += 1; updates.set(path, now); console.log(`  ${acceptedLine(change, path, record, JSON.stringify(before), JSON.stringify(now))}`); }
-    else reproduced += 1;
-  }
-  const waiting = plan.recordPending ? [] : all.filter(entry => plan.pending.has(entry.fixture!)).map(entry => entry.fixture!);
-  for (const path of waiting) console.log(`  ${pendingLine(path, record)}`);
-  for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
-  console.log(`  ${completed.length} benchmark cases through the ${plan.backend} backend: ${reproduced} as recorded, ${accepted} accepted, ${changed} changed; ${waiting.length} not recorded yet`);
-  if (incomplete.length) {
-    const chosen = incomplete.find(row => checkFailurePolicy(row.error, changed).disposition !== "verdict") ?? incomplete[0]!;
-    return reportCheckFailure(chosen.error, process.env, changed);
-  }
-  if (plan.recordPending) {
-    if (changed) console.log(`not recorded: ${changed} recorded run(s) changed; records are written only from a clean comparison`);
-    else if (updates.size) { await writeRunRecord(plan, updates); console.log(`${plan.backend} recorded ${updates.size} row(s) into ${record}`); }
-  }
-  return changed ? 1 : 0;
-}
-
-/** Merge rows into the record, or start it: its header names the clean pin of main that measured them. */
-async function writeRunRecord(plan: RunPlan, updates: ReadonlyMap<string, BenchmarkRun>): Promise<void> {
-  const {provenanceOf} = await import("../conformance/pin-provenance.ts");
-  const binary = process.env.NTS_BIN ?? join(ROOT, "target/release/nts"), pin = provenanceOf(binary);
-  const compiler = createHash("sha256").update(readFileSync(binary)).digest("hex");
-  assert.ok(pin?.clean && !pin.applied && /^[0-9a-f]{40}$/.test(pin.sha) && pin.binary_sha256 === compiler,
-    "--record-pending requires a clean, unpatched pin of main as NTS_BIN; build it with tooling/conformance/pin.ts");
-  const contents = plan.record ? mergeRunRecord(readFileSync(plan.file, "utf8"), updates)
-    : serializeRunRecord({metadata: {version: 1, backend: plan.backend, commit: pin.sha, compiler: compiler.slice(0, 16), under: "benchmarks/cases"}, rows: new Map(updates)});
-  mkdirSync(dirname(plan.file), {recursive: true});
-  const temporary = `${plan.file}.partial-${process.pid}`;
-  writeFileSync(temporary, contents); renameSync(temporary, plan.file);
 }
 
 export async function runBatch(mode: Mode, only?: string, recordPending = false): Promise<number> {
