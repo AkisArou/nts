@@ -615,7 +615,8 @@
     "cache": "~/.cache/nts-scratch/728/edges.json",
     "bytes": 6754577,
     "sha256": "0c409f453dee0c913ef9dcebadc2968a7361f295469f47f10c49dd37d64a5475",
-    "reproduction": "node docs/records/reader-inputs-728/reproduce.ts <output directory>",
+    "reproduction": "node tooling/gate/reader-census.ts reproduce <output directory>",
     "verifiedUnit": "nts-agent-728-exact-reproduction-2.service"
-  }
+  },
+  "nodeVersion": "v26.13.0"
 }

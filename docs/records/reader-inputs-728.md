@@ -143,7 +143,7 @@ every real corpus into every private test.
 - [Summary, per-step losses, slice budgets and fallback counts](reader-inputs-728/summary.json)
 - [Reader classifications](reader-inputs-728/readers.tsv)
 - [First-loss sites and reasons](reader-inputs-728/sites.tsv)
-- [Exact reproduction](reader-inputs-728/reproduce.ts)
+- [Strictly checked census tool](../../tooling/gate/reader-census.ts)
 
 The lossless edge index is kept at `~/.cache/nts-scratch/728/edges.json`, outside
 Git. `tooling/full-check/keep.json` retains that evidence directory until #728
@@ -154,10 +154,10 @@ Recreate the fixed source and index from any pool tree carrying this record:
 ```sh
 node tooling/agents/agents.ts start --name 728-reproduce -- \
   node tooling/gate/admit.ts --key tooling-tests --what '728 reproduce recorded edge index' -- \
-  node docs/records/reader-inputs-728/reproduce.ts "$HOME/.cache/nts-scratch/728/reproduced"
+  node tooling/gate/reader-census.ts reproduce "$HOME/.cache/nts-scratch/728/reproduced"
 ```
 
-`reproduce.ts` checks Node's recorded version, initializes an independent Git
+The tool checks Node's recorded version, initializes an independent Git
 repository in owned scratch with explicit private `GIT_DIR` and disabled
 global/system configuration, and populates its index/files from the recorded
 commit. Its alternate object store is read only; all refs and Git state are
@@ -172,9 +172,11 @@ and disposition. Decoding is checked against every original classified edge.
 The source of each first loss is therefore retained without hundreds of
 thousands of repeated reader/literal strings.
 
-The retained `census.ts`, `frontiers.ts`, `classify.ts`, `plan.ts` and `index.ts` capture the
-read-only investigation. `census.ts` requires a source tree at the named pin
-and a separate output directory; the other scripts take that output directory.
-They run through the normal admission/unit owners. The staged selector is
-removed on completion. No reproduction creates or edits a shared worktree or
-its Git configuration.
+`reader-census.ts inspect <source> <output> [classifications.tsv]` captures a
+new slice's switch-off delta from its selected source tree. The review TSV
+classifies the first-loss rows; an unknown row fails by name rather than
+receiving a guessed classification. The analysis, index encoder and CLI are
+covered by the tooling strict project and deterministic controls. Commands
+run through the normal admission/unit owners. The staged selector is removed
+on completion. No reproduction creates or edits a shared worktree or its Git
+configuration.

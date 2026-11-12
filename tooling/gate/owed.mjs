@@ -1048,6 +1048,12 @@ export const RULES = [
     arms: [],
   },
   {
+    name: "reader declaration census",
+    when: (/** @type {string} */ p) => /^tooling\/gate\/reader-census(?:-[a-z]+)?(?:\.test)?\.ts$/.test(p),
+    steps: ["tooling"],
+    arms: [{kind:"valid",asks:"read-only inferred-edge provenance, classification and lossless reproduction",run:"node tooling/gate/reader-census.ts reproduce <output directory>"}],
+  },
+  {
     name: "standalone census row queries",
     when: (/** @type {string} */ p) => p === "tooling/census/rows.ts",
     settled: true,
