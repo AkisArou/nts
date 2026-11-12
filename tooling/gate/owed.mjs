@@ -2003,7 +2003,7 @@ export function owed(changes) {
   }
 
   if (full.length) {
-    out.push({ name: "owes the full gate", full: true, paths: full, steps: [], arms: [
+    out.push({ name: "owes the full gate", full: true, fallback: true, paths: full, steps: [], arms: [
       { kind: "hygiene", asks: "what does this path reach", run: "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything" },
     ] });
   }
@@ -2130,11 +2130,11 @@ function main() {
       const paths=trackedFiles();
       return collectFullGateCensus(paths,path=>{
         const rules=owed([{path,added:false}]);
-        return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name)};
+        return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};
       },inputDirectoryDeclarations());
     },{record:argv.includes("--record"),initialize:argv.includes("--initialize")});
     if(argv.includes("--json"))console.log(JSON.stringify({census,problems},null,2));
-    else console.log(`gate input placement: ${census.full.length} of ${census.tracked} tracked files owe the full gate; ${census.directories.length} directory declarations`);
+    else console.log(`gate input placement: ${census.full.length} of ${census.tracked} tracked files owe the full gate; ${census.unplaced.length} unplaced fallback, ${census.policy.length} full by policy; ${census.directories.length} directory declarations`);
     if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
     return;
   }

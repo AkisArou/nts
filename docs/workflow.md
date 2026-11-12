@@ -159,9 +159,13 @@ Generated outputs use path operations from positional anchors instead of
 declaring named module-relative input URLs.
 A traced area with no gate reader has a settled rule naming its standalone
 reader. An untraced path keeps the full fallback. `gate-inputs` holds the
-tool-written inventory in `results/gate/full-gate.json`: a newly full path
-fails by name, even if another path leaves the inventory in the same change.
-`node tooling/gate/owed.mjs --full-census --record` can only retire entries.
+tool-written inventory in `results/gate/full-gate.json`. Its unplaced fallback
+set can only shrink: a newly unplaced path fails by name even if another leaves
+in the same change. Full-by-policy paths are listed separately with their
+rule names. Those rules govern their reach, and changing `owed.mjs` itself
+owes the full gate. `node tooling/gate/owed.mjs --full-census --record` retires
+fallback entries and refreshes the policy inventory; it never admits a new
+fallback path.
 
 **Ten minutes or less.** A check that cannot fit moves to the full check.
 The smoke sample is a few hundred TypeScript and test262 cases and the
@@ -572,6 +576,10 @@ the first node task.
   trees, directory claims are visible, settled areas name their external
   readers, and an unplaced-input inventory refuses silent expansion
   ([log](records/notebooks/decisions-log.md#declared-readers-place-gate-inputs-11-12)).
+- **Unknown reach and explicit full policies have separate inventories:** only
+  the unplaced fallback set is ratcheted. Full-by-policy paths name their
+  governing rules, and a rule change owes the full gate
+  ([log](records/notebooks/decisions-log.md#unknown-reach-is-separate-from-full-policy-11-12)).
 
 - **Step CPU is versioned cgroup accounting:** final counters include descendants
   killed without reaping. GNU time stays a named comparison. CPU histories and

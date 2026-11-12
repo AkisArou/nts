@@ -2289,3 +2289,18 @@ keeps its token through final peak capture and worker drain. Local ancestor
 OOM counters identify the firing cgroup and both limits. JavaScript pools,
 resident feeds and shell pools share this owner. Governs
 [the machine](../../workflow.md#the-machine).
+
+## Unknown reach is separate from full policy (11-12)
+
+The input inventory had combined unplaced fallback paths with explicit full
+policies. Moving the shared token scheduler from JavaScript to TypeScript
+therefore failed the path-set ratchet even though its reviewed full policy
+moved with it and its declared readers remained present.
+
+The census now lists the two populations separately. Only unplaced fallback
+paths are ratcheted, and replacing one with another still fails. Full-by-policy
+paths retain each governing rule name; the rules in owed.mjs govern their
+reach, and editing that selector owes the full gate. The tool-owned writer
+migrates the mixed record to the split format. This refines
+[declared reader placement](#declared-readers-place-gate-inputs-11-12) and governs
+[landing selection](../../workflow.md#landing-the-landing-check).

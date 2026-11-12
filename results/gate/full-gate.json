@@ -1,21 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "files": [
     ".clang-format",
     ".clang-tidy",
     ".clangd",
-    ".gitignore",
     ".gitmodules",
     ".ignore",
     ".oxlintrc.json",
-    ".tool-versions",
-    "Cargo.lock",
-    "Cargo.toml",
     "license-queue-current.py",
-    "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-    "rust-toolchain.toml",
     "rustfmt.toml",
     "tooling/census/contents.ts",
     "tooling/census/erased-calls.ts",
@@ -33,7 +25,6 @@
     "tooling/config/src/product.ts",
     "tooling/config/src/profiles.ts",
     "tooling/config/src/profiles/data.json",
-    "tooling/config/src/target.ts",
     "tooling/config/src/workspace.ts",
     "tooling/config/tsconfig.json",
     "tooling/conformance/accessor-audit.mjs",
@@ -137,38 +128,16 @@
     "tooling/conformance/vacuous-lane.mjs",
     "tooling/conformance/view-returns.py",
     "tooling/differential/oracle-reservation-fixture.ts",
-    "tooling/gate/all.sh",
-    "tooling/gate/comment-tokens.rs",
     "tooling/gate/commit-mine.sh",
-    "tooling/gate/memory-watch.ts",
-    "tooling/gate/pinned.sh",
-    "tooling/gate/run.mjs",
     "tooling/gate/slices.sh",
-    "tooling/gate/step-successors.ts",
     "tooling/gate/step-table.d.mts",
-    "tooling/gate/step-table.mjs",
-    "tooling/gate/token.sh",
-    "tooling/gate/tokenpool.mjs",
     "tooling/gate/tokens.d.mts",
-    "tooling/gate/tokens.mjs",
-    "tooling/gate/tooling-test-exclusions.json",
     "tooling/gir-census/baseline.tsv",
     "tooling/gir-census/run.sh",
     "tooling/gir-sweep/sweep.mjs",
     "tooling/gjs-corpus/host.js",
     "tooling/gjs-corpus/new-port.sh",
     "tooling/gjs-corpus/run.sh",
-    "tooling/inputs/dependency-inputs.test.ts",
-    "tooling/inputs/dependency-inputs.ts",
-    "tooling/inputs/link.sh",
-    "tooling/inputs/linker.test.ts",
-    "tooling/inputs/linker.ts",
-    "tooling/inputs/node-inputs-test-fixture.ts",
-    "tooling/inputs/node-inputs.json",
-    "tooling/inputs/node-inputs.test.ts",
-    "tooling/inputs/node-inputs.ts",
-    "tooling/inputs/package-manager.test.ts",
-    "tooling/inputs/package-manager.ts",
     "tooling/jvm/NtsCdsWarm.java",
     "tooling/jvm/arrays-vs-ref.sh",
     "tooling/jvm/sabotage.sh",
@@ -181,5 +150,196 @@
     "tooling/npm-survey/run.sh",
     "tooling/sweep/probe-harness.ts",
     "tsconfig.json"
+  ],
+  "policy": [
+    {
+      "path": ".gitignore",
+      "reasons": [
+        "shared ignored-input policy"
+      ]
+    },
+    {
+      "path": ".tool-versions",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "Cargo.lock",
+      "reasons": [
+        "workspace dependency and toolchain inputs"
+      ]
+    },
+    {
+      "path": "Cargo.toml",
+      "reasons": [
+        "workspace dependency and toolchain inputs"
+      ]
+    },
+    {
+      "path": "package.json",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "reasons": [
+        "workspace dependency and toolchain inputs"
+      ]
+    },
+    {
+      "path": "tooling/config/src/target.ts",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "tooling/gate/all.sh",
+      "reasons": [
+        "shared selector and toolchain policy",
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/comment-tokens.rs",
+      "reasons": [
+        "shared selector and toolchain policy"
+      ]
+    },
+    {
+      "path": "tooling/gate/memory-watch.ts",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/pinned.sh",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/run.mjs",
+      "reasons": [
+        "shared selector and toolchain policy",
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/step-successors.ts",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/step-table.mjs",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/token-pool.ts",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/token.sh",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/tokens.mjs",
+      "reasons": [
+        "the gate's runner"
+      ]
+    },
+    {
+      "path": "tooling/gate/tooling-test-exclusions.json",
+      "reasons": [
+        "shared selector and toolchain policy",
+        "tooling test collection policy"
+      ]
+    },
+    {
+      "path": "tooling/inputs/dependency-inputs.test.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/dependency-inputs.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/link.sh",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/linker.test.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/linker.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/node-inputs-test-fixture.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/node-inputs.json",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/node-inputs.test.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/node-inputs.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/package-manager.test.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/package-manager.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    }
   ]
 }
