@@ -2348,3 +2348,18 @@ diagnostics and exit codes; asynchronous fixture setup belongs in test hooks.
 Import-for-execution becomes an explicit exported function call. Type-only
 imports are erased and do not make an execution graph asynchronous. Governs
 [the machine](../../workflow.md#the-machine).
+## One owner for Rust test builds (11-12)
+
+Every Cargo test route now goes through `tooling/gate/test-profile.ts`, which
+constructs the arguments and environment, validates the manifest and checks
+Cargo's emitted artifact paths. The profile is incremental `nts-dev` with
+`debug = 0`, overflow checks and debug assertions. Conflicting profile or
+incremental settings refuse by name, and the source audit rejects direct test
+builds outside the owner. The inner loop, frontend's native invariants,
+workspace replay and doctests share it. The temporary dev/nts-dev equivalence
+in landing receipts ends; producer and importing core name the same profile.
+
+The frontend's bare Cargo call built a second debug artifact set, and the
+workspace runner's incremental override made another variant of the same
+profile. One invocation owner prevents both from returning. Existing obsolete
+profile generations stay under the separately approved reclamation policy.

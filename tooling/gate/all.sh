@@ -2635,8 +2635,7 @@ step "licenses" licenses
 frontend_tsrs() {
   node compiler/frontend-tsrs/vendor.ts --check &&
     node --test compiler/frontend-tsrs/*.test.ts &&
-    cargo test -p nts-frontend-ts --test integration --no-fail-fast --jobs 4 -- \
-      native_invariants:: --ignored --test-threads=1
+    node tooling/gate/test-profile.ts frontend
 }
 step "frontend-tsrs" frontend_tsrs
 

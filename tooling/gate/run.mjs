@@ -114,7 +114,7 @@ import {ownerEmissionCalls} from "./owner-emission-calls.ts";
 import {STEP_CPU_MEASURE,parseGnuTime,measuredStepTime,readStepBaseline,currentStepCpu} from './step-time.ts';
 import {gib, machineMemory, priorityOf, reservationPriority, rankForOom, reserve, RESERVATION_ENV, SYSTEM_FLOOR_BYTES} from "./memory-ledger.ts";
 import {workerCapBytes} from "../census/worker-memory.ts";
-import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
+
 import {defaultSlots, frontendBudget} from "./budget.ts";
 import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
@@ -382,10 +382,6 @@ function stepEnv(step, slots, scope) {
   e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
   e.NTS_CHECKERS = "1";
   e.CARGO_TARGET_DIR = target;
-  // Match tests.mjs and the landing check, including Cargo calls in frontend-tsrs.
-  e.CARGO_INCREMENTAL ??= "0";
-  e.CARGO_PROFILE_DEV_DEBUG ??= TEST_BUILD_DEBUG;
-  e.CARGO_PROFILE_DEV_OPT_LEVEL ??= TEST_BUILD_OPT_LEVEL;
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
   // instead of queueing on their lock. What it lints is unchanged.

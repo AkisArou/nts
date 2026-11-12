@@ -89,6 +89,8 @@ for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", fa
     // Route the CLI's run storage into this fixture; its control flow is exact.
     writeFileSync(script, readFileSync(script, "utf8").replace("homedir()", JSON.stringify(join(root, "home"))));
     writeFileSync(join(tree, ".tool-versions"), `nodejs ${process.versions.node}\n`);
+    const manifest=readFileSync(new URL("../../Cargo.toml",import.meta.url),"utf8");
+    writeFileSync(join(tree,"Cargo.toml"),"[workspace]\n"+manifest.split(/(?=^\[)/m).find(part=>part.startsWith("[profile.nts-dev]")));
     mkdirSync(bin);
     const compiler = join(tree, "target/nts-dev/nts"), calls = join(root, "cargo.jsonl");
     mkdirSync(dirname(compiler), { recursive: true });
@@ -105,6 +107,7 @@ if(args[0]==='build') {
   if(!readFileSync(${JSON.stringify(compiler)},'utf8').includes('fresh')) writeFileSync(${JSON.stringify(compiler)},${JSON.stringify(executable("fresh"))},{mode:0o755});
 }
 if(args[0]==='test') {
+  console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(tree,'target/nts-dev/deps/fixture'))}],profile:{test:true,debuginfo:0}}));
   if(process.env.NTS_BIN!==${JSON.stringify(compiler)}||process.env.NTS_CHECKERS!=='1') process.exit(24);
   const ran=spawnSync(process.env.NTS_BIN,[],{encoding:'utf8'}); if(ran.status!==0||ran.stdout.trim()!=='fresh') process.exit(25);
 }

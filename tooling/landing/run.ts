@@ -38,7 +38,7 @@ import { gateCommand } from "../gate/affinity.ts";
 import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT } from "../gate/canonical-environment.ts";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { instrumentPolicy } from "../gate/step-result.ts";
-import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "../gate/test-artifacts.ts";
+import { TEST_PROFILE } from "../gate/test-profile.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
@@ -50,7 +50,7 @@ import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 
-export const PROFILE = "nts-dev";
+export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;
 export type StepResult = {
   name: string; verdict: "PASS" | "FAIL" | "INSTRUMENT" | "SKIPPED" | "NOT RUN"; reason?: string;
@@ -127,7 +127,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
   const owned = {
     NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
     NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",
-    CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, ...STANDING_GATE_POLICY,
+    ...STANDING_GATE_POLICY,
     NTS_MEMORY_PRIORITY: options.priority ?? "landing",
     // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
     ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),

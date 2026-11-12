@@ -269,11 +269,11 @@ toolchain directories before system commands. Launcher-added directories
 are discarded. A required command available only through a launcher's PATH
 is a missing host capability, named by the check.
 
-The landing's `nts-dev` workspace test verdict satisfies the core's test
-obligation while both profiles retain overflow checks and debug assertions.
-The receipt retains the producing profile. Once all test routes use one
-named profile, the contract requires that profile. Fresh consumers and
-records pins prepare the release compiler at their measured commit.
+The landing and core build tests through the same `nts-dev` profile, so an
+exact landing workspace test verdict satisfies the core's test obligation.
+The environment contract names that sole test profile and the receipt retains
+its producer profile. Fresh consumers and records pins prepare the release
+compiler at their measured commit.
 
 Culprit probes look up evidence for the actual measured commit, including
 any pending reverts applied to it. Imported outcomes are that commit's own
@@ -385,6 +385,25 @@ locked session on CPU 4 and keep the wall-time floor below.
   is: published again on the newest `main` after a refusal, a few times at
   most, and then a task. One night's run is in flight at a time: a night
   measures once the last run has landed or been given up.
+
+### Rust test builds
+
+`tooling/gate/test-profile.ts` constructs and executes every Cargo test build.
+Its `workspace`, `inner`, `frontend` and `doctests` routes select the complete
+workspace, explicit crates, the frontend's ignored native invariants, and
+rustdoc respectively. Contributors use `node tooling/gate/test-profile.ts inner
+-p <crate> ...`, through the normal heavy-job admission. `inner.ts`, the shell
+frontend step, the workspace replay and the doctest step call the same owner.
+
+The profile is `nts-dev`: no debug info, incremental compilation, overflow
+checks and debug assertions. The owner validates the manifest, refuses
+conflicting arguments or environment, fixes one checker per test process,
+and keeps `--no-fail-fast`. Cargo's actual compiler-artifact reports must name
+files below the selected profile and test artifacts must have no debug info.
+A successful command without artifact evidence is an instrument failure.
+The shared source audit rejects direct Cargo test calls in other tooling,
+including shell calls; isolated cache-pruning controls are classified separately
+because they manufacture obsolete artifacts intentionally.
 
 ## The machine
 
@@ -592,6 +611,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Every Rust test route uses one profile owner.** The shared Cargo invocation
+  uses incremental `nts-dev` without debug info; the manifest, invocation and
+  emitted artifact paths are checked. Inner, frontend, workspace and doctest
+  routes have the same contract, and landing verdict reuse requires it
+  ([log](records/notebooks/decisions-log.md#one-owner-for-rust-test-builds-11-12)).
 
 - **Pooled cases carry their own measured memory**: stable per-case history
   governs admission, while independent hard caps bound workers. Registration

@@ -2,6 +2,7 @@
 // Run allocations belong in the original report, while this identity survives
 // moving the same checked commit between the landing and full-check trees.
 import { createHash } from "node:crypto";
+import { TEST_PROFILE } from "./test-profile.ts";
 import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { arch, platform } from "node:os";
@@ -22,7 +23,6 @@ export type VerdictContract = {
     policy: unknown;
     tools: Record<string, string>;
     inputs: Record<string, string | null>;
-    // Remove this equivalence when all test routes use one named profile.
     test_profiles: readonly string[];
   };
 };
@@ -80,7 +80,7 @@ export function verdictContract(report: EnvironmentReport, facts: Pick<VerdictCo
   const environment: VerdictContract["environment"] = {
     ...facts, host, ambient,
     policy: { standing: STANDING_GATE_POLICY, unrun: PLATFORMS_UNRUN_OK },
-    test_profiles: ["dev", "nts-dev"],
+    test_profiles: [TEST_PROFILE],
   };
   return { version: 1, identity: contractIdentity(environment), environment };
 }

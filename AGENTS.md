@@ -190,13 +190,19 @@ fixtures, examples and blockers did not.
 
 Before you land, run the gate's own commands, not look-alikes:
 `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`;
-`cargo test --no-fail-fast` over every crate you touched *and the backend
-crates* (`-p nts-codegen-{c,llvm,jvm}`), with `NTS_CHECKERS=1`
-set to bound each test process's checker pool and memory; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
+`node tooling/gate/test-profile.ts inner -p <crate> ...` over every crate you
+touched *and the backend crates* (`-p nts-codegen-{c,llvm,jvm}`); the owner
+sets `NTS_CHECKERS=1` to bound each test process's checker pool and memory
+and keeps `--no-fail-fast`; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
 you edited. A core change that passes core's tests has broken a backend's more
 than once. Frontend tests always run: an in-process capture failure is a
 failure, never a missing executable to skip. Without `--no-fail-fast` cargo stops at the first failing test binary and silently
-skips the rest. After committing, read `git show --name-status HEAD`: a new
+skips the rest. Every Rust test build uses `tooling/gate/test-profile.ts`: it owns
+the incremental `nts-dev` profile with no debug info, and checks Cargo's emitted
+artifact paths. The source audit rejects direct test builds elsewhere. On
+2026-11-11 the frontend check built a second debug artifact set, and test
+routes with different incremental settings kept duplicate artifacts.
+[`docs/workflow.md`](docs/workflow.md) gives the route details. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
 `node tooling/gate/inner.ts` runs all of these, then agree on the backends built today (C, LLVM and the JVM)

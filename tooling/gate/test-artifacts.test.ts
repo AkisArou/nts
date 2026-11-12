@@ -27,54 +27,30 @@ function testsFixture(root: string): void {
   assert.equal(initialized.status, 0, initialized.stderr);
 }
 
-test("the gate tests helper builds at opt-level 1 and replays Cargo's environment", () => {
+test("the gate tests helper replays Cargo's environment from incremental nts-dev artifacts", () => {
   const root = mkdtempSync(join(tmpdir(), "nts-test-build-env-"));
   try {
     testsFixture(root);
     mkdirSync(join(root, "src"));
-    writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-env"\nversion="0.0.0"\nedition="2024"\n');
+    const profile=readFileSync(new URL("../../Cargo.toml",import.meta.url),"utf8").split(/(?=^\[)/m).find(part=>part.startsWith("[profile.nts-dev]"))!;
+    writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-env"\nversion="0.0.0"\nedition="2024"\n'+profile);
     writeFileSync(join(root, "build.rs"), 'fn main() { println!("cargo:rustc-env=ACTUAL_OPT_LEVEL={}", std::env::var("OPT_LEVEL").unwrap()); }\n');
     writeFileSync(join(root, "src/lib.rs"), `#[test] fn optimized_build() {
-      assert_eq!(env!("ACTUAL_OPT_LEVEL"), "1");
-      assert_eq!(std::env::var("CARGO_PROFILE_DEV_OPT_LEVEL").unwrap(), "1");
+      assert_eq!(env!("ACTUAL_OPT_LEVEL"), "3");
+      assert_eq!(std::env::var("CARGO_INCREMENTAL").unwrap(), "1");
+      assert_eq!(std::env::var("NTS_CHECKERS").unwrap(), "1");
+      assert!(cfg!(debug_assertions));
     }\n`);
     const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
       cwd: root, encoding: "utf8",
       env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1",
-        CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
-        CARGO_PROFILE_DEV_OPT_LEVEL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
+        CARGO_INCREMENTAL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 1 passed, 0 failed/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("the gate tests helper builds and runs in the profile NTS_TEST_PROFILE names", () => {
-  const root = mkdtempSync(join(tmpdir(), "nts-test-build-profile-"));
-  try {
-    testsFixture(root);
-    mkdirSync(join(root, "src"));
-    // The landing check's nts-dev is a profile of its own; this one is told apart by its optimization.
-    writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-profile"\nversion="0.0.0"\nedition="2024"\n[profile.landing]\ninherits="dev"\nopt-level=2\n');
-    writeFileSync(join(root, "build.rs"), 'fn main() { println!("cargo:rustc-env=ACTUAL_OPT_LEVEL={}", std::env::var("OPT_LEVEL").unwrap()); }\n');
-    writeFileSync(join(root, "src/lib.rs"), '#[test] fn profile_build() { assert_eq!(env!("ACTUAL_OPT_LEVEL"), "2"); }\n');
-    const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
-      cwd: root, encoding: "utf8",
-      env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0",
-        CARGO_PROFILE_DEV_OPT_LEVEL: undefined, NTS_TEST_PROFILE: "landing", NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
-    });
-    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-    assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 1 passed, 0 failed/);
-    assert.ok(existsSync(join(root, "target/landing/deps")), "the test binaries were built in the named profile");
-    const refused = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], { cwd: root, encoding: "utf8",
-      env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), NTS_TEST_PROFILE: "--release" } });
-    assert.equal(refused.status, 2);
-    assert.match(refused.stdout, /NOT MEASURED: NTS_TEST_PROFILE=--release is not a Cargo profile name/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    assert.ok(existsSync(join(root,"target/nts-dev/incremental")));
+    assert.equal(existsSync(join(root,"target/debug")),false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Cargo rebuilds pruned feature/incremental variants while build-script output stays valid", () => {

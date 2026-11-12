@@ -114,6 +114,7 @@ function text(command: string, args: readonly string[]): string {
 }
 
 const ADMIT = fileURLToPath(new URL("./admit.ts", import.meta.url));
+const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
 
 /** A heavy phase: its key in the tree's history, what it is, its scope's MemoryMax, and the workers it runs. */
 type Phase = { key: string; what: string; memoryMax: string; workers: number };
@@ -187,7 +188,7 @@ function main(argv: readonly string[]): number {
     steps.push({ name, status, seconds: Math.round((Date.now() - began) / 1000) });
     return status === 0 || keepGoing;
   };
-  const tests = ["test", "--profile", "nts-dev", "--no-fail-fast", ...crates.flatMap((name) => ["-p", name])];
+  const tests = [TEST_OWNER, "inner", ...crates.flatMap((name) => ["-p", name])];
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
   const nativeFrontend = changed.some((path) => /^(compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
   const after = join(ROOT, "target/nts-dev/nts");
@@ -212,7 +213,7 @@ function main(argv: readonly string[]): number {
     }) &&
     // Even --keep-going cannot authorize tests against a failed build's stale binary.
     compilerReady &&
-    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: after, [runnerVar]: runner })) &&
+    step("tests", () => heavy({ key: "inner-tests", what: "the tests", memoryMax: "16G", workers: CARGO_WORKERS }, process.execPath, tests, { NTS_CHECKERS: "1", NTS_BIN: after, [runnerVar]: runner })) &&
     // Native vendor integrity and complete reachable graphs over the corpus.
     (!nativeFrontend || step("frontend-tsrs", () => heavy({ key: "inner-frontend-tsrs", what: "native frontend checks", memoryMax: "16G", workers: 4 },
       "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));

@@ -51,6 +51,7 @@ writeFileSync(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({
   };
   run("missing");
   const receipt = recordLandingFixture(home, commit, tree, ["build", "tests"]);
+  assert.deepEqual(receipt.contract.environment.test_profiles,["nts-dev"],"the landing receipt names the sole test profile");
   const matched = run("matched");
   assert.deepEqual(matched.reused, ["tests"]);
   const summary = JSON.parse(readFileSync(join(matched.run, "summary.json"), "utf8"));

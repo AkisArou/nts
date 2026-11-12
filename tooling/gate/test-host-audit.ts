@@ -5,6 +5,7 @@ import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {shellCommands} from './shell-commands.ts';
+import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import type {Node} from 'typescript/ast';
 import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-fixture-copies.ts';
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
@@ -139,9 +140,10 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
 
 export function auditTestHost(root:string,debt?:HostDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
-  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[];
+  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
   const inspect=(file:string,source:string,node:Node)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
+    testProfiles.push(...inspectCargoTestCalls(file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node));
   }};
@@ -151,7 +153,11 @@ export function auditTestHost(root:string,debt?:HostDebt){
       if(entry.name==='node_modules')continue;
       const file=directory+'/'+entry.name;
       if(entry.isDirectory())visit(file,rustOnly);
-      else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file)))sources.set(file,inspectHostSource(file,readFileSync(join(root,file),'utf8'),api,inspect));
+      else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file))){
+        const source=readFileSync(join(root,file),'utf8');
+        if(file.endsWith('.sh'))testProfiles.push(...inspectShellCargoTests(file,source));
+        sources.set(file,inspectHostSource(file,source,api,inspect));
+      }
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
   const reach=(file:string,seen:Set<string>):void=>{
@@ -171,7 +177,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
-  return {files:sources.size,closures,reads,publications,problems:[...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts).problems,...fixtureCopyProblems(root,copies)]};
+  return {files:sources.size,closures,reads,publications,problems:[...testProfiles,...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts).problems,...fixtureCopyProblems(root,copies)]};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
