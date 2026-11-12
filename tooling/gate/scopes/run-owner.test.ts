@@ -34,12 +34,12 @@ for (const beforeCheckout of [false, true]) test(`the next runner reaps a dead r
     }
     rmSync(own, { recursive: true, force: true });
   });
-  const code = `import {spawn} from 'node:child_process';import{writeFileSync}from'node:fs';
+  const code = `import {spawn} from 'node:child_process';import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
 import{GateScopes}from${JSON.stringify(new URL("./step-scope.ts", import.meta.url).href)};
 const owner=new GateScopes(process.env,${JSON.stringify(receipt)}),step=owner.step({max:2**31});
 const command=step.command(process.execPath,['-e',${JSON.stringify(`const fs=require('node:fs');fs.watch(${JSON.stringify(own)},()=>{});fs.writeFileSync(${JSON.stringify(ready)},'ready');`)}]);
 spawn(command.command,command.args,{detached:true,stdio:'ignore',env:{...${testEnvironmentHandoff()},NTS_TOOLING_SLICE:step.slice}}).unref();
-writeFileSync(${JSON.stringify(info)},JSON.stringify({slice:owner.slice,group:owner.group}));`;
+durableRecord(${JSON.stringify(info)},{slice:owner.slice,group:owner.group});`;
   const child = spawn(process.execPath, ["--input-type=module", "-e", code], {env:fixtureEnvironment(t), stdio: ["ignore", "pipe", "pipe"] });
   let stderr = ""; child.stderr.on("data", part => { stderr += part; });
   const status = await new Promise<number | null>((resolve, reject) => { child.on("error", reject); child.on("close", resolve); });

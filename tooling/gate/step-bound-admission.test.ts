@@ -57,7 +57,8 @@ fi
   // Only this runner reads the controlled clock. Record its actual bound
   // observations before allowing the test to advance beyond an admission wait.
   writeFileSync(join(gate,"entry.mjs"),`
-import fs,{readFileSync,renameSync,writeFileSync} from "node:fs";
+import fs,{readFileSync} from "node:fs";
+import {durableRecord} from ${JSON.stringify(new URL("./durable-record.ts",import.meta.url).href)};
 import {syncBuiltinESMExports} from "node:module";
 // Fail at the hidden read itself, even when this real host has ample room.
 const read=fs.readFileSync;
@@ -68,8 +69,7 @@ import {StepBoundClock} from "./step-bound.ts";
 const observe=StepBoundClock.prototype.observe;
 StepBoundClock.prototype.observe=function(now,waiting){
   const result=observe.call(this,now,waiting);
-  writeFileSync(${JSON.stringify(observed+".next")},JSON.stringify({now,waiting:waiting??null,...result}));
-  renameSync(${JSON.stringify(observed+".next")},${JSON.stringify(observed)});
+  durableRecord(${JSON.stringify(observed)},{now,waiting:waiting??null,...result});
   return result;
 };
 await import("./run.mjs");

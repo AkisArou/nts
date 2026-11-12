@@ -74,10 +74,10 @@ test("a --here run at the agent priority yields its unused reservation to a serv
   const commit = spawnTest("git", ["-C", here.tree, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   const child = spawn(process.execPath, ["--input-type=module", "-e",
     `import {runLanding} from ${JSON.stringify(new URL("./run.ts", import.meta.url).href)};` +
-    `import {writeFileSync} from "node:fs";` +
+    `import {durableRecord} from ${JSON.stringify(new URL("../gate/durable-record.ts",import.meta.url).href)};` +
     `const ran=await runLanding({tree:${JSON.stringify(here.tree)},target:${JSON.stringify(here.target)},run:${JSON.stringify(here.run)},commit:${JSON.stringify(commit)},steps:["build"],priority:"agent",` +
     `env:{...${testEnvironmentHandoff()},HOME:${JSON.stringify(join(here.own, "home"))}},owned:{NTS_GATE_SLOTS:"4",...${JSON.stringify(here.memory)}},build:[process.execPath,"--input-type=module","-e",${JSON.stringify(holding)}]});` +
-    `writeFileSync(${JSON.stringify(hereResult)},JSON.stringify({state:ran.state}));`],
+    `durableRecord(${JSON.stringify(hereResult)},{state:ran.state});`],
     { env: { ...fixtureEnvironment(t) }, stdio: ["ignore", "ignore", "pipe"] });
   let childStderr = "";
   child.stderr.setEncoding("utf8").on("data", (data: string) => { childStderr += data; });

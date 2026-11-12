@@ -1,3 +1,4 @@
+import {generatedJavaScript,type GeneratedJavaScript} from '../gate/generated-javascript.ts';
 // Real candidate environment and resolution service, in private test roots.
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
@@ -19,13 +20,14 @@ export function candidateVersion(tree:string,version:string):void{
 }
 
 /** The directory is outside disposable tmp so owner exit is what closes it. */
-export function resolutionSubject(observed:string,session:string,status:number):string{
-  return `import {writeFileSync,existsSync} from 'node:fs';
+export function resolutionSubject(observed:string,session:string,status:number):GeneratedJavaScript{
+  return generatedJavaScript(`import {existsSync} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(new URL('../differential/oracle-resolution.ts',import.meta.url).href)};
 const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT);
 const holder=await startNodeResolutionSession(${JSON.stringify(session)},nodeResolutionOptions([],process.env),context.resolutionOwner.pid);
-writeFileSync(${JSON.stringify(observed)},JSON.stringify({holder,version:process.env.CANDIDATE_VERSION,canonical:context.report.canonical,tmp:process.env.TMPDIR,there:existsSync(process.env.TMPDIR),bin:process.env.NTS_BIN,node:process.versions.node,command:process.pid}));
-process.exitCode=${status};\n`;
+durableRecord(${JSON.stringify(observed)},{holder,version:process.env.CANDIDATE_VERSION,canonical:context.report.canonical,tmp:process.env.TMPDIR,there:existsSync(process.env.TMPDIR),bin:process.env.NTS_BIN,node:process.versions.node,command:process.pid});
+process.exitCode=${status};\n`);
 }
 
 export async function assertSessionClosed(observed:string):Promise<void>{

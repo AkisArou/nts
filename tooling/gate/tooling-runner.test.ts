@@ -85,7 +85,8 @@ test("a hung fixture's service and census scopes leave with its slice while a si
   const service=`nts-test-tooling-subject-${randomUUID().slice(0,8)}`;
   writeFileSync(file,`
 import {spawn,spawnSync} from 'node:child_process';
-import {writeFileSync,createReadStream} from 'node:fs';
+import {createReadStream} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
 import {toolingSliceArgs} from ${JSON.stringify(helper)};
 import {MemoryRun} from ${JSON.stringify(memory)};
 import {waitFor} from ${JSON.stringify(waiting)};
@@ -96,7 +97,7 @@ const run=new MemoryRun({budgetBytes:128*2**20,id:'tooling-containment'}),worker
 spawn('systemd-run',scope.argv,{env:scope.env,stdio:'ignore'});
 await waitFor('the owned census scope to start',()=>worker.ready(scope));
 const serviceGroup=spawnSync('systemctl',['--user','show',unit,'--property=ControlGroup','--value'],{encoding:'utf8'}).stdout.trim();
-writeFileSync(${JSON.stringify(state)},JSON.stringify({unit,serviceGroup,censusGroup:run.group,workerGroup:worker.group,scope:scope.unit}));
+durableRecord(${JSON.stringify(state)},{unit,serviceGroup,censusGroup:run.group,workerGroup:worker.group,scope:scope.unit});
 createReadStream(fifo).resume();
 `);
   let observed:any;

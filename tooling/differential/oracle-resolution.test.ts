@@ -104,7 +104,7 @@ test('replacing a held executable by rename gives the child a different identity
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),binary=join(root,'node'),record=join(root,'session.json'),moduleURL=pathToFileURL(join(here,'oracle-resolution.ts')).href;
   copyFileSync(process.execPath,binary,constants.COPYFILE_FICLONE);chmodSync(binary,0o755);
-  const start=`import {writeFileSync} from 'node:fs';import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const session=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([]),process.ppid);writeFileSync(${JSON.stringify(record)},JSON.stringify(session));`;
+  const start=`import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const session=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([]),process.ppid);durableRecord(${JSON.stringify(record)},session);`;
   const initial=spawnSync(binary,['--input-type=module','-e',start],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(initial.status,0,initial.stderr);
   const session=JSON.parse(readFileSync(record,'utf8')) as NodeResolutionSession;
   const check=`import {readFileSync} from 'node:fs';import {checkNodeResolutionSession} from ${JSON.stringify(moduleURL)};const session=JSON.parse(readFileSync(${JSON.stringify(record)},'utf8'));try{checkNodeResolutionSession(session,session.options);console.log('healthy');}catch(error){console.log(error.message);process.exitCode=1;}`;
