@@ -1,3 +1,6 @@
+import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
+import {symlinkSync} from "node:fs";
+import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from './test-environment.ts';
 import assert from "node:assert/strict";
@@ -39,7 +42,8 @@ function fixture(t:{after(fn:()=>void):void}) {
   rmSync(join(root,"results/oracle-counts.json"));
   writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded","previously-no-config"].map(row)});
   git("add",".");git("commit","-qm","candidate");
-  copyModuleClosure(["tooling/differential/agree.mjs"],root);
+  copyModuleClosure(["tooling/differential/agree.mjs",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],root);
+  symlinkSync(join(fileURLToPath(new URL("../..",import.meta.url)),"node_modules"),join(root,"node_modules"));
   const binaries=["before","after"].map(role=>{
     const path=join(directory,role,"nts");mkdirSync(dirname(path));
     writeFileSync(path,`#!${process.execPath}

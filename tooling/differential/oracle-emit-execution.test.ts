@@ -471,7 +471,7 @@ test("copied oracle assets run outside their source tree with an explicit toolch
   const root=workspace(t,{"src/main.ts":"enum E { Value=42 } console.log(E.Value);\n"});
   writeFileSync(join(root,"tsconfig.json"),JSON.stringify({compilerOptions:{target:"ESNext",module:"ESNext",moduleResolution:"bundler",noEmit:true},include:["src"]}));
   const assets=join(root,"assets");mkdirSync(assets);writeFileSync(join(assets,"package.json"),'{"type":"module"}');
-  copyModuleClosure(["tooling/differential/oracle-emit.ts"],assets);
+  copyModuleClosure(["tooling/differential/oracle-emit.ts",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],assets);
   const entry=join(assets,"tooling/differential/oracle-emit.ts");
   const prepared=spawnSync(process.execPath,[entry,"--prepare",join(root,"src/main.ts"),join(root,"emitted"),join(root,"tsconfig.json")],{
     encoding:"utf8",cwd:root,env:{...fixtureEnvironment(t),NTS_ORACLE_TYPESCRIPT:toolchain},

@@ -586,7 +586,7 @@ for (const test of publishesNothing ? [] : tests) {
   const tmpId = testTmpId(process.pid, testOrdinal++);
   let oracle;
   try {
-    const [driver,,capturedAddon]=oracleRuntimeFiles(preparedModule,[join(HERE,"run-one.mjs"),test.path,...(addon?[addon]:[])]);
+    const [driver,,capturedAddon]=oracleRuntimeFiles(preparedModule,[new URL("./run-one.mjs",import.meta.url).pathname,test.path,...(addon?[addon]:[])]);
     oracle=oracleExecution(preparedModule,driver,[test.path]);
     const argv = [...oracle.args,...nodeFlags(test.path),driver,moduleName,test.path,capturedAddon??"-"];
     // `script -qec <command> /dev/null`: quiet, no timing file, run the command under

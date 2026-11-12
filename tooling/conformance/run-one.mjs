@@ -737,7 +737,7 @@ const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
 const realWorkerThreads = realRequire("node:worker_threads");
 const conformanceRunner = join(HERE, "run-one.mjs");
-const commonJsWorkerRunner = join(HERE, "run-cjs-worker.mjs");
+const commonJsWorkerRunner = fileURLToPath(new URL("./run-cjs-worker.mjs",import.meta.url));
 const declaredChildFixtures = new Set();
 const childFixturesPath = nodeModuleFiles(ROOT,moduleName).childFixtures;
 if (existsSync(childFixturesPath)) {

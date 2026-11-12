@@ -61,3 +61,8 @@ test('a standalone entry exclusion expires when its entry gains a dependency',t=
  writeFileSync(file,"import './helper.ts';\n");writeFileSync(join(directory,'helper.ts'),'export const value=1;\n');
  assert.equal(fixtureCopyProblems(root,rows).length,1);
 });
+
+
+test('a helper outside the fixture naming convention obeys the same staging rule',()=>{
+ assert.equal(inspect(imports+`copyFileSync(join(ROOT,'tooling/gate/helper.ts'),'/fixture/helper.ts');`,'tooling/gate/staging-helper.ts').length,1);
+});

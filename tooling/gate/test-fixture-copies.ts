@@ -1,7 +1,7 @@
 // Fixture module inputs belong to copyModuleClosure, including private mutants.
 // Inspect the host audit's existing AST; strings used as test data are not code.
 import {createRequire} from 'node:module';
-import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
+import {dirname,extname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {moduleClosure} from './module-closure.ts';
 import type {Node} from 'typescript/ast';
@@ -26,7 +26,7 @@ export type FixtureCopy={file:string;line:number;source:string;input:string};
 type Binding={value:Node;member?:string};
 
 export function inspectFixtureCopies(rootDirectory:string,file:string,text:string,tree:Node):FixtureCopy[]{
- if(!/\.test\.[cm]?[jt]s$|-fixture\.[cm]?[jt]s$/.test(file)||file==='tooling/gate/module-closure-fixture.ts')return [];
+ if(file==='tooling/gate/module-closure-fixture.ts')return [];
  const ast=createRequire(import.meta.url)('typescript/ast') as typeof import('typescript/ast');
  const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Binding>>(),imports=new Map<string,string>(),calls:Node[]=[];
  const code=(node:Node)=>text.slice(node.pos,node.end).trim();
@@ -66,16 +66,16 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   if(ast.isCallExpression(node)&&ast.isIdentifier(node.expression)&&node.expression.text==='require'&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0]))return node.arguments[0].text.replace(/^node:/,'');
   return code(node);
  };
- const product=(groups:string[][]):string[][]=>groups.reduce<string[][]>((all,group)=>all.flatMap(prefix=>group.slice(0,100).map(value=>[...prefix,value])).slice(0,200),[[]]);
+ const product=(groups:string[][]):string[][]=>groups.reduce<string[][]>((all,group)=>all.flatMap(prefix=>group.map(value=>[...prefix,value])),[[]]);
  const paths=(input:Node,depth=0):string[]=>{
-  const node=unwrap(input);if(depth>16)return ['?'];
+  const node=unwrap(input);if(depth>16)return ['__unknown__'];
   if(ast.isStringLiteralLikeNode(node))return [node.text];
   if(ast.isArrayLiteralExpression(node))return node.elements.flatMap(value=>paths(value,depth+1));
   if(ast.isIdentifier(node)){
    const value=binding(node);if(value)return paths(value.value,depth+1);
    if(node.text==='__dirname')return [dirname(join(rootDirectory,file))];
    if(node.text==='__filename')return [join(rootDirectory,file)];
-   return ['?'];
+   return ['__unknown__'];
   }
   if(ast.isTemplateExpression(node))return product([ [node.head.text],...node.templateSpans.flatMap(span=>[paths(span.expression,depth+1),[span.literal.text]]) ]).map(parts=>parts.join(''));
   if(ast.isBinaryExpression(node)&&code(node.operatorToken)==='+')return product([paths(node.left,depth+1),paths(node.right,depth+1)]).map(parts=>parts.join(''));
@@ -88,11 +88,12 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
    if(called==='url.fileURLToPath'&&node.arguments[0])return paths(node.arguments[0],depth+1);
    if(called==='path.dirname'&&node.arguments[0])return paths(node.arguments[0],depth+1).map(dirname);
   }
-  return ['?'];
+  return ['__unknown__'];
  };
  const reads=(input:Node,depth=0):string[]=>{
   const node=unwrap(input);if(depth>16)return [];
   if(ast.isIdentifier(node)){const value=binding(node);return value?reads(value.value,depth+1):[];}
+  if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')return [];
   if(ast.isCallExpression(node)&&/^(?:fs|fs\/promises)(?:\.promises)?\.readFile(?:Sync)?$/.test(name(node.expression))&&node.arguments[0])return paths(node.arguments[0]);
   const found:string[]=[];node.forEachChild(child=>{found.push(...reads(child,depth+1));});return found;
  };
@@ -106,6 +107,9 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
    if(!isAbsolute(input)&&!input.startsWith('tooling/'))continue;
    const part=relative(rootDirectory,isAbsolute(input)?input:resolve(rootDirectory,input)).split(sep).join('/');
    if(!part.startsWith('tooling/'))continue;
+   const module=/\.[cm]?[jt]sx?$/.test(part);
+   if(extname(part)&&!module&&!part.includes('__unknown__'))continue;
+   if(called.includes('writeFile')&&!module&&!part.includes('__unknown__'))continue;
    // Data, shell entry scripts, package installs and whole-namespace mirrors
    // are explicit inputs. Relative JS imports are the closure owner's job.
    if(/\.(?:json|sh|txt|tsv|md)$/.test(part)||part.includes('/node_modules/'))continue;

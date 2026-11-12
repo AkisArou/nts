@@ -1,13 +1,19 @@
 // Runtime and preparation share these decisions. Planning never imports a port
 // or runs a shim: it captures the finite roots that run-one will actually load.
 import {createHash} from 'node:crypto';
-import {dirname,join,resolve} from 'node:path';
+import {dirname,join,resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parse} from 'acorn';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {nodeHarnessPaths} from './node-paths.ts';
 import {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from './node-preload-runtime.ts';
 export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from './node-preload-runtime.ts';
+
+// Declare the launched entries even when a fixture routes them through its own
+// repository root. The same declarations supply parsed fixture closures.
+const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
+const DRIVER=new URL('./run-one.mjs',import.meta.url),WORKER=new URL('./run-cjs-worker.mjs',import.meta.url);
+const inRoot=(root:string,asset:URL)=>join(root,relative(SOURCE_ROOT,fileURLToPath(asset)));
 
 export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:string){
   const host=new OracleFilesystem(),subject=nodeModuleFiles(root,name),siblings=nodeSiblingModules(root,subject.dir,host),globals=nodeGlobalGroups(subject.dir,host);
@@ -40,14 +46,14 @@ export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:
   }
 
   const drivers:{commonjsWorker?:{source:string;sha256:string}}={};
-  const workerDriver=join(root,'tooling/conformance/run-cjs-worker.mjs');
+  const workerDriver=inRoot(root,WORKER);
   observe(workerDriver);
   if(host.fileExists(workerDriver)){
     javascript(workerDriver);const source=host.realpath(workerDriver);
     drivers.commonjsWorker={source,sha256:files[source]!};
   }
   observe(fileURLToPath(import.meta.url));
-  javascript(join(root,'tooling/conformance/run-one.mjs'));
+  javascript(inRoot(root,DRIVER));
   observe(join(subject.dir,'uses'));observe(join(subject.dir,'globals'));
   observe(subject.childFixtures);
   if(!compiled){if(host.fileExists(subject.bindings))javascript(subject.bindings);else observe(subject.bindings);typed(subject.entry,subject.dir,'subject');}
@@ -62,5 +68,5 @@ export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:
   const paths=nodeHarnessPaths(root,name),usesHarnessPaths=preloads.some(item=>item.entry===join(root,'tooling/conformance/node-paths.ts'));
   const runtimeRoots=[...(usesHarnessPaths?[paths.nodeTestRoot]:[]),subject.dir,...siblings.map(sibling=>sibling.dir),...visited,...(addon?[addon]:[])];
   const descriptor={version:1,drivers,module:name,compiled,subject,siblings,globals,preloads,edges,paths,runtimeRoots};
-  return {entry:join(root,'tooling/conformance/run-one.mjs'),preloads,runtimeRoots,declarations:{descriptor,files,absent:[...new Set(absent)],observations:host.captured()}};
+  return {entry:inRoot(root,DRIVER),preloads,runtimeRoots,declarations:{descriptor,files,absent:[...new Set(absent)],observations:host.captured()}};
 }
