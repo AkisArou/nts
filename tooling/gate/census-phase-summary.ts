@@ -43,9 +43,16 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
   const tolerance=(8*observations+1)/1e6;
   const unmeasured=frames.flatMap(frame=>frame.unmeasured.map(error=>`${frame.project}: ${error}`));
   const compilerObservations=new Set(compilers.filter(row=>row.complete).map(row=>row.observation));
-  for(const frame of frames)for(const id of frame.compiler_observations)if(!compilerObservations.has(id))unmeasured.push(`${frame.project}: missing complete compiler phase record for ${id}`);
+  let incompleteCompiler=compilers.some(row=>!row.complete);
+  for(const frame of frames)for(const id of frame.compiler_observations)if(!compilerObservations.has(id)){
+    incompleteCompiler=true;unmeasured.push(`${frame.project}: missing complete compiler phase record for ${id}`);
+  }
   const remaining=new Map<string,number>();for(const frame of frames)remaining.set(frame.project,(remaining.get(frame.project)??0)+1);
-  for(const project of expectedProjects){const count=remaining.get(project)??0;if(count)remaining.set(project,count-1);else unmeasured.push(`missing census phase frame: ${project}`);}
+  let missingFrame=false;
+  for(const project of expectedProjects){const count=remaining.get(project)??0;if(count)remaining.set(project,count-1);else{missingFrame=true;unmeasured.push(`missing census phase frame: ${project}`);}}
+  for(const [name,row]of rows)if(missingFrame||incompleteCompiler&&['native_capture_check','lowering','emission'].includes(name)){
+    row.missing_observations=Math.max(1,row.missing_observations);row.cpu_s=null;row.wall_s=null;
+  }
   const partial=unmeasured.length>0||compilers.some(row=>!row.complete)||[...rows.values()].some(row=>row.missing_observations>0);
   const unattributed:CensusPhaseRow={phase:'unattributed',cases:null,cpu_s:remainder,known_cpu_s:remainder??0,wall_s:null,self_cpu_s:0,child_cpu_s:0,missing_observations:0};
   return {version:1,status:total===null?'unmeasured':partial?'partial':remainder! < -tolerance?'inconsistent':'complete',
@@ -54,5 +61,6 @@ export function censusPhaseSummary(frames:readonly CensusPhaseFrame[],compilers:
     rows:[...rows.values(),unattributed],unmeasured,
     notes:['Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.',
       'Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.',
+      'Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.',
       'Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero.']};
 }

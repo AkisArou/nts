@@ -80,6 +80,9 @@ test('a missing compiler record or worker frame stays visibly unmeasured',()=>{
   const summary=censusPhaseSummary([costs.finish()],[],5,['fixture','other']);
   assert.equal(summary.status,'partial');assert.ok(summary.unmeasured.some(error=>error.endsWith('missing complete compiler phase record for '+id)));
   assert.match(summary.unmeasured.join('\n'),/missing census phase frame: other/);
+  assert.ok(summary.rows.filter(row=>row.phase!=='unattributed').every(row=>row.cpu_s===null&&row.wall_s===null));
+  const absentCompiler=censusPhaseSummary([costs.finish()],[],5);
+  assert.equal(absentCompiler.rows.find(row=>row.phase==='native_capture_check')?.cpu_s,null);
 });
 
 test('equal nonzero CPU snapshots do not acquire a negative roundoff delta',()=>{
