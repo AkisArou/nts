@@ -8,7 +8,7 @@ import {shellCommands} from './shell-commands.ts';
 import type {Node} from 'typescript/ast';
 import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-fixture-copies.ts';
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
-import {auditWorkerModules,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
+import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
 
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
@@ -171,7 +171,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
-  return {files:sources.size,closures,reads,publications,problems:[...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditWorkerModules(root,moduleFacts).problems,...fixtureCopyProblems(root,copies)]};
+  return {files:sources.size,closures,reads,publications,problems:[...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts).problems,...fixtureCopyProblems(root,copies)]};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

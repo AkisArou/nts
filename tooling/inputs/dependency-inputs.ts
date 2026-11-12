@@ -146,7 +146,7 @@ export async function installDependencies(root:string,tree:string,options:{manag
   }));
 }
 
-if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url) {
+async function main():Promise<void>{
   const [mode,root,tree,revision,...extra]=process.argv.slice(2);
   try {
     if(!root||!tree||extra.length||!['--acquire','--offline'].includes(mode!))throw failure("usage: dependency-inputs.ts --acquire <shared> <source> <commit> | --offline <shared> <tree>");
@@ -154,3 +154,5 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     else await installDependencies(root,tree);
   }catch(error){const problem=error instanceof ToolingInstrumentError?error:failure(String(error));publishToolingFailure(problem);console.error(`instrument failure: ${problem.message}`);process.exitCode=2;}
 }
+
+if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url) main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,5 +1,6 @@
-// Worker entries and their imported modules evaluate synchronously. The one
-// closure selection below can also serve the rule for ordinary library imports.
+// Imported tooling modules and Worker entry closures evaluate synchronously.
+// Command-only entry scripts may await at top level; libraries start main()
+// behind their entry guard instead of making every import graph asynchronous.
 import {readFileSync,readdirSync} from 'node:fs';
 import {isAbsolute,join,relative,sep} from 'node:path';
 import {createRequire} from 'node:module';
@@ -19,13 +20,21 @@ export function topLevelAwaits(file:string,source:string,shared?:import('typescr
   try{visit(root??lease!.sourceFile);return lines;}finally{lease?.dispose();if(!shared)api?.close();}
 }
 
-export type ModuleAsyncFacts={entries:string[];problems:string[];awaits:number[]};
+export type ModuleAsyncFacts={entries:string[];imports:string[];problems:string[];awaits:number[]};
 /** Inspect the caller's existing AST before its lease ends; no parser pass. */
 export function inspectModuleAsync(rootDirectory:string,file:string,source:string,root:Node):ModuleAsyncFacts{
   const ast=createRequire(import.meta.url)('typescript/ast') as typeof import('typescript/ast');
-  const entries=new Set<string>(),problems:string[]=[];
+  const entries=new Set<string>(),imports=new Set<string>(),problems:string[]=[];
   const workers=new Set<string>(),values=new Map<string,Node>();
   const gather=(node:Node):void=>{
+    const specifier=ast.isImportDeclaration(node)?node.importClause?.isTypeOnly?undefined:node.moduleSpecifier
+      :ast.isExportDeclaration(node)?node.isTypeOnly?undefined:node.moduleSpecifier
+      :ast.isImportEqualsDeclaration(node)&&!node.isTypeOnly&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
+      :ast.isCallExpression(node)&&(node.expression.kind===ast.SyntaxKind.ImportKeyword||ast.isIdentifier(node.expression)&&node.expression.text==='require')?node.arguments[0]:undefined;
+    if(specifier&&ast.isStringLiteralLikeNode(specifier)&&/^\.\.?\//.test(specifier.text)){
+      const path=fileURLToPath(new URL(specifier.text,pathToFileURL(join(rootDirectory,file)))),part=relative(rootDirectory,path);
+      if(part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part))imports.add(part.split(sep).join('/'));
+    }
     if(ast.isImportDeclaration(node)&&ast.isStringLiteralLikeNode(node.moduleSpecifier)&&['node:worker_threads','worker_threads'].includes(node.moduleSpecifier.text)){
       const clause=node.importClause,bindings=clause?.namedBindings;
       if(clause?.name)workers.add(clause.name.text+'.Worker');
@@ -62,10 +71,10 @@ export function inspectModuleAsync(rootDirectory:string,file:string,source:strin
   };
   visit(root);
 
-  return {entries:[...entries],problems,awaits:topLevelAwaits(file,source,undefined,root)};
+  return {entries:[...entries],imports:[...imports],problems,awaits:topLevelAwaits(file,source,undefined,root)};
 }
 
-export function auditWorkerModules(root:string,parsed?:ReadonlyMap<string,ModuleAsyncFacts>):{entries:string[];modules:string[];problems:string[]}{
+export function auditModuleAsync(root:string,parsed?:ReadonlyMap<string,ModuleAsyncFacts>):{entries:string[];modules:string[];problems:string[]}{
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   let api:import('typescript/sync').API|undefined;
   const facts=new Map(parsed),entries=new Set<string>(),problems:string[]=[];
@@ -81,8 +90,15 @@ export function auditWorkerModules(root:string,parsed?:ReadonlyMap<string,Module
   try{
     if(!parsed)visit('tooling');
     for(const row of facts.values()){for(const entry of row.entries)entries.add(entry);problems.push(...row.problems);}
-    const modules=entries.size?moduleClosure([...entries],{sourceRoot:root}):[];
-    for(const file of modules)if(/\.[cm]?[jt]s$/.test(file))for(const line of inspect(file).awaits)problems.push(`${file}:${line}: top-level await in a Worker module closure; start work from a message or main()`);
+    const workers=new Set(entries.size?moduleClosure([...entries],{sourceRoot:root}):[]);
+    // The source inventory owns tooling modules, not generated node_modules
+    // outputs or external package graphs a command provisions later.
+    const imported=new Set([...facts.values()].flatMap(row=>row.imports).filter(file=>facts.has(file)));
+    const modules=[...new Set([...workers,...imported])].sort();
+    for(const file of modules)if(/\.[cm]?[jt]s$/.test(file))for(const line of inspect(file).awaits){
+      const reason=workers.has(file)?'a Worker module closure':'an imported tooling module';
+      problems.push(`${file}:${line}: top-level await in ${reason}; start work from a message or main()`);
+    }
     return {entries:[...entries].sort(),modules,problems};
   }finally{api?.close();}
 }

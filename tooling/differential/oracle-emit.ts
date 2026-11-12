@@ -1655,7 +1655,7 @@ export async function prepareOracle(request:OracleOptions,resolutionOwnerPid=pro
   try{return await worker.prepare(request);}finally{worker.close();}
 }
 
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+async function main():Promise<void>{
   if(process.argv[2]==='--read-program-reference'&&process.argv[3]){
     const {readProgramOracleReference}=await import('./oracle-results.ts');
     const request=JSON.parse(process.argv[3]);
@@ -1689,3 +1689,5 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   }
   else throw Error('usage: oracle-emit.ts --identity | --prepare <entry.ts> <owned directory> [tsconfig.json]');
 }
+
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) main().catch(error=>{console.error(error);process.exitCode=1;});
