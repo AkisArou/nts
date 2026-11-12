@@ -107,7 +107,7 @@ import {
 import {homedir} from "node:os";
 import {dirname, join, resolve, relative, isAbsolute, sep} from "node:path";
 import {fileURLToPath} from "node:url";
-import {createTokenPool} from "./tokenpool.mjs";
+import {createTokenPool} from "./token-pool.ts";
 import {CaseCosts} from "./case-costs.ts";
 import {CaseMemoryBroker} from './case-memory-broker.ts';
 import {ownerEmissionCalls} from "./owner-emission-calls.ts";

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
 import { readLedger, reserve } from "../gate/memory-ledger.ts";
 import { useOwnMemory } from "../gate/test-memory.ts";
-import { createTokenPool } from "../gate/tokenpool.mjs";
+import { createTokenPool } from "../gate/token-pool.ts";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
@@ -33,7 +33,7 @@ const scratch = () => {
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 
 /**
- * A real gate token pool of `n` (tokenpool.mjs, as run.mjs serves it) and a
+ * A real gate token pool of `n` (token-pool.ts, as run.mjs serves it) and a
  * client of it as the resident pool's token policy, with the pool's own
  * request, grant, release and cancel counts.
  */

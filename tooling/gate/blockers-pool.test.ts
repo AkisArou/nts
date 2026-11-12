@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { fixturePool, fixtureWorker } from "../conformance/blockers-pool.ts";
-import { createTokenPool } from "./tokenpool.mjs";
+import { createTokenPool } from "./token-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const names = ["a-slow", "b-fast", "c-middle"];

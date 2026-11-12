@@ -14,7 +14,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { createFeed, TemporaryAdmission } from "./admission.ts";
 import { captureRunTemporary } from "./run-temporary.ts";
-import { createTokenPool } from "./tokenpool.mjs";
+import { createTokenPool } from "./token-pool.ts";
 import { waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 

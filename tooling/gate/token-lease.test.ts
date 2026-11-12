@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {connect} from 'node:net';
-import {createTokenPool} from './tokenpool.mjs';
+import {createTokenPool} from './token-pool.ts';
 import {tokenClient} from './tokens.mjs';
 import {waitFor} from './test-wait.ts';
 

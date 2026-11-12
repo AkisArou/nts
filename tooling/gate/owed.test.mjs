@@ -591,7 +591,7 @@ test("a path no rule names owes the full gate", () => {
 });
 
 test("the runner owes the full gate", () => {
-  for (const p of ["tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/token.sh", "tooling/gate/tokenpool.mjs", "tooling/gate/pinned.sh"]) {
+  for (const p of ["tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/token.sh", "tooling/gate/token-pool.ts", "tooling/gate/pinned.sh"]) {
     // Every step, the wide ones too: the runner runs them all.
     assert.equal(stepsFor(p).length, allSteps().length, p);
   }

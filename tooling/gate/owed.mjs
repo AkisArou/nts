@@ -804,7 +804,7 @@ export const RULES = [
     name: "the gate's runner",
     // step-successors routes historical verdict/budget identities, while
     // memory-watch supplies the peak accounting used to admit every step.
-    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|step-table\.mjs|step-successors\.ts|memory-watch\.ts|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
+    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|step-table\.mjs|step-successors\.ts|memory-watch\.ts|token\.sh|tokens\.mjs|token-pool\.ts|pinned\.sh)$/.test(p),
     // Every step, the wide ones too: it runs them all, the full run's among them.
     full: true,
     wide: true,

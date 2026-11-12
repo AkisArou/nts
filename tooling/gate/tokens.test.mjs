@@ -1,6 +1,6 @@
 import {testEnvironment} from "./test-environment.ts";
 import { waitFor } from "./test-wait.ts";
-// The gate's tokens, end to end: tokenpool.mjs's server with token.sh and
+// The gate's tokens, end to end: token-pool.ts's server with token.sh and
 // tokens.mjs as clients, the same code run.mjs uses.
 //
 //   node --test tooling/gate/tokens.test.mjs
@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createTokenPool } from "./tokenpool.mjs";
+import { createTokenPool } from "./token-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOKEN = join(HERE, "token.sh");
