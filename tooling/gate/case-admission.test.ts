@@ -13,8 +13,6 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts'
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
 import {caseMemoryKey} from './case-memory.ts';
 import {tokenCommand} from './token-command.ts';
-import {gateEnvironment} from './canonical-environment.ts';
-const environment=gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR,owned:{NTS_GATE_TOKEN_HELD:'1'}}).env;
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url)),GiB=2**30,MiB=2**20;
 type QueueEvent={event:string;request?:number;context?:string;memory?:{reserved_bytes:number;used_bytes:number}};
@@ -43,6 +41,8 @@ import {activeCommand} from './active-command.ts';
 import {PressureError,publishPressure} from './step-result.ts';
 import {scopedSpawn} from './case-spawn.ts';
 import {tokenCommand} from './token-command.ts';
+import {gateEnvironment} from './canonical-environment.ts';
+const environment=gateEnvironment(process.env,{run:process.env.NTS_GATE_RUN_DIR,owned:{NTS_GATE_TOKEN_HELD:'1'}}).env;
 const queue=join(process.env.NTS_GATE_CASE_COSTS_DIR,'queue.jsonl');
 const events=()=>readFileSync(queue,'utf8').trim().split('\\n').filter(Boolean).map(line=>JSON.parse(line));
 const requested=path=>events().some(row=>row.event==='token.request'&&row.context?.startsWith('json64:')&&JSON.parse(Buffer.from(row.context.slice(7),'base64url').toString()).project===path);
