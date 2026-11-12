@@ -208,26 +208,6 @@ made them appear covered, and unchecked code accumulated thousands of diagnostic
 
 ## Fixtures
 
-**Rust integration cases join their crate's declared harness.** Cargo's automatic
-test discovery is disabled: add a named `#[path]` module to `tests/integration.rs`,
-or to the relevant `tests/integration_<topic>.rs` in core. Core's topics are
-scalars, numbers, strings, arrays, collections, erasure, interfaces, classes,
-signatures, dispatch, control, memory, ranges, providers, lowering and modules.
-Choose the topic whose behavior the case checks; keep the case at its existing
-path. `tooling/gate/test-layout.ts` checks ownership and rejects an omitted case,
-a duplicate or a new per-file target. Its compiled inventory comparison proves
-layout changes retain every test and its multiplicity. On 2026-11-11, hundreds
-of per-file binaries repeatedly linked the whole compiler; one giant core
-harness instead made a single-test edit expensive, so core uses topic harnesses.
-Cases in a harness share a process: keep mutable state private to each test.
-Paths and resource names use `compiler/test-support/scratch.rs`; a returned path
-or snapshot owns its scratch for as long as the value lives. A test that runs
-its own binary uses `compiler/test-support/self_test.rs` with its full module
-path: the owner requires exactly one passing test. `test-layout.ts` rejects
-process-keyed test resources and direct filtered self-spawns. On 2026-11-12,
-merged cases shared a PID-keyed D8 directory, and a bare self-spawn filter
-silently ran zero tests after its test gained a module prefix.
-
 The corpora are the specification: `tests/programs/` (compiled and compared with
 node), `tests/refusals/` (must refuse, with the `// expect:`
 message), `tests/outcomes/` (a recorded wrong answer or crash,
@@ -249,6 +229,23 @@ then a guard once fixed), `tests/memory/`.
   change deletes its count in the same commit. A change to a function body
   with the same cases keeps its count, since every run still checks that all
   cases arrive.
+
+**Rust integration cases join their crate's declared harness.** Cargo's automatic
+test discovery is disabled: add a named `#[path]` module to `tests/integration.rs`,
+or to one of core's `tests/integration_<topic>.rs` harnesses, by the behavior
+the case checks. Keep the case at its existing path. `tooling/gate/test-layout.ts` checks ownership and rejects an omitted case,
+a duplicate or a new per-file target. Its compiled inventory comparison proves
+layout changes retain every test and its multiplicity. On 2026-11-11, hundreds
+of per-file binaries repeatedly linked the whole compiler; one giant core
+harness instead made a single-test edit expensive, so core uses topic harnesses.
+Cases in a harness share a process: keep mutable state private to each test.
+Paths and resource names use `compiler/test-support/scratch.rs`; a returned path
+or snapshot owns its scratch for as long as the value lives. A test that runs
+its own binary uses `compiler/test-support/self_test.rs` with its full module
+path: the owner requires exactly one passing test. `test-layout.ts` rejects
+process-keyed test resources and direct filtered self-spawns. On 2026-11-12,
+merged cases shared a PID-keyed D8 directory, and a bare self-spawn filter
+silently ran zero tests after its test gained a module prefix.
 
 ## Compiler contracts
 

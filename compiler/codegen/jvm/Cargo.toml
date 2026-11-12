@@ -22,6 +22,7 @@ rustc-hash.workspace = true
 # the alternative was shelling out to a built `nts`, which makes a test depend
 # on a binary the gate happens to have left in `target/`.
 camino.workspace = true
+serde_json.workspace = true
 nts-frontend-ts.workspace = true
 # The pinned-dependency reader and the SHA-256 that checks a pin. Not a second
 # copy here: the digest a build verifies an artifact with and the digest this
