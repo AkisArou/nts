@@ -109,6 +109,64 @@ test('repeated linked staging retains production module identity inside private 
   assert.equal(readFileSync(join(f.destination,'data/case.ts'),'utf8'),'fixture data');
 });
 
+test('unsubstituted data links are reusable only with the explicit source-link options',t=>{
+  for(const second of [{link:true},{reuseSourceLinks:true}]){
+    const f=dataFixture(t),before=readFileSync(join(f.source,'data/case.ts'));
+    copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,link:true});
+    const files=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,...second});
+    assert.equal(lstatSync(join(f.destination,'data/case.ts')).isSymbolicLink(),true);
+    assert.deepEqual(readFileSync(join(f.destination,'data/case.ts')),before);
+    assert.equal(files.includes('data/nested/second.txt'),true);
+    assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false,'production links are not private data substitutions');
+    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source}),/unowned path/);
+    assert.deepEqual(readFileSync(join(f.source,'data/case.ts')),before);
+  }
+});
+
+test('an exact production data-directory link is read-only and retains complete membership',t=>{
+  const f=dataFixture(t),before=readFileSync(join(f.source,'data/case.ts'));
+  mkdirSync(f.destination);symlinkSync(join(f.source,'data'),join(f.destination,'data'),'dir');
+  const options={sourceRoot:f.source,reuseSourceLinks:true};
+  for(let pass=0;pass<2;pass++)assert.deepEqual(copyModuleClosure(['entry.ts'],f.destination,options),['data/case.ts','data/nested/second.txt','entry.ts','tooling/gate/reader-inputs.ts']);
+  assert.equal(lstatSync(join(f.destination,'data')).isSymbolicLink(),true);
+  assert.deepEqual(readFileSync(join(f.source,'data/case.ts')),before);
+  assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{...options,dataNamespaces:{data:'private cases'}}),/not an owned directory/);
+});
+
+test('source-link reuse rejects wrong data links and cannot bless private namespace links',t=>{
+  for(const shape of ['directory','file','private-file','private-child']as const){
+    const f=dataFixture(t),before=readFileSync(join(f.source,'data/case.ts')),foreign=join(dirname(f.destination),'foreign');
+    mkdirSync(foreign);writeFileSync(join(foreign,'case.ts'),'wrong source');mkdirSync(f.destination);
+    if(shape==='private-child')f.write('entry.ts',readFileSync(join(f.source,'entry.ts'),'utf8')+"\ndataDirectory(new URL('./data/nested/',import.meta.url));\n");
+    if(shape==='directory'||shape==='private-child')symlinkSync(shape==='private-child'?join(f.source,'data'):foreign,join(f.destination,'data'),'dir');
+    else{mkdirSync(join(f.destination,'data'));symlinkSync(shape==='private-file'?join(f.source,'data/case.ts'):join(foreign,'case.ts'),join(f.destination,'data/case.ts'));}
+    const dataNamespaces:Record<string,string>|undefined=shape==='private-child'?{'data/nested':'private child'}:shape==='private-file'?{data:'private cases'}:undefined;
+    const options={sourceRoot:f.source,link:true,reuseSourceLinks:true,...(dataNamespaces?{dataNamespaces}:{})};
+    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,options),/unowned parent|unowned path/);
+    assert.equal(existsSync(join(f.destination,'entry.ts')),false);
+    assert.deepEqual(readFileSync(join(f.source,'data/case.ts')),before);
+    assert.equal(readFileSync(join(foreign,'case.ts'),'utf8'),'wrong source');
+  }
+});
+
+test('a missing declared child under a source link fails before staging or writing through it',t=>{
+  const f=dataFixture(t),before=readFileSync(join(f.source,'data/case.ts'));
+  mkdirSync(f.destination);symlinkSync(join(f.source,'data'),join(f.destination,'data'),'dir');
+  rmSync(join(f.source,'data/nested/second.txt'));
+  assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,reuseSourceLinks:true}),/ENOENT/);
+  assert.equal(existsSync(join(f.destination,'entry.ts')),false);
+  assert.equal(existsSync(join(f.source,'data/nested/second.txt')),false);
+  assert.deepEqual(readFileSync(join(f.source,'data/case.ts')),before);
+});
+
+test('a source-directory link never admits undeclared source members',t=>{
+  const f=dataFixture(t);mkdirSync(f.destination);symlinkSync(join(f.source,'data'),join(f.destination,'data'),'dir');
+  writeFileSync(join(f.source,'data/untracked.txt'),'not a declared input');
+  assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,reuseSourceLinks:true}),/explicit namespace grant: data\/untracked.txt/);
+  assert.equal(existsSync(join(f.destination,'entry.ts')),false);
+  assert.equal(readFileSync(join(f.source,'data/untracked.txt'),'utf8'),'not a declared input');
+});
+
 test('nested data declarations share one granted namespace and reject ambiguous grants',t=>{
   for(const directory of ['data','data/nested']){
     const f=dataFixture(t);f.privateData();

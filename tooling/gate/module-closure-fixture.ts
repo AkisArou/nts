@@ -53,13 +53,13 @@ function readFixtureInputs(destination:string):FixtureInputManifest{
   return {version:1,data};
 }
 
-function fixtureData(snapshot:InputSnapshot,destination:string,source:string,grants:FixtureClosureOptions['dataNamespaces']){
+function fixtureData(snapshot:InputSnapshot,destination:string,source:string,options:Pick<FixtureClosureOptions,'dataNamespaces'|'link'|'reuseSourceLinks'>){
   const declared=new Map<string,Set<string>>();
   for(const row of snapshot.directories)if(row.kind==='data'){
     const readers=declared.get(row.directory)??new Set<string>();readers.add(row.reader);declared.set(row.directory,readers);
   }
   const owned=new Set(snapshot.ownedFiles),selected=new Map<string,string>();
-  for(const [directory,owner]of Object.entries(grants??{})){
+  for(const [directory,owner]of Object.entries(options.dataNamespaces??{})){
     if(!canonical(directory)||!declared.has(directory))throw Error('fixture data namespace is not a declared data input: '+directory);
     if(typeof owner!=='string'||!owner.trim())throw Error('fixture data namespace has no fixture owner: '+directory);
     if(!info(join(destination,directory))?.isDirectory()||info(join(destination,directory))?.isSymbolicLink())throw Error('fixture data namespace is not an owned directory: '+directory);
@@ -73,22 +73,32 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,gra
     if((under(previous,directory)||under(directory,previous))&&!selected.has(previous))throw Error('fixture data namespace already has an owner; repeat its explicit grant: '+previous);
   }
   const granted=(name:string)=>names.some(directory=>under(directory,name));
+  const overlapsGrant=(name:string)=>names.some(directory=>under(directory,name)||under(name,directory));
+  const sourceDirectory=(name:string,path:string)=>options.reuseSourceLinks&&!overlapsGrant(name)
+    &&realpathSync(path)===join(source,name)&&info(join(source,name))?.isDirectory();
   function privateTree(directory:string):void{
     let parent=destination;
     for(const part of ['',...directory.split('/')]){
       parent=join(parent,part);const stat=info(parent);
-      if(stat&&(!stat.isDirectory()||stat.isSymbolicLink()))throw Error('fixture data namespace has an unowned parent: '+directory);
+      if(stat&&(!stat.isDirectory()||stat.isSymbolicLink())
+        &&!(stat.isSymbolicLink()&&sourceDirectory(relative(destination,parent).split(sep).join('/'),parent)))throw Error('fixture data namespace has an unowned parent: '+directory);
     }
     const expected=new Set(snapshot.files.filter(file=>under(directory,file))),allowedDirectories=new Set<string>([directory]);
     for(const file of expected)for(let parent=dirname(file);under(directory,parent);parent=dirname(parent)){allowedDirectories.add(parent);if(parent===directory)break;}
     const walk=(name:string):void=>{
       const path=join(destination,name),stat=info(path);if(!stat)return;
-      // A linked module still names the exact production input. Data links
-      // have no such owner and may never escape a fixture's private namespace.
-      if(stat.isSymbolicLink()&&owned.has(name)&&realpathSync(path)===join(source,name))return;
-      if(stat.isSymbolicLink()||!stat.isFile()&&!stat.isDirectory())throw Error('fixture data namespace contains an unowned path: '+name);
-      if(!granted(name)&&!(stat.isDirectory()?allowedDirectories:expected).has(name))throw Error('fixture data input needs an explicit namespace grant: '+name);
-      if(stat.isDirectory()){for(const entry of readdirSync(path))walk(name+'/'+entry);return;}
+      // Module links always retain their production identity. Unsubstituted
+      // data may reuse that exact identity only through the explicit linking
+      // options; a private data grant still owns real paths, never data links.
+      const linkedDirectory=stat.isSymbolicLink()&&sourceDirectory(name,path);
+      if(stat.isSymbolicLink()&&!linkedDirectory){
+        if((owned.has(name)||!granted(name)&&(options.link||options.reuseSourceLinks))&&realpathSync(path)===join(source,name))return;
+        throw Error('fixture data namespace contains an unowned path: '+name);
+      }
+      const isDirectory=stat.isDirectory()||linkedDirectory;
+      if(!stat.isFile()&&!isDirectory)throw Error('fixture data namespace contains an unowned path: '+name);
+      if(!granted(name)&&!(isDirectory?allowedDirectories:expected).has(name))throw Error('fixture data input needs an explicit namespace grant: '+name);
+      if(isDirectory){for(const entry of readdirSync(path))walk(name+'/'+entry);return;}
       if(owned.has(name)&&!readFileSync(path).equals(readFileSync(join(source,name))))throw Error('fixture data namespace cannot replace module-owned input: '+name);
     };walk(directory);
   }
@@ -159,7 +169,7 @@ export function copyModuleClosure(entries: readonly string[], root: string, opti
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe([...entries,...(options.owningProject?projectInputs(entries,source):[])]);}
   finally {graph.close();}
-  const data=fixtureData(snapshot,destination,source,options.dataNamespaces),files=data.files;
+  const data=fixtureData(snapshot,destination,source,options),files=data.files;
   const inputs=files.map(name=>{
     const from=resolve(source,name),to=resolve(destination,name);
     if (to === from) throw new Error("fixture destination is the source: " + name);
