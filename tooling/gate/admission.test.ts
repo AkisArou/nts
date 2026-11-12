@@ -76,6 +76,7 @@ test("token pool: a running case finishes through a hold, and the next waits unt
     known: () => true,
   });
   const addr = await pool.start();
+  assert.ok(addr,'the owned token server started');
   // Held-token state is cleared: inside the gate this test itself runs under a token.
   const env = { ...testEnvironment(), NTS_GATE_TOKENS: addr, NTS_GATE_STEP: "s", NTS_GATE_TOKEN_HELD: "" };
   const run = (script: string, delayStart = false) => {

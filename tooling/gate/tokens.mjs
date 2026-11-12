@@ -22,7 +22,7 @@
 // so it hands back the release instead of running a callback.
 import { connect } from "node:net";
 import {randomUUID} from 'node:crypto';
-import {runWithToken} from './case-context.ts';
+import {runWithToken,closeCaseWorkers} from './case-context.ts';
 export {runWithToken} from './case-context.ts';
 
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
@@ -81,7 +81,8 @@ export function tokenClient(where, step) {
         const release=() => {
           if (!held) return;
           held = false;
-          sock.destroy();
+          try{if(lease)closeCaseWorkers({address:where,id:lease});}
+          finally{sock.end('done\n');}
         };
         if(lease)release.case={address:where,id:lease};
         resolve(release);

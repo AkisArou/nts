@@ -70,7 +70,7 @@ export type CaseToken = (path: string, signal: AbortSignal) => Promise<(() => vo
  * is answered or lost. `signal` aborts the worker's wait for a token when the
  * worker stops.
  */
-export type FedWorker = { write: (path: string, release: () => void) => void|Promise<void>; end: () => void; exited: () => boolean; signal?: AbortSignal };
+export type FedWorker = { write: (path: string, release: () => void) => unknown; end: () => void; exited: () => boolean; signal?: AbortSignal };
 
 const untokened: CaseToken = () => Promise.resolve(() => {});
 const never = new AbortController().signal;

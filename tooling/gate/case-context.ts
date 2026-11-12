@@ -2,12 +2,30 @@
 // one controller may have many independent cases active at the same time.
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {connect} from 'node:net';
+import {spawnSync} from 'node:child_process';
 
 export const CASE_LEASE_ADDRESS='NTS_GATE_CASE_LEASE_ADDRESS';
 export const CASE_LEASE_ID='NTS_GATE_CASE_LEASE_ID';
 export type CaseReceipt={address:string;id:string};
 export type TokenRelease=(()=>void)&{case?:CaseReceipt};
 const current=new AsyncLocalStorage<CaseReceipt>();
+const cleanups=new Map<string,Set<()=>void>>();
+
+export function ownCaseWorker(receipt:CaseReceipt|undefined,close:()=>void):void{
+  if(!receipt)return;
+  const owned=cleanups.get(receipt.id)??new Set<()=>void>();owned.add(close);cleanups.set(receipt.id,owned);
+}
+export function closeCaseWorkers(receipt:CaseReceipt):void{
+  const owned=cleanups.get(receipt.id);cleanups.delete(receipt.id);for(const close of owned??[])close();
+}
+/** Capture the last peak before the owner removes a worker cgroup. Bash's
+ * built-in socket avoids starting another Node process for this handshake. */
+export function retireCaseScope(receipt:CaseReceipt|undefined,group:string):void{
+  if(!receipt)return;
+  const source='address=$1; id=$2; group=$3; exec {fd}<>"/dev/tcp/${address%:*}/${address##*:}" || exit 1; printf "retire %s %s\\n" "$id" "$group" >&"$fd"; IFS= read -r answer <&"$fd" || exit 1; [ "$answer" = ready ] || { printf "%s\\n" "$answer" >&2; exit 1; }';
+  const result=spawnSync('bash',['-c',source,'case memory retirement',receipt.address,receipt.id,group],{encoding:'utf8',timeout:30_000});
+  if(result.status!==0)throw Error('case memory: cannot retire owned scope: '+(result.stderr||result.error?.message||result.signal));
+}
 
 export function caseReceipt(env:NodeJS.ProcessEnv=process.env):CaseReceipt|undefined{
   const local=current.getStore();if(local)return local;

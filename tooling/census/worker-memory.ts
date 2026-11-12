@@ -12,7 +12,9 @@ import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gate/tooling-slice.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
-import {caseEnvironment} from '../gate/case-context.ts';
+import {caseEnvironment,caseReceipt,ownCaseWorker,retireCaseScope,type CaseReceipt} from '../gate/case-context.ts';
+import {readLimits} from '../gate/scopes/step-scope.ts';
+import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
@@ -90,7 +92,7 @@ const events = (group: string, local = false) => {
 // Standalone command owners observe the same kernel counters as workers.
 export const memoryEvents = events;
 
-export type MemoryCounters = { oom: number; kills: number };
+export type MemoryCounters = { oom: number; kills: number;limitBytes?:number;ancestors?:AncestorMemory[] };
 export type MemoryCause = "own-limit" | "aggregate-pressure" | "system-pressure";
 
 /** A kill's location is not the limit that caused it. Ancestor OOM events
@@ -99,6 +101,8 @@ export function memoryCause(before: MemoryCounters, after: MemoryCounters, aggre
   if (after.oom < before.oom || after.kills < before.kills || aggregateAfter < aggregateBefore) throw new Error("resident cap: memory counters went backwards");
   if (after.oom > before.oom) return "own-limit";
   if (after.kills === before.kills) return undefined;
+  const ancestor=ancestorMemoryIncident(before.ancestors??[],after.ancestors??[]);
+  if(ancestor)throw new PressureError(`resident ancestor-cap: cgroup ${ancestor.group} at cap ${ancestor.limit} bytes killed a worker whose case cap is ${after.limitBytes} bytes`);
   return aggregateAfter > aggregateBefore ? "aggregate-pressure" : "system-pressure";
 }
 
@@ -322,17 +326,22 @@ export class MemoryWorker {
   readonly bytes: number;
   #closed = false;
   #scopes = new Set<MemoryScope>();
+  #receipt:CaseReceipt|undefined;
   constructor(run: MemoryRun, slice: string, group: string, bytes: number) {
     this.run = run; this.slice = slice; this.group = validGroup(slice, group, run.group); this.bytes = bytes;
   }
   kills() { return events(this.group).kills; }
-  counters(): MemoryCounters { return events(this.group); }
+  counters(): MemoryCounters {
+    return {...events(this.group),limitBytes:readLimits(this.group).max,
+      ancestors:memoryAncestors(this.group,group=>({max:readLimits(group).max,oom:events(group,true).oom}))};
+  }
   scope(command: string, args: readonly string[], environment: NodeJS.ProcessEnv = process.env): MemoryScope {
     if (this.#closed) throw new Error("resident worker is closed");
     // Scope names do not encode ancestry. The explicit --slice owns it.
     const unit = checkedUnitName(`nts-${unitComponent("c")}.scope`);
     const ready = join(this.run.directory, `${unit}.ready`);
     const childEnvironment=caseEnvironment(environment);
+    this.#receipt=caseReceipt(childEnvironment);
     const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
     const scope = {
       unit, ready,
@@ -352,6 +361,7 @@ export class MemoryWorker {
   close() {
     if (this.#closed) return;
     this.#closed = true;
+    retireCaseScope(this.#receipt,this.group);
     for (const scope of [...this.#scopes]) this.stop(scope);
     stopSlice(this.slice, this.group, "worker");
   }
@@ -382,7 +392,7 @@ export function inResidentWorker(): boolean {
  * several at once gives each a lane of its own, so no compile shares
  * another's cap.
  */
-let direct: { run: MemoryRun; idle: Map<number, MemoryWorker[]>; lanes: number } | undefined;
+let direct: { run: MemoryRun; idle: Map<string, MemoryWorker[]>; lanes: number } | undefined;
 let closesOnExit = false;
 /** Drain an existing serial/controller owner without creating another run. */
 export function closeMemoryRun(): void { direct?.run.close(); }
@@ -509,9 +519,11 @@ function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: C
   // workers enter a scope once, then compile without a per-case bus round trip.
   const run = memoryRun(), lanes = direct!;
   const bytes = Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024;
-  const idle = lanes.idle.get(bytes) ?? [];
-  lanes.idle.set(bytes, idle);
-  const worker = idle.pop() ?? run.worker(`direct${lanes.lanes++}`, bytes);
+  const receipt=caseReceipt(options.env),laneKey=String(bytes)+':'+(receipt?.id??'');
+  const idle = lanes.idle.get(laneKey) ?? [];
+  lanes.idle.set(laneKey, idle);
+  let worker=idle.pop();
+  if(!worker){worker=run.worker(`direct${lanes.lanes++}`,bytes);const owned=worker;ownCaseWorker(receipt,()=>{owned.close();lanes.idle.delete(laneKey);});}
   const scope = worker.scope("sh", noAddressLimit, options.env);
   const before = worker.counters();
   const aggregateBefore = worker.run.aggregateOoms();

@@ -694,7 +694,9 @@ const caseMemory=new CaseMemoryBroker({root:ROOT,env,host,
 const tok = createTokenPool({
   prepare:request=>caseMemory.prepare(request),
   attach:(request,scope)=>caseMemory.attach(request,scope),
-  completed:request=>{try{caseMemory.completed(request);}catch(error){stop(`case memory: final observation failed: ${error.message}`);}},
+  retire:(request,group)=>caseMemory.retire(request,group),
+  completed:request=>caseMemory.completed(request),
+  failed:error=>stop(`case memory: final observation failed: ${String(error)}`),
   // `used()` counts the tokens held in an elastic step's share.
   free: () => stopping ? 0 : SLOTS - used().slots - withhold,
   claim: (step, { held, used: spent, waitedS }) => {

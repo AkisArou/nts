@@ -7,7 +7,7 @@ import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
 
-export type CaseTokenRequest={step:string;lease?:string;context:string|null;memory?:CaseMemoryLease};
+export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
 type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};
 type BrokerOptions={root:string;env:NodeJS.ProcessEnv;host:HostObservations;boundary(step:string):WorkerBoundary;report(message:string):void};
 function decoded(text:string|null):Record<string,unknown>{
@@ -20,6 +20,13 @@ function property(unit:string,bytes:number):Promise<void>{
     const child=spawn('systemctl',['--user','set-property','--runtime',unit,`MemoryMax=${bytes}`],{stdio:['ignore','ignore','pipe']});
     let error='';child.stderr.setEncoding('utf8').on('data',(part:string)=>{error+=part;});
     child.on('error',reject);child.on('close',code=>code===0?resolve():reject(Error(`case memory: cannot set ${unit} cap: ${error||code}`)));
+  });
+}
+async function stopWorker(unit:string):Promise<void>{
+  await new Promise<void>((resolve,reject)=>{
+    const child=spawn('systemctl',['--user','stop',unit],{stdio:['ignore','ignore','pipe']});let error='';
+    child.stderr.setEncoding('utf8').on('data',(part:string)=>{error+=part;});
+    child.on('error',reject);child.on('close',code=>code===0||error.includes('not loaded')?resolve():reject(Error(`case memory: cannot drain ${unit}: ${error||code}`)));
   });
 }
 const under=(parent:string,child:string)=>child.startsWith(parent+'/')&&!child.split('/').includes('..');
@@ -67,9 +74,16 @@ export class CaseMemoryBroker {
       if(actual>cap||actual<cap-4096)throw Error('case memory: kernel did not enforce registered case cap');
     }
   }
-  completed(request:CaseTokenRequest):void{
+  retire(request:CaseTokenRequest,group:string):void{request.memory?.retire(group);}
+  async completed(request:CaseTokenRequest):Promise<void>{
     const lease=request.memory;if(!lease)return;
-    try{lease.close();}finally{this.#active.get(request.step)?.delete(lease);}
+    const groups=lease.groups;
+    try{
+      lease.close(Boolean(request.answered));
+      // A lost controller cannot return its CPU token while its workers
+      // still run. The broker owns these exact authenticated slice names.
+      if(!request.answered)for(const group of groups)await stopWorker(basename(group));
+    }finally{this.#active.get(request.step)?.delete(lease);}
   }
   flush(step:string):void{
     const rows=this.#completed.get(step);if(!rows?.length)return;

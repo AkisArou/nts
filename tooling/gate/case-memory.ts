@@ -55,6 +55,7 @@ export class CaseMemoryLease {
   get closed(){return this.#closed;}
   get charge(){return this.#charge;}
   get peak(){return this.#peak;}
+  get groups(){return this.#roots().map(([group])=>group);}
   /** Concurrent roots add caps; a nested scope is already inside its root. */
   get capBytes(){return this.#roots().reduce((sum,[,scope])=>sum+scope.cap,0);}
   #roots(){return [...this.#scopes].filter(([group])=>![...this.#scopes.keys()].some(other=>other!==group&&contains(other,group)));}
@@ -80,11 +81,15 @@ export class CaseMemoryLease {
     }
     this.#charge=charge;this.#peak=Math.max(this.#peak,charge);
   }
-  close():void{
+  retire(group:string):void{
+    const scope=this.#scopes.get(group);if(!scope)return;
+    this.sample();scope.meter.close();this.#scopes.delete(group);
+  }
+  close(record=true):void{
     if(this.#closed)return;
     try{
       this.sample();
-      if(this.#peak>0)this.#effects.completed(this.identity.step,{key:this.key,peak:this.#peak});
+      if(record&&this.#peak>0)this.#effects.completed(this.identity.step,{key:this.key,peak:this.#peak});
     }finally{
       this.#closed=true;
       for(const scope of this.#scopes.values())scope.meter.close();

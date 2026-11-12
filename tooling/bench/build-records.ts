@@ -162,8 +162,9 @@ export async function compileCells(cells: readonly CompileCell[], lanes: number,
       let taken: { cell: number; release: () => void } | undefined;
       await feed.feed({ write: (entry, release) => { taken = { cell: Number(entry), release }; }, end: () => {}, exited: () => failure !== undefined, signal: stop.signal });
       if (taken === undefined) return;
+      const active=taken;
       try {
-        const outcome = await runWithToken(taken.release,()=>compile(cells[taken.cell]!, index));
+        const outcome = await runWithToken(active.release,()=>compile(cells[active.cell]!, index));
         outcomes[taken.cell] = outcome;
         ended(cells[taken.cell]!, outcome);
       } catch (error) {
