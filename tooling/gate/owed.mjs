@@ -1431,9 +1431,15 @@ function stepInputGraph() {
     // Canonical step declarations and collected entries can place an input.
     // A glob's expansion and paths found recursively in source text cannot:
     // they describe conservative reach, not an execution declaration.
-    const exact = (/** @type {string} */ body) => [...code(body).matchAll(PATH)]
-      .map(match => match[1]).filter(path => !/[*?]/.test(path)
-        && existsSync(join(TREE, path)) && statSync(join(TREE, path)).isFile());
+    const exact = (/** @type {string} */ body) => {
+      const text = code(body);
+      return [...text.matchAll(PATH)].flatMap(match => {
+        const path = match[1], tail = text[(match.index ?? 0) + match[0].length];
+        // A prefix cut off before a brace/class glob is not an exact token.
+        return path && !/[*?]/.test(path) && (!tail || /[\s"'`;),|&<>]/.test(tail))
+          && existsSync(join(TREE, path)) && statSync(join(TREE, path)).isFile() ? [path] : [];
+      });
+    };
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new Map();
     const declared = new Set();

@@ -47,14 +47,14 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   };
   put('Cargo.toml', '[package]\nname="selector-fixture"\nversion="0.0.0"\nedition="2021"\n');
   put('src/lib.rs', '');
-  put('tooling/gate/all.sh', '#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tooling proof; exit; fi\nstep "tooling" node tooling/runner.ts\nstep "proof" node tooling/census/exact.ts\n');
+  put('tooling/gate/all.sh', '#!/bin/sh\nif [ "$1" = --list ]; then printf "%s\\n" tooling proof; exit; fi\nstep "tooling" node tooling/runner.ts\nstep "proof" node tooling/census/exact.ts tooling/census/partial{a,b}.ts\n');
   put('tooling/gate/run.mjs', '');
   put('tooling/gate/tooling-test-exclusions.json', '[]');
   put('tooling/runner.ts', '');
   put('tooling/entry.test.ts', '');
   put('tooling/census/exact.ts', 'import "./dependency.ts";\n');
   put('tooling/census/dependency.ts', '');
-  const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts'];
+  const unknown = ['tooling/census/fixtures/unknown-worker.ts', 'tooling/census/data-only.ts', 'tooling/unplaced/unknown.ts', 'tooling/census/partial'];
   for (const path of [...unknown, 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh']) put(path, '');
   git('init', '--quiet', '--initial-branch=main');
   const paths = [...unknown, 'tooling/census/exact.ts', 'tooling/census/dependency.ts', 'runtime/chromium/host/host.c', 'tooling/chromium/args.gn', 'tooling/conformance/check.sh'];
@@ -644,8 +644,8 @@ test("the finite Node preload planner and the harness it reads owe their tooling
 
 test("inferred quoted-basename reach cannot place the host project",()=>{
   // The generic beside-file heuristic also sees case-local 'tsconfig.json'
-  // literals in other readers. Its over-selection is a separate gate finding;
-  // this path's explicit rule never removes those additive obligations.
+  // literals in other readers. It adds checks without declaring this file
+  // to be placed, so it cannot discharge the full fallback.
   const rules = owed([{path:'tooling/conformance/tsconfig.json',added:false}]);
   assert.ok(rules.some(rule => rule.full), 'a basename inferred from fixture text is not a declaration');
   superset(gateSteps(rules),[
