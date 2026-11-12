@@ -35,10 +35,18 @@ export function observedSpawnSync(command:string,args:readonly string[],options:
   const report=join(observer.directory,`child-${process.pid}-${ordinal++}.json`);
   const result=spawnSync(observer.binary,[report,'--',command,...args],options);
   let usage:ChildUsage|undefined;
-  try{usage=readChildUsage(JSON.parse(readFileSync(report,'utf8')));record(usage);}
+  try{usage=readChildUsage(JSON.parse(readFileSync(report,'utf8')));}
   catch(error){record(undefined,String(error));}
   finally{try{rmSync(report,{force:true});}catch(error){record(undefined,`removing child observation: ${String(error)}`);}}
   if(usage){
+    // execvp (and Node) can run executable text through its shell fallback;
+    // posix_spawnp deliberately has no such contract. Only a proven no-entry
+    // refusal may delegate once. Keep that child's CPU unknown, not zero.
+    if(usage.pid===0&&usage.exec_errno&&getSystemErrorName(-usage.exec_errno)==='ENOEXEC'){
+      record(undefined,'phase observation: ENOEXEC before entry; ordinary launch retained without waited rusage');
+      return spawnSync(command,[...args],options);
+    }
+    record(usage);
     result.pid=usage.pid;
     if(usage.exec_errno){
       const code=getSystemErrorName(-usage.exec_errno);

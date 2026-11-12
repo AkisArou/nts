@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync,rmSync} from 'node:fs';
+import {chmodSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {spawn,spawnSync} from 'node:child_process';
 import {test} from 'node:test';
 import {observedSpawnSync,prepareChildObserver,readChildUsage,type ChildUsage} from './child-rusage.ts';
@@ -41,6 +41,22 @@ test('private waited accounting cannot consume the product output buffer',t=>{
     {stdout:ordinary.stdout,stderr:ordinary.stderr,status:ordinary.status,signal:ordinary.signal});
 });
 
+test('an executable text fallback runs once with unchanged input and named missing accounting',t=>{
+  const root=newTestScratch('waited-child-text');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error??'the observer compiled');
+  const script=root+'/plain-script',calls=root+'/calls';
+  writeFileSync(script,'printf x >> "$1"\nprintf accepted\ncat\n');chmodSync(script,0o700);
+  const options={env,encoding:'utf8' as const,input:'input',maxBuffer:64};
+  const ordinary=spawnSync(script,[calls],options);assert.equal(readFileSync(calls,'utf8'),'x');
+  const missing:string[]=[];
+  const observed=observedSpawnSync(script,[calls],options,prepared.observer,(row,error)=>{assert.equal(row,undefined);assert.ok(error);missing.push(error);});
+  assert.equal(readFileSync(calls,'utf8'),'xx','each invocation executes its script exactly once');
+  assert.equal(observed.error,undefined);assert.equal(observed.stdout,'acceptedinput');
+  assert.deepEqual({stdout:observed.stdout,stderr:observed.stderr,status:observed.status,signal:observed.signal},
+    {stdout:ordinary.stdout,stderr:ordinary.stderr,status:ordinary.status,signal:ordinary.signal});
+  assert.equal(missing.length,1);assert.match(missing[0]!,/ENOEXEC before entry.*without waited rusage/);
+});
+
 test('cancellation reaches the exact waited child after observed readiness',async t=>{
   const root=newTestScratch('waited-child-cancellation');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const env=fixtureEnvironment(t),prepared=prepareChildObserver(root,env);assert.ok(prepared.observer,prepared.error??'the private observer was compiled');
@@ -62,6 +78,7 @@ test('cancellation reaches the exact waited child after observed readiness',asyn
 });
 
 test('malformed or missing child accounting cannot become a measured zero',()=>{
-  for(const value of [undefined,{}, {version:1,cpu_measure:'wait4-rusage-v1',pid:1,wall_s:0,user_s:-1,sys_s:0,exit:0,signal:0,exec_errno:0}])
+  for(const value of [undefined,{}, {version:1,cpu_measure:'wait4-rusage-v1',pid:1,wall_s:0,user_s:-1,sys_s:0,exit:0,signal:0,exec_errno:0},
+    {version:1,cpu_measure:'wait4-rusage-v1',pid:0,wall_s:0,user_s:0,sys_s:0,exit:0,signal:0,exec_errno:0}])
     assert.throws(()=>readChildUsage(value),/phase observation/);
 });
