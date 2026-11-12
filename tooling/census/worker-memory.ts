@@ -349,7 +349,7 @@ export class MemoryWorker {
     const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
     const scope = {
       unit, ready,
-      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${bootstrap}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "bash", "--noprofile", "--norc", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
+      argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${bootstrap}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "bash", "--noprofile", "--norc", "--posix", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
       env: { ...childEnvironment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);

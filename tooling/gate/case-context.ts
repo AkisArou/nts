@@ -23,7 +23,7 @@ export function closeCaseWorkers(receipt:CaseReceipt):void{
 export function retireCaseScope(receipt:CaseReceipt|undefined,group:string):void{
   if(!receipt)return;
   const source='address=$1; id=$2; group=$3; exec {fd}<>"/dev/tcp/${address%:*}/${address##*:}" || exit 1; printf "retire %s %s\\n" "$id" "$group" >&"$fd"; IFS= read -r answer <&"$fd" || exit 1; [ "$answer" = ready ] || { printf "%s\\n" "$answer" >&2; exit 1; }';
-  const result=spawnSync('bash',['--noprofile','--norc','-c',source,'case memory retirement',receipt.address,receipt.id,group],{encoding:'utf8',timeout:30_000});
+  const result=spawnSync('bash',['--noprofile','--norc','--posix','-c',source,'case memory retirement',receipt.address,receipt.id,group],{encoding:'utf8',timeout:30_000});
   if(result.status!==0)throw Error('case memory: cannot retire owned scope: '+(result.stderr||result.error?.message||result.signal));
 }
 
