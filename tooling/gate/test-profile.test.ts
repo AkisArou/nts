@@ -9,9 +9,13 @@ import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
+import {moduleClosure} from './module-closure.ts';
 import {inspectRecordPublications} from './test-readiness.ts';
 
 const manifest=readFileSync(TEST_PROFILE_MANIFEST,'utf8');
+test('the run seal verifier is a node-only leaf, so test entries cannot inherit launcher selection',()=>{
+  assert.deepEqual(moduleClosure(['tooling/differential/oracle-seal.ts']),['tooling/differential/oracle-seal.ts']);
+});
 for(const route of TEST_ROUTES)test(route+' checks the actual invocation against profile and incremental mutations',()=>{
   const invocation=testInvocation(route,[],{});
   assert.equal(invocation.env.CARGO_INCREMENTAL,'1');

@@ -8,7 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {ToolingInstrumentError} from './step-result.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
-import {ENVIRONMENT_CONTEXT,requireSealedOracleRun} from './canonical-environment.ts';
+import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
@@ -128,7 +128,7 @@ export function assertPreparedInnerTests(invocation:TestInvocation):void{
   const command='node tooling/gate/inner.ts --no-agree';
   const missing=[ENVIRONMENT_CONTEXT,'NTS_ORACLE_DEPENDENCIES','NTS_BIN'].filter(name=>!invocation.env[name]);
   if(missing.length)fail('inner tests need prepared '+missing.join(', ')+'; run '+command);
-  try{requireSealedOracleRun(invocation.env);}
+  try{assertSealedOracleRun(invocation.env);}
   catch(error){fail('inner tests need a sealed oracle capability: '+String(error)+'; run '+command);}
   const compiler=resolve(invocation.profileDirectory,'nts');
   if(!isAbsolute(invocation.env.NTS_BIN!)||resolve(invocation.env.NTS_BIN!)!==compiler)

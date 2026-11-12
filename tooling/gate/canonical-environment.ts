@@ -6,9 +6,9 @@ import { spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
-import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError,type DependencyCapability} from "../differential/oracle-dependencies.ts";
+import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
 import {assertRunTemporary,captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
-import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions,dependencySealReady,ownsDependencyRun} from '../differential/oracle-runtime.ts';
+import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
@@ -90,7 +90,8 @@ const EXPERIMENTS = new Set([
   // set by a launcher, any of them makes the run an experiment.
   ...HOST_OBSERVATION_ENVIRONMENT,
 ]);
-export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
+import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal.ts';
+export {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal.ts';
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
 export function nodeCompileCacheRoot(env:NodeJS.ProcessEnv=process.env):string{
   return cacheLocation('NODE_COMPILE_CACHE',env[FIXTURE_ENVIRONMENT]!==undefined?env:{},()=>join(userInfo().homedir,'.cache/nts/node-compile-cache/v1'));
@@ -348,17 +349,10 @@ export function gateEnvironment(
   return { env, report, temporary };
 }
 
-/** A supplied canonical run owns its pinned services before any child runs. */
+/** Keep classification at the launcher boundary, not in the node-only leaf. */
 export function requireSealedOracleRun(env:NodeJS.ProcessEnv):void{
-  const raw=env.NTS_ORACLE_DEPENDENCIES;
-  let cap:DependencyCapability|undefined,context:{resolutionOwner?:unknown}|null= null;
-  try{
-    cap=raw?JSON.parse(raw) as DependencyCapability:undefined;
-    context=JSON.parse(env[ENVIRONMENT_CONTEXT]??'null') as {resolutionOwner?:unknown}|null;
-  }catch{/* named setup refusal below */}
-  if(!cap?.seal||process.platform==='linux'&&!context?.resolutionOwner)
-    throw new ToolingInstrumentError('tooling-setup','supplied gate environment is not sealed for oracle runs; seal it with sealOracleRun');
-  ownsDependencyRun(cap,env,true);dependencySealReady(cap,env);
+  try{assertSealedOracleRun(env);}
+  catch(error){throw new ToolingInstrumentError('tooling-setup',error instanceof Error?error.message:String(error),{cause:error});}
 }
 
 /** Validate once in the run parent, then forward its exact pinned seal. */
