@@ -21,3 +21,7 @@ Ledger release takes the same directory flock as decisions. The held-lock
 control uses an actual competing flock and a supplied nonblocking acquisition,
 so its verdict does not depend on how long a machine takes. It verifies a named
 report, unchanged bytes, then owner exit and reclamation by the next decision.
+
+The guard protects the next format change, when this implementation becomes
+the older reader. It cannot constrain older code already deployed; #740's
+separate cases-v2/ namespace was still necessary for that mixed-version window.

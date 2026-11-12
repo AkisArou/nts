@@ -34,7 +34,7 @@ test("an outcome is written whole, with its version and time, and read back; a m
   assert.equal(readOutcome(file), null);
   writeOutcome(file, { status: 3, files: ["results/a.tsv"] }, AT);
   assert.deepEqual(readOutcome<{ files: string[] }>(file), { version: 1, at: AT.toISOString(), status: 3, files: ["results/a.tsv"] });
-  assert.deepEqual(readdirSync(join(dir, "work")), ["outcome.json"], "nothing half written is left beside it");
+  assert.deepEqual(readdirSync(join(dir, "work")), ["outcome.json","outcome.json.lock"], "only the complete outcome and its stable flock inode remain");
   writeFileSync(file, JSON.stringify({ status: 0 }));
   assert.throws(() => readOutcome(file), /not an outcome of version 1/);
 });
