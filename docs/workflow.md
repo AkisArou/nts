@@ -530,6 +530,8 @@ shell frontend step, the workspace replay and the doctest step call the same
 invocation owner. An executing inner invocation without those prepared
 capabilities refuses before Cargo starts and names the contributor command.
 Compile-only `--no-run` invocations need no runtime preparation.
+The complete seal verifier is a node-only leaf, `differential/oracle-seal.ts`,
+so checking preparation adds no launcher dependencies to the Rust test steps.
 
 The profile is `nts-dev`: no debug info, incremental compilation, overflow
 checks and debug assertions. The owner validates the manifest, refuses
