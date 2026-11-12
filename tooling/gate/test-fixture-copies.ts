@@ -63,6 +63,7 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   const node=unwrap(input);if(depth>12)return '';
   if(ast.isIdentifier(node)){const value=binding(node);return value?name(value.value,depth+1)+(value.member?'.'+value.member:''):imports.get(node.text)??node.text;}
   if(ast.isPropertyAccessExpression(node))return name(node.expression,depth+1)+'.'+node.name.text;
+  if(ast.isElementAccessExpression(node)&&node.argumentExpression&&ast.isStringLiteralLikeNode(node.argumentExpression))return name(node.expression,depth+1)+'.'+node.argumentExpression.text;
   if(ast.isCallExpression(node)&&ast.isIdentifier(node.expression)&&node.expression.text==='require'&&node.arguments[0]&&ast.isStringLiteralLikeNode(node.arguments[0]))return node.arguments[0].text.replace(/^node:/,'');
   return code(node);
  };

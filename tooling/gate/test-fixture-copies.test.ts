@@ -66,3 +66,8 @@ test('a standalone entry exclusion expires when its entry gains a dependency',t=
 test('a helper outside the fixture naming convention obeys the same staging rule',()=>{
  assert.equal(inspect(imports+`copyFileSync(join(ROOT,'tooling/gate/helper.ts'),'/fixture/helper.ts');`,'tooling/gate/staging-helper.ts').length,1);
 });
+
+
+test('literal indexed copy methods obey the same owner rule',()=>{
+ assert.equal(inspect(`import * as fs from 'node:fs';fs['copyFileSync']('/owned/tooling/gate/helper.ts','/fixture/helper.ts');`).length,1);
+});
