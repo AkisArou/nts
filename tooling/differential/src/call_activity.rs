@@ -402,15 +402,16 @@ fn wait_for_cleanup(group: u32, observer: &mut impl CleanupObserver) -> Result<(
             return Ok(());
         }
         let elapsed = observer.now().duration_since(started);
-        let remaining = members
-            .iter()
-            .map(|member| format!("{}:{} (start {})", member.pid, member.state, member.started))
-            .collect::<Vec<_>>()
-            .join(", ");
-        ensure!(
-            elapsed < CLEANUP_WEDGE_BOUND,
-            "compiled cleanup INSTRUMENT: owned group {group} remains after {elapsed:?}; wedged-cleanup bound {CLEANUP_WEDGE_BOUND:?}; remaining {remaining}"
-        );
+        if elapsed >= CLEANUP_WEDGE_BOUND {
+            let remaining = members
+                .iter()
+                .map(|member| format!("{}:{} (start {})", member.pid, member.state, member.started))
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::bail!(
+                "compiled cleanup INSTRUMENT: owned group {group} remains after {elapsed:?}; wedged-cleanup bound {CLEANUP_WEDGE_BOUND:?}; remaining {remaining}"
+            );
+        }
         observer.pause();
     }
 }
@@ -649,6 +650,9 @@ impl Watch {
             group_budget: budget,
         }
     }
+    fn activity(&mut self, now: Instant) {
+        self.last = now;
+    }
     fn sample(
         &mut self,
         probe: &impl Probe,
@@ -821,7 +825,7 @@ impl Running {
     fn receive(&mut self, notice: Notice) -> Result<()> {
         match notice {
             Notice::Output(standard, bytes) => {
-                self.watch.last = Live.now();
+                self.watch.activity(Live.now());
                 if standard {
                     self.stdout.extend(bytes);
                 } else {
@@ -837,7 +841,7 @@ impl Running {
                     self.watch.hz,
                     self.watch.limits.cpu_seconds,
                 )?;
-                self.watch.last = Live.now();
+                self.watch.activity(Live.now());
             }
             Notice::Boundary(_) => {}
             Notice::Broken(message) => anyhow::bail!(message),
@@ -959,6 +963,7 @@ mod tests {
     struct Scripted {
         at: std::cell::Cell<Instant>,
         cpu: std::cell::Cell<u64>,
+        group_cpu: std::cell::Cell<u64>,
         busy: bool,
         present: bool,
     }
@@ -967,6 +972,7 @@ mod tests {
             Self {
                 at: std::cell::Cell::new(Instant::now()),
                 cpu: std::cell::Cell::new(0),
+                group_cpu: std::cell::Cell::new(0),
                 busy,
                 present: true,
             }
@@ -1000,7 +1006,7 @@ mod tests {
             }))
         }
         fn group_cpu(&self, _: u32) -> Result<u64> {
-            Ok(self.cpu.get())
+            Ok(self.group_cpu.get())
         }
         fn busy(&self, _: u32, leader: &Process) -> Result<bool> {
             Ok(leader.busy)
@@ -1081,6 +1087,37 @@ mod tests {
             IncompleteKind::Runaway
         ));
     }
+    #[test]
+    fn supplied_descendant_cpu_and_output_activity_use_the_same_clock() {
+        let probe = Scripted::new(false);
+        let idle = Duration::from_secs(60);
+        let mut watch = probe.watch(Limits {
+            cpu_seconds: 30.0,
+            idle,
+        });
+        probe.advance(idle / 2);
+        watch.activity(probe.now());
+        probe.advance(idle / 2);
+        assert!(watch.sample(&probe, 42, (7, 42), None).unwrap().is_none());
+        probe.advance(idle / 2);
+        assert!(matches!(
+            watch
+                .sample(&probe, 42, (7, 42), None)
+                .unwrap()
+                .unwrap()
+                .kind,
+            IncompleteKind::Hung
+        ));
+        let mut watch = probe.watch(Limits {
+            cpu_seconds: 1.0,
+            idle,
+        });
+        probe.advance(Duration::from_secs(5));
+        probe.group_cpu.set(101);
+        let result = watch.sample(&probe, 42, (7, 42), None).unwrap().unwrap();
+        assert!(matches!(result.kind, IncompleteKind::Runaway));
+        assert!(result.reason.contains("owned command group"));
+    }
     struct CleanupScript {
         at: Instant,
         steps: std::collections::VecDeque<(Duration, Vec<RemainingProcess>)>,
@@ -1138,11 +1175,14 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_stops_a_grandchild_even_after_its_leader_and_stdio_exit() {
-        let mut child = Command::new("python3");
-        child.args([
-            "-c",
-            r"import os,time
+    fn ready_owned_group_drains_after_its_leader_exits_and_a_late_observation() {
+        use std::io::BufRead as _;
+        use std::os::unix::process::CommandExt as _;
+        let child = Command::new("python3")
+            .args([
+                "-u",
+                "-c",
+                r"import os,signal,sys
 r,w=os.pipe()
 p=os.fork()
 if p==0:
@@ -1150,35 +1190,83 @@ if p==0:
  fd=os.open('/dev/null',os.O_WRONLY)
  os.dup2(fd,1);os.dup2(fd,2)
  os.write(w,b'1');os.close(w)
- while True: time.sleep(10)
+ signal.pause()
 else:
  os.close(w);os.read(r,1);os.close(r)
- print(p,flush=True)
+ print('ready',p,flush=True)
+ sys.stdin.readline()
 ",
-        ]);
-        let finished = command(
-            child,
-            Limits {
-                cpu_seconds: 5.0,
-                idle: CLEANUP_WEDGE_BOUND,
-            },
-        )
-        .unwrap();
-        assert!(finished.output.status.success());
-        let pid = String::from_utf8(finished.output.stdout)
-            .unwrap()
+            ])
+            .process_group(0)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        let mut owned = OwnedChild {
+            pid: child.id(),
+            child: Some(child),
+            identity: None,
+            finished: false,
+        };
+        let output = owned.child.as_mut().unwrap().stdout.take().unwrap();
+        let mut ready = String::new();
+        std::io::BufReader::new(output)
+            .read_line(&mut ready)
+            .unwrap();
+        let descendant = ready
             .trim()
+            .strip_prefix("ready ")
+            .unwrap()
             .parse::<u32>()
             .unwrap();
-        if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-            // PID 1 may not yet have reaped the killed orphan; it cannot run.
-            assert_eq!(
-                stat[stat.rfind(')').unwrap() + 1..]
-                    .split_whitespace()
-                    .next(),
-                Some("Z")
-            );
+        let identity = process_at(owned.pid).unwrap().unwrap();
+        owned.identity = Some((identity.started, identity.session));
+        let mut release = owned.child.as_mut().unwrap().stdin.take().unwrap();
+        release.write_all(b"exit\n").unwrap();
+        drop(release);
+        assert!(owned.child.as_mut().unwrap().wait().unwrap().success());
+        owned.child.take();
+        let members = group_members(owned.pid).unwrap();
+        assert!(members.iter().any(|member| member.pid == descendant));
+        struct DelayedKernel {
+            stale: Option<Vec<RemainingProcess>>,
+            offset: Duration,
+            observed_late: bool,
         }
+        impl CleanupObserver for DelayedKernel {
+            // Real time is only the five-minute wiring hang guard. The
+            // delayed observation crosses the old bound on supplied time.
+            fn now(&self) -> Instant {
+                Instant::now() + self.offset
+            }
+            fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>> {
+                if let Some(stale) = self.stale.take() {
+                    self.offset = Duration::from_secs(4);
+                    self.observed_late = true;
+                    Ok(stale)
+                } else {
+                    group_members(group)
+                }
+            }
+            fn pause(&mut self) {
+                LiveCleanup.pause();
+            }
+        }
+        let mut observer = DelayedKernel {
+            stale: Some(members),
+            offset: Duration::ZERO,
+            observed_late: false,
+        };
+        owned.finish_with(&mut observer).unwrap();
+        assert!(observer.observed_late);
+        assert!(owned.finished);
+        assert!(group_members(owned.pid).unwrap().is_empty());
+        assert!(
+            process_at(descendant)
+                .unwrap()
+                .is_none_or(|process| !process.running)
+        );
     }
 
     #[test]
