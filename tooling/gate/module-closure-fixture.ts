@@ -68,6 +68,10 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,gra
   // Reject nested grants: their owner would otherwise depend on iteration order.
   const names=[...selected.keys()];
   for(const [index,name]of names.entries())for(const other of names.slice(index+1))if(under(name,other)||under(other,name))throw Error('overlapping fixture data namespaces: '+name+' and '+other);
+  const manifest=readFixtureInputs(destination),entries=new Map(manifest.data.map(row=>[row.directory,row]));
+  for(const previous of entries.keys())for(const directory of declared.keys()){
+    if((under(previous,directory)||under(directory,previous))&&!selected.has(previous))throw Error('fixture data namespace already has an owner; repeat its explicit grant: '+previous);
+  }
   const granted=(name:string)=>names.some(directory=>under(directory,name));
   function privateTree(directory:string):void{
     let parent=destination;
@@ -89,7 +93,6 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,gra
     };walk(directory);
   }
   for(const directory of declared.keys())privateTree(directory);
-  const manifest=readFixtureInputs(destination),entries=new Map(manifest.data.map(row=>[row.directory,row]));
   for(const [directory,fixtureOwner]of selected){
     for(const previous of entries.keys())if(previous!==directory&&(under(previous,directory)||under(directory,previous)))throw Error('overlapping fixture data namespaces: '+previous+' and '+directory);
     const before=entries.get(directory);

@@ -88,7 +88,11 @@ for(const edge of ['entry','import','asset']as const)test(`a ${edge} module rema
 test('a manifest merges declaring readers but refuses a changed owner or future version',t=>{
   const f=dataFixture(t);f.privateData();f.write('second.ts',"import {dataDirectory} from './tooling/gate/reader-inputs.ts';const data=dataDirectory(new URL('./data/',import.meta.url));");
   const options={sourceRoot:f.source,dataNamespaces:{data:'owner'}};
-  copyModuleClosure(['entry.ts'],f.destination,options);copyModuleClosure(['second.ts'],f.destination,options);
+  copyModuleClosure(['entry.ts'],f.destination,options);
+  assert.throws(()=>copyModuleClosure(['second.ts'],f.destination,{sourceRoot:f.source}),/repeat its explicit grant: data/);
+  assert.equal(readFileSync(join(f.destination,'data/case.ts'),'utf8'),'fixture data','an omitted grant cannot overwrite an earlier fixture namespace');
+  assert.equal(existsSync(join(f.destination,'second.ts')),false);
+  copyModuleClosure(['second.ts'],f.destination,options);
   const file=join(f.destination,FIXTURE_INPUT_MANIFEST);
   assert.deepEqual(JSON.parse(readFileSync(file,'utf8')),{version:1,data:[{directory:'data',fixtureOwner:'owner',readers:['entry.ts','second.ts']}]});
   assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{...options,dataNamespaces:{data:'different owner'}}),/already has another owner/);
@@ -119,7 +123,7 @@ test('nested data declarations share one granted namespace and reject ambiguous 
     const manifest=JSON.parse(readFileSync(join(f.destination,FIXTURE_INPUT_MANIFEST),'utf8'));
     assert.deepEqual(manifest,{version:1,data:[{directory,fixtureOwner:'owner',readers:['entry.ts','nested-reader.ts']}]});
     const other=directory==='data'?'data/nested':'data';
-    assert.throws(()=>copyModuleClosure(['entry.ts','nested-reader.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{[other]:'owner'}}),/overlapping fixture data namespaces/);
+    assert.throws(()=>copyModuleClosure(['entry.ts','nested-reader.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{[other]:'owner'}}),/overlapping fixture data namespaces|repeat its explicit grant/);
   }
 });
 
