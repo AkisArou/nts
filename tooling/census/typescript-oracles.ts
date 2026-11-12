@@ -2,7 +2,7 @@
 // original inputs and authenticated evidence survive each admitted attempt;
 // its executable snapshot is finalized and removed before the next dispatch.
 import { mkdirSync,readFileSync } from 'node:fs';
-import { dirname,join,resolve } from 'node:path';
+import { join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
 import { REPOSITORY } from '../differential/oracle-emit.ts';
@@ -53,7 +53,7 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
     if(paths.length)await runMemoryWorkers({
       paths,jobs:Math.min(jobs,paths.length),memory:memoryRun(),workerBytes:Number(process.env.NTS_CENSUS_MEMORY_CAP_KB??6_000_000)*1024,
       key:'typescript-oracles',what:'TypeScript oracle references',token:(path,signal)=>acquireToken({project:path,binary:process.env.NTS_GATE_CASE_BINARY_SHA??''},signal),
-      args:index=>[join(dirname(fileURLToPath(import.meta.url)),'attempt262-worker.ts'),join(scratch,'w'+index),'','',REPOSITORY,'0','','c','roots','oracle',inputs],
+      args:index=>[fileURLToPath(new URL('./attempt262-worker.ts',import.meta.url)),join(scratch,'w'+index),'','',REPOSITORY,'0','','c','roots','oracle',inputs],
       report,onRow:(row:{path:string;bucket:string;why?:string;result?:TypeScriptOracleResult;session?:NodeResolutionSession})=>{
         if(row.bucket!=='oracle-reference'||!row.result||!row.session)errors.push(row.path+': '+(row.why??row.bucket));
         else writer.add(row.result,row.session);

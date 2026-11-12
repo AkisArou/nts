@@ -1378,17 +1378,6 @@ export function corpusInputs() {
  */
 function stepInputGraph() {
   return once("stepInputs", () => {
-    // Exact runtime inputs of their declared readers. These are launched or
-    // spliced as source rather than imported as modules. Inference may find
-    // other readers, but cannot add entries to this declaration.
-    /** @type {Readonly<Record<string, readonly string[]>>} */
-    const runtimeInputs = {
-      "tooling/census/definitions.ts": ["tooling/gate/definitions"],
-      "tooling/conformance/integrity.ts": ["tooling/conformance/integrity.known"],
-      "tooling/census/conformance262.ts": ["tooling/census/attempt262-worker.ts"],
-      "tooling/census/typescript-oracles.ts": ["tooling/census/attempt262-worker.ts"],
-      "tooling/census/project.ts": ["harness.ts", "harness-donotevaluate.ts", "harness-done.ts", "harness-throws.ts", "harness-compare-array.ts"].map(name => `tooling/census/${name}`),
-    };
     const toolingTests=discoverToolingTests(TREE);
     const text = readFileSync(join(TREE, "tooling/gate/all.sh"), "utf8");
     const bodies = new Map();
@@ -1437,12 +1426,13 @@ function stepInputGraph() {
         const path = match[1], tail = text[(match.index ?? 0) + match[0].length];
         // A prefix cut off before a brace/class glob is not an exact token.
         return path && !/[*?]/.test(path) && (!tail || /[\s"'`;),|&<>]/.test(tail))
-          && existsSync(join(TREE, path)) && statSync(join(TREE, path)).isFile() ? [path] : [];
+          && existsSync(join(TREE, path)) ? [path] : [];
       });
     };
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new Map();
     const declared = new Set();
+    const directories = new Map();
     const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1];
@@ -1474,10 +1464,14 @@ function stepInputGraph() {
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        for (const input of moduleClosure(batch, { sourceRoot: TREE })) {
+        for (const input of moduleClosure(batch, { sourceRoot: TREE, directory: row => {
+          const reader = row.reader === "<entry>" ? "tooling/gate/all.sh" : row.reader;
+          const key = reader + "\0" + row.directory;
+          const declaration = directories.get(key) ?? {...row, reader, steps: new Set()};
+          declaration.steps.add(step); directories.set(key, declaration);
+        } })) {
           if (placed.has(input)) continue;
           placed.add(input); declared.add(input); add(input, step); queue.push(input);
-          entries.push(...(runtimeInputs[input] ?? []));
         }
       }
       const seen = new Set();
@@ -1522,7 +1516,7 @@ function stepInputGraph() {
       const [, taker, giver] = m;
       for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
     }
-    return { reach: map, declared };
+    return { reach: map, declared, directories };
   });
 }
 

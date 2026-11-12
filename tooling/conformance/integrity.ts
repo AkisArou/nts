@@ -169,7 +169,7 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const KNOWN = join(HERE, "integrity.known");
+const KNOWN = fileURLToPath(new URL("./integrity.known", import.meta.url));
 /** The projects built as addons: their exported surface is called from outside. */
 const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");

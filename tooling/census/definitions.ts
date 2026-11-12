@@ -54,7 +54,7 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const TABLE = join(ROOT, "tooling/gate/definitions");
+const TABLE = fileURLToPath(new URL("../gate/definitions", import.meta.url));
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 
 const env = { ...process.env, NTS_CHECKERS: "1" };

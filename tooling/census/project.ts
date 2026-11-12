@@ -15,8 +15,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const harnessFiles=new Map<string,string>();
-function harnessSource(name:string):string{
-  const path=join(HERE,name),source=readFileSync(path,'utf8');
+function harnessSource(asset:URL):string{
+  const path=fileURLToPath(asset),source=readFileSync(path,'utf8');
   // Retain the exact bytes actually spliced by this loaded materializer.
   // The oracle adapter validates these facts before use and on every reuse.
   harnessFiles.set(path,createHash('sha256').update(source).digest('hex'));return source;
@@ -24,7 +24,7 @@ function harnessSource(name:string):string{
 export function harnessObservations(){return [...harnessFiles].map(([path,value])=>({kind:'file' as const,path,value}));}
 
 /** The lowerable stand-in for the harness entries every non-raw test receives. */
-export const HARNESS = harnessSource('harness.ts');
+export const HARNESS = harnessSource(new URL('./harness.ts', import.meta.url));
 
 /**
  * Top-level entries appended only for a test that names them, as test262
@@ -32,8 +32,8 @@ export const HARNESS = harnessSource('harness.ts');
  * (`sta.js`) and `$DONE` (`doneprintHandle.js`). Each file says why.
  */
 const GLOBALS = [
-  { names: /\$DONOTEVALUATE\b/, source: harnessSource('harness-donotevaluate.ts') },
-  { names: /\$DONE\b/, source: harnessSource('harness-done.ts') },
+  { names: /\$DONOTEVALUATE\b/, source: harnessSource(new URL('./harness-donotevaluate.ts', import.meta.url)) },
+  { names: /\$DONE\b/, source: harnessSource(new URL('./harness-done.ts', import.meta.url)) },
 ];
 
 /**
@@ -43,8 +43,8 @@ const GLOBALS = [
  * cost). Each file says why it is one.
  */
 const MEMBERS = [
-  { calls: /\bassert\.throws\s*\(/, source: harnessSource('harness-throws.ts') },
-  { calls: /\bassert\.compareArray\s*\(/, source: harnessSource('harness-compare-array.ts') },
+  { calls: /\bassert\.throws\s*\(/, source: harnessSource(new URL('./harness-throws.ts', import.meta.url)) },
+  { calls: /\bassert\.compareArray\s*\(/, source: harnessSource(new URL('./harness-compare-array.ts', import.meta.url)) },
 ];
 
 /**

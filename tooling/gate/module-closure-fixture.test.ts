@@ -50,6 +50,44 @@ test("new source imports are observed without a persistent closure cache", t => 
   assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source}), ["entry.ts", "new.ts"]);
 });
 
+test("parsed module-relative URL assets include modules and leaves, while lookalikes and anchors declare nothing", t => {
+  const f = fixture(t);
+  f.write("entry.ts", `
+const leaf = new URL('./data.json', import.meta.url);
+const worker = new URL('./worker.ts', import.meta.url);
+const anchors = [new URL('.', import.meta.url), new URL('../', import.meta.url), new URL('../..', import.meta.url)];
+const data = "new URL('./absent.ts', import.meta.url)";
+const other = new OtherURL('./absent.ts', import.meta.url);
+const call = URL('./absent.ts', import.meta.url);
+const base = new URL('./absent.ts', somewhereElse);
+const dynamic = new URL(name, import.meta.url);
+// new URL('./absent.ts', import.meta.url);
+`);
+  f.write("data.json", '"import \'./absent.ts\';"');
+  f.write("worker.ts", "export {value} from './shared.ts';");
+  f.write("shared.ts", "export const value = 1;");
+  assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source}), ["data.json", "entry.ts", "shared.ts", "worker.ts"]);
+  assert.deepEqual(copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source}), ["data.json", "entry.ts", "shared.ts", "worker.ts"]);
+  assert.equal(readFileSync(join(f.destination, "data.json"), "utf8"), '"import \'./absent.ts\';"');
+});
+
+test("a named URL directory declares its tracked files with either spelling and reports its breadth", t => {
+  const f = fixture(t);
+  f.write("entry.ts", "const first = new URL('./assets', import.meta.url); const second = new URL('./assets/', import.meta.url);");
+  f.write("assets/data.txt", "fixture asset");
+  f.write("assets/worker.ts", "import '../shared.ts';");
+  f.write("shared.ts", "export const value = 1;");
+  for (const args of [["init", "--quiet", "--initial-branch=main"], ["add", "entry.ts", "assets", "shared.ts"]]) {
+    const result = spawnTest("git", args, {cwd: f.source, encoding: "utf8"});
+    assert.equal(result.status, 0, result.stderr);
+  }
+  f.write("assets/untracked.txt", "not a source-tree input");
+  const directories: import("./module-closure.ts").DirectoryDeclaration[] = [];
+  assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source, directory: row => directories.push(row)}), ["assets/data.txt", "assets/worker.ts", "entry.ts", "shared.ts"]);
+  assert.ok(directories.length > 0);
+  for (const row of directories) assert.deepEqual(row, {reader: "entry.ts", directory: "assets", files: ["assets/data.txt", "assets/worker.ts"]});
+});
+
 test("missing imports and escaping edges fail before partial publication", t => {
   const f = fixture(t); f.write("entry.ts", "import './missing.ts';");
   assert.throws(() => copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source}), /missing\.ts/);
