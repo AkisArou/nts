@@ -1275,7 +1275,8 @@ export function changedPaths(argv) {
 const memo = new Map();
 const once = (key, f) => (memo.has(key) ? memo.get(key) : (memo.set(key, f()), memo.get(key)));
 const rel = (abs) => relative(TREE, abs).split("\\").join("/");
-const trackedFiles = () => once("tracked-files", () => execFileSync("git", ["ls-files", "-z", "--cached"], {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));
+/** @returns {string[]} */
+function trackedFiles() {return once("tracked-files", () => execFileSync("git", ["ls-files", "-z", "--cached"], {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));}
 
 /** Every step all.sh defines, in its order: what "the full gate" means. */
 export function allSteps() {
@@ -1573,12 +1574,13 @@ function stepInputGraph() {
     const membership = new Set();
     const directories = new Map();
     const modules = moduleGraph({sourceRoot:TREE});
-    const directory = (row,step) => {
+    const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
       const key=reader+"\0"+row.directory;
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
+    /** @type {Map<string,{named:string[],other:string[]}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1687,7 +1689,7 @@ function stepInputGraph() {
 
 export function stepInputs() { return stepInputGraph().reach; }
 
-function declaredInput(path) {
+function declaredInput(/** @type {string} */ path) {
   const graph=stepInputGraph();
   if(graph.declared.has(path))return true;
   if(!graph.tracked.has(path))return false;
@@ -1720,6 +1722,7 @@ class InputMap extends Map {
   #positions = new Map();
   #next = 0;
   constructor() { super(); }
+  /** @override */
   set(/** @type {string} */ input, /** @type {Set<string>} */ names) {
     if (!this.has(input)) this.#positions.set(input, this.#next++);
     return super.set(input, names);
@@ -1729,10 +1732,12 @@ class InputMap extends Map {
     if (names) names.add(name);
     else this.set(input, new Set([name]));
   }
+  /** @override */
   delete(/** @type {string} */ input) {
     this.#positions.delete(input);
     return super.delete(input);
   }
+  /** @override */
   clear() { this.#positions.clear(); super.clear(); }
   covering(/** @type {string} */ path) {
     const inputs = [];
@@ -1807,13 +1812,14 @@ export function embedded() {
  * A path owes the full gate when a rule says so, when none of these gave it a
  * step, or when it is an instrument the step map cannot place.
  */
-function rulesFor(path,added) {
+function rulesFor(/** @type {string} */ path,/** @type {boolean} */ added) {
   const cache=once("matched-rules",()=>[new Map(),new Map()]),matches=cache[added?1:0];
   if(!matches.has(path)){
-    const rules=RULES.filter(rule=>rule.when(path,added));
+    const rules=RULES.filter(rule=>(/** @type {(path:string,added:boolean)=>boolean} */(rule.when))(path,added));
     if(isToolingTest(path)){
       const exclusions=once("tooling-test-exclusions",()=>readToolingTestExclusions(TREE,allSteps()));
       const step=toolingTestStep(path,exclusions);
+      if(step===undefined)throw new Error("tooling test has no execution step: "+path);
       rules.push({name:"a tooling test entry",steps:[step],settled:true,wide:step!=="tooling",arms:[]});
     }
     matches.set(path,rules);
