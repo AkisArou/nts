@@ -92,7 +92,11 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,opt
       // options; a private data grant still owns real paths, never data links.
       const linkedDirectory=stat.isSymbolicLink()&&sourceDirectory(name,path);
       if(stat.isSymbolicLink()&&!linkedDirectory){
-        if((owned.has(name)||!granted(name)&&(options.link||options.reuseSourceLinks))&&realpathSync(path)===join(source,name))return;
+        if((owned.has(name)||!granted(name)&&(options.link||options.reuseSourceLinks))
+          &&realpathSync(path)===join(source,name)&&info(join(source,name))?.isFile()){
+          if(!expected.has(name))throw Error('fixture data input needs an explicit namespace grant: '+name);
+          return;
+        }
         throw Error('fixture data namespace contains an unowned path: '+name);
       }
       const isDirectory=stat.isDirectory()||linkedDirectory;

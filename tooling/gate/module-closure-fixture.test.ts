@@ -167,6 +167,19 @@ test('a source-directory link never admits undeclared source members',t=>{
   assert.equal(readFileSync(join(f.source,'data/untracked.txt'),'utf8'),'not a declared input');
 });
 
+test('exact source file and directory links cannot declare untracked input membership',t=>{
+  for(const mode of [{link:true},{reuseSourceLinks:true}])for(const shape of ['file','directory']as const){
+    const f=dataFixture(t),name=shape==='file'?'data/extra.txt':'data/extra';
+    if(shape==='directory')mkdirSync(join(f.source,name));
+    else writeFileSync(join(f.source,name),'untracked source bytes');
+    f.privateData();rmSync(join(f.destination,'data/case.ts'));
+    symlinkSync(join(f.source,name),join(f.destination,name),shape==='directory'?'dir':'file');
+    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,...mode}),/explicit namespace grant|unowned path/);
+    assert.equal(existsSync(join(f.destination,'entry.ts')),false,'membership is checked before any module is copied');
+    if(shape==='file')assert.equal(readFileSync(join(f.source,name),'utf8'),'untracked source bytes');
+  }
+});
+
 test('nested data declarations share one granted namespace and reject ambiguous grants',t=>{
   for(const directory of ['data','data/nested']){
     const f=dataFixture(t);f.privateData();
