@@ -1,7 +1,8 @@
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {  existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -17,28 +18,19 @@ test("cache admission preserves one measured live set and leaves disk working sp
   assert.match(testBuildAdmissionProblem(50 * gib, 80 * gib)!, /50.0 GiB working space/);
 });
 
-/** The same-directory modules `entry` loads through static imports. The copied
- * tree is whatever tests.mjs reaches, not a list kept by hand that drifts when
- * an import is added. */
-function localImportClosure(entry: string): string[] {
-  const seen = new Set<string>(), todo = [entry];
-  while (todo.length) {
-    const file = todo.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    const text = readFileSync(new URL(file, import.meta.url), "utf8");
-    for (const match of text.matchAll(/\bfrom\s+["']\.\/([^"'/]+)["']/g)) todo.push(match[1]!);
-  }
-  return [...seen].sort();
+/** Stage the parsed module graph, then give the tree its own Git inventory. */
+function testsFixture(root: string): void {
+  copyModuleClosure(["tooling/gate/tests.mjs"], root);
+  const initialized = spawnSync("git", ["init", "--quiet"], {cwd: root, encoding: "utf8",
+    env: {...testEnvironment(), GIT_DIR: join(root,".git"), GIT_WORK_TREE: root,
+      GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"}});
+  assert.equal(initialized.status, 0, initialized.stderr);
 }
 
 test("the gate tests helper builds at opt-level 1 and replays Cargo's environment", () => {
   const root = mkdtempSync(join(tmpdir(), "nts-test-build-env-"));
   try {
-    mkdirSync(join(root, "tooling/gate"), { recursive: true });
-    for (const file of localImportClosure("tests.mjs")) {
-      copyFileSync(new URL(file, import.meta.url), join(root, "tooling/gate", file));
-    }
+    testsFixture(root);
     mkdirSync(join(root, "src"));
     writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-env"\nversion="0.0.0"\nedition="2024"\n');
     writeFileSync(join(root, "build.rs"), 'fn main() { println!("cargo:rustc-env=ACTUAL_OPT_LEVEL={}", std::env::var("OPT_LEVEL").unwrap()); }\n');
@@ -62,10 +54,7 @@ test("the gate tests helper builds at opt-level 1 and replays Cargo's environmen
 test("the gate tests helper builds and runs in the profile NTS_TEST_PROFILE names", () => {
   const root = mkdtempSync(join(tmpdir(), "nts-test-build-profile-"));
   try {
-    mkdirSync(join(root, "tooling/gate"), { recursive: true });
-    for (const file of localImportClosure("tests.mjs")) {
-      copyFileSync(new URL(file, import.meta.url), join(root, "tooling/gate", file));
-    }
+    testsFixture(root);
     mkdirSync(join(root, "src"));
     // The landing check's nts-dev is a profile of its own; this one is told apart by its optimization.
     writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-profile"\nversion="0.0.0"\nedition="2024"\n[profile.landing]\ninherits="dev"\nopt-level=2\n');
