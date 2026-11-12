@@ -1,0 +1,15 @@
+{
+  "change": "Literal relative dynamic imports join the declared module graph.",
+  "tracked": 28441,
+  "lostStepsOnPreviouslyPlacedPaths": [],
+  "retiredFallbackPaths": [],
+  "before": {
+    "unplaced": 149,
+    "fullByPolicy": 31
+  },
+  "after": {
+    "unplaced": 149,
+    "fullByPolicy": 31
+  },
+  "afterModuleSha256": "8148bfafde21e17d3b74cd9b77126060e5b361156d3824082c6c3b064cde3877"
+}

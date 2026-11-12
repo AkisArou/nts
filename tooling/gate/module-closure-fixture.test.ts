@@ -50,6 +50,20 @@ test("new source imports are observed without a persistent closure cache", t => 
   assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source}), ["entry.ts", "new.ts"]);
 });
 
+test("literal relative dynamic imports declare inputs while computed imports remain undeclared", t => {
+  const f = fixture(t);
+  f.write("entry.ts", [
+    "export async function literal() {return import('./lazy.ts');}",
+    "export async function template(name: string) {return import(`./${name}.ts`);}",
+    "export async function variable(name: string) {return import(name);}",
+    "const data = \"import('./absent.ts')\"; void data;",
+  ].join("\n"));
+  f.write("lazy.ts", "export {value} from './dependency.ts';");
+  f.write("dependency.ts", "export const value = 23;");
+  assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source}), ["dependency.ts", "entry.ts", "lazy.ts"]);
+  assert.deepEqual(copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source}), ["dependency.ts", "entry.ts", "lazy.ts"]);
+});
+
 test("owning-project staging preserves inherited configs and follows newly declared roots", t => {
   const f = fixture(t);
   f.write("base.json", '{"compilerOptions":{"target":"ES2024","module":"nodenext","allowImportingTsExtensions":true,"noEmit":true}}');

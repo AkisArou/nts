@@ -1,4 +1,6 @@
-// Static module membership, read from each source tree's own declarations.
+// Module membership, read from each source tree's own declarations.
+// Literal relative import() is followed like a static import; computed imports
+// (variables or interpolated templates) must be named as another entry.
 import {lstatSync, readFileSync, realpathSync} from "node:fs";
 import {isAbsolute, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -14,7 +16,8 @@ const inside = (root: string, path: string) => {
   return part !== ".." && !part.startsWith(".." + sep) && !isAbsolute(part);
 };
 
-/** Static declarations, including type imports and re-exports. Data strings,
+/** Declarations, including type imports, re-exports and literal relative
+ * import() calls. Data strings,
  * computed imports and package resolution cannot invent file inputs. Each
  * graph reads fresh bytes; closures share only this graph's parsed references.
  * Module-relative URL assets are declarations too. Dot-only positions are
@@ -39,7 +42,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       const assets: string[] = [];
       const inspect = (node: Node): void => {
         const specifier = isImportDeclaration(node) || isExportDeclaration(node) ? node.moduleSpecifier
-          : isImportEqualsDeclaration(node) && isExternalModuleReference(node.moduleReference) ? node.moduleReference.expression : undefined;
+          : isImportEqualsDeclaration(node) && isExternalModuleReference(node.moduleReference) ? node.moduleReference.expression
+          : ast.isCallExpression(node) && node.expression.kind === ast.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
         if (specifier && isStringLiteralLikeNode(specifier) && /^\.\.?\//.test(specifier.text)) imports.push(specifier.text);
         if (ast.isNewExpression(node) && ast.isIdentifier(node.expression) && node.expression.text === "URL"
           && node.arguments?.length === 2) {
