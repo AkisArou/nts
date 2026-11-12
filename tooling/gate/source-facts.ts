@@ -10,8 +10,8 @@ let syntax:Syntax|undefined;
 export function sourceSyntax():Syntax{return syntax??=createRequire(import.meta.url)('typescript/ast') as Syntax;}
 export type SourceBinding={value:Node;member?:string;kind:'value'|'parameter'|'function'};
 export type SourceInput={file:string;source:string;parseFile?:string};
-/** At most sixteen source leases, and normally at most two MiB of text, are
- * retained together. One unusually large module is processed on its own. */
+/** At most sixteen source leases and two MiB of leased source text per batch.
+ * One larger module runs alone; the iterator also holds one pending input. */
 export const SOURCE_BATCH_MODULES=16;
 export const SOURCE_BATCH_BYTES=2*1024*1024;
 
@@ -73,7 +73,7 @@ export class SourceFacts {
         this.variables.push(node);
         if(node.initializer){
           if(ast.isIdentifier(node.name))values.set(node.name.text,{value:node.initializer,kind:'value'});
-          else if(ast.isObjectBindingPattern(node.name))for(const entry of node.name.elements)if(ast.isIdentifier(entry.name))
+          else if(ast.isObjectBindingPattern(node.name))for(const entry of node.name.elements)if(entry.name&&ast.isIdentifier(entry.name))
             values.set(entry.name.text,{value:node.initializer,member:entry.propertyName?this.code(entry.propertyName):entry.name.text,kind:'value'});
         }
       }
@@ -158,7 +158,7 @@ export class SourceFacts {
       for(let pass=0;pass<3;pass++)for(const variable of this.variables)if(variable.initializer){
         const value=name(variable.initializer);
         if(ast.isIdentifier(variable.name)&&/^(?:process|fs|fs\/promises|os|performance|Date)(?:\.|$)/.test(value))this.ambientAliases.set(variable.name.text,value);
-        if(ast.isObjectBindingPattern(variable.name))for(const entry of variable.name.elements)if(ast.isIdentifier(entry.name))
+        if(ast.isObjectBindingPattern(variable.name))for(const entry of variable.name.elements)if(entry.name&&ast.isIdentifier(entry.name))
           this.ambientAliases.set(entry.name.text,value+'.'+(entry.propertyName?this.code(entry.propertyName):entry.name.text));
       }
     }
@@ -204,7 +204,8 @@ export class GeneratedSourceFacts {
 
 /** The public sync API batches retained-source requests through generators.
  * Inspect and release one bounded batch before reading the next one. */
-export function inspectSourceBatches(api:import('typescript/sync').API,inputs:Iterable<SourceInput>,inspect:(facts:SourceFacts)=>void):void{
+export function inspectSourceBatches(api:import('typescript/sync').API,inputs:Iterable<SourceInput>,inspect:(facts:SourceFacts)=>void):{modules:number;batches:number;largestBatchModules:number;largestBatchBytes:number}{
+  const totals={modules:0,batches:0,largestBatchModules:0,largestBatchBytes:0};
   const iterator=inputs[Symbol.iterator]();let next=iterator.next();
   while(!next.done){
     const batch:SourceInput[]=[];let bytes=0;
@@ -213,7 +214,9 @@ export function inspectSourceBatches(api:import('typescript/sync').API,inputs:It
       batch.push(input);bytes+=size;next=iterator.next();
     }
     const leases=api.batch(...batch.map(input=>api.createSourceFile.gen(input.parseFile??input.file,input.source)));
+    totals.modules+=batch.length;totals.batches++;totals.largestBatchModules=Math.max(totals.largestBatchModules,batch.length);totals.largestBatchBytes=Math.max(totals.largestBatchBytes,bytes);
     try{for(let i=0;i<batch.length;i++){const input=batch[i]!;inspect(new SourceFacts(input.file,input.source,leases[i]!.sourceFile));}}
     finally{for(const lease of leases)lease.dispose();}
   }
+  return totals;
 }

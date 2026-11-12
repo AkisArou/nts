@@ -46,7 +46,7 @@ export function inspectModuleAsync(rootDirectory:string,file:string,source:strin
     const value=node.initializer;
     if(ast.isCallExpression(value)&&ast.isIdentifier(value.expression)&&value.expression.text==='require'&&value.arguments[0]&&ast.isStringLiteralLikeNode(value.arguments[0])&&['node:worker_threads','worker_threads'].includes(value.arguments[0].text)){
       if(ast.isIdentifier(node.name))workers.add(node.name.text+'.Worker');
-      else if(ast.isObjectBindingPattern(node.name))for(const name of node.name.elements)if(ast.isIdentifier(name.name)&&(name.propertyName?facts.code(name.propertyName):name.name.text)==='Worker')workers.add(name.name.text);
+      else if(ast.isObjectBindingPattern(node.name))for(const name of node.name.elements)if(name.name&&ast.isIdentifier(name.name)&&(name.propertyName?facts.code(name.propertyName):name.name.text)==='Worker')workers.add(name.name.text);
     }
   }
   const target=(node:Node,seen=new Set<string>()):string|undefined=>{

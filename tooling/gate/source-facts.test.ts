@@ -1,0 +1,49 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {SourceFacts,GeneratedSourceFacts,inspectSourceBatches,SOURCE_BATCH_BYTES,SOURCE_BATCH_MODULES} from './source-facts.ts';
+
+const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
+
+test('one structural pass supplies lexical bindings, parents, subtree calls and detached edges',()=>{
+  const api=new API(),source=`import {writeFileSync as write} from 'node:fs';
+export {value} from './value.ts';const data=new URL('./input.json',import.meta.url);
+function first(){const file='first';write(file,JSON.stringify({ok:true}));}
+function second(){const file='second';write(file,'data');}
+const pending=import('./dynamic.ts');`;
+  const lease=api.createSourceFile('facts.ts',source);
+  try{
+    const facts=new SourceFacts('facts.ts',source,lease.sourceFile),ast=facts.ast;
+    const writes=facts.calls.filter(call=>facts.name(call.expression)==='fs.writeFileSync');assert.equal(writes.length,2);
+    assert.equal(facts.code(facts.resolve(writes[0]!.arguments[0]!)),"'first'");
+    assert.equal(facts.code(facts.resolve(writes[1]!.arguments[0]!)),"'second'");
+    const functions=facts.ofKind(ast.SyntaxKind.FunctionDeclaration);assert.equal(functions.length,2);
+    assert.equal(facts.callsWithin(functions[0]!).length,2);assert.equal(facts.callsWithin(functions[1]!).length,1);
+    assert.ok([...facts.ancestors(writes[0]!)].includes(functions[0]!));
+    assert.deepEqual(facts.moduleDeclarations(),{imports:['./value.ts','./dynamic.ts'],assets:['./input.json']});
+    assert.equal(facts.line(source.indexOf('function second')),4);
+  }finally{lease.dispose();api.close();}
+});
+
+test('generated source is parsed once per parent session and shares its structural rows',()=>{
+  const api=new API(),generated=new GeneratedSourceFacts(api,'parent.test.ts');
+  try{
+    const source='const result=await import("./result.ts");';
+    const first=generated.get(source);assert.equal(generated.get(source),first);
+    assert.equal(first.topLevelAwaits.length,1);
+    generated.shell('printf ready > "$ready"',12);generated.shell('printf ready > "$ready"',12);
+    assert.equal(generated.shells.length,1);assert.equal(generated.shells[0]!.shell.redirections.length,1);
+  }finally{generated.close();api.close();}
+});
+
+test('source leases are batched by both module count and bytes, with an oversized module alone',()=>{
+  const api=new API(),large='/*'+'x'.repeat(SOURCE_BATCH_BYTES)+'*/';
+  const inputs=[{file:'small.ts',source:'export const small=1;'}, {file:'large.ts',source:large},
+    ...Array.from({length:2*SOURCE_BATCH_MODULES+1},(_,i)=>({file:'entry-'+i+'.ts',source:'export const value='+i+';'}))];
+  const visited:string[]=[];
+  try{
+    const result=inspectSourceBatches(api,inputs,facts=>visited.push(facts.file));
+    assert.deepEqual(visited,inputs.map(input=>input.file));
+    assert.deepEqual(result,{modules:inputs.length,batches:5,largestBatchModules:SOURCE_BATCH_MODULES,largestBatchBytes:Buffer.byteLength(large)});
+  }finally{api.close();}
+});
