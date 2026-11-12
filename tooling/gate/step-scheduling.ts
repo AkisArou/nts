@@ -55,7 +55,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const nameOrder = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
@@ -339,6 +339,13 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
 
 /** A case's key: what its tool calls it, a path or a name, printable and bounded. */
 const CASE_KEY = /^[^\u0000-\u001f\u007f]{1,512}$/;
+export type CaseIdentity={step:string;backend:string;path:string};
+/** The version-two history key. Compiler and content identities never enter it. */
+export function caseMemoryKey(identity:CaseIdentity):string{return JSON.stringify([identity.step,identity.backend,identity.path]);}
+function compositeCaseKey(key:string):boolean{
+  try{const value:unknown=JSON.parse(key);return CASE_KEY.test(key)&&Array.isArray(value)&&value.length===3&&value.every(part=>typeof part==='string')&&KEY.test(value[0])&&value[2].length>0;}
+  catch{return false;}
+}
 /** Each case's last few peaks, oldest first, by its key. */
 export type CaseHistory = ReadonlyMap<string, readonly number[]>;
 export type CaseObservation = { key: string; peak: number };
@@ -349,15 +356,23 @@ export function caseHistoryFile(step: string, env: NodeJS.ProcessEnv = process.e
   return join(dirname(historyFile(env, root)), "cases", `${step}.json`);
 }
 
-/** The case history in `file`; missing, corrupt or of another version, an empty one. */
+/** Version one used subject paths for program-oracles. Migrate once at the
+ * reader boundary; every writer publishes only composite version-two keys. */
 export function readCaseHistory(file: string): CaseHistory {
   let value: unknown;
   try { value = JSON.parse(readFileSync(file, "utf8")); } catch { return new Map(); }
-  if (!record(value) || value.version !== 1 || !keys(value, ["version", "cases"]) || !record(value.cases)) return new Map();
+  if (!record(value) || (value.version!==1&&value.version!==2) || !keys(value, ["version", "cases"]) || !record(value.cases)) return new Map();
   const cases = new Map<string, readonly number[]>();
   for (const [key, peaks] of Object.entries(value.cases)) {
     if (!CASE_KEY.test(key) || !Array.isArray(peaks) || peaks.length === 0 || peaks.length > KEPT_PEAKS || !peaks.every(bytes)) return new Map();
-    cases.set(key, peaks);
+    const step=basename(file,'.json');
+    if(!KEY.test(step))return new Map();
+    const migrated=value.version===1&&!compositeCaseKey(key)?caseMemoryKey({step,backend:step==='program-oracles'?'node':'',path:key}):key;
+    if(!compositeCaseKey(migrated))return new Map();
+    const previous=cases.get(migrated);
+    // Mixed v1 histories have no cross-key timestamps. Keep the largest
+    // measured peaks when old and composite keys converge, never lose one.
+    cases.set(migrated,previous?[...previous,...peaks].sort((a,b)=>a-b).slice(-KEPT_PEAKS):peaks);
   }
   return cases;
 }
@@ -385,11 +400,11 @@ export function writeCaseHistory(file: string, observed: Iterable<CaseObservatio
     if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
     const cases = new Map(readCaseHistory(file));
     for (const row of observed) {
-      if (!CASE_KEY.test(row.key) || !bytes(row.peak)) continue;
+      if (!compositeCaseKey(row.key) || !bytes(row.peak)) continue;
       cases.set(row.key, [...cases.get(row.key) ?? [], row.peak].slice(-KEPT_PEAKS));
     }
     const sorted = Object.fromEntries([...cases].sort(([a], [b]) => nameOrder(a, b)));
-    writeFileSync(pending, JSON.stringify({ version: 1, cases: sorted }) + "\n", { flag: "wx", mode: 0o600 });
+    writeFileSync(pending, JSON.stringify({ version: 2, cases: sorted }) + "\n", { flag: "wx", mode: 0o600 });
     renameSync(pending, file);
     return;
   } catch (error) { return error instanceof Error ? error.message : String(error); }

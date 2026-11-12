@@ -1,9 +1,8 @@
 // The memory owner of one tokened case. Forecasts decide admission; the
 // independent hard cap decides whether the case exhausted its budget.
 import {isAbsolute,relative,resolve} from 'node:path';
-import {caseReservation,peakReservation,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
+import {caseMemoryKey,caseReservation,peakReservation,type CaseIdentity,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 
-export type CaseIdentity={step:string;backend:string;path:string};
 export type CaseMemoryMeter={charge():number;peak():number;close():void};
 export type CaseMemoryEffects={
   history(step:string):CaseHistory;
@@ -21,10 +20,6 @@ export function caseIdentity(step:string,context:Record<string,unknown>,root:str
   const backend=context.backend;
   if(backend!==undefined&&typeof backend!=='string')throw Error(`case memory: ${step} has an invalid backend`);
   return {step,backend:backend??'',path:local.replaceAll('\\','/').replace(/\/$/,'')};
-}
-
-export function caseMemoryKey(identity:CaseIdentity):string {
-  return JSON.stringify([identity.step,identity.backend,identity.path]);
 }
 
 const positive=(bytes:number,what:string)=>{
@@ -46,10 +41,7 @@ export class CaseMemoryLease {
   #closed=false;
   constructor(identity:CaseIdentity,effects:CaseMemoryEffects){
     this.identity=identity;this.key=caseMemoryKey(identity);this.#effects=effects;
-    const history=effects.history(identity.step);
-    // The former oracle-only owner wrote subject-path keys. Retain those
-    // measured peaks until this owner has written the stable composite key.
-    this.forecast=caseReservation(history,this.key)??(identity.step==='program-oracles'&&identity.backend==='node'?caseReservation(history,identity.path):undefined);
+    this.forecast=caseReservation(effects.history(identity.step),this.key);
   }
   /** Known cases keep their forecast; growth beyond it and unknown cases
    * use exactly the ledger's live-use-plus-margin arithmetic. */

@@ -15,7 +15,7 @@ import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
-import {RESERVATION_PER_PEAK, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
+import {RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
   unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
@@ -671,17 +671,33 @@ test("a case's peaks are kept, by its key, and it reserves as a unit does; a cas
   const own = testScratch(t, "case-history"), env = { NTS_GATE_COSTS_DIR: join(own, "costs") };
   mkdirSync(env.NTS_GATE_COSTS_DIR);
   const file = caseHistoryFile("program-oracles", env);
+  const key=(path:string)=>caseMemoryKey({step:'program-oracles',backend:'node',path});
   assert.equal(file, join(own, "costs", "cases", "program-oracles.json"));
   assert.equal(readCaseHistory(file).size, 0);
   for (let run = 1; run <= KEPT_PEAKS + 1; run++)
-    assert.equal(writeCaseHistory(file, [{ key: "benchmarks/cases/heavy", peak: run * GiB }, { key: "tests/programs/light", peak: 140 * MiB }]), undefined);
+    assert.equal(writeCaseHistory(file, [{ key: key("benchmarks/cases/heavy"), peak: run * GiB }, { key: key("tests/programs/light"), peak: 140 * MiB }]), undefined);
   const history = readCaseHistory(file);
-  assert.deepEqual(history.get("benchmarks/cases/heavy"), Array.from({ length: KEPT_PEAKS }, (_, i) => (i + 2) * GiB), "the last few, oldest first");
-  assert.equal(caseReservation(history, "benchmarks/cases/heavy"), peakReservation([(KEPT_PEAKS + 1) * GiB]));
-  assert.equal(caseReservation(history, "tests/programs/light"), peakReservation([140 * MiB]));
-  assert.equal(caseReservation(history, "tests/programs/new"), undefined);
+  assert.deepEqual(history.get(key("benchmarks/cases/heavy")), Array.from({ length: KEPT_PEAKS }, (_, i) => (i + 2) * GiB), "the last few, oldest first");
+  assert.equal(caseReservation(history,key("benchmarks/cases/heavy")), peakReservation([(KEPT_PEAKS + 1) * GiB]));
+  assert.equal(caseReservation(history,key("tests/programs/light")), peakReservation([140 * MiB]));
+  assert.equal(caseReservation(history,key("tests/programs/new")), undefined);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,2);
   writeFileSync(file, '{"version":1,"cases":{"x":[-1]}}');
   assert.equal(readCaseHistory(file).size, 0, "a corrupt history is an empty one");
+});
+
+test('version-one oracle subject history migrates to composite keys and retains converging measured peaks',t=>{
+  const root=testScratch(t,'case-history-migration'),file=join(root,'program-oracles.json'),subject='tests/programs/example';
+  const key=caseMemoryKey({step:'program-oracles',backend:'node',path:subject});
+  writeFileSync(file,JSON.stringify({version:1,cases:{[subject]:[600*MiB],[key]:[300*MiB]}}));
+  const history=readCaseHistory(file);
+  assert.equal(history.has(subject),false);assert.deepEqual(history.get(key),[300*MiB,600*MiB]);
+  assert.equal(caseReservation(history,key),peakReservation([600*MiB]));
+  assert.equal(writeCaseHistory(file,[{key,peak:400*MiB}]),undefined);
+  const recorded=JSON.parse(readFileSync(file,'utf8'));
+  assert.equal(recorded.version,2);assert.deepEqual(Object.keys(recorded.cases),[key]);
+  assert.deepEqual(readCaseHistory(file).get(key),[300*MiB,600*MiB,400*MiB]);
+  assert.equal(caseReservation(readCaseHistory(file),key),peakReservation([600*MiB]));
 });
 
 test("a sized token is answered once its step's slice can hold it: its runaway bound follows its held tokens' sizes", t => {

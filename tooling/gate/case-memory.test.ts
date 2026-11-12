@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CaseMemoryLease,caseIdentity,caseMemoryKey,type CaseMemoryEffects} from './case-memory.ts';
-import {peakReservation,type CaseObservation} from './step-scheduling.ts';
+import {CaseMemoryLease,caseIdentity,type CaseMemoryEffects} from './case-memory.ts';
+import {caseMemoryKey,peakReservation,type CaseObservation} from './step-scheduling.ts';
 
 const MiB=2**20;
 function fixture(known?:number){
@@ -34,16 +34,6 @@ test('a known case asks for its own peak, including when it exceeds the entire i
   const grownGrant=f.lease.bytes;
   assert.ok(f.lease.bytes<=grownGrant);
   assert.ok(2*f.lease.bytes>grownGrant,'a second large case must wait, not borrow the same promise');
-});
-
-test('the shared owner retains the former oracle subject peaks until its composite key is measured',()=>{
-  const identity={step:'program-oracles',backend:'node',path:'tests/programs/example'};
-  const history=new Map([[identity.path,[600*MiB]]]);
-  const effects:CaseMemoryEffects={history:()=>history,completed:()=>{},open:()=>{throw Error('no scope needed');}};
-  assert.equal(new CaseMemoryLease(identity,effects).forecast,peakReservation([600*MiB]));
-  history.set(caseMemoryKey(identity),[300*MiB]);
-  assert.equal(new CaseMemoryLease(identity,effects).forecast,peakReservation([300*MiB]));
-  assert.equal(new CaseMemoryLease({...identity,step:'benches'},effects).forecast,undefined);
 });
 
 test('an unknown case charges live use and margin, and records its own peak',()=>{

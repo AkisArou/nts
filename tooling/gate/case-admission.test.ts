@@ -10,8 +10,7 @@ import {moduleClosure} from './module-closure-fixture.ts';
 import {gateEnvironment} from './canonical-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts';
-import {caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
-import {caseMemoryKey} from './case-memory.ts';
+import {caseMemoryKey,caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
 import {tokenCommand} from './token-command.ts';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url)),GiB=2**30,MiB=2**20;
