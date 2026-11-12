@@ -240,7 +240,7 @@ test("the offline Node migration inventory owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node migration work-list inventory"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
     for (const step of ["addons", "profile", "integrity", "bench-agree", "interop"])
       assert.ok(!gateSteps(rules).includes(step), `${path} does not execute ${step}`);
   }
@@ -252,7 +252,7 @@ test("the offline Node transcription proof owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node transcription proof"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
   }
   assert.ok(owed([{path:"tooling/conformance/unplaced-transcription.mjs",added:true}]).some(rule => rule.full));
 });
@@ -366,7 +366,7 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
 });
 
 test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {
-  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host","tooling-types"]);
+  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host","tooling-types","gate-inputs"]);
   for (const path of ["results/benchmarks/cells.tsv","results/typed-release/cells.tsv","results/suite/corpus.md","results/a-new-tool/measurements.json"]) {
     const got=stepsFor(path);
     assert.ok(got.length>0);
@@ -671,7 +671,7 @@ test("inferred quoted-basename reach cannot place the host project",()=>{
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
-  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
+  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','gate-inputs','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {

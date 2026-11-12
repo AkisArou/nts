@@ -73,7 +73,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
 import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
@@ -81,6 +81,7 @@ import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { moduleClosure } from "./module-closure.ts";
+import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
 /**
@@ -103,7 +104,7 @@ export const SELECTOR_POLICY_DATA = [
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
 
-export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types"];
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types", "gate-inputs"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
 /**
@@ -207,6 +208,7 @@ export const LANDING = {
   tooling: { form: "as-is" },
   "test-host": { form: "tree" },
   "tooling-types": { form: "tree" },
+  "gate-inputs": { form: "tree" },
   // The pin, the inventory and the features audit: seconds, and what a change
   // to a feature's classification owes for what it classified.
   test262: { form: "as-is" },
@@ -349,6 +351,7 @@ export const ASKS = {
   tooling: ["valid", "do the gate's own tools pass their tests (tokens, owed)"],
   "test-host": ["hygiene", "do tooling tests and their dependencies obey host observation ownership"],
   "tooling-types": ["hygiene", "does every tooling module keep or lower its strict diagnostic count"],
+  "gate-inputs": ["hygiene", "does every newly placed gate input keep the full-fallback inventory from growing"],
 };
 
 /** The comparisons a lowering change owes, each with the question only it answers. */
@@ -523,6 +526,48 @@ export const RULES = [
     ],
   },
   {
+    name: "shared selector and toolchain policy",
+    // The target API determines corpus membership, the comment lexer decides
+    // whether compiler work is owed, and package/toolchain pins choose the
+    // implementations every step invokes. Their reach is the gate itself.
+    when: (/** @type {string} */ p) => SELECTOR_POLICY_DATA.includes(/** @type {string} */ p) || p === ".tool-versions",
+    full: true,
+    steps: [],
+    arms: [],
+  },
+  {
+    name: "ungated React implementation and conformance",
+    when: (/** @type {string} */ p) => p.startsWith("runtime/react/"),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "valid", asks: "the standalone React conformance reader, outside the gate", run: "runtime/react/conformance/upstream-tests/run.ts" }],
+  },
+  {
+    name: "ungated SDK consistency and coverage",
+    when: (/** @type {string} */ p) => p.startsWith("runtime/sdk/"),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "valid", asks: "the standalone SDK readers, outside the gate", run: "runtime/sdk/tools/check-consistency.py; runtime/sdk/tools/check-coverage.py" }],
+  },
+  {
+    // Specific gated JSON/provider readers still add their own obligations.
+    // The broader witness suites are standalone, not a core gate corpus.
+    name: "standalone ECMAScript provider witnesses",
+    when: (/** @type {string} */ p) => /^runtime\/ecmascript\/(?:src|providers|tests|tools)\//.test(/** @type {string} */ p)
+      || /^runtime\/ecmascript\/[^/]+\.(?:md|json)$/.test(p)
+      || p.startsWith("tooling/conformance/ecmascript/"),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "valid", asks: "the provider's standalone tests and ICU witnesses, outside the gate", run: "runtime/ecmascript/tests; runtime/ecmascript/tools/icu.ts" }],
+  },
+  {
+    name: "standalone agreement fixtures",
+    when: (/** @type {string} */ p) => p.startsWith("tests/agreements/"),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "answers", asks: "the standalone agreement reader, outside the gate; migrate/table.ts names destinations only", run: "node tooling/conformance/agreement.mjs" }],
+  },
+  {
     name: "reference counting",
     when: (p) => /^compiler\/core\/src\/hir\/(rc|own)\.rs$/.test(p),
     steps: ["rc", "llvm-rc", "memory"],
@@ -667,7 +712,9 @@ export const RULES = [
     // The runner decides what every step is given and how a verdict is read:
     // a change to it can change any step's answer.
     name: "the gate's runner",
-    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|step-table\.mjs|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
+    // step-successors routes historical verdict/budget identities, while
+    // memory-watch supplies the peak accounting used to admit every step.
+    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|step-table\.mjs|step-successors\.ts|memory-watch\.ts|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
     // Every step, the wide ones too: it runs them all, the full run's among them.
     full: true,
     wide: true,
@@ -890,7 +937,22 @@ export const RULES = [
     // Read by two steps and by people; no program compiles a page of it.
     name: "documentation",
     when: (p) => /\.md$/.test(p) && !benchmarkRecord(p) && !/^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
+    settled: true,
     steps: ["records", "primitives"],
+    arms: [],
+  },
+  {
+    name: "notes in corpus and runtime trees",
+    when: (/** @type {string} */ p) => /\.md$/.test(p) && /^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
+    settled: true,
+    steps: [],
+    arms: [],
+  },
+  {
+    name: "license notices",
+    when: (/** @type {string} */ p) => /(?:^|\/)(?:LICENSE|COPYING)(?:[.-][^/]*)?$/.test(/** @type {string} */ p),
+    settled: true,
+    steps: [],
     arms: [],
   },
   {
@@ -1109,7 +1171,7 @@ function nodeHarness(path) {
 }
 
 /** Ordinary changes retain the compiled checks and cheap tree invariants. */
-const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host", "tooling-types"], arms: [] };
+const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths", "test-host", "tooling-types", "gate-inputs"], arms: [] };
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
@@ -1870,7 +1932,7 @@ export function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 12).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 13).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
@@ -1886,6 +1948,20 @@ export function selfTest() {
 
 function main() {
   const argv = process.argv.slice(2);
+  if (argv.includes("--full-census")) {
+    if(argv.some(arg=>!["--full-census","--record","--initialize","--json"].includes(arg)))throw Error("usage: owed.mjs --full-census [--record [--initialize]] [--json]");
+    const {census,problems}=runFullGateCensus(TREE,()=>{
+      const paths=execFileSync("git",["ls-files","-z","--cached"],{cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean);
+      return collectFullGateCensus(paths,path=>{
+        const rules=owed([{path,added:false}]);
+        return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name)};
+      },inputDirectoryDeclarations());
+    },{record:argv.includes("--record"),initialize:argv.includes("--initialize")});
+    if(argv.includes("--json"))console.log(JSON.stringify({census,problems},null,2));
+    else console.log(`gate input placement: ${census.full.length} of ${census.tracked} tracked files owe the full gate; ${census.directories.length} directory declarations`);
+    if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
+    return;
+  }
   const broken = selfTest();
   if (broken) {
     console.log(`  NOT MEASURED: self-test failed -- ${broken}`);

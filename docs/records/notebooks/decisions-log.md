@@ -2194,3 +2194,22 @@ readers accept CPU only from the matching measure. Receipts preserve their
 basis, imported work has zero executed CPU in both comparisons, and combined
 summaries partition mixed-basis totals. Separate build preparation retains its
 named rusage basis. Governs [the machine](../../workflow.md#the-machine).
+
+## Declared readers place gate inputs (11-12)
+
+The #722 fixture's `${configDir}/tooling/**/*` string discharged an unknown
+tool's full-gate obligation. #723 separates placement from inferred reach:
+canonical step inputs, collected tests, parsed imports and named module-relative
+URL assets place files; quoted-text inference can only add checks. Dot-only
+URL positions are anchors. Directory assets place tracked members and the
+census reports each reader and breadth. Traced areas with no gate runner have
+settled rules naming their standalone readers. Untraced paths keep the full
+fallback, held by a tool-written inventory that can only fall.
+
+The whole-tree investigation found that a fixture's runtime wildcard and the
+migration destination table had been claiming unrelated trees. Removing all
+module-text inference would also remove real reader edges, so that conversion
+is separate work (#728). #723 retains its additive reach. A new exact reader
+may retire an old fallback; shared selector, toolchain and supervision policy
+keeps full reach explicitly. Governs
+[landing selection](../../workflow.md#landing-the-landing-check).

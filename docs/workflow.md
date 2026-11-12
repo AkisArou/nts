@@ -140,6 +140,19 @@ already maps them. Examples:
 A Chromium change never waits for the compiler's suites, and a compiler
 change never runs Chromium's.
 
+Placement follows declared readers: canonical step inputs, collected tests,
+static module imports and module-relative `new URL("asset", import.meta.url)`
+expressions. A literal containing only `.` and `..` segments is an anchor and
+declares no input. A named asset declares the file it resolves to, or every
+tracked file beneath it when it resolves to a directory. The census names
+each directory declaration, its reader and its breadth. Conservative path
+inference may add checks; it cannot place a path or remove its full fallback.
+A traced area with no gate reader has a settled rule naming its standalone
+reader. An untraced path keeps the full fallback. `gate-inputs` holds the
+tool-written inventory in `results/gate/full-gate.json`: a newly full path
+fails by name, even if another path leaves the inventory in the same change.
+`node tooling/gate/owed.mjs --full-census --record` can only retire entries.
+
 **Ten minutes or less.** A check that cannot fit moves to the full check.
 The smoke sample is a few hundred TypeScript and test262 cases and the
 examples, on C; the full suites, LLVM, the JVM and the wide steps run after
@@ -504,6 +517,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Declared readers place inputs; inference only adds reach:** module assets
+  use parsed imports and named module-relative URLs. Anchors do not claim
+  trees, directory claims are visible, settled areas name their external
+  readers, and an unplaced-input inventory refuses silent expansion
+  ([log](records/notebooks/decisions-log.md#declared-readers-place-gate-inputs-11-12)).
 
 - **Step CPU is versioned cgroup accounting:** final counters include descendants
   killed without reaping. GNU time stays a named comparison. CPU histories and
