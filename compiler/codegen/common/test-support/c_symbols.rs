@@ -1,12 +1,6 @@
 //! Observe source function symbols from actual C definitions, without pinning
 //! the deterministic private disambiguator in every ABI/body assertion.
 
-pub(crate) fn function_symbol(text: &str, source: &str) -> String {
-    source_symbol(text, source)
-        .unwrap_or_else(|| panic!("no definition of source function `{source}` in {text}"))
-        .to_owned()
-}
-
 pub(crate) fn source_symbol<'a>(text: &'a str, source: &str) -> Option<&'a str> {
     let prefix = format!(
         "__nts_fn_{}_",

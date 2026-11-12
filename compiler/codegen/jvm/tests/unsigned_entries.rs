@@ -7,7 +7,7 @@ use nts_core::hir::{self, HirType, OpKind, ValueId};
 use nts_diagnostics::{Location, SourceId, Span};
 use nts_semantic_schema::Origin;
 
-mod common;
+use crate::common;
 use crate::scratch;
 
 fn function(name: &str, signed: bool, forward: bool) -> hir::Func {

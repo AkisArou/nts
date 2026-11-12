@@ -12,7 +12,7 @@ use nts_core::hir::{Layout, Program};
 use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::Class;
 
-mod common;
+use crate::common;
 
 fn prepared() -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

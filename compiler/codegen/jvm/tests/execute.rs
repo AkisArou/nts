@@ -30,7 +30,7 @@ use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use std::path::{Path, PathBuf};
 
-mod common;
+use crate::common;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");

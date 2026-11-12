@@ -19,7 +19,7 @@ use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
-mod common;
+use crate::common;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");

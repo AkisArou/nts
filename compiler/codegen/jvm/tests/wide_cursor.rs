@@ -13,7 +13,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn a_wide_view_subscript_is_bounded_as_a_long() {

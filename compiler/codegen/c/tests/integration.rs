@@ -10,6 +10,9 @@ mod node_deps;
 #[path = "../../common/test-support/c_symbols.rs"]
 mod c_symbols;
 
+#[path = "../../common/test-support/c_function_symbol.rs"]
+mod c_function_symbol;
+
 #[path = "bitwise.rs"]
 mod bitwise;
 

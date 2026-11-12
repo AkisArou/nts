@@ -21,7 +21,7 @@ use nts_core::hir::Program;
 use nts_frontend_ts::Frontend;
 use std::time::Instant;
 
-mod common;
+use crate::common;
 
 fn prepared() -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

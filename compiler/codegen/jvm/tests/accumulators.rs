@@ -19,7 +19,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 /// Each function's body in a `javap -c -p` listing, keyed by its name.
 fn bodies(listing: &str) -> Vec<(String, String)> {

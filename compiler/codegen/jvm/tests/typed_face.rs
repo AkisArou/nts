@@ -27,7 +27,7 @@
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 const SOURCE: &str = "\
 export type Pair = (a: string, b: string) => void;

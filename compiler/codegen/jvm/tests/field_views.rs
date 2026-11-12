@@ -14,7 +14,7 @@ use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 fn program() -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

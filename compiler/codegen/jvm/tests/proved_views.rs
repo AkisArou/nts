@@ -12,7 +12,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn a_proven_view_access_takes_the_proved_accessor() {

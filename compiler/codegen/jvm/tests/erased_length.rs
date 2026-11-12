@@ -9,7 +9,7 @@
 
 use nts_core::hir::{self, HirType, OpKind, ValueId};
 
-mod common;
+use crate::common;
 
 fn origin() -> nts_semantic_schema::Origin {
     nts_semantic_schema::Origin::source(nts_diagnostics::Location {

@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::process::Output;
 
-mod common;
+use crate::common;
 
 const PROGRAM: &str = r#"package nts.gen;
 import nts.rt.NtsPromise;

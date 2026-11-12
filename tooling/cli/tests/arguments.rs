@@ -2,7 +2,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 #[path = "../src/arguments.rs"]
-mod arguments;
+mod command_table;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
@@ -13,7 +13,7 @@ fn args(values: &[&str]) -> Vec<String> {
 
 #[test]
 fn every_command_rejects_a_bogus_flag_before_doing_work() {
-    for command in arguments::COMMANDS {
+    for command in command_table::COMMANDS {
         let output = Command::new(env!("CARGO_BIN_EXE_nts"))
             .args([command.name, "--nts-unknown-option"])
             .output()
@@ -66,7 +66,7 @@ fn check_cannot_silently_select_c_for_a_backend_flag() {
 #[test]
 fn option_values_and_inline_forms_keep_their_existing_meaning() {
     assert!(
-        arguments::validate(&args(&[
+        command_table::validate(&args(&[
             "bind-c",
             "--clang",
             "--target=x86_64-linux-gnu",
@@ -76,47 +76,53 @@ fn option_values_and_inline_forms_keep_their_existing_meaning() {
         .is_ok()
     );
     assert_eq!(
-        arguments::validate(&args(&["bind-c", "--clang", "--help"])),
+        command_table::validate(&args(&["bind-c", "--clang", "--help"])),
         Ok(false)
     );
     assert_eq!(
-        arguments::validate(&args(&["emit", "--out=here", "--backends=c,llvm"])),
+        command_table::validate(&args(&["emit", "--out=here", "--backends=c,llvm"])),
         Ok(false)
     );
-    assert_eq!(arguments::validate(&args(&["emit-wasm"])), Ok(false));
+    assert_eq!(command_table::validate(&args(&["emit-wasm"])), Ok(false));
     for values in [
         &["emit-c", "--out=here"][..],
         &["check", "--help", "--bogus"],
         &["hir", "--backend"],
         &["emit", "--out="],
     ] {
-        assert!(arguments::validate(&args(values)).is_err(), "{values:?}");
+        assert!(
+            command_table::validate(&args(values)).is_err(),
+            "{values:?}"
+        );
     }
-    assert_eq!(arguments::validate(&args(&["check", "--rc"])), Ok(false));
     assert_eq!(
-        arguments::validate(&args(&["frontend", "--checkers", "4", "project"])),
+        command_table::validate(&args(&["check", "--rc"])),
         Ok(false)
     );
     assert_eq!(
-        arguments::validate(&args(&["deps", "--checkers", "1", "--json"])),
+        command_table::validate(&args(&["frontend", "--checkers", "4", "project"])),
+        Ok(false)
+    );
+    assert_eq!(
+        command_table::validate(&args(&["deps", "--checkers", "1", "--json"])),
         Ok(false)
     );
     for deleted in ["--decompose", "--calls", "--constants", "--workers"] {
-        assert!(arguments::validate(&args(&["frontend", deleted])).is_err());
+        assert!(command_table::validate(&args(&["frontend", deleted])).is_err());
     }
-    assert!(arguments::takes_value("--backend"));
-    assert!(arguments::takes_value("--checkers"));
-    assert!(!arguments::takes_value("--rc"));
+    assert!(command_table::takes_value("--backend"));
+    assert!(command_table::takes_value("--checkers"));
+    assert!(!command_table::takes_value("--rc"));
 }
 
 #[test]
 fn partial_is_an_explicit_build_option_only() {
     assert_eq!(
-        arguments::validate(&args(&["build", "--partial"])),
+        command_table::validate(&args(&["build", "--partial"])),
         Ok(false)
     );
     for command in ["emit", "emit-c", "emit-llvm", "emit-jvm", "check"] {
-        assert!(arguments::validate(&args(&[command, "--partial"])).is_err());
+        assert!(command_table::validate(&args(&[command, "--partial"])).is_err());
     }
 }
 
@@ -570,7 +576,7 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
 #[test]
 fn declarations_match_the_options_the_legacy_command_readers_consume() {
     let consumed = reader_groups();
-    for command in arguments::COMMANDS {
+    for command in command_table::COMMANDS {
         let groups: &[&str] = match command.name {
             "frontend" => &["project", "frontend"],
             "build" => &["project", "build", "roots", "provider"],
@@ -631,7 +637,7 @@ fn every_dispatched_command_has_a_validation_declaration() {
             dispatched.insert(name.clone());
         }
     }
-    let declared: BTreeSet<_> = arguments::COMMANDS
+    let declared: BTreeSet<_> = command_table::COMMANDS
         .iter()
         .map(|command| command.name.to_owned())
         .collect();
@@ -680,7 +686,7 @@ fn every_remaining_process_argv_reader_is_in_the_migration_inventory() {
 #[test]
 fn prepared_oracle_is_an_explicit_check_only_file_argument() {
     assert_eq!(
-        arguments::validate(&args(&[
+        command_table::validate(&args(&[
             "check",
             "--oracle-prepared",
             "manifest.json",
@@ -688,15 +694,17 @@ fn prepared_oracle_is_an_explicit_check_only_file_argument() {
         ])),
         Ok(false)
     );
-    assert!(arguments::takes_value("--oracle-prepared"));
-    assert!(arguments::validate(&args(&["check", "--oracle-prepared"])).is_err());
-    assert!(arguments::validate(&args(&["build", "--oracle-prepared", "manifest.json"])).is_err());
+    assert!(command_table::takes_value("--oracle-prepared"));
+    assert!(command_table::validate(&args(&["check", "--oracle-prepared"])).is_err());
+    assert!(
+        command_table::validate(&args(&["build", "--oracle-prepared", "manifest.json"])).is_err()
+    );
 }
 
 #[test]
 fn option_values_are_not_reinterpreted_as_an_oracle_flag() {
     assert_eq!(
-        arguments::value_of(
+        command_table::value_of(
             &args(&["--clang", "--oracle-prepared", "project"]),
             "--oracle-prepared"
         ),
@@ -710,11 +718,11 @@ fn option_values_are_not_reinterpreted_as_an_oracle_flag() {
         "project",
     ]);
     assert_eq!(
-        arguments::value_of(&values, "--oracle-prepared"),
+        command_table::value_of(&values, "--oracle-prepared"),
         Some("owned/manifest.json")
     );
     assert_eq!(
-        arguments::value_of(&args(&["--out=somewhere"]), "--out"),
+        command_table::value_of(&args(&["--out=somewhere"]), "--out"),
         Some("somewhere")
     );
 }

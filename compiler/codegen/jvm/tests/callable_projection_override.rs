@@ -6,7 +6,7 @@ use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::{class::access, read};
 use std::process::Command;
 
-mod common;
+use crate::common;
 use crate::scratch;
 
 const CLASS: &str = r"

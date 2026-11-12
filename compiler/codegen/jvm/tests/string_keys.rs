@@ -12,7 +12,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {

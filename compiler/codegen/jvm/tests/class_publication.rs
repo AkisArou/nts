@@ -3,7 +3,7 @@
 use nts_core::hir::{Field, HirType, Layout, Program};
 use nts_semantic_schema::{PropertyKey, TypeId};
 
-mod common;
+use crate::common;
 use crate::scratch;
 
 fn class_project() -> (scratch::ScratchDir, Program) {

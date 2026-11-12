@@ -13,7 +13,7 @@ use nts_semantic_schema::{
     syntax,
 };
 
-mod common;
+use crate::common;
 
 fn child<'a>(
     snapshot: &'a SemanticSnapshot,

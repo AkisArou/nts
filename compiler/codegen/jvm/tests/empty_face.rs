@@ -23,7 +23,7 @@ use nts_frontend_ts::Frontend;
 use nts_semantic_schema::TypeId;
 use std::path::Path;
 
-mod common;
+use crate::common;
 
 fn prepared(fixture: &str) -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

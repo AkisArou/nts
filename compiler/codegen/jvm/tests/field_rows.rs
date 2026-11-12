@@ -2,7 +2,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it() {

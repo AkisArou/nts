@@ -12,7 +12,7 @@ use camino::Utf8Path;
 use nts_core::hir::{self, HirType, OpKind, ValueId};
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 const CASES: &[(&str, &str, f64)] = &[
     ("$\u{200d}", "viaJoiner", 1.0),

@@ -5,7 +5,7 @@ use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {

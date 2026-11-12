@@ -18,8 +18,7 @@ use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own, the way
 /// a real one is. See `native.rs`'s helper of the same name for why.
-use crate::c_symbols;
-use c_symbols::function_symbol as private_symbol;
+use crate::c_function_symbol::function_symbol as private_symbol;
 
 fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

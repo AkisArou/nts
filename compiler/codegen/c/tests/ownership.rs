@@ -21,8 +21,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
 /// The C for `source`, compiled for reference counting.
-use crate::c_symbols;
-use c_symbols::function_symbol as private_symbol;
+use crate::c_function_symbol::function_symbol as private_symbol;
 
 fn counted(name: &str, source: &str) -> String {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))

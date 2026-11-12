@@ -4,7 +4,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn conflicting_absence_adapters_decline_the_class_by_name() {

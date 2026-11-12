@@ -11,7 +11,7 @@
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 /// Compile `source` as a one-file program, run it through the launcher, and
 /// return `(status, stdout, stderr)`.

@@ -7,6 +7,9 @@ mod scratch;
 #[path = "../../../test-support/runtime_jar.rs"]
 mod runtime_jar_support;
 
+#[path = "common/mod.rs"]
+mod common;
+
 #[path = "accumulators.rs"]
 mod accumulators;
 

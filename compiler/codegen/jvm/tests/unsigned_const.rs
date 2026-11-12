@@ -8,7 +8,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn an_unsigned_literal_at_its_maximum_emits() {

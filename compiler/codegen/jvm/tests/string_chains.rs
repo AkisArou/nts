@@ -1,11 +1,11 @@
 //! A private string carrier changes only a closed, unpublished direct ABI.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use crate::common;
 use camino::Utf8Path;
 use nts_core::hir::string_accumulators::chains::Plan;
 use nts_frontend_ts::Frontend;
 use std::path::Path;
-mod common;
 #[path = "string_chains/pairs.rs"]
 mod pairs;
 

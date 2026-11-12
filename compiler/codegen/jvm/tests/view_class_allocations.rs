@@ -1,8 +1,8 @@
 //! The requested class is the original view allocation, including species.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use crate::common;
 use camino::Utf8Path;
-mod common;
 
 fn listing(dir: &std::path::Path, class: &str) -> String {
     let javap = common::tool("javap").expect("view allocation guard requires the pinned JDK");

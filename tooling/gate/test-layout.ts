@@ -63,7 +63,8 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
         if(names.has(name))problems.push(file+': module '+name+' is declared twice');names.add(name);
         const resolved=resolve(tests,path),helperFile=normalize(relative(root,resolved));
         if(path.includes('/')){
-          if(helperFile.startsWith('../')||!/(?:^|\/)(?:test-support|tests\/support)\/.+\.rs$/.test(helperFile)||!existsSync(resolved))
+          const localHelper=resolved.startsWith(resolve(tests)+'/')&&normalize(relative(tests,resolved)).includes('/');
+          if(helperFile.startsWith('../')||!localHelper&&!/(?:^|\/)test-support\/.+\.rs$/.test(helperFile)||!existsSync(resolved))
             problems.push(file+': shared helper must be an existing test-support source: '+path);
           if(helpers.some(helper=>helper.file===helperFile))problems.push(file+': shared helper is compiled twice: '+path);
           helpers.push({name,file:helperFile});continue;

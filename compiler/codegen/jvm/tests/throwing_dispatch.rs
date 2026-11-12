@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 const CASE: &str = "a-throwing-override-escapes-a-try-through-a-base-that-cannot-throw";
 

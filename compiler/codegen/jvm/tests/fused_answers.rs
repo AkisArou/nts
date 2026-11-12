@@ -11,7 +11,7 @@
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 #[test]
 fn an_answer_read_only_as_a_float_is_never_boxed() {

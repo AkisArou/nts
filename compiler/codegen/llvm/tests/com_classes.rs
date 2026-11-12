@@ -65,8 +65,7 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
 }
 "#;
 
-use crate::c_symbols;
-use c_symbols::function_symbol;
+use crate::c_function_symbol::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with(name, BINDING, source)

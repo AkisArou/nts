@@ -15,7 +15,7 @@
 
 use nts_core::hir::{self, BinOp, BlockId, HirType, OpKind, ValueId};
 
-mod common;
+use crate::common;
 
 const U32: HirType = HirType::Int {
     bits: 32,

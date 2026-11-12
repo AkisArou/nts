@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 use nts_core::hir::{HirType, ManagedType, OpKind, StaticDeclaration, StaticValueKind};
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 const DYNAMIC: &str = "(await import(\"./value.ts\"))";
 const SOURCE: &str = r#"

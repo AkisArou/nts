@@ -13,7 +13,7 @@ use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 /// Two closures stored as values at one signature, so each is a class under
 /// the signature's callable base and is called through the uniform entry.

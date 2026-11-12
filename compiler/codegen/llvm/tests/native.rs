@@ -43,8 +43,7 @@ mod native_lending;
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
-use crate::c_symbols;
-use c_symbols::function_symbol;
+use crate::c_function_symbol::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with_provider(name, source, hir::Memory::NoGc)

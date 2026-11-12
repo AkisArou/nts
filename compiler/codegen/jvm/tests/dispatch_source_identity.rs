@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 use nts_core::hir::{DispatchRoot, features as identity};
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 fn fixture(
     case: &str,

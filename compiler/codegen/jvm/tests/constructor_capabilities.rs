@@ -5,7 +5,7 @@ use camino::Utf8PathBuf;
 use nts_core::hir::{self, Memory};
 use nts_frontend_ts::Frontend;
 
-mod common;
+use crate::common;
 
 struct Scratch(std::path::PathBuf);
 

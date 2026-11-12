@@ -6,7 +6,7 @@ use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::read;
 use std::process::Command;
 
-mod common;
+use crate::common;
 use crate::scratch;
 
 const SOURCE: &str = r"

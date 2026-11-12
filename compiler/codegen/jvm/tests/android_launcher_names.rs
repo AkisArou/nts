@@ -1,10 +1,10 @@
 //! Every on-device initializer emitter is also checked on the host JVM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::common;
+use crate::scratch;
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
 use std::process::Command;
-mod common;
-use crate::scratch;
 
 const HARNESSES: [(&str, &str, &str); 4] = [
     (
