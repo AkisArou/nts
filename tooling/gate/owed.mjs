@@ -1579,6 +1579,7 @@ function stepInputGraph() {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
+    const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1], rawCommand = m[2];
@@ -1635,20 +1636,27 @@ function stepInputGraph() {
         if (seen.has(input)) continue;
         seen.add(input);
         add(input, step);
+        let references=inferred.get(input);
+        if(!references){
         const abs = join(TREE, input);
         let st;
-        try { st = statSync(abs); } catch { continue; }
+        try { st = statSync(abs); } catch { inferred.set(input,{named:[],other:[]});continue; }
         // The runner names every step's tools; reading it would make each step
         // an input to all of them. It owes the full gate by its own rule.
         // owed.mjs and the tests name paths as cases, not as inputs.
-        if (/^tooling\/gate\/(all\.sh|run\.mjs|owed\.mjs|[^/]+\.test\.mjs)$/.test(input)) continue;
-        if (!st.isFile() || !/\.(sh|mjs|js|ts|py)$/.test(input) || st.size > 1 << 20) continue;
+        if (/^tooling\/gate\/(all\.sh|run\.mjs|owed\.mjs|[^/]+\.test\.mjs)$/.test(input)
+          || !st.isFile() || !/\.(sh|mjs|js|ts|py)$/.test(input) || st.size > 1 << 20) {
+          inferred.set(input,{named:[],other:[]});continue;
+        }
         const body = readFileSync(abs, "utf8");
         // A file the script reads or runs beside itself, `join(HERE, "x.tsv")`,
         // `join(HERE, "attempt262-worker.ts")`: a bare name in quotes that
         // exists in the script's directory.
         const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
+        references={named:named(body),other:[...imports(input,body),...beside]};
+        inferred.set(input,references);
+        }
         // These tooling controls supply private fixture roots to the record
         // validator and the session bridge. They read fixture evidence,
         // not this tree's benchmark data. Production readers keep their reach
@@ -1657,8 +1665,8 @@ function stepInputGraph() {
         // commit, and its fixture writes stand-in records; neither reads these.
         const fixtureBenchmarks = step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
             || /^tooling\/full-check\/(?:bench|repository-fixture)\.ts$/.test(input));
-        const referenced = named(body).filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
-        queue.push(...referenced, ...imports(input, body), ...beside);
+        const referenced = references.named.filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
+        queue.push(...referenced, ...references.other);
       }
     }
     // **Hand-overs through the runner.** run.mjs gives one step another's
