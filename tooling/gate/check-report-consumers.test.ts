@@ -253,10 +253,15 @@ test("the npm survey reads diagnostic fields and refuses a broken report", t => 
   writeFileSync(join(root, "tooling/npm-survey/vendored.json"), JSON.stringify([
     {name: "example", root: pkg, entry: join(pkg, "main.ts"), deps: []},
   ]));
-  const run = (mutation: string) => spawnTest(process.execPath, [join(root, "tooling/npm-survey/verdict.ts")], {
+  // The canonical compiler child receives its protocol from the stand-in
+  // executable, so it needs no fixture-only ambient environment variable.
+  const compilerSource=readFileSync(compiler,"utf8");
+  const run = (mutation: string) => {
+    writeFileSync(compiler,compilerSource.replaceAll("process.env.CHECK_MUTATION",JSON.stringify(mutation)));
+    return spawnTest(process.execPath, [join(root, "tooling/npm-survey/verdict.ts")], {
     cwd: root, encoding: "utf8", 
-    env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
-  });
+    env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler},
+  });};
   for (const [mutation, outcome, code] of [["lowering-refusal", "refused", ""], ["typecheck", "typecheck-failed", "TS2304"]]) {
     const result = run(mutation!); assert.equal(result.status, 0, result.stdout + result.stderr);
     const rows = JSON.parse(readFileSync(join(root, "tooling/npm-survey/verdict.json"), "utf8"));
