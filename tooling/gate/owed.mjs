@@ -1336,7 +1336,7 @@ export function tsconfigInputs(config, seen = new Set()) {
  */
 export function interopInputs() {
   return once("interop-inputs", () => {
-    const map = new Map();
+    const map = new InputMap();
     const add = (input, project) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(project); };
     for (const dir of kids("tests/interop")) {
       if (!existsSync(join(TREE, dir, "build.sh"))) continue;
@@ -1352,7 +1352,7 @@ export function interopInputs() {
 
 export function corpusInputs() {
   return once("corpora", () => {
-    const map = new Map();
+    const map = new InputMap();
     const add = (input, corpus) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(corpus); };
     for (const c of CORPORA) {
       for (const dir of c.dirs()) {
@@ -1430,7 +1430,7 @@ function stepInputGraph() {
       });
     };
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
-    const map = new Map();
+    const map = new InputMap();
     const declared = new Set();
     const directories = new Map();
     const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
@@ -1530,9 +1530,42 @@ export function inputDirectoryDeclarations() {
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
 export function covering(map, path) {
+  if (map instanceof InputMap) return map.covering(path);
   const out = new Set();
   for (const [input, names] of map) if (path === input || path.startsWith(`${input}/`)) for (const n of names) out.add(n);
   return out;
+}
+
+/** A tree input has only its own path and its ancestors as possible readers.
+ * Keep declaration order without scanning every other file for every query. */
+/** @extends {Map<string, Set<string>>} */
+class InputMap extends Map {
+  /** @type {Map<string, number>} */
+  #positions = new Map();
+  #next = 0;
+  constructor() { super(); }
+  set(/** @type {string} */ input, /** @type {Set<string>} */ names) {
+    if (!this.has(input)) this.#positions.set(input, this.#next++);
+    return super.set(input, names);
+  }
+  delete(/** @type {string} */ input) {
+    this.#positions.delete(input);
+    return super.delete(input);
+  }
+  clear() { this.#positions.clear(); super.clear(); }
+  covering(/** @type {string} */ path) {
+    const inputs = [];
+    for (let input = path;;) {
+      if (this.has(input)) inputs.push(input);
+      const slash = input.lastIndexOf("/");
+      if (slash < 0) break;
+      input = input.slice(0, slash);
+    }
+    inputs.sort((a, b) => (this.#positions.get(a) ?? 0) - (this.#positions.get(b) ?? 0));
+    const out = new Set();
+    for (const input of inputs) for (const name of this.get(input) ?? []) out.add(name);
+    return out;
+  }
 }
 
 /**
@@ -1545,7 +1578,7 @@ export function covering(map, path) {
  */
 export function embedded() {
   return once("embedded", () => {
-    const map = new Map();
+    const map = new InputMap();
     let text = "";
     try {
       text = execFileSync("git", ["grep", "-nE", "include(_str|_bytes)?!|CARGO_MANIFEST_DIR\"\\),", "--", "*.rs"], { cwd: TREE, encoding: "utf8", maxBuffer: 1 << 26 });

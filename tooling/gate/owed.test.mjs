@@ -17,6 +17,22 @@ import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, i
 import * as policy from "./owed.mjs";
 import {auditTestHost} from "./test-host-audit.ts";
 
+test("input ancestry queries retain declaration order after replacement and reinsertion", () => {
+  const inputs = stepInputs(), paths = ["__input_query__/a/b", "__input_query__", "__input_query__/a", "__input_query_other__"];
+  try {
+    for (const [index, path] of paths.entries()) inputs.set(path, new Set([String(index), "shared"]));
+    const compare = () => {
+      const control = new Map(inputs);
+      for (const path of [...paths, "__input_query__/a/b/child", "__input_query_other__/a"]) {
+        assert.deepEqual([...covering(inputs, path)], [...covering(control, path)], path);
+      }
+    };
+    compare();
+    inputs.set(paths[0], new Set(["replaced"])); compare();
+    inputs.delete(paths[1]); inputs.set(paths[1], new Set(["reinserted"])); compare();
+  } finally { for (const path of paths) inputs.delete(path); }
+});
+
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
 
