@@ -1,3 +1,5 @@
+import {assertStateVersion} from '../gate/state-version.ts';
+import {versionedRecord} from '../gate/state-file.ts';
 // Where the full check keeps its trees, target, runs and state, and the state
 // itself: one JSON file, written whole and renamed into place, so a stopped
 // service resumes from the last complete write and never from half of one.
@@ -246,6 +248,7 @@ export function emptyState(): State {
 export function readState(file: string): State {
   if (!existsSync(file)) return emptyState();
   const value = JSON.parse(readFileSync(file, "utf8")) as State & { records?: RecordsRun };
+  assertStateVersion(value,1,file);
   if (value.version !== 1) throw new Error(`${file}: unknown state version ${String(value.version)}`);
   // One records run for both parts, from before each part kept its own: it was the core's.
   const { records, ...rest } = value;
@@ -258,10 +261,7 @@ export function readState(file: string): State {
 }
 
 export function writeState(file: string, state: State): void {
-  mkdirSync(dirname(file), { recursive: true });
-  const partial = `${file}.${process.pid}.partial`;
-  writeFileSync(partial, JSON.stringify(state, null, 2) + "\n");
-  renameSync(partial, file);
+  versionedRecord(file,1,state);
 }
 
 /** What the hourly count found, and when (service.ts --count). */

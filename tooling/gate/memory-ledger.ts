@@ -1,3 +1,4 @@
+import {assertStateVersion,assertWritableState} from './state-version.ts';
 // The machine's memory ledger: one admission for every heavy job, whoever runs
 // it -- the landing check, an agent's build, the full check -- so that no two
 // jobs count on the same free memory. `reserve` waits until a job may start;
@@ -468,6 +469,7 @@ const keyList = (value: unknown) => value === undefined || (Array.isArray(value)
 
 function parseEntry(text: string, file: string): LedgerEntry {
   const parsed = JSON.parse(text) as Omit<LedgerEntry, "version" | "grows"> & { version: 1 | 2; grows?: string | null };
+  assertStateVersion(parsed,2,file);
   // Version 1 has the same fields and no growth: an admit.ts from before
   // reservations could grow may still write one, so it reads as a request of
   // its own rather than one that stops every decision.
@@ -507,11 +509,14 @@ function readEntries(dir: string, state: State): LedgerEntry[] {
 
 function writeEntry(dir: string, state: State, entry: LedgerEntry): void {
   const temporary = join(dir, `.tmp-${entry.id}`);
+  assertWritableState(entryPath(dir,state,entry.id),2);
+  assertWritableState(temporary,2);
   writeFileSync(temporary, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
   renameSync(temporary, entryPath(dir, state, entry.id));
 }
 
 function removeQuietly(path: string): void {
+  assertWritableState(path,2);
   try { unlinkSync(path); }
   catch (error) { if (!gone(error)) throw error; }
 }
@@ -533,14 +538,14 @@ export function readLedger(dir: string = process.env[LEDGER_ENV] ?? LEDGER_DIR):
 export type LedgerLock = { release(): void };
 
 /** The ledger's lock, held until `release`; null while another holder has it. */
-export function lockLedger(dir: string): LedgerLock | null {
+export function lockLedger(dir: string,waitSeconds=0): LedgerLock | null {
   mkdirSync(dir, { recursive: true });
   const fd = openSync(join(dir, "lock"), "a", 0o600);
   let locked: SpawnSyncReturns<string>;
   try {
     // flock(1) locks the open file description it is handed as fd 8, which
     // this process shares; the lock outlives flock and ends when `fd` closes.
-    locked = spawnSync("flock", ["-n", "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
+    locked = spawnSync("flock", [...(waitSeconds>0?["-w",String(waitSeconds)]:["-n"]), "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
   } catch (error) { closeSync(fd); throw error; }
   if (locked.status === 0) {
     let held = true;
@@ -549,6 +554,25 @@ export function lockLedger(dir: string): LedgerLock | null {
   closeSync(fd);
   if (locked.status === 75) return null;
   throw new Error(`cannot lock the memory ledger in ${dir}: ${locked.error?.message ?? (locked.stderr.trim() || `flock ended ${locked.status ?? locked.signal}`)}`);
+}
+
+// Cleanup must serialize with a newer writer too. A failed lock acquisition
+// leaves the entry for dead-owner reclamation; it never authorizes an unlink.
+// A normal decision holds this lock for milliseconds. An unavailable lock
+// after the existing history-write allowance defers cleanup to reclamation.
+const RELEASE_LOCK_WAIT_SECONDS=10;
+export function releaseLedgerEntries(dir:string,ids:readonly {id:string;state:State}[],what:string,report:(line:string)=>void=console.error,
+  acquire:()=>LedgerLock|null=()=>lockLedger(dir,RELEASE_LOCK_WAIT_SECONDS)):void{
+  let lock:LedgerLock|null=null;
+  try{
+    if(!existsSync(dir))return; // a closed fixture/run stays gone
+    lock=acquire();
+    if(!lock){report(`memory: ${what} release could not lock ${dir} within its cleanup bound; entries left for dead-owner reclamation`);return;}
+    const paths=ids.map(entry=>entryPath(dir,entry.state,entry.id));
+    for(const path of paths)assertWritableState(path,2);
+    for(const path of paths)removeQuietly(path);
+  }catch(error){report(`memory: ${what} release cleanup failed; remaining entries left for dead-owner reclamation: ${error instanceof Error?error.message:String(error)}`);}
+  finally{lock?.release();}
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,7 +1120,7 @@ async function wait(context: Context, self: LedgerEntry, signal: AbortSignal | u
     }
   } catch (error) {
     // Nobody waits for it any more.
-    if (registered) removeQuietly(entryPath(context.dir, "waiting", self.id));
+    if (registered) releaseLedgerEntries(context.dir,[{id:self.id,state:"waiting"}],self.what,context.report);
     throw error;
   }
 }
@@ -1159,9 +1183,8 @@ function holding(self: LedgerEntry, context: Context): Reservation {
       released = true;
       if (growing !== null) {
         growing.withdraw.abort(new Error(`memory: ${self.what}'s reservation was released while it waited to grow`));
-        removeQuietly(entryPath(dir, "waiting", growing.id));
       }
-      removeQuietly(entryPath(dir, "admitted", self.id));
+      releaseLedgerEntries(dir,[...(growing?[{id:growing.id,state:"waiting" as const}]:[]),{id:self.id,state:"admitted"}],self.what,context.report);
     },
   };
 }
@@ -1174,7 +1197,7 @@ function holding(self: LedgerEntry, context: Context): Reservation {
 export async function reserve(request: ReserveRequest, options: ReserveOptions = {}): Promise<Reservation> {
   const env = options.env ?? process.env;
   const dir = resolve(options.dir ?? env[LEDGER_ENV] ?? LEDGER_DIR);
-  const report = options.report ?? (() => {});
+  const report = options.report ?? console.error;
   const what = label(request.what);
   const { priority = "agent" } = request;
   if (request.liveUse && request.bytes !== 0) throw new TypeError("a live job has no byte forecast; pass zero bytes");

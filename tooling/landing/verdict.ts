@@ -1,9 +1,10 @@
+import {futureStateVersion} from '../gate/state-version.ts';
+import {versionedRecord} from '../gate/state-file.ts';
 import {STEP_CPU_MEASURE,GNU_CPU_MEASURE,validGnuTime} from '../gate/step-time.ts';
 // Durable step evidence from the service's actual checked tip. Queue answers
 // and log retention can change independently of this portable receipt.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { durableRecord } from "../gate/durable-record.ts";
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
 import { unrunPlatforms, type UnrunPlatform } from "../gate/verdict-policy.ts";
 import { isListedLine } from "../records/pending.ts";
@@ -76,7 +77,7 @@ export function writeLandingVerdict(home: string, input: {
     landing: input.landing, base: input.base, at: new Date().toISOString(), run: ran.run,
     profile: "nts-dev", binaries: ran.binaries ?? {}, contract: ran.contract, steps, deferred: selected.selection.deferred,
   };
-  durableRecord(verdictPath(home, input.commit), receipt);
+  versionedRecord(verdictPath(home,input.commit),1,receipt,join(home,"verdicts"));
   return receipt;
 }
 
@@ -108,6 +109,7 @@ export function readLandingVerdict(home: string, commit: string, tree: string, c
   let receipt: unknown;
   try { receipt = JSON.parse(readFileSync(verdictPath(home, commit), "utf8")); }
   catch (error) { return fallback("no readable landing verdict: " + (error as Error).message); }
+  const newer=futureStateVersion(receipt,1,verdictPath(home,commit));if(newer)return fallback(newer.message);
   if (!checkedReceipt(receipt)) return fallback("landing verdict has an invalid receipt or outcome");
   if (receipt.commit !== commit || receipt.tree !== tree) return fallback("landing verdict Git identity differs");
   if (!validContract(contract) || receipt.contract.identity !== contract.identity) return fallback("landing verdict environment contract differs");

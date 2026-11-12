@@ -10,12 +10,12 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
+  admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
 import { peakReservation, readCostHistory } from "./step-scheduling.ts";
@@ -1198,4 +1198,33 @@ test("borrowers inherit rank and admission order across multiple ancestors",asyn
   await inner.grow(4*GiB);
   assert.deepEqual(f.decisions.filter(d=>d.grows===inner.id).map(d=>[d.admitted,d.ahead]),[[true,0]]);
   for(const held of [inner,middle,outer])held.release();(await outside).release();
+});
+
+
+test("future ledger entries refuse reads, updates and release without changing their bytes",async t=>{
+  const f=fixture(t),held=await f.ask({bytes:GiB,what:"future owner"});
+  const path=join(f.dir,"admitted",held.id+".json"),original=readFileSync(path,"utf8");
+  const future=JSON.stringify({...JSON.parse(original),version:3,extra:"unknown"})+"\n";
+  writeFileSync(path,future);
+  assert.throws(()=>readLedger(f.dir),/unsupported future state version 3/);
+  await assert.rejects(held.noteOver("future-key"),/unsupported future state version 3/);
+  held.release();
+  assert.match(f.lines.join("\n"),/release cleanup failed.*future state version 3/);
+  assert.equal(readFileSync(path,"utf8"),future);
+});
+
+test("release under a held directory lock reports and leaves reclamation to the next decision",async t=>{
+  const f=fixture(t),child=ownerProcess(t),held=await f.ask({bytes:GiB,what:"blocked release",owner:{pid:child.pid}});
+  const path=join(f.dir,"admitted",held.id+".json"),original=readFileSync(path,"utf8");
+  const lock=lockLedger(f.dir);assert.ok(lock);
+  try{
+    releaseLedgerEntries(f.dir,[{id:held.id,state:"admitted"}],"blocked release",line=>f.lines.push(line),()=>lockLedger(f.dir));
+    assert.equal(readFileSync(path,"utf8"),original);
+    assert.match(f.lines.join("\n"),/blocked release release could not lock.*left for dead-owner reclamation/);
+  }finally{lock.release();}
+  const exited=once(child,"exit");child.stdin!.end();await exited;
+  const next=await f.ask({bytes:GiB,what:"next after failed release"});
+  assert.equal(existsSync(path),false);
+  assert.match(f.lines.join("\n"),/dropped blocked release's reservation.*has exited/);
+  next.release();held.release();
 });

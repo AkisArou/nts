@@ -105,3 +105,15 @@ test("an entirely covered plan executes nothing and new steps remain owed", t =>
   const saved = JSON.parse(readFileSync(verdictPath(f.home, commit), "utf8")) as LandingVerdict;
   assert.equal(saved.profile, "nts-dev");
 });
+
+
+test("a future receipt executes the full plan and refuses a downgrade publication",t=>{
+  const f=fixture(t);writeLandingVerdict(f.home,f.input);
+  const path=verdictPath(f.home,commit),future='{ "version": 2, "unknown": true }\n';
+  writeFileSync(path,future);
+  const requested=["build","tests"],read=readLandingVerdict(f.home,commit,tree,f.contract,requested);
+  assert.deepEqual(read.execute,requested);assert.deepEqual(read.reused,[]);
+  assert.match(read.reason??'',/future state version 2/);
+  assert.throws(()=>writeLandingVerdict(f.home,f.input),/future state version 2/);
+  assert.equal(readFileSync(path,"utf8"),future);
+});

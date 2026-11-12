@@ -1,3 +1,4 @@
+import {futureStateVersion} from '../gate/state-version.ts';
 import {STEP_CPU_MEASURE,GNU_CPU_MEASURE,readStepBaseline} from '../gate/step-time.ts';
 // What a change's landing check runs, and what it leaves to the full check.
 //
@@ -229,9 +230,10 @@ const positive = (value: unknown): value is number => typeof value === "number" 
 const measuredCpu = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 /** The landing check's own record: `{ version: 2, steps: { "<step>" | "<step>:<kind>": { cpu, wall } } }`. */
-export function readLandingCosts(file: string): Map<string, Measured> {
+export function readLandingCosts(file: string,report:(warning:string)=>void=console.error): Map<string, Measured> {
   try {
     const value = JSON.parse(readFileSync(file, "utf8")) as { version?: unknown; steps?: Record<string, unknown> };
+    const newer=futureStateVersion(value,2,file);if(newer){report(newer.message);return new Map();}
     if (value.version !== 2 || !value.steps || typeof value.steps !== "object") return new Map();
     const out = new Map<string, Measured>();
     for (const [key, row] of Object.entries(value.steps)) {

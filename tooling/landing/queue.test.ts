@@ -5,7 +5,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { acquire, holder, withLock } from "./lock.ts";
@@ -124,4 +124,24 @@ test("one owner holds the lock; a dead owner's lock is taken over", t => {
   taken!.release();
   writeFileSync(path, "garbage\n");
   assert.ok(withLock(path, () => true), "an unreadable owner is no owner");
+});
+
+
+test("future queue state refuses reads, transitions and deletions byte for byte",t=>{
+  const q=new Queue(home(t)),entry=q.submit(sha("a"));
+  const queued=join(q.home,"queue",readdirSync(join(q.home,"queue"))[0]!);
+  const checking=join(q.home,"checking.json"),result=join(q.home,"results",entry.id+".json"),status=join(q.home,"status.json");
+  const future='{ "version": 2, "id": "opaque", "extra": true }\n';
+  for(const [path,actions] of [
+    [queued,[()=>q.waiting(),()=>q.take(),()=>q.withdraw(entry.id)]],
+    [checking,[()=>q.checking(),()=>q.update({phase:"landing"}),()=>q.requeue(),()=>q.answer(entry,{state:"refused",message:"old"})]],
+    [result,[()=>q.result(entry.id),()=>q.answer(entry,{state:"refused",message:"old"})]],
+    [status,[()=>q.status(),()=>q.setStatus({state:"idle"})]],
+  ] as const){
+    writeFileSync(path,future);
+    for(const action of actions){assert.throws(action,/future state version 2/);assert.equal(readFileSync(path,"utf8"),future);}
+    rmSync(path);
+  }
+  const held=join(q.home,"held",entry.id+".json");writeFileSync(held,future);
+  assert.throws(()=>q.retry(entry.id),/future state version 2/);assert.equal(readFileSync(held,"utf8"),future);
 });

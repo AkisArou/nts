@@ -1,3 +1,5 @@
+import {futureStateVersion,type FutureStateVersionError} from './state-version.ts';
+import {lockStateFile as lockHistory,STATE_LOCK_WAIT_SECONDS as LOCK_WAIT_SECONDS} from './state-file.ts';
 import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // Scheduling history is an optimization. Missing or corrupt history uses the
 // committed baseline and the machine's shares; it never changes which checks
@@ -53,9 +55,8 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // **A reservation decides when work starts, never its verdict.** A step's
 // slice is held to its grant and grows while it runs (run.mjs, "Memory"); a
 // step killed at its hard bound is memory pressure, held, never a FAIL.
-import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -76,7 +77,7 @@ export type MemoryUnit = "step" | "token" | "worker";
 /** A key's last few measured peaks, oldest first, in bytes per unit. */
 export type Peaks = { readonly unit: MemoryUnit; readonly peaks: readonly number[] };
 export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks };
-export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, Peaks> };
+export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, Peaks>;readonly unsupportedVersion?:FutureStateVersionError };
 
 /** Peaks kept per key: one small run among them does not shrink a reservation. */
 export const KEPT_PEAKS = 5;
@@ -95,11 +96,14 @@ function parsePeaks(value: unknown, units: readonly MemoryUnit[]): Peaks | null 
 
 /**
  * The history in `file`: version 4 CPU, with earlier memory history retained. A file
- * that is missing, corrupt or of another version is an empty history.
+ * that is missing or corrupt is empty. A newer version is a named read-only
+ * empty view: it is never mistaken for a writable empty history.
  */
-export function readCostHistory(file: string): CostHistory {
+export function readCostHistory(file: string,report:(warning:string)=>void=console.error): CostHistory {
   let value: unknown;
   try { value = JSON.parse(readFileSync(file, "utf8")); } catch { return empty(); }
+  const newer=futureStateVersion(value,4,file);
+  if(newer){report(newer.message);return {...empty(),unsupportedVersion:newer};}
   if (!record(value)) return empty();
   if (value.version === 2) {
     if (!keys(value, ["version", "steps"]) || !record(value.steps)) return empty();
@@ -274,23 +278,6 @@ export type StepObservation = {
 };
 export type JobObservation = { key: string; peak: number };
 
-const LOCK_WAIT_SECONDS = 10;
-
-/** The history's own lock, held across a read and its write so that no writer's observation is lost; null when none came within LOCK_WAIT_SECONDS. */
-function lockHistory(file: string): (() => void) | null {
-  const fd = openSync(`${file}.lock`, "a", 0o600);
-  let locked: SpawnSyncReturns<string>;
-  try {
-    // flock(1) locks the open file description it is handed as fd 8, which
-    // this process shares; the lock ends when `fd` closes.
-    locked = spawnSync("flock", ["-w", String(LOCK_WAIT_SECONDS), "-E", "75", "8"], { stdio: ["ignore", "ignore", "pipe", null, null, null, null, null, fd], encoding: "utf8" });
-  } catch (error) { closeSync(fd); throw error; }
-  if (locked.status === 0) return () => closeSync(fd);
-  closeSync(fd);
-  if (locked.status === 75) return null;
-  throw new Error(`cannot lock ${file}: ${locked.error?.message ?? (locked.stderr.trim() || `flock ended ${locked.status ?? locked.signal}`)}`);
-}
-
 const appended = (kept: Peaks | undefined, unit: MemoryUnit, peak: number): Peaks =>
   ({ unit, peaks: [...(kept?.unit === unit ? kept.peaks : []), peak].slice(-KEPT_PEAKS) });
 
@@ -310,7 +297,8 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
     try { mkdirSync(dirname(file)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
     unlock = lockHistory(file);
     if (unlock === null) return `${file} stayed locked for ${LOCK_WAIT_SECONDS} s`;
-    const current = readCostHistory(file);
+    const current = readCostHistory(file,()=>{});
+    if(current.unsupportedVersion)return current.unsupportedVersion.message;
     const steps = new Map<string, { cpu?: number; memory?: Peaks }>();
     for (const [name, cpu] of initialCpu) if (KEY.test(name) && measured(cpu)) steps.set(name, { cpu });
     for (const [name, row] of current.steps) steps.set(name, { ...steps.get(name), ...row });

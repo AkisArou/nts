@@ -1,3 +1,4 @@
+import {withStateWrite} from '../gate/state-file.ts';
 // The landing service: the queue drained one change at a time, against the
 // newest main (docs/workflow.md, "Landing: the landing check").
 //
@@ -211,12 +212,14 @@ function finishLanding(config: Config, queue: Queue, entry: Entry, base: string,
 /** The steps that passed, by what they cost, for the next estimate (selection.ts's costs). */
 export function recordCosts(home: string, ran: Ran, kind: ChangeKind): void {
   const file = join(home, "costs.json");
-  const steps = Object.fromEntries([...readLandingCosts(file)].map(([key,row])=>[key,{...row,cpu_measure:landingCpuMeasure(key)}]));
-  for (const step of ran.steps) {
-    if (step.verdict !== "PASS" || step.cpu_measure!==landingCpuMeasure(step.name)||!(typeof step.cpu === "number" && Number.isFinite(step.cpu) && step.cpu >= 0)) continue;
-    steps[costKey(step.name, kind)] = { cpu: step.cpu,cpu_measure:step.cpu_measure, ...(typeof step.wall === "number" && step.wall > 0 ? { wall: step.wall } : {}) };
-  }
-  durableRecord(file, { version: 2, steps: Object.fromEntries(Object.entries(steps).sort(([a], [b]) => a < b ? -1 : 1)) });
+  withStateWrite(file,2,()=>{
+    const steps = Object.fromEntries([...readLandingCosts(file)].map(([key,row])=>[key,{...row,cpu_measure:landingCpuMeasure(key)}]));
+    for (const step of ran.steps) {
+      if (step.verdict !== "PASS" || step.cpu_measure!==landingCpuMeasure(step.name)||!(typeof step.cpu === "number" && Number.isFinite(step.cpu) && step.cpu >= 0)) continue;
+      steps[costKey(step.name, kind)] = { cpu: step.cpu,cpu_measure:step.cpu_measure, ...(typeof step.wall === "number" && step.wall > 0 ? { wall: step.wall } : {}) };
+    }
+    durableRecord(file, { version: 2, steps: Object.fromEntries(Object.entries(steps).sort(([a], [b]) => a < b ? -1 : 1)) });
+  });
 }
 
 /** Delete run directories older than `days`. */

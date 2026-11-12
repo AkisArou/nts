@@ -1,0 +1,16 @@
+owner	state	supported_version	read_behavior	publication_or_deletion	proof
+step-scheduling.ts	steps.json step/job history	4	named empty read-only view	refuse under history flock	state-version.test.ts
+step-scheduling.ts	cases-v2/*.json case history	2	named empty read-only view	refuse under history flock; import absent v2 only from sibling cases/	case migration and future-version controls after #740 rebase
+memory-ledger.ts	waiting/ and admitted/ ledger entries	2	refuse by name	guard update and deletion under directory flock; failed release leaves named report and entry	memory-ledger.test.ts
+landing/selection.ts; landing/service.ts	costs.json	2	named empty read-only view	refuse under costs file flock	state-version.test.ts
+landing/queue.ts	queue/ held/ results/ checking.json status.json	1	refuse by name	guard transitions and deletions under one queue directory mutex	queue.test.ts
+landing/verdict.ts	verdicts/<commit>.json	1	execute all requested checks and name incompatibility	refuse under receipt directory mutex	verdict.test.ts
+full-check/state.ts	state.json	1	refuse by name	refuse under state file flock	state-version.test.ts
+full-check/background.ts	job outcome file	1	refuse by name	guard publication and restart deletion under outcome file flock	state-version.test.ts
+scopes/run-owner.ts	warm-tree root owner receipt	1	refuse by name	guard claim/reap/complete/close under one receipt mutex; claim uses wx	state-version.test.ts
+scopes/step-entry.ts	private step entry receipt	1	reject foreign version/identity	exclusive-create wx already preserves existing bytes	step-entry and scope controls
+artifact-shadow.ts	content-keyed artifact observation	1	reject incompatible entry	immutable linkSync publication already preserves existing bytes	artifact-shadow.test.ts
+full-gate-census.ts; tooling-types.ts	tracked ratchet records	1	reject unsupported schema before record	validated tracked inputs, not live cross-version controller state	existing parser mutation controls
+step-result.ts; step-time.ts; tooling-runner.ts; scopes/step-scope.ts	private per-attempt result/time/completion/drain records	per protocol	reject incompatible protocol	fresh run namespace and attempt identity; no shared mutable history	existing protocol controls
+pool.ts; costs.mjs; state.ts count; case-costs.ts telemetry	unversioned metadata/maps and append-only telemetry	unversioned	owner-specific	no numeric schema header to downgrade	inventory exclusion
+canonical-environment.ts; verdict-contract.ts; host-observations.ts	capability/protocol values	per capability	reject incompatible capability	inputs or per-run declarations, not shared mutable state	existing capability controls

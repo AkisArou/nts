@@ -2304,3 +2304,16 @@ reach, and editing that selector owes the full gate. The tool-owned writer
 migrates the mixed record to the split format. This refines
 [declared reader placement](#declared-readers-place-gate-inputs-11-12) and governs
 [landing selection](../../workflow.md#landing-the-landing-check).
+
+## Future state versions are read-only (11-12)
+
+#725 follows a mixed-version scheduling-history replay: a v4 writer retained
+memory peaks, then a stale v3 publication reset the file it could not read.
+Every versioned shared state owner now recognizes future headers before schema
+validation and rechecks under its publication/deletion lock. Histories decline
+to record, operational state refuses, and future receipts run the requested
+checks. Synchronous ledger cleanup leaves a named warning and an entry for
+dead-owner reclamation when its lock cannot be acquired. See
+[the inventory](../future-state-2026-11-12.tsv) and
+[the replay](future-state-2026-11-12.md). Governs
+[the machine](../../workflow.md#the-machine).

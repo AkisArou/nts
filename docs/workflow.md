@@ -449,6 +449,15 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   yield decisions, status and child handoffs. A higher-rank landing still
   preempts an admitted agent job and its borrowers: only live work and its
   margin remain promised to that landing. Independent new jobs retain FIFO.
+- **Future state versions are read-only.** Every shared versioned state owner
+  checks a recognizable newer numeric version before validating its schema.
+  A history gives a named empty view and records nothing; operational state
+  refuses by name. A future landing receipt executes the requested checks
+  instead of reusing it. Publication and deletion recheck the existing version
+  under the owner's same lock, so a stale reader cannot downgrade a newer
+  writer's file. Missing and malformed files retain their separate recovery
+  paths. Ledger release remains synchronous: if its bounded lock attempt fails,
+  it names the failure and leaves the entry for dead-owner reclamation.
 - **Step CPU includes its complete retained cgroup.** After its processes exit
   and before its scope is deleted, the runner reads `cpu.stat` through
   `HostObservations`. A missing counter fails the instrument. The authoritative
@@ -696,6 +705,12 @@ the first node task.
   entries and their module closures contain no top-level await; command bodies
   belong behind main() entry guards. The test-host source audit checks this
   contract ([evidence](records/notebooks/worker-termination-2026-11-12.md)).
+- **Older code never rewrites newer state.** Histories return named read-only
+  views, operational state refuses, and incompatible receipts fall back to
+  execution. Every update or deletion verifies the version again under the
+  same owner lock; exclusive-create and immutable link publication preserve
+  existing entries. Missing and malformed state remain separate cases
+  ([log](records/notebooks/decisions-log.md#future-state-versions-are-read-only-11-12)).
 - **Reservations are measured peaks** (11-09): a step or job reserves 1.25
   times the largest of its last five peaks, sampled on the ledger's own
   basis and kept in its tree's scheduling history. A step never measured

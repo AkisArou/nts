@@ -1,3 +1,5 @@
+import {assertStateVersion} from '../state-version.ts';
+import {withStateWrite,withStateLock} from '../state-file.ts';
 // The warm gate tree has one runner under its existing tree lock. Its next
 // runner collects the previous root only after proving that owner is dead.
 import { randomUUID } from "node:crypto";
@@ -17,8 +19,9 @@ function processIdentity(pid: number): { start: string; live: boolean } | undefi
     return { start: fields[19]!, live: fields[0] !== "Z" && fields[0] !== "X" };
   } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
 }
-function readOwner(text: string): RunOwner {
+function readOwner(text: string,file="gate root receipt"): RunOwner {
   const value = JSON.parse(text) as RunOwner;
+  assertStateVersion(value,1,file);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid prior gate root receipt");
   const keys = value.scope === undefined ? ["version", "nonce", "pid", "start", "boot", "slice"] : ["version", "nonce", "pid", "start", "boot", "slice", "scope"];
   if (!value || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(keys.sort()) || value.version !== 1
@@ -35,27 +38,31 @@ function readOwner(text: string): RunOwner {
 }
 
 export function reapRunOwner(path: string, reap: (previous: RunOwner) => void): void {
-  let prior: string | undefined;
-  try { prior = readFileSync(path, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  if (prior !== undefined) {
-    const previous = readOwner(prior), identity = previous.boot === boot() ? processIdentity(previous.pid) : undefined;
-    if (identity?.live && identity.start === previous.start) throw new Error("a live gate runner still owns this tree's step root");
-    reap(previous);
-    if (readFileSync(path, "utf8") !== prior) throw new Error("gate root receipt changed during stale cleanup");
-    rmSync(path);
-  }
+  withStateLock(path,()=>{
+    let prior: string | undefined;
+    try { prior = readFileSync(path, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (prior !== undefined) {
+      const previous = readOwner(prior,path), identity = previous.boot === boot() ? processIdentity(previous.pid) : undefined;
+      if (identity?.live && identity.start === previous.start) throw new Error("a live gate runner still owns this tree's step root");
+      reap(previous);
+      if (readFileSync(path, "utf8") !== prior) throw new Error("gate root receipt changed during stale cleanup");
+      rmSync(path);
+    }
+  });
 }
 
 export function claimRunOwner(path: string, slice: string, reap: (previous: RunOwner) => void) {
-  mkdirSync(dirname(path), { recursive: true });
-  reapRunOwner(path, reap);
-  const identity = processIdentity(process.pid);
-  if (!identity?.live) throw new Error("current gate owner identity is unavailable");
-  const own: RunOwner = { version: 1, nonce: randomUUID(), pid: process.pid, start: identity.start, boot: boot(), slice };
-  writeFileSync(path, JSON.stringify(own) + "\n", { flag: "wx", mode: 0o600 });
-  const verify = () => { if (readOwner(readFileSync(path, "utf8")).nonce !== own.nonce) throw new Error("gate root receipt changed owners"); };
-  return {
-    complete(scope: RootIdentity) { verify(); own.scope = scope; durableRecord(path, own); },
-    close() { verify(); rmSync(path); },
-  };
+  return withStateLock(path,()=>{
+    mkdirSync(dirname(path), { recursive: true });
+    reapRunOwner(path, reap);
+    const identity = processIdentity(process.pid);
+    if (!identity?.live) throw new Error("current gate owner identity is unavailable");
+    const own: RunOwner = { version: 1, nonce: randomUUID(), pid: process.pid, start: identity.start, boot: boot(), slice };
+    writeFileSync(path, JSON.stringify(own) + "\n", { flag: "wx", mode: 0o600 });
+    const verify = () => { if (readOwner(readFileSync(path, "utf8"),path).nonce !== own.nonce) throw new Error("gate root receipt changed owners"); };
+    return {
+      complete(scope: RootIdentity) {withStateWrite(path,1,()=>{verify();own.scope=scope;durableRecord(path,own);});},
+      close() {withStateWrite(path,1,()=>{verify();rmSync(path);});},
+    };
+  });
 }

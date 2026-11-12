@@ -1,3 +1,5 @@
+import {assertStateVersion} from '../gate/state-version.ts';
+import {versionedRecord,withStateWrite} from '../gate/state-file.ts';
 // Work the full check starts in the background (docs/workflow.md, "After
 // landing: the full check"): each piece runs in a systemd user unit of its own,
 // named for its kind of work, so it outlives the controller that started it
@@ -27,8 +29,7 @@
 // name is free again and `running` says false. A unit is stopped by its name,
 // `systemctl --user stop <name>`, never by a PID.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { systemdEnvironment } from "../gate/environment.ts";
 import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 
@@ -72,16 +73,14 @@ export type Outcome = { version: 1; at: string; status: number };
 
 /** The outcome, whole: written beside itself and renamed into place, so a reader finds all of it or nothing. */
 export function writeOutcome<T extends object>(file: string, value: T & { status: number }, at = new Date()): void {
-  mkdirSync(dirname(file), { recursive: true });
-  const partial = `${file}.${process.pid}.partial`;
-  writeFileSync(partial, `${JSON.stringify({ version: 1, at: at.toISOString(), ...value }, null, 2)}\n`);
-  renameSync(partial, file);
+  versionedRecord(file,1,{version:1,at:at.toISOString(),...value});
 }
 
 /** The outcome a job wrote, or null when it wrote none. */
 export function readOutcome<T extends object = object>(file: string): (Outcome & T) | null {
   if (!existsSync(file)) return null;
   const value = JSON.parse(readFileSync(file, "utf8")) as Outcome & T;
+  assertStateVersion(value,1,file);
   if (value.version !== 1 || typeof value.status !== "number") throw new Error(`${file}: not an outcome of version 1`);
   return value;
 }
@@ -99,7 +98,7 @@ export function newJob(unit: string, outcome: string, at: Date): Job {
  */
 export function start(units: Units, spec: UnitSpec, job: Job, save: () => void): string | null {
   if (spec.name !== job.unit) throw new Error(`the job is ${job.unit}'s, not ${spec.name}'s`);
-  rmSync(job.outcome, { force: true });
+  withStateWrite(job.outcome,1,()=>rmSync(job.outcome,{force:true}));
   save();
   try { return units.start(spec); }
   catch (error) { return error instanceof Error ? error.message : String(error); }

@@ -1,3 +1,5 @@
+import {assertStateVersion,assertWritableState,FutureStateVersionError} from '../gate/state-version.ts';
+import {withStateLock,versionedRecord,withStateWrite} from '../gate/state-file.ts';
 // The landing queue: one durable file per change waiting to land, checked one
 // at a time against the newest main, each answered by a result file.
 //
@@ -21,7 +23,6 @@ import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, wri
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
-import { durableRecord } from "../gate/durable-record.ts";
 import { OOM_SCORE } from "../gate/memory-ledger.ts";
 import { revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
@@ -48,7 +49,7 @@ export type Result = {
 export type Status = { version: 1; state: "idle" | "checking" | "landing" | "held"; at: string; id?: string; sha?: string; message?: string; run?: string; since?: string };
 
 const now = () => new Date().toISOString();
-const readJson = <T>(path: string): T | null => { try { return JSON.parse(readFileSync(path, "utf8")) as T; } catch { return null; } };
+const readJson = <T>(path: string): T | null => { try { const value:unknown=JSON.parse(readFileSync(path,"utf8"));assertStateVersion(value,1,path);return value as T; } catch(error) {if(error instanceof FutureStateVersionError)throw error;return null;} };
 const files = (dir: string) => { try { return readdirSync(dir).filter(name => name.endsWith(".json")).sort(); } catch { return []; } };
 
 export class Queue {
@@ -58,15 +59,20 @@ export class Queue {
     for (const dir of ["queue", "held", "results", "withdraw"]) mkdirSync(join(home, dir), { recursive: true });
   }
   private path(...parts: string[]) { return join(this.home, ...parts); }
+  private mutate<T>(write:()=>T):T {return withStateLock(this.path("queue-state"),write);}
+  private record(path:string,value:unknown):void {versionedRecord(path,1,value,this.path("queue-state"));}
+  private remove(path:string):void {if(existsSync(path))withStateWrite(path,1,()=>rmSync(path,{force:true}),this.path("queue-state"));}
 
   /** Queue `sha` to land. `first` puts it ahead of every change waiting (the full check's reverts). */
   submit(sha: string, options: { branch?: string | null; tree?: string | null; first?: boolean; by?: string; note?: string } = {}): Entry {
-    if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new Error(`submit wants a full commit id, not ${sha}`);
-    const first = options.first === true;
-    const entry: Entry = { version: 1, id: `${sha.slice(0, 12)}-${randomUUID().slice(0, 8)}`, sha, branch: options.branch ?? null,
-      tree: options.tree ?? null, first, submitted_at: now(), by: options.by ?? "agent", ...(options.note ? { note: options.note } : {}) };
-    durableRecord(this.path("queue", `${this.key(entry)}.json`), entry);
-    return entry;
+    return this.mutate(()=>{
+      if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new Error(`submit wants a full commit id, not ${sha}`);
+      const first = options.first === true;
+      const entry: Entry = { version: 1, id: `${sha.slice(0, 12)}-${randomUUID().slice(0, 8)}`, sha, branch: options.branch ?? null,
+        tree: options.tree ?? null, first, submitted_at: now(), by: options.by ?? "agent", ...(options.note ? { note: options.note } : {}) };
+      this.record(this.path("queue", `${this.key(entry)}.json`), entry);
+      return entry;
+    });
   }
   // `0-` sorts ahead of `1-`; among equals, by time and then id.
   private key(entry: Entry): string {
@@ -79,43 +85,51 @@ export class Queue {
   }
   /** Move the next waiting change to `checking.json`; null when none waits. */
   take(): Checking | null {
-    for (const name of files(this.path("queue"))) {
-      const entry = readJson<Entry>(this.path("queue", name));
-      if (!entry) { rmSync(this.path("queue", name), { force: true }); continue; }
-      const checking: Checking = { ...entry, started_at: now(), phase: "checking" };
-      durableRecord(this.path("checking.json"), checking);
-      rmSync(this.path("queue", name), { force: true });
-      return checking;
-    }
-    return null;
+    return this.mutate(()=>{
+      for (const name of files(this.path("queue"))) {
+        const entry = readJson<Entry>(this.path("queue", name));
+        if (!entry) { this.remove(this.path("queue", name)); continue; }
+        const checking: Checking = { ...entry, started_at: now(), phase: "checking" };
+        this.record(this.path("checking.json"), checking);
+        this.remove(this.path("queue", name));
+        return checking;
+      }
+      return null;
+    });
   }
   checking(): Checking | null { return readJson<Checking>(this.path("checking.json")); }
   update(fields: Partial<Checking>): Checking {
-    const current = this.checking();
-    if (!current) throw new Error("no change is being checked");
-    const next = { ...current, ...fields };
-    durableRecord(this.path("checking.json"), next);
-    return next;
+    return this.mutate(()=>{
+      const current = this.checking();
+      if (!current) throw new Error("no change is being checked");
+      const next = { ...current, ...fields };
+      this.record(this.path("checking.json"), next);
+      return next;
+    });
   }
   /** Put the change being checked back at the front: its check starts again. */
   requeue(): Entry | null {
-    const current = this.checking();
-    if (!current) return null;
-    const { started_at: _s, base: _b, tip: _t, run: _r, phase: _p, ...entry } = current;
-    const again: Entry = { ...entry, first: true };
-    durableRecord(this.path("queue", `${this.key(again)}.json`), again);
-    rmSync(this.path("checking.json"), { force: true });
-    return again;
+    return this.mutate(()=>{
+      const current = this.checking();
+      if (!current) return null;
+      const { started_at: _s, base: _b, tip: _t, run: _r, phase: _p, ...entry } = current;
+      const again: Entry = { ...entry, first: true };
+      this.record(this.path("queue", `${this.key(again)}.json`), again);
+      this.remove(this.path("checking.json"));
+      return again;
+    });
   }
 
   /** Answer `entry`: its result is durable before it leaves `checking.json`. */
   answer(entry: Entry, result: Omit<Result, "version" | "id" | "sha" | "at" | "task">): Result {
-    const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result };
-    durableRecord(this.path("results", `${entry.id}.json`), full);
-    if (result.state === "held") durableRecord(this.path("held", `${entry.id}.json`), entry);
-    if (this.checking()?.id === entry.id) rmSync(this.path("checking.json"), { force: true });
-    rmSync(this.path("withdraw", entry.id), { force: true });
-    return full;
+    return this.mutate(()=>{
+      const full: Result = { version: 1, id: entry.id, sha: entry.sha, at: now(), task: entry.branch, ...result };
+      this.record(this.path("results", `${entry.id}.json`), full);
+      if (result.state === "held") this.record(this.path("held", `${entry.id}.json`), entry);
+      if (this.checking()?.id === entry.id) this.remove(this.path("checking.json"));
+      this.remove(this.path("withdraw", entry.id));
+      return full;
+    });
   }
   result(id: string): Result | null { return readJson<Result>(this.path("results", `${id}.json`)); }
   results(): Result[] {
@@ -127,12 +141,14 @@ export class Queue {
   }
   /** Queue a held change again, at the front. */
   retry(id: string): Entry {
-    const entry = readJson<Entry>(this.path("held", `${id}.json`));
-    if (!entry) throw new Error(`no held change ${id}`);
-    const again: Entry = { ...entry, first: true, submitted_at: now() };
-    durableRecord(this.path("queue", `${this.key(again)}.json`), again);
-    rmSync(this.path("held", `${id}.json`), { force: true });
-    return again;
+    return this.mutate(()=>{
+      const entry = readJson<Entry>(this.path("held", `${id}.json`));
+      if (!entry) throw new Error(`no held change ${id}`);
+      const again: Entry = { ...entry, first: true, submitted_at: now() };
+      this.record(this.path("queue", `${this.key(again)}.json`), again);
+      this.remove(this.path("held", `${id}.json`));
+      return again;
+    });
   }
 
   /** The entry an id or a commit (or its prefix) names, waiting, checked or held. */
@@ -149,22 +165,26 @@ export class Queue {
    * checked is answered when its check ends, and never lands.
    */
   withdraw(asked: string): "withdrawn" | "requested" | "unknown" {
-    const found = this.find(asked);
-    if (!found) return "unknown";
-    if (found.where === "checking") { writeFileSync(this.path("withdraw", found.entry.id), `${now()}\n`); return "requested"; }
-    for (const dir of ["queue", "held"]) for (const name of files(this.path(dir))) {
-      if (readJson<Entry>(this.path(dir, name))?.id === found.entry.id) rmSync(this.path(dir, name), { force: true });
-    }
-    this.answer(found.entry, { state: "withdrawn", message: "withdrawn before it was checked" });
-    return "withdrawn";
+    return this.mutate(()=>{
+      const found = this.find(asked);
+      if (!found) return "unknown";
+      if (found.where === "checking") { assertWritableState(this.path("withdraw",found.entry.id),1);writeFileSync(this.path("withdraw", found.entry.id), `${now()}\n`); return "requested"; }
+      for (const dir of ["queue", "held"]) for (const name of files(this.path(dir))) {
+        if (readJson<Entry>(this.path(dir, name))?.id === found.entry.id) this.remove(this.path(dir, name));
+      }
+      this.answer(found.entry, { state: "withdrawn", message: "withdrawn before it was checked" });
+      return "withdrawn";
+    });
   }
   withdrawRequested(id: string): boolean { return existsSync(this.path("withdraw", id)); }
 
   status(): Status { return readJson<Status>(this.path("status.json")) ?? { version: 1, state: "idle", at: now() }; }
   setStatus(fields: Omit<Status, "version" | "at">): void {
-    const previous = this.status();
-    const since = previous.state === fields.state && previous.id === fields.id ? previous.since ?? previous.at : now();
-    durableRecord(this.path("status.json"), { version: 1, at: now(), since, ...fields });
+    return this.mutate(()=>{
+      const previous = this.status();
+      const since = previous.state === fields.state && previous.id === fields.id ? previous.since ?? previous.at : now();
+      this.record(this.path("status.json"), { version: 1, at: now(), since, ...fields });
+    });
   }
 }
 
