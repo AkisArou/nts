@@ -196,3 +196,39 @@ test("two changed-input re-probes bound a busy history, and unknown reach holds 
     assert.match(result.kind === "held" ? result.reason : "", unknown ? /could not establish owed reach.*selector unavailable/ : /after 2 fix-forward re-probes; no revert/);
   }
 });
+
+
+test("a changed-input main probe reuses the complete immutable history for the same steps", () => {
+  const m = model(8, { 2: ["tests"] }), latest = "f".repeat(40);
+  let tip = m.candidates.at(-1)!, historyAtChange = -1, mainProbes = 0;
+  const result = search(m.input(["tests"]), (base, reverts, steps, fresh) => {
+    if (base === latest) {
+      mainProbes++;
+      return { base, reverts, steps, verdict: "red", failed: steps, run: "main-again" };
+    }
+    const p = m.measure(base, reverts, steps, fresh);
+    if (base === m.candidates[2] && fresh) { tip = latest; historyAtChange = m.calls.length; }
+    return p;
+  }, { commit: () => tip, reaches: () => true });
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[2]);
+  assert.equal(mainProbes, 1);
+  assert.ok(historyAtChange > 0);
+  assert.equal(m.calls.length, historyAtChange, "the second pass makes no history probes");
+});
+
+test("fixing c2/A during bisection searches the unattributed B and finds c5 only", () => {
+  const m = model(8, { 2: ["A"], 5: ["B"] }), latest = "f".repeat(40);
+  let tip = m.candidates.at(-1)!, changedAt = -1;
+  const requests: { base: string; steps: string[] }[] = [];
+  const result = search(m.input(["A","B"]), (base, reverts, steps, fresh) => {
+    requests.push({ base, steps });
+    if (base === latest) return { base, reverts, steps, verdict: "red", failed: ["B"], run: "fix-A" };
+    const p = m.measure(base, reverts, steps, fresh);
+    if (base === m.candidates[2] && fresh) { tip = latest; changedAt = requests.length; }
+    return p;
+  }, { commit: () => tip, reaches: () => true });
+  assert.equal(result.kind === "culprit" && result.commit, m.candidates[5]);
+  assert.deepEqual(result.kind === "culprit" && result.failed, ["B"]);
+  assert.ok(requests.slice(changedAt).filter(p => p.base !== latest).every(p => p.steps.join() === "B"));
+  assert.equal(requests.filter(p => p.base === m.input([]).good).length, 1, "the per-step green control is retained");
+});

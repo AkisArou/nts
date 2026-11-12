@@ -281,17 +281,17 @@ test("a fix landed during the red run is recorded before any search or issue reo
   assert.equal(verified(repo), fixed, "the next core verifies newest main");
 });
 
-test("a partial fix reverts and reopens only the culprit of the remaining red steps", async t => {
+test("a partial fix during bisection reverts and reopens only the remaining culprit", async t => {
   const repo = repository(t), gate = fakeGate(repo), fx = harness(repo, gate);
   repo.commit({ "src.txt": "base" }, "good");
   await cycle(fx);
-  repo.commit({ "RED/tests": "" }, "breaks tests\n\nFixes #101");
+  const first = repo.commit({ "RED/tests": "" }, "breaks tests\n\nFixes #101");
   const bad = repo.commit({ "RED/typescript-c": "" }, "breaks compiler\n\nFixes #102");
   let fixed = "";
   const run = gate.run.bind(gate);
   gate.run = (commit, steps, label, ...rest) => {
     const result = run(commit, steps, label, ...rest);
-    if (commit === bad && label === "core") fixed = repo.commit({ "RED/tests": null }, "fix tests forward");
+    if (commit === first && label === "core-probe" && !fixed) fixed = repo.commit({ "RED/tests": null }, "fix tests forward");
     return result;
   };
   await cycle(fx);
@@ -301,7 +301,9 @@ test("a partial fix reverts and reopens only the culprit of the remaining red st
   assert.equal(fx.submitted.length, 1);
   assert.equal(repo.git.run(["rev-parse", culprit.revert! + "^"]), fixed);
   assertMessage(repo.git, culprit.revert!, /Newest main remained red/, /valid through/, /typescript-c/);
-  assert.ok(gate.measured.filter(m => m.label === "core-probe").slice(1).every(m => m.steps.join() === "typescript-c"));
+  const refreshed = gate.measured.findIndex(m => m.label === "core-probe" && m.commit === fixed);
+  assert.ok(refreshed > 0);
+  assert.ok(gate.measured.slice(refreshed + 1).every(m => m.steps.join() === "typescript-c"));
 });
 
 test("probe carry uses both endpoint rules and wide reach; unknown or non-forward reach cannot narrow", t => {

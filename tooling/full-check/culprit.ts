@@ -7,9 +7,12 @@
 // range (from then on the history itself takes it out), and the service's own
 // record of the reverts it has submitted and that have not landed yet.
 //
-// Four probes guard the verdict, because a revert of a good commit costs more
+// Observations guard the verdict, because a revert of a good commit costs more
 // than a red that waits for the next run:
-//   - the tip is measured again first, with the known culprits taken out:
+//   - newest main is measured as-is: a fixed-forward green reverts nothing,
+//     and only steps still red enter the historical search. Its observations
+//     are retained per step within this search, never across searches;
+//   - the tip is measured again, with the known culprits taken out:
 //     green means the red is explained (their reverts are on the way) or did
 //     not repeat (flaky), and nothing is reverted;
 //   - the last green commit is measured again: red there too is the machine
@@ -111,11 +114,37 @@ export function takenOut(input: SearchInput, index: number): string[] {
 export function search(input: SearchInput, measure: Measure, main: Main): SearchResult {
   const probes: Probe[] = [];
   if (!input.candidates.length) return { kind: "held", reason: "no commit since the last green run: the red is not a commit's", probes };
+  const history = new Map<string, HistoryResult>();
+  const established = new Map<string, Extract<HistoryResult, { kind: "culprit" }>>();
+  const observations = new Map<string, Map<string, { verdict: "red" | "green"; fresh: boolean }>>();
+  const observationKey = (base: string, reverts: string[]) => JSON.stringify([base, [...reverts].sort()]);
+  const remember = (p: Probe, fresh: boolean) => {
+    const key = observationKey(p.base, p.reverts), entries = observations.get(key) ?? new Map();
+    for (const step of p.steps) {
+      // A red union may also contain held steps. Only an explicitly failed
+      // step, or a wholly green probe, establishes an individual verdict.
+      if (p.failed.includes(step)) entries.set(step, { verdict: "red", fresh });
+      else if (p.verdict === "green") entries.set(step, { verdict: "green", fresh });
+    }
+    observations.set(key, entries);
+  };
+  const historical: Measure = (base, reverts, steps, fresh) => {
+    const known = steps.map(step => observations.get(observationKey(base, reverts))?.get(step));
+    if (known.every(p => p && (!fresh || p.fresh))) {
+      const failed = steps.filter((_, index) => known[index]!.verdict === "red");
+      // The original measured probes below retain all provenance. This is an
+      // in-process decision assembled from them, never a new run receipt.
+      return { base, reverts, steps, verdict: failed.length ? "red" : "green", failed, run: "" };
+    }
+    const p = measure(base, reverts, steps, fresh);
+    probes.push(p); remember(p, fresh);
+    return p;
+  };
   let attempts = 0;
   for (;;) {
     const commit = main.commit();
     const current = measure(commit, [], input.steps, true);
-    probes.push(current);
+    probes.push(current); remember(current, true);
     const held = (reason: string): SearchResult => ({ kind: "held", reason, probes });
     if (current.verdict === "skip") return held(`newest main ${commit.slice(0, 12)} could not be measured: ${current.reason ?? "no verdict"}`);
     const advanced = (): { through: string } | { again: true } | { held: SearchResult } => {
@@ -141,11 +170,24 @@ export function search(input: SearchInput, measure: Measure, main: Main): Search
     }
     const steps = input.steps.filter(step => current.failed.includes(step));
     if (!steps.length) return held(`newest main ${commit.slice(0, 12)} was red without naming a failed step`);
-    const result = searchHistory({ ...input, steps }, measure, current);
+    const key = JSON.stringify([...steps].sort());
+    let result = history.get(key);
+    if (!result && steps.every(step => established.has(step))) {
+      const first = steps.map(step => established.get(step)!).reduce((a, b) => a.index <= b.index ? a : b);
+      result = { ...first, failed: steps.filter(step => established.get(step)!.index === first.index), flaky: [] };
+    }
+    if (!result) {
+      result = searchHistory({ ...input, steps }, historical, current);
+      history.set(key, result);
+      if (result.kind === "culprit") {
+        const commit = result.commit;
+        const confirmed = result.probes.filter(p => p.base === commit).flatMap(p => p.failed);
+        for (const step of steps.filter(step => confirmed.includes(step))) established.set(step, { ...result, failed: [step], flaky: [] });
+      }
+    }
     if (result.kind === "culprit" && commit === input.candidates.at(-1)) {
       result.flaky = [...new Set([...result.flaky, ...input.steps.filter(step => !current.failed.includes(step))])];
     }
-    probes.push(...result.probes.filter(p => p !== current));
     validity = advanced();
     if ("held" in validity) return validity.held;
     if ("again" in validity) continue;

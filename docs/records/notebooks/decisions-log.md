@@ -2453,3 +2453,12 @@ A flaky green that temporarily says fixed forward is accepted: the next core
 catches it again, while a wrong revert removes working code. Fix attribution
 names the deciding main commit instead of spending more suite runs finding the
 first fixing commit. #754.
+
+## Historical culprit observations belong to one search (11-12)
+
+A changed-input main probe must not repeat an immutable historical bisection.
+Within one search, retain observations per step and reuse the same red-step
+set's result. Attribution stays per step: if c2 breaks A and c5 breaks B, a
+main fix for A cannot turn c2 into B's culprit by filtering the union result.
+A remaining step with no established culprit gets its own search, reusing
+only established observations. No memo survives the search. #754.

@@ -296,7 +296,11 @@ What follows from a run:
   run. Before any automatic or hand-revert decision, its main probe must
   still cover the current inputs: both endpoint owed rules over subsequent
   changes, including wide reach, decide this. Unrelated commits keep the
-  probe valid. Changed inputs get at most two re-probes, then a named hold;
+  probe valid. Within one search, historical observations are retained per
+  step. The same red-step set reuses its search, while a remaining step
+  without an established culprit gets its own search. This memo ends with
+  the search; newest-main probes always execute freshly.
+  Changed inputs get at most two re-probes, then a named hold;
   unknown reach also holds. A false green defers a defect to the next core,
   a cheaper error than reverting a change already fixed forward.
   The full check reverts a still-red culprit (the
