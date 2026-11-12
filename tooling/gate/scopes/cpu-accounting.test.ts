@@ -26,7 +26,7 @@ child.stdout.once('data',()=>{writeFileSync(ready,'');const stop=()=>{if(existsS
   const launch=scope.command('/usr/bin/time',['-f','%e %U %S %M','-o',time,process.execPath,parent,burner,ready,release]);
   const worker=spawn(launch.command,launch.args,{env:{...fixtureEnvironment(t),...memory},stdio:['ignore','pipe','pipe']});
   const closed=once(worker,'close');let error='';worker.stderr!.on('data',chunk=>{error+=String(chunk);});
-  await waitFor('CPU child readiness',()=>existsSync(ready));
+  await waitFor('CPU child readiness',()=>existsSync(ready),{stopped:()=>worker.exitCode!==null||worker.signalCode!==null?error||'CPU child launcher ended before readiness':undefined});
   const baseline=scope.cpuCounters().usageUsec;
   await waitFor('half a CPU second in the live scope',()=>scope.cpuCounters().usageUsec>=baseline+500_000);
   writeFileSync(release,'');assert.deepEqual(await closed,[0,null],error);
@@ -36,4 +36,14 @@ child.stdout.once('data',()=>{writeFileSync(ready,'');const stop=()=>{if(existsS
   const measured=measuredStepTime(proof.cpu,1,gnu);
   assert.ok(measured.cpu-gnu.cpu>=0.4,`unreaped CPU was lost by GNU time: ${JSON.stringify(measured)}`);
   assert.ok(Math.abs(measured.cpu*1e6-proof.cpu.usageUsec)<=1,'recording tolerance is one microsecond');
+});
+
+
+test('a missing final CPU counter cannot produce a scope drain proof',async t=>{
+  const root=testScratch(t,'scope-cpu-missing'),memory=ownMemory(join(root,'host'));
+  const scopes=new GateScopes({...fixtureEnvironment(t),...memory,NTS_GATE_RUN_DIR:root});
+  t.after(()=>scopes.close());const scope=scopes.step({max:2**30});
+  const packet=JSON.parse(readFileSync(memory.NTS_HOST_OBSERVATIONS,'utf8'));delete packet.cpu.default.systemUsec;
+  writeFileSync(memory.NTS_HOST_OBSERVATIONS,JSON.stringify(packet));
+  await assert.rejects(scope.drain(),/cpu.default.systemUsec/);
 });

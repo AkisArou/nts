@@ -669,7 +669,7 @@ let withhold = 0;
 // predecessor's (step-successors.ts), else the committed baseline.
 function workEstimate(name) {
   const own = CPU_HISTORY.get(name) ?? INHERITED_WORK.get(name) ?? currentStepCpu(BASE.get(name));
-  if (own > 0) return own;
+  if (typeof own === "number" && own > 0) return own;
   return estimate(name) * width(name);
 }
 
@@ -1268,8 +1268,13 @@ function start(step, slots, rider = false) {
     let gnuTime,measurement;
     try { gnuTime=parseGnuTime(readFileSync(timeFile,'utf8')); } catch {}
     if(drained){
-      measurement=measuredStepTime(drained.cpu,wall,gnuTime);
-      writeFileSync(join(RUN_DIR,`${step.name}.time`),JSON.stringify(measurement)+'\n');
+      try{
+        measurement=measuredStepTime(drained.cpu,wall,gnuTime);
+        writeFileSync(join(RUN_DIR,`${step.name}.time`),JSON.stringify(measurement)+'\n');
+      }catch(error){
+        cleanupError=`step CPU record failed: ${String(error)}`;
+        scopeCleanup={state:'error',reason:cleanupError};stop(cleanupError);
+      }
     }
     const {cpu,user,sys,maxrss_kb:maxrss}=measurement??{};
     // After the drain, so no process of the step can still write over it.
