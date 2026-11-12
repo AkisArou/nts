@@ -42,9 +42,11 @@ test("one recorded regression does not discard a new row or an independently acc
   const before=header+all.slice(1).map(one=>one.fixture+"\t"+JSON.stringify(one.name==="improved"?{kind:"aborted",failure:"old failure"}:{kind:"agrees"})+"\n").join("");
   const plan:RunPlan={backend:"jvm",file,record:parseRunRecord(before),pending:new Set([all[0]!.fixture]),recordPending:true};
   let written=new Map<string,BenchmarkRun>();
+  const lines:string[]=[];
   const status=await finishBenchmarks(plan,all,all.map(one=>({entry:one,record:check(one.name==="regressed"?"aborted":"agrees"),disposition:one.name==="regressed"?1:0})),[],
-    {binary:"unused-supplied-writer",parentEnv:fixtureEnvironment(t),log:()=>{},write:async rows=>{written=new Map(rows);}});
+    {binary:"unused-supplied-writer",parentEnv:fixtureEnvironment(t),log:line=>lines.push(line),write:async rows=>{written=new Map(rows);}});
   assert.equal(status,1,"the regression remains red");
   assert.deepEqual([...written.keys()].sort(),[all[1]!.fixture,all[0]!.fixture].sort());
   assert.equal(written.has(all[2]!.fixture),false,"the worse row is never published");
+  assert.ok(lines.includes("not recorded: 1 recorded run(s) changed"),"the regression keeps its consumer summary while other updates publish");
 });

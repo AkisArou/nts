@@ -52,6 +52,7 @@ export async function finishBenchmarks(plan: RunPlan, all: readonly Entry[], com
   for (const path of waiting) say(`  ${pendingLine(path, record)}`);
   for (const row of incomplete) say(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   say(`  ${completed.length} benchmark cases through the ${plan.backend} backend: ${reproduced} as recorded, ${accepted} accepted, ${changed} changed; ${waiting.length} not recorded yet`);
+  if (plan.recordPending && changed) say(`not recorded: ${changed} recorded run(s) changed`);
   // Each update was either pending or accepted by its own ratchet. Another
   // case's incomplete observation or regression cannot discard that evidence.
   if (plan.recordPending && updates.size) {
