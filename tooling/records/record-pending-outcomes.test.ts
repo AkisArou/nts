@@ -8,7 +8,7 @@ import {testEnvironment} from "../gate/test-environment.ts";
 // manager holds TMPDIR to the context's registered temporary.
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {copyFileSync,cpSync,existsSync,mkdirSync,readFileSync,rmSync} from "node:fs";
+import {copyFileSync,cpSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync} from "node:fs";
 import {homedir} from "node:os";
 import {dirname,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -42,7 +42,9 @@ function recordsRun(t:{after(fn:()=>void):void}){
   // outcomes preload, and what it imports, inside the tooling projects that
   // own them, and checks each of those projects whole.
   cpSync(join(SOURCE,"tooling"),join(root,"tooling"),{recursive:true});
-  copyModuleClosure(['tooling/records/record-pending.ts'],root);
+  mkdirSync(join(root,'tests/typescript'),{recursive:true});
+  copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{'tests/typescript':'pending-outcome records fixture'}});
+  assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   for(const file of ["tsconfig.base.json","tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }

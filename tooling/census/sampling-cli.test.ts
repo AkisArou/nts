@@ -39,6 +39,7 @@ test('sampled record comparisons distinguish omitted, pending and compared cases
   const git=(args:string[])=>{const result=spawnSync('git',gitArguments(args),{env:fixtureEnvironment(t),cwd:fixture,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
   git(['init','--quiet']);git(['add','tests']);git(['-c','user.name=Fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Private sample']);
   const selected=selectTypescript(fixture,'tests/typescript'),sampled=populationOf(selected,{sample:1});
+  assert.equal(selected.length,2,'the declared corpus is supplied by this fixture, without production cases');
   assert.ok('population' in sampled);const target=sampled.population[0]!.path;
   const other=selected.find(row=>row.path!==target)!.path;
   const pass:TypeScriptObservation={kind:'pass'},fingerprint=createHash('sha256').update(readFileSync(binary)).digest('hex').slice(0,16);
