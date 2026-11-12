@@ -1,0 +1,15 @@
+module	publication	call_sites
+tooling/census/census-scratch.test.ts	readiness path	1
+tooling/census/output-oracle.ts	sealed terminal outcomes	3
+tooling/census/worker-memory.test.ts	killed census slices	1
+tooling/differential/oracle-resolution.test.ts	session capability	1
+tooling/full-check/background.test.ts	unit outcome; existing manual rename consolidated	1
+tooling/full-check/run-environment-fixture.ts	branded child observation	1
+tooling/full-check/service.test.ts	branded delta suffix	1
+tooling/full-check/measure.test.ts	two branded summary suffixes	2
+tooling/gate/oracle-record.test.ts	collected plans	1
+tooling/gate/scopes/run-owner.test.ts	run owner info	1
+tooling/gate/scopes/stop.test.ts	cancellation, escape identity, seal handoff	3
+tooling/gate/step-bound-admission.test.ts	admission observation; existing manual rename consolidated	1
+tooling/gate/tooling-runner.test.ts	hung child readiness	1
+tooling/landing/run-holds.test.ts	here result	1
