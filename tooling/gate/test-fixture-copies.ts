@@ -45,7 +45,7 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   if(ast.isParameterDeclaration(node)&&node.name&&ast.isIdentifier(node.name))values.set(node.name.text,{value:node.name});
   if(ast.isVariableDeclaration(node)&&node.initializer){
    if(ast.isIdentifier(node.name))values.set(node.name.text,{value:node.initializer});
-   else if(ast.isObjectBindingPattern(node.name))for(const item of node.name.elements)if(ast.isIdentifier(item.name))values.set(item.name.text,{value:node.initializer,member:item.propertyName?code(item.propertyName):item.name.text});
+   else if(ast.isObjectBindingPattern(node.name))for(const item of node.name.elements)if(item.name&&ast.isIdentifier(item.name))values.set(item.name.text,{value:node.initializer,member:item.propertyName?code(item.propertyName):item.name.text});
   }
   if(ast.isForOfStatement(node)&&ast.isVariableDeclarationList(node.initializer))for(const item of node.initializer.declarations)
    if(ast.isIdentifier(item.name))values.set(item.name.text,{value:node.expression});
