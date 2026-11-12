@@ -1,7 +1,7 @@
 import {testEnvironment,testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { constants, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, closeSync, openSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -239,7 +239,7 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
 test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: TEST_HANG_MS }, async (t) => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of ["pressure-a", "pressure-b"]) {
+  for (const path of ["pressure-a", "pressure-b", "closed-reader-control"]) {
     const fifo = spawnTest("mkfifo", [join(directory, `release-${path}`)], { encoding: "utf8" });
     assert.equal(fifo.status, 0, fifo.stderr);
   }
@@ -248,6 +248,16 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
   t.after(gate.close);
   const rows: any[] = [];
   const reports: string[] = [];
+  let closedReaderControl = false;
+  const releaseReader = (path: string | number): string => {
+    try { writeFileSync(path, "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); return "released"; }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      // The OOM-killed reader can disappear before open, or before write.
+      if (code !== "ENXIO" && code !== "EPIPE") throw error;
+      return code;
+    }
+  };
   const summary = await runMemoryWorkers({
     paths: ["pressure-a", "pressure-b"], jobs: 2, memory, workerBytes: 640 * 2 ** 20,
     token: gate.token,
@@ -256,15 +266,21 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
     report: message => {
       reports.push(message);
       if (message.startsWith("resident pressure: requeued ")) {
-        for (const path of ["pressure-a", "pressure-b"]) {
-          try { writeFileSync(join(directory, `release-${path}`), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
-          catch (error) { if (error.code !== "ENXIO") throw error; } // A killed reader has no wait to release.
+        if (!closedReaderControl) {
+          const path = join(directory, "release-closed-reader-control");
+          const reader = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+          const writer = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
+          closeSync(reader); // Structural EPIPE: the writer is already open.
+          try { assert.equal(releaseReader(writer), "EPIPE"); closedReaderControl = true; }
+          finally { closeSync(writer); }
         }
+        for (const path of ["pressure-a", "pressure-b"]) releaseReader(join(directory, `release-${path}`));
       }
     },
   });
   assert.deepEqual(rows.map(row => [row.path, row.bucket]).sort(), [["pressure-a", "strict-pass"], ["pressure-b", "strict-pass"]]);
   assert.equal(rows.length, 2, "each input has exactly one final verdict");
+  assert.equal(closedReaderControl, true, "the vanished reader did not lose the survivor verdict");
   assert.ok(summary.pressureRequeues >= 1 && summary.pressureRequeues <= 2, JSON.stringify(summary));
   assert.equal(summary.isolatedReplays, summary.pressureRequeues);
   assert.ok(summary.aggregatePressureKills > 0, JSON.stringify(summary));
