@@ -344,7 +344,12 @@ export type CaseIdentity={step:string;backend:string;path:string};
 /** The version-two history key. Compiler and content identities never enter it. */
 export function caseMemoryKey(identity:CaseIdentity):string{return JSON.stringify([identity.step,identity.backend,identity.path]);}
 function compositeCaseKey(key:string):boolean{
-  try{const value:unknown=JSON.parse(key);return CASE_KEY.test(key)&&Array.isArray(value)&&value.length===3&&value.every(part=>typeof part==='string')&&KEY.test(value[0])&&value[2].length>0;}
+  try{
+    const value:unknown=JSON.parse(key);
+    if(!CASE_KEY.test(key)||!Array.isArray(value)||value.length!==3)return false;
+    const [step,backend,path]:unknown[]=value;
+    return typeof step==='string'&&KEY.test(step)&&typeof backend==='string'&&typeof path==='string'&&path.length>0;
+  }
   catch{return false;}
 }
 /** Each case's last few peaks, oldest first, by its key. */
