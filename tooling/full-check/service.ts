@@ -158,7 +158,8 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
 }
 
 class ControllerRestart extends Error {
-  constructor(readonly commit:string) { super(`restarting for verified ${commit}`); }
+  readonly commit:string;
+  constructor(commit:string) { super(`restarting for verified ${commit}`); this.commit=commit; }
 }
 
 function beforeRun(fx: Effects):void {
