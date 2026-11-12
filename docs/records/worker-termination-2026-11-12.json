@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "node": "26.13.0",
+  "source_pin": "4b89c4cca",
+  "before": {
+    "base": {
+      "pin": "fef93db92283",
+      "completed": 75,
+      "native_aborts": 3
+    },
+    "candidate": {
+      "pin": "9bc14851c543",
+      "completed": 74,
+      "native_aborts": 2
+    }
+  },
+  "standalone": {
+    "processes_per_arm": 16,
+    "async_dependency_aborts": 16,
+    "synchronous_dependency_aborts": 0,
+    "terminations_per_successful_process": 100
+  },
+  "after": {
+    "completed": 400,
+    "native_aborts": 0,
+    "passed": 398,
+    "ordinary_failures": [
+      {
+        "log": "batch-13-1.log",
+        "kind": "EPIPE",
+        "sha256": "b0fb775322c4bf2884000bcf6a0363457bc5884962bd03085929e4b964a146f9"
+      },
+      {
+        "log": "batch-18-3.log",
+        "kind": "partial readiness JSON",
+        "sha256": "43f1e25b880eea38340b2d8b17e08c610372803a235313e7ec77c13a89876065"
+      }
+    ],
+    "landing_interrupted_excluded": 16
+  },
+  "host_audit_wall_seconds": {
+    "separate_parse": 4.096932,
+    "shared_parse": 1.8998089999999999,
+    "final_focused": 2.799071
+  },
+  "worker_source_sha256": {
+    "tooling/gate/memory-ledger.ts": "6b68b97aa0aed67273fc49ed30ec64c21b0b95b45d57e95685eed63e5dbf10f3",
+    "tooling/gate/memory-watch.ts": "2c78e07ed56cfa506a2b29f2843d6dec6be1f18ddf78518a3c43c89a7fd731fe",
+    "tooling/gate/worker-lifecycle.ts": "0e6dfb46688b86dfac33ce34d184f6a0bbb737f0c2415b5338f9bfd795966f3f",
+    "tooling/gate/module-async.ts": "20835b9f0653f8082f980dffa40c16372018b49a7ad54e99b9ffb33ed30496cd",
+    "tooling/gate/test-host-audit.ts": "c55f3f2c986ed9275b3ef7cb1c23e2c6fce989c2a74abaf739c3bb6ba484e0c5"
+  },
+  "notes": [
+    "Background suites reused one private oracle-resolution holder namespace after its holder process died; their verdicts are not canonical proof.",
+    "EPIPE fixed after the frozen confirmation, with a closed-reader control that fails under the previous condition.",
+    "The readiness JSON publication failure is #730."
+  ]
+}

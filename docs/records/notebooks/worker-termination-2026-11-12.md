@@ -89,3 +89,25 @@ joins the test's slice and has its own runtime bound.
 The same refused run's CLI live-memory check saw a published 160 MiB peak
 but no matching final history row. That route uses a detached watcher
 process, not reserveJob's Worker; the exact flush failure is not yet reduced.
+
+## Confirmation
+
+The frozen sampler implementation at `4b89c4cca` completed 400 loaded
+worker-memory test processes with zero native aborts. Sixteen subjects stopped
+for incoming landings are excluded. Two ordinary failures are retained: an
+OOM reader disappeared between FIFO open and write (EPIPE), and a partially
+published ready.json failed parsing (#730). The EPIPE condition and its
+deterministic closed-reader control are fixed in #735 after the frozen run.
+The previous condition fails that control, while the fixed file passes.
+
+The host audit took 4.097 seconds with separate parsing, 1.900 seconds with
+shared roots, and 2.799 seconds in the final focused run. Its Worker rule borrows
+the existing root before lease disposal and stores detached facts. The final
+focused proof passed 95 tests and strict checking with no diagnostic increase.
+The [tool-written summary](../worker-termination-2026-11-12.json) retains counts
+and production-source hashes.
+
+Background suite verdicts are not proof: the experiment reused its own
+oracle-resolution namespace across separately stopped scopes. The holder does
+not reclaim holder.json when its PID is dead. Real run directories are fresh;
+no cross-run account cache interference was observed.
