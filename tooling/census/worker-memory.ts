@@ -15,6 +15,7 @@ import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from
 import {caseEnvironment,caseReceipt,ownCaseWorker,retireCaseScope,type CaseReceipt} from '../gate/case-context.ts';
 import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
+import {hostInfrastructure} from '../gate/host-infrastructure.ts';
 
 const CGROUP = "/sys/fs/cgroup";
 const STOP_HANG_MS = 5 * 60_000;
@@ -348,10 +349,12 @@ export class MemoryWorker {
     const childEnvironment=caseEnvironment(environment);
     this.#receipt=caseReceipt(childEnvironment);
     const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
+    // A program's filtered environment need not carry the launcher's bus.
+    // The bounded-entry scope uses only its parent's declared infrastructure.
     const scope = {
       unit, ready,
       argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${bootstrap}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "bash", "--noprofile", "--norc", "--posix", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
-      env: { ...childEnvironment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
+      env: { ...childEnvironment, ...hostInfrastructure(process.env), NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);
     return scope;
