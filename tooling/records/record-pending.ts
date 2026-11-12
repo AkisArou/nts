@@ -103,7 +103,6 @@ export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
-const OUTCOMES_RECORDER=new URL('../conformance/outcomes-check.ts',import.meta.url);
 
 /**
  * The gate steps whose checks hold each kind's records: a kind is recorded
@@ -264,7 +263,7 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       // The JVM, which bench-agree checks (BENCH_AGREE_BACKENDS).
       return [["tooling/differential/check-consumers.ts", "benchmarks", "--record-pending"]];
     case "outcomes":
-      return [[relative(SOURCE_ROOT,fileURLToPath(OUTCOMES_RECORDER)), "--record-pending"]];
+      return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
     case "dex":
       return [["tooling/android/dex-record.ts", "record-pending"]];
     case "compile-times": {
