@@ -61,7 +61,8 @@
 //   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (inner loop; never landing)
 //   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
 //   NTS_GATE_RUN_DIR      where logs and the summary go
-//                         (default <target>/gate-runs/<time>-<pid>)
+//                         (outside the source tree; default
+//                          ~/.cache/nts-gate/runs/<time>-<pid>)
 //   NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
 //   NTS_GATE_RECORD_TIMES=1 write this run's times to tooling/gate/times.tsv
 //   NTS_GATE_STEP_CEILING_S the most any step may run (the landing check's
