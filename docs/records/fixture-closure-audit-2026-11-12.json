@@ -1,0 +1,27 @@
+{
+  "method": "ABBA on one tree; control disables only inspectFixtureCopies inside the shared AST walk. All other audit code and source inputs are identical.",
+  "samples": [
+    {
+      "name": "control",
+      "wallMs": 2261.798386
+    },
+    {
+      "name": "current",
+      "wallMs": 2407.374157
+    },
+    {
+      "name": "current",
+      "wallMs": 2434.9910839999993
+    },
+    {
+      "name": "control",
+      "wallMs": 2092.6165459999993
+    }
+  ],
+  "meanMs": {
+    "control": 2177.207466,
+    "current": 2421.1826204999998
+  },
+  "addedMs": 243.97515449999992,
+  "profile": "The same current audit was also run with node --cpu-prof; exclusive V8 samples in test-fixture-copies.ts total 0.194 s. The new rule does not parse sources a second time."
+}
