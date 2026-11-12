@@ -963,7 +963,7 @@ test("a publication that fails is made again once main moves, and a record main 
 
 test("one night's run is in flight at a time: a night due while the last run waits to land measures once it lands", async t => {
   const repo = repository(t), gate = fakeGate(repo), at = machine(repo, gate, { bench: stubBench() });
-  const first = repo.commit({ "a.txt": "1\n" }, "verified one");
+  repo.commit({ "a.txt": "1\n" }, "verified one");
   await cycle(at(BEFORE));
   const night = at(NIGHT);
   await cycle(night);
