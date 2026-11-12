@@ -177,7 +177,7 @@ if [ -n "$r8" ]; then
   case "$out" in *"PASS:"*) ;; *) failed=1 ;; esac
   adb shell rm -f /data/local/tmp/nts-shrunk.dex /data/local/tmp/nts-testonly.dex
 else
-  echo "--- no cached R8; run \`cargo test -p nts-codegen-jvm --test android\` first to pin and fetch it"
+  echo "--- no cached R8; run \`cargo test -p nts-codegen-jvm --test integration android::\` first to pin and fetch it"
 fi
 
 # Does `ConnectivityManager` deliver, and is the first network not a change?

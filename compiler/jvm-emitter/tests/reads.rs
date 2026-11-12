@@ -589,7 +589,7 @@ fn nullability_is_asymmetric_between_returns_and_arguments() {
 }
 
 /// Print the generated declarations, for reading rather than asserting.
-/// `cargo test --test reads show_generated -- --nocapture --ignored`
+/// `cargo test --test integration reads::show_generated -- --nocapture --ignored`
 #[test]
 #[ignore = "output for a human, not an assertion"]
 fn show_generated() {
