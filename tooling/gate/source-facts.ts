@@ -219,10 +219,13 @@ export function inspectSourceBatches(api:import('typescript/sync').API,inputs:It
       const input=next.value,size=Buffer.byteLength(input.source);if(batch.length&&bytes+size>SOURCE_BATCH_BYTES)break;
       batch.push(input);bytes+=size;next=iterator.next();
     }
-    const leases=api.batch(...batch.map(input=>api.createSourceFile.gen(input.parseFile??input.file,input.source)));
+    const leases:(import('typescript/sync').RetainedSourceFile|undefined)[]=api.batch(...batch.map(input=>api.createSourceFile.gen(input.parseFile??input.file,input.source)));
     totals.modules+=batch.length;totals.batches++;totals.largestBatchModules=Math.max(totals.largestBatchModules,batch.length);totals.largestBatchBytes=Math.max(totals.largestBatchBytes,bytes);
-    try{for(let i=0;i<batch.length;i++){const input=batch[i]!;inspect(new SourceFacts(input.file,input.source,leases[i]!.sourceFile));}}
-    finally{for(const lease of leases)lease.dispose();}
+    try{for(let i=0;i<batch.length;i++){
+      const input=batch[i]!,lease=leases[i]!;
+      try{inspect(new SourceFacts(input.file,input.source,lease.sourceFile));}
+      finally{lease.dispose();leases[i]=undefined;}
+    }}finally{for(const lease of leases)lease?.dispose();}
   }
   return totals;
 }
