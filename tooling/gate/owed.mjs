@@ -1619,6 +1619,9 @@ function stepInputGraph() {
           const files=trackedFiles().filter(path=>path.startsWith(input+"/"));
           directory({reader:"<entry>",directory:input,files},step);
           membership.add(input);add(input,step);
+          // Retain legacy additive text reach until its reader classification
+          // is complete. Data members still never enter the host AST graph.
+          queue.push(...files);
         }else moduleEntries.push(input);
       }
       entries.splice(0,entries.length,...moduleEntries);

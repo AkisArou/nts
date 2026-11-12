@@ -7,10 +7,24 @@ export function shellCommands(source:string):ShellCommands {
   const commands:ShellCommand[]=[],data:ShellCommands['data']=[];
   const prefixes=new Set(['if','then','elif','else','while','until','do','!','time','command','exec','builtin']);
   type Here={delimiter:string;quoted:boolean;tabs:boolean};
+  function arithmetic(start:number,end:number):number {
+    let i=start,depth=0;
+    while(i<end){
+      if(source[i]==='\\'){i+=2;continue;}
+      if(source.startsWith('$((',i)){i=arithmetic(i+3,end);continue;}
+      if(source.startsWith('$(',i)){i=scan(i+2,end,')');continue;}
+      if(source[i]==='`'){i=scan(i+1,end,'`');continue;}
+      if(depth===0&&source.startsWith('))',i))return i+2;
+      if(source[i]==='(')depth++;else if(source[i]===')')depth--;
+      i++;
+    }
+    return i;
+  }
   function substitutions(start:number,end:number):void {
     for(let i=start;i<end;){
       const c=source[i];
       if(c==='\\'){i+=2;continue;}
+      if(source.startsWith('$((',i)){i=arithmetic(i+3,end);continue;}
       if(source.startsWith('$(',i)){i=scan(i+2,end,')');continue;}
       if(c==='`'){i=scan(i+1,end,'`');continue;}
       i++;
@@ -36,6 +50,7 @@ export function shellCommands(source:string):ShellCommands {
         begin();const quote=c;i++;
         while(i<end&&source[i]!==quote){
           if(quote==='"'&&source[i]==='\\'){word+=source[i+1]??'';i+=2;continue;}
+          if(quote==='"'&&source.startsWith('$((',i)){dynamic=true;i=arithmetic(i+3,end);continue;}
           if(quote==='"'&&source.startsWith('$(',i)){dynamic=true;i=scan(i+2,end,')');continue;}
           if(quote==='"'&&source[i]==='`'){dynamic=true;i=scan(i+1,end,'`');continue;}
           if(quote==='"'&&source[i]==='$')dynamic=true;
@@ -43,7 +58,9 @@ export function shellCommands(source:string):ShellCommands {
         }
         i++;continue;
       }
+      if(source.startsWith('$((',i)){begin();dynamic=true;i=arithmetic(i+3,end);continue;}
       if(source.startsWith('$(',i)){begin();dynamic=true;i=scan(i+2,end,')');continue;}
+      if(source.startsWith('((',i)){finish();i=arithmetic(i+2,end);command=true;continue;}
       if(c==='`'){
         if(stop==='`'){finish();return i+1;}
         begin();dynamic=true;i=scan(i+1,end,'`');continue;

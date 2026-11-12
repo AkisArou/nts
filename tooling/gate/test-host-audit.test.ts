@@ -47,6 +47,9 @@ test('shell command reads follow quotes, substitutions and heredoc expansion',()
     ['cat <<EOF\nfree is prose here\nEOF\n',false],
     ['echo "\\$(free)"',false],
     ['cat <<EOF\n\\$(free)\nEOF\n',false],
+    ['echo "$((free))"',false],
+    ['((free))',false],
+    ['echo "$((1+$(free)))"',true],
   ];
   for(const [source,expected] of cases){
     const reads=inspectHostSource('tooling/shell-fixture.sh',source).reads.filter(read=>read.kind==='kernel');
