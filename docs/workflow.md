@@ -756,6 +756,7 @@ the first node task.
   preparation; verification stays isolated by project. A reusable baseline
   requires complete facts on both admission and read, so an infrastructure
   failure cannot permanently prevent reuse after the instrument is repaired.
+  ([record](records/notebooks/759-jvm-verifier.md)).
 
 - **Contributor proof uses the prepared inner loop.** `inner.ts` prepares the
   oracle seal, builds the compiler and owns the per-binary runner before
