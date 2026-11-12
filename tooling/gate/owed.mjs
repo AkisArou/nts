@@ -555,10 +555,11 @@ export const RULES = [
     name: "standalone ECMAScript provider witnesses",
     when: (/** @type {string} */ p) => /^runtime\/ecmascript\/(?:src|providers|tests|tools)\//.test(/** @type {string} */ p)
       || /^runtime\/ecmascript\/[^/]+\.(?:md|json)$/.test(p)
+      || p === "runtime/ecmascript/third_party/lunisolar-sources.json"
       || p.startsWith("tooling/conformance/ecmascript/"),
     settled: true,
     steps: [],
-    arms: [{ kind: "valid", asks: "the provider's standalone tests and ICU witnesses, outside the gate", run: "runtime/ecmascript/tests; runtime/ecmascript/tools/icu.ts" }],
+    arms: [{ kind: "valid", asks: "the provider's standalone tests, ICU witnesses and data generators, outside the gate", run: "runtime/ecmascript/tests; runtime/ecmascript/tools/icu.ts; runtime/ecmascript/tools/generate-lunisolar-data.ts" }],
   },
   {
     name: "standalone agreement fixtures",
@@ -990,10 +991,38 @@ export const RULES = [
   },
   {
     name: "license notices",
-    when: (/** @type {string} */ p) => /(?:^|\/)(?:LICENSE|COPYING)(?:[.-][^/]*)?$/.test(/** @type {string} */ p),
+    when: (/** @type {string} */ p) => /(?:^|\/)(?:LICENSE|COPYING|[^/]+-LICENSE)(?:[.-][^/]*)?$/.test(/** @type {string} */ p),
     settled: true,
     steps: [],
     arms: [],
+  },
+  {
+    name: "standalone census row queries",
+    when: (/** @type {string} */ p) => p === "tooling/census/rows.ts",
+    settled: true,
+    steps: [],
+    arms: [{kind:"valid",asks:"the standalone row query and gain-comparison readers, outside the gate",run:"node tooling/census/rows.ts --self-test; node tooling/census/rerun.ts"}],
+  },
+  {
+    name: "record number allocation",
+    when: (/** @type {string} */ p) => p === "tooling/gate/claim-record.sh",
+    settled: true,
+    steps: [],
+    arms: [{kind:"valid",asks:"the contributor's record-number allocator, outside the gate",run:"tooling/gate/claim-record.sh '<title>'"}],
+  },
+  {
+    name: "machine package bootstrap inputs",
+    when: (/** @type {string} */ p) => p === "tooling/bootstrap/arch-packages.txt",
+    settled: true,
+    steps: [],
+    arms: [{kind:"valid",asks:"the machine bootstrap reader, outside the gate",run:"tooling/bootstrap/bootstrap.sh"}],
+  },
+  {
+    name: "standalone gate project configuration",
+    when: (/** @type {string} */ p) => p === "tooling/gate/tsconfig.json",
+    settled: true,
+    steps: [],
+    arms: [{kind:"valid",asks:"the standalone project checker; the gate uses tooling/tsconfig.json instead",run:"node node_modules/typescript/bin/tsc --project tooling/gate/tsconfig.json"}],
   },
   {
     // Only worker-memory.test.ts executes this synthetic compiler. The
