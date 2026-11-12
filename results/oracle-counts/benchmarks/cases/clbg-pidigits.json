@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-pidigits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-pidigits/case.ts",
+      "signature": "92420800025d51b9648780bda4abef8bb891e041c782233fa1c5822f12046fb8",
+      "keys": {
+        "c": "05465b7980e0fe3415d1b8b36c17bc2c",
+        "jvm": "9eb9bc283a72bb6868d011299ac30171",
+        "llvm": "d51c46417da63bcae6ec06b3c43fd0b9"
+      },
+      "cases_sha256": "8e97dcf7a60005be42d674693bce4b44357beefb5da151f820a52d12880b1bdb",
+      "driver_sha256": "f4944a7a79d68f287fad422c55cde9a49b7c70603f551b3726e12afadf235d9c",
+      "input_domain": {
+        "identity": "4e72217fa49d55e855790b1195a68c59",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Bound the spigot's digit count, whose cost grows faster than quadratically, within the Node oracle's CPU budget, while covering benchmark seed 500 and published input 30.",
+                "max": 1000,
+                "integer": false,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Bound the spigot's digit count, whose cost grows faster than quadratically, within the Node oracle's CPU budget, while covering benchmark seed 500 and published input 30.",
+                "max": 1000,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 22,
+          "cases_sha256": "a4140f09df3e424886cc77ca5484f376c75c02c6aaba1bbf1440d16a9a93441b"
+        },
+        "work": {
+          "count": 22,
+          "cases_sha256": "35abe97eba8a7a42b59ae419c0fa8b325c09f10711d1190ecce8f10e9593aa51"
+        }
+      },
+      "complete": true,
+      "count": 44
+    }
+  ]
+}
