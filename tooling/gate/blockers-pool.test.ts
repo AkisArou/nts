@@ -18,7 +18,6 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const root = mkdtempSync(join(tmpdir(), "nts-blockers-pool-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const path of ["tooling/conformance", "tooling/gate", "tooling/jvm", "runtime/jvm", "napi", "tmp"]) mkdirSync(join(root, path), {recursive:true});
-  copyModuleClosure(["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"].map(path=>"tooling/"+path),root);
   copyFileSync(join(HERE, "../../runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   writeFileSync(join(root, "napi/node_api.h"), "");
   const trace = join(root, "trace.jsonl");
@@ -29,6 +28,9 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
     writeFileSync(join(dir, "tsconfig.json"), "{}");
     writeFileSync(join(dir, "src/main.ts"), "// expect: nothing refused\nexport function value() { return 1; }\n");
   }
+  copyModuleClosure(["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"].map(path=>"tooling/"+path),root,
+    {dataNamespaces:{'tests/refusals':'blocker pool private cases'}});
+  assert.deepEqual(readdirSync(join(root,'tests/refusals')).sort(),[...fixtureNames].sort(),'the pool control runs only its private cases');
   const compiler = join(root, "compiler");
   writeFileSync(compiler, `#!${process.execPath}
 const fs = require('node:fs'), path = require('node:path');

@@ -1742,8 +1742,9 @@ function stepInputGraph() {
         if (/\.(?:sh|py)$/.test(input)) {
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
           const launchedInputs=modules.describe(launched);
+          const ownedLaunchInputs=new Set(launchedInputs.ownedFiles);
           references.other.push(...launchedInputs.ownedFiles);
-          references.data=launchedInputs.files.filter(path=>!launchedInputs.ownedFiles.includes(path));
+          references.data=launchedInputs.files.filter(path=>!ownedLaunchInputs.has(path));
         }
         }
         // These tooling controls supply private fixture roots to the record
