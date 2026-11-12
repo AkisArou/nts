@@ -94,7 +94,7 @@ const changeOwes = (changes) => gateSteps(owed(changes));
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');
-    assert.ok(rule?.when(path),path);assert.deepEqual(rule.steps,['tooling']);
+    assert.ok(rule);assert.ok(rule.when(path),path);assert.deepEqual(rule.steps,['tooling']);
   }
 });
 
