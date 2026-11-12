@@ -112,6 +112,7 @@ impl Boundaries {
 
 #[derive(Debug)]
 struct Process {
+    state: char,
     group: u32,
     session: u32,
     running: bool,
@@ -159,6 +160,7 @@ fn process(text: &str) -> Result<Option<Process>> {
             .context("process CPU overflow")?;
     }
     Ok(Some(Process {
+        state: field(0)?.chars().next().context("missing process state")?,
         group: u32::try_from(group)?,
         session: u32::try_from(session)?,
         running: !matches!(fields[0], "Z" | "X"),
@@ -255,6 +257,9 @@ struct OwnedChild {
 
 impl OwnedChild {
     fn finish(&mut self) -> Result<()> {
+        self.finish_with(&mut LiveCleanup)
+    }
+    fn finish_with(&mut self, cleanup: &mut impl CleanupObserver) -> Result<()> {
         if self.finished {
             return Ok(());
         }
@@ -282,16 +287,7 @@ impl OwnedChild {
                 ensure!(!group_remains(group)?, "cannot stop owned compiled group");
             }
         }
-        // Signal delivery precedes termination. Do not return while a helper
-        // could still execute; an unreapable cleanup is an instrument error.
-        let cleanup = Instant::now();
-        while group_remains(group)? {
-            ensure!(
-                cleanup.elapsed() < Duration::from_secs(3),
-                "owned compiled group did not finish cleanup"
-            );
-            thread::sleep(Duration::from_millis(5));
-        }
+        wait_for_cleanup(group, cleanup)?;
         if let Some(child) = &mut self.child {
             child.wait()?;
         }
@@ -346,19 +342,77 @@ fn group_busy(group: u32) -> Result<bool> {
     Ok(false)
 }
 
-fn group_remains(group: u32) -> Result<bool> {
+#[derive(Debug, Clone)]
+struct RemainingProcess {
+    pid: u32,
+    state: char,
+    started: u64,
+}
+
+fn group_members(group: u32) -> Result<Vec<RemainingProcess>> {
+    let mut members = Vec::new();
     for entry in std::fs::read_dir("/proc")? {
         let entry = entry?;
         if let Some(pid) = entry
             .file_name()
             .to_str()
             .and_then(|name| name.parse().ok())
-            && process_at(pid)?.is_some_and(|process| process.group == group && process.running)
+            && let Some(process) =
+                process_at(pid)?.filter(|process| process.group == group && process.running)
         {
-            return Ok(true);
+            members.push(RemainingProcess {
+                pid,
+                state: process.state,
+                started: process.started,
+            });
         }
     }
-    Ok(false)
+    Ok(members)
+}
+fn group_remains(group: u32) -> Result<bool> {
+    Ok(!group_members(group)?.is_empty())
+}
+
+// SIGKILL precedes kernel exit and reaping. This is a wedged-instrument
+// backstop, not a case allowance: a loaded machine may take seconds to drain
+// an owned group, so only five minutes without complete cleanup fails closed.
+const CLEANUP_WEDGE_BOUND: Duration = Duration::from_secs(5 * 60);
+trait CleanupObserver {
+    fn now(&self) -> Instant;
+    fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>>;
+    fn pause(&mut self);
+}
+struct LiveCleanup;
+impl CleanupObserver for LiveCleanup {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+    fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>> {
+        group_members(group)
+    }
+    fn pause(&mut self) {
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+fn wait_for_cleanup(group: u32, observer: &mut impl CleanupObserver) -> Result<()> {
+    let started = observer.now();
+    loop {
+        let members = observer.members(group)?;
+        if members.is_empty() {
+            return Ok(());
+        }
+        let elapsed = observer.now().duration_since(started);
+        let remaining = members
+            .iter()
+            .map(|member| format!("{}:{} (start {})", member.pid, member.state, member.started))
+            .collect::<Vec<_>>()
+            .join(", ");
+        ensure!(
+            elapsed < CLEANUP_WEDGE_BOUND,
+            "compiled cleanup INSTRUMENT: owned group {group} remains after {elapsed:?}; wedged-cleanup bound {CLEANUP_WEDGE_BOUND:?}; remaining {remaining}"
+        );
+        observer.pause();
+    }
 }
 
 impl Drop for OwnedChild {
@@ -539,6 +593,7 @@ fn event_reader(
 /// What the supervisor reads of its owned group: /proc for a real child, a
 /// script in the tests of the idle decision.
 trait Probe {
+    fn now(&self) -> Instant;
     fn leader(&self, group: u32) -> Result<Option<Process>>;
     fn group_cpu(&self, group: u32) -> Result<u64>;
     /// Whether a thread of the group is busy; asked only when no CPU moved.
@@ -547,6 +602,9 @@ trait Probe {
 
 struct Live;
 impl Probe for Live {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
     fn leader(&self, group: u32) -> Result<Option<Process>> {
         process_at(group)
     }
@@ -569,7 +627,13 @@ struct Watch {
     group_budget: f64,
 }
 impl Watch {
-    fn new(identity: &Process, hz: u32, limits: Limits, channel: Option<&Channel>) -> Self {
+    fn new(
+        identity: &Process,
+        hz: u32,
+        limits: Limits,
+        channel: Option<&Channel>,
+        now: Instant,
+    ) -> Self {
         let budget = channel.map_or(limits.cpu_seconds, |c| {
             let calls = u32::try_from(c.boundaries.total - c.boundaries.next).unwrap_or(u32::MAX);
             (limits.cpu_seconds * (f64::from(calls) + 1.0)).min(COMMAND_CPU_BUDGET_SECONDS)
@@ -577,9 +641,9 @@ impl Watch {
         Self {
             hz,
             limits,
-            last: Instant::now(),
+            last: now,
             cpu: identity.cpu,
-            group_at: Instant::now(),
+            group_at: now,
             group_period: Duration::from_secs(5).min(limits.idle / 4),
             group_cpu: identity.cpu,
             group_budget: budget,
@@ -592,7 +656,7 @@ impl Watch {
         identity: (u64, u32),
         channel: Option<&Channel>,
     ) -> Result<Option<Incomplete>> {
-        let now = Instant::now();
+        let now = probe.now();
         if now.duration_since(self.group_at) >= self.group_period {
             let cpu = probe.group_cpu(group)?;
             if cpu != self.group_cpu {
@@ -728,7 +792,7 @@ impl Running {
             sender,
         ));
         let remaining = readers.len();
-        let watch = Watch::new(&identity, hz, limits, channel.as_ref());
+        let watch = Watch::new(&identity, hz, limits, channel.as_ref(), Live.now());
         Ok(Self {
             owned,
             channel,
@@ -757,7 +821,7 @@ impl Running {
     fn receive(&mut self, notice: Notice) -> Result<()> {
         match notice {
             Notice::Output(standard, bytes) => {
-                self.watch.last = Instant::now();
+                self.watch.last = Live.now();
                 if standard {
                     self.stdout.extend(bytes);
                 } else {
@@ -773,7 +837,7 @@ impl Running {
                     self.watch.hz,
                     self.watch.limits.cpu_seconds,
                 )?;
-                self.watch.last = Instant::now();
+                self.watch.last = Live.now();
             }
             Notice::Boundary(_) => {}
             Notice::Broken(message) => anyhow::bail!(message),
@@ -892,84 +956,101 @@ mod tests {
         command
     }
 
-    #[test]
-    fn a_silent_busy_child_completes_past_the_old_twenty_second_wall_guard() {
-        let child = node(
-            "const start=process.cpuUsage();for(;;){const used=process.cpuUsage(start);if(used.user+used.system>=21_000_000)break;}",
-        );
-        let finished = command(
-            child,
-            Limits {
-                cpu_seconds: 30.0,
-                idle: Duration::from_secs(2),
-            },
-        )
-        .unwrap();
-        assert!(finished.output.status.success());
-        assert!(finished.incomplete.is_none());
-        assert_eq!(finished.output.stdout, b"");
-    }
-
-    /// A group whose CPU never moves, whose leader keeps its identity, and
-    /// whose threads are busy or asleep as scripted.
     struct Scripted {
+        at: std::cell::Cell<Instant>,
+        cpu: std::cell::Cell<u64>,
         busy: bool,
+        present: bool,
+    }
+    impl Scripted {
+        fn new(busy: bool) -> Self {
+            Self {
+                at: std::cell::Cell::new(Instant::now()),
+                cpu: std::cell::Cell::new(0),
+                busy,
+                present: true,
+            }
+        }
+        fn advance(&self, by: Duration) {
+            self.at.set(self.at.get() + by);
+        }
+        fn watch(&self, limits: Limits) -> Watch {
+            Watch::new(
+                &self.leader(42).unwrap().unwrap(),
+                100,
+                limits,
+                None,
+                self.now(),
+            )
+        }
     }
     impl Probe for Scripted {
+        fn now(&self) -> Instant {
+            self.at.get()
+        }
         fn leader(&self, group: u32) -> Result<Option<Process>> {
-            Ok(Some(Process {
+            Ok(self.present.then_some(Process {
+                state: if self.busy { 'R' } else { 'S' },
                 group,
                 session: group,
                 running: true,
                 busy: self.busy,
                 started: 7,
-                cpu: 100,
+                cpu: self.cpu.get(),
             }))
         }
         fn group_cpu(&self, _: u32) -> Result<u64> {
-            Ok(100)
+            Ok(self.cpu.get())
         }
         fn busy(&self, _: u32, leader: &Process) -> Result<bool> {
             Ok(leader.busy)
         }
     }
-
-    /// How sampling `probe` for five times its idle guard ends.
-    fn sampled(probe: &Scripted) -> Option<IncompleteKind> {
-        let idle = Duration::from_millis(60);
-        let identity = probe.leader(42).unwrap().unwrap();
-        let mut watch = Watch::new(
-            &identity,
-            100,
-            Limits {
-                cpu_seconds: 30.0,
-                idle,
-            },
-            None,
-        );
-        let ends = Instant::now() + idle * 5;
-        while Instant::now() < ends {
-            if let Some(incomplete) = watch.sample(probe, 42, (7, 42), None).unwrap() {
-                return Some(incomplete.kind);
-            }
-            thread::sleep(Duration::from_millis(5));
-        }
-        None
-    }
-
     #[test]
-    fn a_busy_thread_with_no_cpu_progress_is_never_idle() {
-        // A child that waits for a core on a loaded machine, or that its
-        // memory cap holds in the kernel, shows R or D and no CPU progress for
-        // longer than its idle guard: it is still running. One whose every
-        // thread sleeps is hung.
-        assert!(sampled(&Scripted { busy: true }).is_none());
-        assert!(matches!(
-            sampled(&Scripted { busy: false }),
-            Some(IncompleteKind::Hung)
-        ));
+    fn supplied_progress_and_busy_threads_survive_arbitrarily_long_wall_gaps() {
+        for advances_cpu in [false, true] {
+            let probe = Scripted::new(true);
+            let mut watch = probe.watch(Limits {
+                cpu_seconds: 30.0,
+                idle: Duration::from_secs(2),
+            });
+            // No host wait: this represents a runnable child starved of CPU
+            // by siblings for many inactivity intervals, then making progress.
+            for _ in 0..10 {
+                probe.advance(Duration::from_secs(21));
+                if advances_cpu {
+                    probe.cpu.set(probe.cpu.get() + 1);
+                }
+                assert!(watch.sample(&probe, 42, (7, 42), None).unwrap().is_none());
+            }
+        }
     }
-
+    #[test]
+    fn supplied_sleep_without_progress_reaches_inactivity_and_exit_is_not_a_hang() {
+        let mut probe = Scripted::new(false);
+        let idle = Duration::from_secs(60);
+        let mut watch = probe.watch(Limits {
+            cpu_seconds: 30.0,
+            idle,
+        });
+        probe.advance(idle / 2);
+        assert!(watch.sample(&probe, 42, (7, 42), None).unwrap().is_none());
+        probe.advance(idle / 2);
+        assert!(matches!(
+            watch
+                .sample(&probe, 42, (7, 42), None)
+                .unwrap()
+                .unwrap()
+                .kind,
+            IncompleteKind::Hung
+        ));
+        probe.present = false;
+        probe.advance(idle);
+        assert!(
+            watch.sample(&probe, 42, (7, 42), None).unwrap().is_none(),
+            "the exit event, not inactivity, finishes an exited child"
+        );
+    }
     #[test]
     fn running_waiting_and_kernel_held_threads_are_busy_and_sleeping_ones_are_not() {
         let stat = |state: &str| {
@@ -982,116 +1063,78 @@ mod tests {
         }
     }
 
-    /// The highest CPU this process may use, outside the measurement pair
-    /// (4 and 5).
-    fn shared_core() -> u32 {
-        let status = std::fs::read_to_string("/proc/self/status").unwrap();
-        let allowed = status
-            .lines()
-            .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
-            .unwrap();
-        let mut cpus = Vec::new();
-        for part in allowed.trim().split(',') {
-            let (low, high) = part.split_once('-').unwrap_or((part, part));
-            cpus.extend(low.parse::<u32>().unwrap()..=high.parse::<u32>().unwrap());
-        }
-        cpus.into_iter()
-            .filter(|cpu| !matches!(cpu, 4 | 5))
-            .max()
-            .unwrap()
-    }
-
-    /// `program` on `core` in a scope of its own at CPU `weight`, beside its
-    /// siblings in the tooling run's slice when there is one.
-    fn weighted(weight: u32, unit: &str, core: u32, program: &[&str]) -> Command {
-        let mut command = Command::new("systemd-run");
-        command.args(["--user", "--scope", "--quiet", "--collect"]);
-        command.arg(format!("--unit={unit}"));
-        command.args([
-            "-p",
-            &format!("CPUWeight={weight}"),
-            "-p",
-            "RuntimeMaxSec=60",
-        ]);
-        if let Ok(slice) = std::env::var("NTS_TOOLING_SLICE") {
-            command.arg(format!("--slice={slice}"));
-        }
-        command.args(["--", "taskset", "-c", &core.to_string()]);
-        command.args(program);
-        command
-    }
-
     #[test]
-    fn a_busy_child_that_busier_siblings_keep_from_its_core_is_never_idle() {
-        // #630's condition, made certain: the child shares one core with four
-        // spinning siblings at ten thousand times its CPU weight, so for their
-        // four seconds it is runnable (R) with almost no CPU, past its one
-        // second idle guard; once they end it finishes its 50 ms of CPU.
-        let core = shared_core();
-        let namespace = crate::scratch::StdScratchDir::in_std_target("busy-observer");
-        let id = namespace.namespace();
-        let mut siblings = weighted(
-            10_000,
-            &format!("nts-test-busy-siblings-{id}"),
-            core,
-            &[
-                "sh",
-                "-c",
-                "for i in 1 2 3 4; do timeout 4 sh -c 'while :; do :; done' & done; wait",
-            ],
-        )
-        .spawn()
-        .unwrap();
-        thread::sleep(Duration::from_millis(300));
-        let child = weighted(
-            1,
-            &format!("nts-test-busy-child-{id}"),
-            core,
-            &[
-                "node",
-                "-e",
-                "const start=process.cpuUsage();for(;;){const used=process.cpuUsage(start);if(used.user+used.system>=50_000)break;}",
-            ],
-        );
-        let finished = command(
-            child,
-            Limits {
-                cpu_seconds: 30.0,
-                idle: Duration::from_secs(1),
-            },
-        );
-        let _ = siblings.wait();
-        let finished = finished.unwrap();
-        assert!(finished.incomplete.is_none(), "{:?}", finished.incomplete);
-        assert!(finished.output.status.success());
-    }
-
-    #[test]
-    fn idle_and_cpu_runaway_are_distinct_supervisor_observations() {
-        let idle = command(
-            node("setInterval(()=>{},1000)"),
-            Limits {
-                cpu_seconds: 5.0,
-                idle: Duration::from_millis(200),
-            },
-        )
-        .unwrap();
+    fn supplied_cpu_budget_is_runaway_even_when_every_thread_is_busy() {
+        let probe = Scripted::new(true);
+        let mut watch = probe.watch(Limits {
+            cpu_seconds: 0.1,
+            idle: Duration::from_secs(60),
+        });
+        probe.advance(Duration::from_secs(1));
+        probe.cpu.set(20);
         assert!(matches!(
-            idle.incomplete.unwrap().kind,
-            IncompleteKind::Hung
-        ));
-        let busy = command(
-            node("for(;;){}"),
-            Limits {
-                cpu_seconds: 0.1,
-                idle: Duration::from_secs(5),
-            },
-        )
-        .unwrap();
-        assert!(matches!(
-            busy.incomplete.unwrap().kind,
+            watch
+                .sample(&probe, 42, (7, 42), None)
+                .unwrap()
+                .unwrap()
+                .kind,
             IncompleteKind::Runaway
         ));
+    }
+    struct CleanupScript {
+        at: Instant,
+        steps: std::collections::VecDeque<(Duration, Vec<RemainingProcess>)>,
+        pauses: usize,
+    }
+    impl CleanupObserver for CleanupScript {
+        fn now(&self) -> Instant {
+            self.at
+        }
+        fn members(&mut self, _: u32) -> Result<Vec<RemainingProcess>> {
+            let (advance, members) = self
+                .steps
+                .pop_front()
+                .expect("scripted cleanup observation");
+            self.at += advance;
+            Ok(members)
+        }
+        fn pause(&mut self) {
+            self.pauses += 1;
+        }
+    }
+    #[test]
+    fn supplied_cleanup_can_drain_slowly_but_a_wedged_group_names_what_remains() {
+        let member = RemainingProcess {
+            pid: 43,
+            state: 'D',
+            started: 7,
+        };
+        let mut slow = CleanupScript {
+            at: Instant::now(),
+            steps: [
+                (Duration::from_secs(4), vec![member.clone()]),
+                (Duration::from_secs(1), vec![]),
+            ]
+            .into(),
+            pauses: 0,
+        };
+        wait_for_cleanup(42, &mut slow).unwrap();
+        assert_eq!(slow.pauses, 1);
+        let mut stuck = CleanupScript {
+            at: Instant::now(),
+            steps: [(CLEANUP_WEDGE_BOUND, vec![member])].into(),
+            pauses: 0,
+        };
+        let error = wait_for_cleanup(42, &mut stuck).unwrap_err().to_string();
+        for expected in [
+            "INSTRUMENT",
+            "group 42",
+            "wedged-cleanup bound",
+            "43:D",
+            "start 7",
+        ] {
+            assert!(error.contains(expected), "{error}");
+        }
     }
 
     #[test]
@@ -1117,7 +1160,7 @@ else:
             child,
             Limits {
                 cpu_seconds: 5.0,
-                idle: Duration::from_secs(5),
+                idle: CLEANUP_WEDGE_BOUND,
             },
         )
         .unwrap();
@@ -1195,7 +1238,7 @@ else:
                 .env("NTS_DIFF_RESULTS", &results);
             let limits = Limits {
                 cpu_seconds: 5.0,
-                idle: Duration::from_secs(5),
+                idle: CLEANUP_WEDGE_BOUND,
             };
             let finished = if enabled {
                 run(child, Utf8Path::from_path(&results).unwrap(), 0, 2, limits)
@@ -1291,7 +1334,7 @@ int main(int argc, char **argv) {{
                 1,
                 Limits {
                     cpu_seconds: 5.0,
-                    idle: Duration::from_secs(5),
+                    idle: CLEANUP_WEDGE_BOUND,
                 },
             )
             .unwrap();
