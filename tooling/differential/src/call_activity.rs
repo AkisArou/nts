@@ -401,7 +401,7 @@ fn group_remains(group: u32) -> Result<bool> {
 // SIGKILL precedes kernel exit and reaping. This is a wedged-instrument
 // backstop, not a case allowance: a loaded machine may take seconds to drain
 // an owned group, so only five minutes without complete cleanup fails closed.
-const CLEANUP_WEDGE_BOUND: Duration = Duration::from_secs(5 * 60);
+const CLEANUP_WEDGE_BOUND: Duration = Duration::from_mins(5);
 trait CleanupObserver {
     fn now(&self) -> Instant;
     fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>>;
@@ -979,12 +979,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
 
-    fn node(source: &str) -> Command {
-        let mut command = Command::new("node");
-        command.args(["-e", source]);
-        command
-    }
-
     struct Scripted {
         at: std::cell::Cell<Instant>,
         cpu: std::cell::Cell<u64>,
@@ -1059,7 +1053,7 @@ mod tests {
     #[test]
     fn supplied_sleep_without_progress_reaches_inactivity_and_exit_is_not_a_hang() {
         let mut probe = Scripted::new(false);
-        let idle = Duration::from_secs(60);
+        let idle = Duration::from_mins(1);
         let mut watch = probe.watch(Limits {
             cpu_seconds: 30.0,
             idle,
@@ -1099,7 +1093,7 @@ mod tests {
         let probe = Scripted::new(true);
         let mut watch = probe.watch(Limits {
             cpu_seconds: 0.1,
-            idle: Duration::from_secs(60),
+            idle: Duration::from_mins(1),
         });
         probe.advance(Duration::from_secs(1));
         probe.cpu.set(20);
@@ -1115,7 +1109,7 @@ mod tests {
     #[test]
     fn supplied_descendant_cpu_and_output_activity_use_the_same_clock() {
         let probe = Scripted::new(false);
-        let idle = Duration::from_secs(60);
+        let idle = Duration::from_mins(1);
         let mut watch = probe.watch(Limits {
             cpu_seconds: 30.0,
             idle,
@@ -1232,6 +1226,30 @@ mod tests {
 
     #[test]
     fn ready_owned_group_drains_after_its_leader_exits_and_a_late_observation() {
+        struct DelayedKernel {
+            stale: Option<Vec<RemainingProcess>>,
+            offset: Duration,
+            observed_late: bool,
+        }
+        impl CleanupObserver for DelayedKernel {
+            // Real time is only the five-minute wiring hang guard. The
+            // delayed observation crosses the old bound on supplied time.
+            fn now(&self) -> Instant {
+                Instant::now() + self.offset
+            }
+            fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>> {
+                if let Some(stale) = self.stale.take() {
+                    self.offset = Duration::from_secs(4);
+                    self.observed_late = true;
+                    Ok(stale)
+                } else {
+                    group_members(group)
+                }
+            }
+            fn pause(&mut self) {
+                LiveCleanup.pause();
+            }
+        }
         use std::io::BufRead as _;
         use std::os::unix::process::CommandExt as _;
         let child = Command::new("python3")
@@ -1285,30 +1303,6 @@ else:
         owned.child.take();
         let members = group_members(owned.pid).unwrap();
         assert!(members.iter().any(|member| member.pid == descendant));
-        struct DelayedKernel {
-            stale: Option<Vec<RemainingProcess>>,
-            offset: Duration,
-            observed_late: bool,
-        }
-        impl CleanupObserver for DelayedKernel {
-            // Real time is only the five-minute wiring hang guard. The
-            // delayed observation crosses the old bound on supplied time.
-            fn now(&self) -> Instant {
-                Instant::now() + self.offset
-            }
-            fn members(&mut self, group: u32) -> Result<Vec<RemainingProcess>> {
-                if let Some(stale) = self.stale.take() {
-                    self.offset = Duration::from_secs(4);
-                    self.observed_late = true;
-                    Ok(stale)
-                } else {
-                    group_members(group)
-                }
-            }
-            fn pause(&mut self) {
-                LiveCleanup.pause();
-            }
-        }
         let mut observer = DelayedKernel {
             stale: Some(members),
             offset: Duration::ZERO,
