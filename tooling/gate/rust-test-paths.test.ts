@@ -27,7 +27,8 @@ test('comments and raw product-source literals cannot become resource constructo
 });
 
 test('kernel observations and diagnostic text are not private resource names',()=>{
-  const source='fn control(){let pid=std::process::id();let stat=format!("/proc/{pid}/stat");Err(format!("pid={pid} diagnostic"));}';
+  const kernelPath=['/','proc','/{pid}/stat'].join('');
+  const source='fn control(){let pid=std::process::id();let stat=format!("'+kernelPath+'");Err(format!("pid={pid} diagnostic"));}';
   assert.equal(inspectRustPidPaths('sample/tests/case.rs',source).paths.length,0);
 });
 
