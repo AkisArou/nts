@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,7 +47,8 @@ test('the real native shell captures terminal statuses and publishes only the ag
   const tree=join(dir,codes.join('-')),bin=join(tree,'bin'),tmp=join(tree,'tmp');
   for(const path of ['tooling/conformance','tooling/gate','runtime/node/internal','runtime/node/control/test','runtime/c','bin','tmp'])
    mkdirSync(join(tree,path),{recursive:true});
-  for(const path of ['tooling/conformance/c-tests.sh','tooling/conformance/native-case-result.ts','tooling/gate/step-result.ts'])
+  copyModuleClosure(['tooling/conformance/native-case-result.ts'],tree);
+  for(const path of ['tooling/conformance/c-tests.sh'])
    copyFileSync(join(repo,path),join(tree,path));
   // Only external build/discovery and timeout commands are controlled. The
   // shell's status capture, terminal rows, helper and shared publisher are real.

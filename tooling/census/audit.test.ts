@@ -1,8 +1,9 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -11,7 +12,7 @@ test("metadata audit reads all authorities and exclusions without a compiler or 
   const write = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
   try {
     const path = "tooling/census/audit.ts";
-    write(path, ""); copyFileSync(new URL("./audit.ts", import.meta.url), join(root, path));
+    copyModuleClosure([path],root);
     write("tooling/census/features.json", JSON.stringify({ version: 1, features: { Feature: { class: "inapplicable", reason: "reason", authority: "docs/boundary.md §Boundary" } } }));
     const exclusions = { exclusions: [{ kind: "include", match: "helper.js", reason: "reason", authority: "docs/boundary.md §Boundary" }] };
     write("tooling/census/test262-exclusions.json", JSON.stringify(exclusions));

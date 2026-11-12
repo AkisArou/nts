@@ -1,9 +1,10 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from './test-environment.ts';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, posix } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/new-projects.ts";
 import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
@@ -38,16 +39,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   rmSync(join(root,"results/oracle-counts.json"));
   writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded","previously-no-config"].map(row)});
   git("add",".");git("commit","-qm","candidate");
-  for(const name of ["differential","conformance","gate"]) mkdirSync(join(root,"tooling",name),{recursive:true});
-  const agree=new URL("../differential/agree.mjs",import.meta.url).pathname;
-  put("tooling/differential/agree.mjs",readFileSync(agree,"utf8"));
-  // agree.mjs's own relative imports, read from it so this tree keeps pace with
-  // what it loads; a symlinked module resolves its own imports from the repo.
-  const imported=new Set([...readFileSync(agree,"utf8").matchAll(/\bfrom\s+["'](\.\.?\/[^"']+)["']/g)].map(([,specifier])=>posix.normalize(posix.join("differential",specifier!))));
-  for(const path of imported) {
-    mkdirSync(dirname(join(root,"tooling",path)),{recursive:true});
-    symlinkSync(new URL(`../${path}`,import.meta.url).pathname,join(root,"tooling",path));
-  }
+  copyModuleClosure(["tooling/differential/agree.mjs"],root);
   const binaries=["before","after"].map(role=>{
     const path=join(directory,role,"nts");mkdirSync(dirname(path));
     writeFileSync(path,`#!${process.execPath}

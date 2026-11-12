@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
@@ -27,7 +28,8 @@ test("the real records step validates benchmark evidence and its rendered table"
   };
   const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{env:testEnvironment(),cwd:root,encoding:"utf8"});
   try {
-    for(const path of ["tooling/gate/all.sh","tooling/gate/records.ts","tooling/bench/run-record.ts","tooling/bench/groups.ts"]) {
+    copyModuleClosure(["tooling/gate/records.ts"],root);
+    for(const path of ["tooling/gate/all.sh"]) {
       mkdirSync(dirname(join(root,path)),{recursive:true});
       writeFileSync(join(root,path),readFileSync(fileURLToPath(new URL("../../"+path,import.meta.url))));
     }

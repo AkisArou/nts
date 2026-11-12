@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -354,12 +355,11 @@ test("the real check CLI detects a one-change renderer drift", () => {
     git(root, ["add", "README"]);
     git(root, ["commit", "-qm", "fixture"]);
     publishRun(root, fixture("renderer"));
-    const implementation = fileURLToPath(new URL("./run-record.ts", import.meta.url)),
-      mutant = join(root, "mutant.ts"),
-      source = readFileSync(implementation, "utf8");
+    const implementation = fileURLToPath(new URL("./run-record.ts", import.meta.url));
+    copyModuleClosure(["tooling/bench/run-record.ts"],root);
+    const mutant=join(root,"tooling/bench/run-record.ts"),source=readFileSync(mutant,"utf8");
     assert.ok(source.includes("# Benchmark results"));
     writeFileSync(mutant, source.replaceAll("# Benchmark results", "# Drifted benchmark results"));
-    writeFileSync(join(root, "groups.ts"), readFileSync(fileURLToPath(new URL("./groups.ts", import.meta.url))));
     const good = spawnSync(process.execPath, [implementation, "check", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(good.status, 0, good.stderr);
     const bad = spawnSync(process.execPath, [mutant, "check", root], {env:testEnvironment(), encoding: "utf8" });

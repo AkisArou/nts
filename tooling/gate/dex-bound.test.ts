@@ -8,7 +8,7 @@ import {fixtureEnvironment} from "./test-environment.ts";
 //
 //   node --test tooling/gate/dex-bound.test.ts
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,10 +29,6 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
   copyModuleClosure(["tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);
-  // What the record's parser imports, as it is.
-  for (const path of ["tooling/bench/outcomes.ts", "tooling/records", "tooling/census", "tooling/conformance"]) {
-    if (!existsSync(join(root, path))) symlinkSync(join(ROOT, path), join(root, path));
-  }
   copyFileSync(new URL('./token.sh',import.meta.url),join(root, "tooling/gate/token.sh"));
   // d8 refuses what a `*-refused` target emits and accepts the rest; javap
   // names one method of each class.

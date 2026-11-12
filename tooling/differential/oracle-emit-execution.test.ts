@@ -1,3 +1,4 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 // The Node oracle's emission and preparation (oracle-emit.ts): captured runtime
 // assets, CommonJS and ESM goals at execution, oracle identity, child event
@@ -470,16 +471,16 @@ test("copied oracle assets run outside their source tree with an explicit toolch
   const root=workspace(t,{"src/main.ts":"enum E { Value=42 } console.log(E.Value);\n"});
   writeFileSync(join(root,"tsconfig.json"),JSON.stringify({compilerOptions:{target:"ESNext",module:"ESNext",moduleResolution:"bundler",noEmit:true},include:["src"]}));
   const assets=join(root,"assets");mkdirSync(assets);writeFileSync(join(assets,"package.json"),'{"type":"module"}');
-  for(const name of [...ORACLE_EXECUTION_FILES,"oracle-emit.ts","oracle-loader.ts","oracle-filesystem.ts","oracle-runtime.ts","oracle-resolution.ts","oracle-assets.ts","oracle-toolchain.json"])
-    cpSync(join(REPOSITORY,"tooling/differential",name),join(assets,name));
-  const prepared=spawnSync(process.execPath,[join(assets,"oracle-emit.ts"),"--prepare",join(root,"src/main.ts"),join(root,"emitted"),join(root,"tsconfig.json")],{
+  copyModuleClosure(["tooling/differential/oracle-emit.ts"],assets);
+  const entry=join(assets,"tooling/differential/oracle-emit.ts");
+  const prepared=spawnSync(process.execPath,[entry,"--prepare",join(root,"src/main.ts"),join(root,"emitted"),join(root,"tsconfig.json")],{
     encoding:"utf8",cwd:root,env:{...fixtureEnvironment(t),NTS_ORACLE_TYPESCRIPT:toolchain},
   });
   assert.equal(prepared.status,0,prepared.stderr);
   const configured:OraclePrepared=JSON.parse(prepared.stdout);
   assert.ok(configured.args.some(arg=>arg.startsWith("data:text/javascript,")&&decodeURIComponent(arg).includes("assets/oracle-loader.mjs")));
   for(const name of [...ORACLE_EXECUTION_FILES,"oracle-emit.ts","oracle-loader.ts","oracle-filesystem.ts","oracle-runtime.ts","oracle-resolution.ts","oracle-assets.ts","oracle-toolchain.json"])
-    assert.deepEqual(readFileSync(join(dirname(configured.manifest),"assets",name)),readFileSync(join(assets,name)));
+    assert.deepEqual(readFileSync(join(dirname(configured.manifest),"assets",name)),readFileSync(join(assets,"tooling/differential",name)));
   assert.deepEqual(configured.identity,oracleIdentity(toolchain));
   const run=execute(root,oracleExecution(configured));assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,"42\n");
 });

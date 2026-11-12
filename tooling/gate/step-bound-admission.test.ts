@@ -12,7 +12,7 @@ import {test,type TestContext} from "node:test";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {gateEnvironment,hostEnvironment} from "./canonical-environment.ts";
 import {readLedger,reserve,type Reservation} from "./memory-ledger.ts";
-import {moduleClosure} from "./module-closure-fixture.ts";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import type {BoundWait} from "./step-bound.ts";
 import {ownMemory} from "./test-memory.ts";
@@ -34,10 +34,7 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
     if(!inherited)stopToolingSlice(slice);
     removable(own);rmSync(own,{recursive:true,force:true});
   });
-  for(const file of moduleClosure(["tooling/gate/run.mjs"])) {
-    const target=join(root,file);mkdirSync(dirname(target),{recursive:true});copyFileSync(join(SOURCE,file),target);
-  }
-  copyFileSync(join(SOURCE,"tooling/gate/tokens.mjs"),join(gate,"tokens.mjs"));
+  copyModuleClosure(["tooling/gate/run.mjs","tooling/gate/tokens.mjs"],root);
   const table=join(gate,"step-table.mjs");
   writeFileSync(table,readFileSync(table,"utf8").replace(`name: "${STEP}", bound: 3600`,`name: "${STEP}", bound: 3`));
   assert.match(readFileSync(table,"utf8"),/name: "test262-census-c", bound: 3,/);

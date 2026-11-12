@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -328,7 +329,7 @@ test("Cargo infrastructure crosses the endpoint process without becoming a polic
   const gate = join(repo, "tooling/gate");
   mkdirSync(gate, { recursive: true });
   mkdirSync(join(repo, "tooling/inputs"));
-  for (const file of ["gate/owed-range.ts", "gate/checks.ts", "gate/change-paths.ts", "inputs/linker.ts"]) writeFileSync(join(repo, "tooling", file), readFileSync(join(ROOT, "tooling", file)));
+  copyModuleClosure(["tooling/gate/owed-range.ts"],repo);
   writeFileSync(join(repo, "Cargo.toml"), "[workspace]\n");
   writeFileSync(join(gate, "owed.mjs"), `
 import {readFileSync} from "node:fs";

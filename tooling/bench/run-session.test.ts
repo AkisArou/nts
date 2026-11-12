@@ -1,8 +1,9 @@
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
@@ -77,14 +78,12 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
     assert.equal(row.status, 0, row.stderr);
     assert.match(row.stdout, /control\t/);
     assert.match(row.stdout, /1\.000× SHORT/);
-    const mutant = join(root, "run-session.ts");
-    const source = readFileSync(script, "utf8"),
-      changed = source.replace(/\bconsoleHeader,\s*/g, "").replace(/\bconsoleRow,\s*/g, "")
-        .replace('from "../jvm/vm-flags.ts"', "from " + JSON.stringify(new URL("../jvm/vm-flags.ts", import.meta.url).href));
+    copyModuleClosure(["tooling/bench/run-session.ts"],root);
+    const mutant = join(root, "tooling/bench/run-session.ts");
+    const source = readFileSync(mutant, "utf8"),
+      changed = source.replace(/\bconsoleHeader,\s*/g, "").replace(/\bconsoleRow,\s*/g, "");
     assert.notEqual(changed, source);
     writeFileSync(mutant, changed);
-    for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts", "run-journal.ts", "groups.ts"])
-      symlinkSync(fileURLToPath(new URL("./" + name, import.meta.url)), join(root, name));
     const old = spawnSync(process.execPath, [mutant, "header", root], {env:testEnvironment(), encoding: "utf8" });
     assert.equal(old.status, 1);
     assert.match(old.stderr, /consoleHeader is not defined/);

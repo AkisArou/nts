@@ -6,6 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {shellCommands} from './shell-commands.ts';
 import type {Node} from 'typescript/ast';
+import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-fixture-copies.ts';
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
 import {auditWorkerModules,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
@@ -138,9 +139,10 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
 
 export function auditTestHost(root:string,debt?:HostDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
-  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[];
+  const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[];
   const inspect=(file:string,source:string,node:Node)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
+    copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node));
   }};
   try {
@@ -169,7 +171,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
-  return {files:sources.size,closures,reads,publications,problems:[...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditWorkerModules(root,moduleFacts).problems]};
+  return {files:sources.size,closures,reads,publications,problems:[...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditWorkerModules(root,moduleFacts).problems,...fixtureCopyProblems(root,copies)]};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

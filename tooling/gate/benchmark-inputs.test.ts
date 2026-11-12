@@ -1,3 +1,4 @@
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
@@ -212,7 +213,8 @@ test("inherited include rules cannot make opaque input a compiled root", () => {
 test("the real licences CLI invokes the input guard before accepting a compiler inventory", () => {
   const f = fixture();
   try {
-    for (const path of ["tooling/licenses/licenses.ts", "tooling/licenses/benchmark-inputs.ts", "build/node-deps/recipes.json"]) {
+    copyModuleClosure(["tooling/licenses/licenses.ts"],f.root);
+    for (const path of ["build/node-deps/recipes.json"]) {
       mkdirSync(dirname(join(f.root, path)), {recursive: true}); cpSync(join(repository, path), join(f.root, path));
     }
     symlinkSync(resolve(repository, "node_modules"), join(f.root, "node_modules"));
