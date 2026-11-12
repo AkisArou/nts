@@ -589,12 +589,14 @@ export const RULES = [
   },
   {
     name: "native platform build and launch helpers",
+    wide: true,
     when: (/** @type {string} */ p) => /^tooling\/(?:apple|windows)\/[^/]+\.sh$/.test(p),
     steps: ["interop"],
     arms: [],
   },
   {
     name: "the JVM catalogue launcher",
+    wide: true,
     when: (/** @type {string} */ p) => p === "tooling/jvm/member-name.ts",
     steps: ["interop", "on-device"],
     arms: [],
