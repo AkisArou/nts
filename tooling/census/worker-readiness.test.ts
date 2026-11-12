@@ -24,7 +24,7 @@ test('bounded entry publishes readiness only after its complete cgroup path',asy
   assert.ok(at>0);
   // Redirection opens the publication's target before this printf function
   // enters. Holding it here exposes exactly the old empty-file window.
-  scope.argv[at]='printf() { case "${2-}" in 0::*) : > "$READY_PAUSED"; IFS= read -r released < "$READY_RELEASE" ;; esac; builtin printf "$@"; }\n'+scope.argv[at];
+  scope.argv[at]='printf() { case "$2" in 0::*) : > "$READY_PAUSED"; IFS= read -r released < "$READY_RELEASE" ;; esac; builtin printf "$@"; }\n'+scope.argv[at];
   const child=spawn('systemd-run',scope.argv,{env:scope.env,stdio:['ignore','pipe','pipe']});
   let output='',ended=false;
   child.stdout.on('data',part=>{output+=part;});child.stderr.on('data',part=>{output+=part;});
