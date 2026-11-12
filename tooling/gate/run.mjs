@@ -1118,14 +1118,17 @@ function adjustMemory() {
   // could give.
   const wanted = [...running.values()].reduce((sum, r) => sum + (r.draining ? 0 : r.want), 0);
   if (wanted) need = Math.max(need, Math.min(u.bytes + withholdBytes + wanted - reserved(), capacity - reserved()));
+  const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
   // A growth that waits stays queued while the run yields: the request that
   // outranks the run is ahead of it, so it cannot be admitted before that one.
   if (growth) {
-    if (need <= 0 && !growth.withdrawn) { growth.withdrawn = true; growth.controller.abort(); }
+    // Running work can drain while this ticket waits. Keep a useful partial
+    // grant, but withdraw an excess before its stale size blocks a fitting job.
+    // Its finally schedules the replacement only after cancellation settles.
+    if (bytes < growth.bytes && !growth.withdrawn) { growth.withdrawn = true; growth.controller.abort(); }
     return;
   }
-  if (need <= 0 || yielding) return;
-  const bytes = Math.min(Math.ceil(need / BLOCK) * BLOCK, capacity - reserved());
+  if (bytes <= 0 || yielding) return;
   const controller = new AbortController(), asked = Date.now();
   growth = { bytes, controller, withdrawn: false };
   reservation.grow(bytes, { signal: controller.signal }).then(() => {
