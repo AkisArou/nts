@@ -140,9 +140,9 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     function visit(node:Node):void{
       if(ast.isCallExpression(node)){
         if(generated&&node.arguments[0]&&!sealedWrites.has(node)&&
-          (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|appendFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&!pathKind(node.arguments[0],/\.jsonl$/)&&
+          (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&!pathKind(node.arguments[0],/\.jsonl$/)&&
             (jsonValue(node.arguments[1])||pathKind(node.arguments[0],/\.json(?:\.|$)/))||
-           /^(?:fs|fs\/promises)\.(?:open(?:Sync)?|createWriteStream)$/.test(name(node.expression))&&pathKind(node.arguments[0],/\.json(?:\.|$)/))){
+           (/^(?:fs|fs\/promises)\.createWriteStream$/.test(name(node.expression))||/^(?:fs|fs\/promises)\.open(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&render(node.arguments[1])!=='r')&&pathKind(node.arguments[0],/\.json(?:\.|$)/))){
           const line=offset+text.slice(0,node.pos).split('\n').length,source=code(node).replace(/\s+/g,' '),key=line+':'+source;
           if(!seen.has(key)){seen.add(key);found.push({file,line,source});}
         }

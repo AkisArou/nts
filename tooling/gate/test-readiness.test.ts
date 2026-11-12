@@ -44,7 +44,7 @@ const numeric=['.1','1e9'];const options=['-e','.1'];
 function prose(){return \`writeFileSync('ready.json', JSON.stringify({ok:true}));\`;}
 const sample=${JSON.stringify(writer)};`),[]);
   const good=`import{durableRecord}from'./durable-record.ts';durableRecord('ready.json',{ok:true});
-import{appendFileSync}from'node:fs';appendFileSync('events.jsonl',JSON.stringify({event:1})+'\\n');`;
+import{appendFileSync,openSync}from'node:fs';appendFileSync(log,JSON.stringify({event:1})+'\\n');openSync('input.json','r');`;
   assert.deepEqual(inspect(`import{spawnSync}from'node:child_process';spawnSync(node,['-e',${JSON.stringify(good)}]);`),[]);
   assert.equal(generatedJavaScript('console.log(1)'), 'console.log(1)','the source brand is a pure identity');
 });
