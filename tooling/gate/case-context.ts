@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 export const CASE_LEASE_ADDRESS='NTS_GATE_CASE_LEASE_ADDRESS';
 export const CASE_LEASE_ID='NTS_GATE_CASE_LEASE_ID';
 export type CaseReceipt={address:string;id:string};
-export type TokenRelease=(()=>void)&{case?:CaseReceipt};
+export type TokenRelease=(()=>void)&{case?:CaseReceipt;closed?:Promise<void>};
 const current=new AsyncLocalStorage<CaseReceipt>();
 const cleanups=new Map<string,Set<()=>void>>();
 
@@ -41,6 +41,7 @@ export function caseEnvironment(env:NodeJS.ProcessEnv):NodeJS.ProcessEnv{
 export function runWithToken<T>(release:TokenRelease,run:()=>T):T{
   return release.case?current.run(release.case,run):run();
 }
+export async function releaseToken(release:TokenRelease):Promise<void>{release();await release.closed;}
 export function registerCaseScope(receipt:CaseReceipt|undefined,group:string,cap:number,scope:string):Promise<void>{
   if(!receipt)return Promise.resolve();
   return new Promise((resolve,reject)=>{

@@ -11,7 +11,7 @@ import type { Backend } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { createFeed, type CaseToken } from "../gate/admission.ts";
 import { reserveJob, type JobRequest } from "../gate/memory-ledger.ts";
-import { acquireToken,runWithToken } from "../gate/tokens.mjs";
+import { acquireToken,runWithToken,releaseToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
@@ -170,7 +170,7 @@ export async function compileCells(cells: readonly CompileCell[], lanes: number,
       } catch (error) {
         failure ??= { error };
         stop.abort();
-      } finally { taken.release(); }
+      } finally { await releaseToken(taken.release); }
     }
   };
   await Promise.all(Array.from({ length: Math.min(lanes, cells.length) }, (_, index) => lane(index)));

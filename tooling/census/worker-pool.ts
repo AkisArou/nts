@@ -21,7 +21,7 @@ import { cgroupCharge, reserveJob, type Reservation } from "../gate/memory-ledge
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
-import {registerCaseScope,type TokenRelease} from '../gate/case-context.ts';
+import {registerCaseScope,releaseToken,type TokenRelease} from '../gate/case-context.ts';
 
 export type ResidentPoolOptions = {
   paths: string[];
@@ -67,7 +67,9 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
   const worker = async (index: number) => {
     const bound = memory.worker(index, workerBytes);
     let again = true;
+    let returned=Promise.resolve();
     while (again) {
+      await returned;
       again = await new Promise<boolean>((resolve, reject) => {
         // Include startup and waits between dispatches: an idle scope can be
         // collateral damage from the same aggregate or system-wide killer.
@@ -87,7 +89,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         const returnToken = () => {
           const held = release;
           release = undefined;
-          held?.();
+          if(held){returned=releaseToken(held);void returned.catch(fail);}
         };
         const finish = (row?: any) => {
           if (!active) throw new Error(`worker ${index} answered without an in-flight case`);
@@ -123,7 +125,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           try { bound.stop(scope); } catch {}
           reject(error);
         };
-        const feed = () => queue.feed({
+        const feed = () => returned.then(()=>queue.feed({
           write: async (entry, granted) => {
             if (active !== undefined) {
               granted();
@@ -142,7 +144,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           end: () => child.stdin.end(),
           exited: () => exited || restarting,
           signal: stopped.signal,
-        }).catch(fail);
+        })).catch(fail);
         child.on("error", fail);
         child.stdin.on("error", (error) => { if (!exited && !restarting) fail(error); });
         createInterface({ input: child.stdout }).on("line", (line) => {
@@ -210,6 +212,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         void start().catch(fail);
       });
     }
+    await returned;
   };
   try {
     for (let index = 0; index < Math.min(jobs, work.length); index++) tasks.push(worker(index));

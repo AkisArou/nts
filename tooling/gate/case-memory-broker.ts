@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {basename} from 'node:path';
 import {readFileSync} from 'node:fs';
 import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
-import {caseHistoryFile,readCaseHistory,writeCaseHistory,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
+import {caseHistoryFile,readCaseHistory,writeCaseHistory,KEPT_PEAKS,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
 
 export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
@@ -43,7 +43,10 @@ export class CaseMemoryBroker {
     const identity=caseIdentity(request.step,decoded(request.context),root);
     request.memory=new CaseMemoryLease(identity,{
       history:step=>{let history=this.#histories.get(step);if(!history){history=readCaseHistory(caseHistoryFile(step,env,root));this.#histories.set(step,history);}return history;},
-      completed:(step,row)=>{const rows=this.#completed.get(step)??[];rows.push(row);this.#completed.set(step,rows);},
+      completed:(step,row)=>{
+        const rows=this.#completed.get(step)??[];rows.push(row);this.#completed.set(step,rows);
+        const history=new Map(this.#histories.get(step));history.set(row.key,[...history.get(row.key)??[],row.peak].slice(-KEPT_PEAKS));this.#histories.set(step,history);
+      },
       open:group=>{
         const meter=host.scopeMemoryPeak(group);
         if(!meter.resettable){meter.close();throw Error('case memory: per-case worker peak meter cannot reset');}

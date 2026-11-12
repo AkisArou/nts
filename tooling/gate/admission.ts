@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
+import {releaseToken} from './case-context.ts';
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
@@ -129,14 +130,14 @@ export function createFeed(paths: readonly string[], { token = untokened, outran
         const reserved = returned.pop() ?? next++;
         const release = await token(paths[reserved]!, worker.signal ?? never);
         if (release === null || worker.exited()) {
-          release?.();
+          if(release)await releaseToken(release);
           returned.push(reserved);
           if (worker.exited()) return;
           continue;
         }
         // Outranked while the token was awaited: the case gives way, with its token.
         if (outranked()) {
-          release();
+          await releaseToken(release);
           returned.push(reserved);
           continue;
         }

@@ -66,7 +66,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     }
   };
   pool.start=()=>new Promise(resolve=>{
-    const server=createServer(sock=>{
+    const server=createServer({allowHalfOpen:true},sock=>{
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:Date.now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
       sock.on('data',(data:string)=>{
@@ -96,13 +96,16 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
         pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');
       });
       const gone=async()=>{
-        if(w.gone)return;w.gone=true;trace(w.granted?'token.release':'token.cancel',w);
+        if(w.gone)return;w.gone=true;
         if(w.granted){
-          pool.account();await completed(w);pool.active.delete(w);pool.held.set(w.step,(pool.held.get(w.step)??0)-1);
+          pool.account();await completed(w);trace('token.release',w);pool.active.delete(w);pool.held.set(w.step,(pool.held.get(w.step)??0)-1);
           if(w.bytes!==undefined){const s=pool.sized.get(w.step)!;pool.sized.set(w.step,{count:s.count-1,bytes:s.bytes-w.bytes});}
           pool.total--;released();pool.grant();trace('pool.change');
-        }else if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);
+        }else {trace('token.cancel',w);if(w.step!=='')pool.waiting=pool.waiting.filter(x=>x!==w);}
       };
+      // FIN is the completion acknowledgement. A normal client retains its
+      // readable socket until the final meter and worker drain have finished.
+      sock.on('end',()=>{void gone().then(()=>sock.end(),failed);});
       sock.on('close',()=>{void gone().catch(failed);});sock.on('error',()=>{void gone().catch(failed);});
     });
     server.on('error',()=>resolve(null));server.listen(0,'127.0.0.1',()=>{

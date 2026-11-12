@@ -22,8 +22,8 @@
 // so it hands back the release instead of running a callback.
 import { connect } from "node:net";
 import {randomUUID} from 'node:crypto';
-import {runWithToken,closeCaseWorkers} from './case-context.ts';
-export {runWithToken} from './case-context.ts';
+import {runWithToken,closeCaseWorkers,releaseToken} from './case-context.ts';
+export {runWithToken,releaseToken} from './case-context.ts';
 
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
 const STEP = process.env.NTS_GATE_STEP ?? "?";
@@ -78,6 +78,15 @@ export function tokenClient(where, step) {
         if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
         settle();
         let held = true;
+        let ended=false;
+        const closed=new Promise((resolve,reject)=>{
+          sock.once('end',()=>{ended=true;held?reject(new Error('tokens.mjs: the runner ended an active case lease')):resolve();});
+          sock.once('error',reject);
+          sock.once('close',()=>{if(!ended)reject(new Error('tokens.mjs: the runner ended before the case completion reply'));});
+        });
+        // Callers await closed at their lifetime boundary, which may be later
+        // than an unexpected runner failure while the case still executes.
+        void closed.catch(()=>{});
         const release=() => {
           if (!held) return;
           held = false;
@@ -86,6 +95,7 @@ export function tokenClient(where, step) {
           sock.end('done\n');
         };
         if(lease)release.case={address:where,id:lease};
+        release.closed=closed;
         resolve(release);
       });
       sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
@@ -112,7 +122,7 @@ export async function withToken(fn, context) {
   try {
     return await runWithToken(release,fn);
   } finally {
-    release();
+    await releaseToken(release);
   }
 }
 
