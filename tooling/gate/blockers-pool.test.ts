@@ -168,7 +168,7 @@ else process.stdout.write(${JSON.stringify(names.map(n=>`${n}/src/main.ts`).join
   writeFileSync(join(h.root,"tooling/conformance/integrity.ts"),`
 import {appendFileSync} from 'node:fs';
 import {withToken} from '../gate/tokens.mjs';
-await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage:'integrity'})+'\\n');});
+await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage:'integrity'})+'\\n');},{scope:'step'});
 `);
   const observations: any[]=[];
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1,observe:(e: any)=>observations.push(e)});

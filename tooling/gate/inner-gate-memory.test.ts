@@ -66,7 +66,7 @@ NAMES
 elif [ "$2" = program-oracles ]; then
   node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-results.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();'
 else
-  exec bash "$(dirname "$0")/token.sh" touch ${JSON.stringify(started)}
+  exec bash "$(dirname "$0")/token.sh" --step -- touch ${JSON.stringify(started)}
 fi
 `);
   const compiler = join(own, "nts"); writeFileSync(compiler, "controlled compiler identity\n");

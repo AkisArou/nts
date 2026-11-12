@@ -13,6 +13,10 @@ export type CaseMemoryEffects={
 /** Content and compiler identities are deliberately absent: a new compiler
  * still needs the memory the same case held on the preceding compiler. */
 export function caseIdentity(step:string,context:Record<string,unknown>,root:string):CaseIdentity {
+  if(context.scope==='step'){
+    if(context.project!==undefined)throw Error('case memory: a step lease cannot also name a case');
+    return {step,backend:'',path:'@step'};
+  }
   const path=context.project;
   if(typeof path!=='string'||!path.trim())throw Error(`case memory: ${step} has no case path`);
   const local=relative(root,resolve(root,path));

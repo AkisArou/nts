@@ -8,6 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { connect } from "node:net";
+import { randomUUID } from 'node:crypto';
+import { tokenClient } from './tokens.mjs';
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -33,6 +35,7 @@ async function pool(n, opts = {}) {
 }
 
 function run(cmd, args, env, input, holdInput = false) {
+  if (cmd === TOKEN) args = ['--step', '--', ...args];
   const child = spawn(cmd, args, { env: { ...testEnvironment(), ...env }, stdio: ["pipe", "pipe", "pipe"] });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
@@ -79,7 +82,7 @@ fs.writeFileSync(base+'.end',String(process.hrtime.bigint()));console.log('done 
 
 test("a token comes back when its holder is SIGKILLed", async () => {
   const p = await pool(1);
-  const child = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  const child = spawn(TOKEN, ["--step", "--", process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
   const closed=new Promise(resolve=>child.on("close",resolve));
   await waitFor("the token holder to be granted",()=>p.total===1);
   child.kill("SIGKILL");
@@ -117,7 +120,7 @@ test("outside a gate the command runs; inside one, a runner that is gone is an e
 
 test("a runner that accepted and then died: every waiting worker exits non-zero, none runs", async () => {
   const p = await pool(1);
-  const holder = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  const holder = spawn(TOKEN, ["--step", "--", process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
   await waitFor("the token holder to be granted",()=>p.total===1);
   const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
   await waitFor("three queued token clients",()=>p.waiting.length===3);
@@ -144,7 +147,7 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   const p = await pool(1, { claim: (step) => (step === "long" ? 100 : 1),
     observe: e => { if (e.event === "token.grant" && e.step !== "other") order.push(e.step); },
   });
-  const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...testEnvironment(), ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
+  const holder = spawn(TOKEN, ["--step", "--", "sh", "-c", "read _"], { env: { ...testEnvironment(), ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
   const released = new Promise((r) => holder.on("close", r));
   await waitFor("the token holder to be granted",()=>p.total===1);
   const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => assert.equal(r.status, 0));
@@ -169,19 +172,19 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
     inside += 1; most = Math.max(most, inside);
     await release.promise;
     inside -= 1;
-  })));
+  }, {scope:"step"})));
   try {await waitFor("two admitted callbacks and four queued requests",()=>inside===2 && p.waiting.length===4);}
   finally {release.resolve();await running;}
   assert.equal(most, 2);
   await waitFor("all token releases",()=>p.total===0);
   assert.equal(p.total, 0);
-  assert.equal(await withToken(async () => 42), 42);
+  assert.equal(await withToken(async () => 42, {scope:"step"}), 42);
   // What the tool spawns inherits the guard, so it does not ask again.
   const child = await run("sh", ["-c", "echo $NTS_GATE_TOKEN_HELD"], {NTS_GATE_TOKEN_HELD:process.env.NTS_GATE_TOKEN_HELD});
   assert.equal(child.out.trim(), "1");
   p.close();
   // And a runner that is gone rejects rather than running untokened.
-  await assert.rejects(withToken(async () => "ran"), /went away|cannot be reached/);
+  await assert.rejects(withToken(async () => "ran", {scope:"step"}), /went away|cannot be reached/);
 });
 
 test("a failed telemetry observer changes neither grants nor the command's exit", async () => {
@@ -195,34 +198,44 @@ test("a failed telemetry observer changes neither grants nor the command's exit"
   } finally { p.close(); }
 });
 
-test("shell telemetry preserves project names without adding protocol lines", async () => {
+test("case telemetry preserves project names without adding protocol lines", async () => {
   const observations = [];
   const p = await pool(1, { observe: e => observations.push(e) });
   try {
     const project = "tests/programs/a% b\nq/tsconfig.json";
-    const r = await run(TOKEN, ["sh", "-c", "exit 0", "_", project], {
-      ...tokenEnv(p), NTS_GATE_CASE_COSTS_DIR: "enabled",
-    });
-    assert.equal(r.status, 0);
+    const release = await tokenClient(p.addr, 'examples').acquire({project});
+    release(); await release.closed;
     const request = observations.find(e => e.event === "token.request");
-    assert.equal(decodeURIComponent(request.context.slice(5)), project);
+    assert.equal(JSON.parse(Buffer.from(request.context.slice(7),'base64url').toString()).project, project);
     assert.equal(observations.filter(e => e.event === "token.grant").length, 1);
   } finally { p.close(); }
 });
 
 // A request line as tokens.mjs and token.sh send it, on its own connection:
 // `go` resolves true, a close without it false.
-function asking(p, line) {
+function asking(p, line, declared = true) {
   const at = p.addr.lastIndexOf(":");
   const sock = connect({ host: p.addr.slice(0, at), port: Number(p.addr.slice(at + 1)) });
+  let answer = '';
   const go = new Promise((resolve) => {
-    sock.on("data", (d) => { if (String(d).startsWith("go")) resolve(true); });
+    sock.on("data", (d) => { answer += d; if (String(d).startsWith("go")) resolve(true); });
     sock.on("close", () => resolve(false));
   });
-  sock.write(line + "\n");
-  return { go, close: () => sock.destroy() };
+  sock.write(line + (declared ? " lease:" + randomUUID() + " json64:" + Buffer.from(JSON.stringify({scope:"step"})).toString("base64url") : "") + "\n");
+  return { go, answer:()=>answer, close: () => sock.destroy() };
 }
 const UNIT = 600;
+
+test('both token endpoints refuse a request with no declared lease',async()=>{
+  const p=await pool(1);
+  try{
+    await assert.rejects(tokenClient(p.addr,'examples').acquire({}),/declare a case project or an explicit step lease/);
+    const raw=asking(p,'want examples 1',false);
+    assert.equal(await raw.go,false);assert.match(raw.answer(),/requires an explicit case or step lease/);raw.close();assert.equal(p.total,0);
+    const result=await run('bash',[TOKEN,'true'],tokenEnv(p));
+    assert.equal(result.status,75);assert.match(result.out,/needs --case or an explicit --step lease/);
+  }finally{p.close();}
+});
 
 test("a sized request that fits goes before an older one of its step that does not, and each token counts at its size", async () => {
   const q = createTokenPool({

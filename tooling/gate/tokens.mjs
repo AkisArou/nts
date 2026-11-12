@@ -43,10 +43,11 @@ export function tokenClient(where, step) {
   const i = where.lastIndexOf(":");
   const address = { host: where.slice(0, i), port: Number(where.slice(i + 1)) };
   const acquire = (context, signal, bytes) => {
+    if(!context||!(typeof context.project==='string'&&context.project.trim()||context.scope==='step'))return Promise.reject(new Error('tokens.mjs: declare a case project or an explicit step lease'));
     if (bytes !== undefined && !(Number.isSafeInteger(bytes) && bytes > 0)) return Promise.reject(new Error(`tokens.mjs: a token's size is a positive whole number of bytes, not ${bytes}`));
     if (signal?.aborted) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
-      const lease=context?.project===undefined?undefined:randomUUID();
+      const lease=randomUUID();
       const sock = connect(address);
       let settled = false;
       let buf = "";

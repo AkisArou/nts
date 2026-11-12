@@ -14,7 +14,7 @@ test('a lost case controller retains its token until its worker drain completes'
     completed:async request=>{if(++completions===1){assert.equal(request.answered,undefined);draining();await drained;}}});
   const address=await pool.start();assert.ok(address);t.after(()=>{finishDrain();pool.close();});
   const first=connect({host:'127.0.0.1',port:Number(address.split(':')[1])});t.after(()=>first.destroy());
-  await new Promise<void>((resolve,reject)=>{first.once('error',reject);first.once('data',data=>{assert.equal(String(data),'go\n');resolve();});first.once('connect',()=>first.write(`want integrity ${process.pid}\n`));});
+  await new Promise<void>((resolve,reject)=>{first.once('error',reject);first.once('data',data=>{assert.equal(String(data),'go\n');resolve();});first.once('connect',()=>first.write(`want integrity ${process.pid} lease:lost-case json64:eyJzY29wZSI6InN0ZXAifQ\n`));});
   let granted=false;const next=tokenClient(address,'integrity').acquire({project:'tests/fixture/next'}).then(release=>{granted=true;return release;});
   await waitFor('the next case to queue',()=>pool.waiting.length===1);
   first.destroy();await started;

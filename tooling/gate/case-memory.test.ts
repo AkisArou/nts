@@ -25,6 +25,8 @@ test('case identity keeps its measured history across compiler and content chang
   assert.notEqual(caseMemoryKey(before),caseMemoryKey({...before,step:'dex'}));
   assert.throws(()=>caseIdentity('benches',{project:'/outside'},'/source'),/outside its source tree/);
   assert.throws(()=>caseIdentity('benches',{project:'tests/../../outside'},'/source'),/outside its source tree/);
+  assert.deepEqual(caseIdentity('benches',{scope:'step'},'/source'),{step:'benches',backend:'',path:'@step'});
+  assert.throws(()=>caseIdentity('benches',{scope:'step',project:'tests/fixture'},'/source'),/step lease cannot also name a case/);
 });
 
 test('a known case asks for its own peak, including when it exceeds the entire initial grant',()=>{

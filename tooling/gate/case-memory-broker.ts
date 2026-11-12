@@ -12,7 +12,6 @@ type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};
 type BrokerOptions={root:string;env:NodeJS.ProcessEnv;host:HostObservations;boundary(step:string):WorkerBoundary;report(message:string):void};
 function decoded(text:string|null):Record<string,unknown>{
   if(text?.startsWith('json64:'))return JSON.parse(Buffer.from(text.slice(7),'base64url').toString('utf8')) as Record<string,unknown>;
-  if(text?.startsWith('path:'))return {project:decodeURIComponent(text.slice(5))};
   throw Error('case memory: a leased token has no declared case identity');
 }
 function property(unit:string,bytes:number):Promise<void>{
@@ -38,7 +37,7 @@ export class CaseMemoryBroker {
   #options:BrokerOptions;
   constructor(options:BrokerOptions){this.#options=options;}
   prepare(request:CaseTokenRequest):void{
-    if(!request.lease)return; // Historical unsized clients keep their protocol.
+    if(!request.lease)throw Error('case memory: a token request requires an explicit case or step lease');
     const {root,env,host}=this.#options;
     const identity=caseIdentity(request.step,decoded(request.context),root);
     request.memory=new CaseMemoryLease(identity,{

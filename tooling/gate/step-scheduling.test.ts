@@ -366,7 +366,7 @@ case $1 in
   integrity)
     work() {
       until [ -e "$own/format-ran" ]; do
-        bash "$gate/token.sh" node -e 'require("node:fs").writeFileSync(process.argv[1] + "/case-ran", "")' "$own" || exit 1
+        bash "$gate/token.sh" --step -- node -e 'require("node:fs").writeFileSync(process.argv[1] + "/case-ran", "")' "$own" || exit 1
       done
     }
     pids=
@@ -473,9 +473,9 @@ case $1 in
   integrity)
     work() {
       until [ -e "$own/landing-admitted" ]; do
-        bash "$gate/token.sh" node -e 0 || exit 1
+        bash "$gate/token.sh" --step -- node -e 0 || exit 1
       done
-      bash "$gate/token.sh" node -e 0
+      bash "$gate/token.sh" --step -- node -e 0
     }
     pids=
     for worker in 1 2 3 4 5 6 7 8; do work & pids="$pids $!"; done
@@ -672,7 +672,7 @@ test("a case's peaks are kept, by its key, and it reserves as a unit does; a cas
   mkdirSync(env.NTS_GATE_COSTS_DIR);
   const file = caseHistoryFile("program-oracles", env);
   const key=(path:string)=>caseMemoryKey({step:'program-oracles',backend:'node',path});
-  assert.equal(file, join(own, "costs", "cases", "program-oracles.json"));
+  assert.equal(file, join(own, "costs", "cases-v2", "program-oracles.json"));
   assert.equal(readCaseHistory(file).size, 0);
   for (let run = 1; run <= KEPT_PEAKS + 1; run++)
     assert.equal(writeCaseHistory(file, [{ key: key("benchmarks/cases/heavy"), peak: run * GiB }, { key: key("tests/programs/light"), peak: 140 * MiB }]), undefined);
@@ -700,6 +700,21 @@ test('version-one oracle subject history migrates to composite keys and retains 
   assert.equal(caseReservation(readCaseHistory(file),key),peakReservation([600*MiB]));
 });
 
+test('an older writer cannot overwrite the version-two case history namespace',t=>{
+  const root=testScratch(t,'case-history-old-writer'),env={NTS_GATE_COSTS_DIR:root};
+  const file=caseHistoryFile('program-oracles',env),legacy=join(root,'cases','program-oracles.json');
+  const subject='tests/programs/example',key=caseMemoryKey({step:'program-oracles',backend:'node',path:subject});
+  mkdirSync(dirname(legacy));
+  const old=JSON.stringify({version:1,cases:{[subject]:[600*MiB]}})+'\n';writeFileSync(legacy,old);
+  assert.deepEqual(readCaseHistory(file).get(key),[600*MiB]);
+  assert.equal(writeCaseHistory(file,[{key,peak:400*MiB}]),undefined);
+  assert.equal(readFileSync(legacy,'utf8'),old,'the migration leaves the old candidate its own file');
+  writeFileSync(legacy,JSON.stringify({version:1,cases:{[subject]:[100*MiB]}}));
+  assert.deepEqual(readCaseHistory(file).get(key),[600*MiB,400*MiB]);
+  writeFileSync(file,'invalid');
+  assert.equal(readCaseHistory(file).size,0,'a present v2 file never falls back to stale v1');
+});
+
 test("a sized token is answered once its step's slice can hold it: its runaway bound follows its held tokens' sizes", t => {
   // integrity's unit is 256 MiB; its worker asks for a 1 GiB token and then a
   // 512 MiB one, and reads its slice's MemoryMax as each is answered.
@@ -709,7 +724,13 @@ test("a sized token is answered once its step's slice can hold it: its runaway b
     steps: "integrity", availableKiB: 16 * 2 ** 20,
     rows: { integrity: { elastic: true, slots: 2, min: 1, reserve: 0.25, bound: 60 } },
     times: "integrity\t100\t20\t2\n",
-    before: own => { fixture = own; },
+    before: (own,memory) => {
+      fixture = own;
+      assert.equal(writeCaseHistory(caseHistoryFile('integrity',memory),[
+        {key:caseMemoryKey({step:'integrity',backend:'',path:'tests/fixture/first'}),peak:peakFor(GiB)},
+        {key:caseMemoryKey({step:'integrity',backend:'',path:'tests/fixture/second'}),peak:peakFor(GiB/2)},
+      ]),undefined);
+    },
     payload: `
 case $1 in
   integrity) exec node --input-type=module -e '
@@ -718,8 +739,8 @@ import { dirname, join } from "node:path";
 const { acquireToken } = await import(process.argv[1]);
 const slice = join("/sys/fs/cgroup", dirname(readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "")));
 const high = () => Number(readFileSync(join(slice, "memory.max"), "utf8"));
-const first = await acquireToken({}, undefined, 2 ** 30), atFirst = high();
-const second = await acquireToken({}, undefined, 2 ** 29), atSecond = high();
+const first = await acquireToken({project:"tests/fixture/first"}), atFirst = high();
+const second = await acquireToken({project:"tests/fixture/second"}), atSecond = high();
 writeFileSync(process.argv[2] + "/highs.json", JSON.stringify([atFirst, atSecond]));
 first(); second();
 ' ${JSON.stringify(tokens)} "$2" ;;

@@ -42,10 +42,11 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 //
 // **A case can be its own unit.** An elastic step whose cases differ by
 // orders of magnitude keeps a history of its own beside steps.json,
-// `cases/<step>.json`: each case's last few peaks, by the case's key, kept
-// and reserved as a unit's are. Its tool asks for each case's token at that
-// case's reservation (tokens.mjs, a request's `bytes`), and for one it has
-// not measured at the step's unit. program-oracles does: a median program
+// `cases-v2/<step>.json`: each case's last few peaks, by step, backend and
+// path. The runner sizes each lease from those peaks, or live use and margin
+// when it has never been measured. The old cases/ namespace is imported only
+// before the first v2 publication, so historical candidates cannot overwrite
+// a newer history. program-oracles showed why: a median program
 // held 139 MiB and three held two gigabytes, so a token sized for every
 // program at once asked eighteen times what most of them hold.
 //
@@ -353,14 +354,23 @@ export type CaseObservation = { key: string; peak: number };
 /** The case history of `step` beside the target's steps.json (`historyFile`). */
 export function caseHistoryFile(step: string, env: NodeJS.ProcessEnv = process.env, root: string = TOOLING_ROOT): string {
   if (!KEY.test(step)) throw new Error(`not a step name: ${step}`);
-  return join(dirname(historyFile(env, root)), "cases", `${step}.json`);
+  return join(dirname(historyFile(env, root)), "cases-v2", `${step}.json`);
 }
 
 /** Version one used subject paths for program-oracles. Migrate once at the
  * reader boundary; every writer publishes only composite version-two keys. */
 export function readCaseHistory(file: string): CaseHistory {
   let value: unknown;
-  try { value = JSON.parse(readFileSync(file, "utf8")); } catch { return new Map(); }
+  let source: string;
+  try { source = readFileSync(file, "utf8"); }
+  catch (error) {
+    // Old candidates still write cases/. Import it only before the first v2
+    // publication; an old writer can never replace a newer history.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || basename(dirname(file)) !== 'cases-v2') return new Map();
+    try { source = readFileSync(join(dirname(dirname(file)), 'cases', basename(file)), 'utf8'); }
+    catch { return new Map(); }
+  }
+  try { value = JSON.parse(source); } catch { return new Map(); }
   if (!record(value) || (value.version!==1&&value.version!==2) || !keys(value, ["version", "cases"]) || !record(value.cases)) return new Map();
   const cases = new Map<string, readonly number[]>();
   for (const [key, peaks] of Object.entries(value.cases)) {

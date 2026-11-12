@@ -82,7 +82,7 @@ test("token pool: a running case finishes through a hold, and the next waits unt
   const run = (script: string, delayStart = false) => {
     const command=join(HERE, "token.sh");
     // The first token request arrives after the old 300 ms assumption.
-    const args=delayStart ? ["-c", 'sleep 0.35; exec "$@"', "_", command, "sh", "-c", script] : ["sh", "-c", script];
+    const args=delayStart ? ["-c", 'sleep 0.35; exec "$@"', "_", command, "--step", "--", "sh", "-c", script] : ["--step", "--", "sh", "-c", script];
     const child = spawn(delayStart ? "sh" : command, args, { env, stdio: ["pipe", "pipe", "inherit"] });
     let output = "";
     child.stdout.on("data", chunk => { output += chunk; });

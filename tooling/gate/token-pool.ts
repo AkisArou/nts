@@ -1,5 +1,5 @@
 // One token is one connection, retained until its case and descendants end.
-// Sized tokens account for their case; old unsized clients retain the protocol.
+// Every request names an explicit case or step lease. The broker sizes it.
 import {createServer,type Server,type Socket} from 'node:net';
 import type {CaseMemoryLease} from './case-memory.ts';
 import {hostObservations} from './host-observations.ts';
@@ -98,6 +98,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
           w.bytes=bytes;rest=rest.slice(1);
         }
         if(rest[0]?.startsWith('lease:')){w.lease=rest[0].slice(6);if(!/^[-a-zA-Z0-9]{1,64}$/.test(w.lease)){sock.destroy();return;}rest=rest.slice(1);}
+        if(!w.lease){sock.end('error: token request requires an explicit case or step lease\n');return;}
         w.context=rest.join(' ');w.step=known(step)?step:'?';w.since=now();
         try{prepare(w);if(w.memory)w.bytes=w.memory.bytes;}catch(error){sock.end(`error: ${String(error)}\n`);return;}
         pool.waiting.push(w);trace('token.request',w);pool.grant();trace('pool.change');

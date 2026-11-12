@@ -107,9 +107,9 @@ test('an unknown case keeps its hard cap despite a much smaller step forecast',t
   assert.ok(peakReservation(peaks)>128*MiB,'the following run learns this case, rather than averaging the step');
 });
 
-test('the old unsized shape fires the ancestor cap and names both limits',t=>{
+test('the pre-registration worker shape fires the ancestor cap and names both limits',t=>{
   const f=runFixture(t,{live:false,payload:`
-const release=await acquireToken({});assert.ok(release);
+const release=await acquireToken({scope:"step"});assert.ok(release);
 try{
   const memory=memoryRun(),worker=memory.worker('old',2*2**30);
   // Restore the pre-fix setup only in this control: the requested worker

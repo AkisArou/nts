@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# token.sh <command> [args...]: run <command> holding one of the gate's tokens.
+# token.sh --case <path> [--backend <name>] -- <command> [args...]
+# token.sh --step -- <command> [args...]   a job with no case
 #
 # **The gate's CPU budget is a pool of tokens, one per running process**, held
 # by run.mjs (see "Tokens" there). A step's workers take one each around the
@@ -25,7 +26,12 @@
 #
 # The connection is inherited by what <command> starts, so a descendant that
 # outlives it keeps the token until it exits too: it is still the step's work.
-if [ "${1-}" = --case ] || [ "${1-}" = --case-last ]; then
+step_lease=""
+if [ "${1-}" = --step ]; then
+  step_lease=1; shift
+  [ "${1-}" = -- ] || { echo "token.sh --step needs -- before its command" >&2; exit 2; }
+  shift
+elif [ "${1-}" = --case ] || [ "${1-}" = --case-last ]; then
   if [ "$1" = --case-last ]; then case_path=${!#}; shift; else case_path=${2:?token.sh --case needs a path}; shift 2; fi
   case_backend=""
   if [ "${1-}" = --backend ]; then case_backend=${2:?token.sh --backend needs a name}; shift 2; fi
@@ -38,25 +44,20 @@ fi
 if [ -z "${NTS_GATE_TOKENS:-}" ] || [ -n "${NTS_GATE_TOKEN_HELD:-}" ]; then
   exec "$@"
 fi
+[ -n "$step_lease" ] || { echo "token.sh: a gate request needs --case or an explicit --step lease" >&2; exit 75; }
 host=${NTS_GATE_TOKENS%:*}
 port=${NTS_GATE_TOKENS##*:}
 if ! { exec {nts_gate_token}<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
   echo "token.sh: no gate runner at $NTS_GATE_TOKENS; not running $1" >&2
   exit 75
 fi
-if [ -n "${NTS_GATE_CASE_COSTS_DIR:-}" ]; then
-  # Escape the two protocol delimiters without spawning another process.
-  context=${!#}
-  context=${context//%/%25}
-  context=${context//$'\n'/%0A}
-  context=${context//$'\r'/%0D}
-  printf 'want %s %s path:%s\n' "${NTS_GATE_STEP:-?}" "$$" "$context" >&"$nts_gate_token"
-else
-  printf 'want %s %s\n' "${NTS_GATE_STEP:-?}" "$$" >&"$nts_gate_token"
-fi
+lease="step-$$-$RANDOM-$RANDOM"
+# The fixed context is {"scope":"step"}, encoded once without a helper process.
+printf 'want %s %s lease:%s json64:eyJzY29wZSI6InN0ZXAifQ\n' "${NTS_GATE_STEP:-?}" "$$" "$lease" >&"$nts_gate_token"
 if ! IFS= read -r reply <&"$nts_gate_token" || [ "$reply" != go ]; then
   echo "token.sh: the gate runner at $NTS_GATE_TOKENS went away before granting a token; not running $1" >&2
   exit 75
 fi
 export NTS_GATE_TOKEN_HELD=1
+export NTS_GATE_CASE_LEASE_ADDRESS="$NTS_GATE_TOKENS" NTS_GATE_CASE_LEASE_ID="$lease"
 exec "$@"
