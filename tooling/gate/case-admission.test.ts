@@ -20,7 +20,7 @@ type Summary={verdict:string;memory:{growths:number};steps:{name:string;verdict:
 
 function runFixture(t:TestContext,{payload,known=[],live=true}:{payload:string;known?:string[];live?:boolean}){
   const f=fixture(t),gate=join(f.tree,'tooling/gate');
-  for(const path of moduleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts'])){
+  for(const path of moduleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts'])){
     const destination=join(f.tree,path);mkdirSync(dirname(destination),{recursive:true});copyFileSync(join(ROOT,path),destination);
   }
   const memory=ownMemory(join(f.own,'memory'),{availableKiB:4*2**20,totalKiB:4*2**20,
@@ -39,6 +39,8 @@ import {acquireToken,runWithToken} from './tokens.mjs';
 import {compileActive,memoryRun,memoryCause} from '../census/worker-memory.ts';
 import {activeCommand} from './active-command.ts';
 import {PressureError,publishPressure} from './step-result.ts';
+import {scopedSpawn} from './case-spawn.ts';
+import {tokenCommand} from './token-command.ts';
 const queue=join(process.env.NTS_GATE_CASE_COSTS_DIR,'queue.jsonl');
 const events=()=>readFileSync(queue,'utf8').trim().split('\\n').filter(Boolean).map(line=>JSON.parse(line));
 const requested=path=>events().some(row=>row.event==='token.request'&&row.context?.startsWith('json64:')&&JSON.parse(Buffer.from(row.context.slice(7),'base64url').toString()).project===path);
@@ -56,7 +58,7 @@ ${payload}
   const inherited=toolingSlice(),slice=inherited??newToolingSlice(true),unit='nts-test-case-admission-'+randomUUID();
   if(!inherited)t.after(()=>stopToolingSlice(slice));
   const launcher=f.options(['integrity']).env;assert.ok(launcher);
-  const env=gateEnvironment(launcher,{run:f.run,owned:{...memory,NTS_GATE_TARGET:f.target,NTS_GATE_STEPS:'integrity',NTS_GATE_SLOTS:'2',NTS_TOOLING_SLICE:slice},oracleRoot:f.tree}).env;
+  const env=gateEnvironment(launcher,{run:f.run,owned:{...memory,NTS_GATE_TARGET:f.target,NTS_GATE_STEPS:'integrity',NTS_GATE_SLOTS:'2',NTS_TOOLING_SLICE:slice,NTS_CENSUS_MEMORY_CAP_KB:String(2*GiB/1024)},oracleRoot:f.tree}).env;
   const result=spawnSync('systemd-run',['--user','--unit='+unit,'--slice='+slice,'--collect','--wait','--pipe','--quiet',
     '--working-directory='+f.tree,'-p','Nice=19','-p','LimitCORE=0','-p','CPUAffinity=0-3 6-31','-p','RuntimeMaxSec=120s',
     ...Object.entries(env).filter(([,value])=>value!==undefined).map(([name,value])=>'--setenv='+name+'='+value),process.execPath,join(gate,'run.mjs')],{encoding:'utf8',maxBuffer:16*MiB});
@@ -123,4 +125,21 @@ test('the shared shell command entry refuses an absent identity or command befor
   await assert.rejects(tokenCommand([]),/requires --case/);
   await assert.rejects(tokenCommand(['--case']),/stable case path/);
   await assert.rejects(tokenCommand(['--case','tests/fixture/x','--']),/requires a command/);
+});
+
+test('shell and stream readers share the lease while preserving command status and output',t=>{
+  const f=runFixture(t,{payload:`
+const release=await acquireToken({project:'tests/fixture/stream',backend:'node'});assert.ok(release);
+try{await runWithToken(release,()=>new Promise((resolve,reject)=>{
+  const child=scopedSpawn(process.execPath,['-e','const a=Buffer.alloc(120*2**20,1);process.stdout.write("stream "+a.at(-1));process.exitCode=7'],{cwd:process.cwd(),env:process.env,stdio:['ignore','pipe','pipe']});
+  let out='',err='';child.stdout.on('data',chunk=>{out+=chunk;});child.stderr.on('data',chunk=>{err+=chunk;});child.once('error',reject);
+  child.once('close',status=>{try{assert.equal(status,7,err);assert.equal(out,'stream 1');resolve();}catch(error){reject(error);}});
+}));}finally{release();}
+const result=await tokenCommand(['--case','tests/fixture/shell','--backend','node','--',process.execPath,'-e','const a=Buffer.alloc(120*2**20,1);process.stdout.write("shell "+a.at(-1));process.exitCode=9']);
+assert.equal(result.status,9);assert.equal(result.signal,null);
+`});
+  assert.equal(f.status,0,f.output);assert.equal(f.summary.verdict,'green',f.output);assert.match(f.output,/shell 1/);
+  for(const path of ['tests/fixture/stream','tests/fixture/shell']){
+    const peaks=f.history.get(caseMemoryKey({step:'integrity',backend:'node',path}));assert.ok(peaks&&peaks[0]!>120*MiB);
+  }
 });
