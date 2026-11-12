@@ -50,6 +50,35 @@ test("new source imports are observed without a persistent closure cache", t => 
   assert.deepEqual(moduleClosure(["entry.ts"], {sourceRoot: f.source}), ["entry.ts", "new.ts"]);
 });
 
+test("owning-project staging preserves inherited configs and follows newly declared roots", t => {
+  const f = fixture(t);
+  f.write("base.json", '{"compilerOptions":{"target":"ES2024","module":"nodenext","allowImportingTsExtensions":true,"noEmit":true}}');
+  f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts"]}');
+  f.write("project/src/entry.ts", "export const value: number = 19; console.log(value);");
+  const first = copyModuleClosure(["project/src/entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true});
+  assert.deepEqual(first, ["base.json", "project/src/entry.ts", "project/tsconfig.json"]);
+  for (const file of first) assert.deepEqual(readFileSync(join(f.destination, file)), readFileSync(join(f.source, file)));
+  f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts","src/registered.ts"]}');
+  f.write("project/src/registered.ts", "import {value} from './dependency.ts'; console.log(value);");
+  f.write("project/src/dependency.ts", "export const value: number = 23;");
+  const destination = join(f.destination, "new-root");
+  const second = copyModuleClosure(["project/src/entry.ts"], destination, {sourceRoot: f.source, owningProject: true});
+  assert.deepEqual(second, ["base.json", "project/src/dependency.ts", "project/src/entry.ts", "project/src/registered.ts", "project/tsconfig.json"]);
+  assert.equal(readFileSync(join(destination, "project/tsconfig.json"), "utf8"), readFileSync(join(f.source, "project/tsconfig.json"), "utf8"));
+  const result = spawnTest(process.execPath, [join(destination, "project/src/registered.ts")], {encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, "23\n");
+});
+
+test("owning-project staging refuses missing and escaping projects before copying", t => {
+  const f = fixture(t); f.write("entry.ts", "export const value = 19;");
+  assert.throws(() => copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true}), /no owning project|escapes source root/);
+  assert.equal(existsSync(f.destination), false);
+  f.write("tsconfig.json", '{"extends":"../outside.json","files":["entry.ts"]}');
+  writeFileSync(join(f.source, "../outside.json"), '{"compilerOptions":{"noEmit":true}}');
+  assert.throws(() => copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true}), /escapes source root/);
+  assert.equal(existsSync(f.destination), false);
+});
+
 test("parsed module-relative URL assets include modules and leaves, while lookalikes and anchors declare nothing", t => {
   const f = fixture(t);
   f.write("entry.ts", `

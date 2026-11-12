@@ -671,7 +671,10 @@ the first node task.
 
 - **Fixture tooling comes from its declared closure.** A private test repository
   stages command entries through `copyModuleClosure`, including their imports
-  and named assets. Private mutations follow staging. Package installations,
+  and named assets. A fixture that compiles TypeScript uses its owning-project
+  mode: `OracleFilesystem.projectFor` discovers the project, and the pinned
+  parser supplies its inherited config files and declared roots, unchanged.
+  Private mutations follow staging. Package installations,
   data and shell entry scripts remain explicit inputs. The source audit rejects
   selected dependency lists, manual tails and ad-hoc import discovery, including
   in shared helpers. Complete discovered namespace mirrors and byte-only

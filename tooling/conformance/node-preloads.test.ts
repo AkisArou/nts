@@ -42,11 +42,8 @@ function fixture(t:TestContext,{runner=false}:{runner?:boolean}={}){
   const root=mkdtempSync(join(tmpdir(),'nts-node-preloads-'));t.after(()=>removeOracleSnapshot(root));
   const write=(file:string,body:string)=>{file=join(root,file);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,body);};
   if(runner){
-    const files=copyModuleClosure(['tooling/conformance/run.mjs',...ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name)],root);
-    // Configuration is an explicit fixture input. Keep the owner's options,
-    // with roots derived from the staged graph instead of unrelated test files.
-    const project=JSON.parse(readFileSync(join(REPOSITORY,'tooling/conformance/tsconfig.json'),'utf8'));
-    write('tooling/conformance/tsconfig.json',JSON.stringify({...project,files:files.filter(file=>file.startsWith('tooling/conformance/')&&file.endsWith('.ts')).map(file=>file.slice('tooling/conformance/'.length)),include:[]}));
+    copyModuleClosure(['tooling/conformance/run.mjs'],root,{owningProject:true});
+    copyModuleClosure(ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name),root);
   }else write('tooling/conformance/run-one.mjs',"export {};\n");
   for(const name of ['subject','sibling']){write(`runtime/node/${name}/src/main.ts`,'export const value:number=1;\n');write(`runtime/node/${name}/tsconfig.json`,'{"files":["src/main.ts"]}');}
   return {root,write};

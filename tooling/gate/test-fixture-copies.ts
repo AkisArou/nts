@@ -42,7 +42,7 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
    if(names){if(ast.isNamespaceImport(names))imports.set(names.name.text,module);
     else for(const item of names.elements)imports.set(item.name.text,module+'.'+(item.propertyName?.text??item.name.text));}
   }
-  if(ast.isParameterDeclaration(node)&&ast.isIdentifier(node.name))values.set(node.name.text,{value:node.name});
+  if(ast.isParameterDeclaration(node)&&node.name&&ast.isIdentifier(node.name))values.set(node.name.text,{value:node.name});
   if(ast.isVariableDeclaration(node)&&node.initializer){
    if(ast.isIdentifier(node.name))values.set(node.name.text,{value:node.initializer});
    else if(ast.isObjectBindingPattern(node.name))for(const item of node.name.elements)if(ast.isIdentifier(item.name))values.set(item.name.text,{value:node.initializer,member:item.propertyName?code(item.propertyName):item.name.text});
