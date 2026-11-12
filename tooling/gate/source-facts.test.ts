@@ -20,7 +20,7 @@ const pending=import('./dynamic.ts');`;
     const functions=facts.ofKind(ast.SyntaxKind.FunctionDeclaration);assert.equal(functions.length,2);
     assert.equal(facts.callsWithin(functions[0]!).length,2);assert.equal(facts.callsWithin(functions[1]!).length,1);
     assert.ok([...facts.ancestors(writes[0]!)].includes(functions[0]!));
-    assert.deepEqual(facts.moduleDeclarations(),{imports:['./value.ts','./dynamic.ts'],assets:['./input.json']});
+    assert.deepEqual(facts.moduleDeclarations(),{imports:['./value.ts','./dynamic.ts'],assets:[{path:'./input.json',kind:'module'}]});
     assert.equal(facts.line(source.indexOf('function second')),4);
   }finally{lease.dispose();api.close();}
 });
@@ -34,6 +34,24 @@ test('generated source is parsed once per parent session and shares its structur
     generated.shell('printf ready > "$ready"',12);generated.shell('printf ready > "$ready"',12);
     assert.equal(generated.shells.length,1);assert.equal(generated.shells[0]!.shell.redirections.length,1);
   }finally{generated.close();api.close();}
+});
+
+test('data directories are recognized by their lexical owner, including aliases but not shadows',()=>{
+  const api=new API(),source=`import {dataDirectory as data} from './reader-inputs.ts';
+import * as inputs from './reader-inputs.ts';
+import {dataDirectory as other} from './lookalike.ts';
+const alias=data;const {dataDirectory:destructured}=inputs;
+data(new URL('./direct/',import.meta.url));alias(new URL('./alias/',import.meta.url));
+inputs.dataDirectory(new URL('./namespace/',import.meta.url));destructured(new URL('./destructured/',import.meta.url));
+other(new URL('./lookalike/',import.meta.url));
+function shadow(data:Function){data(new URL('./parameter/',import.meta.url));}
+function local(){function data(url:URL){return url;}data(new URL('./function/',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    const declarations=new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations();
+    assert.deepEqual(declarations.assets,[...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'/',kind:'data'})),
+      ...['lookalike','parameter','function'].map(name=>({path:'./'+name+'/',kind:'module'}))]);
+  }finally{lease.dispose();api.close();}
 });
 
 test('source leases are batched by both module count and bytes, with an oversized module alone',()=>{

@@ -2561,3 +2561,15 @@ command-entry did. An import from oracle-dependencies otherwise compiles the
 whole gate project and reaches cross-directory roots outside its rootDir.
 Shared leaves reached by an oracle preload each own a one-file tsconfig.
 Part of #763.
+## Fixtures own only declared data namespaces (11-12)
+
+Reader declarations distinguish module-owned inputs from branded data
+directories. A fixture grant substitutes only an already-declared directory
+at its own destination, names its fixture owner, and records that owner with
+the declaring readers in the staged manifest. Imports, entries and URL-declared
+module inputs always retain production bytes. Without a grant the copier
+stages every declared data member. This lets reader declarations grow without
+either copying a real corpus into every small fixture or reviving dependency
+lists. Shell/Python launches retain the parsed JavaScript continuation while
+inferred edges remain unable to discharge an unknown path's full gate.
+Part of #728.

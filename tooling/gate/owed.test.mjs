@@ -178,6 +178,26 @@ test('each program consumer owes one shared producer before native execution',()
   }
 });
 
+for(const launcher of ['sh','py'])test(`an inferred ${launcher} to JavaScript handoff keeps its parsed closure without placing it`,t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-launcher-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('Cargo.toml','[package]\nname="launcher-fixture"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('tooling/gate/all.sh',`#!/bin/sh\nif [ "$1" = --list ]; then printf '%s\\n' proof; exit; fi\nstep "proof" ${launcher==='sh'?'bash':'python'} tooling/launcher.${launcher}\n`);
+  put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');
+  put('tooling/empty.test.ts','');
+  put('tooling/launcher.'+launcher,launcher==='sh'?'node tooling/private/entry.ts\n':"import subprocess\nsubprocess.run(['node', 'tooling/private/entry.ts'])\n");
+  put('tooling/private/entry.ts',"export * from './middle.ts';\n");
+  put('tooling/private/middle.ts',"const leaf=new URL('./payload.bin',import.meta.url);\n");
+  put('tooling/private/payload.bin','declared leaf');
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){const result=spawnTest('git',args,{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  const script=`import {stepInputs,covering,owed} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+const path='tooling/private/payload.bin';console.log(JSON.stringify({reach:[...covering(stepInputs(),path)],full:owed([{path,added:true}]).some(row=>row.full)}));`;
+  const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  const row=JSON.parse(result.stdout);assert.ok(row.reach.includes('proof'));assert.equal(row.full,true,'a parsed continuation cannot turn an inferred launch into placement');
+});
+
 test('each TypeScript backend owes its shared reference exactly once',()=>{
   for(const steps of [['typescript-c'],['typescript-llvm'],['typescript-jvm'],['typescript-c','typescript-llvm','typescript-jvm']]){
     const selected=gateSteps([{precise:true,steps}]);

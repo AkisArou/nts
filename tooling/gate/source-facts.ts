@@ -4,6 +4,8 @@
 import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
+import {posix} from 'node:path';
+import type {ModuleDeclarations,ReaderInput} from './reader-inputs.ts';
 
 type Syntax=typeof import('typescript/ast');
 let syntax:Syntax|undefined;
@@ -170,8 +172,8 @@ export class SourceFacts {
     }
     return name(node);
   }
-  moduleDeclarations():{imports:string[];assets:string[]}{
-    const ast=this.ast,imports:string[]=[],assets:string[]=[];
+  moduleDeclarations():ModuleDeclarations{
+    const ast=this.ast,imports:string[]=[],assets:ReaderInput[]=[];
     for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
       const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
         :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
@@ -182,7 +184,13 @@ export class SourceFacts {
       const [literal,base]=node.arguments;
       if(literal&&ast.isStringLiteralLikeNode(literal)&&literal.kind===ast.SyntaxKind.StringLiteral&&base&&ast.isPropertyAccessExpression(base)&&base.name.text==='url'
         &&ast.isMetaProperty(base.expression)&&base.expression.keywordToken===ast.SyntaxKind.ImportKeyword&&base.expression.name.text==='meta'
-        &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..'))assets.push(literal.text);
+        &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
+        const parent=this.parents.get(node);
+        const called=parent&&ast.isCallExpression(parent)&&parent.arguments.length===1&&parent.arguments[0]===node?this.name(parent.expression):'';
+        const owner=/^(\.{1,2}\/.*)\.dataDirectory$/.exec(called)?.[1];
+        const data=owner&&posix.normalize(posix.join(posix.dirname(this.file),owner))==='tooling/gate/reader-inputs.ts';
+        assets.push({path:literal.text,kind:data?'data':'module'});
+      }
     }
     return {imports,assets};
   }

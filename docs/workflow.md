@@ -152,6 +152,14 @@ declares no input. A named asset declares the file it resolves to, or every
 tracked file beneath it when it resolves to a directory. The census names
 each directory declaration, its reader and its breadth. Conservative path
 inference may add checks; it cannot place a path or remove its full fallback.
+`dataDirectory(new URL("directory/", import.meta.url))`, from
+`tooling/gate/reader-inputs.ts`, declares a data directory: its tracked members
+are inputs, not host modules to parse. Entry modules, imports and unbranded
+URL assets retain their own production bytes even inside a data directory.
+The declaration rows are independent of source language; other reader adapters
+can supply the same module and data edges. A shell or Python launch into
+JavaScript continues through the parsed module graph. An inferred launch adds
+reach without gaining authority to place unknown inputs.
 Canonical step directories declare tracked membership as data; their members
 are not host modules to parse. The selector shares parsed module references
 and input indexes only within one invocation, and reads fresh bytes next time.
@@ -923,14 +931,23 @@ the first node task.
   and named assets. A fixture that compiles TypeScript uses its owning-project
   mode: `OracleFilesystem.projectFor` discovers the project, and the pinned
   parser supplies its inherited config files and declared roots, unchanged.
-  Private mutations follow staging. Package installations,
-  data and shell entry scripts remain explicit inputs. The source audit rejects
+  Private mutations follow staging. A fixture may grant its own populated
+  namespace only at an exact declared data directory. The copier refuses an
+  undeclared namespace or any replacement of module-owned bytes, and publishes
+  `.nts-fixture-inputs.json` with the relative directory, declaring readers and
+  fixture owner. Without a grant it stages the complete declared data input.
+  Grants contain owners, never source paths or dependency lists; symlinks may
+  name only exact production module inputs, never private data. Package
+  installations and shell entry scripts remain explicit inputs. The source audit rejects
   selected dependency lists, manual tails and ad-hoc import discovery, including
   in shared helpers. Complete discovered namespace mirrors and byte-only
   identity fixtures are classified separately; a standalone-entry exclusion is
   checked to have no relative dependency. Supplied oracle test contexts must
   already be sealed with `sealOracleRun`, so captures retain the run's holder
   ownership ([log](records/notebooks/decisions-log.md#fixture-tooling-follows-declared-closures-11-12)).
+  Data ownership is separate from module membership, so a synthetic corpus
+  cannot hide a new runtime dependency
+  ([log](records/notebooks/decisions-log.md#fixtures-own-only-declared-data-namespaces-11-12)).
 
 - **Source inspectors share structural facts.** One bounded parse batch feeds
   the host, publication, fixture-copy, profile and module-lifecycle inspectors.

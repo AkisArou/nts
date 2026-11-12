@@ -7,11 +7,11 @@ import {isAbsolute, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
-import type {Node} from "typescript/ast";
+import {SourceFacts} from './source-facts.ts';
+import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind} from './reader-inputs.ts';
+export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
-export type DirectoryDeclaration = {reader: string; directory: string; files: readonly string[]};
-export type ModuleDeclarations={imports:string[];assets:string[]};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
   /** A caller which already owns parsed source facts supplies detached edges. */
   declarations?:ReadonlyMap<string,ModuleDeclarations>};
@@ -31,10 +31,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   // caller actually walking a graph needs the already provisioned parser.
   const require = createRequire(import.meta.url);
   const {API} = require("typescript/sync") as typeof import("typescript/sync");
-  const ast = require("typescript/ast") as typeof import("typescript/ast");
-  const {isExportDeclaration, isExternalModuleReference, isImportDeclaration, isImportEqualsDeclaration, isStringLiteralLikeNode} = ast;
   const root = realpathSync(options.sourceRoot ?? SOURCE);
-  const references = new Map<string, {imports: string[]; assets: string[]}>();
+  const references = new Map<string,ModuleDeclarations>();
   let tracked: string[] | undefined;
   let api:import('typescript/sync').API|undefined;
   function parsed(path: string) {
@@ -43,64 +41,50 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const supplied=options.declarations?.get(relative(root,path).split(sep).join('/'));
     if(supplied){references.set(path,supplied);return supplied;}
     api??=new API({cwd:root});
-    const lease = api.createSourceFile(path, readFileSync(path, "utf8"));
+    const source=readFileSync(path,'utf8'),lease=api.createSourceFile(path,source);
     try {
-      const imports: string[] = [];
-      const assets: string[] = [];
-      const inspect = (node: Node): void => {
-        const specifier = isImportDeclaration(node) || isExportDeclaration(node) ? node.moduleSpecifier
-          : isImportEqualsDeclaration(node) && isExternalModuleReference(node.moduleReference) ? node.moduleReference.expression
-          : ast.isCallExpression(node) && node.expression.kind === ast.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
-        if (specifier && isStringLiteralLikeNode(specifier) && /^\.\.?\//.test(specifier.text)) imports.push(specifier.text);
-        if (ast.isNewExpression(node) && ast.isIdentifier(node.expression) && node.expression.text === "URL"
-          && node.arguments?.length === 2) {
-          const [literal, base] = node.arguments;
-          if (literal && ast.isStringLiteralLikeNode(literal) && literal.kind === ast.SyntaxKind.StringLiteral
-            && base && ast.isPropertyAccessExpression(base) && base.name.text === "url"
-            && ast.isMetaProperty(base.expression) && base.expression.keywordToken === ast.SyntaxKind.ImportKeyword
-            && base.expression.name.text === "meta"
-            && !/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)
-            && literal.text.split("/").some(segment => segment !== "" && segment !== "." && segment !== "..")) assets.push(literal.text);
-        }
-        node.forEachChild(inspect);
-      };
-      inspect(lease.sourceFile);
-      const result = {imports, assets}; references.set(path, result); return result;
+      const result=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile).moduleDeclarations();
+      references.set(path,result);return result;
     } finally {lease.dispose();}
   }
-  function closure(entries: readonly string[], reportDirectory: ModuleClosureOptions["directory"] = options.directory): string[] {
-    const visited = new Set<string>();
-    function asset(reader: string, path: string): void {
+  function describe(entries:readonly string[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
+    const visited=new Set<string>(),owned=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    function asset(reader:string,path:string,kind:InputKind):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
-      if (!lstatSync(path).isDirectory()) {visit(path); return;}
+      if (!lstatSync(path).isDirectory()) {
+        if(kind==='data')throw Error('declared data input is not a directory: '+relative(root,path));
+        visit(path);return;
+      }
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
       tracked ??= execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
       const directory = relative(root, path).split(sep).join("/");
       const files = tracked.filter(file => directory === "" || file.startsWith(directory + "/"));
-      reportDirectory?.({reader, directory, files});
-      for (const file of files) visit(resolve(root, file));
+      const row={reader,directory,files,kind};directories.push(row);reportDirectory?.(row);
+      for(const file of files){if(kind==='data')visited.add(file);else visit(resolve(root,file));}
     }
     function visit(path: string): void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
       const name = relative(root, path).split(sep).join("/");
-      if (visited.has(name)) return;
+      if(owned.has(name))return;
       if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
-      visited.add(name);
-      if (!/\.[cm]?[jt]sx?$/.test(path)) return;
+      owned.add(name);visited.add(name);
+      // A non-JS reader (for example a harness manifest) can supply the same
+      // detached declarations. Its adapter owns parsing that source format.
+      if(!/\.[cm]?[jt]sx?$/.test(path)&&!options.declarations?.has(name))return;
       const {imports, assets} = parsed(path);
       for (const specifier of imports) visit(fileURLToPath(new URL(specifier, pathToFileURL(path))));
-      for (const specifier of assets) asset(name, fileURLToPath(new URL(specifier, pathToFileURL(path))));
+      for(const input of assets)asset(name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input.kind);
     }
 
     for (const entry of entries) {
       if (isAbsolute(entry)) throw new Error("module entry must be repository-relative: " + entry);
       const path = resolve(root, entry);
-      if (lstatSync(path).isDirectory()) asset("<entry>", path);
+      if (lstatSync(path).isDirectory()) asset("<entry>", path,'module');
       else visit(path);
     }
-    return [...visited].sort();
+    return {files:[...visited].sort(),ownedFiles:[...owned].sort(),directories};
   }
-  return {closure, close: () => api?.close()};
+  return {describe,closure:(entries:readonly string[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }
 
 /** A public walk always gets a fresh graph, including fresh source bytes. */

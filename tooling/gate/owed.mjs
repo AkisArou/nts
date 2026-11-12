@@ -1681,7 +1681,7 @@ function stepInputGraph() {
       for(const input of new Set(entries)){
         if(statSync(join(TREE,input)).isDirectory()){
           const files=trackedFiles().filter(path=>path.startsWith(input+"/"));
-          directory({reader:"<entry>",directory:input,files},step);
+          directory({reader:"<entry>",directory:input,files,kind:"data"},step);
           membership.add(input);add(input,step);
           // Retain legacy additive text reach until its reader classification
           // is complete. Data members still never enter the host AST graph.
@@ -1725,6 +1725,14 @@ function stepInputGraph() {
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
         references={named:named(body),other:[...imports(input,body),...beside]};
         inferred.set(input,references);
+        // A shell/Python launcher can name a JavaScript entry. From that
+        // boundary onward its imports and URL assets are parsed declarations,
+        // even after module-text inference goes away. This is additive reach:
+        // an inferred launcher edge never discharges an unknown path's fallback.
+        if (/\.(?:sh|py)$/.test(input)) {
+          const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
+          references.other.push(...modules.closure(launched));
+        }
         }
         // These tooling controls supply private fixture roots to the record
         // validator and the session bridge. They read fixture evidence,
