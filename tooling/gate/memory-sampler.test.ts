@@ -3,7 +3,7 @@ import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {reserveJob,readLedger} from './memory-ledger.ts';
-import {readCostHistory} from './step-scheduling.ts';
+import {readCostHistory,historyFile} from './step-scheduling.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {newTestScratch} from './test-scratch.ts';
@@ -17,7 +17,7 @@ test('release records its final peak and returns memory synchronously, then the 
  t.after(async()=>{held.release();await held.closed;});
  held.release();held.release();
  assert.equal(readLedger(owned.NTS_MEMORY_LEDGER).admitted.length,0,'the queue need not wait for thread exit');
- const peak=readCostHistory(join(owned.NTS_GATE_COSTS_DIR,'steps.json')).jobs.get('sampler-close')?.peaks.at(-1);
+ const peak=readCostHistory(historyFile(owned)).jobs.get('sampler-close')?.observations.at(-1)?.peak;
  assert.ok(peak&&peak>=160*2**20,'the final parent observation was recorded before release returned');
  await held.closed;
 });

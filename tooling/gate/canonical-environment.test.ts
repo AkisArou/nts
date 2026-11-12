@@ -21,6 +21,7 @@ import {
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
 import {ownMemory} from "./test-memory.ts";
+import {historyFile,writeCostHistory} from './step-scheduling.ts';
 import {readLedger,reserve} from "./memory-ledger.ts";
 
 
@@ -495,9 +496,9 @@ child.release();
   // This arm waits for a measured capture's forecast. An unknown capture
   // asks only for its live margin and would fit beside the runner.
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
-  writeFileSync(join(memory.NTS_GATE_COSTS_DIR,'steps.json'),JSON.stringify({version:3,steps:oracle?{'program-oracles':{memory:{unit:'token',peaks:[Math.floor(2*2**30/1.25)]}}}:{},jobs:{
-    'oracle-dependency-capture':{unit:'worker',peaks:[Math.floor(2*2**30/1.25)]},
-  }})+'\n');
+  assert.equal(writeCostHistory(historyFile(memory),{steps:oracle?[{name:'program-oracles',memory:{unit:'token',peak:Math.floor(2*2**30/1.25)}}]:[],jobs:[
+    {key:'oracle-dependency-capture',basis:'job',width:1,peak:Math.floor(2*2**30/1.25)},
+  ]}),undefined);
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{
     NTS_GATE_STEPS:oracle?'program-oracles':'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target'),
     ...(oracle==='priority'?{NTS_MEMORY_PRIORITY:'full-check'}:{}),

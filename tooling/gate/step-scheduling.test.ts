@@ -16,7 +16,7 @@ import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
 import {RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
-  unitReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+  unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
 import {OOM_SCORE} from "./memory-ledger.ts";
@@ -57,7 +57,7 @@ test("completed CPU history survives small runs and corrupt or failed cache writ
   const blocked = join(own, "not-a-directory"); writeFileSync(blocked, "preserve");
   assert.equal(typeof writeCostHistory(join(blocked, "steps.json"), {}), "string");
   assert.equal(readFileSync(blocked, "utf8"), "preserve");
-  assert.equal(typeof writeCostHistory(join(own, "removed", "costs", "steps.json"), { jobs: [{ key: "agree", peak: 1 }] }), "string",
+  assert.equal(typeof writeCostHistory(join(own, "removed", "costs", "steps.json"), { jobs: [{key:"agree",peak:1,basis:"worker",width:1}] }), "string",
     "a history whose directory's parent has gone is not made again: a test's removed scratch stays removed");
   writeFileSync(previous, JSON.stringify({ schema: 1, environment: { canonical: false }, steps: [
     { name: "typescript-c", verdict: "PASS", cpu: 1 },
@@ -69,12 +69,12 @@ test("a key's last few peaks are kept, per unit, and one small run does not shri
   const file = join(testScratch(t, "step-scheduling-peaks"), "costs/steps.json");
   const MiB = 2 ** 20;
   const run = (peak: number) => assert.equal(writeCostHistory(file, { steps: [{ name: "tests", verdict: "PASS", cpu_measure:STEP_CPU_MEASURE,cpu: 10, memory: { unit: "step", peak } }],
-    jobs: [{ key: "agree", peak: peak / 2 }] }), undefined);
+    jobs: [{key:"agree",peak:peak/2,basis:"worker",width:1}] }), undefined);
   for (const peak of [800, 1000, 900, 950, 990, 100]) run(peak * MiB);
   const history = readCostHistory(file);
   assert.deepEqual(history.steps.get("tests"), { cpu: 10, memory: { unit: "step", peaks: [1000, 900, 950, 990, 100].map(peak => peak * MiB) } },
     `the last ${KEPT_PEAKS} peaks, oldest first, beside the CPU seconds`);
-  assert.deepEqual(history.jobs.get("agree"), { unit: "worker", peaks: [500, 450, 475, 495, 50].map(peak => peak * MiB) });
+  assert.deepEqual(history.jobs.get("agree"), {basis:"worker",observations:[500,450,475,495,50].map(peak=>({peak:peak*MiB,width:1}))});
   assert.equal(peakReservation(history.steps.get("tests")!.memory!.peaks), 1250 * MiB, "1.25 times the largest: the small last run shrinks nothing");
   assert.equal(peakReservation([MiB]), LEAST_RESERVATION_BYTES, "never less than the least reservation");
   assert.equal(peakReservation([1000 * MiB + 1]), 1251 * MiB, "rounded up to a whole MiB");
@@ -91,14 +91,14 @@ test("an unmeasured step reserves the largest of its kind, and with nothing meas
     ["tests", { cpu: 1, memory: { unit: "step" as const, peaks: [4 * GiB] } }],
     ["format", { memory: { unit: "step" as const, peaks: [64 * MiB] } }],
     ["integrity", { memory: { unit: "token" as const, peaks: [400 * MiB] } }],
-  ]), jobs: new Map([["agree", { unit: "worker" as const, peaks: [800 * MiB] }]]) };
+  ]), jobs: new Map([["agree", {basis:"worker" as const,observations:[{peak:800*MiB,width:1}]}]]) };
   assert.deepEqual(unitReservation(history, { step: "tests" }, "step", 1), { bytes: 5 * GiB, basis: "measured" });
   assert.deepEqual(unitReservation(history, { step: "format" }, "step", 1), { bytes: LEAST_RESERVATION_BYTES, basis: "measured" });
   assert.deepEqual(unitReservation(history, { step: "clippy" }, "step", 1), { bytes: 5 * GiB, basis: "largest" }, "the largest fixed step's");
   assert.deepEqual(unitReservation(history, { step: "examples" }, "token", 1), { bytes: 500 * MiB, basis: "largest" }, "the largest token's");
   assert.deepEqual(unitReservation(history, { step: "integrity" }, "step", 7), { bytes: 5 * GiB, basis: "largest" },
     "peaks measured per token say nothing of the step as a whole");
-  assert.deepEqual(unitReservation(history, { job: "record-oracles" }, "worker", 1), { bytes: 0, basis: "live" }, "an unrelated job is no forecast");
+  assert.deepEqual(jobReservation(history,"record-oracles","worker"), { bytes: 0, basis: "live" }, "an unrelated job is no forecast");
   const empty = { steps: new Map(), jobs: new Map() };
   assert.deepEqual(unitReservation(empty, { step: "tests" }, "step", machineShare(32 * GiB, 8, 24)), { bytes: Math.floor(32 * GiB / 3), basis: "share" });
   assert.equal(machineShare(32 * GiB, 48, 24), 32 * GiB, "never more than the machine");
@@ -771,7 +771,7 @@ test('the CPU instrument migration keeps memory peaks but resets legacy CPU and 
   const memory={unit:'step',peaks:[1000]};
   writeFileSync(file,JSON.stringify({version:3,steps:{tests:{cpu:0.17,memory}},jobs:{probe:{unit:'worker',peaks:[500]}}}));
   assert.deepEqual(readCostHistory(file).steps.get('tests'),{memory});
-  assert.deepEqual(readCostHistory(file).jobs.get('probe'),{unit:'worker',peaks:[500]});
+  assert.equal(readCostHistory(file).jobs.has('probe'),false,'legacy jobs have no recoverable width or sizing basis');
   writeFileSync(summary,JSON.stringify({schema:1,environment:{canonical:true},steps:[{name:'tests',verdict:'PASS',cpu:0.17,cpu_measure:GNU_CPU_MEASURE}]}));
   assert.equal(readPreviousStepCpu(summary).size,0);
   assert.equal(writeCostHistory(file,{steps:[{name:'tests',verdict:'PASS',cpu:9,cpu_measure:GNU_CPU_MEASURE}]}),undefined);
@@ -779,7 +779,7 @@ test('the CPU instrument migration keeps memory peaks but resets legacy CPU and 
   assert.equal(writeCostHistory(file,{steps:[{name:'tests',verdict:'PASS',cpu:4,cpu_measure:STEP_CPU_MEASURE}]}),undefined);
   assert.equal(stepCpu(readCostHistory(file)).get('tests'),4);
   assert.deepEqual(readCostHistory(file).steps.get('tests')!.memory,memory);
-  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,4);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).version,5);
 });
 
 test('the runner never classifies an accounting switch as a CPU regression',t=>{

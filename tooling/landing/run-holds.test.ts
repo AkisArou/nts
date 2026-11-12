@@ -1,3 +1,4 @@
+import {historyFile,writeCostHistory} from "../gate/step-scheduling.ts";
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 // What holds a landing (run.ts): memory it waits for in the ledger, a tree
 // without history, pressure that never clears, a hung or stuck step at the
@@ -24,9 +25,9 @@ test("memory the run waits for is a hold, never a verdict: the build waits its t
   // system: a 56 GiB job leaves too little for them, until the build asks and
   // the job ends. The job is another landing's: one of lower priority would
   // promise the build only what it uses (memory-ledger.ts).
-  const workers = STEPS.find(row => row.name === "build")!.slots, history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
+  const workers = STEPS.find(row => row.name === "build")!.slots, history = historyFile(f.memory);
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(8 * 2 ** 30 / workers / 1.25)] } } }) + "\n");
+  assert.equal(writeCostHistory(history,{jobs:[{key:"landing-build",basis:"worker",width:workers,peak:Math.floor(8*2**30/workers/1.25)*workers}]}),undefined);
   const sized = jobSizing({ key: "landing-build", units: workers }, f.memory);
   assert.equal(sized.basis, "measured");
   const asked = gib(sized.bytes).replace(".", "\\.");
@@ -58,9 +59,9 @@ test("a --here run at the agent priority yields its unused reservation to a serv
   // the fixture's 61 GiB reading, two such grants cannot both count whole
   // (61 less the system's 2 GiB floor), so the service run is admitted
   // only over the part of the --here grant its build is not using.
-  const workers = STEPS.find(row => row.name === "build")!.slots, history = join(here.memory.NTS_GATE_COSTS_DIR, "steps.json");
+  const workers = STEPS.find(row => row.name === "build")!.slots, history = historyFile(here.memory);
   mkdirSync(here.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { "landing-build": { unit: "worker", peaks: [Math.floor(56 * 2 ** 30 / workers / 1.25)] } } }) + "\n");
+  assert.equal(writeCostHistory(history,{jobs:[{key:"landing-build",basis:"worker",width:workers,peak:Math.floor(56*2**30/workers/1.25)*workers}]}),undefined);
   const shared = { NTS_GATE_SLOTS: "4", ...here.memory };
   const entryOf = (path: string) => `import {copyFileSync} from "node:fs";import {join} from "node:path";copyFileSync(join(process.env.NTS_MEMORY_LEDGER,"admitted",process.env.NTS_MEMORY_RESERVATION+".json"),${JSON.stringify(path)});`;
   const hereEntry = join(here.own, "here-entry.json"), serviceEntry = join(here.own, "service-entry.json");

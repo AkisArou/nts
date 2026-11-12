@@ -142,7 +142,7 @@ import {hostInfrastructure} from "./host-infrastructure.ts";
 import {peakWatcherScope} from "./memory-watch-scope.ts";
 import {toolingSliceArgs,toolingSlice} from "./tooling-slice.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
-import { historyFile, KEY, peakReservation, readCostHistory, unitReservation, writeCostHistory, type MemorySizing } from "./step-scheduling.ts";
+import { historyFile, KEY, peakReservation, bindJobBasis, jobReservation, writeCostHistory, type JobBasis, type MemorySizing } from "./step-scheduling.ts";
 
 /** Kept free beyond every reservation, for the rest of the system. */
 export const SYSTEM_FLOOR_BYTES = 2 * 2 ** 30;
@@ -1276,7 +1276,7 @@ export type JobRequest = {
 };
 
 /** What a job reserves, why, and the history its peak goes to. */
-export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: string; units: number };
+export type JobSizing = { bytes: number; basis: MemorySizing["basis"]; history: string; units: number; sampleBasis:JobBasis };
 
 /**
  * What a job reserves in the environment `env`: per worker, what its own
@@ -1290,13 +1290,14 @@ export function jobSizing(request: Omit<JobRequest, "what">, env: NodeJS.Process
   if (!KEY.test(request.key)) throw new TypeError(`memory: a job's key is lower-case words joined by hyphens, not ${JSON.stringify(request.key)}`);
   if (!Number.isSafeInteger(units) || units < 1) throw new RangeError(`memory: ${request.key} runs a positive whole number of workers, not ${units}`);
   if (request.atMostBytes !== undefined) amount(request.atMostBytes, request.key, "holds at most");
-  const history = historyFile(env);
+  const history = historyFile(env),sampleBasis:JobBasis=request.units===undefined?"job":"worker";
+  const owned=bindJobBasis(history,request.key,sampleBasis);
   const { totalBytes } = machineMemory(env);
   const capacity = totalBytes - SYSTEM_FLOOR_BYTES;
-  const unit = unitReservation(readCostHistory(history), { job: request.key }, "worker", 0);
-  if (unit.basis === "live") return { bytes: 0, basis: "live", history, units };
+  const unit = jobReservation(owned,request.key,sampleBasis);
+  if (unit.basis === "live") return { bytes: 0, basis: "live", history, units, sampleBasis };
   const bytes = Math.max(1, Math.min(unit.bytes * units, capacity, request.atMostBytes ?? Infinity));
-  return { bytes, basis: unit.basis, history, units };
+  return { bytes, basis: unit.basis, history, units, sampleBasis };
 }
 
 const WATCHER = new URL("./memory-watch.ts", import.meta.url);
@@ -1319,12 +1320,12 @@ export const WATCH_MS = POLL_MS;
  * write. After the command ends, only its flush has a bounded lifetime.
  * A scope that cannot start refuses before the command executes.
  */
-export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units"> & { key: string },
+export function watchPeak(reservation: Pick<Reservation, "id" | "ledger">, job: Pick<JobSizing, "history" | "units" | "sampleBasis"> & { key: string },
   env:NodeJS.ProcessEnv=process.env): void {
   const scope=peakWatcherScope(reservation.id),slice=toolingSlice(env);
   const started = spawnSync("systemd-run", ["--user","--scope","--quiet","--collect",`--unit=${scope}`,
     ...toolingSliceArgs(env),`--description=memory peak watcher for ${job.key}`,"--","setsid","-f",process.execPath,
-    fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, String(job.units),scope],
+    fileURLToPath(WATCHER), reservation.ledger, reservation.id, job.history, job.key, job.sampleBasis, String(job.units),scope],
     { stdio: ["ignore", "inherit", "inherit"], cwd: "/", env: { PATH: env.PATH ?? "/usr/bin:/bin",...hostInfrastructure(env),...hostObservationEnvironment(env),...(slice?{NTS_TOOLING_SLICE:slice}:{}) } });
   if (started.error||started.status !== 0) throw new ToolingInstrumentError('tooling-setup',
     `memory: ${job.key}'s peak watcher scope ${scope} could not start: ${started.error?.message??`systemd-run ended ${started.status??started.signal}`}`);
@@ -1414,7 +1415,7 @@ export async function reserveJob(request: JobRequest,
       }
     }
     if (peak <= 0) return;
-    const warning = writeCostHistory(sizing.history, { jobs: [{ key: request.key, peak: Math.ceil(peak / sizing.units) }] });
+    const warning = writeCostHistory(sizing.history, { jobs: [{key:request.key,peak,basis:sizing.sampleBasis,width:sizing.units}] });
     if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
   const finish=async()=>{release();try{await sampler.closed;}catch{/* the lifecycle already reported its named failure */}};

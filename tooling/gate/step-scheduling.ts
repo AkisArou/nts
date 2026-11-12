@@ -5,7 +5,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // committed baseline and the machine's shares; it never changes which checks
 // run or their verdicts.
 //
-// **One history of what each step costs, per target**: `steps.json` in
+// **One history of what each step costs, per target**: `steps-v5.json` in
 // <target>/gate-costs (NTS_GATE_COSTS_DIR, where a test's code names its own).
 // For each step, the CPU seconds its checks took when they last passed, and
 // the memory its last few runs held at most; beside the steps, by key, the
@@ -43,7 +43,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // anywhere: the step table names none.
 //
 // **A case can be its own unit.** An elastic step whose cases differ by
-// orders of magnitude keeps a history of its own beside steps.json,
+// orders of magnitude keeps a history of its own beside steps-v5.json,
 // `cases-v2/<step>.json`: each case's last few peaks, by step, backend and
 // path. The runner sizes each lease from those peaks, or live use and margin
 // when it has never been measured. The old cases/ namespace is imported only
@@ -56,7 +56,7 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // slice is held to its grant and grows while it runs (run.mjs, "Memory"); a
 // step killed at its hard bound is memory pressure, held, never a FAIL.
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -72,12 +72,19 @@ const TOOLING_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 /** A removed step's checks, moved to the steps that now run them (owed.mjs). */
 export type StepSuccessors = Readonly<Record<string, { readonly steps: readonly string[] }>>;
 
-/** What a memory peak was measured over: a fixed step, one token of an elastic step, one worker of a job. */
-export type MemoryUnit = "step" | "token" | "worker";
+/** What a memory peak was measured over: a fixed step or one token of an elastic step. */
+export type MemoryUnit = "step" | "token";
 /** A key's last few measured peaks, oldest first, in bytes per unit. */
 export type Peaks = { readonly unit: MemoryUnit; readonly peaks: readonly number[] };
 export type StepCosts = { readonly cpu?: number; readonly memory?: Peaks };
-export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, Peaks>;readonly unsupportedVersion?:FutureStateVersionError };
+export type JobBasis = "job" | "worker";
+/** Whole-job bytes, with the actual width that produced the sample. */
+export type JobSample = {readonly peak:number;readonly width:number};
+export type JobPeaks = {readonly basis:JobBasis;readonly observations:readonly JobSample[]};
+export type CostHistory = { readonly steps: ReadonlyMap<string, StepCosts>; readonly jobs: ReadonlyMap<string, JobPeaks>;
+  readonly unsupportedVersion?:FutureStateVersionError;readonly legacyJobs?:readonly string[];readonly legacyFile?:string };
+export const COST_HISTORY_VERSION=5;
+export const COST_HISTORY_NAME="steps-v5.json";
 
 /** Peaks kept per key: one small run among them does not shrink a reservation. */
 export const KEPT_PEAKS = 5;
@@ -94,39 +101,75 @@ function parsePeaks(value: unknown, units: readonly MemoryUnit[]): Peaks | null 
   return { unit: value.unit as MemoryUnit, peaks };
 }
 
-/**
- * The history in `file`: version 4 CPU, with earlier memory history retained. A file
- * that is missing or corrupt is empty. A newer version is a named read-only
- * empty view: it is never mistaken for a writable empty history.
- */
-export function readCostHistory(file: string,report:(warning:string)=>void=console.error): CostHistory {
+/** A supported view, with old step observations retained. The versioned
+ * namespace imports its predecessor only before the first v5 publication;
+ * older historical candidates continue writing their own file. */
+export function readCostHistory(file: string,report:(line:string)=>void=console.error): CostHistory {
+  const input=basename(file)===COST_HISTORY_NAME&&!existsSync(file)?join(dirname(file),"steps.json"):file;
   let value: unknown;
-  try { value = JSON.parse(readFileSync(file, "utf8")); } catch { return empty(); }
-  const newer=futureStateVersion(value,4,file);
-  if(newer){report(newer.message);return {...empty(),unsupportedVersion:newer};}
+  try { value = JSON.parse(readFileSync(input, "utf8")); } catch { return empty(); }
+  const unsupportedVersion=futureStateVersion(value,COST_HISTORY_VERSION,input);
+  if(unsupportedVersion){report(unsupportedVersion.message);return {...empty(),unsupportedVersion};}
   if (!record(value)) return empty();
-  if (value.version === 2) {
-    if (!keys(value, ["version", "steps"]) || !record(value.steps)) return empty();
-    const entries = Object.entries(value.steps);
-    if (entries.some(([name, cpu]) => !KEY.test(name) || !measured(cpu))) return empty();
-    return empty(); // Legacy wait4 CPU cannot seed cgroup CPU history.
-  }
-  if (![3,4].includes(Number(value.version)) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
-  const steps = new Map<string, StepCosts>(), jobs = new Map<string, Peaks>();
+  if (value.version === 2) return empty(); // Legacy wait4 CPU cannot seed cgroup CPU history.
+  if ((value.version!==3&&value.version!==4&&value.version!==5) || !keys(value, ["version", "cpu_measure", "steps", "jobs"]) || !record(value.steps) || !record(value.jobs)) return empty();
+  const steps = new Map<string, StepCosts>(), jobs = new Map<string, JobPeaks>();
   for (const [name, row] of Object.entries(value.steps)) {
     if (!KEY.test(name) || !record(row) || !keys(row, ["cpu", "memory"])) return empty();
     if (row.cpu !== undefined && !measured(row.cpu)) return empty();
     const memory = row.memory === undefined ? undefined : parsePeaks(row.memory, ["step", "token"]);
     if (memory === null || (row.cpu === undefined && memory === undefined)) return empty();
-    const cpu=value.version===4&&value.cpu_measure===STEP_CPU_MEASURE?row.cpu:undefined;
+    const cpu=value.version!==3&&value.cpu_measure===STEP_CPU_MEASURE?row.cpu:undefined;
     if(cpu!==undefined||memory)steps.set(name,{...(cpu!==undefined?{cpu:cpu as number}:{}),...(memory?{memory}:{})});
   }
+  if(value.version!==COST_HISTORY_VERSION){
+    const legacyJobs=Object.keys(value.jobs).sort();
+    if(legacyJobs.length)report(`memory history: ignoring ${legacyJobs.length} ambiguous legacy job key(s) in ${input}; sizing basis and measured width are absent: ${legacyJobs.join(", ")}`);
+    return {steps,jobs,legacyJobs,legacyFile:input};
+  }
   for (const [key, row] of Object.entries(value.jobs)) {
-    const memory = KEY.test(key) ? parsePeaks(row, ["worker"]) : null;
-    if (memory === null) return empty();
-    jobs.set(key, memory);
+    if(!KEY.test(key)||!record(row)||!keys(row,["basis","observations"])||(row.basis!=="job"&&row.basis!=="worker")||!Array.isArray(row.observations)||row.observations.length>KEPT_PEAKS)return empty();
+    const basis=row.basis,observations:JobSample[]=[];
+    for(const sample of row.observations){
+      if(!record(sample)||!keys(sample,["peak","width"])||!bytes(sample.peak)||!bytes(sample.width)||(basis==="job"&&sample.width!==1))return empty();
+      observations.push({peak:sample.peak as number,width:sample.width as number});
+    }
+    jobs.set(key,{basis,observations});
   }
   return { steps, jobs };
+}
+
+export function assertJobBasis(key:string,basis:JobBasis,previous:JobPeaks|undefined):void{
+  if(previous&&previous.basis!==basis)throw new Error(`memory: job key ${key} is bound to ${previous.basis} sizing; ${basis} sizing disagrees (${basis==="worker"?"--workers supplied":"no --workers supplied"})`);
+}
+
+/** One key keeps its declared meaning before any admission, including its
+ * first unmeasured run. The locked re-read excludes conflicting first users. */
+export function bindJobBasis(file:string,key:string,basis:JobBasis,report:(line:string)=>void=console.error):CostHistory{
+  if(!KEY.test(key))throw new Error("invalid memory history job key: "+key);
+  const view=readCostHistory(file,()=>{});
+  if(view.unsupportedVersion)throw view.unsupportedVersion;
+  assertJobBasis(key,basis,view.jobs.get(key));
+  if(view.jobs.has(key))return view;
+  mkdirSync(dirname(file),{recursive:true});
+  const unlock=lockHistory(file);if(!unlock)throw new Error(`memory: cannot bind ${key}'s sizing basis; ${file} stayed locked for ${LOCK_WAIT_SECONDS} s`);
+  try{
+    assertWritableState(file,COST_HISTORY_VERSION);
+    const current=readCostHistory(file,()=>{});if(current.unsupportedVersion)throw current.unsupportedVersion;
+    assertJobBasis(key,basis,current.jobs.get(key));
+    if(current.jobs.has(key))return current;
+    const jobs=new Map(current.jobs);jobs.set(key,{basis,observations:[]});
+    const next={steps:current.steps,jobs};publishCostHistory(file,next);
+    if(current.legacyJobs?.length)report(`memory history: migrated ${current.legacyFile} to ${file}; dropped ${current.legacyJobs.length} ambiguous job key(s), kept every supported step row: ${current.legacyJobs.join(", ")}`);
+    return next;
+  }finally{unlock();}
+}
+
+/** A job's own observations, normalized only by the widths stored with them. */
+export function jobReservation(history:CostHistory,key:string,basis:JobBasis):MemorySizing{
+  const own=history.jobs.get(key);assertJobBasis(key,basis,own);
+  if(!own?.observations.length)return {bytes:0,basis:"live"};
+  return {bytes:peakReservation(own.observations.map(row=>Math.ceil(row.peak/row.width))),basis:"measured"};
 }
 
 /** The CPU seconds each step's checks took when they last passed. */
@@ -247,11 +290,9 @@ export type MemorySizing = {
  * A step whose peaks were measured over another unit (it was fixed, and is
  * elastic now) has none of its own.
  */
-export function unitReservation(history: CostHistory, of: { step: string } | { job: string }, unit: MemoryUnit, share: number): MemorySizing {
-  const own = "step" in of ? history.steps.get(of.step)?.memory : history.jobs.get(of.job);
+export function unitReservation(history: CostHistory, of: { step: string }, unit: MemoryUnit, share: number): MemorySizing {
+  const own = history.steps.get(of.step)?.memory;
   if (own && own.unit === unit) return { bytes: peakReservation(own.peaks), basis: "measured" };
-  // No forecast exists for this job. The ledger charges its live use and margin.
-  if ("job" in of) return { bytes: 0, basis: "live" };
   const rows = [...history.steps.values()].flatMap(row => row.memory?.unit === unit ? [row.memory] : []);
   if (rows.length) return { bytes: Math.max(...rows.map(row => peakReservation(row.peaks))), basis: "largest" };
   return { bytes: share, basis: "share" };
@@ -268,7 +309,7 @@ export function unitReservation(history: CostHistory, of: { step: string } | { j
  */
 export function historyFile(env: NodeJS.ProcessEnv = process.env, root: string = TOOLING_ROOT): string {
   const target = env.CARGO_TARGET_DIR ? resolve(env.CARGO_TARGET_DIR) : join(root, "target");
-  return join(resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs")), "steps.json");
+  return join(resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs")), COST_HISTORY_NAME);
 }
 
 export type StepObservation = {
@@ -276,7 +317,7 @@ export type StepObservation = {
   /** The most it held, per unit: present only for a step that ran to its own end. */
   memory?: { unit: "step" | "token"; peak: number };
 };
-export type JobObservation = { key: string; peak: number };
+export type JobObservation = {key:string;basis:JobBasis;peak:number;width:number};
 
 const appended = (kept: Peaks | undefined, unit: MemoryUnit, peak: number): Peaks =>
   ({ unit, peaks: [...(kept?.unit === unit ? kept.peaks : []), peak].slice(-KEPT_PEAKS) });
@@ -291,7 +332,6 @@ const appended = (kept: Peaks | undefined, unit: MemoryUnit, peak: number): Peak
  */
 export function writeCostHistory(file: string, observed: { steps?: Iterable<StepObservation>; jobs?: Iterable<JobObservation> },
   initialCpu: ReadonlyMap<string, number> = new Map()): string | undefined {
-  const pending = `${file}.${process.pid}.${randomUUID()}`;
   let unlock: (() => void) | null = null;
   try {
     try { mkdirSync(dirname(file)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
@@ -310,16 +350,27 @@ export function writeCostHistory(file: string, observed: { steps?: Iterable<Step
       const memory = row.memory && bytes(row.memory.peak) ? appended(was.memory, row.memory.unit, row.memory.peak) : was.memory;
       if (cpu !== undefined || memory !== undefined) steps.set(row.name, { ...(cpu !== undefined ? { cpu } : {}), ...(memory ? { memory } : {}) });
     }
-    for (const row of observed.jobs ?? []) if (KEY.test(row.key) && bytes(row.peak)) jobs.set(row.key, appended(jobs.get(row.key), "worker", row.peak));
-    const sorted = <T>(map: ReadonlyMap<string, T>) => Object.fromEntries([...map].sort(([a], [b]) => nameOrder(a, b)));
-    writeFileSync(pending, JSON.stringify({ version: 4,cpu_measure:STEP_CPU_MEASURE,steps: sorted(steps), jobs: sorted(jobs) }) + "\n", { flag: "wx", mode: 0o600 });
-    renameSync(pending, file);
+    for (const row of observed.jobs ?? []) {
+      if(!KEY.test(row.key)||!bytes(row.peak)||!bytes(row.width)||(row.basis!=="job"&&row.basis!=="worker")||(row.basis==="job"&&row.width!==1))throw new Error("invalid memory observation for job "+row.key);
+      const was=jobs.get(row.key);assertJobBasis(row.key,row.basis,was);
+      jobs.set(row.key,{basis:row.basis,observations:[...(was?.observations??[]),{peak:row.peak,width:row.width}].slice(-KEPT_PEAKS)});
+    }
+    publishCostHistory(file,{steps,jobs});
+    if(current.legacyJobs?.length)console.error(`memory history: migrated ${current.legacyFile} to ${file}; dropped ${current.legacyJobs.length} ambiguous job key(s), kept every supported step row: ${current.legacyJobs.join(", ")}`);
     return;
   } catch (error) { return error instanceof Error ? error.message : String(error); }
   finally {
-    try { rmSync(pending, { force: true }); } catch { /* no verdict depends on this cache */ }
     unlock?.();
   }
+}
+
+/** Called only while the history's existing flock is held. */
+function publishCostHistory(file:string,history:Pick<CostHistory,"steps"|"jobs">):void{
+  assertWritableState(file,COST_HISTORY_VERSION);
+  const pending=`${file}.${process.pid}.${randomUUID()}`;
+  const sorted=<T>(map:ReadonlyMap<string,T>)=>Object.fromEntries([...map].sort(([a],[b])=>nameOrder(a,b)));
+  try{writeFileSync(pending,JSON.stringify({version:COST_HISTORY_VERSION,cpu_measure:STEP_CPU_MEASURE,steps:sorted(history.steps),jobs:sorted(history.jobs)})+"\n",{flag:"wx",mode:0o600});renameSync(pending,file);}
+  finally{rmSync(pending,{force:true});}
 }
 
 // ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import type {BoundWait} from "./step-bound.ts";
 import {ownMemory} from "./test-memory.ts";
-import {caseMemoryKey,caseHistoryFile,writeCaseHistory} from './step-scheduling.ts';
+import {caseMemoryKey,caseHistoryFile,writeCaseHistory,historyFile,writeCostHistory} from './step-scheduling.ts';
 import {newTestScratch} from "./test-scratch.ts";
 import {waitFor} from "./test-wait.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
@@ -94,8 +94,8 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   oracleWorkspaceFixture(t,root);
   const memoryDir=join(own,"memory"),memory=ownMemory(memoryDir,{availableKiB:mode==="active"?16*2**20:3.25*2**20,totalKiB:16*2**20,clock:{kind:"file",file:clock}});
   mkdirSync(memory.NTS_GATE_COSTS_DIR,{recursive:true});
-  writeFileSync(join(memory.NTS_GATE_COSTS_DIR,"steps.json"),JSON.stringify({version:3,steps:{[STEP]:{memory:{unit:"token",peaks:[Math.floor(2*GiB/1.25)]}}},
-    jobs:{"oracle-dependency-capture":{unit:"worker",peaks:[1]}}}));
+  assert.equal(writeCostHistory(historyFile(memory),{steps:[{name:STEP,memory:{unit:"token",peak:Math.floor(2*GiB/1.25)}}],
+    jobs:[{key:"oracle-dependency-capture",basis:"job",width:1,peak:1}]}),undefined);
   assert.equal(writeCaseHistory(caseHistoryFile(STEP,memory,root),[{key:caseMemoryKey({step:STEP,backend:'',path:'bound-control'}),peak:Math.floor(2*GiB/1.25)}]),undefined);
   mkdirSync(join(own,"target/release"),{recursive:true});
   writeFileSync(join(own,"target/release/nts"),"#!/bin/sh\nexit 0\n",{mode:0o755});

@@ -18,7 +18,7 @@ import {
   admissible, cgroupCharge, gib, jobSizing, ledgerStatus, lockLedger, releaseLedgerEntries, noteOver, OOM_SCORE, ownedBy, parseBytes, parseMeminfo, PRIORITIES, reservationPriority, processCharge, processIdentity, processTree, readLedger, reserve,
   type Decision, type LedgerEntry, type Queued, type Reservation, type ReserveOptions, type ReserveRequest,
 } from "./memory-ledger.ts";
-import { peakReservation, readCostHistory } from "./step-scheduling.ts";
+import { peakReservation, readCostHistory, historyFile, writeCostHistory, type JobBasis } from "./step-scheduling.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { testScratch } from "./test-scratch.ts";
 import { ownMemory,withoutHanded } from "./test-memory.ts";
@@ -117,7 +117,7 @@ function fixture(t: TestContext): Fixture {
     return asked;
   };
   return {
-    dir, meminfo, env, history: join(root, "costs", "steps.json"), memory, used, decisions, lines, ask,
+    dir, meminfo, env, history: historyFile(env), memory, used, decisions, lines, ask,
     of: what => decisions.filter(decision => decision.what === what),
     stopped: () => failures.length ? String(failures[0]) : undefined,
   };
@@ -747,9 +747,8 @@ function setCharge(f:Fixture,bytes:number):void {
   value.resident={kind:"fixed",defaultBytes:bytes};
   writeFileSync(file,JSON.stringify(value));
 }
-function seedJobs(f: Fixture, jobs: Record<string, number>): void {
-  mkdirSync(join(f.history, ".."), { recursive: true });
-  writeFileSync(f.history, JSON.stringify({ version: 3, steps: {}, jobs: Object.fromEntries(Object.entries(jobs).map(([key, bytes]) => [key, { unit: "worker", peaks: [peakFor(bytes)] }])) }) + "\n");
+function seedJobs(f:Fixture,jobs:Record<string,number>,basis:JobBasis="job"):void{
+  assert.equal(writeCostHistory(f.history,{jobs:Object.entries(jobs).map(([key,bytes])=>({key,basis,peak:peakFor(bytes),width:1}))}),undefined);
 }
 
 // A job of two workers holding 96 MiB as it releases: the last sample of its
@@ -766,21 +765,22 @@ process.stdout.write(JSON.stringify({ bytes: entry.bytes, unmeasured: entry.unme
 test("a job reserves what its earlier runs held per worker, and the peak it held goes to its history as it releases", t => {
   const f = fixture(t);
   setCharge(f,96 * MiB);
-  seedJobs(f, { "held-job": GiB });
+  seedJobs(f, { "held-job": GiB },"worker");
   const run = spawnTest(process.execPath, ["--input-type=module", "-e", MEASURED_JOB, LEDGER], { encoding: "utf8", env: admitEnv(f) }, "a measured job");
   assert.equal(run.status, 0, run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), { bytes: 2 * GiB, unmeasured: [], held: 96 * MiB }, "1 GiB a worker, as its history says");
   const kept = readCostHistory(f.history).jobs.get("held-job")!;
-  assert.equal(kept.unit, "worker");
-  assert.equal(kept.peaks.length, 2, "the seeded peak, and this run's, once however often it was released");
-  assert.ok(kept.peaks[1]! >= 48 * MiB, `half of what the job held, per worker: ${kept.peaks[1]}`);
-  assert.equal(peakReservation(kept.peaks), GiB, "a smaller run does not shrink the reservation");
+  assert.equal(kept.basis, "worker");
+  assert.equal(kept.observations.length, 2, "the seeded peak, and this run's, once however often it was released");
+  assert.equal(kept.observations[1]!.width,2);
+  assert.ok(kept.observations[1]!.peak/kept.observations[1]!.width >= 48 * MiB, `half of what the job held, per worker: ${kept.observations[1]!.peak}`);
+  assert.equal(peakReservation(kept.observations.map(row=>Math.ceil(row.peak/row.width))), GiB, "a smaller run does not shrink the reservation");
   assert.deepEqual(readLedger(f.dir), { waiting: [], admitted: [] });
 });
 
 test("an unmeasured job has no forecast; status still names unmeasured steps and fixed reservations that ran over", async t => {
   const f = fixture(t);
-  const share = jobSizing({ key: "fresh" }, f.env);
+  const share = jobSizing({ key: "fresh",units:2 }, f.env);
   assert.equal(share.basis, "live");
   assert.equal(share.bytes, 0, "no forecast before the first live sample");
   seedJobs(f, { other: 3 * GiB });
@@ -885,9 +885,9 @@ test("admit.ts --key reserves what its key held, and its watcher has the command
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout, String(160 * MiB));
   const kept = readCostHistory(f.history).jobs.get("admitted-job")!;
-  assert.equal(kept.peaks.length, 2, "the seeded peak, and the command's, written before its output ended");
-  assert.ok(kept.peaks[1]! > 128 * MiB, `the command's peak, past what it reserved: ${kept.peaks[1]}`);
-  assert.ok(peakReservation(kept.peaks) > 160 * MiB, "its next run reserves by it");
+  assert.equal(kept.observations.length, 2, "the seeded peak, and the command's, written before its output ended");
+  assert.ok(kept.observations[1]!.peak > 128 * MiB, `the command's peak, past what it reserved: ${kept.observations[1]!.peak}`);
+  assert.ok(peakReservation(kept.observations.map(row=>Math.ceil(row.peak/row.width))) > 160 * MiB, "its next run reserves by it");
   const refused = admit(f, ["--bytes", "1G", "--workers", "2", "--", "true"]);
   assert.equal(refused.status, 125);
   assert.match(refused.stderr, /--workers and --at-most size a --key/);

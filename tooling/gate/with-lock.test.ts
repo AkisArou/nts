@@ -17,6 +17,7 @@ import { existsSync, readdirSync, mkdirSync, writeFileSync, readFileSync, unlink
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {historyFile,writeCostHistory} from "./step-scheduling.ts";
 import { readLedger, reserve } from "./memory-ledger.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
@@ -89,7 +90,7 @@ test("a session waits for its memory in the ledger without holding the lock: ano
   const f = fixture(t, 2.5 * GiB_KIB), first = join(f.root, "first-ran"), second = join(f.root, "second-ran");
   const waiting = join(f.memory.NTS_MEMORY_LEDGER, "waiting");
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  writeFileSync(join(f.memory.NTS_GATE_COSTS_DIR, "steps.json"), JSON.stringify({ version: 3, steps: {}, jobs: { "perf-waiting": { unit: "worker", peaks: [2 ** 30] } } }));
+  assert.equal(writeCostHistory(historyFile(f.memory),{jobs:[{key:"perf-waiting",basis:"job",width:1,peak:2 ** 30}]}),undefined);
   const args = f.unitArgs(["sh", WITH_LOCK, "--wait", "--no-quiet-wait", "--key", "perf-waiting", "sh", "-c", `: > ${JSON.stringify(first)}`]);
   const session = spawn("systemd-run", args, {env:fixtureEnvironment(t), stdio: ["ignore", "ignore", "pipe"] });
   let err = "";
@@ -104,7 +105,7 @@ test("a session waits for its memory in the ledger without holding the lock: ano
   // check's priority, so it goes ahead of the session -- takes the lock without
   // waiting for it, and gives it back.
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  writeFileSync(join(f.memory.NTS_GATE_COSTS_DIR, "steps.json"), JSON.stringify({ version: 3, steps: {}, jobs: { "perf-landing": { unit: "worker", peaks: [2 ** 20] } } }));
+  assert.equal(writeCostHistory(historyFile(f.memory),{jobs:[{key:"perf-landing",basis:"job",width:1,peak:2 ** 20}]}),undefined);
   const other = f.withLock(["--no-quiet-wait", "--key", "perf-landing", "sh", "-c", `: > ${JSON.stringify(second)}`], { NTS_MEMORY_PRIORITY: "landing" });
   assert.equal(other.status, 0, other.stderr);
   assert.deepEqual([existsSync(second), existsSync(first), existsSync(f.lock)], [true, false, false], "it measured while the session still waited");

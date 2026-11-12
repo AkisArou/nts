@@ -15,7 +15,7 @@
 //     when it releases the reservation.
 //   - As a process of its own, for a job that `admit.ts` has become:
 //
-//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers> <scope>
+//       node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker> <workers> <scope>
 //
 //     It does not count itself, and once the reservation has ended (released,
 //     dropped, or its owner gone) it adds the most it saw, per worker, to the
@@ -75,15 +75,15 @@ function startThread():void {
   });
 }
 async function main():Promise<void> {
-  const [ledger,id,history,key,workers,scope]=process.argv.slice(2),units=Number(workers);
-  if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||!Number.isSafeInteger(units)||units<1)
-    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <workers> <scope>');
+  const [ledger,id,history,key,basis,workers,scope]=process.argv.slice(2),units=Number(workers);
+  if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||(basis!=="job"&&basis!=="worker")||!Number.isSafeInteger(units)||units<1||(basis==="job"&&units!==1))
+    throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker> <workers> <scope>');
   const ending=new AbortController();
   for(const signal of ['SIGINT','SIGTERM','SIGHUP'] as const)process.on(signal,()=>ending.abort());
   const most=await watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
   if(most>0)try{
     enterWatcherFlush(scope,process.env);
-    const warning=writeCostHistory(history,{jobs:[{key,peak:Math.ceil(most/units)}]});
+    const warning=writeCostHistory(history,{jobs:[{key,peak:most,basis,width:units}]});
     if(warning)throw Error(warning);
   }catch(error){throw new ToolingInstrumentError('tooling-setup',`memory: ${key}'s peak is not in its history: ${String(error)}`,{cause:error});}
 }

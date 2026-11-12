@@ -354,11 +354,11 @@ test("the records job reserves per lane: four lanes ask four times what one does
   const { jobSizing } = await import("../gate/memory-ledger.ts");
   const { historyFile, writeCostHistory } = await import("../gate/step-scheduling.ts");
   const env = { ...withoutHanded(fixtureEnvironment(t)), ...ownMemory(join(testScratch(t, "benchmark-record-sizing"), "memory")) };
-  assert.equal(writeCostHistory(historyFile(env), { jobs: [{ key: "bench-compile-records", peak: 2 ** 30 }] }), undefined);
+  assert.equal(writeCostHistory(historyFile(env), { jobs: [{key:"bench-compile-records",peak:2**30,basis:"worker",width:1}] }), undefined);
   const one = jobSizing(recordsJob(1, "one lane"), env), four = jobSizing(recordsJob(4, "four lanes"), env);
   assert.equal(one.basis, "measured");
   assert.equal(four.units, 4);
   assert.equal(four.bytes, 4 * one.bytes, "a lane's measured peak, times the lanes");
-  assert.equal(writeCostHistory(historyFile(env), { jobs: [{ key: "bench-compile-records", peak: 7 * 2 ** 30 }] }), undefined);
+  assert.equal(writeCostHistory(historyFile(env), { jobs: [{key:"bench-compile-records",peak:7*2**30,basis:"worker",width:1}] }), undefined);
   assert.equal(jobSizing(recordsJob(4, "four lanes"), env).bytes, 4 * COMPILE_CAP_BYTES, "never more than the lanes' own caps");
 });

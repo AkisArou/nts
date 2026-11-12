@@ -11,7 +11,7 @@ import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment } from "./canonical-environment.ts";
 import { jobSizing, ledgerStatus, readLedger } from "./memory-ledger.ts";
-import { readCostHistory, peakReservation } from "./step-scheduling.ts";
+import { readCostHistory,historyFile,writeCostHistory, peakReservation } from "./step-scheduling.ts";
 import { removable } from "./run-temporary.ts";
 import { ownMemory } from "./test-memory.ts";
 import { newTestScratch } from "./test-scratch.ts";
@@ -52,8 +52,8 @@ function fixture(t: TestContext,resident:HostObservationFixture["resident"]={kin
 test("an unknown CLI job starts beside a large unrelated history, is charged live, records its peak at unit exit and uses it next time", async t => {
   const f = fixture(t), release = join(f.root, "release"), ready = join(f.root, "ready");
   mkdirSync(f.memory.NTS_GATE_COSTS_DIR, { recursive: true });
-  const history = join(f.memory.NTS_GATE_COSTS_DIR, "steps.json");
-  writeFileSync(history, JSON.stringify({ version: 3, steps: {}, jobs: { unrelated: { unit: "worker", peaks: [12 * 2 ** 30] } } }));
+  const history = historyFile(f.memory);
+  assert.equal(writeCostHistory(history,{jobs:[{key:"unrelated",basis:"job",peak:12*2**30,width:1}]}),undefined);
   writeFileSync(release, "");
   assert.deepEqual([jobSizing({ key: "perf-count" }, f.memory).bytes, jobSizing({ key: "perf-count" }, f.memory).basis], [0, "live"]);
   const first = f.start("const fs=require('node:fs'),held=Buffer.alloc(160*2**20,1);const watcher=fs.watch(process.argv[1],()=>watcher.close());fs.writeFileSync(process.argv[2],'ready');process.on('exit',()=>process.stdout.write(String(held.length)));", [release, ready]);
@@ -67,12 +67,12 @@ test("an unknown CLI job starts beside a large unrelated history, is charged liv
   writeFileSync(release, "finish");
   assert.deepEqual(await first.done, [0, null], first.stderr);
   const measured = readCostHistory(history).jobs.get("perf-count")!;
-  assert.ok(measured?.peaks.at(-1)! >= 160 * MiB, "unit exit flushes the observed peak");
+  assert.ok(measured?.observations.at(-1)!.peak >= 160 * MiB, "unit exit flushes the observed peak");
   assert.equal(first.stdout, String(160 * MiB));
-  assert.deepEqual([jobSizing({ key: "perf-count" }, f.memory).basis, jobSizing({ key: "perf-count" }, f.memory).bytes], ["measured", peakReservation(measured.peaks)]);
+  assert.deepEqual([jobSizing({ key: "perf-count" }, f.memory).basis, jobSizing({ key: "perf-count" }, f.memory).bytes], ["measured", peakReservation(measured.observations.map(row=>row.peak))]);
   const second = f.start("const fs=require('node:fs'),path=require('node:path');const entry=JSON.parse(fs.readFileSync(path.join(process.env.NTS_MEMORY_LEDGER,'admitted',process.env.NTS_MEMORY_RESERVATION+'.json'),'utf8'));process.stdout.write(JSON.stringify({live:entry.liveUse??false,bytes:entry.bytes}));");
   assert.deepEqual(await second.done, [0, null], second.stderr);
-  assert.deepEqual(JSON.parse(second.stdout), { live: false, bytes: peakReservation(measured.peaks) });
+  assert.deepEqual(JSON.parse(second.stdout), { live: false, bytes: peakReservation(measured.observations.map(row=>row.peak)) });
 });
 
 
@@ -113,7 +113,7 @@ test('stopping a command during its exit write keeps the peak in a fresh bounded
   const stop=spawnSync('systemctl',['--user','stop',run.unit],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(stop.status,0,stop.stderr);
   assert.equal(spawnSync('systemctl',['--user','is-active','--quiet',flush],{env:fixtureEnvironment(t)}).status,0,'the command stop cannot reach its flush');
   writeFileSync(lock.unlock,'continue');assert.deepEqual(await run.done,[0,null],run.stderr);
-  const history=join(f.memory.NTS_GATE_COSTS_DIR,'steps.json');assert.equal(readCostHistory(history).jobs.get('perf-count')?.peaks.at(-1),160*MiB);
+  const history=historyFile(f.memory);assert.equal(readCostHistory(history).jobs.get('perf-count')?.observations.at(-1)?.peak,160*MiB);
   await waitFor('the drained flush collects',()=>spawnSync('systemctl',['--user','is-active','--quiet',flush],{env:fixtureEnvironment(t)}).status!==0);
  }finally{writeFileSync(lock.unlock,'continue');}
 });
@@ -123,7 +123,7 @@ test('a CLI peak history write failure is reported by key and cause',async t=>{
  const run=f.start(HELD_COMMAND,[release,ready],{owned:lock.owned});
  await observeOwnedPeak(f,ready,run.ended);writeFileSync(release,'finish');assert.deepEqual(await run.done,[0,null],run.stderr);
  assert.match(run.stderr,/memory: perf-count's peak is not in its history:.*fixture history lock failure/);
- assert.equal(readCostHistory(join(f.memory.NTS_GATE_COSTS_DIR,'steps.json')).jobs.has('perf-count'),false);
+ assert.equal(readCostHistory(historyFile(f.memory)).jobs.has('perf-count'),false);
 });
 
 test('an unavailable watcher scope refuses admission before executing the command',async t=>{
