@@ -8,6 +8,9 @@
 //                                               nothing uncommitted: what a landing gates
 //   node tooling/gate/owed.mjs --run            also run the owed gate steps
 //   node tooling/gate/owed.mjs --self-test
+//   node tooling/gate/owed.mjs --full-census [--record [--initialize]] [--json]
+//
+// Invalid arguments are refused before repository discovery or selection.
 //
 // # Why
 //

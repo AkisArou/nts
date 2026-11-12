@@ -32,6 +32,8 @@ test('unknown or incomplete CLI requests fail before the first Git call',t=>{
     [['--since','--no-such-flag'],'--since'],[['--full-census','--no-such-flag'],'--no-such-flag'],
     [['--record'],'--record'],[['--full-census','--initialize'],'--initialize'],
     [['--commit','HEAD','--run'],'--run'],[['--since','HEAD','--commit','HEAD'],'--since'],
+    [['--run','--run'],'--run'],[['--self-test','--run'],'--self-test'],
+    [['--full-census','--since','HEAD'],'--since'],[['--since',''],'--since'],
   ];
   for(const [args,named] of invalid){
     const result=spawnTest(process.execPath,[fileURLToPath(new URL('./owed.mjs',import.meta.url)),...args],{cwd:root,env,encoding:'utf8'});
