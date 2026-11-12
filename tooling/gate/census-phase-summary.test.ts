@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {censusPhaseSummary} from './census-phase-summary.ts';
-import {CensusPhaseCosts,readCensusPhaseFrame,type PhaseSample} from '../census/phase-costs.ts';
+import {CensusPhaseCosts,censusPhaseCosts,readCensusPhaseFrame,type PhaseSample} from '../census/phase-costs.ts';
+
+test('unrelated steps do not open census observations or enable child wrappers',()=>{
+  for(const step of ['tooling','test262-census-c','benches'])assert.equal(censusPhaseCosts('fixture','c',{
+    NTS_GATE_STEP:step,NTS_GATE_CASE_COSTS_DIR:'/not-used',NTS_HOST_OBSERVATIONS:'/not-opened',
+  }),undefined);
+});
 
 test('supplied disjoint phases reconcile to scope CPU with an explicit remainder',()=>{
   const frame=readCensusPhaseFrame({version:1,project:'fixture',backend:'c',step:'typescript-c',compiler_observations:[],unmeasured:[],phases:[

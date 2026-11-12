@@ -2,8 +2,8 @@
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {prepareChildObserver} from './child-rusage.ts';
-import {CENSUS_PHASE_STEPS,censusPhaseSummary} from './census-phase-summary.ts';
-import {readCensusPhaseFrame,type CensusPhaseFrame} from '../census/phase-costs.ts';
+import {censusPhaseSummary} from './census-phase-summary.ts';
+import {CENSUS_PHASE_STEPS,readCensusPhaseFrame,type CensusPhaseFrame} from '../census/phase-costs.ts';
 
 /** The run's memory as run.mjs counts it: its reservation, what its running steps are counted for, and what waits. */
 export type MemoryState = {

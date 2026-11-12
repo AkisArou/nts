@@ -3,7 +3,6 @@
 import type {CensusPhaseFrame} from '../census/phase-costs.ts';
 import type {Check} from './case-costs.ts';
 
-export const CENSUS_PHASE_STEPS=new Set(['typescript-c','typescript-llvm','typescript-jvm','test262-cases','test262-builtins-cases','test262-rest-cases','test262-jvm','test262-llvm']);
 const GROUPS={materialization:[],native_capture_check:['capture'],lowering:['lower','prepare'],emission:['c.emit','llvm.emit','jvm.emit'],host_compile_link:[],execution:[],comparison:[]} as const;
 type Name=keyof typeof GROUPS;
 export type CensusPhaseRow={phase:Name|'unattributed';cases:number|null;cpu_s:number|null;known_cpu_s:number;wall_s:number|null;self_cpu_s:number;child_cpu_s:number;missing_observations:number};

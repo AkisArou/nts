@@ -203,9 +203,11 @@ pub fn session(project: &camino::Utf8Path) -> Session {
     // Unit tests may run many checks concurrently in one process. Its
     // process-wide CPU counters cannot attribute those to individual tests.
     // Gate CLI children each execute one check and have unambiguous counters.
-    if !matches!(
+    if !observed_command(
         std::env::args().nth(1).as_deref(),
-        Some("check" | "emit-c" | "emit-llvm" | "emit-jvm")
+        std::env::var("NTS_GATE_COMPILER_OBSERVATION")
+            .ok()
+            .as_deref(),
     ) {
         return Session {
             total: None,
@@ -222,6 +224,12 @@ pub fn session(project: &camino::Utf8Path) -> Session {
             previous: None,
         },
     }
+}
+
+fn observed_command(command: Option<&str>, observation: Option<&str>) -> bool {
+    command == Some("check")
+        || matches!(command, Some("emit-c" | "emit-llvm" | "emit-jvm"))
+            && observation.is_some_and(|value| !value.is_empty())
 }
 
 fn session_at(root: &std::path::Path, project: &camino::Utf8Path, step: String) -> Session {
@@ -275,6 +283,17 @@ impl Drop for Session {
 #[allow(clippy::unwrap_used, reason = "test assertions")]
 mod tests {
     use super::*;
+
+    #[test]
+    fn emit_observations_need_the_case_workers_explicit_handoff() {
+        assert!(observed_command(Some("check"), None));
+        for command in ["emit-c", "emit-llvm", "emit-jvm"] {
+            assert!(!observed_command(Some(command), None));
+            assert!(!observed_command(Some(command), Some("")));
+            assert!(observed_command(Some(command), Some("case-observation")));
+        }
+        assert!(!observed_command(Some("hir"), Some("case-observation")));
+    }
 
     #[test]
     fn peak_rss_requires_a_kernel_value_and_its_unit() {

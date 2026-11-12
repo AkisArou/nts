@@ -8,6 +8,7 @@ import {hostObservations} from '../gate/host-observations.ts';
 import {observedSpawnSync,type ChildObserver} from '../gate/child-rusage.ts';
 
 export type WorkerPhase='materialization'|'host_compile_link'|'execution'|'comparison';
+export const CENSUS_PHASE_STEPS=new Set(['typescript-c','typescript-llvm','typescript-jvm','test262-cases','test262-builtins-cases','test262-rest-cases','test262-jvm','test262-llvm']);
 export type PhaseCost={phase:WorkerPhase;wall_s:number;self_cpu_s:number;child_cpu_s:number};
 export type CensusPhaseFrame={version:1;project:string;backend:string;step:string;compiler_observations:string[];phases:PhaseCost[];unmeasured:string[]};
 export type PhaseSample={wall:number;user:number;sys:number};
@@ -84,7 +85,7 @@ export class CensusPhaseCosts {
 
 export function censusPhaseCosts(project:string,backend:string,env:NodeJS.ProcessEnv=process.env):CensusPhaseCosts|undefined{
   const directory=env.NTS_GATE_CASE_COSTS_DIR,step=env.NTS_GATE_STEP;
-  if(!directory||!step)return;
+  if(!directory||!step||!CENSUS_PHASE_STEPS.has(step))return;
   const host=hostObservations(env);
   return new CensusPhaseCosts(project,backend,step,()=>{
     const cpu=host.ownCpu();return {wall:host.now()/1000,user:cpu.userUsec/1e6,sys:cpu.systemUsec/1e6};
