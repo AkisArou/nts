@@ -316,7 +316,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     return changed ? 1 : 0;
   } finally {
     try { closeMemoryRun(); }
-    finally { reservation?.release(); rmSync(scratch, { recursive: true, force: true }); }
+    finally { reservation?.release(); try { await reservation?.closed; } finally { rmSync(scratch, { recursive: true, force: true }); } }
   }
 }
 

@@ -26,3 +26,13 @@ test('a final reply without a valid sample is a named protocol failure',async()=
  const f=fixture();f.lifecycle.stop();f.worker.emit('message',{kind:'stopped'});f.worker.emit('exit',0);
  await assert.rejects(f.lifecycle.closed,/invalid final reply/);assert.equal(f.terminated,0);
 });
+
+test('a valid final reply followed by exit is clean when the reservation ends naturally',async()=>{
+ const f=fixture();f.worker.emit('message',{kind:'stopped',peak:23});f.worker.emit('exit',0);await f.lifecycle.closed;
+ f.lifecycle.stop();assert.deepEqual(f.messages,[]);assert.equal(f.terminated,0);assert.deepEqual(f.warnings,[]);
+});
+test('a throwing owned reporter rejects closed without escaping the worker callback',async()=>{
+ const worker=new EventEmitter();Object.assign(worker,{postMessage(){},unref(){},async terminate(){return 1;}});
+ const lifetime=workerLifecycle(worker as unknown as WorkerTransport,'owned reporter',()=>{throw Error('report namespace unavailable');},{arm(){return()=>{};}});
+ assert.doesNotThrow(()=>worker.emit('exit',1));await assert.rejects(lifetime.closed,/reporting failed.*report namespace unavailable/);
+});

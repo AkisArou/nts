@@ -309,6 +309,10 @@ silently ran zero tests after its test gained a module prefix.
   machine itself runs out, the kernel kills the full check's work first,
   then agents' (admit.ts ranks yours), and a landing's last. Still `nice -n
   19` and one heavy job of yours at a time.
+  A scoped `reserveJob` owner calls `release()` and awaits `closed` before
+  removing anything its sampler or reporter can use; process-lifetime jobs
+  drain at `beforeExit`. On 2026-11-12 a sampler diagnostic appended a landing
+  fixture's build.log after the fixture had removed its directory.
   Never SIGSTOP timed work: its wall-clock timeout keeps running, so
   suspension fabricates a timeout.
   A job with no peak in its history is charged its live use and a margin,

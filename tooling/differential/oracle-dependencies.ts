@@ -213,7 +213,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
         const overBudget=worker.counters().oom>0||run.runaway||run.hung||cpu.usage_usec!>CAPTURE_CPU_SECONDS*1e6;
         writeFileSync(join(capability.directory,'command.json'),JSON.stringify({command:'systemd-run',args:scope.argv,scope:memory.group,peakBytes,residentBudgetBytes:CAPTURE_BYTES,cpuBudgetSeconds:CAPTURE_CPU_SECONDS,...run},null,2)+'\n');
         if(overBudget)throw new CaseBudgetError('oracle dependency capture exceeded its preparation budget: '+(run.runaway??run.hung??'resident memory'));
-      }finally{try{memory.close();}finally{if(!reservation.inherited)reservation.release();}}
+      }finally{try{memory.close();}finally{if(!reservation.inherited){reservation.release();await reservation.closed;}}}
       writeFileSync(join(capability.directory,'stdout'),run.stdout);writeFileSync(join(capability.directory,'stderr'),run.stderr);
       if(signal?.aborted)throw Error('oracle dependency capture canceled before publication');
       if(run.status!==0||run.signal||run.error||run.hung||run.runaway)throw Error('oracle dependency capture not measured: '+run.out);

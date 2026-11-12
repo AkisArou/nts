@@ -113,5 +113,5 @@ export async function prepareOracles(requests:OracleRequest[],options:{
       :new ToolingInstrumentError('tooling-setup','oracle worker was not measured: '+String(failed.reason),{cause:failed.reason});
     writeFileSync(join(directory,'members.json'),JSON.stringify(result,null,2)+'\n');return result;
   // A reservation this preparation made ends with it; one it ran inside is its job's.
-  }finally{if(reservation&&!reservation.inherited)reservation.release();}
+  }finally{if(reservation&&!reservation.inherited){reservation.release();await reservation.closed;}}
 }

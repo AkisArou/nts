@@ -2239,7 +2239,9 @@ has outlasted its execution idle window. Governs [the machine](../../workflow.md
 processes aborted with an async dependency, while the synchronous control
 had zero aborts. The sampler now starts and stops by message, while the parent
 records its peak and releases memory synchronously. A separate closed promise
-certifies reply and exit; termination is only a named bounded fallback. A
+certifies reply and exit, including natural reservation completion. Scoped
+owners await it before tearing down reporter-owned state. Termination is only
+a named bounded fallback. A
 source rule rejects top-level await in Worker entry closures. Governs
 [the machine](../../workflow.md#the-machine); the
 [reduction](worker-termination-2026-11-12.md) is retained outside sweeps.

@@ -13,7 +13,7 @@ export function workerLifecycle(worker:WorkerTransport,label:string,report:(line
   let stopping=false,exited=false,replied=false,cancel=()=>{},problem:Error|undefined;
   let resolve!:()=>void,reject!:(error:Error)=>void;
   const closed=new Promise<void>((yes,no)=>{resolve=yes;reject=no;});
-  const fail=(why:string)=>{if(!problem){problem=new ToolingInstrumentError('tooling-setup',`${label} ${why}`);report(problem.message);}};
+  const fail=(why:string)=>{if(!problem){problem=new ToolingInstrumentError('tooling-setup',`${label} ${why}`);try{report(problem.message);}catch(error){problem=new ToolingInstrumentError('tooling-setup',`${problem.message}; reporting failed: ${String(error)}`,{cause:error});}}};
   // A caller may use only the synchronous release. Reporting still names a
   // failed service, while a lifecycle owner can await and observe the failure.
   void closed.catch(()=>{});
@@ -25,8 +25,9 @@ export function workerLifecycle(worker:WorkerTransport,label:string,report:(line
   worker.on('error',(error:Error)=>{fail(`failed: ${error.message}`);});
   worker.on('exit',(code:number)=>{
     exited=true;cancel();
-    if(!stopping)fail(`exited before stop (status ${code})`);
-    else if(!replied)fail(`exited without its final reply (status ${code})`);
+    // The watched reservation can end by handover before its handle stops.
+    // A final reply certifies that natural completion just as an explicit stop.
+    if(!replied)fail(`exited without its final reply (status ${code})`);
     else if(code!==0)fail(`exited with status ${code}`);
     if(problem)reject(problem);else resolve();
   });

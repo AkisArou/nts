@@ -111,3 +111,18 @@ Background suite verdicts are not proof: the experiment reused its own
 oracle-resolution namespace across separately stopped scopes. The holder does
 not reclaim holder.json when its PID is dead. Real run directories are fresh;
 no cross-run account cache interference was observed.
+
+## Reporter lifetime
+
+The first #735 landing passed every run-steps assertion, then failed the file
+because a sampler callback appended build.log after the fixture removed its
+run directory. This was a new #735 defect, not an asynchronous file stream:
+runLanding passed appendFileSync as its sampler reporter. A valid final reply
+followed by natural reservation completion was also misclassified as failure.
+
+The caller sweep found 14 direct production reserveJob sites. Five scoped
+owners now await closed after synchronous release: landing/run, worker-pool,
+oracle-batch, oracle-dependencies and bench/build-records. The other nine are
+process-lifetime jobs whose beforeExit handler drains the sampler. Natural
+completion with a final reply is clean. A reporter exception rejects closed
+by name and cannot escape a worker event callback.

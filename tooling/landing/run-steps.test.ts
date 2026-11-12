@@ -10,6 +10,7 @@ import {join} from "node:path";
 import {ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT,gateEnvironment} from "../gate/canonical-environment.ts";
 import {launcherEnvironment,PROFILE,runLanding} from "./run.ts";
 import {fixture} from './run-fixture.ts';
+import {spawnTest} from "../gate/test-wait.ts";
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", async t => {
   const f = fixture(t);
@@ -100,4 +101,27 @@ test("a step memory pressure kept from measuring runs again, alone", async t => 
   const attempt = JSON.parse(readFileSync(join(f.run, "attempt-2/summary.json"), "utf8"));
   assert.deepEqual(attempt.requested, ["program-oracles", "examples"], "only the unmeasured native step and its run-owned producer run again");
   assert.equal(attempt.memory.priority, "landing");
+});
+
+test("a landing keeps its reporter alive until its sampler closes", t => {
+  const code = `import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {join} from 'node:path';import {mock} from 'node:test';
+const ledger=${JSON.stringify(new URL('../gate/memory-ledger.ts',import.meta.url).href)};
+const real=await import(ledger);let report,releaseObserved,close;const released=new Promise(done=>{releaseObserved=done;}),closed=new Promise(done=>{close=done;});
+mock.module(ledger,{namedExports:{...real,reserveJob:async(_request,options)=>{
+ report=options.report;return {id:'owned-log-control',ledger:'/owned',inherited:false,env:{},bytes:1,active:()=>true,grow:async()=>{},shrink:async()=>{},outranked:()=>false,noteOver:async()=>{},release:()=>releaseObserved(),closed};
+}}});
+const {fixture}=await import(${JSON.stringify(new URL('./run-fixture.ts',import.meta.url).href)});
+const {runLanding}=await import(${JSON.stringify(new URL('./run.ts',import.meta.url).href)});
+const cleanup=[],f=fixture({after(callback){cleanup.push(callback);}});let returned=false;
+const pending=runLanding(f.options(['build']));pending.then(()=>{returned=true;},()=>{returned=true;});
+try{
+ await released;await new Promise(done=>queueMicrotask(done));
+ assert.equal(returned,false,'landing returned before its owned sampler closed');
+ report('last sampler report');close();const ran=await pending;assert.equal(ran.state,'green',ran.message);
+ assert.match(readFileSync(join(f.run,'build.log'),'utf8'),/last sampler report/);console.log('reporter closed before return');
+}finally{close();await pending.catch(()=>{});for(const callback of cleanup.reverse())await callback();}`;
+  // Preserve declared import instrumentation in the control's own process.
+  const imports=process.execArgv.flatMap((argument,index,args)=>argument==='--import'&&args[index+1]?[argument,args[index+1]!] : []);
+  const result=spawnTest(process.execPath,[...imports,'--experimental-test-module-mocks','--input-type=module','-e',code],{encoding:'utf8',env:fixtureEnvironment(t)});
+  assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/reporter closed before return/);
 });

@@ -629,7 +629,10 @@ the first node task.
 - **Sampler services have an explicit lifecycle.** A reservation's release
   takes its final reading, records the peak and returns memory synchronously.
   Its sampler starts and stops by message, replies with its final sample and
-  exits itself. `closed` certifies that shutdown; a missing reply or a wedged
+  exits itself. A scoped owner awaits `closed` before tearing down any state
+  its sampler or reporter can use; process-lifetime jobs drain at `beforeExit`.
+  A valid final reply also certifies a reservation that ended by handover.
+  `closed` certifies that shutdown; a missing reply or a wedged
   drain is named, and forced termination is only the bounded fallback. Worker
   entries and their module closures contain no top-level await; command bodies
   belong behind main() entry guards. The test-host source audit checks this

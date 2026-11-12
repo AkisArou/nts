@@ -193,7 +193,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     }
     if (!rest.length) return finish("green", "green");
     return finishSteps(options, selected.node, launcher, owned, rest, results, finish, hold);
-  } finally { hold?.release(); }
+  } finally { hold?.release(); await hold?.closed; }
 }
 
 /**

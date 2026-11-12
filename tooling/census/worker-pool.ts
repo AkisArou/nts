@@ -252,7 +252,7 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   catch (error) { memory.close(); throw error; }
   try { return await rounds(options, budgetBytes, reservation); }
   // A reservation this pool made ends with it; one it ran inside is its job's.
-  finally { if (!reservation.inherited) reservation.release(); }
+  finally { if (!reservation.inherited) { reservation.release(); await reservation.closed; } }
 }
 
 async function rounds(options: ResidentPoolOptions, budgetBytes: number, reservation: Reservation): Promise<ResidentPoolSummary> {
