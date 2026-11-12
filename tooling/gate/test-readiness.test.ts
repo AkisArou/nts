@@ -22,6 +22,7 @@ test('script files, inline invocations, aliases and local source helpers reach t
     `import {spawnSync as run} from 'node:child_process';run(node,['-e',${JSON.stringify(writer)}]);`,
     `import {spawnTest} from './test-wait.ts';const args=['--eval',${JSON.stringify(writer)}];spawnTest(node,args,{});`,
     `import * as fs from 'node:fs';function source(){return ${JSON.stringify(writer)};}fs.writeFileSync('child.mjs',source());`,
+    `import{writeFileSync}from'node:fs';import{source}from'./source-fixture.ts';writeFileSync('child.mjs',source()+${JSON.stringify(writer)});`,
     `import {generatedJavaScript as js} from './generated-javascript.ts';export function source(){return js(${JSON.stringify(writer)});}`,
   ])assert.equal(inspect(source).length,1,source);
 });

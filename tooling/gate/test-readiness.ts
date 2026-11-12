@@ -15,12 +15,14 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     if(depth>6)return;
     if(generated){if(parsed.has(text))return;parsed.add(text);}
     const lease=borrowed?undefined:api.createSourceFile(file+(generated?'.generated.ts':''),text),tree=borrowed??lease!.sourceFile;
-    const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Binding>>(),imports=new Map<string,string>();
+    const parents=new Map<Node,Node>(),scopes=new Map<Node,Map<string,Binding>>(),imports=new Map<string,string>(),calls:Node[]=[],publishers:Node[]=[],bindingsByNode=new Map<Node,Binding|null>();
     const code=(node:Node)=>text.slice(node.pos,node.end).trim();
     const isScope=(node:Node)=>ast.isSourceFile(node)||ast.isBlock(node)||[ast.SyntaxKind.FunctionDeclaration,ast.SyntaxKind.FunctionExpression,ast.SyntaxKind.ArrowFunction,ast.SyntaxKind.MethodDeclaration,ast.SyntaxKind.Constructor,ast.SyntaxKind.GetAccessor,ast.SyntaxKind.SetAccessor].includes(node.kind)||ast.isForStatement(node)||ast.isForOfStatement(node);
     function gather(node:Node,scope:Node):void{
       if(isScope(node)){scope=node;scopes.set(scope,new Map());}
       const bindings=scopes.get(scope)!;
+      if(ast.isCallExpression(node))calls.push(node);
+      if(ast.isFunctionDeclaration(node)&&node.name?.text==='publishOracleTerminal')publishers.push(node);
       if(ast.isImportDeclaration(node)&&ast.isStringLiteralLikeNode(node.moduleSpecifier)){
         const module=node.moduleSpecifier.text.replace(/^node:/,''),clause=node.importClause,names=clause?.namedBindings;
         if(clause?.name)imports.set(clause.name.text,module);
@@ -42,9 +44,10 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     gather(tree,tree);
     const binding=(node:Node):Binding|undefined=>{
       if(!ast.isIdentifier(node))return undefined;
+      const known=bindingsByNode.get(node);if(known!==undefined)return known??undefined;
       let at:Node|undefined=node;
-      while(at){const value=scopes.get(at)?.get(node.text);if(value)return value;at=parents.get(at);}
-      return undefined;
+      while(at){const value=scopes.get(at)?.get(node.text);if(value){bindingsByNode.set(node,value);return value;}at=parents.get(at);}
+      bindingsByNode.set(node,null);return undefined;
     };
     const unwrap=(node:Node):Node=>{
       while(ast.isAwaitExpression(node)||ast.isParenthesizedExpression(node)||ast.isAsExpression(node)||ast.isNonNullExpression(node)||ast.isSatisfiesExpression(node))node=node.expression;
@@ -99,7 +102,10 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
       }).join('');
       if(ast.isBinaryExpression(node)&&code(node.operatorToken)==='+'){
         const left=render(node.left,steps+1),right=render(node.right,steps+1);
-        return left!==undefined&&right!==undefined?left+right:undefined;
+        // A cross-module source factory is audited at its branded definition.
+        // Keep inspecting a concrete suffix/prefix instead of losing both
+        // fragments when the other side cannot be rendered locally.
+        return left===undefined&&right===undefined?undefined:(left??'__generated_fragment;')+(right??';__generated_fragment;');
       }
       if(ast.isCallExpression(node)){
         const value=returned(node.expression);if(value)return render(value,steps+1);
@@ -132,7 +138,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
       if(name(r.expression)!=='fs.renameSync'||r.arguments.length!==2||!from||!to||!ast.isIdentifier(from)||from.text!==temporary.name.text||!ast.isIdentifier(to)||to.text!=='marker')return;
       sealedWrites.add(w);
     }
-    const gatherPublishers=(node:Node):void=>{sealedPublisher(node);node.forEachChild(gatherPublishers);};gatherPublishers(tree);
+    for(const publisher of publishers)sealedPublisher(publisher);
     const embedded=(node:Node):void=>{
       const value=render(node);
       if(value!==undefined)parse(value,offset+text.slice(0,node.pos).split('\n').length-1,true,depth+1);
@@ -157,9 +163,8 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
           }
         }
       }
-      node.forEachChild(visit);
     }
-    try{visit(tree);}finally{lease?.dispose();}
+    try{for(const call of calls)visit(call);}finally{lease?.dispose();}
   }
   try{parse(source,0,false,0,root);}finally{if(!shared)api.close();}
   return found;

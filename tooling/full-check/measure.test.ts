@@ -1,3 +1,4 @@
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 // node --test tooling/full-check/measure.test.ts
 //
 // How a run's summary.json is read: a skip the policy accepts passes, a step
@@ -114,7 +115,7 @@ test('red full-check runs use the measured environment and release resolution se
   nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
   candidateEnvironmentFixture(repo.root);candidateVersion(repo.root,'measured');
   const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session');
-  const subject=resolutionSubject(observed,session,1)+`import {writeFileSync as write} from 'node:fs';write(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL',reason:'private red control'}]}));\n`;
+  const subject=resolutionSubject(observed,session,1)+generatedJavaScript(`import {durableRecord as publishSummary} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};publishSummary(process.env.NTS_GATE_RUN_DIR+'/summary.json',{identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL',reason:'private red control'}]});\n`);
   const script=`#!/bin/sh
 if [ -n "$NTS_GATE_SETUP_ONLY" ];then
   mkdir -p "$NTS_GATE_TREE"
@@ -145,7 +146,7 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session'),bin=join(repo.dir,'bin');mkdirSync(bin);
   const cargo=join(bin,'cargo');writeFileSync(cargo,'#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release"\nprintf "#!/bin/sh\\n" > "$CARGO_TARGET_DIR/release/nts"\n');chmodSync(cargo,0o755);
   nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
-  const subject=resolutionSubject(observed,session,1)+`import assert from 'node:assert/strict';assert.equal(process.env.NTS_GATE_LOCK_FD,undefined);\nimport {GateResource} from ${JSON.stringify(new URL('../gate/gate-resource.ts',import.meta.url).href)};assert.equal(GateResource.tryAcquire(process.env.NTS_GATE_TREE+'.lock'),null);\nimport {writeFileSync as write} from 'node:fs';write(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL'}]}));\n`;
+  const subject=resolutionSubject(observed,session,1)+generatedJavaScript(`import assert from 'node:assert/strict';assert.equal(process.env.NTS_GATE_LOCK_FD,undefined);\nimport {GateResource} from ${JSON.stringify(new URL('../gate/gate-resource.ts',import.meta.url).href)};assert.equal(GateResource.tryAcquire(process.env.NTS_GATE_TREE+'.lock'),null);\nimport {durableRecord as publishSummary} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};publishSummary(process.env.NTS_GATE_RUN_DIR+'/summary.json',{identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL'}]});\n`);
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private candidate inputs']);
   const script=readFileSync(new URL('../gate/pinned.sh',import.meta.url),'utf8');
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject,'tooling/gate/all.sh':`#!/bin/sh\nif [ "$1" = --list ];then echo tooling; exit 0;fi\nexec node subject.ts "$(git rev-parse HEAD)"\n`},'real pinned control');

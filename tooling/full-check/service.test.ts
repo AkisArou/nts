@@ -1,3 +1,4 @@
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/service.test.ts
 //
@@ -1369,8 +1370,10 @@ test('records use the newly verified environment, in the records tree at the ver
   repo.git.run(['add','-f','tooling','.tool-versions']);
   // Like record-pending.ts --after, it leaves the delta of what it recorded in the run's folder.
   const delta={version:1,commit:null,headers:{},rows:[{kind:'outcomes',record:'results/fresh.tsv',case:'results',key:'results',before:null,after:'fresh row\n',sources:'0'.repeat(64)}]};
-  const script=resolutionSubject(observed,session,0)+`import {mkdirSync} from 'node:fs';mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');`
-    +`writeFileSync(process.argv[4]+'/${DELTA_FILE}',${JSON.stringify(JSON.stringify(delta))});\n`;
+  const script=resolutionSubject(observed,session,0)+generatedJavaScript(`import {mkdirSync,writeFileSync} from 'node:fs';
+import {durableRecord as publishDelta} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
+mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');
+publishDelta(process.argv[4]+'/${DELTA_FILE}',${JSON.stringify(delta)});\n`);
   const commit=repo.commit({'tooling/records/record-pending.ts':script,'LOG/tests':'pending: private-case is not recorded in results/fresh.tsv yet\n'},'new verified environment');
   let calls=0;
   const fx=harness(repo,fakeGate(repo),{recorder:(tree,pin,run,part)=>{
