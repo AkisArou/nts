@@ -354,6 +354,23 @@ in two ways:
 - **Records list what does not pass,** by kind (refused, wrong answer,
   abort, timeout), not a transcript of every case. A passing case needs no row.
 
+The fast `records` check classifies the oracle record's identity inputs.
+It checks source existence, a source digest wherever the row carries one,
+and the normalized workload declaration against the current tree. Explanatory
+reasons and formatting do not change that declaration. A changed input makes
+the retained record red: the change deletes its fixture record, which makes
+it pending for fresh recording. A measured row carries no body-only digest,
+so a function-body edit alone keeps its population promise. The check names
+the remaining identity inputs that require native plans instead of claiming
+to have validated them. Budget provenance separately schedules refreshes.
+
+Benchmark run updates are independent by case. The recorder publishes each
+completed pending row and accepted update before reporting another case's
+failure or incomplete observation. A recorded regression keeps its old row,
+an unmeasured case stays pending, and the batch keeps its red or held result.
+The controller publishes audited delta rows even when a recorder exits with
+a problem; one recorder cannot discard another's evidence.
+
 ## Benchmarks
 
 Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
@@ -1024,3 +1041,9 @@ the first node task.
 - **Platforms:** Apple and Windows programs may stay unrun when their only
   refusals are platform skips. A red that only affects the JVM is recorded in
   `tooling/conformance/jvm-declines.known` and fixed afterwards.
+
+- **Oracle records own their identity inputs.** The fast records check
+  validates the inputs available from the tree and explicitly names those
+  requiring native planning. A source-owned population change deletes the
+  stale fixture record. Independent completed benchmark updates survive
+  another case's incomplete measurement without hiding that failure.

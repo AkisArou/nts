@@ -2496,3 +2496,18 @@ independently of the tree move: each cycle and core, wide or probe launch
 checks it. The status names the verified target while the lock is busy.
 In-flight work finishes, and independent records and benchmark units remain
 adoptable. A restart request produces no held result. Fixes #755.
+## Oracle records own their identity inputs (11-12)
+
+A CLBG workload declaration changed the generated population while its older
+budget record remained. The native reader correctly refused the stale key,
+but the retained record hid the need for fresh recording. The fast records
+check now classifies all row identity inputs, validates the cheap tree inputs,
+and names native-plan gaps. A changed input deletes the stale fixture record
+in the same change, making it pending. Reasons and formatting are not workload
+constraints; measured body-only edits keep their count promise.
+
+One incomplete benchmark also made finishBenchmarks return before publishing
+its independently completed rows. Completed pending and accepted updates now
+publish before the batch reports its remaining failure. The parent already
+published audited deltas despite recorder errors; that behavior stays.
+#592.

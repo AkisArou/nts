@@ -1,8 +1,10 @@
-// Filesystem-only validation of documentation numbering and benchmark evidence.
+// Documentation numbering, benchmark evidence and cheap oracle identity inputs.
 import {readdirSync} from "node:fs";
 import {join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {checkRecords as checkBenchmarkRecords} from "../bench/run-record.ts";
+import {readRecords} from "../differential/oracle-records.ts";
+import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identities.ts";
 
 // Existing collisions are named, never allowed by count: fixing one cannot
 // spend its allowance on a new collision. This list only shrinks.
@@ -22,7 +24,7 @@ export function recordNumbers(names:readonly string[],known:readonly string[]=KN
   };
 }
 
-export function checkRecords(root:string,report:(message:string)=>void=console.log):void {
+export function checkRecords(root:string,report:(message:string)=>void,env:NodeJS.ProcessEnv):void {
   const numbers=recordNumbers(readdirSync(join(root,"docs/records")));
   if(numbers.unexpected.length)throw new Error([
     "a record number was claimed twice:",
@@ -31,6 +33,9 @@ export function checkRecords(root:string,report:(message:string)=>void=console.l
   ].join("\n"));
   if(numbers.stale.length)throw new Error("fixed, so remove from KNOWN_DUPLICATE_RECORDS: "+numbers.stale.join(" "));
   checkBenchmarkRecords(root);
+  const problems=oracleIdentityProblems(root,readRecords(root).rows,env);
+  report(oracleIdentityScope());
+  if(problems.length)throw Error(problems.join("\n"));
   report(`${numbers.count} records, ${KNOWN_DUPLICATE_RECORDS.length} numbers claimed twice and named; benchmark run records and table validated`);
 }
 
@@ -38,6 +43,6 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
   try {
     const [root,...extra]=process.argv.slice(2);
     if(!root||extra.length)throw new Error("usage: records.ts <root>");
-    checkRecords(resolve(root));
+    checkRecords(resolve(root),console.log,process.env);
   }catch(error){console.error(error instanceof Error?error.message:String(error));process.exitCode=1;}
 }

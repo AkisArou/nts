@@ -20,11 +20,14 @@ export type Populations = Record<string, { count: number; cases_sha256: string }
 export type MarginBudget = { phase: "execute"; outcome: "margin"; bound: number; signal: null; cpu_s: number[]; reason: string };
 /** What a budget row records: an oracle stopped at a bound, or runs too close to one to count. */
 export type RecordedBudget = OracleBudget | MarginBudget;
-export type OracleRow = { kind: "measured" | "no-oracle" | "budget"; source: string; signature: string;
-  input_domain?: RecordedDomain; populations?: Populations;
+/** Population identity inputs. The fast gate classifies every field here. */
+export type OracleIdentityInputs = { source: string; signature: string;
+  input_domain?: RecordedDomain; source_digest?: string;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
+};
+export type OracleRow = OracleIdentityInputs & { kind: "measured" | "no-oracle" | "budget"; populations?: Populations;
   budget?: RecordedBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
-  count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
+  count?: number; complete?: true; node_cpu_s?: number[]; reason?: string };
 /** What a budget row's provenance names: the entry, Node, the producer and the policy it was measured under. */
 export type BudgetRevision = { entry: string; node: string; producer: string; policy: string };
 /**
@@ -88,7 +91,12 @@ export function parseGenerator(value: unknown): Generator {
 
 function domain(value: unknown): RecordedDomain {
   const input = object(value, "input_domain"); fields(input, ["identity", "declaration"], "input_domain");
-  const declaration = object(input.declaration, "domain declaration");
+  return { identity: hash(input.identity, 32, "domain identity"), declaration: domainDeclaration(input.declaration) };
+}
+
+/** One grammar for recorded and source-owned workload declarations. */
+export function domainDeclaration(value: unknown): RecordedDomain["declaration"] {
+  const declaration = object(value, "domain declaration");
   fields(declaration, ["version", "functions"], "domain declaration");
   if (declaration.version !== 1) fail("unknown domain declaration version");
   const functions = object(declaration.functions, "domain functions");
@@ -113,7 +121,7 @@ function domain(value: unknown): RecordedDomain {
       return [parameter, result];
     }))];
   }));
-  return { identity: hash(input.identity, 32, "domain identity"), declaration: { version: 1, functions: converted } };
+  return { version: 1, functions: converted };
 }
 
 export function parseRow(value: unknown): OracleRow {

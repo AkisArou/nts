@@ -11,6 +11,7 @@ import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./records.ts";
 // The records step and tooling both exercise the canonical validator controls.
 import "../bench/run-record.test.ts";
 import {newTestScratch} from "./test-scratch.ts";
+import {writeRecords} from "../differential/oracle-records.ts";
 
 test("record numbering preserves named collisions and refuses new or stale allowances",()=>{
   const names=KNOWN_DUPLICATE_RECORDS.flatMap(number=>[number+"-first.md",number+"-second.md"]);
@@ -34,6 +35,9 @@ test("the real records step validates benchmark evidence and its rendered table"
       writeFileSync(join(root,path),readFileSync(fileURLToPath(new URL("../../"+path,import.meta.url))));
     }
     mkdirSync(join(root,"docs/records"),{recursive:true});
+    mkdirSync(join(root,"tests/programs"),{recursive:true});
+    mkdirSync(join(root,"benchmarks/cases"),{recursive:true});
+    writeRecords(root,{version:1,generator_version:1,generator_digest:"a".repeat(32),seed:null,rows:[]});
     for(const number of KNOWN_DUPLICATE_RECORDS)for(const suffix of ["first","second"])writeFileSync(join(root,`docs/records/${number}-${suffix}.md`),"fixture\n");
     runGit("init","-q");runGit("config","user.name","records control");runGit("config","user.email","test@example.invalid");
     runGit("add",".");runGit("commit","-qm","records fixture");

@@ -28,8 +28,9 @@ type RecordingOptions = {
  * row by the shared ratchet. Reproducing passes, a loud defect included; a
  * change the ratchet accepts passes and is listed; anything else is red. With
  * --record-pending (the full check's writer, after landing) every benchmark
- * runs, and from a clean comparison its pending rows and accepted changes are
- * written, every other line byte for byte.
+ * runs. Its completed pending rows and accepted changes are written
+ * independently, every other line byte for byte; incomplete cases retain
+ * their named failures and missing rows.
  */
 export async function finishBenchmarks(plan: RunPlan, all: readonly Entry[], completed: readonly Completed[], incomplete: readonly Incomplete[], options: RecordingOptions): Promise<number> {
   const say = options.log ?? console.log;
