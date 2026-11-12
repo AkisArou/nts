@@ -156,6 +156,8 @@ inference may add checks; it cannot place a path or remove its full fallback.
 `tooling/gate/reader-inputs/main.ts`, declares a data directory: its tracked members
 are inputs, not host modules to parse. Entry modules, imports and unbranded
 URL assets retain their own production bytes even inside a data directory.
+Only module-owned files enter host-reference traversal; data members keep
+their input obligations without making their strings or imports into readers.
 The declaration rows are independent of source language; other reader adapters
 can supply the same module and data edges. A shell or Python launch into
 JavaScript continues through the parsed module graph. An inferred launch adds
