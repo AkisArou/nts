@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // How many functions the compiler emits, per corpus module, held to a table.
 //
 //   node tooling/census/definitions.ts            check against tooling/gate/definitions
@@ -46,7 +47,7 @@
 import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { exitAfterOutput } from "../gate/exit.ts";
@@ -54,6 +55,8 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const NODE_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url)));
+const WEB_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url)));
 const TABLE = fileURLToPath(new URL("../gate/definitions", import.meta.url));
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 
@@ -69,10 +72,10 @@ if (!existsSync(NTS)) {
 }
 
 const modules = [
-  ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
-    .map((e) => `runtime/node/${e.name}`),
-  ...(existsSync(join(ROOT, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
+  ...readdirSync(NODE_RUNTIME, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(NODE_RUNTIME, e.name, "tsconfig.json")))
+    .map((e) => join(relative(ROOT,NODE_RUNTIME),e.name)),
+  ...(existsSync(join(WEB_RUNTIME,"tsconfig.json")) ? [relative(ROOT,WEB_RUNTIME)] : []),
 ].sort();
 
 /** The functions `hir --prepared` printed, and whether they reconcile. */

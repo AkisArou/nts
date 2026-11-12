@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { FIXED_AMBIENT } from "../gate/canonical-environment.ts";
 // Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
@@ -169,6 +170,10 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const NODE_RUNTIME=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url))));
+const WEB_RUNTIME=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url))));
+const PROGRAMS=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../tests/programs/",import.meta.url))));
+const REFUSALS=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../tests/refusals/",import.meta.url))));
 const KNOWN = fileURLToPath(new URL("./integrity.known", import.meta.url));
 /** The projects built as addons: their exported surface is called from outside. */
 const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
@@ -1247,8 +1252,8 @@ const fixturePrefix = "tests/outcomes/";
 const projects = (named.length > 0
   ? named.flatMap((p) => (p.replace(/\/$/, "").startsWith(fixturePrefix) ? outcomes([p.replace(/\/$/, "").slice(fixturePrefix.length)]) : [p]))
   : process.argv.includes("--runtime")
-    ? [...under("runtime/node"), "runtime/web-platform"]
-    : [...under("tests/programs"), ...under("tests/refusals"), ...outcomes()]
+    ? [...under(NODE_RUNTIME), WEB_RUNTIME]
+    : [...under(PROGRAMS), ...under(REFUSALS), ...outcomes()]
 ).sort();
 
 /**

@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // Compile the generated C for every runtime project, including web-platform.
 //
@@ -15,7 +16,7 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,  } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, relative } from "node:path";
 import {fileURLToPath} from "node:url";
 
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
@@ -24,6 +25,8 @@ import { activeCommand } from "../gate/active-command.ts";
 import { publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentError } from "../gate/step-result.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const NODE_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url)));
+const WEB_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url)));
 const FLAGS = ["-std=c11", "-fsyntax-only"];
 
 function run(command, args, root, env, activity,execute) {
@@ -88,11 +91,11 @@ async function main() {
   }
   const env = { ...process.env, NTS_CHECKERS: "1" };
   const named = process.argv.slice(2);
-  const nodeProjects = readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(ROOT, "runtime/node", entry.name, "tsconfig.json")))
-    .map((entry) => `runtime/node/${entry.name}`);
-  const projects = named.length > 0 ? named : [...nodeProjects, "runtime/web-platform"];
-  if (named.length === 0 && (nodeProjects.length === 0 || !existsSync(join(ROOT, "runtime/web-platform/tsconfig.json")))) {
+  const nodeProjects = readdirSync(NODE_RUNTIME, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(NODE_RUNTIME, entry.name, "tsconfig.json")))
+    .map((entry) => join(relative(ROOT,NODE_RUNTIME),entry.name));
+  const projects = named.length > 0 ? named : [...nodeProjects, relative(ROOT,WEB_RUNTIME)];
+  if (named.length === 0 && (nodeProjects.length === 0 || !existsSync(join(WEB_RUNTIME,"tsconfig.json")))) {
     console.log("  NOT MEASURED: the runtime corpus is incomplete");
     return 2;
   }

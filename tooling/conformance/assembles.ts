@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // Does what `emit-llvm` emits assemble?
 //
 //   node tooling/conformance/assembles.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
@@ -39,7 +40,7 @@
 import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
@@ -49,6 +50,8 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const NODE_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url)));
+const WEB_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url)));
 const KNOWN = fileURLToPath(new URL("./assembles.known",import.meta.url));
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const LLVM_AS = process.env.NTS_LLVM_AS ?? "llvm-as";
@@ -84,10 +87,10 @@ const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const projects = (named.length > 0
   ? named
   : [
-    ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
-      .map((e) => `runtime/node/${e.name}`),
-    "runtime/web-platform",
+    ...readdirSync(NODE_RUNTIME, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(NODE_RUNTIME, e.name, "tsconfig.json")))
+      .map((e) => join(relative(ROOT,NODE_RUNTIME),e.name)),
+    relative(ROOT,WEB_RUNTIME),
   ]).sort();
 
 const known = new Map(

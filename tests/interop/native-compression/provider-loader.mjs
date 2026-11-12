@@ -6,7 +6,7 @@ registerHooks({
       return { url: new URL("./provider-binding.mjs", import.meta.url).href, shortCircuit: true };
     }
     const resolved = next(specifier, context);
-    if (resolved.url.endsWith("/runtime/web-platform/test/node-compression-provider.ts")) {
+    if (resolved.url === new URL("../../../runtime/web-platform/test/node-compression-provider.ts",import.meta.url).href) {
       return { url: new URL("./provider-replacement.ts", import.meta.url).href, shortCircuit: true };
     }
     return resolved;

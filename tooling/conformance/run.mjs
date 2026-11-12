@@ -1,3 +1,4 @@
+import {fileURLToPath} from "node:url";
 // Node's own test suite, run against our implementation of a node module.
 //
 // # Why node's tests and not ours
@@ -521,7 +522,7 @@ if (addon !== null && !sabotage && !emptyExports
   try {
     published = execFileSync(
       process.execPath,
-      [join(HERE, "shaped-surface.mjs"), dirname(resolvePath(addon)), moduleName],
+      [fileURLToPath(new URL("./shaped-surface.mjs",import.meta.url)), dirname(resolvePath(addon)), moduleName],
       { encoding: "utf8", env: environment },
     );
   } catch (error) {

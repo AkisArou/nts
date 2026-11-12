@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // An outcomes fixture as a compilable project: the one definition of how
 // `tests/outcomes/<name>` becomes something `nts` can read.
@@ -15,9 +16,7 @@ import { fileURLToPath } from "node:url";
 import {sourceAssetPath} from "../differential/oracle-runtime.ts";
 import type {OracleFilesystem} from "../differential/oracle-filesystem.ts";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "../..");
-export const OUTCOMES = join(HERE, "../../tests/outcomes");
+export const OUTCOMES = fileURLToPath(dataDirectory(new URL("../../tests/outcomes/",import.meta.url)));
 export const OUTCOME_ORACLE_PRELOADS=Object.freeze([fileURLToPath(new URL('./outcomes-node-preload.ts',import.meta.url))]);
 
 /**
@@ -32,7 +31,7 @@ export const OUTCOME_ORACLE_PRELOADS=Object.freeze([fileURLToPath(new URL('./out
  * wrong answers for weeks until 7f7bf5340.
  */
 export const RUNTIME_SPECIFIER = "@nts/runtime/";
-export const RUNTIME_ROOT = join(ROOT, "runtime");
+export const RUNTIME_ROOT = fileURLToPath(dataDirectory(new URL("../../runtime/",import.meta.url)));
 export const outcomeSourceAssets=(root=RUNTIME_ROOT)=>[
   {root:join(root,'node'),depth:1,name:'bindings.node.mjs'},
   {root,depth:1,name:'bindings.node.mjs'},
@@ -95,7 +94,7 @@ export function materialise(scratch: string, name: string, sources: string, mode
   writeFileSync(
     join(dir, "tsconfig.json"),
     `${JSON.stringify({
-      extends: join(ROOT, "tsconfig.fixtures.json"),
+      extends: fileURLToPath(new URL("../../tsconfig.fixtures.json",import.meta.url)),
       compilerOptions: { ...options, paths: { [`${RUNTIME_SPECIFIER}*`]: [`${RUNTIME_ROOT}/*`] } },
       include: ["src"],
     }, null, 2)}\n`,

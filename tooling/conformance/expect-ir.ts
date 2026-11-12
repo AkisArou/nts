@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // The representation facts the corpora state, checked against the compiler.
 //
 //   node tooling/conformance/expect-ir.ts [name ...]
@@ -27,7 +28,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exitAfterOutput } from "../gate/exit.ts";
 
@@ -71,13 +72,14 @@ function projectFor(name: string, file: string): string {
   const dir = join(SCRATCH, name);
   mkdirSync(dir, { recursive: true });
   const tsconfig = join(dir, "tsconfig.json");
-  writeFileSync(tsconfig, JSON.stringify({ extends: join(ROOT, "tsconfig.fixtures.json"), files: [file] }));
+  writeFileSync(tsconfig, JSON.stringify({ extends: fileURLToPath(new URL("../../tsconfig.fixtures.json",import.meta.url)), files: [file] }));
   return tsconfig;
 }
 
 function cases(): Case[] {
   const found: Case[] = [];
-  for (const corpus of ["tests/programs", "tests/refusals"]) {
+  for (const input of [dataDirectory(new URL("../../tests/programs/",import.meta.url)),dataDirectory(new URL("../../tests/refusals/",import.meta.url))]) {
+    const corpus=relative(ROOT,fileURLToPath(input));
     for (const name of readdirSync(join(ROOT, corpus)).sort()) {
       const dir = join(ROOT, corpus, name);
       if (existsSync(join(dir, "tsconfig.json")) && statesAFact(dir)) {
@@ -85,7 +87,7 @@ function cases(): Case[] {
       }
     }
   }
-  const benchmarks = join(ROOT, "benchmarks/cases");
+  const benchmarks = fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url)));
   for (const name of readdirSync(benchmarks).sort()) {
     const file = join(benchmarks, name, "case.ts");
     if (existsSync(file) && readFileSync(file, "utf8").includes(FACT)) {

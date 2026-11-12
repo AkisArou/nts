@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import memberCatalogue from "../../compiler/codegen/jvm/member-names.json" with {type: "json"};
 import {sourceName, withoutRecordedMethods} from "../../compiler/codegen/jvm/member-grammar.ts";
@@ -104,7 +105,7 @@ import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.ts";
 import { describe, provenanceOf } from "./pin.ts";
@@ -118,6 +119,8 @@ import {createVerifierDriver,type DriverProcessResult} from "./jvm-verifier-driv
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const NODE_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url)));
+const WEB_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url)));
 const KNOWN = fileURLToPath(new URL("./jvm-verifies.known", import.meta.url));
 const DECLINES = fileURLToPath(new URL("./jvm-declines.known", import.meta.url));
 const DRIVER = fileURLToPath(new URL("./JvmVerify.java", import.meta.url));
@@ -209,10 +212,10 @@ const projects = (named.length > 0
   : process.argv.includes("--outcomes")
     ? outcomes()
     : [
-    ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
-      .map((e) => `runtime/node/${e.name}`),
-    "runtime/web-platform",
+    ...readdirSync(NODE_RUNTIME, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(NODE_RUNTIME, e.name, "tsconfig.json")))
+      .map((e) => join(relative(ROOT,NODE_RUNTIME),e.name)),
+    relative(ROOT,WEB_RUNTIME),
   ]).sort();
 
 let known;

@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(HERE, "../..");
 export const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-export const HARNESS = readFileSync(join(ROOT, "tooling/sweep/probe-harness.ts"), "utf8");
+export const HARNESS = readFileSync(new URL("../sweep/probe-harness.ts",import.meta.url), "utf8");
 
 /** xorshift32: small, seeded, and the same sequence on every machine. */
 export function rng(seed) {

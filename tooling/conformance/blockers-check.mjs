@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {bundledDependencies} from './node-deps.mjs';
 import { vmToolFlags } from "../jvm/vm-flags.ts";
@@ -67,7 +68,9 @@ process.on("exit", () => {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const FIXTURES = join(HERE, "../../tests/refusals");
+const FIXTURES = fileURLToPath(dataDirectory(new URL("../../tests/refusals/",import.meta.url)));
+const C_RUNTIME=fileURLToPath(dataDirectory(new URL("../../runtime/c/",import.meta.url)));
+const NODE_INTERNAL=fileURLToPath(dataDirectory(new URL("../../runtime/node/internal/",import.meta.url)));
 
 /**
  * Where `node_api.h` and `uv.h` are, or one sentence saying they are nowhere.
@@ -489,10 +492,10 @@ for (const name of worker ? [worker.name] : []) {
     const bundled = bundledDependencies(compiler);
     const cc = spawnSync("clang", [
       "-std=c11", "-c", join(dir, file), "-I", dir,
-      "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
-      "-include", join(ROOT, "runtime/node/internal/shared.h"),
-      "-I", join(ROOT, "runtime/c"),
-      "-I", join(ROOT, "runtime/node/internal"),
+      "-include", fileURLToPath(new URL("../../runtime/node/internal/nts_node.h",import.meta.url)),
+      "-include", fileURLToPath(new URL("../../runtime/node/internal/shared.h",import.meta.url)),
+      "-I", C_RUNTIME,
+      "-I", NODE_INTERNAL,
       "-I", NAPI,
       ...bundled.include_flags,
       "-o", "/dev/null",
@@ -539,16 +542,16 @@ for (const name of worker ? [worker.name] : []) {
     const addon = join(work, "fixture.node");
     const sources = readdirSync(dir).filter((f) => f.endsWith(".c")).map((f) => join(dir, f));
     if (sources.length === 0) return { stage: "emitted-nothing" };
-    const internal = readdirSync(join(ROOT, "runtime/node/internal"))
+    const internal = readdirSync(NODE_INTERNAL)
       .filter((f) => f.endsWith(".c"))
-      .map((f) => join(ROOT, "runtime/node/internal", f));
+      .map((f) => join(NODE_INTERNAL,f));
     const bundled = bundledDependencies(compiler);
     const link = spawnSync("clang", [
       "-std=c11", "-O0", "-D_GNU_SOURCE", "-fPIC", "-shared", "-fvisibility=hidden",
       "-I", dir,
       "-I", NAPI,
       ...bundled.include_flags,
-      "-I", join(ROOT, "runtime/node/internal"),
+      "-I", NODE_INTERNAL,
       "-o", addon, ...sources, ...internal, ...bundled.link_flags, "-lm",
     ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
     if (link.status !== 0) {
@@ -612,10 +615,10 @@ for (const name of worker ? [worker.name] : []) {
       const bundled = bundledDependencies(compiler);
       const cc = spawnSync("clang", [
         "-std=c11", "-c", join(dir, "program.c"), "-I", dir,
-        "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
-        "-include", join(ROOT, "runtime/node/internal/shared.h"),
-        "-I", join(ROOT, "runtime/c"),
-        "-I", join(ROOT, "runtime/node/internal"),
+        "-include", fileURLToPath(new URL("../../runtime/node/internal/nts_node.h",import.meta.url)),
+        "-include", fileURLToPath(new URL("../../runtime/node/internal/shared.h",import.meta.url)),
+        "-I", C_RUNTIME,
+        "-I", NODE_INTERNAL,
         "-I", NAPI,
         ...bundled.include_flags,
         "-o", "/dev/null",

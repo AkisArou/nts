@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // Is what `nts types` prints a consistent table?
 //
 //   node tooling/conformance/types-check.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
@@ -42,7 +43,7 @@
 import {scopedSpawn as spawn} from '../gate/case-spawn.ts';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { longestFirst } from "../gate/costs.mjs";
@@ -51,6 +52,9 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
+const NODE_RUNTIME=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../runtime/node/",import.meta.url))));
+const WEB_RUNTIME=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../runtime/web-platform/",import.meta.url))));
+const PROGRAMS=relative(ROOT,fileURLToPath(dataDirectory(new URL("../../tests/programs/",import.meta.url))));
 const WORKERS = Number(process.env.NTS_TYPES_CHECK_JOBS ?? 4);
 
 const TYPE_LINE = /^#(\d+)(?: `([^`]*)`)?(?: args\[([^\]]*)\])? ([A-Za-z]+)(.*)$/;
@@ -368,7 +372,7 @@ const under = (dir) =>
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, dir, e.name, "tsconfig.json")))
     .map((e) => `${dir}/${e.name}`);
 const named = argv.filter((a) => !a.startsWith("--"));
-const projects = (named.length > 0 ? named : argv.includes("--examples") ? under("tests/programs") : [...under("runtime/node"), "runtime/web-platform"]).sort();
+const projects = (named.length > 0 ? named : argv.includes("--examples") ? under(PROGRAMS) : [...under(NODE_RUNTIME), WEB_RUNTIME]).sort();
 
 const run = (args) =>
   new Promise((done) => {

@@ -1,3 +1,4 @@
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
 /**
  * Audit `nts.config.ts` against the type package: coverage, drift, duplication.
  *
@@ -21,7 +22,7 @@ import { register } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
-const pkgIndex = resolve(here, "src/index.ts");
+const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
 
 // Resolve `@nts/config` the way tsconfig.configs.json's `paths` does, so the
 // configs are evaluated against the same package tsc checks them against.
@@ -56,8 +57,11 @@ const walk = (dir, out = []) => {
 };
 // The four directories that were one, `examples`, until 2026-10-14: named, not
 // `tests` as a whole, so no fixture kind joins the audit by being added.
-const configPaths = ["tests/programs", "tests/interop", "tests/gjs", "tests/workspace"]
-  .flatMap((dir) => walk(join(repo, dir)))
+const configPaths = [dataDirectory(new URL("../../tests/programs/",import.meta.url)),
+  dataDirectory(new URL("../../tests/interop/",import.meta.url)),
+  dataDirectory(new URL("../../tests/gjs/",import.meta.url)),
+  dataDirectory(new URL("../../tests/workspace/",import.meta.url))]
+  .flatMap((dir) => walk(fileURLToPath(dir)))
   .sort();
 
 // --- the package's own shape, read from source -----------------------------
@@ -75,7 +79,7 @@ const sources = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entr
   const path = join(dir, entry.name);
   return entry.isDirectory() ? sources(path) : entry.name.endsWith(".ts") ? [path] : [];
 });
-for (const path of sources(join(here, "src"))) {
+for (const path of sources(fileURLToPath(dataDirectory(new URL("./src/",import.meta.url))))) {
   const src = readFileSync(path, "utf8");
   interfacesDeclared += (src.match(/^(?:export )?interface /gm) ?? []).length;
   // `{...\n}` or `{}` on one line. The one-line form is not hypothetical: an
@@ -200,13 +204,14 @@ ask(
 // --- 2. is every config typechecked by something? --------------------------
 
 const enrolled = new Set();
-for (const tc of [
-  "tests/workspace/tsconfig.configs.json",
-  "tests/programs/library/tsconfig.config.json",
-  "tests/interop/tsconfig.configs.json",
-  "tests/gjs/tsconfig.configs.json",
+for (const input of [
+  new URL("../../tests/workspace/tsconfig.configs.json",import.meta.url),
+  new URL("../../tests/programs/library/tsconfig.config.json",import.meta.url),
+  new URL("../../tests/interop/tsconfig.configs.json",import.meta.url),
+  new URL("../../tests/gjs/tsconfig.configs.json",import.meta.url),
 ]) {
-  const json = JSON.parse(readFileSync(join(repo, tc), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+  const tc=relative(repo,fileURLToPath(input));
+  const json = JSON.parse(readFileSync(input, "utf8").replace(/^\s*\/\/.*$/gm, ""));
   for (const f of [...(json.files ?? []), ...(json.include ?? [])]) {
     enrolled.add(relative(repo, resolve(repo, dirname(tc), f)));
   }
