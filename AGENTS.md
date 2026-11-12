@@ -331,6 +331,11 @@ An oracle test's supplied canonical environment is already sealed with
   `test262-records` for the five test262 records (through `admit.ts`), and
   `perf-count` for instruction counts (through `with-lock.sh`). Put the
   issue and experiment in `--what` or the log name, never in these keys.
+  A key binds whole-job sizing without `--workers`, or worker sizing with it;
+  keep that declaration consistent. Samples retain their whole peak and measured
+  width in `steps-v5.json`. On 2026-11-12 a whole-build sample was recorded as
+  one worker and inflated the next build's reservation. Admission now refuses
+  a changed basis by name instead of reinterpreting the same key.
   Pooled cases use the common case lease, keyed by step, backend and source
   path. On 2026-11-12 step-average sizing killed A* and flight-planner below
   their own caps. [The workflow](docs/workflow.md#the-machine) defines

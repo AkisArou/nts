@@ -95,7 +95,7 @@
 import {hostObservations,HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
 import {GateScopes} from "./scopes/step-scope.ts";
-import {RESERVATION_PER_PEAK, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+import {RESERVATION_PER_PEAK, historyFile, elasticHeldBytes, inheritedStepWork, machineShare, orderStepStarts, readCostHistory, readPreviousStepCpu, stepCpu, unitReservation, unmeasuredLimit, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {StepBoundClock, stepBound, stepBoundReason, stepBoundWait} from "./step-bound.ts";
 import {spawn, spawnSync} from "node:child_process";
@@ -319,7 +319,7 @@ const estimate = (name) => BASE.get(name)?.wall ?? 60;
 // the CPU seconds its checks took when they last passed, separate from the
 // committed timing-verdict baseline, and the peaks that size its memory.
 const COSTS_DIR = resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs"));
-const HISTORY_FILE = join(COSTS_DIR, "steps.json");
+const HISTORY_FILE = historyFile({NTS_GATE_COSTS_DIR:COSTS_DIR},ROOT);
 const HISTORY = readCostHistory(HISTORY_FILE);
 const CPU_HISTORY = new Map([...readPreviousStepCpu(join(dirname(RUN_DIR), "latest", "summary.json")), ...stepCpu(HISTORY)]);
 const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => currentStepCpu(BASE.get(name)), STEP_SUCCESSORS);

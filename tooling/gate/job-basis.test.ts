@@ -9,6 +9,9 @@ import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest} from './test-wait.ts';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {generatedJavaScript} from './generated-javascript.ts';
 
 const GiB=2**30;
 function fixture(t:TestContext){
@@ -73,4 +76,25 @@ test('v5 imports step rows once, names the rejected legacy jobs and isolates old
  const retained=readFileSync(f.file,'utf8');writeFileSync(legacy,JSON.stringify({version:4,cpu_measure:STEP_CPU_MEASURE,steps:{},jobs:{}}));
  assert.deepEqual(readCostHistory(f.file).steps.get('tests'),steps.tests);
  assert.equal(readFileSync(f.file,'utf8'),retained);
+});
+
+test('concurrent first callers bind exactly one meaning under the shared flock',async t=>{
+ const f=fixture(t),script=generatedJavaScript(`
+import {bindJobBasis} from ${JSON.stringify(new URL('./step-scheduling.ts',import.meta.url).href)};
+process.stdin.once('data',()=>{
+ try{bindJobBasis(process.argv[1],'concurrent-key',process.argv[2]);console.log('bound '+process.argv[2]);}
+ catch(error){console.error(String(error));process.exitCode=2;}
+});
+`);
+ const children=['job','worker'].map(basis=>{
+  const child=spawn(process.execPath,['--input-type=module','-e',script,f.file,basis],{env:fixtureEnvironment(t),stdio:['pipe','pipe','pipe']});
+  const closed=once(child,'close');let output='';
+  child.stdout.on('data',bytes=>{output+=bytes;});child.stderr.on('data',bytes=>{output+=bytes;});
+  return {child,closed,output:()=>output};
+ });
+ for(const run of children)run.child.stdin.end('enter');
+ const exits=await Promise.all(children.map(run=>run.closed));assert.deepEqual(exits.map(row=>row[0]).sort(),[0,2]);
+ const basis=readCostHistory(f.file).jobs.get('concurrent-key')!.basis;
+ assert.match(children.map(run=>run.output()).join('\n'),new RegExp('bound '+basis));
+ assert.match(children.map(run=>run.output()).join('\n'),/concurrent-key is bound to .* sizing; .* sizing disagrees/);
 });

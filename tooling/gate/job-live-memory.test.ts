@@ -77,6 +77,9 @@ test("an unknown CLI job starts beside a large unrelated history, is charged liv
 
 
 function historyLock(t:TestContext,f:ReturnType<typeof fixture>,mode:'hold'|'fail'){
+ // Bind the meaning before installing a failure at the final peak write.
+ // The fixture controls publication, rather than declaration before admission.
+ jobSizing({key:'perf-count'},f.memory);
  const bin=join(f.root,'bin'),locked=join(f.root,'history-locked'),unlock=join(f.root,'history-unlock');mkdirSync(bin);
  writeFileSync(join(bin,'flock'),`#!${process.execPath}
 const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);
@@ -123,7 +126,7 @@ test('a CLI peak history write failure is reported by key and cause',async t=>{
  const run=f.start(HELD_COMMAND,[release,ready],{owned:lock.owned});
  await observeOwnedPeak(f,ready,run.ended);writeFileSync(release,'finish');assert.deepEqual(await run.done,[0,null],run.stderr);
  assert.match(run.stderr,/memory: perf-count's peak is not in its history:.*fixture history lock failure/);
- assert.equal(readCostHistory(historyFile(f.memory)).jobs.has('perf-count'),false);
+ assert.equal(readCostHistory(historyFile(f.memory)).jobs.get('perf-count')?.observations.length,0);
 });
 
 test('an unavailable watcher scope refuses admission before executing the command',async t=>{

@@ -6,10 +6,13 @@
 //   node tooling/gate/admit.ts --status [--json]
 //
 // With `--key`, the command reserves what its earlier runs under that key
-// were measured to hold, per worker, in the scheduling history of the target
+// were measured to hold in the scheduling history of the target
 // it runs against (memory-ledger.ts's `jobSizing`), never more than
 // `--at-most` (its own kernel cap, say). Its peak is watched while it runs
 // and added to that history once it ends, so its next run reserves by it.
+// A key binds whole-job sizing when --workers is absent, or worker sizing
+// when it is supplied. Its meaning cannot change. Every sample keeps the
+// whole peak and its measured width; worker forecasts use that width.
 // Without an observation of its own, the job has no forecast: admission asks
 // for its live margin and the ledger follows its use until that first peak.
 // With `--bytes`, it reserves that much, and nothing is measured.

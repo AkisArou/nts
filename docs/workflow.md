@@ -458,6 +458,16 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   writer's file. Missing and malformed files retain their separate recovery
   paths. Ledger release remains synchronous: if its bounded lock attempt fails,
   it names the failure and leaves the entry for dead-owner reclamation.
+- **A job key keeps one measurement basis.** First use binds whole-job or
+  worker sizing under the history's flock before admission. `--workers`, even
+  a width of one, declares worker sizing; omission declares a whole job.
+  A mismatch refuses by name, and publication rechecks the basis under the
+  same lock. Samples retain the whole peak and measured width; worker
+  forecasts normalize each sample by that width. `steps-v5.json` imports its
+  predecessor only while absent. Step rows survive; legacy job observations
+  without a recoverable basis and width are rejected with a named count and
+  measured again through live accounting. Historical writers retain their
+  old namespace.
 - **Step CPU includes its complete retained cgroup.** After its processes exit
   and before its scope is deleted, the runner reads `cpu.stat` through
   `HostObservations`. A missing counter fails the instrument. The authoritative
@@ -739,6 +749,12 @@ the first node task.
   counts and five test262 records. Issue numbers belong in labels and logs,
   so a fresh task can use the warm tree's observations
   ([log](records/notebooks/decisions-log.md#unmeasured-jobs-use-live-accounting-11-10)).
+- **Job history keys bind their sizing basis.** A key's first caller declares
+  whole-job or worker meaning before admission, and every writer preserves
+  it. Each observation keeps its whole peak and measured width. The versioned
+  history path retains compatible step observations and names discarded
+  ambiguous job observations, without exposing new state to older writers
+  ([log](records/notebooks/decisions-log.md#job-keys-keep-their-measurement-basis-11-12)).
 - **Reservations yield to a request that outranks them** (11-09): for a
   waiting request's decision, a reservation of lower priority counts as what
   its job uses and a margin, whatever holds it; a landing's build hands its

@@ -2328,3 +2328,15 @@ undeclared Node launch drivers, now declared at their readers for #728. The orac
 recipe owner remains byte-identical because it hashes its own source. A supplied
 unsealed oracle context now refuses by name instead of silently changing holder
 ownership. Governs [the workflow](../../workflow.md#decisions).
+
+## Job keys keep their measurement basis (11-12)
+
+#733 binds each memory-history key to a whole job or a worker before admission,
+under its existing flock. Every sample retains its whole peak and measured
+width. A caller changing the meaning of `--workers` refuses by name, and the
+writer checks again while locked. `steps-v5.json` imports the old file only
+before first publication: historical candidates can still write their old
+namespace. Compatible step rows survive. Legacy job observations have no
+recoverable basis or width, so the migration names how many it rejected and
+each job measures one live-accounting run. Governs
+[the machine](../../workflow.md#the-machine).

@@ -29,7 +29,8 @@ import {STEP_CPU_MEASURE,currentStepCpu} from './step-time.ts';
 // slice held, sampled on the memory ledger's own basis (cgroupCharge: what no
 // other job can have, without the page cache the kernel gives back first), per
 // unit of the step: the whole step for a fixed step, one token for an elastic
-// one, one worker for a job. The last KEPT_PEAKS peaks are kept, and a unit
+// one. Jobs keep whole peaks and their measured widths under one bound basis.
+// The last KEPT_PEAKS observations are kept, and a unit
 // reserves 1.25 times the largest, so one small run never shrinks a
 // reservation. A job without peaks is charged live use and margin by the
 // ledger and records its first peak for next time. A step never measured
@@ -284,8 +285,7 @@ export type MemorySizing = {
 };
 
 /**
- * What one unit of a step or a job reserves: from its own measured peaks;
- * never measured, a job has no forecast and uses live ledger accounting.
+ * What one unit of a step reserves, from its own measured peaks.
  * A step uses the largest reservation of its unit kind here, else `share`.
  * A step whose peaks were measured over another unit (it was fixed, and is
  * elastic now) has none of its own.
@@ -395,7 +395,7 @@ function compositeCaseKey(key:string):boolean{
 export type CaseHistory = ReadonlyMap<string, readonly number[]>;
 export type CaseObservation = { key: string; peak: number };
 
-/** The case history of `step` beside the target's steps.json (`historyFile`). */
+/** The case history of `step` beside the target's versioned history (`historyFile`). */
 export function caseHistoryFile(step: string, env: NodeJS.ProcessEnv = process.env, root: string = TOOLING_ROOT): string {
   if (!KEY.test(step)) throw new Error(`not a step name: ${step}`);
   return join(dirname(historyFile(env, root)), "cases-v2", `${step}.json`);

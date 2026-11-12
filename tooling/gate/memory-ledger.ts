@@ -1269,7 +1269,7 @@ export type JobRequest = {
   /** Its name in the scheduling history, where its earlier runs left their peaks. */
   key: string;
   what: string;
-  /** Its parallel workers: the history keeps its peak per worker. */
+  /** Present: a worker basis at this measured width. Absent: a whole-job basis. */
   units?: number;
   /** The most it can ever hold, its own kernel cap where it has one: it never reserves more. */
   atMostBytes?: number;
