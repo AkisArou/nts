@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // The git the full check needs: first-parent ranges of main, the reverts a
 // range already holds, and a commit with culprits reverted, made in the object
 // store alone (`merge-tree` and `commit-tree`), so composing one never touches
@@ -15,7 +16,7 @@ export class Git {
   }
   /** The command's whole result, whatever its status. */
   try(args: string[], input?: string): GitResult {
-    const r = spawnSync("git", args, { cwd: this.cwd, env: this.env, encoding: "utf8", input, maxBuffer: 1 << 28 });
+    const r = spawnSync("git",gitArguments( args), { cwd: this.cwd, env: this.env, encoding: "utf8", input, maxBuffer: 1 << 28 });
     if (r.error) throw r.error;
     return { status: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
   }

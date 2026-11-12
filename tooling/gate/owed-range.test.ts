@@ -232,7 +232,8 @@ export const allSteps=()=>["tooling"];
   const actual=execFileSync("sh",["-c","command -v git"],{env:fixtureEnvironment(t),encoding:"utf8"}).trim(),bin=join(directory,"bin"),deletions=join(directory,"deletions.jsonl");mkdirSync(bin);
   writeFileSync(join(bin,"git"),`#!${process.execPath}
 import {spawnSync} from 'node:child_process';import {appendFileSync} from 'node:fs';import {createConnection} from 'node:net';
-const args=process.argv.slice(2),result=spawnSync(${JSON.stringify(actual)},args,{encoding:'utf8'});
+const forwarded=process.argv.slice(2),args=forwarded[0]==='--no-optional-locks'?forwarded.slice(1):forwarded;
+const result=spawnSync(${JSON.stringify(actual)},forwarded,{encoding:'utf8'});
 if(process.env.OWED_TEST_COLLECT==='1'&&args[0]==='for-each-ref'&&args.at(-1)==='refs/nts-selector/')await new Promise((done,reject)=>{
  const socket=createConnection({host:'127.0.0.1',port:Number(process.env.OWED_TEST_BARRIER_PORT)});
  socket.once('error',reject);socket.once('connect',()=>socket.write(JSON.stringify({collection:true})+'\\n'));socket.once('data',()=>socket.end());socket.once('close',done);
@@ -313,7 +314,7 @@ test("a failed range worktree creation is identified as infrastructure",t=>{
  writeFileSync(join(repo,"next"),"next");git("add","next");git("commit","-qm","next");
  const actual=execFileSync("sh",["-c","command -v git"],{env:fixtureEnvironment(t),encoding:"utf8"}).trim(),bin=join(repo,"bin"),attempt=join(repo,"attempt");mkdirSync(bin);
  const quote=(s:string)=>"'"+s.replaceAll("'","'\\''")+"'";
- writeFileSync(join(bin,"git"),`#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = add ]; then pwd > ${quote(attempt)}; echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
+ writeFileSync(join(bin,"git"),`#!/bin/sh\nfirst=$1; second=$2\nif [ "$1" = --no-optional-locks ]; then first=$2; second=$3; fi\nif [ "$first" = worktree ] && [ "$second" = add ]; then pwd > ${quote(attempt)}; echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
  const prior=process.env.PATH;t.after(()=>{process.env.PATH=prior;});process.env.PATH=`${bin}:${prior}`;
  assert.throws(()=>selectRange(repo,`${base}..HEAD`),error=>selectionInfrastructure(error)&&String(error).includes("resource unavailable"));
  const registry=readFileSync(attempt,"utf8").trim();assert.equal(basename(registry),"registry.git");

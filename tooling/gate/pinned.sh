@@ -66,13 +66,13 @@ fi
 # gitignored inputs linked below live there and nowhere else, and a worktree's
 # own copies (missing node_modules, a dangling submodule link) gated three steps
 # red for nothing the change did.
-root=$(dirname -- "$(git -C "$(dirname -- "$0")" rev-parse --path-format=absolute --git-common-dir)")
+root=$(dirname -- "$(git --no-optional-locks -C "$(dirname -- "$0")" rev-parse --path-format=absolute --git-common-dir)")
 commit=${1:-HEAD}
 # The rest are passed to all.sh (step names); the commit is not one.
 [ $# -gt 0 ] && shift
 # Resolved where the script runs, so `HEAD` is that tree's: object ids are
 # shared by every worktree, branch names and HEAD are not.
-sha=$(git -C "$(dirname -- "$0")" rev-parse --short "$commit")
+sha=$(git --no-optional-locks -C "$(dirname -- "$0")" rev-parse --short "$commit")
 tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}
 target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}
 
@@ -114,15 +114,15 @@ if [ -e "$tree/.git" ]; then
   # Discarding is right here and only here: this worktree exists to hold one
   # commit while it is gated, nobody edits it, and anything in it that is not
   # the commit is something a previous gate left behind.
-  git -C "$tree" checkout --detach -q --force "$sha"
+  git --no-optional-locks -C "$tree" checkout --detach -q --force "$sha"
   # And what an earlier run left untracked is not part of this commit either:
   # an untracked example directory is one more program to every step that
   # globs tests/programs/. The inputs linked below are re-made after this.
-  git -C "$tree" clean -fdq -e third_party -e node_modules -e '**/node_modules'
+  git --no-optional-locks -C "$tree" clean -fdq -e third_party -e node_modules -e '**/node_modules'
 else
   # `worktree add` writes to `.git/worktrees/`, not to the shared index, so it
   # is safe while another session is staging.
-  git -C "$root" worktree add --detach -q "$tree" "$sha"
+  git --no-optional-locks -C "$root" worktree add --detach -q "$tree" "$sha"
 fi
 
 # What no commit carries -- the third-party clones and the workspace's

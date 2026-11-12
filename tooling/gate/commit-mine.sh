@@ -83,10 +83,10 @@ done
 # partial commit records its working-tree state, which is "deleted".
 for path in "$@"; do
   [ -e "$path" ] && continue
-  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && continue
-  git cat-file -e "HEAD:$path" 2>/dev/null \
+  git --no-optional-locks ls-files --error-unmatch -- "$path" >/dev/null 2>&1 && continue
+  git --no-optional-locks cat-file -e "HEAD:$path" 2>/dev/null \
     || { echo "commit-mine: $path does not exist and git does not know it" >&2; exit 2; }
-  git reset -q HEAD -- "$path"
+  git --no-optional-locks reset -q HEAD -- "$path"
 done
 
 # A partial commit can only name paths git already knows, so a new file needs
@@ -94,7 +94,7 @@ done
 # which is the weakest thing that works: the commit still takes the content from
 # the working tree, and nobody else's staged work is disturbed.
 for path in "$@"; do
-  git ls-files --error-unmatch -- "$path" > /dev/null 2>&1 || git add -N -- "$path"
+  git --no-optional-locks ls-files --error-unmatch -- "$path" > /dev/null 2>&1 || git --no-optional-locks add -N -- "$path"
 done
 
 # **And an untracked file under a named path is refused, not added.**
@@ -119,7 +119,7 @@ done
 # case for a new example or fixture. What is left is the mixed directory, which is
 # the one that loses files.
 for path in "$@"; do
-  new=$(git ls-files --others --exclude-standard -- "$path")
+  new=$(git --no-optional-locks ls-files --others --exclude-standard -- "$path")
   [ -n "$new" ] || continue
   echo "commit-mine: REFUSING -- untracked file(s) under $path that this commit would leave behind:" >&2
   printf '%s\n' "$new" | while IFS= read -r file; do echo "    $file" >&2; done
@@ -220,13 +220,13 @@ if command -v clang-format > /dev/null 2>&1; then
   fi
 fi
 
-before=$(git ls-tree -r HEAD --name-only | wc -l)
+before=$(git --no-optional-locks ls-tree -r HEAD --name-only | wc -l)
 
 # shellcheck disable=SC2086
-git commit -q $args -- "$@"
+git --no-optional-locks commit -q $args -- "$@"
 
-after=$(git ls-tree -r HEAD --name-only | wc -l)
-touched=$(git diff --name-only HEAD^ HEAD | wc -l)
+after=$(git --no-optional-locks ls-tree -r HEAD --name-only | wc -l)
+touched=$(git --no-optional-locks diff --name-only HEAD^ HEAD | wc -l)
 wanted=$#
 
 # A partial commit may legitimately add or remove files, but only the ones
@@ -250,7 +250,7 @@ fi
 # Containment is what was meant, and it says the same thing about the case this
 # was built for -- a file nobody named cannot be under a path somebody named.
 stray=""
-for changed in $(git diff --name-only HEAD^ HEAD); do
+for changed in $(git --no-optional-locks diff --name-only HEAD^ HEAD); do
   covered=""
   for path in "$@"; do
     case "$changed" in
@@ -268,4 +268,4 @@ if [ -n "$stray" ]; then
 fi
 
 echo "commit-mine: $touched file(s), tree $before -> $after"
-git --no-pager log --oneline -1
+git --no-optional-locks --no-pager log --oneline -1

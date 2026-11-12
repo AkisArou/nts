@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // One capacity equation for pool leases and temporary admission. Git owns a
 // lease; declared build outputs consume its measured promise. No folder size
 // outside those outputs, and no free checkout, enters that promise.
@@ -76,7 +77,7 @@ export class DiskCapacity {
   activeLeases():BuildLease[]{
     if(!this.pool||!existsSync(this.pool.dir))return [];
     const {dir,git}=this.pool;
-    const refs=infrastructureProbe({purpose:'read landed disk lease owners',command:'git',args:['for-each-ref','--format=%(objectname) %(refname)','refs/nts/landed/'],cwd:git.root,...(git.env?{env:git.env}:{})}).stdout;
+    const refs=infrastructureProbe({purpose:'read landed disk lease owners',command:'git',args:gitArguments(['for-each-ref','--format=%(objectname) %(refname)','refs/nts/landed/']),cwd:git.root,...(git.env?{env:git.env}:{})}).stdout;
     const landed=new Map(refs.trim().split('\n').filter(Boolean).map(line=>{const [sha,ref]=line.split(' ');return [ref!.slice('refs/nts/landed/'.length),sha!];}));
     return worktrees(git).filter(tree=>dirname(resolve(tree.path))===resolve(dir)&&/^[1-9][0-9]*$/.test(tree.path.split('/').at(-1)!)
       &&tree.branch!==null&&landed.get(tree.branch)!==tree.head).map(tree=>({root:tree.path,target:join(tree.path,'target')}));

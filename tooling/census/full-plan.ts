@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { gateEnvironment } from "../gate/canonical-environment.ts";
@@ -10,12 +11,12 @@ export function fullPlan(root: string, home: string, args: string[], now = Date.
     throw new Error("usage: node tooling/census/full.ts [commit] [--candidate] (candidate requires an explicit commit)");
   }
   const asked = positional[0] ?? "main";
-  const resolved = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${asked}^{commit}`], { cwd: root, encoding: "utf8" });
+  const resolved = spawnSync("git",gitArguments( ["rev-parse", "--verify", "--quiet", `${asked}^{commit}`]), { cwd: root, encoding: "utf8" });
   if (resolved.status !== 0) throw new Error(`\`${asked}\` names no commit`);
   // Resolve once. Every later command consumes this immutable object ID, even
   // if the caller's branch moves before setup starts.
   const commit = resolved.stdout.trim();
-  if (!candidate && spawnSync("git", ["merge-base", "--is-ancestor", commit, "main"], { cwd: root }).status !== 0) {
+  if (!candidate && spawnSync("git",gitArguments( ["merge-base", "--is-ancestor", commit, "main"]), { cwd: root }).status !== 0) {
     throw new Error(`${asked} is not on main -- use --candidate for explicit pre-landing validation`);
   }
   const scope = candidate ? join(home, "candidates") : home;

@@ -1,6 +1,7 @@
 // Literal shell command words, including commands inside substitutions.
 // Quoted arguments and heredoc data cannot turn prose into a command.
-export type ShellCommand={name:string;start:number};
+export type ShellWord={value:string;dynamic:boolean;start:number;end:number};
+export type ShellCommand={name:string;start:number;end:number;args:ShellWord[]};
 export type ShellRedirection={operator:string;target:string;dynamic:boolean;start:number;end:number};
 export type ShellCommands={commands:ShellCommand[];data:{start:number;end:number}[];redirections:ShellRedirection[]};
 
@@ -33,14 +34,15 @@ export function shellCommands(source:string):ShellCommands {
   }
   function scan(start:number,end:number,stop?:')'|'`'):number {
     let i=start,command=true,word='',wordStart=start,dynamic=false,redirect=false,depth=0,redirectStart=0,redirectOperator='';
+    let current:ShellCommand|undefined;
     const pending:Here[]=[];
     const finish=()=>{
       if(!word&&!dynamic)return;
       if(redirect){redirections.push({operator:redirectOperator,target:word,dynamic,start:redirectStart,end:i});redirect=false;}
       else if(command){
         if(!dynamic&&(/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)||prefixes.has(word))){/* The command follows. */}
-        else {if(!dynamic)commands.push({name:word,start:wordStart});command=false;}
-      }
+        else {if(!dynamic){current={name:word,start:wordStart,end:i,args:[]};commands.push(current);}command=false;}
+      }else current?.args.push({value:word,dynamic,start:wordStart,end:i});
       word='';dynamic=false;
     };
     const begin=()=>{if(!word&&!dynamic)wordStart=i;};
@@ -89,7 +91,7 @@ export function shellCommands(source:string):ShellCommands {
         continue;
       }
       if(c==='\n'){
-        finish();command=true;i++;
+        finish();command=true;current=undefined;i++;
         for(const here of pending.splice(0)){
           const body=i;let bodyEnd=end;
           while(i<end){
@@ -108,7 +110,7 @@ export function shellCommands(source:string):ShellCommands {
         finish();
         if(c===')'&&stop===')'&&depth===0)return i+1;
         if(c==='(')depth++;else if(c===')')depth--;
-        command=true;i++;continue;
+        command=true;current=undefined;i++;continue;
       }
       begin();if(c==='$')dynamic=true;word+=c;i++;
     }

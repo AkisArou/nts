@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // Measure the first real crypto program, its warm rebuilds and the dependency
 // validator separately. Raw outputs and exec-inherited counters are retained.
 import assert from 'node:assert/strict';
@@ -159,7 +160,7 @@ for(const key of [programKey])for(const target of readdirSync(join(archives,key)
   archive_bytes:statSync(join(directory,`lib${target}.a`)).size});
 }
 const protocolCorrection=resume?{reason:'The original validator request reordered flags and created a second key. All original validator rows are rejected; original cold/warm C and LLVM program guards had already passed. Only five corrected validator launches are used here.',rejected_validation:Array.from({length:5},(_,i)=>JSON.parse(readFileSync(join(out,'warm-validation-'+i+'.json'),'utf8')))}:null;
-const summary={protocolCorrection,program_cache_key:programKey,source:command('git',['rev-parse','HEAD']).trim(),profile:'release',
+const summary={protocolCorrection,program_cache_key:programKey,source:command('git',gitArguments(['rev-parse','HEAD'])).trim(),profile:'release',
  scope:COUNTER_SCOPE+'; includes GNU time and all compiler, assembler, archiver and linker descendants',
  conditions:{affinity:command('taskset',['-pc',String(process.pid)]).trim(),nice:19,workers:4,
   node:process.version,compiler:command('clang',['--version']).split('\n')[0],archiver:command('llvm-ar',['--version']).split('\n')[0],

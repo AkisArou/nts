@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // The count step (docs/workflow.md, The machine: "the full check counts
 // them"). Red when a branch is named by no open issue nor docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
@@ -520,12 +521,12 @@ function readSlices(repo: string): { slices: Slice[]; activeUnits: string[] } | 
 
 export function gather(repo: string, cache = join(homedir(), ".cache"), now = Date.now()): CountInput {
   const git = (args: string[]) => {
-    const r = read("git", args, repo);
+    const r = read("git",gitArguments( args), repo);
     if (!r.ok) throw new Error(`git ${args.join(" ")}: ${r.error}`);
     return r.out;
   };
-  const sha = (rev: string) => { const r = read("git", ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`], repo); return r.ok ? r.out.trim() : null; };
-  const remote = read("git", ["ls-remote", "--heads", "origin"], repo);
+  const sha = (rev: string) => { const r = read("git",gitArguments( ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`]), repo); return r.ok ? r.out.trim() : null; };
+  const remote = read("git",gitArguments( ["ls-remote", "--heads", "origin"]), repo);
   const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   const slices = readSlices(repo);

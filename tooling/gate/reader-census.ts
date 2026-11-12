@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // A repeatable, read-only reader census, with its classification kept in the
 // reviewed record rather than in executable selector policy.
 import {mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
@@ -62,8 +63,8 @@ export function reproduceReaders(output:string):void{
   const env={...base,GIT_DIR:join(source,'.git'),GIT_WORK_TREE:source,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1'};
   // The object store is read only. Git config, index, refs and all writes have
   // an explicit private GIT_DIR; this source copy is never a shared worktree.
-  const objects=resolve(SOURCE,execFileSync('/usr/bin/git',['rev-parse','--git-path','objects'],{cwd:SOURCE,encoding:'utf8',env:base}).trim());
-  const git=(...args:string[])=>execFileSync('/usr/bin/git',args,{cwd:source,encoding:'utf8',env,maxBuffer:64<<20});
+  const objects=resolve(SOURCE,execFileSync('/usr/bin/git',gitArguments(['rev-parse','--git-path','objects']),{cwd:SOURCE,encoding:'utf8',env:base}).trim());
+  const git=(...args:string[])=>execFileSync('/usr/bin/git',gitArguments(args),{cwd:source,encoding:'utf8',env,maxBuffer:64<<20});
   try{
     git('init','--quiet','--initial-branch=source');
     mkdirSync(join(source,'.git/objects/info'),{recursive:true});

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gitArguments} from "./git-arguments.ts";
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.
@@ -336,7 +337,7 @@ function sha256(path) {
   }
 }
 function git(...args) {
-  const r = spawnSync("git", args, { encoding: "utf8" });
+  const r = spawnSync("git",gitArguments( args), { encoding: "utf8" });
   return r.status === 0 ? r.stdout.trim() : null;
 }
 

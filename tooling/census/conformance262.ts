@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 import {cacheLocation} from '../gate/cache-capabilities.ts';
 // Every Test262 case under a directory, each given one of five outcomes, with
 // every non-pass attributed to a named cause. A conformance run.
@@ -1077,7 +1078,7 @@ if (checkFile && TYPESCRIPT) {
 // --- the report ----------------------------------------------------------------
 
 const pct = (n, d) => (d === 0 ? "n/a" : `${((100 * n) / d).toFixed(2)}%`);
-const pin = execFileSync("git", ["-C", SUITE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const pin = execFileSync("git",gitArguments( ["-C", SUITE, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
 const out = [];
 const say = (line = "") => out.push(line);
 
@@ -1150,7 +1151,7 @@ if (recordedFile) {
   const at = recordedCommitOf(recordedFile);
   if (!at) say("  record age: unknown -- written before records named their commit; a full run re-records it with one");
   else {
-    const since = spawnSync("git", ["rev-list", "--count", `${at}..HEAD`, "--", "compiler", "runtime"], { cwd: ROOT, encoding: "utf8" });
+    const since = spawnSync("git",gitArguments( ["rev-list", "--count", `${at}..HEAD`, "--", "compiler", "runtime"]), { cwd: ROOT, encoding: "utf8" });
     const count = since.status === 0 ? since.stdout.trim() : "?";
     say(`  record age: written at ${at.slice(0, 12)}; ${count} commit(s) since touch compiler/ or runtime/ -- a pass any of them gained is not in this record until a full run`);
   }

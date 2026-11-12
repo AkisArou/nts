@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environment.ts";
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
@@ -45,7 +46,7 @@ const modules = selected ? [selected] : population;
 const cannot = instructionsWork();
 if (cannot) throw new Error(`not measured: ${cannot}`);
 const sha256 = digest(nts);
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+const commit = execFileSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: root, encoding: "utf8" }).trim();
 const cache = join(homedir(), ".cache/nts-compile-calibration");
 mkdirSync(cache, { recursive: true });
 const out = resolve(option("--run-dir") ?? mkdtempSync(join(cache, "run-")));

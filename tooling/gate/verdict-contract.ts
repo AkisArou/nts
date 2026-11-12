@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Portable identity of the canonical environment in which a step was checked.
 // Run allocations belong in the original report, while this identity survives
 // moving the same checked commit between the landing and full-check trees.
@@ -104,8 +105,8 @@ export function readVerdictContract(tree: string, env: NodeJS.ProcessEnv, probe:
     const directory = join(tree, "third_party", name);
     if (!existsSync(directory)) { inputs["third_party/" + name] = null; continue; }
     const root = realpathSync(directory);
-    const head = command("git", ["rev-parse", "HEAD"], root, env, probe);
-    const dirty = command("git", ["status", "--porcelain=v1", "--untracked-files=normal"], root, env, probe);
+    const head = command("git",gitArguments( ["rev-parse", "HEAD"]), root, env, probe);
+    const dirty = command("git",gitArguments( ["status", "--porcelain=v1", "--untracked-files=normal"]), root, env, probe);
     if (dirty) throw Error("landing verdict input has local changes: third_party/" + name);
     inputs["third_party/" + name] = head;
   }

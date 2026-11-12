@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Cargo targets own harnesses; each harness owns its case files. Test bodies
 // stay at their paths. The compiled --list inventory proves a layout change
 // preserves every test identity and its multiplicity, including nested tests.
@@ -91,7 +92,7 @@ export function checkTestLayout(root:string,packages:readonly CargoPackage[]):Te
 
 export function assertTestLayout(root:string,packages:readonly CargoPackage[]=cargoPackages(root)):TestLayout{
   const layout=checkTestLayout(root,packages);
-  const listed=spawnSync('git',['ls-files','-z','--','*.rs'],{cwd:root,encoding:'utf8'});
+  const listed=spawnSync('git',gitArguments(['ls-files','-z','--','*.rs']),{cwd:root,encoding:'utf8'});
   if(listed.error||listed.status!==0)throw Error('Rust test resource inventory: '+(listed.stderr||listed.error?.message||listed.status));
   const owned=packages.map(pkg=>normalize(relative(root,dirname(pkg.manifest_path)))+'/');
   for(const file of listed.stdout.split('\0').filter(Boolean)){

@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Discover test entries, rather than maintaining a second catalogue of folders.
 import {execFileSync} from "node:child_process";
 import {readdirSync,readFileSync} from "node:fs";
@@ -62,7 +63,7 @@ export function collectToolingTests(root:string):string[] {
  * Include untracked and ignored files too; node_modules is the only directory
  * exception, and neither an index omission nor .gitignore may hide a test. */
 export function toolingTestInventory(root:string):string[] {
-  const paths=observe("Git tooling test inventory",()=>execFileSync("git",["ls-files","-z","--cached","--others","--","tooling"],{
+  const paths=observe("Git tooling test inventory",()=>execFileSync("git",gitArguments(["ls-files","-z","--cached","--others","--","tooling"]),{
     cwd:root,encoding:"utf8",maxBuffer:16*1024*1024,stdio:["ignore","pipe","pipe"],
   }));
   return [...new Set(paths.split("\0").filter(isToolingTest))].sort();

@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // The landing check (docs/workflow.md, "Landing: the landing check").
 //
 //   node tooling/landing/check.ts <commit>             queue it, and wait for its answer
@@ -35,15 +36,15 @@ import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
 const say = (line: string) => console.log(`landing: ${line}`);
 const short = (sha: string) => sha.slice(0, 12);
 const option = (argv: string[], name: string) => { const at = argv.indexOf(name); return at >= 0 ? argv[at + 1] : undefined; };
-const toplevel = (cwd = process.cwd()) => spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" }).stdout.trim();
-const currentBranch = (tree: string) => spawnSync("git", ["branch", "--show-current"], { cwd: tree, encoding: "utf8" }).stdout.trim() || null;
+const toplevel = (cwd = process.cwd()) => spawnSync("git",gitArguments( ["rev-parse", "--show-toplevel"]), { cwd, encoding: "utf8" }).stdout.trim();
+const currentBranch = (tree: string) => spawnSync("git",gitArguments( ["branch", "--show-current"]), { cwd: tree, encoding: "utf8" }).stdout.trim() || null;
 const exitFor = (state: Result["state"]) => state === "landed" ? 0 : state === "held" ? 3 : 1;
 
 /** The range a commit's dry run and `--here` select: what it adds to main, or, on main already, its own change. */
 function rangeOf(root: string, sha: string): { base: string; note: string } {
   const main = revParse({ root }, "refs/heads/main");
   if (isAncestor({ root }, sha, main)) return { base: revParse({ root }, `${sha}^`), note: `${short(sha)}, on main already (its own change)` };
-  const base = spawnSync("git", ["merge-base", main, sha], { cwd: root, encoding: "utf8" }).stdout.trim();
+  const base = spawnSync("git",gitArguments( ["merge-base", main, sha]), { cwd: root, encoding: "utf8" }).stdout.trim();
   return { base, note: base === main ? `${short(sha)} on main ${short(main)}` : `${short(sha)}, replayed onto main ${short(main)} when it lands` };
 }
 
@@ -62,8 +63,8 @@ function dryRun(root: string, sha: string, argv: string[]): number {
 
 async function here(root: string, sha: string): Promise<number> {
   const tree = toplevel();
-  if (spawnSync("git", ["rev-parse", "HEAD"], { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
-  const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: tree, encoding: "utf8" }).stdout.trim();
+  if (spawnSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
+  const dirty = spawnSync("git",gitArguments( ["status", "--porcelain", "--untracked-files=no"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
   if (dirty) { say(`--here checks the commit, and this tree has uncommitted changes:\n${dirty}`); return 2; }
   const { base, note } = rangeOf(root, sha);
   const selected = ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET)(base, sha, changedPaths({ root }, base, sha));

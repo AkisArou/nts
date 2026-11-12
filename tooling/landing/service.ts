@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 import {withStateWrite} from '../gate/state-file.ts';
 // The landing service: the queue drained one change at a time, against the
 // newest main (docs/workflow.md, "Landing: the landing check").
@@ -198,7 +199,7 @@ function finishLanding(config: Config, queue: Queue, entry: Entry, base: string,
   let branch: BranchOutcome[] = [];
   try { branch = entry.branch ? deleteBranch(g, entry.branch, entry.sha, config.remote) : []; }
   catch (error) { branch = [{ where: "local", state: "kept", reason: (error as Error).message }]; }
-  const commits = base === tip ? [] : spawnSync("git", ["rev-list", "--reverse", `${base}..${tip}`], { cwd: config.root, env: config.env ?? process.env, encoding: "utf8" }).stdout.split("\n").filter(Boolean);
+  const commits = base === tip ? [] : spawnSync("git",gitArguments( ["rev-list", "--reverse", `${base}..${tip}`]), { cwd: config.root, env: config.env ?? process.env, encoding: "utf8" }).stdout.split("\n").filter(Boolean);
   const kept = branch.filter(b => b.state === "kept").map(b => `${b.where} branch kept: ${b.reason}`);
   if (pool?.state === "kept") kept.push(pool.reason!);
   const parts = [note ?? `LANDED ${short(entry.sha)} as ${short(tip)}: main is ${short(tip)}`,
@@ -237,7 +238,7 @@ export function prune(dir: string, days: number, now = Date.now()): string[] {
 /** The landing tree at `tip`, with the inputs no commit carries, linked by the tree's own linker as a gate tree's are. */
 export function prepareTree(root: string, tree: string, tip: string, env?: NodeJS.ProcessEnv): void {
   const run = (args: string[], cwd: string) => {
-    const r = spawnSync("git", args, { cwd, env: env ?? process.env, encoding: "utf8" });
+    const r = spawnSync("git",gitArguments( args), { cwd, env: env ?? process.env, encoding: "utf8" });
     if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${(r.stderr ?? "").trim()}`);
   };
   if (!existsSync(join(tree, ".git"))) run(["worktree", "add", "-q", "--detach", tree, tip], root);

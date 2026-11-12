@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // Content-provider census, from a committed worktree and an explicit compiler.
 //   NTS_BIN=<nts> node tooling/census/contents.ts collect <fresh-raw-dir> [programs/name|benchmarks/name ...]
 //   node tooling/census/contents.ts record <raw-dir>
@@ -18,7 +19,7 @@ import {reserveJob} from "../gate/memory-ledger.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 function git(args: string[]): string {
-  const p = spawnSync("git", args, {cwd: root, encoding: "utf8"});
+  const p = spawnSync("git",gitArguments( args), {cwd: root, encoding: "utf8"});
   if (p.error || p.status !== 0) throw new Error(`git ${args.join(" ")}: ${p.error?.message ?? p.stderr}`);
   return p.stdout.trim();
 }

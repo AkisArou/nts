@@ -2540,3 +2540,16 @@ it; the same validator discards invalid existing baselines under a repair
 lock, leaving future formats untouched. Run logs retain infrastructure
 failures. The controlled before, after and repeated runs, with their separate
 CPU bases, are in the #759 proof summaries and comparison record. Fixes #759.
+
+## Git observers never refresh another tree's index (11-12)
+
+The pool's status path could run Git's optional index refresh while another
+agent wrote that index. Git arguments now have one pure owner that disables
+optional locks for observation and mutation alike; required mutation locks
+remain enabled. A syntactic rule checks command positions and selected
+generated sources, using the shared facts. Remaining sites have exact
+source-keyed counts that only fall, so removing one cannot permit a new one.
+The control forces a stale index with optional locks explicitly enabled,
+proves a private before variant refreshes it, then checks unchanged bytes and
+write statistics with the argv owner. Production owners are the first slice.
+Part of #763.

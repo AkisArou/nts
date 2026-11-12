@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // Archive and program first-build costs, using the same real CLI plan as users.
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -170,7 +171,7 @@ declare module 'c:bundled-crypto' {
  rows.push({plan,cold,warm,llvm,artifacts:[c,l],archive_bytes:compiled.reduce((sum,t)=>sum+t.archive_bytes,0),native_objects,native_cold_wall_s:compiled.reduce((sum,t)=>sum+t.wall_s,0),...(linux?{expected_objects,compiled}:{})});
  writeFileSync(join(out,'partial.json'),JSON.stringify(rows,null,2)+'\n');
 }
-const git=spawnSync('git',['rev-parse','HEAD'],{cwd:tree,encoding:'utf8'});assert.equal(git.status,0);
+const git=spawnSync('git',gitArguments(['rev-parse','HEAD']),{cwd:tree,encoding:'utf8'});assert.equal(git.status,0);
 const summary={source:git.stdout.trim(),...(linux?{mode:'linux'}:{}),profile:'release',scope:COUNTER_SCOPE+'; GNU time plus every native compiler/archiver/linker descendant',conditions:{node:process.version,compiler:run('clang',['--version'],process.env).split('\n')[0],zig:run('zig',['version'],process.env).trim(),workers:4,...observed},
  compiler:{baseline_bytes:statSync(resolve(baseline)).size,candidate_bytes:statSync(nts).size},shared_source_files:Object.keys(registry.files).length,rows};
 writeFileSync(join(out,'summary.json'),JSON.stringify(summary,null,2)+'\n');

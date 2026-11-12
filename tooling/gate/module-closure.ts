@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Module membership, read from each source tree's own declarations.
 // Literal relative import() is followed like a static import; computed imports
 // (variables or interpolated templates) must be named as another entry.
@@ -73,7 +74,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       if (!lstatSync(path).isDirectory()) {visit(path); return;}
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
-      tracked ??= execFileSync("git", ["ls-files", "-z", "--cached"], {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
+      tracked ??= execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
       const directory = relative(root, path).split(sep).join("/");
       const files = tracked.filter(file => directory === "" || file.startsWith(directory + "/"));
       reportDirectory?.({reader, directory, files});

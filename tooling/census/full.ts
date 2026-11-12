@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // The full run: the gate steps a landing leaves out, on a pin of main.
 //
 //   node tooling/census/full.ts            # main's tip
@@ -36,7 +37,7 @@ import { exitAfterOutput } from "../gate/exit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");
-const git = (args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
+const git = (args: string[]) => execFileSync("git",gitArguments( args), { cwd: ROOT, encoding: "utf8" }).trim();
 const steps = [...WIDE];
 // No worktree setup before required tools can run.
 try {

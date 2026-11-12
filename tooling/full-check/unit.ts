@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // The full check's systemd user units: the controller, one long-running
 // service at low priority from a controller worktree of its own at `verified`;
 // the hourly count, a service its own timer starts; and each part's records
@@ -156,9 +157,9 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     else {
       const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
       if (!existsSync(join(layout.controller, ".git"))) {
-        const start = spawnSync("git", ["rev-parse", "--verify", "--quiet", "refs/heads/verified"], { cwd: root }).status === 0 ? "verified" : "main";
+        const start = spawnSync("git",gitArguments( ["rev-parse", "--verify", "--quiet", "refs/heads/verified"]), { cwd: root }).status === 0 ? "verified" : "main";
         mkdirSync(layout.home, { recursive: true });
-        run("git", ["worktree", "add", "--detach", "-q", layout.controller, start], root);
+        run("git",gitArguments( ["worktree", "add", "--detach", "-q", layout.controller, start]), root);
         console.log(`controller tree: ${layout.controller} at ${start}`);
       }
       // The service launches gates from this tree, so it has the inputs no

@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // Build a Test262 file, run it, and report what happened. A conformance run.
 //
 //   node tooling/census/run262.ts [--under <prefix>] [--slice1] [--limit N]
@@ -173,7 +174,7 @@ for (const record of chosen) {
 
 const ran = [...buckets.values()].reduce((sum, count) => sum + count, 0);
 const report = {
-  pin: execFileSync("git", ["-C", SUITE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  pin: execFileSync("git",gitArguments( ["-C", SUITE, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim(),
   compiler: NTS,
   // The bytes, not the path. A path stays true while the binary behind it is
   // replaced, which is the whole reason the copy above exists.

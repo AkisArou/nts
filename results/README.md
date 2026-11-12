@@ -12,6 +12,7 @@ commit it measured.
 | `benchmarks/runs/<date>-<commit>-<sitting>.json` | `tooling/bench/run-record.ts`, shared by `nts-bench` and comparator sittings | one immutable versioned run, its complete inventory, per-cell timings/spreads/checksums/status, each backend's verdicts, exact builds, harness and machine conditions |
 | `benchmarks/full.md` | the shared run-record renderer | the newest complete run, with separate C and LLVM verdict counts and each backend's compatible own-best provenance |
 | `tooling-types/diagnostics.json` | `tooling/gate/tooling-types.ts --record` | the remaining strict TypeScript diagnostic count of each tooling module; counts may only fall |
+| `git-observations/unprotected.json` | `tooling/gate/git-observations.ts --record` | exact source sites still lacking owned Git arguments, by module and command position; each count may only fall |
 | `suite/corpus.md` | `nts-suite` | TypeScript's own test cases compiled as ordinary programs: how many lower, refuse, or break the frontend, and the refusals that stop the most |
 | `suite/test262-expressions.md` | `nts-suite test262` | closed numeric expressions from test262 compiled and compared with node |
 

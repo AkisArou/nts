@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
@@ -35,7 +36,7 @@ function infrastructure<T>(operation:string,run:()=>T):T {
 }
 
 function git(repo: string, ...args: string[]): string {
-  return infrastructure(`selector git ${args[0]}`,()=>execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim());
+  return infrastructure(`selector git ${args[0]}`,()=>execFileSync("git",gitArguments( args), { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim());
 }
 
 function processIdentity(pid:number):{start:string;live:boolean}|null {
@@ -53,7 +54,7 @@ function collectPin(repo:string,ref:string,expected:string):void {
     // Another collector can remove this exact dead owner's ref after our
     // enumeration. Only an independently confirmed absence completes it;
     // a changed ref or any other Git failure remains infrastructure failure.
-    try{execFileSync("git",["show-ref","--verify","--quiet",ref],{cwd:repo,stdio:["ignore","pipe","pipe"]});}
+    try{execFileSync("git",gitArguments(["show-ref","--verify","--quiet",ref]),{cwd:repo,stdio:["ignore","pipe","pipe"]});}
     catch(probe){if((probe as {status?:number;signal?:string}).status===1&&!(probe as {signal?:string}).signal)return;}
     throw error;
   }

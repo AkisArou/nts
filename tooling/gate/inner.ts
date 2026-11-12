@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
 import {clippyTarget} from "./build-targets.ts";
@@ -141,9 +142,9 @@ function heavy(phase: Phase, command: string, args: readonly string[], env: Node
 }
 
 function changedPaths(base: string): string[] {
-  const committed = text("git", ["diff", "--name-only", `${base}...HEAD`]);
-  const working = text("git", ["diff", "--name-only", "HEAD"]);
-  const untracked = text("git", ["ls-files", "--others", "--exclude-standard"]);
+  const committed = text("git",gitArguments( ["diff", "--name-only", `${base}...HEAD`]));
+  const working = text("git",gitArguments( ["diff", "--name-only", "HEAD"]));
+  const untracked = text("git",gitArguments( ["ls-files", "--others", "--exclude-standard"]));
   return [...new Set(`${committed}\n${working}\n${untracked}`.split("\n").filter(Boolean))].sort();
 }
 
@@ -176,7 +177,7 @@ function main(argv: readonly string[],capacity:DiskCapacity): number {
   }
   const at = argv.indexOf("--base");
   const asked = at >= 0 ? argv[at + 1] : "main";
-  const base = text("git", ["rev-parse", "--verify", `${asked}^{commit}`]).trim();
+  const base = text("git",gitArguments( ["rev-parse", "--verify", `${asked}^{commit}`])).trim();
   const agree = !argv.includes("--no-agree");
   const keepGoing = argv.includes("--keep-going");
   const changed = changedPaths(base);

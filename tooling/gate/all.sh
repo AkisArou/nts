@@ -227,9 +227,9 @@ lint() {
 # edit. That is intended, and the resolution is the same either way: commit it
 # deliberately, or revert it.
 reformatted() {
-  bad=$(git diff --name-only -- '*.rs' '*.ts' '*.mjs' | while read -r f; do
+  bad=$(git --no-optional-locks diff --name-only -- '*.rs' '*.ts' '*.mjs' | while read -r f; do
           [ -f "$f" ] || continue
-          before=$(git show "HEAD:$f" 2>/dev/null | tr -d '[:space:]' | cksum)
+          before=$(git --no-optional-locks show "HEAD:$f" 2>/dev/null | tr -d '[:space:]' | cksum)
           after=$(tr -d '[:space:]' < "$f" | cksum)
           [ "$before" = "$after" ] && echo "$f"
         done)
@@ -1084,7 +1084,7 @@ backend_examples() {
   # correct *about that tree*, and a session iterating on a new example needs it
   # to run -- but a floor must never be raised off a run that printed this.
   untracked=$(for d in tests/programs/*/tsconfig.json; do
-                git ls-files --error-unmatch "$d" >/dev/null 2>&1 || echo "$d"
+                git --no-optional-locks ls-files --error-unmatch "$d" >/dev/null 2>&1 || echo "$d"
               done)
   if [ -n "$untracked" ]; then
     echo "  NOT A COMMIT: untracked example(s) are in this count --"
@@ -1757,7 +1757,7 @@ test262() {
   fi
   pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
     tooling/suite/src/test262_runner/mod.rs)
-  at=$(git -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
+  at=$(git --no-optional-locks -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
   if [ "$at" != "$pin" ]; then
     echo "  the checkout is at $at and the pin is $pin"
     echo "  every test262 command refuses with WrongPin until those agree:"

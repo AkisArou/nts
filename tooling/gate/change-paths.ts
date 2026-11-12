@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 import {execFileSync} from "node:child_process";
 import {lstatSync,readFileSync} from "node:fs";
 import {join} from "node:path";
@@ -32,7 +33,7 @@ export function parseNameStatus(text:string):PathChange[] {
 }
 
 export function contentChanges(repo:string,changes:PathChange[],from:string,to:string|null):PathChange[] {
-  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,encoding:"utf8",stdio:["ignore","pipe","ignore"],maxBuffer:8<<20});
+  const git=(...args:string[])=>execFileSync("git",gitArguments(args),{cwd:repo,encoding:"utf8",stdio:["ignore","pipe","ignore"],maxBuffer:8<<20});
   return changes.map(change=>{
     if(change.added||change.deleted)return change;
     try {
@@ -46,6 +47,6 @@ export function contentChanges(repo:string,changes:PathChange[],from:string,to:s
 }
 
 export function committedChanges(repo:string,from:string,to:string):PathChange[] {
-  const status=execFileSync("git",["diff","--name-status","-z","-M",from,to],{cwd:repo,encoding:"utf8"});
+  const status=execFileSync("git",gitArguments(["diff","--name-status","-z","-M",from,to]),{cwd:repo,encoding:"utf8"});
   return contentChanges(repo,parseNameStatus(status),from,to);
 }

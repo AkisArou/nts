@@ -521,6 +521,17 @@ outside Worker closures may use top-level await.
   same remaining promise before admitting an allocation. Fixtures carry a
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
+- **Git observers preserve the owner's index.** Git arguments run through
+  `tooling/gate/git-arguments.ts`, which prepends `--no-optional-locks` for
+  observations and mutations alike. Required mutation locks remain enabled.
+  The shared source-facts audit checks literal or constant-bound Git command
+  positions: a call's first argument, an argv vector's first element, a
+  probe's command property, and shell command words. Shell and Python argv
+  carry the literal option. Selected generated launch sources are checked
+  through the same facts. `results/git-observations/unprotected.json` records
+  remaining exact source sites; a different unprotected site cannot consume
+  a retired site's allowance. `git-observations.ts --record` writes only
+  decreases, under its owner lock.
 - **Owner locks publish complete identities.** The landing service, its
   observers, disk capacity and cache upkeep share `tooling/landing/lock.ts`.
   A private complete boot/PID/start file is linked atomically to the lock
@@ -739,6 +750,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Every Git invocation disables optional index refresh.** One argv owner
+  protects command positions without a classification of which subcommands
+  only observe. Required mutation locks still work. Existing unprotected
+  source sites have a tool-written ceiling that only falls
+  ([log](records/notebooks/decisions-log.md#git-observers-never-refresh-another-trees-index-11-12)).
 
 - **Owner publication and reclamation are separate atomic operations.** A
   complete hard-link publication prevents an empty owner becoming visible;

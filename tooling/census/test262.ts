@@ -1,3 +1,4 @@
+import {gitArguments} from "../gate/git-arguments.ts";
 // Why the compiler refuses each Test262 file. A census, never a verdict.
 //
 //   node tooling/census/test262.ts [--under <prefix>] [--slice1] [--limit N]
@@ -337,7 +338,7 @@ for (const record of planned) {
 
 const ranked = [...firstRefusal.entries()].sort((a, b) => b[1] - a[1]);
 const report = {
-  pin: execFileSync("git", ["-C", SUITE, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  pin: execFileSync("git",gitArguments( ["-C", SUITE, "rev-parse", "HEAD"]), { encoding: "utf8" }).trim(),
   compiler: NTS,
   // The bytes, not the path: a path stays true while the binary behind it is
   // replaced, which is what the copy above prevents.

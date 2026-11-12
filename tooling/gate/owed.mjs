@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
 //
@@ -141,7 +142,7 @@ if (IS_COMMAND) {
  * answered, confidently, about the shared checkout's uncommitted files. The
  * `--commit` mode reads history and could not show it.
  */
-const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+const TREE = execFileSync("git",gitArguments( ["rev-parse", "--show-toplevel"]), { encoding: "utf8" }).trim();
 
 // Policy data and lexer/tool versions, as distinct from the derived project
 // and reader graph. The range selector fingerprints these plus every loaded
@@ -1054,6 +1055,12 @@ export const RULES = [
     arms: [{kind:"valid",asks:"read-only inferred-edge provenance, classification and lossless reproduction",run:"node tooling/gate/reader-census.ts reproduce <output directory>"}],
   },
   {
+    name: "Git observation ownership",
+    when: (/** @type {string} */ p) => /^tooling\/gate\/git-(?:arguments|observations)(?:\.test)?\.ts$/.test(p),
+    steps: ["tooling"],
+    arms: [{kind:"valid",asks:"Git command ownership and unchanged observer indexes",run:"node --test tooling/gate/git-observations.test.ts"}],
+  },
+  {
     name: "standalone census row queries",
     when: (/** @type {string} */ p) => p === "tooling/census/rows.ts",
     settled: true,
@@ -1306,7 +1313,7 @@ const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "test
  * new example).
  */
 export function changedPaths(argv) {
-  const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
+  const git = (...args) => execFileSync("git",gitArguments( args), { cwd: TREE, encoding: "utf8" });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
   if (commit) return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", `${commit}^`, commit)), `${commit}^`, commit);
@@ -1333,7 +1340,7 @@ const memo = new Map();
 const once = (key, f) => (memo.has(key) ? memo.get(key) : (memo.set(key, f()), memo.get(key)));
 const rel = (abs) => relative(TREE, abs).split("\\").join("/");
 /** @returns {string[]} */
-function trackedFiles() {return once("tracked-files", () => execFileSync("git", ["ls-files", "-z", "--cached"], {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));}
+function trackedFiles() {return once("tracked-files", () => execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));}
 
 /** Every step all.sh defines, in its order: what "the full gate" means. */
 export function allSteps() {
@@ -1827,7 +1834,7 @@ export function embedded() {
     const map = new InputMap();
     let text = "";
     try {
-      text = execFileSync("git", ["grep", "-nE", "include(_str|_bytes)?!|CARGO_MANIFEST_DIR\"\\),", "--", "*.rs"], { cwd: TREE, encoding: "utf8", maxBuffer: 1 << 26 });
+      text = execFileSync("git",gitArguments( ["grep", "-nE", "include(_str|_bytes)?!|CARGO_MANIFEST_DIR\"\\),", "--", "*.rs"]), { cwd: TREE, encoding: "utf8", maxBuffer: 1 << 26 });
     } catch {
       return map;
     }

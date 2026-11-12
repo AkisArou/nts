@@ -56,6 +56,11 @@ supplies the inputs no commit carries (`third_party/*` corpora); the native
 checker is compiled into nts, and every tree shares the object store.
 
 - `git stash` is shared by every worktree: commit work in progress instead.
+- Git observations use `git --no-optional-locks`; tooling builds the arguments
+  through `tooling/gate/git-arguments.ts`, including mutation commands, whose
+  required locks still work. On 2026-11-12 pool status was found able to refresh
+  another task's index during a commit. The source audit rejects new
+  unprotected command positions.
 - Sabotage and control experiments run only after the fix is committed:
   restoring the "before" state with `git checkout` has destroyed the fix
   itself. A control is usually a pin (`tooling/conformance/pin.ts`), not a tree.

@@ -13,6 +13,7 @@ import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
 import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
+import {inspectGitInvocations,inspectShellGit,inspectGeneratedGitShells,inspectPythonGit,gitInvocationProblems,parseGitDebt,GIT_DEBT_FILE,EMPTY_GIT_DEBT,type GitInvocation,type GitDebt} from './git-observations.ts';
 
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
 export type HostRead={file:string;line:number;kind:HostReadKind;source:string;generated:boolean};
@@ -114,17 +115,20 @@ export function recordHostDebt(path:string,reads:readonly HostRead[],debt:HostDe
   writeFileSync(pending,JSON.stringify(Object.fromEntries(Object.entries(next).sort()),null,2)+'\n');renameSync(pending,path);
 }
 
-export function auditTestHost(root:string,debt?:HostDebt){
+export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
   const declarations=new Map<string,ModuleDeclarations>();
   const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
+  const gitInvocations:GitInvocation[]=[],python:{file:string;source:string}[]=[];
   const inspect=(file:string,source:string,node:SourceFacts,generated:GeneratedSourceFacts)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
     declarations.set(file,node.moduleDeclarations());
+    gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node,
-      (text,tree,offset)=>testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset)),generated));
+      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));},generated));
+    gitInvocations.push(...inspectGeneratedGitShells(generated.shells));
   }};
   try {
   const inputs:string[]=[];
@@ -133,6 +137,7 @@ export function auditTestHost(root:string,debt?:HostDebt){
       if(entry.name==='node_modules')continue;
       const file=directory+'/'+entry.name;
       if(entry.isDirectory())visit(file,rustOnly);
+      else if(entry.isFile()&&!rustOnly&&file.endsWith('.py'))python.push({file,source:readFileSync(join(root,file),'utf8')});
       else if(entry.isFile()&&(rustOnly?/\.rs$/.test(file):/\.(?:[cm]?[jt]s|sh|rs)$/.test(file))){
         if(file.endsWith('.rs'))sources.set(file,inspectHostSource(file,readFileSync(join(root,file),'utf8'),api));
         else inputs.push(file);
@@ -140,7 +145,8 @@ export function auditTestHost(root:string,debt?:HostDebt){
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
   function *sourceInputs():Iterable<SourceInput>{for(const file of inputs)yield {file,source:readFileSync(join(root,file),'utf8'),...(file.endsWith('.sh')?{parseFile:file+'.generated.ts'}:{})};}
-  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh'))testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell));sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts));});
+  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh')){testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell));gitInvocations.push(...inspectShellGit(facts.file,facts.source,facts.shell));}sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts));});
+  gitInvocations.push(...inspectPythonGit(python));
   const reach=(file:string,seen:Set<string>):void=>{
     if(seen.has(file))return;seen.add(file);
     for(const reference of sources.get(file)?.references??[]){
@@ -158,7 +164,8 @@ export function auditTestHost(root:string,debt?:HostDebt){
   });
   const reached=new Set(closures.flatMap(row=>row.modules));
   const reads=[...sources.entries()].flatMap(([file,row])=>file.startsWith('tooling/')&&(reached.has(file)||fixture(file))||file.endsWith('.rs')?row.reads:[]);
-  return {files:sources.size,closures,reads,publications,problems:[...testProfiles,...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts,declarations).problems,...fixtureCopyProblems(root,copies)]};
+  const gitCeiling=gitDebt??(debt?EMPTY_GIT_DEBT:parseGitDebt(JSON.parse(readFileSync(join(root,GIT_DEBT_FILE),'utf8'))));
+  return {files:sources.size,closures,reads,publications,gitInvocations,problems:[...testProfiles,...publications.map(row=>`${row.file}:${row.line}: generated JSON publisher must use durableRecord: ${row.source}`),...hostReadProblems(reads,debt??JSON.parse(readFileSync(join(root,HOST_DEBT),'utf8')) as HostDebt),...auditModuleAsync(root,moduleFacts,declarations).problems,...fixtureCopyProblems(root,copies),...gitInvocationProblems(gitInvocations,gitCeiling)]};
   } finally {api.close();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

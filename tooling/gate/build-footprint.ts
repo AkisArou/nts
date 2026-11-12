@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Measure the complete cold inner build set, without running its test cases.
 // Only declared Cargo output roots enter the record; target scratch/evidence
 // never does. --cold explicitly discards these idle build caches through Cargo.
@@ -52,7 +53,7 @@ export async function measureColdBuild(root:string,target:string,env:NodeJS.Proc
       if(status!==0)throw Error('cold build failed: '+step.shown.join(' ')+' ('+status+')');
     }
   }finally{clearInterval(collect);sample();}
-  const source=infrastructureProbe({purpose:'identify the cold build source',command:'git',args:['rev-parse','HEAD'],cwd:root,env}).stdout.trim();
+  const source=infrastructureProbe({purpose:'identify the cold build source',command:'git',args:gitArguments(['rev-parse','HEAD']),cwd:root,env}).stdout.trim();
   const toolchain=infrastructureProbe({purpose:'identify the cold build toolchain',command:'rustc',args:['-vV'],cwd:root,env}).stdout.trim();
   return {version:1,kind:'cold-inner',profile:TEST_PROFILE,clippyCache:'clippy',source,toolchain,commands,samples,
     peakAllocatedBytes:Math.max(...samples.map(row=>row.allocatedBytes)),finalAllocatedBytes:samples.at(-1)!.allocatedBytes};
@@ -64,7 +65,7 @@ runAsCommand(import.meta.url,async()=>{
   const root=fileURLToPath(new URL('../..',import.meta.url)),target=resolve(root,process.env.CARGO_TARGET_DIR??'target');
   // Read before cleaning, so a misspelled workspace cannot remove another cache.
   readFileSync(join(root,'Cargo.toml'));
-  const dirty=infrastructureProbe({purpose:'verify committed cold-build inputs',command:'git',args:['status','--porcelain'],cwd:root}).stdout;
+  const dirty=infrastructureProbe({purpose:'verify committed cold-build inputs',command:'git',args:gitArguments(['status','--porcelain']),cwd:root}).stdout;
   if(dirty.trim())throw Error('cold build measurement requires committed inputs: '+dirty.trim());
   const record=await measureColdBuild(root,target,process.env);
   durableRecord(resolve(args[2]!),record);

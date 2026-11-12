@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Read-only investigation of a selected source tree. Instrumentation belongs
 // only to this private copy; it cannot alter the selector used for a verdict.
 import {readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
@@ -46,7 +47,7 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
       engines.push({name,owner,map,full});
     }
     const before=engines[0]!,after=engines[1]!;
-    const files=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8',maxBuffer:64<<20}).split('\0').filter(Boolean);
+    const files=execFileSync('git',gitArguments(['ls-files','-z']),{cwd:root,encoding:'utf8',maxBuffer:64<<20}).split('\0').filter(Boolean);
     const sites:Site[]=[],targets=new Map<string,Site[]>();
     for(const [reader,groups]of before.owner.legacyReferences){
       for(const kind of ['named','imports','beside']as const)for(const row of groups[kind]){
@@ -65,7 +66,7 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
       }
     }
     const capture:Capture={sites,lost,missing};
-    const metadata={source:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),tracked:files.length,lostEdges:lost.length,lostPaths:new Set(lost.map(row=>row.path)).size,sites:sites.length,withoutProvenance:missing.length,byStep};
+    const metadata={source:execFileSync('git',gitArguments(['rev-parse','HEAD']),{cwd:root,encoding:'utf8'}).trim(),tracked:files.length,lostEdges:lost.length,lostPaths:new Set(lost.map(row=>row.path)).size,sites:sites.length,withoutProvenance:missing.length,byStep};
     writeFileSync(join(output,'provenance.json'),JSON.stringify(capture,null,2)+'\n');
     writeFileSync(join(output,'before-full.json'),JSON.stringify(before.full,null,2)+'\n');
     writeFileSync(join(output,'after-full.json'),JSON.stringify(after.full,null,2)+'\n');

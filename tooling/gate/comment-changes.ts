@@ -1,3 +1,4 @@
+import {gitArguments} from "./git-arguments.ts";
 // Narrowing is optional. Lexer errors and unsupported syntax retain the
 // ordinary path-based gate. A broken tool is a named instrument failure.
 // Never run a preprocessor: #if 0 is code.
@@ -134,7 +135,7 @@ function changedLines(before: string, after: string,probe:InfrastructureProbe): 
   try {
     const old = join(directory, "before"), updated = join(directory, "after");
     writeFileSync(old, before); writeFileSync(updated, after);
-    const diff = probe({purpose:"read changed Rust comment lines",command:"git",args:["diff","--no-index","--no-ext-diff","--no-textconv","--no-color","--unified=0","--",old,updated],maxBuffer,exits:[0,1]});
+    const diff = probe({purpose:"read changed Rust comment lines",command:"git",args:gitArguments(["diff","--no-index","--no-ext-diff","--no-textconv","--no-color","--unified=0","--",old,updated]),maxBuffer,exits:[0,1]});
     if (diff.status !== 1) return null;
     return diff.stdout.split("\n").filter(line => /^[+-]/.test(line) && !/^--- |^\+\+\+ /.test(line)).map(line => line.slice(1));
   } finally { rmSync(directory, { recursive: true, force: true }); }
