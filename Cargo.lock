@@ -431,6 +431,7 @@ dependencies = [
  "nts-jvm-emitter",
  "nts-semantic-schema",
  "rustc-hash",
+ "serde_json",
 ]
 
 [[package]]
