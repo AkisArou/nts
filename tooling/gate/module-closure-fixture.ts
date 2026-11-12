@@ -1,16 +1,13 @@
 // Test repositories carry the modules their entry points actually import.
 // Package installations and non-module assets remain explicit fixture inputs.
 import {copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, symlinkSync} from "node:fs";
-import {dirname, isAbsolute, join, relative, resolve, sep} from "node:path";
+import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {moduleClosure, type ModuleClosureOptions} from "./module-closure.ts";
+import {outsideSource} from "./source-containment.ts";
 export {moduleClosure} from "./module-closure.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
-const inside = (root: string, path: string) => {
-  const part = relative(root, path);
-  return part !== ".." && !part.startsWith(".." + sep) && !isAbsolute(part);
-};
 const info = (path: string) => {
   try {return lstatSync(path);}
   catch (error) {if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error;}
@@ -19,11 +16,8 @@ const info = (path: string) => {
 /** Complete the graph before callers apply private mutations. Existing equal
  * modules are harmless; a different fixture file is never overwritten. */
 export function copyModuleClosure(entries: readonly string[], root: string, options: ModuleClosureOptions & {link?: boolean} = {}): string[] {
-  const source = realpathSync(options.sourceRoot ?? SOURCE), requested = resolve(root);
-  let ancestor = requested;
-  while (!info(ancestor)) ancestor = dirname(ancestor);
-  const destination = resolve(realpathSync(ancestor), relative(ancestor, requested));
-  if (inside(source, destination)) throw new Error("fixture destination resolves inside source tree: " + root);
+  const source = realpathSync(options.sourceRoot ?? SOURCE);
+  const destination = outsideSource(source, root, "fixture destination");
   const files = moduleClosure(entries, {...options, sourceRoot: source});
   for (const name of files) {
     const from = resolve(source, name), to = resolve(destination, name);

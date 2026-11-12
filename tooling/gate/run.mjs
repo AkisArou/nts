@@ -122,6 +122,7 @@ import {typeScriptOracleDirectory} from '../census/typescript-oracle-capture.ts'
 import {typeScriptOracleHandoff} from '../census/typescript-oracle-results.ts';
 import {programOracleHandoff} from '../differential/oracle-results.ts';
 import {programOracleDirectory} from '../differential/oracle-result-scope.ts';
+import {outsideSource} from './source-containment.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -202,6 +203,8 @@ if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
+try {outsideSource(ROOT,RUN_DIR,"NTS_GATE_RUN_DIR");}
+catch(error){usage(error instanceof Error?error.message:String(error));}
 let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate", oracleRoot: ROOT });
 env = normalized.env;
 // In-process provisioning resolves tools through the run's canonical PATH too.
