@@ -53,13 +53,28 @@ pub(super) fn execute(command: &Command, source: &Utf8Path) -> Result<Finished> 
     execute_owned(command, Utf8Path::new(&population), &root)
 }
 
+pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
+    (
+        "oracle-execution.ts",
+        include_bytes!("../oracle-execution.ts"),
+    ),
+    (
+        "oracle-execution-policy.ts",
+        include_bytes!("../oracle-execution-policy.ts"),
+    ),
+    ("oracle-batch.ts", include_bytes!("../oracle-batch.ts")),
+    (
+        "command-entry/main.ts",
+        include_bytes!("../command-entry/main.ts"),
+    ),
+];
+
 pub(super) fn execution_identity() -> Result<String> {
-    Ok(super::oracle_emit::digest(&serde_json::to_vec(&[
-        super::oracle_emit::digest(include_bytes!("../oracle-execution.ts")),
-        super::oracle_emit::digest(include_bytes!("../oracle-execution-policy.ts")),
-        super::oracle_emit::digest(include_bytes!("../oracle-batch.ts")),
-        super::oracle_emit::digest(include_bytes!("../command-entry/main.ts")),
-    ])?))
+    let hashes: Vec<_> = EXECUTION_FILES
+        .iter()
+        .map(|(_, bytes)| super::oracle_emit::digest(bytes))
+        .collect();
+    Ok(super::oracle_emit::digest(&serde_json::to_vec(&hashes)?))
 }
 
 fn source_root() -> Result<camino::Utf8PathBuf> {

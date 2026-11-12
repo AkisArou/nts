@@ -19,6 +19,10 @@ pub(super) struct Prepared {
 }
 
 const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
+    (
+        "command-entry/main.ts",
+        include_str!("../command-entry/main.ts"),
+    ),
     ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
     (
@@ -64,7 +68,9 @@ pub(super) fn verify_source(root: &Utf8Path) -> Result<()> {
 fn materialize(directory: &Utf8Path) -> Result<Utf8PathBuf> {
     std::fs::create_dir_all(directory)?;
     for &(name, bytes) in IMPLEMENTATION_FILES {
-        std::fs::write(directory.join(name), bytes)?;
+        let target = directory.join(name);
+        std::fs::create_dir_all(target.parent().context("oracle asset has no parent")?)?;
+        std::fs::write(target, bytes)?;
     }
     Ok(directory.join("oracle-emit.ts"))
 }
@@ -1207,18 +1213,7 @@ fn verify_implementation(identity: &Value, assets: &Utf8Path) -> Result<Executio
     if identity["executionSha256"] != super::oracle_run::execution_identity()? {
         bail!("prepared oracle execution policy identity mismatch");
     }
-    for file in [
-        "oracle-execution.ts",
-        "oracle-execution-policy.ts",
-        "oracle-batch.ts",
-    ] {
-        let expected = if file == "oracle-execution.ts" {
-            include_bytes!("../oracle-execution.ts").as_slice()
-        } else if file == "oracle-execution-policy.ts" {
-            include_bytes!("../oracle-execution-policy.ts").as_slice()
-        } else {
-            include_bytes!("../oracle-batch.ts").as_slice()
-        };
+    for &(file, expected) in super::oracle_run::EXECUTION_FILES {
         if std::fs::read(assets.join(file))? != expected {
             bail!("prepared oracle embedded {file} identity mismatch");
         }
