@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {parseCensusCommand} from './reader-census.ts';
+import {handoffTargets} from './reader-census-graph.ts';
+import {moduleGraph} from './module-closure.ts';
+import {testScratch} from './test-scratch.ts';
 import {firstLosses,classifyLosses,readClassifications,encodeIndex,sliceBudgets,type Capture,type Disposition} from './reader-census-analysis.ts';
 
 const header='id\treader\tkind\tliteral\trole\tsteps\treason\n';
@@ -20,6 +25,24 @@ test('reader losses name the first retained reader instead of downstream copies'
   const plan=sliceBudgets(classified);
   assert.equal(plan[0]!.assignedEdges,2);
   assert.equal(plan.reduce((sum,row)=>sum+row.assignedEdges,0),2,'a shared reader never doubles the edge budget');
+});
+
+test('a shell launch retains first-loss provenance for its parsed URL assets',t=>{
+  const root=testScratch(t,'reader-handoff');mkdirSync(join(root,'tooling'));
+  writeFileSync(join(root,'tooling/entry.ts'),"export const input=new URL('./payload.json',import.meta.url);");
+  writeFileSync(join(root,'tooling/payload.json'),'{}');
+  const graph=moduleGraph({sourceRoot:root});
+  try{
+    const original=['tooling/entry.ts'],handoffs=new Map([['tooling/entry.ts',graph.closure(original)]]);
+    const lost={path:'tooling/payload.json',step:'tooling',sources:[] as number[]};
+    const value:Capture={sites:[{reader:'tooling/launch.sh',kind:'named',literal:'tooling/entry.ts',targets:original,steps:['tooling'],retainedSteps:['tooling'],lost:1}],lost:[lost],missing:[lost]};
+    assert.throws(()=>firstLosses(value),/no first-loss provenance/);
+    value.sites[0]!.targets=handoffTargets(original,handoffs);
+    assert.deepEqual(value.sites[0]!.targets,['tooling/entry.ts','tooling/payload.json']);
+    lost.sources=value.sites.flatMap((site,index)=>site.targets.includes(lost.path)?[index]:[]);
+    assert.deepEqual(firstLosses(value).edges[0]?.frontiers,[0]);
+    assert.strictEqual(handoffTargets(original,undefined),original,'a selector without the handoff keeps its frozen target rows');
+  }finally{graph.close();}
 });
 
 test('the index retains every path, step, provenance set and disposition byte for byte',()=>{

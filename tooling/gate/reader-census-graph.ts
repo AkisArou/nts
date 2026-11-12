@@ -14,8 +14,17 @@ import type {Capture,Site,SiteKind,LostEdge} from './reader-census-analysis.ts';
 
 type LegacyReference={literal:string;targets:string[]};
 type Selector={stepInputs:()=>Map<string,Set<string>>;covering:(map:Map<string,Set<string>>,path:string)=>Set<string>;
-  legacyReferences:Map<string,Record<SiteKind,LegacyReference[]>>;collectInvestigationCensus:()=>FullGateCensus};
+  legacyReferences:Map<string,Record<SiteKind,LegacyReference[]>>;
+  legacyHandoffs:Map<string,Map<string,string[]>>;collectInvestigationCensus:()=>FullGateCensus};
 const replace=(source:string,from:string,to:string)=>{assert.equal(source.split(from).length,2,'reader census unique instrumentation anchor: '+from.slice(0,80));return source.replace(from,to);};
+
+/** A launch owns its parsed module closure, including assets which have no
+ * path-shaped literal in the shell source. Older selectors have no handoff,
+ * so their original target order and frozen evidence remain unchanged. */
+export function handoffTargets(targets:string[],handoffs:ReadonlyMap<string,readonly string[]>|undefined):string[]{
+  const extra=targets.flatMap(target=>handoffs?.get(target)??[]);
+  return extra.length?[...new Set([...targets,...extra])]:targets;
+}
 
 export async function collectReaderCensus(sourceRoot:string,output:string){
   const root=resolve(sourceRoot),scratch=newTestScratch('728-reader-census');
@@ -23,7 +32,7 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     copyModuleClosure(['tooling/gate/owed.mjs'],scratch,{sourceRoot:root});
     symlinkSync(join(root,'node_modules'),join(scratch,'node_modules'));
     let source=readFileSync(join(scratch,'tooling/gate/owed.mjs'),'utf8');
-    source='export const legacyReferences=new Map();\n'+source;
+    source='export const legacyReferences=new Map(),legacyHandoffs=new Map();\n'+source;
     source+=`\nexport function collectInvestigationCensus(){return collectFullGateCensus(trackedFiles(),path=>{const rules=owed([{path,added:false}]);return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};},inputDirectoryDeclarations());}\n`;
     source=replace(source,'const body = readFileSync(abs, "utf8");',`const body = readFileSync(abs, "utf8");
         if (NO_MODULE_TEXT && /\\.[cm]?[jt]sx?$/.test(input)) {
@@ -37,6 +46,9 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
           imports:[...body.matchAll(/(?:from\\s+|import\\s*\\(\\s*|require\\(\\s*)["'](\\.{1,2}\\/[^"']+)["']/g)].map(match=>({literal:match[1],targets:[rel(resolve(TREE,dirname(input),match[1]))]})),
           beside:[...code(body).matchAll(/["']([A-Za-z0-9_.-]+\\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)].map(match=>({literal:match[1],targets:[dirname(input)+"/"+match[1]]})).filter(row=>row.targets.some(target=>references.other.includes(target)))
         });`);
+    const handoff='references.other.push(...modules.closure(launched));';
+    if(source.includes(handoff))source=replace(source,handoff,`legacyHandoffs.set(input,new Map(launched.map(entry=>[entry,modules.closure([entry])])));
+          ${handoff}`);
     const engines:{name:string;owner:Selector;map:Map<string,Set<string>>;full:FullGateCensus}[]=[];
     for(const [name,disabled]of [['before',false],['after',true]]as const){
       const file=join(scratch,'tooling/gate/owed-'+name+'.mjs');
@@ -51,8 +63,8 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     const sites:Site[]=[],targets=new Map<string,Site[]>();
     for(const [reader,groups]of before.owner.legacyReferences){
       for(const kind of ['named','imports','beside']as const)for(const row of groups[kind]){
-        const site:Site={reader,kind,literal:row.literal,targets:row.targets,steps:[...before.owner.covering(before.map,reader)].sort(),retainedSteps:[...after.owner.covering(after.map,reader)].sort(),lost:0};
-        sites.push(site);for(const target of row.targets){const list=targets.get(target)??[];list.push(site);targets.set(target,list);}
+        const site:Site={reader,kind,literal:row.literal,targets:handoffTargets(row.targets,before.owner.legacyHandoffs.get(reader)),steps:[...before.owner.covering(before.map,reader)].sort(),retainedSteps:[...after.owner.covering(after.map,reader)].sort(),lost:0};
+        sites.push(site);for(const target of site.targets){const list=targets.get(target)??[];list.push(site);targets.set(target,list);}
       }
     }
     const lost:LostEdge[]=[],byStep:Record<string,number>={},missing:LostEdge[]=[];
@@ -71,6 +83,7 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     writeFileSync(join(output,'before-full.json'),JSON.stringify(before.full,null,2)+'\n');
     writeFileSync(join(output,'after-full.json'),JSON.stringify(after.full,null,2)+'\n');
     writeFileSync(join(output,'summary.json'),JSON.stringify(metadata,null,2)+'\n');
+    assert.equal(missing.length,0,'reader census has switch-off edges without captured provenance; see provenance.json');
     return {capture,metadata,before:before.full,after:after.full};
   }finally{removable(scratch);rmSync(scratch,{recursive:true,force:true});}
 }
