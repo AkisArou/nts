@@ -79,6 +79,7 @@ export function tokenClient(where, step) {
         settle();
         let held = true;
         let ended=false;
+        /** @type {Promise<void>} */
         const closed=new Promise((resolve,reject)=>{
           sock.once('end',()=>{ended=true;held?reject(new Error('tokens.mjs: the runner ended an active case lease')):resolve();});
           sock.once('error',reject);

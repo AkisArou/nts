@@ -70,9 +70,14 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:Date.now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
       sock.on('data',(data:string)=>{
-        if(w.step!==''){if(data.includes('done\n'))w.answered=true;return;}
+        if(w.step!==''){
+          buf+=data;
+          const lines=buf.split('\n');buf=lines.pop()??'';
+          if(lines.includes('done'))w.answered=true;
+          return;
+        }
         buf+=data;const nl=buf.indexOf('\n');if(nl<0)return;
-        const words=buf.slice(0,nl).split(' ');
+        const words=buf.slice(0,nl).split(' ');buf=buf.slice(nl+1);
         if(words[0]==='retire'){
           w.step='registration';const [,id,group]=words;
           const owner=[...pool.active].find(entry=>entry.lease===id);

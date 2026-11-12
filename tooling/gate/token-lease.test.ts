@@ -22,3 +22,18 @@ test('a lost case controller retains its token until its worker drain completes'
   finishDrain();const release=await next;assert.ok(release);release();
   await waitFor('the second case to finish',()=>pool.total===0);
 });
+
+test('normal case completion replies only after the final observation is saved',async t=>{
+  let finish!:()=>void,entered!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const saved=new Promise<void>(resolve=>{finish=resolve;});
+  const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
+    completed:async request=>{assert.equal(request.answered,true);entered();await saved;}});
+  const address=await pool.start();assert.ok(address);t.after(()=>{finish();pool.close();});
+  const release=await tokenClient(address,'integrity').acquire({project:'tests/fixture/final-reply'});assert.ok(release);
+  let closed=false;void release.closed?.then(()=>{closed=true;});
+  release();await started;
+  assert.equal(closed,false);assert.equal(pool.total,1);
+  finish();await release.closed;
+  assert.equal(closed,true);assert.equal(pool.total,0);
+});
