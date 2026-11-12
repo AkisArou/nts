@@ -621,6 +621,11 @@ outside Worker closures may use top-level await.
   `publishOracleTerminal` writer using builtins, a unique sibling temporary
   and rename. The audit verifies its complete atomic shape; no other inline
   publisher is exempt.
+  Inspectors share `source-facts.ts`'s structural index for each parsed module:
+  bindings, scopes, parents, calls, imports and selected generated sources.
+  Parse batches hold at most sixteen leases or two MiB of source; a larger
+  module is inspected alone, and each lease is released after its inspection.
+  Shell command and redirection facts come from the shared shell parser.
 - **Infrastructure probes are synchronous questions.**
   `tooling/gate/infrastructure-probe.ts` owns their invocation, stdin and
   output limits. One minutes-long wedged-probe guard allows slow healthy
@@ -835,6 +840,12 @@ the first node task.
   already be sealed with `sealOracleRun`, so captures retain the run's holder
   ownership ([log](records/notebooks/decisions-log.md#fixture-tooling-follows-declared-closures-11-12)).
 
+- **Source inspectors share structural facts.** One bounded parse batch feeds
+  the host, publication, fixture-copy, profile and module-lifecycle inspectors.
+  A module's structural index and selected generated sources are reused rather
+  than traversed separately by each rule. The complete finding inventory stays
+  identical when the audit engine changes
+  ([log](records/notebooks/decisions-log.md#source-inspectors-share-structural-facts-11-12)).
 - **Child records publish atomically.** Generated producers use the same
   durable record owner as their parents. The source audit follows actual
   script and eval inputs and explicit source-factory brands; it rejects raw

@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "issue": 747,
+  "verdict": "improvement",
+  "measuredSource": "444603c0dc18d9f3b3bd3017ba0e3b68ab703c4e",
+  "measuredOldEngine": "5399e30e99e66f93772c06386d8a186bc636536a",
+  "counter": "cpu_core/instructions/u",
+  "order": [
+    "before",
+    "after",
+    "after",
+    "before"
+  ],
+  "subjectCpu": 4,
+  "excludedMonitorCpus": [
+    4,
+    5
+  ],
+  "batch": {
+    "modules": 16,
+    "sourceBytes": 2097152,
+    "oversized": "alone"
+  },
+  "node": "v26.13.0",
+  "rows": [
+    {
+      "arm": "before",
+      "wallMs": 5210.588425999999,
+      "cpuMs": 4163.956,
+      "peakBytes": 350326784,
+      "load": [
+        35.88,
+        39.66,
+        42.41
+      ],
+      "files": 1852,
+      "closures": 245,
+      "reads": 412,
+      "problems": [],
+      "instructions": 54150413105,
+      "counter": "cpu_core/instructions/u"
+    },
+    {
+      "arm": "after",
+      "wallMs": 3372.481046,
+      "cpuMs": 3358.438,
+      "peakBytes": 414216192,
+      "load": [
+        33.89,
+        39.19,
+        42.24
+      ],
+      "files": 1852,
+      "closures": 245,
+      "reads": 412,
+      "problems": [],
+      "instructions": 43473961007,
+      "counter": "cpu_core/instructions/u"
+    },
+    {
+      "arm": "after",
+      "wallMs": 3383.4869869999998,
+      "cpuMs": 3369.864,
+      "peakBytes": 404115456,
+      "load": [
+        32.62,
+        38.83,
+        42.11
+      ],
+      "files": 1852,
+      "closures": 245,
+      "reads": 412,
+      "problems": [],
+      "instructions": 44529241944,
+      "counter": "cpu_core/instructions/u"
+    },
+    {
+      "arm": "before",
+      "wallMs": 4016.2837449999997,
+      "cpuMs": 3999.414,
+      "peakBytes": 367390720,
+      "load": [
+        32.62,
+        38.83,
+        42.11
+      ],
+      "files": 1852,
+      "closures": 245,
+      "reads": 412,
+      "problems": [],
+      "instructions": 54259383240,
+      "counter": "cpu_core/instructions/u"
+    }
+  ],
+  "finalConfirmation": {
+    "source": "09cbe04bcf52d435a32500c2be74b58a1c6c4db3",
+    "oldEngine": "08852c508f035ff4e946eb91e36dd180ace498ec",
+    "files": 1853,
+    "closures": 246,
+    "hostReads": 412,
+    "publications": 0,
+    "problems": 0,
+    "beforeSha256": "1e6db2f6a6bf71ab96dedd7bb8c7ae0d7493393f626751527ddc7a914e23a216",
+    "afterSha256": "1e6db2f6a6bf71ab96dedd7bb8c7ae0d7493393f626751527ddc7a914e23a216",
+    "findings": "shared-source-facts-747.findings.json",
+    "runs": [
+      {
+        "arm": "before",
+        "wallMs": 7518.242936,
+        "cpuMs": 9129.288,
+        "peakBytes": 494596096,
+        "files": 1853,
+        "closures": 246,
+        "reads": 412,
+        "publications": 0,
+        "problems": []
+      },
+      {
+        "arm": "after",
+        "wallMs": 5553.2250380000005,
+        "cpuMs": 6481.688,
+        "peakBytes": 578715648,
+        "files": 1853,
+        "closures": 246,
+        "reads": 412,
+        "publications": 0,
+        "problems": []
+      },
+      {
+        "arm": "after",
+        "wallMs": 5455.397687999999,
+        "cpuMs": 6325.533,
+        "peakBytes": 599384064,
+        "files": 1853,
+        "closures": 246,
+        "reads": 412,
+        "publications": 0,
+        "problems": []
+      },
+      {
+        "arm": "before",
+        "wallMs": 6688.792207999999,
+        "cpuMs": 7856.327,
+        "peakBytes": 563118080,
+        "files": 1853,
+        "closures": 246,
+        "reads": 412,
+        "publications": 0,
+        "problems": []
+      }
+    ]
+  }
+}

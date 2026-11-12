@@ -2422,6 +2422,20 @@ compiled-child owner now retains the first cleanup success or named failure,
 and later calls return it without another observation, signal or wait. A
 supplied-state control checks both terminal outcomes. #744.
 
+## Source inspectors share structural facts (11-12)
+
+The test-host audit shares one structural index per module across its
+inspectors, including lexical bindings, parents, calls and declared module
+edges. Selected generated sources share their own index. Parser leases are
+batched at sixteen modules or two MiB, with an oversized module inspected
+alone and leases released immediately after use. Shell command facts retain
+redirections without adding another policy.
+
+Separate inspector walks had grown the audit's cost each time a rule joined
+it. The fixed-tree inventory is unchanged, and locked instruction counts show
+the shared index removes work. The higher bounded peak is accepted at its
+measured size. [Measurement](../shared-source-facts-747.md). #747.
+
 ## Case retirement has an owned lifetime (11-12)
 
 Worker close starts once and exposes a closed promise. The worker keeps its
