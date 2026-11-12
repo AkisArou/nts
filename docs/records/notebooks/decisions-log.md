@@ -2264,3 +2264,12 @@ and eval sinks and at explicitly branded source factories. Its one sealed
 oracle exception is verified as a unique temporary followed by rename. A record
 pipe was rejected because an inheriting grandchild can hold it open after the
 subject exits. See [the contract](../../workflow.md#the-machine).
+## Infrastructure probes have one owner (11-12)
+
+Short spawnSync questions to git, systemctl and tool versions use one
+synchronous owner and a five-minute wedged-tool guard. Timeout, signal or
+launch errors name their purpose and fail the instrument before a fallback or
+case classification. Fixtures inject runner results. A shared Worker bridge
+was rejected as unnecessary machinery for these synchronous questions; their
+existing APIs and product-specific case bounds remain intact. See
+[the contract](../../workflow.md#the-machine).

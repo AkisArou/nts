@@ -491,6 +491,13 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   `publishOracleTerminal` writer using builtins, a unique sibling temporary
   and rename. The audit verifies its complete atomic shape; no other inline
   publisher is exempt.
+- **Infrastructure probes are synchronous questions.**
+  `tooling/gate/infrastructure-probe.ts` owns their invocation, stdin and
+  output limits. One minutes-long wedged-probe guard allows slow healthy
+  tools to answer under load. A timeout, signal, spawn error or missing exit
+  status is a named tooling-setup instrument failure, never a case outcome
+  or a reason to silently fall back. Each caller declares which ordinary
+  exit codes it classifies. Fixtures replace the runner with supplied results.
 - **Command supervision consumes observations.** `CommandLiveness` in
   `tooling/gate/command-liveness.ts` decides from output, CPU counters,
   busy/sleep state and monotonic time. `active-process.ts` owns the process
@@ -633,6 +640,11 @@ the first node task.
   JSON writes. The sealed oracle's checked inline writer preserves its loader
   boundary without an inherited record pipe
   ([log](records/notebooks/decisions-log.md#child-records-publish-atomically-11-12)).
+- **Infrastructure probes have one wedged-tool guard.** Short synchronous
+  questions to tools use one owner, with a minutes-long bound and named
+  instrument failures. They preserve synchronous selection and artifact-key
+  APIs. Fixtures supply runner results; per-case product bounds stay separate
+  ([log](records/notebooks/decisions-log.md#infrastructure-probes-have-one-owner-11-12)).
 
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket
