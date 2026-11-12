@@ -30,7 +30,8 @@ export async function outputOracle(project: string, scratch: string, body: strin
   const emittedHarness=join(dirname(snapshotOwner.manifest),emitted),capturedMain=oracleRuntimeFile(snapshotOwner,join(project,'src/main.js'));
   rmSync(marker, { force: true });
   writeFileSync(driver, `
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, renameSync } from "node:fs";
+import {randomUUID} from "node:crypto";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
@@ -38,6 +39,13 @@ const src = ${JSON.stringify(dirname(capturedMain))};
 const logicalSrc = ${JSON.stringify(join(project, "src"))};
 const marker = ${JSON.stringify(marker)};
 const harness = join(logicalSrc, "harness.ts");
+// This driver is sealed: importing a repository helper would change its loader
+// closure. test-readiness.ts verifies this one inline atomic publisher instead.
+function publishOracleTerminal(record) {
+  const temporary = marker + "." + randomUUID() + ".partial";
+  writeFileSync(temporary, JSON.stringify(record));
+  renameSync(temporary, marker);
+}
 try {
   vm.runInThisContext(readFileSync(${JSON.stringify(emittedHarness)}, "utf8"), {filename:harness});
   for (const name of readdirSync(src).filter(name => name.startsWith("include-")).sort()) {
@@ -45,7 +53,7 @@ try {
     vm.runInThisContext(readFileSync(file, "utf8"), {filename:join(logicalSrc,name)});
   }
 } catch (error) {
-  writeFileSync(marker, JSON.stringify({complete:false, why:String(error)}));
+  publishOracleTerminal({complete:false, why:String(error)});
   process.exit(2);
 }
 try {
@@ -54,11 +62,11 @@ try {
     ? 'await import(pathToFileURL(main).href);'
     : 'vm.runInThisContext(readFileSync(main, "utf8"), {filename:join(logicalSrc,"main.js")});'}
   await new Promise(resolve => setImmediate(resolve));
-  writeFileSync(marker, JSON.stringify({complete:true}));
+  publishOracleTerminal({complete:true});
 } catch (error) {
   // A source throw is a complete Node observation. A process exit, signal,
   // timeout, or failed harness setup leaves no successful terminal marker.
-  writeFileSync(marker, JSON.stringify({complete:true, thrown:String(error)}));
+  publishOracleTerminal({complete:true, thrown:String(error)});
   process.exitCode = 1;
 }
 `);

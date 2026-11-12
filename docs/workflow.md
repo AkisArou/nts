@@ -482,6 +482,15 @@ compiler and runtime sources retain their own projects and diagnostic policy.
   grants enter the worker; canonical execution flags keep their identity. Child environments must
   come from the allowlist owner. A fixture missing its resource packet fails
   before the production adapter can run.
+  Generated child JSON records publish through `durableRecord`
+  (`tooling/gate/durable-record.ts`), so existence means complete bytes.
+  `test-readiness.ts` checks parsed source reaching script-file or Node eval
+  sinks. Exported source factories declare the boundary with the pure
+  `generatedJavaScript` brand; arbitrary data and synchronous parent setup
+  are outside this rule. The sealed output-oracle driver has one inline
+  `publishOracleTerminal` writer using builtins, a unique sibling temporary
+  and rename. The audit verifies its complete atomic shape; no other inline
+  publisher is exempt.
 - **Command supervision consumes observations.** `CommandLiveness` in
   `tooling/gate/command-liveness.ts` decides from output, CPU counters,
   busy/sleep state and monotonic time. `active-process.ts` owns the process
@@ -617,6 +626,13 @@ the first node task.
   ([log](records/notebooks/decisions-log.md#bounded-entry-precedes-execution-inactivity-11-12)).
   The gate checks ownership across dependencies and generated launches, and
   runs tooling entries with strict fixture observations and ambient poison.
+
+- **Child records publish atomically.** Generated producers use the same
+  durable record owner as their parents. The source audit follows actual
+  script and eval inputs and explicit source-factory brands; it rejects raw
+  JSON writes. The sealed oracle's checked inline writer preserves its loader
+  boundary without an inherited record pipe
+  ([log](records/notebooks/decisions-log.md#child-records-publish-atomically-11-12)).
 
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket

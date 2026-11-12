@@ -798,11 +798,11 @@ test("a census killed inside its unit leaves none of its slices once that unit s
   t.after(() => {
     for (const name of [unit, ...slices]) { try { ctl("stop", name); } catch { /* already gone */ } }
   });
-  const census = `import { writeFileSync } from "node:fs";
+  const census = `import {durableRecord} from ${JSON.stringify(new URL("../gate/durable-record.ts",import.meta.url).href)};
 const { MemoryRun } = await import(${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});
 const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "killed633" });
 const worker = run.worker(0, 64 * 2 ** 20);
-writeFileSync(${JSON.stringify(ready)}, JSON.stringify({ slice: run.slice, worker: worker.slice }));
+durableRecord(${JSON.stringify(ready)}, { slice: run.slice, worker: worker.slice });
 setInterval(() => {}, 60_000);`;
   // The enclosing test slice stops this service if its test process aborts.
   // The runtime bound also covers a plain node --test without a slice owner.

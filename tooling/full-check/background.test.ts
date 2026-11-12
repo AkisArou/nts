@@ -1,3 +1,4 @@
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 // node --test tooling/full-check/background.test.ts
 //
@@ -96,10 +97,10 @@ test("a real unit runs its command in its tree, at low priority off the measurem
   mkdirSync(tree);
   const name = ownedUnit(t, "ends"), outcome = join(dir, "outcome.json"), log = join(dir, "unit.log");
   // The work says where and how it runs, then writes its outcome as its last act.
-  const work = `const {readFileSync,writeFileSync,renameSync}=require("node:fs"),os=require("node:os");`
+  const work = generatedJavaScript(`const {readFileSync}=require("node:fs"),os=require("node:os");`
     + `const cpus=/^Cpus_allowed_list:\\s*(\\S+)/m.exec(readFileSync("/proc/self/status","utf8"))[1];`
     + `console.log(JSON.stringify({cwd:process.cwd(),nice:os.getPriority(),cpus,cgroup:readFileSync("/proc/self/cgroup","utf8").trim()}));`
-    + `writeFileSync(process.argv[1]+".partial",JSON.stringify({version:1,at:new Date(0).toISOString(),status:0,said:"done"}));renameSync(process.argv[1]+".partial",process.argv[1]);`;
+    + `import(${JSON.stringify(new URL("../gate/durable-record.ts",import.meta.url).href)}).then(({durableRecord})=>durableRecord(process.argv[1],{version:1,at:new Date(0).toISOString(),status:0,said:"done"}));`);
   const job = newJob(name, outcome, AT);
   assert.equal(start(units, { name, cwd: tree, command: [process.execPath, "-e", work, outcome], log }, job, () => {}), null);
   await waitFor(`${name} to end`, () => !units.running(name));

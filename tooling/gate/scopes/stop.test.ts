@@ -37,6 +37,7 @@ import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {appendFileSync, chmodSync, readFileSync, writeFileSync} from 'node:fs';
 import {isAbsolute, relative, sep} from 'node:path';
+import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
 import {GateScopes as ActualGateScopes} from ${JSON.stringify(actual)};
 export * from ${JSON.stringify(actual)};
 export class GateScopes extends ActualGateScopes {
@@ -63,7 +64,7 @@ export class GateScopes extends ActualGateScopes {
         finally{chmodSync(cap.seal.record,0o444);}
       }
       const after=hash(readFileSync(cap.seal.record));
-      writeFileSync(${JSON.stringify(join(own, "cancellation.json"))},JSON.stringify({slice:scope.slice,signal:'SIGTERM',record:cap.seal.record,before,after,isolated:true})+'\\n');
+      durableRecord(${JSON.stringify(join(own, "cancellation.json"))},{slice:scope.slice,signal:'SIGTERM',record:cap.seal.record,before,after,isolated:true});
       const result=spawnSync('systemctl',['--user','kill','--kill-whom=all','--signal=SIGTERM',scope.slice],{encoding:'utf8'});
       assert.equal(result.status,0,result.stderr);
     };
@@ -116,10 +117,11 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(own, "descendant.mjs"), `
-import {readFileSync, existsSync, writeFileSync, watch} from 'node:fs';
+import {readFileSync, existsSync, watch} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
 const own=${JSON.stringify(own)},stat=readFileSync('/proc/self/stat','utf8');
 process.on('SIGTERM',()=>{});
-writeFileSync(own+'/escape-ready',JSON.stringify({pid:process.pid,started:Number(stat.slice(stat.lastIndexOf(')')+2).split(/\\s+/)[19])}));
+durableRecord(own+'/escape-ready',{pid:process.pid,started:Number(stat.slice(stat.lastIndexOf(')')+2).split(/\\s+/)[19])});
 const finish=()=>{if(existsSync(own+'/escape-release'))process.exit(0);};
 watch(own,finish);finish();
 `);
@@ -131,6 +133,7 @@ watch(own,()=>{});writeFileSync(own+'/format-descendant-ready','ready');
   writeFileSync(join(gate, "payload.mjs"), `
 import {existsSync, watch, writeFileSync} from "node:fs";
 import {spawn} from "node:child_process";
+import {durableRecord} from ${JSON.stringify(new URL('../durable-record.ts',import.meta.url).href)};
 import { publishToolingFailure, ToolingInstrumentError } from ${JSON.stringify(new URL("../step-result.ts", import.meta.url).href)};
 const own = ${JSON.stringify(own)};
 const ready = own + "/ready", release = own + "/release";
@@ -142,7 +145,7 @@ function until(path) {
   });
 }
 if (process.env.NTS_GATE_STEP === "old-paths") {
-  if (${JSON.stringify(Boolean(control.oracleCancellation))}) writeFileSync(own+'/seal-handoff.json',process.env.NTS_ORACLE_DEPENDENCIES);
+  if (${JSON.stringify(Boolean(control.oracleCancellation))}) durableRecord(own+'/seal-handoff.json',JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES));
   const escape=${JSON.stringify(escape)};
   if(escape){
     const path=own+'/descendant.mjs';

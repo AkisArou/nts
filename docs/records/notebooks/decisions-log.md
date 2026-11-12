@@ -2255,3 +2255,12 @@ whose one-minute RuntimeMaxUSec bounds only the history flush. A sampling
 scope that cannot start refuses before command execution; every history write
 failure is named. See [the reproduction](exit-peak-2026-11-12.md) and
 [the contract](../../workflow.md#decisions).
+
+## Child records publish atomically (11-12)
+
+A generated producer uses `durableRecord`, rather than exposing a file while
+its bytes are still being written. The test-host audit parses source at script
+and eval sinks and at explicitly branded source factories. Its one sealed
+oracle exception is verified as a unique temporary followed by rename. A record
+pipe was rejected because an inheriting grandchild can hold it open after the
+subject exits. See [the contract](../../workflow.md#the-machine).

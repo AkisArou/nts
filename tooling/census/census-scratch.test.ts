@@ -17,6 +17,7 @@ for(const mode of ['success','exception','SIGTERM'] as const)test(`census scratc
 import assert from 'node:assert/strict';
 import {chmodSync,existsSync,mkdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 import {ownCensusScratch} from ${JSON.stringify(new URL('./census-scratch.ts',import.meta.url).href)};
 const owner=ownCensusScratch(()=>{
  if(!existsSync(${JSON.stringify(drained)})){
@@ -28,7 +29,7 @@ assert.equal(owner.path,join(process.env.TMPDIR,'conformance262',String(process.
 mkdirSync(join(owner.path,'snapshot'),{recursive:true});
 writeFileSync(join(owner.path,'snapshot/input'),'immutable bytes');
 chmodSync(join(owner.path,'snapshot/input'),0o444);chmodSync(join(owner.path,'snapshot'),0o555);
-writeFileSync(${JSON.stringify(ready)},owner.path);
+durableRecord(${JSON.stringify(ready)},{path:owner.path});
 if(${JSON.stringify(mode)}==='exception')throw Error('intentional census exception');
 if(${JSON.stringify(mode)}==='SIGTERM')process.stdin.resume();
 else owner.cleanup();
@@ -50,6 +51,6 @@ else owner.cleanup();
     assert.equal(result.status,mode==='success'?0:1,result.stderr);
     if(mode==='exception')assert.match(result.stderr,/intentional census exception/);
   }
-  const path=readFileSync(ready,'utf8');assert.ok(path.startsWith(temporary+'/'));
+  const {path}=JSON.parse(readFileSync(ready,'utf8')) as {path:string};assert.ok(path.startsWith(temporary+'/'));
   assert.equal(readFileSync(drained,'utf8'),'drained');assert.equal(existsSync(path),false);
 });

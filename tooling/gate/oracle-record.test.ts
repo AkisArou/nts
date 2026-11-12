@@ -405,6 +405,7 @@ esac
   const control=join(root,'plan-control.mjs');
   writeFileSync(control,`
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)};
 import {join} from 'node:path';
 import {mock} from 'node:test';
 import {scriptedCommand,commandSample} from ${JSON.stringify(new URL('./command-observations-fixture.ts',import.meta.url).href)};
@@ -437,7 +438,7 @@ try{
     for(const key of ['plans','unplanned','failures'])collected[key].push(...(outcome[key]??[]));
   }
   mkdirSync(${JSON.stringify(evidence)},{recursive:true});
-  writeFileSync(join(${JSON.stringify(evidence)},'plans.json'),JSON.stringify(collected));
+  durableRecord(join(${JSON.stringify(evidence)},'plans.json'),collected);
 }
 finally{closeMemoryRun();}
 `);
