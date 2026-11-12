@@ -502,7 +502,7 @@ fn count_cases(
         };
         if accept_result(
             &measured.shown,
-            assemble(&measured, lanes.is_some()),
+            assemble(&measured, lanes.is_some(), MeasurementMode::Counted),
             &mut failed,
         )
         .is_none()
@@ -554,7 +554,7 @@ fn measure_cases(
             spoiled.push(name.to_owned());
         }
         if let Some(measurements) = accept_build(name, computed, &mut row_failures, &mut failed)? {
-            let assembled = assemble(&measurements, lanes.is_some());
+            let assembled = assemble(&measurements, lanes.is_some(), MeasurementMode::Timed);
             if let Err(error) = &assembled {
                 row_failures.insert(
                     name.to_owned(),
@@ -1419,7 +1419,13 @@ fn note_unsteady_cells(shown: &str, results: &[Option<Measured>]) {
     }
 }
 
-fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
+#[derive(Clone, Copy)]
+enum MeasurementMode {
+    Timed,
+    Counted,
+}
+
+fn assemble(measured: &Measurements, filtered: bool, mode: MeasurementMode) -> Result<Row> {
     let Measurements {
         shown,
         results,
@@ -1496,11 +1502,14 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
     for (column, outcome) in &row.outcomes {
         println!("note: {shown:<16} {} {outcome}", column.key());
     }
-    note_unsteady_cells(shown, results);
-
-    work_agrees(&row)?;
-    if let Some(note) = row.asymmetry() {
-        eprintln!("note: {shown}: {note}");
+    // Count mode proves equal work through checksums and the captured input
+    // contract. Loaded wall times cannot invalidate an instruction count.
+    if matches!(mode, MeasurementMode::Timed) {
+        note_unsteady_cells(shown, results);
+        work_agrees(&row)?;
+        if let Some(note) = row.asymmetry() {
+            eprintln!("note: {shown}: {note}");
+        }
     }
 
     Ok(row)
@@ -2926,6 +2935,45 @@ mod tests {
     use anyhow::Context;
 
     #[test]
+    fn count_agreement_ignores_loaded_wall_times_but_keeps_checksums() {
+        use super::{Absences, Measured, MeasurementMode, Measurements, assemble};
+        let counted = |ns| Measured {
+            ns_per_op: ns,
+            checksum: "same".to_owned(),
+            spread: 1.0,
+            warm_capped: false,
+            instructions: Some(1_000_000),
+            counted_reps: Some(1),
+        };
+        let mut observation = Measurements {
+            workload: None,
+            source_capture: None,
+            hosts: None,
+            shown: "loaded-count-control".to_owned(),
+            results: vec![
+                Some(counted(17_600_000.0)),
+                Some(counted(17_600_000.0)),
+                Some(counted(1_000_000.0)),
+                Some(counted(17_600_000.0)),
+                Some(counted(626_620.0)),
+                Some(counted(1_000_000.0)),
+            ],
+            absences: Absences {
+                outcomes: std::collections::BTreeMap::new(),
+                jvm: None,
+                cpp: None,
+            },
+            lowers: true,
+            node: Some(counted(1_000_000.0)),
+            bun: Some(counted(1_000_000.0)),
+        };
+        assert!(assemble(&observation, false, MeasurementMode::Timed).is_err());
+        assert!(assemble(&observation, false, MeasurementMode::Counted).is_ok());
+        observation.results[0].as_mut().expect("counted C").checksum = "different".to_owned();
+        assert!(assemble(&observation, false, MeasurementMode::Counted).is_err());
+    }
+
+    #[test]
     fn published_entries_survive_private_symbol_names() {
         let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -3106,7 +3154,7 @@ mod tests {
         // The saved run retains the typed observation and all independent work.
         let saved = serde_json::to_string(&observation)?;
         let reread: super::Measurements = serde_json::from_str(&saved)?;
-        let row = super::assemble(&reread, false)?;
+        let row = super::assemble(&reread, false, super::MeasurementMode::Timed)?;
         assert_eq!(row.cpp, Some(10.0));
         assert_eq!(row.bun, Some(19.0));
         assert!(row.nts.is_none());
@@ -3121,10 +3169,10 @@ mod tests {
             .as_mut()
             .expect("C++ observation")
             .checksum = "different".to_owned();
-        assert!(super::assemble(&observation, false).is_err());
+        assert!(super::assemble(&observation, false, super::MeasurementMode::Timed).is_err());
         observation.results[0] = Some(measured(1.0));
         assert!(
-            super::assemble(&observation, false)
+            super::assemble(&observation, false, super::MeasurementMode::Timed)
                 .err()
                 .context("contradictory observation was accepted")?
                 .to_string()
@@ -3157,10 +3205,12 @@ mod tests {
             node: Some(measured(30.0)),
             bun: None,
         };
-        let fresh = super::assemble(&measurements, false).expect("a row");
+        let fresh =
+            super::assemble(&measurements, false, super::MeasurementMode::Timed).expect("a row");
         let text = serde_json::to_string(&measurements).expect("saved");
         let saved: super::Measurements = serde_json::from_str(&text).expect("read back");
-        let again = super::assemble(&saved, false).expect("the same row");
+        let again =
+            super::assemble(&saved, false, super::MeasurementMode::Timed).expect("the same row");
         assert_eq!(
             (fresh.nts, fresh.cpp, fresh.llvm, fresh.node),
             (again.nts, again.cpp, again.llvm, again.node)
@@ -3197,7 +3247,8 @@ mod tests {
         };
         let json = serde_json::to_string(&measurements).expect("valid missing-reference row");
         let restored = serde_json::from_str(&json).expect("valid missing-reference row");
-        let row = super::assemble(&restored, false).expect("valid missing-reference row");
+        let row = super::assemble(&restored, false, super::MeasurementMode::Timed)
+            .expect("valid missing-reference row");
         assert!(row.cpp.is_none());
         assert_eq!(row.cpp_absence.as_deref(), Some(absent));
         assert_eq!(row.nts, Some(1.0));
