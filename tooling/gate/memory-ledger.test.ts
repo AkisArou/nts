@@ -1086,23 +1086,21 @@ test("a request the reservation it draws on covers whole asks the queue nothing,
   // The holder's child asks 4 of its 16 unused: admitted at once, though the big request is ahead of it.
   const child = ownerProcess(t);
   const inside = await f.ask({ bytes: 4 * GiB, what: "child", owner: { pid: child.pid } });
-  assert.deepEqual([f.of("child").at(-1)!.drawnBytes, f.of("child").at(-1)!.ahead], [4 * GiB, 1]);
+  assert.deepEqual([f.of("child").at(-1)!.drawnBytes, f.of("child").at(-1)!.ahead], [4 * GiB, 0]);
   // A growth of it draws on the holder as it did: the 12 left.
   await inside.grow(12 * GiB);
   const drawnNow = () => readLedger(f.dir).admitted.find(entry => entry.what === "child")!;
   assert.deepEqual([drawnNow().bytes, drawnNow().drawn], [16 * GiB, 16 * GiB]);
-  // One more is beyond the holder's: it asks the queue, behind the big request.
-  const more = inside.grow(GiB);
-  more.catch(() => {});
+  // Beyond the holder's forecast, growth still keeps that admitted job's
+  // place. Its uncovered 1 GiB fits the 2 GiB beside the holder.
+  await inside.grow(GiB);
   const growthOf = () => f.decisions.filter(decision => decision.grows === inside.id);
-  await waitFor("the growth beyond the holder's to wait", () => growthOf().some(decision => !decision.admitted), { stopped: f.stopped });
-  assert.ok(growthOf().filter(decision => !decision.admitted).every(decision => decision.drawnBytes === 0 && decision.ahead === 1));
-  // It gives back 8: its own part first, and it has none, so 8 of what it
-  // drew, which the holder has unused again -- and the growth draws its 1 there.
-  await inside.shrink(8 * GiB);
-  await more;
-  assert.deepEqual([drawnNow().bytes, drawnNow().drawn], [9 * GiB, 9 * GiB]);
-  assert.equal(f.of("big").at(-1)?.admitted, false, "the big request still waits for room beside the holder");
+  assert.deepEqual([drawnNow().bytes,drawnNow().drawn],[17*GiB,16*GiB]);
+  assert.deepEqual([growthOf().at(-1)!.admitted,growthOf().at(-1)!.drawnBytes,growthOf().at(-1)!.ahead],[true,0,0]);
+  // A shrink returns the uncovered byte forecast first, then borrowed bytes.
+  await inside.shrink(8*GiB);
+  assert.deepEqual([drawnNow().bytes,drawnNow().drawn],[9*GiB,9*GiB]);
+  assert.equal(f.of("big").at(-1)?.admitted,false,"a later request still waits beside the holder");
   inside.release();
   holder.release();
   (await big).release();
