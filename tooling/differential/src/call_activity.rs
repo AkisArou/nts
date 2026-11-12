@@ -963,7 +963,7 @@ mod tests {
     struct Scripted {
         at: std::cell::Cell<Instant>,
         cpu: std::cell::Cell<u64>,
-        group_cpu: std::cell::Cell<u64>,
+        descendant_cpu: std::cell::Cell<u64>,
         busy: bool,
         present: bool,
     }
@@ -972,7 +972,7 @@ mod tests {
             Self {
                 at: std::cell::Cell::new(Instant::now()),
                 cpu: std::cell::Cell::new(0),
-                group_cpu: std::cell::Cell::new(0),
+                descendant_cpu: std::cell::Cell::new(0),
                 busy,
                 present: true,
             }
@@ -1006,7 +1006,7 @@ mod tests {
             }))
         }
         fn group_cpu(&self, _: u32) -> Result<u64> {
-            Ok(self.group_cpu.get())
+            Ok(self.cpu.get() + self.descendant_cpu.get())
         }
         fn busy(&self, _: u32, leader: &Process) -> Result<bool> {
             Ok(leader.busy)
@@ -1025,7 +1025,7 @@ mod tests {
             for _ in 0..10 {
                 probe.advance(Duration::from_secs(21));
                 if advances_cpu {
-                    probe.cpu.set(probe.cpu.get() + 1);
+                    probe.cpu.set(probe.cpu.get() + 210);
                 }
                 assert!(watch.sample(&probe, 42, (7, 42), None).unwrap().is_none());
             }
@@ -1113,7 +1113,7 @@ mod tests {
             idle,
         });
         probe.advance(Duration::from_secs(5));
-        probe.group_cpu.set(101);
+        probe.descendant_cpu.set(101);
         let result = watch.sample(&probe, 42, (7, 42), None).unwrap().unwrap();
         assert!(matches!(result.kind, IncompleteKind::Runaway));
         assert!(result.reason.contains("owned command group"));
