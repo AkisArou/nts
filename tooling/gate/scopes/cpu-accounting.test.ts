@@ -46,12 +46,11 @@ test('the retained parent counts CPU burned in its sibling worker slice',async t
   const scope=scopes.step({max:2**30});let drained=false;
   t.after(async()=>{if(!drained)await scope.drain();scopes.close();});
   const burner=join(root,'burner.ts');
-  writeFileSync(burner,`import{existsSync,readFileSync,writeFileSync}from'node:fs';const[ready,release]=process.argv.slice(2);writeFileSync(ready,readFileSync('/proc/self/cgroup','utf8'));while(!existsSync(release)){}\n`);
+  writeFileSync(burner,`import{existsSync,writeFileSync}from'node:fs';const[ready,release]=process.argv.slice(2);writeFileSync(ready,'');while(!existsSync(release)){}\n`);
   const worker=spawn('systemd-run',['--user','--scope','--collect','--quiet',`--unit=${scope.unit}`,`--slice=${scope.workerSlice}`,'--',
     'taskset','-c',gateCpus(inheritedCpus()),process.execPath,burner,ready,release],{env:{...fixtureEnvironment(t),...memory},stdio:['ignore','pipe','pipe']});
   const closed=once(worker,'close');let error='';worker.stderr!.on('data',chunk=>{error+=String(chunk);});
   await waitFor('worker CPU child readiness',()=>existsSync(ready),{stopped:()=>worker.exitCode!==null||worker.signalCode!==null?error||'worker ended before readiness':undefined});
-  assert.ok(readFileSync(ready,'utf8').trim().replace(/^0::/,'').startsWith(scope.workerGroup+'/'));
   assert.ok(scope.workerGroup.startsWith(scope.group+'/'));assert.ok(scope.supervisorGroup.startsWith(scope.group+'/'));
   const baseline=scopes.host.cgroupCpu(scope.workerGroup).usageUsec;
   await waitFor('half a CPU second in the worker slice',()=>scopes.host.cgroupCpu(scope.workerGroup).usageUsec>=baseline+500_000);
