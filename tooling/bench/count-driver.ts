@@ -5,6 +5,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {closeSync,mkdirSync,openSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {durableRecord} from '../gate/durable-record.ts';
+import {FIXED_AMBIENT,hostEnvironment} from '../gate/canonical-environment.ts';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 
 export const COUNT_INSTRUMENT='instruction-calibrated-empty-subtracted-v1';
@@ -84,5 +85,8 @@ export async function countDriver(options:{program:string;args:string[];cwd:stri
 runAsCommand(import.meta.url,async()=>{
   const [cpu,folder,separator,program,...args]=process.argv.slice(2);
   assert.ok(cpu&&/^\d+$/.test(cpu)&&folder&&separator==='--'&&program,'usage: count-driver.ts <cpu> <folder> -- <program> [args...]');
-  console.log(JSON.stringify(await countDriver({cpu:Number(cpu),folder,program,args,cwd:process.cwd(),env:process.env})));
+  // These are benchmark programs, not tooling children: only declared host
+  // tools, fixed ambient values and this counter's own temporary cross over.
+  const env={...hostEnvironment(process.env),...FIXED_AMBIENT,TMPDIR:folder};
+  console.log(JSON.stringify(await countDriver({cpu:Number(cpu),folder,program,args,cwd:process.cwd(),env})));
 });
