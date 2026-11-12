@@ -32,6 +32,29 @@ test('a dependency calling statfs directly fails, including aliases and generate
   }
 });
 
+test('shell command reads follow quotes, substitutions and heredoc expansion',()=>{
+  const cases:[string,boolean][]=[
+    ['echo "claim-record: no free number below 10000"',false],
+    ["printf '%s\\n' free",false],
+    ['free -b',true],
+    ['"free" -b',true],
+    ['echo "$(free -b)"',true],
+    ["echo '$(free -b)'",false],
+    ['echo "`free -b`"',true],
+    ["echo '`free -b`'",false],
+    ["cat <<'EOF'\n$(free -b)\n`free -b`\nEOF\n",false],
+    ['cat <<EOF\n$(free -b)\nEOF\n',true],
+    ['cat <<EOF\nfree is prose here\nEOF\n',false],
+    ['echo "\\$(free)"',false],
+    ['cat <<EOF\n\\$(free)\nEOF\n',false],
+  ];
+  for(const [source,expected] of cases){
+    const reads=inspectHostSource('tooling/shell-fixture.sh',source).reads.filter(read=>read.kind==='kernel');
+    assert.equal(reads.length>0,expected,source+'\n'+JSON.stringify(reads));
+    if(expected)assert.ok(hostReadProblems(reads,{}).some(problem=>problem.includes('kernel read outside its owner')));
+  }
+});
+
 test('an inner environment missing disk observations fails before reading the real disk',t=>{
   const root=testScratch(t,'host-audit-disk'),owned=ownMemory(root),env=fixtureEnvironment(t,owned);
   const file=owned.NTS_HOST_OBSERVATIONS,value=JSON.parse(readFileSync(file,'utf8'));

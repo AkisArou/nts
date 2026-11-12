@@ -4,6 +4,7 @@ import {readFileSync,readdirSync,existsSync,renameSync,writeFileSync} from 'node
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
+import {shellCommands} from './shell-commands.ts';
 import type {Node} from 'typescript/ast';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
 
@@ -87,9 +88,14 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
   }
   try {
     if(file.endsWith('.sh')){
+      const shell=shellCommands(source);
+      for(const command of shell.commands)if(/(?:^|\/)(?:nproc|free|df|vmstat)$/.test(command.name))
+        reads.push({file,line:source.slice(0,command.start).split('\n').length,kind:'kernel',source:command.name,generated:false});
+      let offset=0;
       for(const [index,line] of source.split('\n').entries()){
-        if(line.trim().startsWith('#'))continue;
-        for(const match of line.matchAll(/(?:\/proc(?:\/[\w${}/.-]*)?|\/sys\/fs\/cgroup[\w${}/.-]*|\b(?:nproc|free|df|vmstat)\b)/g))reads.push({file,line:index+1,kind:'kernel',source:match[0],generated:false});
+        const start=offset;offset+=line.length+1;
+        if(line.trim().startsWith('#')||shell.data.some(range=>start>=range.start&&start<range.end))continue;
+        for(const match of line.matchAll(/(?:\/proc(?:\/[\w${}/.-]*)?|\/sys\/fs\/cgroup[\w${}/.-]*)/g))reads.push({file,line:index+1,kind:'kernel',source:match[0],generated:false});
         for(const match of line.matchAll(/(?:tooling|runtime)\/[\w./-]+\.(?:[cm]?[jt]s|sh)\b/g))references.add(match[0]);
       }
       // Shell heredocs and node -e payloads are code, including their aliases.
