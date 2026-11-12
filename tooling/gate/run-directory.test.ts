@@ -60,7 +60,7 @@ for(const kind of ['root','target','alias-root','alias-target','outside','siblin
       assert.deepEqual(inventory(f.tree),before,'refusal creates no source namespace');
       assert.equal(existsSync(join(f.tree,'target')),false);
     }else{
-      assert.match(said,/unknown step/);
+      assert.match(said,/name no such step: 731-unknown-step/);
       assert.doesNotMatch(said,/resolves inside source tree/);
       assert.ok(existsSync(join(requested,'tmp')),'the accepted directory reaches canonical namespace creation');
     }
