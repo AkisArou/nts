@@ -1495,7 +1495,7 @@ function stepInputGraph() {
     };
     const named = (body) => [
       ...[...code(body).matchAll(PATH)]
-        .flatMap((m) => expand(m[1].replace(/\/$/, "")))
+        .flatMap((m) => { const path=m[1]; if(path===undefined)throw new Error("gate input path has no capture"); return expand(path.replace(/\/$/, "")); })
         .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p) || DATA.test(p)),
       ...[...code(body).matchAll(/["'](benchmarks)["']/g)].map((m) => m[1]),
     ];
@@ -1505,7 +1505,9 @@ function stepInputGraph() {
     const exact = (/** @type {string} */ body) => {
       const text = code(body);
       return [...text.matchAll(PATH)].flatMap(match => {
-        const path = match[1], tail = text[(match.index ?? 0) + match[0].length];
+        const path = match[1], token = match[0];
+        if(path===undefined||token===undefined)throw new Error("canonical gate input has no captured token");
+        const tail = text[(match.index ?? 0) + token.length];
         // A prefix cut off before a brace/class glob is not an exact token.
         return path && !/[*?]/.test(path) && (!tail || /[\s"'`;),|&<>]/.test(tail))
           && existsSync(join(TREE, path)) ? [path] : [];
@@ -1558,7 +1560,9 @@ function stepInputGraph() {
       }
       const seen = new Set();
       while (queue.length) {
-        const input = normalize(queue.shift()).split("\\").join("/");
+        const queued = queue.shift();
+        if(typeof queued!=="string")throw new Error("gate input queue contains a non-path");
+        const input = normalize(queued).split("\\").join("/");
         if (seen.has(input)) continue;
         seen.add(input);
         add(input, step);
@@ -1596,6 +1600,7 @@ function stepInputGraph() {
     const runner = readFileSync(join(TREE, "tooling/gate/run.mjs"), "utf8");
     for (const m of runner.matchAll(/step\.name === "([a-z0-9-]+)" && plan\.includes\("([a-z0-9-]+)"\)\)\s*e\.NTS_[A-Z_]+\s*=/g)) {
       const [, taker, giver] = m;
+      if(!taker||!giver)throw new Error("gate input handover has no step name");
       for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
     }
     return { reach: map, declared, directories };
