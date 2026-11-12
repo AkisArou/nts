@@ -1,7 +1,33 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { test } from "node:test";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { test, type TestContext } from "node:test";
+import { testScratch } from "../gate/test-scratch.ts";
 import { parseTypeScriptRecord, serializeTypeScriptRecord } from "../census/typescript-record.ts";
+
+function compileFixture(t: TestContext): string {
+  const root = testScratch(t, "benchmark-compile-row"), directory = join(root, "results/benchmarks/jvm");
+  mkdirSync(directory, { recursive: true });
+  const metadata = { version: 1, backend: "jvm", commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] };
+  const cell = { scope: "compile", source: "1".repeat(64), driver: "2".repeat(64), outcome: { kind: "pass" } };
+  writeFileSync(join(directory, "outcomes.tsv"), "# nts-benchmark-outcomes " + JSON.stringify(metadata) + "\nbenchmarks/cases/absences\t" + JSON.stringify(cell) + "\n");
+  return root;
+}
+
+test("a header-only benchmark is an entirely pending inventory, while an empty measured suite is refused", async () => {
+  const { parseBenchmarkRecord, serializeBenchmarkRecord, benchmarkInventory, mergeBenchmarkRecord } = await import("./outcomes.ts");
+  const metadata = { version: 1, backend: "jvm", commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] };
+  const header = "# nts-benchmark-outcomes " + JSON.stringify(metadata) + "\n";
+  const record = parseBenchmarkRecord(header);
+  assert.deepEqual(record.rows, []);
+  assert.deepEqual(parseBenchmarkRecord(serializeBenchmarkRecord(record)).rows, []);
+  const cells = [{ path: "benchmarks/cases/pending", scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64) }];
+  assert.deepEqual(benchmarkInventory(record, cells), cells);
+  const written = parseBenchmarkRecord(mergeBenchmarkRecord(header, [{ ...cells[0]!, outcome: { kind: "pass" } }]));
+  assert.deepEqual(benchmarkInventory(written, cells), []);
+  const measured = '# nts-typescript-outcomes ' + JSON.stringify({version:3,backend:"c",commit:"a".repeat(40),compiler:"b".repeat(16),harness:"c".repeat(16),under:"tests/typescript"}) + "\n";
+  assert.throws(() => parseTypeScriptRecord(measured), /an empty record measures nothing/);
+});
 
 test("benchmark records bind every case and scope without making compiler changes stale", async () => {
   const old = '# nts-typescript-outcomes {"version":3,"backend":"c","commit":"' + "a".repeat(40) +
@@ -124,7 +150,7 @@ test("a compile past its bound is a recorded timeout, ranked as a loud defect", 
   assert.equal(compareBenchmarkOutcome({ kind: "wrong", node: "1", compiled: "2" }, timeout).word, "LOUD NOW");
 });
 
-test("a compile timeout elsewhere is judged against the benchmark's compile row", async () => {
+test("a compile timeout elsewhere is judged against the benchmark's compile row", async t => {
   const { judgeCompileTimeout, recordedCompileOutcome, parseBenchmarkRecord } = await import(new URL("./outcomes.ts", import.meta.url).href);
   const { compileTimeoutLine } = await import(new URL("./compile-outcome.ts", import.meta.url).href);
   assert.equal(judgeCompileTimeout({ kind: "timeout", stage: "compile" }), "as recorded");
@@ -137,13 +163,12 @@ test("a compile timeout elsewhere is judged against the benchmark's compile row"
   const record = parseBenchmarkRecord(header + row("spin", { kind: "timeout", stage: "compile" }));
   assert.deepEqual(recordedCompileOutcome(record, "benchmarks/cases/spin"), { kind: "timeout", stage: "compile" });
   assert.equal(recordedCompileOutcome(record, "benchmarks/cases/new"), null);
-  // The repository's own record: every recorded case has a row.
-  const root = new URL("../..", import.meta.url).pathname;
+  const root = compileFixture(t);
   assert.equal(compileTimeoutLine(root, "jvm", "benchmarks/cases/absences"), "worse: the record says pass");
   assert.match(compileTimeoutLine(root, "jvm", "benchmarks/cases/no-such-case"), /^pending: benchmarks\/cases\/no-such-case is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet$/);
 });
 
-test("a compile that declined elsewhere is judged against the benchmark's compile row", async () => {
+test("a compile that declined elsewhere is judged against the benchmark's compile row", async t => {
   const { judgeCompileDecline } = await import(new URL("./outcomes.ts", import.meta.url).href);
   const { compileDeclineLine } = await import(new URL("./compile-outcome.ts", import.meta.url).href);
   for (const recorded of [{ kind: "refused", diagnostic: "NTS1001 x" }, { kind: "build-failure", stage: "compiler-crash", diagnostic: "invalid HIR" }, { kind: "timeout", stage: "compile" }]) {
@@ -151,7 +176,7 @@ test("a compile that declined elsewhere is judged against the benchmark's compil
   }
   assert.equal(judgeCompileDecline({ kind: "pass" }), "worse");
   assert.equal(judgeCompileDecline(null), "pending");
-  const root = new URL("../..", import.meta.url).pathname;
+  const root = compileFixture(t);
   assert.equal(compileDeclineLine(root, "jvm", "benchmarks/cases/absences"), "worse: the record says pass");
   assert.match(compileDeclineLine(root, "jvm", "benchmarks/cases/no-such-case"), /^pending: benchmarks\/cases\/no-such-case is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet$/);
 });

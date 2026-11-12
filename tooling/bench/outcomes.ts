@@ -67,6 +67,7 @@ export function parseBenchmarkOutcome(value: unknown): BenchmarkOutcome {
 export const benchmarkKey = (row: Pick<BenchmarkRow, "path" | "scope">): string => `${row.path}\0${row.scope}`;
 const format: LineRecordFormat<BenchmarkMetadata, BenchmarkCell> = {
   prefix: "# nts-benchmark-outcomes ", label: "benchmark",
+  allowEmpty: true,
   metadata(value) {
     const row = object(value); keys(row, ["version", "backend", "commit", "compiler", "harness", "under", "scopes"]);
     assert.equal(row.version, 1, "unsupported benchmark outcome version"); assert.equal(row.under, "benchmarks/cases");

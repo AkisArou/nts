@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 export interface LineRecordFormat<Metadata, Row> {
   prefix: string;
   label: string;
+  /** Inventory formats can represent all cells pending; measured suites cannot. */
+  allowEmpty?: boolean;
   metadata(value: unknown): Metadata;
   row(path: string, value: unknown, metadata: Metadata): Row;
   key(path: string, value: Row): string;
@@ -27,7 +29,7 @@ export function parseLineRecord<Metadata, Row>(contents: string, format: LineRec
     assert.ok(!seen.has(key), `duplicate recorded case: ${path}`);
     seen.add(key); rows.push({ path, value });
   }
-  assert.ok(rows.length > 0, "an empty record measures nothing");
+  assert.ok(rows.length > 0 || format.allowEmpty === true, "an empty record measures nothing");
   return { metadata, rows };
 }
 

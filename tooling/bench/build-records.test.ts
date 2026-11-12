@@ -261,7 +261,7 @@ test("recorded compile cells execute every backend and expose outcome movement",
   assert.ok(calls.some(row => row.includes("-x") && row.includes("ir")));
 });
 
-test("case identities cover imported sources, inherited configs and local data independently of the scratch path", async t => {
+test("case identities cover resolved options, roots, sources and data independently of config syntax and scratch paths", async t => {
   const { benchmarkIdentities } = await import("./build-records.ts");
   const root = testScratch(t, "benchmark-record-identity");
   const a = "benchmarks/cases/control", b = "benchmarks/cases/subject";
@@ -274,6 +274,23 @@ test("case identities cover imported sources, inherited configs and local data i
   const identity = () => benchmarkIdentities(root, [a, b], join(root, "scratch-a"));
   const original = await identity();
   assert.deepEqual(await benchmarkIdentities(root, [b, a], join(root, "scratch-b")), new Map([...original].reverse()));
+  const base = join(root, "tsconfig.fixtures.json");
+  writeFileSync(base, '{\n// configuration documentation\n"exclude":["${configDir}/tooling/**/*","${configDir}/node_modules/**/*"],"compilerOptions":{"noEmit":true,"target":"ESNext"}\n}\n');
+  assert.deepEqual(await identity(), original, "comments, option order and an irrelevant inherited exclude do not change inputs");
+  writeFileSync(base, JSON.stringify({ compilerOptions: { target: "ESNext", noEmit: true, strictNullChecks: true } }));
+  assert.notEqual((await identity()).get(a), original.get(a), "an option changes identity even when the source graph stays the same");
+  writeFileSync(base, JSON.stringify({ compilerOptions: { target: "ESNext", noEmit: true } }));
+  writeFileSync(join(root, a, "case.ts"), "export function run() { return 2; }");
+  assert.notEqual((await identity()).get(a), original.get(a), "case source contents remain an input");
+  writeFileSync(join(root, a, "case.ts"), "export function run() { return 1; }");
+  const own = join(root, b, "tsconfig.json");
+  writeFileSync(own, JSON.stringify({ extends: "../../../tsconfig.fixtures.json", files: ["case.ts"] }));
+  assert.deepEqual(await identity(), original, "an equivalent explicit config is not extra case data");
+  writeFileSync(own, '{// own config comment\n"extends":"../../../tsconfig.fixtures.json","files":["case.ts"],"exclude":["unused/**/*"]}');
+  assert.deepEqual(await identity(), original, "case-local config syntax is not source data either");
+  writeFileSync(own, JSON.stringify({ extends: "../../../tsconfig.fixtures.json", files: ["case.ts", "../../common/input.ts"] }));
+  assert.notEqual((await identity()).get(b), original.get(b), "root membership matters even when both source files were already loaded");
+  writeFileSync(own, JSON.stringify({ extends: "../../../tsconfig.fixtures.json", files: ["case.ts"] }));
   // Oracle populations do not decide a compile result; ordinary local data still does.
   const domain = join(root, b, "case.domains.json");
   writeFileSync(domain, JSON.stringify({ version: 1, functions: { run: { n: { min: 0, max: 2 } } } }));

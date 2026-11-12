@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { closeMemoryRun, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
@@ -59,8 +59,21 @@ export function benchmarkCases(root: string): string[] {
   assert.ok(paths.length > 0, "no benchmark cases found; an empty run is not passing"); return paths;
 }
 
-/** Source identity comes from the declared SDK's resolved graph, including
- * inherited configs, plus all case-local data. This is identity validation,
+/** Canonical options retain array order and remove checkout-specific prefixes. */
+function compilerIdentityValue(root: string, value: unknown): unknown {
+  if (typeof value === "string" && isAbsolute(value)) {
+    const local = relative(root, value);
+    return local === "" ? "$root" : !local.startsWith("../") && !isAbsolute(local) ? "$root/" + local.split(sep).join("/") : value;
+  }
+  if (Array.isArray(value)) return value.map(entry => compilerIdentityValue(root, entry));
+  if (value !== null && typeof value === "object") return Object.fromEntries(
+    Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, entry]) => [key, compilerIdentityValue(root, entry)]),
+  );
+  return value;
+}
+
+/** Source identity comes from the SDK's resolved options, roots and sources,
+ * plus case-local data. Config syntax only selects those inputs. This is identity validation,
  * not a cache: the compiler still executes every selected cell on every run.
  */
 export async function benchmarkIdentities(root: string, paths: string[], scratch: string): Promise<Map<string, string>> {
@@ -76,24 +89,29 @@ export async function benchmarkIdentities(root: string, paths: string[], scratch
         assert.ok(project, `benchmark identity cannot resolve project: ${path}`);
         const program = project.program;
         const sources = program.getSourceFileNames();
+        const configs = new Set<string>(program.getConfigFileNames());
+        const options = { ...program.getCompilerOptions() };
+        // This records where options were read, including a generated scratch
+        // config. Resolved options and roots carry its compiler-facing meaning.
+        delete options.configFilePath;
         assert.ok(sources.includes(join(root, path, "case.ts") as typeof sources[number]), `benchmark identity has no checked entry: ${path}`);
         // The oracle's call population is not a compile input. An actual
         // source import still enters through the checked graph above.
-        const data = regularFiles(join(root, path)).filter(file => file !== join(root, path, "case.domains.json"));
-        const inputs = new Set([...sources, ...program.getConfigFileNames(), ...data]);
-        const entries: [string, string][] = [];
-        for (const file of inputs) {
-          if (file === config && config.startsWith(scratch + "/")) {
-            entries.push(["$generated-config", hash(JSON.stringify({ extends: "tsconfig.fixtures.json", include: [path + "/"] }))]); continue;
-          }
+        const data = regularFiles(join(root, path)).filter(file => file !== join(root, path, "case.domains.json") && !configs.has(file));
+        const labelOf = (file: string): string => {
           const local = relative(root, file);
           const library = program.getSourceFileMetadata(file)?.isDefaultLibrary;
           const label = library ? `$typescript/lib/${basename(file)}` : !local.startsWith("../") && !isAbsolute(local) ? local : undefined;
           assert.ok(label, `benchmark identity has an undeclared external source: ${file}`);
-          entries.push([label, hash(readFileSync(file))]);
-        }
+          return label.split(sep).join("/");
+        };
+        // A config imported by the program remains a source, even though its
+        // role as configuration does not contribute raw bytes.
+        const entries: [string, string][] = [...new Set([...sources, ...data])].map(file => [labelOf(file), hash(readFileSync(file))]);
         entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-        identities.set(path, hash(JSON.stringify(entries)));
+        identities.set(path, hash(JSON.stringify(compilerIdentityValue(root, {
+          version: 2, options, roots: project.parsedCommandLine.fileNames.map(labelOf), files: entries,
+        }))));
       } finally { snapshot.dispose(); api.clearSourceFileCache(); }
     }
   } finally { api.close(); }
