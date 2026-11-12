@@ -66,7 +66,7 @@ export function writeLandingVerdict(home: string, input: {
       outcome.name === "interop" && !!selected.interop ||
       outcome.name === "doctests" && !!selected.doctests;
     return {
-      outcome, coverage: narrowed ? "selected" : "full",
+      outcome:{...outcome,...(outcome.cpu!==undefined?{cpu_measure:outcome.cpu_measure??GNU_CPU_MEASURE}:{})}, coverage: narrowed ? "selected" : "full",
       notices: [...new Set(log.split("\n").filter(isListedLine).map(line => line.trim()))],
       platforms: unrunPlatforms(outcome.name, log),
     };

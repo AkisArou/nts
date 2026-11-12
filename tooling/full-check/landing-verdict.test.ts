@@ -125,3 +125,19 @@ test("unmeasured CPU remains unavailable in the combined accounting", t => {
   assert.equal(summary.execution.cpu_s, 0);
   assert.equal(summary.execution.credited_cpu_s, null);
 });
+
+
+test('a reused cgroup receipt preserves its GNU comparison in origin without executing either twice',t=>{
+  const f=fixture(t),receipt=recordLandingFixture(f.home,commit,tree,['tests']);
+  const row=receipt.steps.find(step=>step.outcome.name==='tests')!.outcome;
+  row.cpu=8;row.cpu_measure=STEP_CPU_MEASURE;row.gnu_time={version:1,cpu_measure:GNU_CPU_MEASURE,cpu:2,user:1.5,sys:0.5,wall:1,maxrss_kb:10};
+  writeFileSync(verdictPath(f.home,commit),JSON.stringify(receipt));
+  const result=measureWithLanding({...f.options,requested:['tests','examples']});
+  const summary=JSON.parse(readFileSync(join(result.run,'summary.json'),'utf8'));
+  const imported=summary.steps.find((step:{name:string})=>step.name==='tests');
+  assert.equal(imported.cpu,0);assert.equal(imported.gnu_time.cpu,0);
+  assert.equal(imported.origin.cpu_measure,STEP_CPU_MEASURE);assert.equal(imported.origin.cpu,8);
+  assert.equal(imported.origin.gnu_time.cpu,2);
+  assert.deepEqual(summary.execution.credited_cpu_s_by_measure,{[STEP_CPU_MEASURE]:8});
+  assert.equal(summary.execution.gnu_cpu_s,1.75,'only the fresh legacy comparison and preparation were executed');
+});

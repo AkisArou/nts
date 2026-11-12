@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy } from "../gate/verdict-policy.ts";
 import type { Layout, RunRecord } from "./state.ts";
-import { readBaseline } from "../landing/selection.ts";
+import {readStepBaseline} from "../gate/step-time.ts";
 import { newToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 import { MEASUREMENT_HOLD } from "./measure-command.ts";
 import {nodePin} from "../bootstrap/node.ts";
@@ -110,7 +110,7 @@ export function fullCheckCeiling(lastGreen: RunRecord | undefined, steps: readon
     } catch { /* There may be no history, or its run has been pruned. */ }
   }
   if (wall === undefined) {
-    const costs = readBaseline(baseline);
+    const costs = readStepBaseline(baseline);
     wall = Math.max(0, ...steps.map(step => costs.get(step)?.wall ?? 0));
   }
   return Math.ceil(Math.max(15 * 60, 3 * wall));

@@ -248,7 +248,7 @@ export function costKey(step: string, kind: ChangeKind): string {
   return COMPILES.has(step) ? `${step}:${kind}` : step;
 }
 
-/** The committed baseline: `step  wall  cpu  slots`, `#` comments. */
+/** The compatible CPU baseline; wall-only readers use readStepBaseline. */
 export function landingCpuMeasure(key:string):string { return key.split(':')[0]==='build'?GNU_CPU_MEASURE:STEP_CPU_MEASURE; }
 export function readBaseline(text: string): Map<string, Measured> {
   return new Map([...readStepBaseline(text)].filter(([name,row])=>row.cpu_measure===landingCpuMeasure(name)).map(([name,row])=>[name,{cpu:row.cpu,...(positive(row.wall)?{wall:row.wall}:{})}]));
