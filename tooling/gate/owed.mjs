@@ -84,6 +84,50 @@ import { moduleGraph } from "./module-closure.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
+const USAGE = `usage: node tooling/gate/owed.mjs [--since <rev> | --commit <rev> | --range <base>..<tip>] [--run]
+       node tooling/gate/owed.mjs --self-test
+       node tooling/gate/owed.mjs --full-census [--record [--initialize]] [--json]
+       node tooling/gate/owed.mjs   (working-tree and untracked changes)
+`;
+const VALUE_ARGUMENTS = new Set(["--since", "--commit", "--range"]);
+const SWITCH_ARGUMENTS = new Set(["--run", "--self-test", "--full-census", "--record", "--initialize", "--json"]);
+
+/** Validate the complete request before Git or a derived-input graph is read.
+ * @param {string[]} argv */
+export function validateArguments(argv) {
+  const seen = new Set();
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === undefined) throw new Error("missing argument");
+    if (!VALUE_ARGUMENTS.has(arg) && !SWITCH_ARGUMENTS.has(arg)) throw new Error(`unknown argument ${arg}`);
+    if (seen.has(arg)) throw new Error(`repeated argument ${arg}`);
+    seen.add(arg);
+    if (VALUE_ARGUMENTS.has(arg)) {
+      const value = argv[++index];
+      if (!value || value.startsWith("-")) throw new Error(`${arg} requires a value${value ? `; got ${value}` : ""}`);
+    }
+  }
+  if (seen.has("--full-census")) {
+    for (const arg of seen) if (!["--full-census", "--record", "--initialize", "--json"].includes(arg))
+      throw new Error(`${arg} cannot be combined with --full-census`);
+    if (seen.has("--initialize") && !seen.has("--record")) throw new Error("--initialize requires --record");
+  } else {
+    for (const arg of ["--record", "--initialize", "--json"]) if (seen.has(arg)) throw new Error(`${arg} requires --full-census`);
+    if (seen.has("--self-test") && seen.size !== 1) throw new Error("--self-test cannot be combined with other arguments");
+    const selectors = [...seen].filter(arg => VALUE_ARGUMENTS.has(arg));
+    if (selectors.length > 1) throw new Error(`${selectors.join(" and ")} select different changes; choose one`);
+  }
+}
+
+const IS_COMMAND = Boolean(process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href);
+if (IS_COMMAND) {
+  try {validateArguments(process.argv.slice(2));}
+  catch (error) {
+    process.stderr.write(`owed.mjs: ${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
+    process.exit(2);
+  }
+}
+
 /**
  * The tree whose change is asked about: the one the command is run from, not
  * the one this script lives in. "The repo" is two things here -- the rules
@@ -2077,7 +2121,6 @@ export function selfTest() {
 function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--full-census")) {
-    if(argv.some(arg=>!["--full-census","--record","--initialize","--json"].includes(arg)))throw Error("usage: owed.mjs --full-census [--record [--initialize]] [--json]");
     const {census,problems}=runFullGateCensus(TREE,()=>{
       const paths=trackedFiles();
       return collectFullGateCensus(paths,path=>{
@@ -2161,4 +2204,4 @@ function main() {
 }
 
 // Run as a command; imported (owed.test.mjs), it only exports.
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
+if (IS_COMMAND) main();
