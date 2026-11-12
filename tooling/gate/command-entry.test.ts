@@ -27,6 +27,15 @@ test('the shared entry reports synchronous throws and rejected commands once wit
  }
 });
 
+test('an unsettled command fails at event-loop drain with the top-level-await exit code',t=>{
+ const root=testScratch(t,'command-entry-unsettled'),file=join(root,'unsettled.mjs'),control=join(root,'top-level.mjs');
+ writeFileSync(control,'await new Promise(()=>{});');
+ writeFileSync(file,`import {runAsCommand} from ${JSON.stringify(helper)};runAsCommand(import.meta.url,()=>new Promise(()=>{}));`);
+ const original=run(control),result=run(file);
+ assert.equal(original.status,13,original.stderr);assert.equal(result.status,original.status,result.stderr);
+ assert.equal(result.stdout,'');assert.match(result.stderr,/INSTRUMENT: command entry .*unsettled\.mjs: main did not settle before the event loop drained/);
+});
+
 test('an imported command remains synchronous and does not run its body; symlink entry semantics are explicit',t=>{
  const root=testScratch(t,'command-entry-import'),subject=join(root,'subject.mjs'),loader=join(root,'loader.cjs'),alias=join(root,'alias.mjs');
  const source=(realpath:boolean)=>`import {runAsCommand} from ${JSON.stringify(helper)};runAsCommand(import.meta.url,async()=>{process.stdout.write('ran');return 7;},{realpath:${realpath}});`;
