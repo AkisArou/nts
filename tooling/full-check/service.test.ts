@@ -816,6 +816,7 @@ test("a busy night enters normal wide admission at its deadline, while daytime r
   repo.commit({ "a.txt": "2\n" }, "second");
   const daytime = at(new Date(2026, 10, 7, 12));
   assert.equal(await cycle(daytime), "core");
+  assert.equal(await cycle(daytime), "benchmarks", "the fulfilled night's existing benchmark request still proceeds");
   assert.equal(await cycle(daytime), "idle");
   assert.equal(readState(repo.layout.state).wide.last_run!.commit, first);
 });
