@@ -1726,6 +1726,13 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
   },
 });
 mkdirSync(RUN_DIR, { recursive: true });
+try{
+  diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:Date.now(),
+    emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),
+    log:line=>process.stderr.write(line+'\n'),
+    failed:error=>{diagnosticsFailure=String(error);stop(`host observation: ${error}`);}});
+  diagnostics.start();
+}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);}
 caseCosts = new CaseCosts(RUN_DIR);
 caseCosts.preparePhases(plan,env);
 identities.commit = git("rev-parse", "HEAD");
@@ -1760,14 +1767,9 @@ function settings() {
 let setupFailure, dependencySealFailure;
 try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); }
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
-if (!setupFailure && scopes) {
-  try{
-    diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,workersGroup:scopes.group,startedAt,
-      emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),
-      log:line=>process.stderr.write(line+'\n'),
-      failed:error=>{diagnosticsFailure=String(error);stop(`host observation: ${error}`);}});
-    diagnostics.start();
-  }catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);setupFailure=`host observation setup failed: ${error}`;}
+if(diagnosticsFailure)setupFailure=`host observation setup failed: ${diagnosticsFailure}`;
+if(!setupFailure&&scopes){
+  try{diagnostics?.attachWorkers(scopes.group);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);setupFailure=`host observation setup failed: ${error}`;}
 }
 if (!setupFailure) {
   try { await reserveMemory(); }

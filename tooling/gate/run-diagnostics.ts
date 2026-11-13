@@ -4,13 +4,13 @@ import {HostObservationError,type HostObservations,type LoopDelay,type LoopDelay
 import {PRESSURE_RESOURCES} from './host-pressure.ts';
 
 export type PressureDelta={identity:string;stallUsec:Record<(typeof PRESSURE_RESOURCES)[number],{some:number;full:number}>};
-type PressureSet={machine:PressureReading;runner:PressureReading;workers:PressureReading};
-export type PressureExposure={machine:PressureDelta;runner:PressureDelta;workers:PressureDelta};
+type PressureSet={machine:PressureReading;runner:PressureReading;workers:PressureReading|null};
+export type PressureExposure={machine:PressureDelta;runner:PressureDelta;workers:PressureDelta|null};
 type Endpoint={offsetMs:number;at:string;pressure:PressureSet};
 export type StepDiagnostics={version:1;sourceRun:string;startedAt:string;finishedAt:string;elapsedMs:number;
   loopDelay:LoopDelay;pressureExposure:PressureExposure;pressureBasis:'shared-scope-endpoints-overlap'};
 export type DiagnosticsSummary={version:1;sourceRun:string;state:'running'|'complete'|'incomplete';error:string|null;
-  sampleIntervalMs:1000;loopResolutionMs:20;runnerGroup:string;workersGroup:string;timeline:string;
+  sampleIntervalMs:1000;loopResolutionMs:20;runnerGroup:string;workersGroup:string|null;workersStartedAt:string|null;timeline:string;
   startedAt:string;finishedAt:string|null;loopDelay:LoopDelay|null;pressureExposure:PressureExposure|null;
   minutes:{startedAt:string;finishedAt:string;elapsedMs:number;loopDelay:LoopDelay}[]};
 
@@ -29,14 +29,16 @@ export function pressureDelta(before:PressureReading,after:PressureReading):Pres
   return {identity:after.identity,stallUsec};
 }
 function exposure(before:PressureSet,after:PressureSet):PressureExposure{
-  return {machine:pressureDelta(before.machine,after.machine),runner:pressureDelta(before.runner,after.runner),workers:pressureDelta(before.workers,after.workers)};
+  return {machine:pressureDelta(before.machine,after.machine),runner:pressureDelta(before.runner,after.runner),workers:before.workers&&after.workers?pressureDelta(before.workers,after.workers):null};
 }
-type Options={host:HostObservations;sourceRun:string;workersGroup:string;startedAt:number;
+type Options={host:HostObservations;sourceRun:string;workersGroup?:string;startedAt:number;
   emit:(row:unknown)=>void;log:(line:string)=>void;failed:(error:unknown)=>void};
 
 export class RunDiagnostics{
   private readonly options:Options;
   private readonly runnerGroup:string;
+  private workersGroup:string|null;
+  private firstWorker:Endpoint|null=null;
   private readonly origin:number;
   private readonly meters:LoopDelayMeter[]=[];
   private readonly steps=new Map<string,{start:Endpoint;delay:LoopDelayMeter}>();
@@ -52,11 +54,12 @@ export class RunDiagnostics{
   private closed=false;
   private result:DiagnosticsSummary|undefined;
   constructor(options:Options){
-    this.options=options;this.origin=options.host.now();this.runnerGroup=options.host.ownCgroup();
+    this.options=options;this.origin=options.host.now();this.runnerGroup=options.host.ownCgroup();this.workersGroup=options.workersGroup??null;
     try{
       this.runDelay=this.meter();this.minuteDelay=this.meter();this.intervalDelay=this.meter();
       this.first=this.endpoint();this.last=this.first;this.minuteStart=this.first;
-      options.emit({kind:'run-diagnostics-start',version:1,sourceRun:options.sourceRun,runnerGroup:this.runnerGroup,workersGroup:options.workersGroup,...this.first});
+      if(this.workersGroup)this.firstWorker=this.first;
+      options.emit({kind:'run-diagnostics-start',version:1,sourceRun:options.sourceRun,runnerGroup:this.runnerGroup,workersGroup:this.workersGroup,...this.first});
     }catch(error){
       const failures=[error];for(const meter of this.meters)try{meter.close();}catch(cleanup){failures.push(cleanup);}
       throw failures.length===1?error:new AggregateError(failures,'run diagnostics setup and meter cleanup failed');
@@ -64,12 +67,17 @@ export class RunDiagnostics{
   }
   private meter():LoopDelayMeter{const meter=this.options.host.loopDelay();this.meters.push(meter);return meter;}
   private endpoint():Endpoint{
-    const {host,workersGroup,startedAt}=this.options,offsetMs=host.now()-this.origin;
+    const {host,startedAt}=this.options,offsetMs=host.now()-this.origin;
     if(offsetMs<0)throw new HostObservationError('host observation diagnostics clock moved backwards');
-    return {offsetMs,at:new Date(startedAt+offsetMs).toISOString(),pressure:{machine:host.machinePressure(),runner:host.cgroupPressure(this.runnerGroup),workers:host.cgroupPressure(workersGroup)}};
+    return {offsetMs,at:new Date(startedAt+offsetMs).toISOString(),pressure:{machine:host.machinePressure(),runner:host.cgroupPressure(this.runnerGroup),workers:this.workersGroup?host.cgroupPressure(this.workersGroup):null}};
+  }
+  attachWorkers(group:string):void{
+    if(this.workersGroup!==null)throw Error('run diagnostics worker root already attached');
+    this.workersGroup=group;this.firstWorker=this.sample();
+    this.options.emit({kind:'run-diagnostics-workers',version:1,group,...this.firstWorker});
   }
   start():void{
-    if(this.timer||this.closed)throw Error('run diagnostics sampler already started or closed');
+    if(this.timer||this.closed||this.error!==null)throw Error('run diagnostics sampler already started, failed or closed');
     this.timer=setInterval(()=>{try{this.sample();}catch(error){this.fail(error);}},1000);this.timer.unref();
   }
   private fail(error:unknown):void{
@@ -97,6 +105,7 @@ export class RunDiagnostics{
     this.minuteDelay.reset();this.minuteStart=end;
   }
   beginStep(name:string):void{
+    if(this.workersGroup===null)throw Error('step diagnostics require the attached worker root');
     if(this.steps.has(name))throw Error('duplicate step diagnostics: '+name);
     const start=this.sample();this.steps.set(name,{start,delay:this.meter()});
   }
@@ -110,22 +119,23 @@ export class RunDiagnostics{
   }
   close():void{
     if(this.closed)return;clearInterval(this.timer);this.timer=undefined;
+    let snapshot:DiagnosticsSummary|undefined;
     try{
       if(this.error===null){this.sample();this.finishMinute(this.last);}
-      this.result={...this.report(),finishedAt:this.last.at,state:this.error===null?'complete':'incomplete'};
-      this.options.emit({kind:'run-diagnostics-complete',...this.result});
+      snapshot=this.report();
     }catch(error){this.fail(error);}
     finally{
       this.closed=true;for(const meter of this.meters)try{meter.close();}catch(error){this.fail(error);}
-      if(this.result)this.result.state=this.error===null?'complete':'incomplete';
     }
+    this.result={...(snapshot??this.report()),finishedAt:this.last.at,error:this.error,state:this.error===null?'complete':'incomplete'};
+    try{this.options.emit({kind:'run-diagnostics-complete',...this.result});}catch(error){this.fail(error);this.result.state='incomplete';this.result.error=this.error;}
     if(this.error!==null)throw new HostObservationError('run diagnostics incomplete: '+this.error);
   }
   report():DiagnosticsSummary{
     if(this.result)return structuredClone({...this.result,error:this.error});
     return {version:1,sourceRun:this.options.sourceRun,state:this.error!==null?'incomplete':this.closed?'complete':'running',error:this.error,
-      sampleIntervalMs:1000,loopResolutionMs:20,runnerGroup:this.runnerGroup,workersGroup:this.options.workersGroup,timeline:'diagnostics.jsonl',
+      sampleIntervalMs:1000,loopResolutionMs:20,runnerGroup:this.runnerGroup,workersGroup:this.workersGroup,workersStartedAt:this.firstWorker?.at??null,timeline:'diagnostics.jsonl',
       startedAt:this.first.at,finishedAt:this.closed?this.last.at:null,loopDelay:this.closed?null:this.runDelay.read(),
-      pressureExposure:exposure(this.first.pressure,this.last.pressure),minutes:structuredClone(this.minutes)};
+      pressureExposure:{...exposure(this.first.pressure,this.last.pressure),workers:this.firstWorker?.pressure.workers&&this.last.pressure.workers?pressureDelta(this.firstWorker.pressure.workers,this.last.pressure.workers):null},minutes:structuredClone(this.minutes)};
   }
 }

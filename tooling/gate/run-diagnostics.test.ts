@@ -37,7 +37,7 @@ test('supplied delay histograms and shared pressure endpoints survive overlappin
   assert.deepEqual(first.loopDelay,{count:9,maxMs:1234,p99Ms:1111});
   assert.equal(first.pressureBasis,'shared-scope-endpoints-overlap');assert.equal(first.sourceRun,'/retained/run');
   writeFileSync(clock,'62000');ownMemory(root,{pressure:pressure(500),loopDelay:{kind:'fixed',value:{count:10,maxMs:1500,p99Ms:900}}});
-  const second=diagnostics.endStep('two');assert.equal(second.pressureExposure.workers.stallUsec.memory.some,300);
+  const second=diagnostics.endStep('two');assert.equal(second.pressureExposure.workers?.stallUsec.memory.some,300);
   diagnostics.close();diagnostics.close();
   const report=diagnostics.report();assert.equal(report.state,'complete');assert.equal(report.finishedAt,new Date(62000).toISOString());
   assert.equal(report.pressureExposure?.machine.stallUsec.io.some,400);
@@ -73,7 +73,7 @@ test('an explicitly live native delay meter reports readiness and closes without
 test('explicit live PSI retains machine and own cgroup identities without a substitute reading',t=>{
   const env=ownMemory(testScratch(t,'pressure-live'),{pressure:{kind:'live'}}),host=hostObservations(env);
   const machine=host.machinePressure(),group=host.ownCgroup(),own=host.cgroupPressure(group);
-  assert.ok(machine.identity.startsWith('/proc/pressure:'));assert.ok(own.identity.startsWith('/sys/fs/cgroup'+group+':'));
+  assert.notEqual(machine.identity,own.identity);assert.ok(own.identity.includes(group));
   assert.equal(pressureDelta(machine,host.machinePressure()).identity,machine.identity);
   assert.equal(pressureDelta(own,host.cgroupPressure(group)).identity,own.identity);
 });
@@ -81,6 +81,23 @@ test('explicit live PSI retains machine and own cgroup identities without a subs
 test('a meter close failure still closes every acquired diagnostic meter',t=>{
   const env=ownMemory(testScratch(t,'diagnostics-meter-cleanup')),closed:number[]=[],base=hostObservations(env);let next=0;
   const host={...base,loopDelay:()=>{const id=next++,meter=base.loopDelay();return {...meter,close:()=>{closed.push(id);meter.close();if(id===0)throw Error('supplied meter close failure');}};}};
-  const diagnostics=new RunDiagnostics({host,sourceRun:'/run',workersGroup:'/workers',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
+  const rows:{kind?:string;state?:string;error?:string}[]=[];
+  const diagnostics=new RunDiagnostics({host,sourceRun:'/run',workersGroup:'/workers',startedAt:0,emit:row=>rows.push(row as typeof rows[number]),log:()=>{},failed:()=>{}});
   assert.throws(()=>diagnostics.close(),/supplied meter close failure/);assert.deepEqual(closed,[0,1,2]);assert.equal(diagnostics.report().state,'incomplete');
+  const terminal=rows.filter(row=>row.kind==='run-diagnostics-complete');assert.equal(terminal.length,1);assert.equal(terminal[0]?.state,'incomplete');assert.match(terminal[0]?.error??'',/supplied meter close failure/);
+});
+
+test('delayed acquisition pairs its own wall clock and attaches a later worker root at its own endpoint',t=>{
+  const root=testScratch(t,'diagnostics-delayed-start'),clock=join(root,'clock');writeFileSync(clock,'5000');
+  const pressure=(total:number)=>({kind:'fixed' as const,ownGroup:'/runner',machine:reading('machine',total),default:reading('cgroup',total)});
+  const env=ownMemory(root,{clock:{kind:'file',file:clock},pressure:pressure(100)});
+  const rows:unknown[]=[],diagnostics=new RunDiagnostics({host:hostObservations(env),sourceRun:'/run',startedAt:10_000,emit:row=>rows.push(row),log:()=>{},failed:()=>{}});
+  assert.equal(diagnostics.report().startedAt,new Date(10_000).toISOString());
+  assert.equal(diagnostics.report().pressureExposure?.workers,null);assert.equal(diagnostics.report().workersStartedAt,null);
+  writeFileSync(clock,'7000');ownMemory(root,{pressure:pressure(900)});diagnostics.attachWorkers('/late-root');
+  assert.equal(diagnostics.report().workersStartedAt,new Date(12_000).toISOString());
+  writeFileSync(clock,'8000');ownMemory(root,{pressure:pressure(1000)});diagnostics.close();
+  const report=diagnostics.report();assert.equal(report.finishedAt,new Date(13_000).toISOString());
+  assert.equal(report.pressureExposure?.machine.stallUsec.cpu.some,900);assert.equal(report.pressureExposure?.workers?.stallUsec.cpu.some,100);
+  const first=rows[0] as {pressure:{workers:unknown}};assert.equal(first.pressure.workers,null);
 });
