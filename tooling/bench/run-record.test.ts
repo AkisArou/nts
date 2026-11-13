@@ -356,7 +356,7 @@ test("the real check CLI detects a one-change renderer drift", () => {
     git(root, ["add", "README"]);
     git(root, ["commit", "-qm", "fixture"]);
     for(const input of ["docs/foundations","results/benchmarks/runs"])mkdirSync(join(root,input),{recursive:true});
-    copyModuleClosure(["tooling/bench/run-record.ts"],root,{dataNamespaces:{"docs/foundations":"renderer drift control","results/benchmarks/runs":"renderer drift control"}});
+    copyModuleClosure(["tooling/bench/run-record.ts"],root,{dataNamespaces:{"docs/foundations":"renderer drift control"}});
     writeFileSync(join(root,"docs/primitives.md"),"fixture\n");
     assert.deepEqual(readdirSync(join(root,"results/benchmarks/runs")),[]);
     publishRun(root, fixture("renderer"));

@@ -610,7 +610,7 @@ function dependencies():DependencyHandle{
   const previous=dependencyImages.get(key);if(previous)return previous;
   let record=sealed;
   if(!record){
-    const helper=join(cap.source,relative(REPOSITORY,fileURLToPath(new URL('./oracle-dependencies.ts',import.meta.url))));
+    const helper=join(cap.source,'tooling/differential',basename(fileURLToPath(new URL('./oracle-dependencies.ts',import.meta.url))));
     if(hash(readFileSync(helper))!==cap.helperSha256)throw Error('oracle dependency provisioner source mismatch');
     const run=spawnSync(process.execPath,[helper,'--capture',raw],{encoding:'utf8',maxBuffer:32*2**20});
     if(run.status!==0||run.signal||run.error)throw Error('oracle dependency capture not measured: '+run.stdout+run.stderr);

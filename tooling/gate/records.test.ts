@@ -31,7 +31,7 @@ test("the real records step validates benchmark evidence and its rendered table"
   const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{env:testEnvironment(),cwd:root,encoding:"utf8"});
   try {
     for(const input of ["docs/foundations","results/benchmarks/runs","tests/programs","benchmarks/cases"])mkdirSync(join(root,input),{recursive:true});
-    copyModuleClosure(["tooling/gate/records.ts"],root,{dataNamespaces:{"docs/foundations":"records CLI control","results/benchmarks/runs":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}});
+    copyModuleClosure(["tooling/gate/records.ts"],root,{dataNamespaces:{"docs/foundations":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}});
     writeFileSync(join(root,"docs/primitives.md"),"fixture\n");
     assert.deepEqual(readdirSync(join(root,"results/benchmarks/runs")),[]);
     for(const path of ["tooling/gate/all.sh"]) {

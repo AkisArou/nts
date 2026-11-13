@@ -14,15 +14,10 @@ import {
   fsyncSync,
   closeSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
-import {dataDirectory} from "../gate/reader-inputs/main.ts";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
-
-const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
-const RUNS=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../results/benchmarks/runs/",import.meta.url))));
-const FULL=relative(SOURCE,fileURLToPath(new URL("../../results/benchmarks/full.md",import.meta.url)));
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -392,7 +387,7 @@ export function parseRun(value: unknown): RunRecord {
   return decode(value, false);
 }
 export function readRuns(root: string): RunRecord[] {
-  const directory = join(root, RUNS);
+  const directory = join(root, "results/benchmarks/runs");
   if (!existsSync(directory)) return [];
   return readdirSync(directory)
     .filter((f) => f.endsWith(".json"))
@@ -432,7 +427,7 @@ export function checkRecords(root: string): { runs: number; complete: number } {
         .digest("hex");
     check(identity === match[1], "immutable benchmark run was rewritten: " + match[2]);
   }
-  const full = join(root, FULL);
+  const full = join(root, "results/benchmarks/full.md");
   check(existsSync(full), "missing benchmark full.md");
   check(
     readFileSync(full, "utf8") === renderFull(runs, readBenchmarkGroups(root)),
@@ -744,7 +739,7 @@ function atomic(path: string, body: string, createOnly: boolean): void {
   }
 }
 function renderLocked(root: string): string {
-  const full = join(root, FULL);
+  const full = join(root, "results/benchmarks/full.md");
   mkdirSync(join(root, "results/benchmarks"), { recursive: true });
   atomic(full, renderFull(readRuns(root), readBenchmarkGroups(root)), false);
   return full;
@@ -769,7 +764,7 @@ export function renderRuns(root: string): string {
 }
 function publishLocked(root: string, value: unknown, commitResults: boolean): string {
   const run = parseRun(value),
-    directory = join(root, RUNS);
+    directory = join(root, "results/benchmarks/runs");
   if (commitResults)
     check(
       git(root, ["diff", "--cached", "--name-only"]) === "",
