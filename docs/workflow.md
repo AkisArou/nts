@@ -156,8 +156,12 @@ inference may add checks; it cannot place a path or remove its full fallback.
 `tooling/gate/reader-inputs/main.ts`, declares a data directory: its tracked members
 are inputs, not host modules to parse. Entry modules, imports and unbranded
 URL assets retain their own production bytes even inside a data directory.
-Only module-owned files enter host-reference traversal; data members keep
-their input obligations without making their strings or imports into readers.
+`fileInput(new URL("file", import.meta.url))` declares exact immutable bytes
+read as text or data. It retains byte ownership without entering the file's
+imports or launches. Only entered modules take part in host-reference traversal;
+data members and exact file inputs keep their input obligations without making
+their strings or imports into readers. A later real import enters a file even
+if an earlier reader reached it as data or exact bytes.
 The declaration rows are independent of source language; other reader adapters
 can supply the same module and data edges. A shell or Python launch into
 JavaScript continues through the parsed module graph. An inferred launch adds
@@ -858,6 +862,11 @@ the first node task.
   trees, directory claims are visible, settled areas name their external
   readers, and an unplaced-input inventory refuses silent expansion
   ([log](records/notebooks/decisions-log.md#declared-readers-place-gate-inputs-11-12)).
+- **Byte ownership and module traversal are separate:** an exact `fileInput`
+  keeps production bytes without entering their graph. Data-directory members
+  and exact byte inputs enter that graph only when an independent module edge
+  reaches them
+  ([log](records/notebooks/decisions-log.md#exact-input-bytes-do-not-enter-modules-11-13)).
 - **Unknown reach and explicit full policies have separate inventories:** only
   the unplaced fallback set is ratcheted. Full-by-policy paths name their
   governing rules, and a rule change owes the full gate
