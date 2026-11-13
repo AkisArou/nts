@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {newTestScratch} from './test-scratch.ts';
 
-const helper=join(dirname(fileURLToPath(import.meta.url)),'corpus.ts');
+const helper=fileURLToPath(new URL('./corpus.ts',import.meta.url));
 function fixture(body:(root:string,suite:string)=>void){
   const root=newTestScratch('corpus-gate');
   const suite=join(root,'suite.cjs');

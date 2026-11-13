@@ -24,8 +24,8 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   const own = testScratch(t, "dex-bound"), root = join(own, "repo");
   for (const dir of ["tooling/android", "tooling/gate", "tooling/bench", "runtime/jvm", "results/benchmarks/jvm"]) mkdirSync(join(root, dir), { recursive: true });
   for (const dir of ["bin", "sdk/build-tools/99.0.0"]) mkdirSync(join(own, dir), { recursive: true });
-  copyFileSync(join(ROOT, "tooling/android/dexes.sh"), join(root, "tooling/android/dexes.sh"));
-  copyFileSync(join(ROOT, "runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
+  copyFileSync(new URL('../android/dexes.sh',import.meta.url), join(root, "tooling/android/dexes.sh"));
+  copyFileSync(new URL('../../runtime/jvm/test-vm-flags.txt',import.meta.url), join(root, "runtime/jvm/test-vm-flags.txt"));
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
   copyModuleClosure(["tooling/gate/token-command.ts","tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);

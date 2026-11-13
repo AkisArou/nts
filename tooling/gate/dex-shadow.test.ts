@@ -17,7 +17,7 @@ test("the two real identical Box artifacts match despite d8 warning origin paths
   assert.ok(process.env.ANDROID_HOME, "this integration test requires the declared Android SDK capability");
   const cache = join(root, "cache"), costs = join(root, "costs"); mkdirSync(costs);
   const fixtures = ["a-decorator-option-needs-a-decorator", "a-fieldless-class-needs-no-define-option"];
-  const result = spawnTest("sh", ["tooling/android/dexes.sh", ...fixtures], { cwd: ROOT, encoding: "utf8",
+  const result = spawnTest("sh", [fileURLToPath(new URL('../android/dexes.sh',import.meta.url)), ...fixtures], { cwd: ROOT, encoding: "utf8",
     env: { ...fixtureEnvironment(t), NTS_BIN: bin, NTS_CHECKERS: "1", NTS_GATE_JOBS: "1", NTS_ART_WORK: join(root, "work"),
       NTS_GATE_STEP: "dex", NTS_GATE_RUN_DIR: root, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_SHADOW_DIR: cache } });
   assert.equal(result.status, 0, result.stdout + result.stderr);

@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {heapReport} from './layouts-heap.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 
 test('heap helper compiles strictly and moves observed main/thread placement',{skip:process.platform!=='linux'||process.arch!=='x64'},()=>{
  const dir=newTestScratch('layout-heap');
  try {
-  const source=resolve(import.meta.dirname,'../../tooling/bench/layouts-heap.c'),library=join(dir,'heap.so');
+  const source=fileURLToPath(new URL('./layouts-heap.c',import.meta.url)),library=join(dir,'heap.so');
   let r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared',source,'-ldl','-pthread','-o',library],{env:testEnvironment(),encoding:'utf8'});
   assert.equal(r.status,0,r.stderr);
   const probe=join(dir,'probe.c'),binary=join(dir,'probe');

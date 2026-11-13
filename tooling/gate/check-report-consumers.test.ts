@@ -37,8 +37,8 @@ function sandbox(t: TestContext) {
   assert.deepEqual(readdirSync(join(root,"benchmarks/cases")),["control"]);
   // Package imports use the same provisioned toolchain as the real entry.
   symlinkSync(join(source, "../../node_modules"), join(root, "node_modules"));
-  copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
-  copyFileSync(join(source, "../conformance/web-platform/compiled/check.sh"), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
+  copyFileSync(new URL('../sweep/run.sh',import.meta.url), join(root, "tooling/sweep/run.sh"));
+  copyFileSync(new URL('../conformance/web-platform/compiled/check.sh',import.meta.url), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
   writeFileSync(join(root, "tooling/gate/tokens.mjs"), "export async function withToken(fn) { return fn(); }\n");
   writeFileSync(join(root, "tooling/sweep/sweep.mjs"), "console.log('export function work(n: number): number { return n; }');\n");
   writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
