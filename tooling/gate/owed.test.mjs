@@ -370,6 +370,17 @@ test("offline Unicode generators leave conformance obligations with their fixtur
   assert.ok(owed([{ path: "tooling/unclassified-generator.ts", added: true }]).some(rule => rule.full), "unrelated tooling keeps its unknown-reach obligation");
 });
 
+test('URL-host provenance owes offline freshness instead of executing its backend cases',()=>{
+  for(const added of [false,true]){
+    const rules=owed([{path:'tooling/unicode-cases/url-hosts.ts',added}]),steps=gateSteps(rules);
+    assert.ok(!rules.some(rule=>rule.full));
+    assert.ok(steps.includes('unicode-freshness'));
+    for(const step of ['typescript-c','typescript-llvm','typescript-jvm','typescript-oracles'])assert.ok(!steps.includes(step),step);
+  }
+  for(const path of ['.tool-versions','tooling/inputs/pinned-inputs.json','tests/typescript/unicode/url-hosts-idna-001.ts'])
+    assert.ok(gateSteps(owed([{path,added:false}])).includes('unicode-freshness'),path);
+});
+
 test("bundled native dependencies owe their executed ELF and algorithm guards", () => {
   for (const path of ["build/node-deps/recipes.json", "tooling/bootstrap/node.ts", "tooling/bootstrap/node_recipe.py", "runtime/node/crypto/dh.c", "tooling/conformance/c-tests.sh"]) {
     const rules = owed([{path,added:true}]);

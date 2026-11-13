@@ -251,7 +251,7 @@ export const LANDING = {
   config: { form: "tree" },
   licenses: { form: "tree" },
   audit: { form: "tree" },
-  "unicode-freshness": { form: "tree" },
+  "unicode-freshness": { form: "as-is" },
   build: { form: "as-is" },
   clippy: { form: "as-is" },
   tests: { form: "as-is" },
