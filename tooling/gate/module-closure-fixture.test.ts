@@ -76,6 +76,24 @@ test('a later module edge enters an earlier file input, in either entry order',t
   assert.throws(()=>moduleClosure(['directory.ts'],{sourceRoot:f.source}),/declared file input is not a file: data/);
 });
 
+test('a data-directory member is entered when a real import reaches it later',t=>{
+  const f=dataFixture(t);
+  f.write('data/case.ts',"import './dependency.ts';");f.write('data/dependency.ts','export const answer=1;');
+  f.write('importer.ts',"import './data/case.ts';");
+  for(const entries of [['entry.ts','importer.ts'],['importer.ts','entry.ts']]){
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{
+      const data=graph.describe(['entry.ts']);
+      assert.ok(data.files.includes('data/case.ts'));
+      assert.ok(!data.ownedFiles.includes('data/case.ts'));
+      const imported=graph.describe(entries);
+      for(const name of ['data/case.ts','data/dependency.ts']){
+        assert.ok(imported.ownedFiles.includes(name));assert.ok(imported.moduleFiles.includes(name));
+      }
+    }finally{graph.close();}
+  }
+});
+
 test('a fixture data namespace stages its reader without reading the replaced production bytes',t=>{
   const f=dataFixture(t);f.privateData();rmSync(join(f.source,'data/case.ts'));
   const files=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'synthetic cases'}});
