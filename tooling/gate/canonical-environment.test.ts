@@ -383,6 +383,12 @@ fi
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));
     assert.equal(summary.environment.canonical,true);assert.equal(summary.environment.host.JAVA_HOME,base.JAVA_HOME);
+    assert.equal(summary.diagnostics.state,'complete');assert.equal(summary.diagnostics.sourceRun,directory);
+    assert.deepEqual(summary.diagnostics.loopDelay,{count:0,maxMs:null,p99Ms:null});
+    assert.equal(summary.diagnostics.pressureExposure.machine.stallUsec.cpu.some,0);
+    assert.ok(readFileSync(join(directory,'diagnostics.jsonl'),'utf8').includes('run-diagnostics-complete'));
+    assert.ok(summary.steps.every((row:{diagnostics?:{sourceRun:string;loopDelay:{count:number}}})=>row.diagnostics?.sourceRun===directory&&row.diagnostics.loopDelay.count===0));
+
     assert.equal(summary.steps[0].verdict,code===0?"PASS":code===86||code===92||code===93?"INSTRUMENT":code===89||code===91?"NOT RUN":"FAIL");
     assert.equal(summary.steps[0].exit,code===86||code===87||code===88||code===89||code===93?1:code>=90?0:code);
     if(code===93){assert.match(summary.steps[0].reason,/oracle dependency seal changed/);assert.equal(summary.steps[0].instrument.kind,"tooling-setup");assert.equal(instrumentPolicy(summary.steps[0].instrument?.kind)?.disposition === "operator-hold",true,"the lander's shared policy holds the instrument failure instead of attributing a regression");}

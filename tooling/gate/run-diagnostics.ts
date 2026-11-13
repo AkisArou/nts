@@ -57,7 +57,10 @@ export class RunDiagnostics{
       this.runDelay=this.meter();this.minuteDelay=this.meter();this.intervalDelay=this.meter();
       this.first=this.endpoint();this.last=this.first;this.minuteStart=this.first;
       options.emit({kind:'run-diagnostics-start',version:1,sourceRun:options.sourceRun,runnerGroup:this.runnerGroup,workersGroup:options.workersGroup,...this.first});
-    }catch(error){for(const meter of this.meters)meter.close();throw error;}
+    }catch(error){
+      const failures=[error];for(const meter of this.meters)try{meter.close();}catch(cleanup){failures.push(cleanup);}
+      throw failures.length===1?error:new AggregateError(failures,'run diagnostics setup and meter cleanup failed');
+    }
   }
   private meter():LoopDelayMeter{const meter=this.options.host.loopDelay();this.meters.push(meter);return meter;}
   private endpoint():Endpoint{
@@ -70,7 +73,7 @@ export class RunDiagnostics{
     this.timer=setInterval(()=>{try{this.sample();}catch(error){this.fail(error);}},1000);this.timer.unref();
   }
   private fail(error:unknown):void{
-    if(this.error!==null)return;
+    if(this.error!==null){this.error+='; '+String(error);return;}
     this.error=String(error);clearInterval(this.timer);this.timer=undefined;this.options.failed(error);
   }
   sample():Endpoint{
@@ -103,7 +106,7 @@ export class RunDiagnostics{
       const end=this.sample();
       return {version:1,sourceRun:this.options.sourceRun,startedAt:step.start.at,finishedAt:end.at,elapsedMs:end.offsetMs-step.start.offsetMs,
         loopDelay:step.delay.read(),pressureExposure:exposure(step.start.pressure,end.pressure),pressureBasis:'shared-scope-endpoints-overlap'};
-    }finally{step.delay.close();this.steps.delete(name);}
+    }finally{try{step.delay.close();}finally{this.steps.delete(name);}}
   }
   close():void{
     if(this.closed)return;clearInterval(this.timer);this.timer=undefined;
@@ -113,7 +116,7 @@ export class RunDiagnostics{
       this.options.emit({kind:'run-diagnostics-complete',...this.result});
     }catch(error){this.fail(error);}
     finally{
-      this.closed=true;for(const meter of this.meters)meter.close();
+      this.closed=true;for(const meter of this.meters)try{meter.close();}catch(error){this.fail(error);}
       if(this.result)this.result.state=this.error===null?'complete':'incomplete';
     }
     if(this.error!==null)throw new HostObservationError('run diagnostics incomplete: '+this.error);

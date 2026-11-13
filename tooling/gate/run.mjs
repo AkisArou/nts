@@ -94,7 +94,6 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
 //                         unless the launcher's code owns another, as a test does)
 
-import {appendFileSync} from "node:fs";
 import {RunDiagnostics} from "./run-diagnostics.ts";
 import {clippyTarget} from "./build-targets.ts";
 import {hostObservations,HostObservationError} from "./host-observations.ts";
@@ -448,7 +447,10 @@ function stepEnv(step, slots, scope) {
   return oracleStepEnvironment(e,step.name);
 }
 
-let diagnostics,diagnosticsFailure;
+/** @type {RunDiagnostics|undefined} */
+let diagnostics;
+/** @type {string|undefined} */
+let diagnosticsFailure;
 function finish(name, verdict, reason, extra = {}) {
   results.set(name, { verdict, reason, ...extra });
 }
@@ -1713,9 +1715,9 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
     /** @type {unknown[]} */
     const failures=[];
-    try{diagnostics?.close();}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);failures.push(error);}
     try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{diagnostics?.close();}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);failures.push(error);}
     try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{reservation?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await reservation?.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
@@ -1758,7 +1760,7 @@ function settings() {
 let setupFailure, dependencySealFailure;
 try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); }
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
-if (!setupFailure) {
+if (!setupFailure && scopes) {
   try{
     diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,workersGroup:scopes.group,startedAt,
       emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),

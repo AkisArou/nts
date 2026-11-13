@@ -238,7 +238,7 @@ type MemoryFixture = {
   /** Observe excessive positive growth only in the private staged runner. */
   excessGrowth?:'before'|'after';
   /** Fail only the staged terminal owner, after the actual cleanup request. */
-  lateCleanup?:'broker'|'ledger';
+  lateCleanup?:'broker'|'ledger'|'diagnostics';
   reportOrder?:'before'|'after';
 };
 
@@ -269,7 +269,10 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
         const report="registerCommandCloser('gate run report '+RUN_DIR,{",resources="registerCommandCloser('gate run resources '+RUN_DIR,{",end='mkdirSync(RUN_DIR, { recursive: true });';
         assert.ok(source.includes(report)&&source.includes(resources)&&source.includes(end),'cleanup control follows the actual registered owners');
         if(lateCleanup==='broker')source=source.replace(report,"const realBrokerClose=tok.close;tok.close=()=>{realBrokerClose();throw Error('late broker cleanup control');};\n"+report);
-        else{
+        else if(lateCleanup==='diagnostics'){
+          const diagnostics='try{diagnostics?.close();}';assert.ok(source.includes(diagnostics));
+          source=source.replace(diagnostics,"try{diagnostics?.close();throw Error('late diagnostics cleanup control');}");
+        }else{
           const ledger='try{await reservation?.closed;}';assert.ok(source.includes(ledger));
           source=source.replace(ledger,"try{await reservation?.closed;throw Error('late ledger cleanup control');}");
         }
@@ -372,7 +375,7 @@ fi
   return { own,result, summary, step, output: result.stdout + result.stderr, history,ledger:memory.NTS_MEMORY_LEDGER, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
 }
 
-for(const lateCleanup of ['broker','ledger'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
+for(const lateCleanup of ['broker','ledger','diagnostics'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
   const fixture:MemoryFixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1,bound:2}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
   const before=memoryRun(t,{...fixture,reportOrder:'before'});
   assert.equal(before.result.status,2,before.output);

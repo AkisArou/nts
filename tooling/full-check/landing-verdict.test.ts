@@ -41,6 +41,9 @@ test("the core executes deferred work and prepares release artifacts while retai
   const f = fixture(t);
   recordLandingFixture(f.home, commit, tree, ["build", "tests", "rustfmt"], { logs: { tests:
     "pending: new-case is not recorded in results/examples.tsv yet\nimproved, record pending: better-case in results/examples.tsv: refusal -> pass\n" } });
+  const receiptPath=verdictPath(f.home,commit),receipt=JSON.parse(readFileSync(receiptPath,'utf8'));
+  receipt.steps.find((row:{outcome:{name:string}})=>row.outcome.name==='tests').outcome.diagnostics={version:1,sourceRun:'/original/landing-run',loopDelay:{count:3,maxMs:20,p99Ms:20}};
+  writeFileSync(receiptPath,JSON.stringify(receipt));
   const result = measureWithLanding(f.options);
   assert.equal(result.verdict, "green");
   assert.deepEqual(f.measured, [["build", "examples"]]);
@@ -52,6 +55,11 @@ test("the core executes deferred work and prepares release artifacts while retai
   assert.equal(notices.accepted[0]?.name, "better-case");
   const summary = JSON.parse(readFileSync(join(result.run, "summary.json"), "utf8"));
   assert.equal(summary.wall_s, 2);
+  const reused=summary.steps.find((row:{name:string})=>row.name==='tests');
+  assert.equal(reused.diagnostics,undefined,'original pressure/delay is never attributed to fresh execution');
+  assert.equal(reused.origin.diagnostics.sourceRun,'/original/landing-run');
+  assert.equal(reused.origin.diagnostics.loopDelay.count,3);
+
   assert.equal(summary.execution.cpu_s, 2.75);
   assert.deepEqual(summary.execution.cpu_s_by_measure,{[STEP_CPU_MEASURE]:2,[GNU_CPU_MEASURE]:0.75});
   assert.deepEqual(summary.execution.credited_cpu_s_by_measure,{[GNU_CPU_MEASURE]:20});

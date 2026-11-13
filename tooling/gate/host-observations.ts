@@ -64,7 +64,7 @@ export interface HostObservations {
 }
 
 function checkedGroup(group:string):string{
-  if(!group.startsWith('/')||group.split('/').includes('..')||group.includes('\n')||group.includes('\0'))throw new HostObservationError('host observation pressure cgroup path is invalid');
+  if(typeof group!=='string'||!group.startsWith('/')||group.split('/').includes('..')||group.includes('\n')||group.includes('\0'))throw new HostObservationError('host observation pressure cgroup path is invalid');
   return group;
 }
 function liveOwnCgroup():string{

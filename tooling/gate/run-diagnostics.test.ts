@@ -69,3 +69,18 @@ test('an explicitly live native delay meter reports readiness and closes without
   const sample=meter.read();assert.ok(sample.count>0);assert.ok(sample.maxMs!==null&&sample.p99Ms!==null&&sample.maxMs>=sample.p99Ms);
   meter.reset();assert.deepEqual(meter.read(),{count:0,maxMs:null,p99Ms:null});
 });
+
+test('explicit live PSI retains machine and own cgroup identities without a substitute reading',t=>{
+  const env=ownMemory(testScratch(t,'pressure-live'),{pressure:{kind:'live'}}),host=hostObservations(env);
+  const machine=host.machinePressure(),group=host.ownCgroup(),own=host.cgroupPressure(group);
+  assert.ok(machine.identity.startsWith('/proc/pressure:'));assert.ok(own.identity.startsWith('/sys/fs/cgroup'+group+':'));
+  assert.equal(pressureDelta(machine,host.machinePressure()).identity,machine.identity);
+  assert.equal(pressureDelta(own,host.cgroupPressure(group)).identity,own.identity);
+});
+
+test('a meter close failure still closes every acquired diagnostic meter',t=>{
+  const env=ownMemory(testScratch(t,'diagnostics-meter-cleanup')),closed:number[]=[],base=hostObservations(env);let next=0;
+  const host={...base,loopDelay:()=>{const id=next++,meter=base.loopDelay();return {...meter,close:()=>{closed.push(id);meter.close();if(id===0)throw Error('supplied meter close failure');}};}};
+  const diagnostics=new RunDiagnostics({host,sourceRun:'/run',workersGroup:'/workers',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
+  assert.throws(()=>diagnostics.close(),/supplied meter close failure/);assert.deepEqual(closed,[0,1,2]);assert.equal(diagnostics.report().state,'incomplete');
+});
