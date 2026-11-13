@@ -252,7 +252,7 @@ const phaseValid=(row:Record<string,unknown>)=>['cargo-setup','rustdoc-setup','d
   &&(row.source===undefined||typeof row.source==='string')&&(!['doctest-runtime','test-runtime'].includes(String(row.phase))||typeof row.source==='string');
 const absolute=(value:unknown):value is string=>typeof value==='string'&&isAbsolute(value)&&!value.includes('\0');
 const digestValid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value);
-const position=(value:unknown)=>integer(value)&&value>=0&&value<6;
+const position=(value:unknown):value is number=>integer(value)&&value>=0&&value<6;
 function readSubject(value:unknown,cwd:string,args:readonly string[]):InputSubject{
   const row=indexObject(value);
   const descriptor=(position:number)=>Number(BigInt.asIntN(32,BigInt('0x'+args[position]!)));

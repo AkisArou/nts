@@ -175,6 +175,10 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   await assert.rejects(readInputTraceIndex(changed('counts',[...rows.slice(0,-1),{...footer,counts:{...footer.counts,observations:footer.counts.observations+1}}]),()=>{}),/count mismatch/);
   await assert.rejects(readInputTraceIndex(changed('missing',rows.slice(0,-1)),()=>{}),/incomplete input index/);
   await assert.rejects(readInputTraceIndex(changed('trailing',[...rows,rows[0]]),()=>{}),/after input index completion/);
+  await assert.rejects(readInputTraceIndex(changed('raw-binding',[...rows.slice(0,-1),{...footer,raw:undefined}]),()=>{}),/malformed input index record/);
+  const descriptorRow=rows.find(row=>(row as {kind:string}).kind==='observation') as InputIndexObservation;
+  const wrongFd={...descriptorRow,subjects:descriptorRow.subjects.map(subject=>subject.kind==='descriptor'?{...subject,fd:4}:subject)};
+  await assert.rejects(readInputTraceIndex(changed('wrong-fd',rows.map(row=>row===descriptorRow?wrongFd:row)),()=>{}),/malformed descriptor subject/);
 });
 
 test('only canceled input-free lifetime facts can remain unattributed',async t=>{

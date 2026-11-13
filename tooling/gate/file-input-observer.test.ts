@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync,type StdioOptions} from 'node:child_process';
-import {readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
@@ -31,6 +31,17 @@ const subject=String.raw`
 static void *thread_exit(void *unused){(void)unused;syscall(SYS_exit,0);return NULL;}
 int main(int argc,char **argv){
   if(argc<2)return 90;
+  if(!strcmp(argv[1],"anchors")){
+    if(chdir(argv[2]))return 124;
+    int fd=open("logical/jump/../target",O_RDONLY);if(fd<0)return 125;
+    char b[8];ssize_t n=read(fd,b,sizeof(b));close(fd);
+    if(n!=8||memcmp(b,"physical",8)||write(1,b,8)!=8)return 126;
+    if(chdir("physical"))return 127;
+    fd=open("target",O_RDONLY);if(fd<0)return 128;
+    n=read(fd,b,sizeof(b));close(fd);
+    if(n!=8||memcmp(b,"physical",8)||write(1,b,8)!=8)return 129;
+    return 0;
+  }
   if(!strcmp(argv[1],"facts")){
     if(chdir(argv[2]))return 91;
     int dir=open(".",O_RDONLY|O_DIRECTORY);if(dir<0)return 92;
@@ -123,6 +134,18 @@ test('the native observer retains actual images, attempted inputs and original p
   assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.target===join(root,'value'))&&row.outcome==='unknown'));
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'));
   assert.ok(decoded.observations.every(row=>row.subjects.every(subject=>subject.kind==='descriptor'?!subject.target.includes('socket:['):subject.name!=='socket-relative')));
+
+  mkdirSync(join(root,'logical'));mkdirSync(join(root,'physical/inner'),{recursive:true});
+  symlinkSync('../physical/inner',join(root,'logical/jump'));
+  writeFileSync(join(root,'physical/target'),'physical');writeFileSync(join(root,'logical/target'),'lexical!');
+  const anchoredRaw=join(root,'anchors.raw.gz'),anchoredIndex=join(root,'anchors.index.gz');
+  const anchored=spawnTest(binary,fileObserverArguments(anchoredRaw,program,['anchors',root]),{env,encoding:'utf8'});
+  assert.equal(anchored.status,0,anchored.stderr);assert.equal(anchored.stdout,'physicalphysical');
+  await publishInputTrace({raw:anchoredRaw,output:anchoredIndex,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'anchors',kind:['test'],source:'fixture.rs'}});
+  const anchoredRows:InputIndexObservation[]=[];
+  await readInputTraceIndex(anchoredIndex,row=>{if(row.kind==='observation')anchoredRows.push(row);});
+  assert.ok(anchoredRows.some(row=>row.cwd===root&&row.subjects.some(subject=>subject.kind==='path'&&subject.name==='logical/jump/../target'&&subject.anchor.kind==='cwd'&&subject.anchor.path===root)));
+  assert.ok(anchoredRows.some(row=>row.cwd===join(root,'physical')&&row.subjects.some(subject=>subject.kind==='path'&&subject.name==='target'&&subject.anchor.kind==='cwd'&&subject.anchor.path===row.cwd)));
 
   const descriptor=join(root,'descriptor');writeFileSync(descriptor,'def');
   const {openSync,closeSync}=await import('node:fs');
