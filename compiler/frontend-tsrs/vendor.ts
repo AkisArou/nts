@@ -31,7 +31,7 @@ type Patch = { id: string; base: string; path: string; sha256: string; rationale
 const adapter = dirname(fileURLToPath(import.meta.url));
 
 function patchesFor(commit: string): Patch[] {
-  const path = join(adapter, "patches.json");
+  const path = fileURLToPath(new URL('./patches.json',import.meta.url));
   const patches: Patch[] = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : [];
   if (!Array.isArray(patches)) throw new Error("invalid carried tsrs patch registry");
   const ids = new Set<string>();
@@ -112,8 +112,8 @@ if (!source) {
   const commit = verify();
   process.stdout.write(`third_party/tsrs: ${commit}, ${inventory(target).length} files verified\n`);
   if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "../../tooling/licenses/licenses.ts"), "--check"], { stdio: "inherit" });
-  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "roles.ts"), "--check"], { stdio: "inherit" });
-  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "names.ts"), "--check"], { stdio: "inherit" });
+  if (!flag("--out")) execFileSync(process.execPath, [fileURLToPath(new URL('./roles.ts',import.meta.url)), "--check"], { stdio: "inherit" });
+  if (!flag("--out")) execFileSync(process.execPath, [fileURLToPath(new URL('./names.ts',import.meta.url)), "--check"], { stdio: "inherit" });
 } else {
   if (!requested) throw new Error("--source needs --rev <commit>; no floating pin is inferred");
   const git = (...argv: string[]) => execFileSync("git", ["-C", source, ...argv], { maxBuffer: 64 << 20 });
@@ -201,6 +201,6 @@ if (!source) {
   process.stdout.write(`${JSON.stringify({ commit, version, typescript_commit: tsCommit, crates: crates.size, files: files.size, rust_lines: lines, manifest_sha256: hash(text), checked: check, dry_run: dryRun })}\n`);
   // Keep the safe named slots derived from the exact new native visitor.
   // The normal gate's --check regenerates both files in a scratch directory.
-  if (!flag("--out") && !dryRun) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "roles.ts"), ...(check ? ["--check"] : [])], { stdio: "inherit" });
-  if (!flag("--out") && !dryRun) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "names.ts"), ...(check ? ["--check"] : [])], { stdio: "inherit" });
+  if (!flag("--out") && !dryRun) execFileSync(process.execPath, [fileURLToPath(new URL('./roles.ts',import.meta.url)), ...(check ? ["--check"] : [])], { stdio: "inherit" });
+  if (!flag("--out") && !dryRun) execFileSync(process.execPath, [fileURLToPath(new URL('./names.ts',import.meta.url)), ...(check ? ["--check"] : [])], { stdio: "inherit" });
 }

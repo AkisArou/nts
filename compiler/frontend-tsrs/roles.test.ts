@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const adapter = dirname(fileURLToPath(import.meta.url));
-const script = join(adapter, "roles.ts");
+const script = fileURLToPath(new URL('./roles.ts',import.meta.url));
 const vendor = join(adapter, "../../third_party/tsrs");
 test("native visitor regenerates the committed field roles byte for byte", () => {
   const result = spawnSync(process.execPath, [script, "--check"], { encoding: "utf8" });

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 const adapter = dirname(fileURLToPath(import.meta.url));
-const script = join(adapter, "names.ts");
+const script = fileURLToPath(new URL('./names.ts',import.meta.url));
 test("the native internal-name table regenerates byte for byte", () => {
   const result = spawnSync(process.execPath, [script, "--check"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stdout + result.stderr);
