@@ -12,7 +12,7 @@ import {removable} from '../gate/run-temporary.ts';
 const CATALOGUE='compiler/codegen/jvm/member-names.json';
 function fixture(t:TestContext){
   const root=newTestScratch('jvm-members');t.after(()=>{removable(root);rmSync(root,{recursive:true,force:true});});
-  const model={version:1,prefix:'@synthetic.',observer:{legacy_raising_suffix:'raising'},
+  const model={version:1,prefix:'@synthetic_',observer:{legacy_raising_suffix:'raising'},
     name_escape:{ascii_literal:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_',escaped_non_ascii:[]},
     roles:[{rust:'FIXED',stem:'fixed',key:'none'},{rust:'body',stem:'body',key:'name'}],
     java_templates:[{template:'runtime/jvm/member-templates/Synthetic.java.in',output:'runtime/jvm/Synthetic.java'}]};

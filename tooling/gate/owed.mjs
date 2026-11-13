@@ -1649,7 +1649,7 @@ function stepInputGraph() {
       });
     };
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
-    const map = new InputMap();
+    const map = new InputMap(), byteReaders = new InputMap();
     const declared = new Set();
     const membership = new Set();
     const directories = new Map();
@@ -1660,11 +1660,11 @@ function stepInputGraph() {
       if(row.member)map.declareMember(row.directory,row.member,step);
       // A declared data population includes future members. Private grants
       // suppress only their production population and never claim it here.
-      if(row.kind==='data'&&!row.fixture)map.add(row.directory,step);
+      if(row.kind==='data'&&!row.fixture){map.add(row.directory,step);byteReaders.add(row.directory,step);}
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[]}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[]}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1709,7 +1709,7 @@ function stepInputGraph() {
       while (entries.length) {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
-        const snapshot=modules.describe(batch, row => directory(row,step));
+        const snapshot=modules.describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
         for (const input of snapshot.files) {
           if (placed.has(input)) continue;
           placed.add(input); declared.add(input); add(input, step);
@@ -1742,8 +1742,10 @@ function stepInputGraph() {
         // flatten their module members back into production-context walks, or
         // infer readers from diagnostics, query strings and generated data.
         if (/\.[cm]?[jt]sx?$/.test(input)) {
-          const snapshot=modules.describe([input]);
-          references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories};
+          /** @type {import('./module-closure.ts').ByteInputDeclaration[]} */
+          const bytes=[];
+          const snapshot=modules.describe([input],undefined,row=>bytes.push(row));
+          references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories,bytes};
         } else {
           const body = readFileSync(abs, "utf8");
           const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
@@ -1753,7 +1755,10 @@ function stepInputGraph() {
           // continues through the same parsed graph without authorizing new
           // fallback placement from conservative shell text.
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
-          const launchedInputs=modules.describe(launched);
+          /** @type {import('./module-closure.ts').ByteInputDeclaration[]} */
+          const bytes=[];
+          const launchedInputs=modules.describe(launched,undefined,row=>bytes.push(row));
+          references.bytes=bytes;
           references.other.push(...launchedInputs.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)));
           references.data=launchedInputs.files;
           references.directories=launchedInputs.directories;
@@ -1761,6 +1766,7 @@ function stepInputGraph() {
         inferred.set(input,references);
         }
         for(const row of references.directories??[])directory(row,step);
+        for(const row of references.bytes??[])byteReaders.add(row.path,step);
         for(const data of references.data??[])add(data,step);
         queue.push(...references.named, ...references.other);
       }
@@ -1774,9 +1780,9 @@ function stepInputGraph() {
     for (const m of runner.matchAll(/step\.name === "([a-z0-9-]+)" && plan\.includes\("([a-z0-9-]+)"\)\)\s*e\.NTS_[A-Z_]+\s*=/g)) {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
-      for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
+      for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
     }
-    return { reach: map, declared, directories, membership, tracked:new Set(trackedFiles()) };
+    return { reach: map, byteReaders, declared, directories, membership, tracked:new Set(trackedFiles()) };
     } finally {modules.close();}
   });
 }
@@ -1986,6 +1992,9 @@ export function owed(changes) {
       // A changed/removed feature also owes the full metadata selection: it
       // can leave an upstream feature unclassified. Prose cannot do that.
       const steps = precise === "classification meaning" ? ["audit", "test262", ...records] : [...TREE_CHECKS];
+      // Declared byte reads survive token/prose precision. An ordinary module
+      // import alone does not turn every comment into an execution change.
+      steps.push(...covering(stepInputGraph().byteReaders,path));
       const row = add(precise, path, steps, { precise: true });
       if (precise === "comments" && path.endsWith(".rs") && all?.get(ownCrate)?.doctests) {
         const name = all?.get(ownCrate)?.name;

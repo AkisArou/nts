@@ -661,3 +661,18 @@ test('an explicit project config uses the same parser without nearest-entry disc
     assert.throws(()=>graph.describe([projectConfig(pathToFileURL(join(f.source,'project/missing.json')))]),/ENOENT/);
   }finally{graph.close();}
 });
+
+
+test('exact byte reports survive either module promotion order',t=>{
+  const {source,write}=fixture(t);
+  write('tooling/gate/reader-inputs/main.ts','export const fileInput=(url:URL)=>url;');
+  write('text.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';const data=fileInput(new URL('./both.ts',import.meta.url));");
+  write('module.ts',"import './both.ts';");write('both.ts',"import './nested.ts';");write('nested.ts','');
+  for(const entries of [['text.ts','module.ts'],['module.ts','text.ts']]){
+    const reports:{reader:string;path:string}[]=[];
+    const graph=moduleGraph({sourceRoot:source,byteInput:row=>reports.push(row)});
+    try{const snapshot=graph.describe(entries);assert.ok(snapshot.moduleFiles.includes('both.ts'));assert.ok(snapshot.moduleFiles.includes('nested.ts'));}
+    finally{graph.close();}
+    assert.deepEqual(reports,[{reader:'text.ts',path:'both.ts'}]);
+  }
+});

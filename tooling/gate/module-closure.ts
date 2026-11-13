@@ -13,7 +13,9 @@ import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespac
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
+export type ByteInputDeclaration={reader:string;path:string};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
+  byteInput?:(declaration:ByteInputDeclaration)=>void;
   /** A caller which already owns parsed source facts supplies detached edges. */
   declarations?:ReadonlyMap<string,ModuleDeclarations>};
 const inside = (root: string, path: string) => {
@@ -71,7 +73,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       references.set(path,result);return result;
     } finally {lease.dispose();}
   }
-  function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
+  function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput):InputSnapshot {
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
     const contexts=new Map<string,Context>();
@@ -104,6 +106,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if (!lstatSync(path).isDirectory()) {
         if(kind==='data')throw Error('declared data input is not a directory: '+nameOf(path));
         if(kind==='members')throw Error('declared module members input is not a directory: '+nameOf(path));
+        if(kind==='file')reportByteInput?.({reader,path:nameOf(path)});
         visit(context,path,kind!=='file');return;
       }
       if(kind==='file')throw Error('declared file input is not a file: '+nameOf(path));
