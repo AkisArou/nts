@@ -3,7 +3,7 @@ use crate::scratch;
 
 use nts_build::node_deps::{Artifacts, Request};
 use std::{
-    os::unix::fs::PermissionsExt as _,
+    os::unix::{fs::PermissionsExt as _, process::ExitStatusExt as _},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -45,6 +45,28 @@ fn artifacts(path: &Path, libraries: &[&str]) -> Artifacts {
     serde_json::from_slice(&output.stdout).expect("artifact manifest")
 }
 
+fn loop_instrument_failure(status: std::process::ExitStatus) -> bool {
+    matches!(status.code(), Some(124 | 137)) || status.signal() == Some(9)
+}
+
+#[test]
+fn loop_guard_distinguishes_kills_from_native_crashes() {
+    for (raw, instrument) in [
+        (0, false),
+        (1 << 8, false),
+        (124 << 8, true),
+        (137 << 8, true),
+        (9, true),
+        (6, false),
+        (11, false),
+    ] {
+        assert_eq!(
+            loop_instrument_failure(std::process::ExitStatus::from_raw(raw)),
+            instrument
+        );
+    }
+}
+
 fn loop_control(driver: &Path, addons: &[PathBuf]) -> std::process::Output {
     // This bounds a wedged instrument, not the amount of time healthy work
     // must take beside another build. Completion and the checksums decide it.
@@ -55,7 +77,7 @@ fn loop_control(driver: &Path, addons: &[PathBuf]) -> std::process::Output {
         .output()
         .expect("start Node loop instrument");
     assert!(
-        output.status.code().is_some_and(|code| code != 124 && code != 137),
+        !loop_instrument_failure(output.status),
         "INSTRUMENT: Node loop control did not complete within its five-minute wedged guard, or was killed: {}\n{}\n{}",
         output.status,
         String::from_utf8_lossy(&output.stdout),
@@ -160,10 +182,10 @@ fn private_uv_symbols_and_host_loops_work_across_addons_and_workers() {
     }
     let driver = repo.join("tooling/cli/tests/fixtures/node-loop-driver.cjs");
     let output = loop_control(&driver, &addons);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "{}: {}", output.status, String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"host-loop-ok 32 1344\n");
     let mutant = loop_control(&driver, &[dir.join("interposed.node")]);
-    assert_eq!(mutant.status.code(), Some(1));
+    assert_eq!(mutant.status.code(), Some(1), "{}: {}", mutant.status, String::from_utf8_lossy(&mutant.stderr));
     assert!(
         String::from_utf8_lossy(&mutant.stderr).contains("bundled uv must not bind Node symbols")
     );
