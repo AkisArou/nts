@@ -56,6 +56,7 @@ const key=(pid:number,birth:string)=>pid+':'+birth;
  * matching image. The same pathname reused in another task grants nothing. */
 export class RustInputPhases{
   private readonly tasks=new Map<string,Image>();
+  private readonly argvFacts=new Map<string,string>();
   readonly images:Image[]=[];
   private root:number|undefined;
   private readonly calls=new Map<string,DoctestCall>();
@@ -74,8 +75,9 @@ export class RustInputPhases{
     if(!row.factsComplete||!row.birth||row.birth==='0')fail('missing task identity/image facts');
     const identity=key(row.tgid,row.birth),previous=this.tasks.get(identity);
     const path=byteFactText(row.image,'actual task image'),cwd=byteFactText(row.cwd,'actual task cwd');
+    const actualArgv=row.argvRead?row.argv.hex:'';
+    if(previous?.path===path&&this.argvFacts.get(identity)===actualArgv)return previous;
     const args=row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):[];
-    if(previous?.path===path&&JSON.stringify(previous.args)===JSON.stringify(args))return previous;
     const parent=this.tasks.get(key(row.ppid,row.parentBirth));
     if(!this.target&&!previous&&!parent&&row.tgid!==this.root)fail('unattributed task '+identity+' parent '+key(row.ppid,row.parentBirth));
     let phase:TracePhase=this.target?{phase:'test-runtime',source:this.target.source}:{...(previous?.phase??parent?.phase??{phase:'cargo-setup'})};
@@ -91,7 +93,7 @@ export class RustInputPhases{
     }
     const image:Image={id:this.images.length+1,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
       reason:!previous?'first-observation':previous.path===path?'actual-argv':'actual-image'};
-    this.images.push(image);this.tasks.set(identity,image);return image;
+    this.images.push(image);this.tasks.set(identity,image);this.argvFacts.set(identity,actualArgv);return image;
   }
   finish():void{for(const identity of this.calls.keys())if(!this.entered.has(identity))fail('recorded doctest has no matching entered image: '+identity);}
 }
@@ -103,7 +105,7 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
 export async function publishInputTrace(options:{raw:string;output:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[]}):Promise<void>{
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls);
   const observations=new Map<string,RuntimeObservation>();
-  const probes=new Map<string,{image:number;kind:string;fd?:number;raw:string;error:number;count:number}>();
+  const probes=new Map<string,TracePhase&{image:number;kind:string;fd?:number;raw:string;rawPath?:string;error:number;count:number}>();
   const descriptors:ObservationRow[]=[];
   const retain=(row:InputAttempt,image:Image,path:string,rawPath:string,operation:string)=>{
     const identity=JSON.stringify([image.id,operation,row.syscall,path,row.canceled]);
@@ -111,9 +113,9 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
     if(previous){previous.count++;return;}
     observations.set(identity,{...image.phase,path,rawPath,operation,syscall:row.syscall,outcome:'unknown',image:image.id,count:1,canceled:row.canceled});
   };
-  const probe=(image:Image,kind:string,raw:string,error:number,fd?:number)=>{
-    const identity=JSON.stringify([image.id,kind,raw,error,fd]),previous=probes.get(identity);
-    if(previous)previous.count++;else probes.set(identity,{image:image.id,kind,raw,error,fd,count:1});
+  const probe=(image:Image,kind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{
+    const identity=JSON.stringify([image.id,kind,raw,error,fd,rawPath]),previous=probes.get(identity);
+    if(previous)previous.count++;else probes.set(identity,{...image.phase,image:image.id,kind,raw,error,fd,rawPath,count:1});
   };
   const terminal=await readFileObservation(options.raw,row=>{
     if(row.kind==='root-start'){phases.start(row.root);return;}
@@ -141,7 +143,7 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
         const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!descriptor)fail('missing path directory descriptor');
         if(descriptor.fd<0&&descriptor.fd!==-100){probe(image,'invalid-dirfd',path.value.hex,descriptor.target.error,descriptor.fd);continue;}
         const target=byteFactText(descriptor.target,'path directory descriptor');
-        if(!isAbsolute(target)){probe(image,'non-file-dirfd',descriptor.target.hex,0,descriptor.fd);continue;}
+        if(!isAbsolute(target)){probe(image,'non-file-dirfd',descriptor.target.hex,0,descriptor.fd,path.value.hex);continue;}
         resolved=resolve(target,named);
       }
       retain(row,image,resolved,path.value.hex,row.operation);
