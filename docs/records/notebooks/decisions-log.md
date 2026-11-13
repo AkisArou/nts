@@ -2607,6 +2607,7 @@ that part's previous landing through the existing followLanding owner before
 writeRecords checks whether its rows still wait. Landed and withdrawn answers
 settle in the current cycle; a waiting answer still prevents duplicate work.
 The cycle-entry and post-run checks share the same retry and settlement rules.
+
 ## Exact input bytes do not enter modules (11-13)
 
 Part of #728. The reader-input owner adds fileInput for immutable files read as text or data. InputSnapshot keeps byte ownership separate from the set of entered modules, so a launcher audit reading a TypeScript source cannot execute its import graph in the selector. The copier still refuses replacement of those bytes under a private data grant. A later module edge upgrades either exact bytes or data-directory membership to real traversal, regardless of entry order. The language-neutral declaration rows carry the distinction for non-JavaScript readers too.
