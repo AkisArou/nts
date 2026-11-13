@@ -92,7 +92,7 @@ const first = spawnSync(traceDirectory?'strace':process.execPath, cargoTrace?inp
 });
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 if(cargoTrace){
-  try{await publishInputTrace({raw:cargoTrace,output:join(traceDirectory,'cargo.json'),cwd:ROOT,root:ROOT});}
+  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.json'),cwd:ROOT,root:ROOT});}
   catch(error){if(isCommandExit(error))throw error;console.error('NOT MEASURED: '+String(error));exitCommand(2);}
 }
 const recorded = readdirSync(calls)
