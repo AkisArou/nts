@@ -66,6 +66,34 @@ export type InputSubject={kind:'path';arg:number;dirfdArg:number;name:string;raw
 export type InputIndexProbe={probeKind:string;fd?:number;raw:string;rawPath?:string;error:number};
 export type RuntimeObservation=TracePhase&{attempt:Pick<InputAttempt,'id'|'tid'|'tgid'|'ppid'|'birth'|'parentBirth'>;
   cwd:string;args:string[];operation:string;syscall:string;outcome:'unknown';image:number;canceled:boolean;subjects:InputSubject[];probes:InputIndexProbe[]};
+export type InputOpenClass={kind:'content-read'|'write'|'directory'|'path'|'unknown';flags:string|null;abi:FileObserverReceipt['abi']|null;reason:string};
+/** Requested open semantics only. A consumer must authenticate the observer
+ * receipt/raw binding before using the ABI, and claim every later operation
+ * independently. No result or descriptor use is inferred from this class. */
+export function classifyInputOpen(row:Pick<RuntimeObservation,'syscall'|'operation'|'args'>,observer:FileObserverReceipt|null):InputOpenClass{
+  const answer=(kind:InputOpenClass['kind'],flags:string|null,reason:string):InputOpenClass=>({kind,flags,abi:observer?.abi??null,reason});
+  if(row.operation!=='open')return answer('unknown',null,'not an open operation');
+  const index=row.syscall==='open'?1:row.syscall==='openat'?2:undefined;
+  if(index===undefined)return answer('unknown',null,row.syscall==='openat2'?'openat2 structure was not captured':'unknown open syscall');
+  const flags=row.args[index];
+  if(flags===undefined||!/^[0-9a-f]{1,16}$/.test(flags))return answer('unknown',null,'missing scalar open flags');
+  if(!observer)return answer('unknown',flags,'missing authenticated capture ABI');
+  if(observer.abi!=='linux-x86_64-v1')return answer('unknown',flags,'open flag recipe is not implemented for '+observer.abi);
+  const bits=BigInt('0x'+flags);
+  // Linux x86-64 fcntl ABI: access bits 0..1 and known flags 6..22.
+  // Unknown bits and noncanonical wider arguments retain no metadata authority.
+  if((bits&~0x7fffc3n)!==0n)return answer('unknown',flags,'unknown open flag bits');
+  if((bits&3n)===3n)return answer('unknown',flags,'invalid access mode');
+  // __O_TMPFILE includes O_DIRECTORY but requests a new writable inode.
+  if((bits&0x400000n)!==0n)return answer('write',flags,'temporary inode requested');
+  if((bits&0x200000n)!==0n){
+    if((bits&~0x2b0000n)!==0n)return answer('unknown',flags,'mixed path-only flags');
+    return answer('path',flags,'path descriptor requested');
+  }
+  if((bits&(3n|0x40n|0x200n))!==0n)return answer('write',flags,'writable access, creation or truncation requested');
+  if((bits&0x10000n)!==0n)return answer('directory',flags,'directory-only descriptor requested');
+  return answer('content-read',flags,'readable file descriptor requested');
+}
 const key=(pid:number,birth:string)=>pid+':'+birth;
 /** Image facts come from the stopped task, never the target of an exec attempt.
  * Calls are bound to the shell's PID/birth and only become runtime on an actual
@@ -196,6 +224,8 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
         subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor});
       }
       if(!row.paths.length)for(const fd of row.dirfds)descriptor(fd);
+      for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args);
+      for(const value of probes)readProbe(value);
       counts.observations+=subjects.length;counts.probes+=probes.length;
       const {id,tid,tgid,ppid,birth,parentBirth}=row;
       await emit({kind:'observation',...image.phase,attempt:{id,tid,tgid,ppid,birth,parentBirth},cwd:byteFactText(row.cwd,'actual cwd'),args:row.args,
@@ -220,8 +250,9 @@ const phaseValid=(row:Record<string,unknown>)=>['cargo-setup','rustdoc-setup','d
 const absolute=(value:unknown):value is string=>typeof value==='string'&&isAbsolute(value)&&!value.includes('\0');
 const digestValid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value);
 const position=(value:unknown)=>integer(value)&&value>=0&&value<6;
-function readSubject(value:unknown):InputSubject{
+function readSubject(value:unknown,cwd:string,args:readonly string[]):InputSubject{
   const row=indexObject(value);
+  const descriptor=(position:number)=>Number(BigInt.asIntN(32,BigInt('0x'+args[position]!)));
   if(!position(row.arg)||!hex(row.raw))fail('malformed input subject');
   if(row.kind==='path'){
     if(!integer(row.dirfdArg)||row.dirfdArg< -1||row.dirfdArg>5||typeof row.name!=='string'||row.name.includes('\0')
@@ -231,15 +262,14 @@ function readSubject(value:unknown):InputSubject{
     else{
       if(isAbsolute(row.name)||!absolute(anchor.path))fail('malformed pathname anchor');
       if(anchor.kind==='dirfd'){
-        if(!integer(anchor.fd)||anchor.fd<0||!hex(anchor.raw)||Buffer.from(anchor.path).toString('hex')!==anchor.raw)fail('malformed directory descriptor anchor');
-      }else if(anchor.kind!=='cwd')fail('unknown pathname anchor');
+        if(!integer(anchor.fd)||anchor.fd<0||!hex(anchor.raw)||Buffer.from(anchor.path).toString('hex')!==anchor.raw||row.dirfdArg<0||descriptor(row.dirfdArg)!==anchor.fd)fail('malformed directory descriptor anchor');
+      }else if(anchor.kind!=='cwd'||anchor.path!==cwd||row.dirfdArg>=0&&descriptor(row.dirfdArg)!==-100)fail('pathname anchor differs from its actual attempt');
     }
   }else if(row.kind==='descriptor'){
-    if(!integer(row.fd)||row.fd<0&&row.fd!==-100||!absolute(row.target)||Buffer.from(row.target).toString('hex')!==row.raw)fail('malformed descriptor subject');
+    if(!integer(row.fd)||row.fd<0&&row.fd!==-100||!absolute(row.target)||Buffer.from(row.target).toString('hex')!==row.raw||descriptor(row.arg)!==row.fd)fail('malformed descriptor subject');
     if(row.pathArgument!==undefined){
       const path=indexObject(row.pathArgument),value=indexObject(path.value);
-      if(!position(path.arg)||!integer(path.dirfdArg)||path.dirfdArg< -1||path.dirfdArg>5||!hex(value.hex)
-        ||!integer(value.error)||value.error<0||typeof value.truncated!=='boolean'||typeof value.null!=='boolean')fail('malformed descriptor pathname provenance');
+      if(!position(path.arg)||path.dirfdArg!==row.arg||value.hex!==''||value.error!==0||value.truncated!==false||value.null!==true)fail('malformed descriptor pathname provenance');
     }
   }else fail('unknown input subject');
   return row as InputSubject;
@@ -288,7 +318,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       if(typeof attempt.id!=='string'||!/^\d{1,20}$/.test(attempt.id)||['tid','tgid','ppid'].some(field=>!integer(attempt[field]))
         ||!integer(attempt.tid)||attempt.tid<1||!integer(attempt.tgid)||attempt.tgid<1||!integer(attempt.ppid)||attempt.ppid<0
         ||typeof attempt.birth!=='string'||!/^\d+$/.test(attempt.birth)||attempt.birth==='0'||typeof attempt.parentBirth!=='string'||!/^\d+$/.test(attempt.parentBirth))fail('malformed raw attempt identity');
-      for(const value of row.subjects)readSubject(value);
+      for(const value of row.subjects)readSubject(value,row.cwd,row.args);
       for(const value of row.probes)readProbe(value);
       counts.attempts++;counts.observations+=row.subjects.length;counts.probes+=row.probes.length;
     }else if(row.kind==='inherited'){
@@ -298,7 +328,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       if(fact.kind!=='attempt'||!canceledLifetime(fact))fail('terminal fact contains a filesystem candidate');counts.terminalFacts++;counts.attempts++;
     }else if(row.kind==='index-complete'){
       const terminal=readObservationRow(row.terminal),reported=indexObject(row.counts),raw=indexObject(row.raw);
-      if(terminal.kind!=='complete'||!terminal.complete||!terminal.drainComplete||terminal.errors||terminal.attempts!==counts.attempts)fail('incomplete native input index');
+      if(terminal.kind!=='complete'||!terminal.complete||!terminal.drainComplete||terminal.errors||terminal.attempts!==counts.attempts||counts.images>counts.attempts)fail('incomplete native input index');
       if(!absolute(raw.path)||!digestValid(raw.sha256)||!integer(raw.bytes)||raw.bytes<1)fail('missing raw capture artifact binding');
       if(header.observer&&(!firstImage||firstImage.pid!==terminal.root||firstImage.path!==header.observer.observedPath))fail('observer receipt has no matching raw root image');
       for(const field of Object.keys(counts) as (keyof InputIndexCounts)[])if(reported[field]!==counts[field])fail('input index count mismatch: '+field);

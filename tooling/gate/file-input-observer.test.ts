@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {gzipSync,gunzipSync,constants} from 'node:zlib';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
-import {publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -35,6 +35,9 @@ int main(int argc,char **argv){
     if(chdir(argv[2]))return 91;
     int dir=open(".",O_RDONLY|O_DIRECTORY);if(dir<0)return 92;
     int value=openat(dir,"value",O_RDONLY);if(value<0)return 93;
+    int path_only=openat(dir,"value",O_PATH|O_NOFOLLOW);if(path_only<0)return 123;
+    close(path_only);
+    int temporary=openat(dir,".",O_TMPFILE|O_RDWR,0600);if(temporary>=0)close(temporary);
     char b[32];ssize_t n=read(value,b,sizeof(b));if(n<0)return 94;
     if(write(1,b,(size_t)n)!=n)return 95;
     if(openat(dir,"missing",O_RDONLY)!=-1||errno!=ENOENT)return 96;
@@ -108,7 +111,15 @@ test('the native observer retains actual images, attempted inputs and original p
   const published=join(root,'facts.index.jsonl.gz');
   await publishInputTrace({raw:record,output:published,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
   const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
-  await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='observation')decoded.descriptorProbes.push(...row.probes);});
+  const indexed=await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='observation')decoded.descriptorProbes.push(...row.probes);});
+  assert.deepEqual(indexed.header.observer,prepared.receipt);
+  assert.deepEqual(indexed.complete.raw,{path:record,...artifact});
+  const opens=decoded.observations.filter(row=>row.operation==='open').map(row=>classifyInputOpen(row,indexed.header.observer));
+  if(prepared.receipt.abi==='linux-x86_64-v1'){
+    assert.ok(opens.some(row=>row.kind==='path'));assert.ok(opens.some(row=>row.kind==='directory'));assert.ok(opens.some(row=>row.kind==='write'&&row.reason==='temporary inode requested'));
+  }else assert.ok(opens.every(row=>row.kind==='unknown'));
+  await assert.rejects(publishInputTrace({raw:record,output:join(root,'wrong-observer.gz'),cwd:root,root,observer:{...prepared.receipt,sha256:'0'.repeat(64)}}),/observer digest changed/);
+  await assert.rejects(publishInputTrace({raw:record,output:join(root,'wrong-image.gz'),cwd:root,root,observer:{...prepared.receipt,observedPath:'/wrong/observer'},target:{package:'fixture',name:'test',kind:['test'],source:'fixture.rs'}}),/root image does not match/);
   assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.target===join(root,'value'))&&row.outcome==='unknown'));
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'));
   assert.ok(decoded.observations.every(row=>row.subjects.every(subject=>subject.kind==='descriptor'?!subject.target.includes('socket:['):subject.name!=='socket-relative')));

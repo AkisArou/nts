@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {testArtifactTargets,testBuildStatus,RustInputPhases,publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
-import {readCompressedRecords,type InputAttempt,type ByteFact} from './file-input-observer.ts';
+import {testArtifactTargets,testBuildStatus,RustInputPhases,publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {readCompressedRecords,type InputAttempt,type ByteFact,type FileObserverReceipt} from './file-input-observer.ts';
 import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {newTestScratch} from './test-scratch.ts';
@@ -31,6 +31,25 @@ const bytes=(text:string):ByteFact=>({hex:Buffer.from(text).toString('hex'),erro
 const image=(pid:number,parent:number,path:string,args:string[]=[],birth=String(pid)):InputAttempt=>({kind:'attempt',id:String(pid),tid:pid,tgid:pid,ppid:parent,birth,parentBirth:String(parent),
   syscall:'exit_group',operation:'lifetime',outcome:'unknown',canceled:false,factsComplete:true,args:['0','0','0','0','0','0'],cwd:bytes('/source/crate'),image:bytes(path),
   argvRead:path==='/toolchain/rustdoc',argv:bytes(args.join('\0')+'\0'),paths:[],dirfds:[]});
+
+test('open request classes retain their ABI and never confuse temporary creation with a directory read',()=>{
+  const basis:FileObserverReceipt={version:1,observedPath:'/observer',artifactPath:'/retained/observer',sha256:'0'.repeat(64),sourceSha256:'1'.repeat(64),abi:'linux-x86_64-v1'};
+  const request=(flags:string,syscall='openat')=>({operation:'open',syscall,args:['0',syscall==='open'?flags:'0',syscall==='openat'?flags:'10000','0','0','0']});
+  for(const [flags,kind]of [
+    ['0','content-read'],['1','write'],['2','write'],['40','write'],['200','write'],['241','write'],
+    ['10000','directory'],['90000','directory'],['220000','path'],['2b0000','path'],
+    ['410002','write'],['410000','write'],['20','unknown'],['80000000','unknown'],['3','unknown'],['220200','unknown'],
+  ] as const){
+    for(const syscall of ['open','openat']){
+      const result=classifyInputOpen(request(flags,syscall),basis);
+      assert.equal(result.kind,kind,syscall+' flags '+flags);assert.equal(result.flags,flags);assert.equal(result.abi,basis.abi);
+    }
+  }
+  assert.equal(classifyInputOpen(request('10000'),null).kind,'unknown','unproved capture ABI grants no metadata interpretation');
+  assert.equal(classifyInputOpen(request('10000'),{...basis,abi:'linux-aarch64-v1'}).kind,'unknown');
+  assert.equal(classifyInputOpen(request('10000','openat2'),basis).flags,null,'a pointer to open_how is not scalar flags');
+  assert.equal(classifyInputOpen({...request('10000'),operation:'lookup',syscall:'statx'},basis).kind,'unknown','stat flags have their own operation contract');
+});
 
 test('actual task images and identity-bound commands separate rustdoc setup from test runtime',()=>{
   const phases=new RustInputPhases('/source',undefined,[{version:1,pid:5,birth:'5',cwd:'/source/crate',argv:['/private/temporary']}]);
@@ -91,6 +110,7 @@ test('same-image cwd changes update actual rustdoc context without claiming anot
 test('attempt groups retain kernel path order, two-path positions and actual changing anchors',async t=>{
   const root=newTestScratch('rust-input-anchors');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const rename=image(1,0,'/fixture');rename.id='41';rename.operation='rename';rename.syscall='renameat2';
+  rename.args=['3','0','4','0','0','0'];
   rename.paths=[{arg:1,dirfdArg:0,value:bytes('link/../value')},{arg:3,dirfdArg:2,value:bytes('../destination')}];
   rename.dirfds=[{arg:0,fd:3,target:bytes('/source/first')},{arg:2,fd:4,target:bytes('/source/second')}];
   const after={...image(1,0,'/fixture'),id:'42',cwd:bytes('/source/moved'),syscall:'openat',operation:'open',
@@ -117,6 +137,7 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
 test('descriptor-backed null paths are retained and non-filesystem dirfds never invent path anchors',async t=>{
   const root=newTestScratch('rust-input-descriptors');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const nullPath=image(1,0,'/fixture');nullPath.syscall='statx';nullPath.operation='lookup';
+  nullPath.args=['3','0','1000','0','0','0'];
   nullPath.paths=[{arg:1,dirfdArg:0,value:{hex:'',error:0,truncated:false,null:true}}];
   nullPath.dirfds=[{arg:0,fd:3,target:bytes('/source/crate/value')}];
   const socket=image(1,0,'/fixture');socket.syscall='openat';socket.operation='open';
