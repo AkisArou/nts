@@ -33,6 +33,16 @@ test('a bad acquisition never publishes a usable cache row',async t=>{
   assert.equal(existsSync(pinnedInputFile(input,cache)),false);
 });
 
+test('overlapping acquisitions publish one verified input through one writer',async t=>{
+  const cache=testScratch(t,'pinned-input-overlap');let started!:()=>void,finish!:()=>void,calls=0;
+  const entered=new Promise<void>(resolve=>{started=resolve;}),released=new Promise<void>(resolve=>{finish=resolve;});
+  const fetcher:typeof fetch=async()=>{calls++;started();await released;return new Response(bytes);};
+  const first=acquirePinnedInput(input,{cache,fetcher});await entered;
+  const second=acquirePinnedInput(input,{cache,fetcher});finish();
+  assert.deepEqual(await Promise.all([first,second]),[pinnedInputFile(input,cache),pinnedInputFile(input,cache)]);
+  assert.equal(calls,1);assert.deepEqual(readPinnedInput(input,{cache}),bytes);
+});
+
 test('an unsupported content record survives acquisition byte for byte',async t=>{
   const cache=testScratch(t,'pinned-input-version'),file=pinnedInputFile(input,cache),record='{"version":2,"future":"owned elsewhere"}\n';
   writeFileSync(file,record);

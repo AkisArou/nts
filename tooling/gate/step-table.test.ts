@@ -16,6 +16,14 @@ import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {ownMemory} from "./test-memory.ts";
 
+test('the shell and runner catalogues contain exactly the same complete step set',()=>{
+  const listed=spawnTest('sh',[fileURLToPath(new URL('./all.sh',import.meta.url)),'--list'],{encoding:'utf8'});
+  assert.equal(listed.status,0,listed.stderr);
+  const names=listed.stdout.trim().split('\n');
+  assert.equal(new Set(names).size,names.length,'the shell cannot define a step twice');
+  assert.deepEqual(names.sort(),STEPS.map(row=>row.name).sort());
+});
+
 test("the table's dependencies all name steps, and none waits for itself", () => {
   assert.equal(stepTableProblem(STEPS), null);
   assert.equal(stepTableProblem([{ name: "a", needs: ["gone"] }]), "a depends on gone, which is not a step");
