@@ -2809,3 +2809,19 @@ shortcuts and propagates metadata through its existing parsed runner handovers.
 Root membership is explicit; ordinary dot-only anchors remain non-readers.
 Runtime declarations, operation-aware trace coverage and removal of Rust checks
 from ALWAYS remain separate review boundaries.
+
+
+## Derived reader facts keep their operation (11-13)
+
+Project parsing now retains its actual filesystem callback answers through the
+existing OracleFilesystem owner. Explicit Node 26 host capture shares the
+existing package-scope protocol; compiled roots and erased type imports do not
+become host entries. The canonical graph keeps typed non-placing facts, original
+callback provenance and actual alias/target dependencies per fixture context.
+Presence/type changes and byte changes retain separate selection semantics.
+The copier validates original source facts and replays destination answers after
+staging genuine inputs, refusing non-portable stat values rather than certifying
+a copied object's source timestamp. Source-file ownership checks share only the
+graph's parsed-source lifetime; protocol observations remain freshly read.
+Runtime Cargo declarations, operation coverage and removal of ALWAYS remain
+separate work under #761.

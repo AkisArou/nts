@@ -202,6 +202,30 @@ references and roots. Configs remain leaf bytes; roots enter the module graph.
 Discovery runs only for project declarations and is fresh for each graph.
 `projectConfig(new URL("tsconfig.solution.json", import.meta.url))` selects the
 config named by a compiler command directly, through that same parser.
+The parser's filesystem callbacks retain their actual typed answers, including
+negative lookups, followed directory entries, real paths and stat mode, size
+and Date timestamp. These observations grant no placement or content-open
+authority. Captured file reads retain immutable bytes; existence and stat alone
+never copy a child. Callback provenance retains the actual link chain and
+followed target facts without changing the original answer. Followed parser
+entries and physical `directoryMembership` retain their distinct semantics.
+Presence and type facts ignore content-only edits, while file reads and file
+stats retain byte sensitivity. Structural dependencies survive prose and
+records shortcuts and the runner's parsed output handovers.
+The graph distinguishes compiled module roots from host-entered modules in
+each fixture context. Erased type imports remain source inputs; later host
+reach promotes a module and its nested fixtures without losing either role.
+An actual Node invocation owner may select the explicit Node 26 package-scope
+recipe for host entries, retaining logical and physical scope candidates. This
+recipe supplies no Bun resolution authority. The graph shares parsed source
+and successful source-file ownership checks only within its own lifetime;
+captured filesystem operations remain fresh.
+The copier validates original observations before staging and replays them in
+the destination after genuine inputs and fixture manifests are staged. A
+non-portable stat or other answer refuses with both values and its context;
+copying bytes does not certify the source timestamp on the destination. Typed
+observations carry no data substitution authority, even under a private
+namespace prefix that overlaps immutable inputs.
 `moduleMembers(new URL("population/", import.meta.url), "nts.config.ts")`
 selects recursively discovered modules with that literal basename, excluding
 hidden and dependency paths. The runtime walker consumes the same descriptor.
@@ -923,6 +947,12 @@ the first node task.
 
 ## Decisions
 
+- **Derived reader facts preserve the operation and context.** Project callbacks
+  and explicitly selected Node scope discovery retain typed non-placing facts,
+  alias provenance and immutable byte reads in the canonical graph. Selection
+  respects byte, presence and type semantics; staging validates the source and
+  refuses non-portable destination answers
+  ([log](records/notebooks/decisions-log.md#derived-reader-facts-keep-their-operation-11-13)).
 - **Rust input observations separate attempts from outcomes.** Cargo supplies
   source identity; the observer reads fresh task facts and joins native drain
   and stream publication before accepting coverage. Notification continuation
