@@ -88,6 +88,22 @@ public final class NetworkPrimitivesTest {
         try { await(future); throw new AssertionError("Expected failure: " + expected); }
         catch (java.util.concurrent.ExecutionException error) { check(error.getCause().toString().toLowerCase().contains(expected.toLowerCase()), error.toString()); }
     }
+    private static void finishPeer(Thread peer, Throwable primary, AutoCloseable... resources) throws Exception {
+        Throwable failure=null;
+        for(AutoCloseable resource:resources) {
+            try { resource.close(); }
+            catch(Exception | Error error) { if(failure==null)failure=error;else failure.addSuppressed(error); }
+        }
+        try {
+            peer.join(HANG_MS);
+            check(!peer.isAlive(),"INSTRUMENT: socket peer did not close within its hang guard");
+        } catch(Exception | Error error) { if(failure==null)failure=error;else failure.addSuppressed(error); }
+        if(failure!=null) {
+            if(primary!=null)primary.addSuppressed(failure);
+            else if(failure instanceof Exception)throw (Exception)failure;
+            else throw (Error)failure;
+        }
+    }
     public static void main(String[] args) throws Exception {
         try {
             tcp(); cancellation(); policies(); timers(); tls(args[0]);
@@ -188,13 +204,13 @@ public final class NetworkPrimitivesTest {
         try(NetworkPrimitives trusted=new NetworkPrimitives(lane,h->true,(n,m)->errors.add(m),4,context.getSocketFactory());NetworkPrimitives untrusted=primitives(2)) {
             AtomicInteger remaining=new AtomicInteger(3);
             Thread peer=new Thread(()->{while(remaining.getAndDecrement()>0){try(Socket socket=server.accept()){socket.getOutputStream().write(42);}catch(IOException expected){/* Negative TLS tests abort the server handshake. */}}});peer.start();
+            Throwable primary=null;
             try {
                 int id=await(connect(trusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS));check(await(read(trusted,id))[0]==42,"TLS payload");trusted.closeSocket(id);passed("TLS with private root and hostname verification");
                 fails(connect(untrusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Untrusted TLS certificate rejected");
                 fails(connect(trusted,"localhost",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Trusted certificate with wrong hostname rejected");
-            } finally {
-                server.close();peer.join(HANG_MS);check(!peer.isAlive(),"INSTRUMENT: TLS peer did not close within its hang guard");
-            }
+            } catch(Exception | Error error) { primary=error;throw error; }
+            finally { finishPeer(peer,primary,trusted,untrusted,server); }
         } finally { server.close(); }
         SuppliedClock clock=new SuppliedClock();
         ServerSocket stalled=new ServerSocket(0);
@@ -203,13 +219,13 @@ public final class NetworkPrimitivesTest {
             Thread peer=new Thread(()->{try{accepted.complete(stalled.accept());}catch(IOException error){accepted.completeExceptionally(error);}});
             peer.start();
             CompletableFuture<Integer> connected=connect(api,"127.0.0.1",stalled.getLocalPort(),true,HANG_MS);
+            Throwable primary=null;
             try(Socket remote=await(accepted)) {
                 check(remote.isConnected(),"Stalled peer accepted the socket");
                 clock.fire(HANG_MS);fails(connected,"SocketTimeoutException");
                 check(api.openSocketCount()==0,"TLS timeout leak");
-            } finally {
-                stalled.close();peer.join(HANG_MS);check(!peer.isAlive(),"INSTRUMENT: stalled peer did not close within its hang guard");
-            }
+            } catch(Exception | Error error) { primary=error;throw error; }
+            finally { finishPeer(peer,primary,api,stalled); }
             passed("Supplied TLS deadline closes a stalled handshake and releases capacity");
         } finally {
             stalled.close();
