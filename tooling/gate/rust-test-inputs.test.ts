@@ -6,6 +6,8 @@ import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {newTestScratch} from './test-scratch.ts';
 import {gzipSync} from 'node:zlib';
+import {constants} from 'node:buffer';
+import {durableRecordStream} from './durable-record.ts';
 
 const artifact={package_id:'pkg-id',executable:'/source/target/nts-dev/deps/arbitrary-hash',profile:{test:true},target:{name:'integration',kind:['test'],src_path:'/source/crate/tests/integration.rs'}};
 const evidence=(artifacts:unknown[]= [artifact])=>({version:1,status:0,buildFinished:true,artifacts});
@@ -112,4 +114,23 @@ test('only canceled input-free lifetime facts can remain unattributed',async t=>
   assert.equal(complete.complete.counts.terminalFacts,1);assert.equal(complete.complete.counts.images,0);assert.equal(complete.complete.counts.observations,0);
   await assert.rejects(publishInputTrace(produce('live',{...canceled,canceled:false})),/unreadable or truncated/);
   await assert.rejects(publishInputTrace(produce('file',{...canceled,syscall:'openat',operation:'open',paths:[{arg:1,dirfdArg:0,value:bytes('file')}]})),/unreadable or truncated/);
+});
+
+
+test('input index publication and its typed reader exceed one string with bounded records',async t=>{
+  const root=newTestScratch('rust-input-index-scale');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  assert.throws(()=>'x'.repeat(constants.MAX_STRING_LENGTH+1),RangeError);
+  const output=join(root,'scale.index.gz'),argvRaw='61'.repeat(60*1024);
+  const context={kind:'execution',id:1,parent:0,pid:1,birth:'1',path:'/fixture',cwd:'/source',phase:{phase:'test-runtime',source:'src/lib.rs'},reason:'first-observation',argvRaw};
+  const repeats=Math.ceil(constants.MAX_STRING_LENGTH/Buffer.byteLength(JSON.stringify(context)))+1;
+  let encodedBytes=0;
+  await durableRecordStream(output,async append=>{
+    const put=async(row:unknown)=>{const line=JSON.stringify(row)+'\n';encodedBytes+=Buffer.byteLength(line);await append(line);};
+    await put({kind:'index-start',version:3,mechanism:'seccomp-user-notification',outcomes:'unknown',target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
+    for(let id=1;id<=repeats;id++)await put({...context,id,pid:id});
+    await put({kind:'index-complete',terminal:{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:repeats,errors:0,drainComplete:true,observerSignal:0},
+      counts:{images:repeats,observations:0,probes:0,terminalFacts:0,inherited:0}});
+  },{gzip:true});
+  let seen=0;const complete=await readInputTraceIndex(output,row=>{if(row.kind==='execution')seen++;});
+  assert.ok(encodedBytes>constants.MAX_STRING_LENGTH);assert.equal(seen,repeats);assert.equal(complete.complete.counts.images,repeats);
 });
