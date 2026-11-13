@@ -13,11 +13,12 @@ export type InputAttempt={kind:'attempt';id:string;tid:number;tgid:number;ppid:n
   syscall:string;operation:string;outcome:'unknown';canceled:boolean;factsComplete:boolean;args:string[];
   cwd:ByteFact;image:ByteFact;argvRead:boolean;argv:ByteFact;paths:PathFact[];dirfds:DescriptorFact[]};
 export type ObservationStart={kind:'start';version:2;mechanism:'seccomp-user-notification';noNewPrivileges:true};
-export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean};
+export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean;observerSignal:number};
 export type InheritedDescriptor={kind:'inherited';fd:number;flags:number;target:ByteFact};
 export type RootExit={kind:'root-exit';root:number;exit:number;signal:number};
+export type RootStart={kind:'root-start';root:number};
 export type ObservationError={kind:'error';message:string;errno:number};
-export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|ObservationError;
+export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError;
 
 export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):string{
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
@@ -48,7 +49,8 @@ export function readObservationRow(value:unknown):ObservationRow{
   const row=object(value);let valid=false;
   if(row.kind==='start')valid=row.version===2&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true;
   else if(row.kind==='complete')valid=typeof row.complete==='boolean'&&typeof row.entered==='boolean'&&typeof row.drainComplete==='boolean'
-    &&['root','execErrno','exit','signal','attempts','errors'].every(key=>integer(row[key]));
+    &&['root','execErrno','exit','signal','attempts','errors','observerSignal'].every(key=>integer(row[key]));
+  else if(row.kind==='root-start')valid=integer(row.root)&&row.root>0;
   else if(row.kind==='root-exit')valid=['root','exit','signal'].every(key=>integer(row[key]));
   else if(row.kind==='error')valid=typeof row.message==='string'&&integer(row.errno);
   else if(row.kind==='inherited')valid=integer(row.fd)&&integer(row.flags)&&byteFact(row.target);

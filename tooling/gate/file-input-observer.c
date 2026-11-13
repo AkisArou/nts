@@ -357,7 +357,7 @@ static unsigned long long process_birth(unsigned long pid) {
     token = strtok_r(NULL, " ", &saved);
   return token ? strtoull(token, NULL, 10) : 0;
 }
-static void descriptor_json(pid_t tid, int argument, uint64_t raw) {
+static Bytes descriptor_target(pid_t tid, uint64_t raw) {
   int fd = (int)raw;
   Bytes value;
   if (fd == AT_FDCWD)
@@ -367,9 +367,7 @@ static void descriptor_json(pid_t tid, int argument, uint64_t raw) {
     snprintf(member, sizeof(member), "fd/%d", fd);
     value = proc_link(tid, member);
   }
-  fprintf(output, "{\"arg\":%d,\"fd\":%d,\"target\":", argument, fd);
-  bytes_json(&value);
-  fputc('}', output);
+  return value;
 }
 static void attempt_json(int listener, const struct seccomp_notif *request) {
   const Call *call = NULL;
@@ -404,6 +402,16 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   for (unsigned i = 0; i < call->count; i++) {
     paths[i] = remote_path(request->pid, request->data.args[call->paths[i]]);
     complete = complete && good(&paths[i]);
+  }
+  Bytes descriptors[2];
+  for (unsigned i = 0; i < (call->count ? call->count : 1); i++) {
+    if (call->dirfds[i] < 0)
+      continue;
+    int fd = (int)request->data.args[call->dirfds[i]];
+    descriptors[i] =
+        descriptor_target(request->pid, request->data.args[call->dirfds[i]]);
+    if (fd >= 0 || fd == AT_FDCWD)
+      complete = complete && good(&descriptors[i]);
   }
   bool canceled =
       ioctl(listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &request->id) < 0;
@@ -444,8 +452,10 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
       if (comma)
         fputc(',', output);
       comma = true;
-      descriptor_json(request->pid, call->dirfds[i],
-                      request->data.args[call->dirfds[i]]);
+      fprintf(output, "{\"arg\":%d,\"fd\":%d,\"target\":", call->dirfds[i],
+              (int)request->data.args[call->dirfds[i]]);
+      bytes_json(&descriptors[i]);
+      fputc('}', output);
     }
   fputs("]}\n", output);
   attempts++;
@@ -486,9 +496,12 @@ static void inherited_descriptors(void) {
   closedir(directory);
 }
 static volatile sig_atomic_t signal_to_forward;
+static volatile sig_atomic_t terminal_signal;
 static void wake_signal(int signal) {
-  if (signal != SIGCHLD)
+  if (signal != SIGCHLD) {
     signal_to_forward = signal;
+    terminal_signal = signal;
+  }
 }
 static void child_error(int fd, int stage) {
   ChildError value = {.stage = stage, .error = errno};
@@ -558,6 +571,7 @@ int main(int argc, char **argv) {
     execvp(argv[3], argv + 3);
     child_error(exec_error[1], 4);
   }
+  fprintf(output, "{\"kind\":\"root-start\",\"root\":%d}\n", root);
   close(pair[1]);
   close(exec_error[1]);
   struct pollfd handoff = {.fd = pair[0], .events = POLLIN};
@@ -595,8 +609,10 @@ int main(int argc, char **argv) {
     }
     fprintf(output,
             "{\"kind\":\"complete\",\"complete\":false,\"entered\":false,"
-            "\"stage\":%d,\"execErrno\":%d}\n",
-            launch_error.stage, launch_error.error);
+            "\"root\":%d,\"exit\":-1,\"signal\":0,\"attempts\":0,\"errors\":1,"
+            "\"drainComplete\":true,\"observerSignal\":%d,\"stage\":%d,"
+            "\"execErrno\":%d}\n",
+            root, terminal_signal, launch_error.stage, launch_error.error);
     fclose(output);
     fprintf(stderr,
             "file input observer: listener setup failed at stage %d: %s\n",
@@ -710,15 +726,15 @@ int main(int argc, char **argv) {
   fprintf(output,
           "{\"kind\":\"complete\",\"complete\":%s,\"root\":%d,\"entered\":%s,"
           "\"execErrno\":%d,\"exit\":%d,\"signal\":%d,\"attempts\":%lu,"
-          "\"errors\":%lu,\"drainComplete\":%s}\n",
+          "\"errors\":%lu,\"drainComplete\":%s,\"observerSignal\":%d}\n",
           complete ? "true" : "false", root, entered ? "true" : "false",
           launch_error.error,
           WIFEXITED(root_status) ? WEXITSTATUS(root_status) : -1,
           WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0, attempts,
-          errors, drained ? "true" : "false");
+          errors, drained ? "true" : "false", terminal_signal);
   if (fclose(output))
     complete = false;
-  if (!complete || launch_error.error) {
+  if ((!complete || launch_error.error) && !terminal_signal) {
     fprintf(stderr,
             "file input observer: incomplete census (root %d, %lu fact errors, "
             "drain %s, exec errno %d)\n",
@@ -726,8 +742,8 @@ int main(int argc, char **argv) {
             launch_error.error);
     return 2;
   }
-  if (WIFSIGNALED(root_status)) {
-    int signal = WTERMSIG(root_status);
+  if (terminal_signal || WIFSIGNALED(root_status)) {
+    int signal = terminal_signal ? terminal_signal : WTERMSIG(root_status);
     struct sigaction action_default = {0};
     action_default.sa_handler = SIG_DFL;
     sigemptyset(&action_default.sa_mask);
