@@ -3,7 +3,7 @@ import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {  existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -42,13 +42,23 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
       assert_eq!(std::env::var("NTS_CHECKERS").unwrap(), "1");
       assert!(cfg!(debug_assertions));
     }\n`);
+    mkdirSync(join(root,'runtime-data'));writeFileSync(join(root,'runtime-data/value'),'runtime');
+    appendFileSync(join(root,'src/lib.rs'),'\n/// ```\n/// assert_eq!(std::fs::read_to_string("runtime-data/value").unwrap(), "runtime");\n/// ```\npub fn doc_input() {}\n#[test] fn runtime_input() {\nassert_eq!(std::fs::read_to_string("runtime-data/value").unwrap(), "runtime");\nassert!(std::fs::read_to_string("runtime-data/missing").is_err());\nassert_eq!(std::fs::read_dir("runtime-data").unwrap().count(), 1);\n}\n');
+    const trace=join(root,'input-trace');
     const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
       cwd: root, encoding: "utf8",
       env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1",
-        CARGO_INCREMENTAL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
+        CARGO_INCREMENTAL: undefined, NTS_TEST_PROFILE: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs"),NTS_RUST_INPUT_TRACE:trace },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-    assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 1 passed, 0 failed/);
+    assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 2 passed, 0 failed/);
+    const cargo=JSON.parse(readFileSync(join(trace,'cargo.json'),'utf8'));
+    const binary=JSON.parse(readFileSync(join(trace,'binary-0.json'),'utf8'));
+    assert.equal(binary.target.source,'src/lib.rs');
+    assert.ok(cargo.observations.some((row:{phase:string;source?:string;path:string})=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.path===join(root,'runtime-data/value')));
+    assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));
+    assert.ok(binary.observations.some((row:{path:string;success:boolean})=>row.path===join(root,'runtime-data/missing')&&!row.success));
+    assert.ok(binary.observations.some((row:{path:string;operation:string})=>row.path===join(root,'runtime-data')&&row.operation==='directory'));
     assert.ok(existsSync(join(root,"target/nts-dev/incremental")));
     assert.equal(existsSync(join(root,"target/debug")),false);
   } finally { rmSync(root, { recursive: true, force: true }); }
