@@ -124,13 +124,19 @@ step "private" node tooling/private/fixture.ts
   put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');
   put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;export const fileInput=url=>url;export const fixtureInput=(url,options)=>({url,...options});');
   put('tooling/private/reader.ts',`import {dataDirectory,fileInput} from '../gate/reader-inputs/main.ts';
-import './code.ts';
-const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=dataDirectory(new URL('../census/',import.meta.url));
+import './code.ts';import '../utility-samples/owned.cjs';
+const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=dataDirectory(new URL('../census/',import.meta.url));const utilities=dataDirectory(new URL('../utility-samples/',import.meta.url));
 `);
   put('tooling/private/fixture.ts',`import {fixtureInput} from '../gate/reader-inputs/main.ts';
 const child=fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:{'tooling/private/data':'private-fixture'}});
 `);
   for(const path of ['tooling/private/code.ts','tooling/private/bytes.ts','tooling/private/data/case.ts','tooling/census/unexecuted.ts'])put(path,'export const value=1;\n');
+  const programs=['host.cjs','host.mjs','host.js','host.mts','host.cts','host.ts','host.tsx','host.jsx','host.sh','host.py','Host.java'];
+  for(const name of [...programs,'owned.cjs'])put('tooling/utility-samples/'+name,'// implementation body\n');
+  for(const name of ['types.d.ts','types.d.mts','types.d.cts'])put('tooling/utility-samples/'+name,'export type Value=string;\n');
+  put('tooling/utility-samples/command','#!/bin/sh\nexit 0\n');
+  put('tooling/utility-samples/executable','opaque executable body\n');chmodSync(join(root,'tooling/utility-samples/executable'),0o755);
+  put('tooling/utility-samples/named-list','# data, not a shell program\nname: reason\n');put('tooling/utility-samples/metadata.json','{}\n');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.']]){
     const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
@@ -141,14 +147,16 @@ const paths=['tooling/private/data/case.ts','tooling/private/bytes.ts','tooling/
 const rows=paths.map(path=>{const change={path,before:'// plain prose\\nexport const value=1;\\n',after:'// altered prose\\nexport const value=1;\\n',sameMode:true};return {path,precise:preciseChange(change),steps:gateSteps(owed([change]))};});
 const future=['tooling/private/data/new.bin','tooling/private/data/deleted.bin'].map(path=>({path,steps:[...covering(stepInputs(),path)]}));
 const inspected=owed([{path:'tooling/census/unexecuted.ts',added:false}]);
-console.log(JSON.stringify({rows,future,inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
+const utilities=${JSON.stringify([...['host.cjs','host.mjs','host.js','host.mts','host.cts','host.ts','host.tsx','host.jsx','host.sh','host.py','Host.java'],'command','executable','owned.cjs','types.d.ts','types.d.mts','types.d.cts','named-list','metadata.json'])}.map(name=>{const path='tooling/utility-samples/'+name;return {name,full:owed([{path,added:false}]).some(row=>row.fallback),reach:[...covering(stepInputs(),path)]};});
+console.log(JSON.stringify({rows,future,utilities,inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
   const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
-  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,inspected}=JSON.parse(result.stdout);
+  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,utilities,inspected}=JSON.parse(result.stdout);
   for(const row of rows)assert.equal(row.precise,'comments',row.path);
   assert.ok(rows[0].steps.includes('proof'));assert.ok(!rows[0].steps.includes('private'));
   for(const step of ['proof','private']){assert.ok(rows[1].steps.includes(step));assert.ok(!rows[2].steps.includes(step));}
   for(const row of future){assert.ok(row.steps.includes('proof'),row.path);assert.ok(!row.steps.includes('private'),row.path);}
   assert.ok(inspected.reach.includes('proof'));assert.ok(inspected.full,'a tracked instrument inspected only as bytes keeps its execution fallback');
+  for(const row of utilities){assert.ok(row.reach.includes('proof'));assert.equal(row.full,[...programs,'command','executable'].includes(row.name),row.name);}
 });
 
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{

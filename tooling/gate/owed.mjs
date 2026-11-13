@@ -75,10 +75,11 @@ import {gitArguments} from "./git-arguments/main.ts";
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, globSync, openSync, readSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
+import {toolingInputRole} from "./tooling-input-role.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
 import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
@@ -797,8 +798,7 @@ export const RULES = [
     // `.ts` since the lanes' tools became TypeScript (2026-09-29): until then
     // this matched none of them, and no instrument change owed a self-test.
     // The fixture trees are programs, not instruments, and have rules below.
-    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p)
-      && p !== "tooling/census/fixtures/resident-worker.ts",
+    when: toolingInstrument,
     // Owes what runs it, from the derived map of what each step runs (see
     // `stepInputs`); an instrument that map cannot place owes the full gate.
     placedBy: "stepInputs",
@@ -1357,6 +1357,22 @@ const once = (key, f) => (memo.has(key) ? memo.get(key) : (memo.set(key, f()), m
 const rel = (abs) => relative(TREE, abs).split("\\").join("/");
 /** @returns {string[]} */
 function trackedFiles() {return once("tracked-files", () => execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));}
+
+/** A broad byte population cannot certify an implementation or utility.
+ * Unknown names use bounded source metadata, not a suffix-only exemption. */
+function toolingInstrument(/** @type {string} */ path){
+  if(!path.startsWith('tooling/')||path==='tooling/census/fixtures/resident-worker.ts'
+    ||path.split('/').some(part=>part===''||part==='.'||part==='..'))return false;
+  const role=once('tooling-input-role:'+path,()=>toolingInputRole(path,()=>{
+    const source=join(TREE,path);
+    if(!existsSync(source))return undefined;
+    const stat=statSync(source);if(!stat.isFile())return undefined;
+    const fd=openSync(source,'r'),prefix=Buffer.alloc(2);
+    try{const length=readSync(fd,prefix,0,prefix.length,0);return {executable:(stat.mode&0o111)!==0,prefix:prefix.subarray(0,length).toString('ascii')};}
+    finally{closeSync(fd);}
+  }));
+  return role==='program'||role==='unknown';
+}
 
 /** Every step all.sh defines, in its order: what "the full gate" means. */
 export function allSteps() {
