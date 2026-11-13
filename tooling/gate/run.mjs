@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {gitArguments} from "./git-arguments/main.ts";
+import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.
@@ -355,6 +356,13 @@ let scopes;
 /** @type {{state:"complete"}|{state:"error",reason:string}} */
 let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
+/** @type {()=>void} */
+let finishRun;
+/** @type {()=>void} */
+let finishStartup;
+const runClosed=new Promise(resolve=>{finishRun=()=>resolve(undefined);});
+const startupClosed=new Promise(resolve=>{finishStartup=()=>resolve(undefined);});
+let releaseTreeLock=()=>{};
 let caseCosts = null;
 let typeScriptOracleReference;
 let programOracleReference;
@@ -1477,19 +1485,13 @@ function slower() {
   return out;
 }
 
-function done() {
+function done(){
   if (summaryWritten) return;
-  summaryWritten = true;
-  // Every step has drained, so the run's memory goes back to the ledger now.
-  growth?.controller.abort();
-  reservation?.release();
-  tok.close();
-  clearTimeout(outrankedLook);
+  summaryWritten=true;finishRun();
+}
+
+function writeSummary() {
   if (outrankedNow) memoryRecord.outranked_s += (Date.now() - outrankedSince) / 1000;
-  try { scopes?.close(); }
-  catch (error) { scopeCleanup = { state: "error", reason: `cannot close run scopes: ${error.message}` }; }
-  clearInterval(costClock);
-  clearInterval(memoryClock);
   if (!identities.nts) identify();
   identities.node = process.version;
   for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
@@ -1645,9 +1647,9 @@ function takeTreeLock() {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       writeFileSync(LOCK, `${process.pid} ${RUN_DIR}\n`, { flag: "wx" });
-      process.on("exit", () => {
+      releaseTreeLock=()=>{
         try { if (readFileSync(LOCK, "utf8").startsWith(`${process.pid} `)) rmSync(LOCK, { force: true }); } catch {}
-      });
+      };
       return;
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
@@ -1664,9 +1666,8 @@ function takeTreeLock() {
 // ---------------------------------------------------------------------------
 // Main.
 // ---------------------------------------------------------------------------
-for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-  process.on(sig, () => stop(`signal ${sig}`));
-}
+runAsCommand(import.meta.url,async()=>{
+try{
 // **A run whose output nobody reads any more stops**, as SIGPIPE stops a
 // pipeline's writer: whoever started it has gone. Its writes then fail
 // (EPIPE), and an error left to the handler below would be reported to the
@@ -1681,15 +1682,33 @@ for (const stream of [process.stdout, process.stderr]) {
     stop(error.code === "EPIPE" ? "its output has no reader" : `its output cannot be written: ${error.code ?? error.message}`);
   });
 }
-process.on("uncaughtException", (e) => {
-  if (!outputGone) process.stderr.write(`run.mjs: ${e.stack ?? e}\n`);
-  interrupted = `runner crashed: ${e.message}`;
-  stop(interrupted);
-});
-
 checkTable();
 plan = requested();
 takeTreeLock();
+// Reports and the tree lock outlive the broker, all workers and the ledger.
+registerCommandCloser('gate run report '+RUN_DIR,{
+  close:({failures})=>{
+    if(failures.length)scopeCleanup={state:'error',reason:failures.join('; ')};
+    try{writeSummary();}finally{releaseTreeLock();}
+  },
+});
+registerCommandCloser('gate run resources '+RUN_DIR,{
+  cancel:reason=>{
+    tok.cancel();
+    stop(reason.kind==='signal'?`signal ${reason.signal}`:`runner crashed: ${reason.error instanceof Error?reason.error.message:String(reason.error??'command failed')}`);
+  },
+  close:async()=>{
+    if(!summaryWritten)stop('command completed before the gate finished');
+    await startupClosed;await runClosed;
+    growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
+    const failures=[];
+    try{tok.close();await tok.closed;}catch(error){failures.push(error);}
+    try{scopes?.close();}catch(error){failures.push(error);}
+    try{reservation?.release();await reservation?.closed;}catch(error){failures.push(error);}
+    if(failures.length===1)throw failures[0];
+    if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
+  },
+});
 mkdirSync(RUN_DIR, { recursive: true });
 caseCosts = new CaseCosts(RUN_DIR);
 caseCosts.preparePhases(plan,env);
@@ -1760,3 +1779,7 @@ if (stopping) {
 } else {
   schedule();
 }
+await runClosed;
+return Number(process.exitCode??0);
+}finally{preparing=false;finishStartup();}
+});

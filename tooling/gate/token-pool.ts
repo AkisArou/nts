@@ -22,12 +22,27 @@ type TokenOptions={
 export type TokenPool={
   addr:string|null;server:Server|null;held:Map<string,number>;sized:Map<string,{count:number;bytes:number}>;
   peak:Map<string,number>;used:Map<string,number>;total:number;waiting:TokenRequest[];active:Set<TokenRequest>;last:number;
-  account():void;grant():void;start():Promise<string|null>;close():void;
+  account():void;grant():void;start():Promise<string|null>;cancel():void;close():void;closed:Promise<void>;
 };
 
 export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null,known=()=>true,released=()=>{},observe=()=>{},prepare=()=>{},attach=async()=>{},completed=()=>{},retire=()=>{},failed=error=>{throw error;},now=hostObservations().now}:TokenOptions):TokenPool{
+  let cancelled=false,closing=false,finishClose!:()=>void,rejectClose!:(error:unknown)=>void;
+  const closed=new Promise<void>((resolve,reject)=>{finishClose=resolve;rejectClose=reject;});
+  void closed.catch(()=>{});
+  const finalizing=new Set<Promise<void>>(),failures:unknown[]=[];
   const pool:TokenPool={addr:null,server:null,held:new Map(),sized:new Map(),peak:new Map(),used:new Map(),total:0,waiting:[],active:new Set(),last:now(),
-    account:()=>{},grant:()=>{},start:async()=>null,close:()=>{pool.server?.close();}};
+    account:()=>{},grant:()=>{},start:async()=>null,closed,
+    cancel:()=>{cancelled=true;for(const request of pool.waiting)request.sock.end('error: token pool is shutting down\n');},
+    close:()=>{
+      if(closing)return;closing=true;pool.cancel();
+      const finish=async()=>{
+        await Promise.allSettled([...finalizing]);
+        if(failures.length===1)rejectClose(failures[0]);
+        else if(failures.length)rejectClose(new AggregateError(failures,'token pool final retirement failed'));
+        else finishClose();
+      };
+      if(pool.server)pool.server.close(error=>{if(error)failures.push(error);void finish();});else void finish();
+    }};
   let requests=0;
   const trace=(event:string,w?:TokenRequest)=>{
     try{observe({event,request:w?.id,step:w?.step,pid:w?.pid,context:w?.context,bytes:w?.bytes});}catch{/* Telemetry cannot grant work or change its status. */}
@@ -51,6 +66,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
     return {oldest,chosen};
   };
   pool.grant=()=>{
+    if(cancelled)return;
     pool.account();const at=now();
     while(pool.waiting.length&&free()>0){
       const {oldest,chosen}=candidates();let best:{w:TokenRequest;c:number}|null=null;
@@ -62,12 +78,13 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       if(w.bytes!==undefined){const s=pool.sized.get(w.step)??{count:0,bytes:0};pool.sized.set(w.step,{count:s.count+1,bytes:s.bytes+w.bytes});}
       pool.total++;if(n>(pool.peak.get(w.step)??0))pool.peak.set(w.step,n);
       const ready=w.bytes===undefined?null:answering(w.step,w);
-      const go=()=>{if(!w.gone)w.sock.write('go\n');};
+      const go=()=>{if(!w.gone){if(cancelled)w.sock.end('error: token pool is shutting down\n');else w.sock.write('go\n');}};
       if(ready)void ready.then(go,error=>w.sock.end(`error: ${String(error)}\n`));else go();
       trace('pool.change');
     }
   };
   pool.start=()=>new Promise(resolve=>{
+    if(cancelled)throw Error('token pool cannot start after cancellation');
     const server=createServer({allowHalfOpen:true},sock=>{
       const w:TokenRequest={sock,id:++requests,step:'',pid:0,context:'',since:now(),granted:false,gone:false};
       let buf='';sock.setEncoding('utf8');
@@ -95,6 +112,7 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
           void Promise.resolve().then(()=>attach(owner,{group,cap:Number(cap),scope})).then(()=>sock.end('ready\n'),error=>sock.end(`error: ${String(error)}\n`));return;
         }
         if(words[0]!=='want'){sock.destroy();return;}
+        if(cancelled){sock.end('error: token pool is shutting down\n');return;}
         const step=words[1]??'?';w.pid=Number(words[2]);let rest=words.slice(3);
         if(rest[0]?.startsWith('bytes:')){
           const bytes=Number(rest[0].slice(6));if(!/^bytes:[1-9][0-9]*$/.test(rest[0])||!Number.isSafeInteger(bytes)){sock.destroy();return;}
@@ -116,8 +134,11 @@ export function createTokenPool({free,claim,eligible=()=>true,answering=()=>null
       };
       // FIN is the completion acknowledgement. A normal client retains its
       // readable socket until the final meter and worker drain have finished.
-      sock.on('end',()=>{void gone().then(()=>sock.end(),failed);});
-      sock.on('close',()=>{void gone().catch(failed);});sock.on('error',()=>{void gone().catch(failed);});
+      const finish=()=>{
+        const work=gone();finalizing.add(work);
+        void work.then(()=>{finalizing.delete(work);if(!sock.destroyed&&!sock.writableEnded)sock.end();},error=>{finalizing.delete(work);failures.push(error);failed(error);});
+      };
+      sock.on('end',finish);sock.on('close',finish);sock.on('error',finish);
     });
     server.on('error',()=>resolve(null));server.listen(0,'127.0.0.1',()=>{
       server.unref();pool.server=server;const address=server.address();

@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 type Command=()=>number|void|Promise<number|void>;
 export type CommandSignal='SIGINT'|'SIGTERM'|'SIGHUP';
 export type CloseReason={kind:'completion'}|{kind:'failure';error?:unknown}|{kind:'signal';signal:CommandSignal};
-export type CloseContext={reason:CloseReason;code:number};
+export type CloseContext={reason:CloseReason;code:number;failures:readonly string[]};
 export type CommandCloser={cancel?:(reason:Exclude<CloseReason,{kind:'completion'}>)=>void;close:(context:CloseContext)=>void|Promise<void>;closed?:()=>Promise<void>};
 export const COMMAND_CLOSE_MS=5*60_000;
 type CloseHost={arm:(callback:()=>void,milliseconds:number)=>()=>void;report:(line:string)=>void;exit:(code:number)=>void};
@@ -63,7 +63,7 @@ export class CommandLifetime{
       for(;;){
         const next=[...this.#resources.entries()].at(-1);if(!next)break;
         const [id,row]=next;
-        try{await row.owner.close({reason:this.#reason,code:result()});}catch(error){if(!this.#ended)this.#problem(row.name,error);}
+        try{await row.owner.close({reason:this.#reason,code:result(),failures:[...this.#problems]});}catch(error){if(!this.#ended)this.#problem(row.name,error);}
         // Read completion after close starts it, including when close throws.
         try{await row.owner.closed?.();}catch(error){if(!this.#ended)this.#problem(row.name+' completion',error);}
         if(this.#ended)return;
