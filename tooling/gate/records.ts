@@ -1,11 +1,14 @@
 // Documentation numbering, benchmark evidence and cheap oracle identity inputs.
 import {readdirSync} from "node:fs";
-import {join,resolve} from "node:path";
-import {pathToFileURL} from "node:url";
+import {join,relative,resolve} from "node:path";
+import {fileURLToPath,pathToFileURL} from "node:url";
 import {checkRecords as checkBenchmarkRecords} from "../bench/run-record.ts";
 import {pendingFixtures,readRecords,recordPath} from "../differential/oracle-records.ts";
 import {pendingLine} from "../records/pending.ts";
 import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identities.ts";
+import {dataDirectory} from './reader-inputs/main.ts';
+
+const RECORD_DIRECTORY=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
 
 // Existing collisions are named, never allowed by count: fixing one cannot
 // spend its allowance on a new collision. This list only shrinks.
@@ -26,7 +29,7 @@ export function recordNumbers(names:readonly string[],known:readonly string[]=KN
 }
 
 export function checkRecords(root:string,report:(message:string)=>void,env:NodeJS.ProcessEnv):void {
-  const numbers=recordNumbers(readdirSync(join(root,"docs/records")));
+  const numbers=recordNumbers(readdirSync(join(root,RECORD_DIRECTORY)));
   if(numbers.unexpected.length)throw new Error([
     "a record number was claimed twice:",
     ...numbers.unexpected.flatMap(([,files])=>files.map(file=>"  docs/records/"+file)),
