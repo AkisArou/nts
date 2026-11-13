@@ -2444,6 +2444,31 @@
       "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/config-index.json",
       "bytes": 29824,
       "sha256": "0457275720f278717542e73da7123995ffe4d4ec204cad286262579a455f3daf"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/rebase.json",
+      "bytes": 1098,
+      "sha256": "e4e2621178708f443d9f470df45c88781cd45a7c77a33c52fd288d925789755c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/rebase-focused.sh",
+      "bytes": 566,
+      "sha256": "8d10ebff0d2c1f0d3c65b14feaa95ebdda79f1ecca10992b5aa4c2c62f457873"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/rebase-focused.log",
+      "bytes": 12076,
+      "sha256": "edde71c71e43daf1e81e8836359aaaa12d5e64df5edda674639cfc113e4418ab"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/rebase-host.log",
+      "bytes": 73,
+      "sha256": "b4104a613e666ec6cad8dbd86902a9ef31e412c64057552fedb8d75b495586a4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/rebase-strict.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
     }
   ],
   "retentionReplay": {
@@ -2471,5 +2496,43 @@
     ],
     "cleanupFailures": [],
     "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9"
+  },
+  "rebaseReceipt": {
+    "source": "917633f3cb6158b5f3ac50da3a6bad7fbe7f4592",
+    "onto": "5d2ad99f6ed9c4d36681e30ea342821158dc2bd4",
+    "proofSource": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "rustFiles": [
+      {
+        "path": "compiler/core/src/hir/lower.rs",
+        "bytes": 112241,
+        "sha256": "65ff5e5951c798e52b3ece6edc30e4bd404d84a5e4ec5f6f6cc34abf6697c16d"
+      },
+      {
+        "path": "compiler/core/src/hir/lower/tests.rs",
+        "bytes": 29962,
+        "sha256": "8a56c535a919473c4e5993a09587adad8f77b3a378e09538593d8e79dbae256b"
+      }
+    ],
+    "interveningPaths": [
+      "docs/records/notebooks/decisions-log.md",
+      "docs/records/notebooks/pinned-preparation-774.json",
+      "docs/records/notebooks/pinned-preparation-774.md",
+      "docs/workflow.md",
+      "results/benchmarks/full.md",
+      "results/benchmarks/runs/2026-11-13-653fb5235a07-d9f524ad2fc34a46928d739c8cc9c2cc.json",
+      "tooling/full-check/keep.json",
+      "tooling/full-check/measure.test.ts",
+      "tooling/gate/pinned.sh",
+      "tooling/gate/pinned.test.ts"
+    ],
+    "compilerRuntimeCorpusOrTest262RecordChanges": [],
+    "verifiedArtifacts": 275,
+    "focused": {
+      "pass": 135,
+      "fail": 0,
+      "bootstrap": "tooling/gate/test-host-bootstrap.ts"
+    },
+    "host": "test host ownership: 1892 sources, 263 entry closures, 413 reads checked",
+    "strict": "tooling strict types: 832 modules; 5695 recorded diagnostics; 0 improved modules"
   }
 }

@@ -84,3 +84,12 @@ owned scope CPU.
 The [companion JSON](lowering-test-module-681.json) retains precise pins,
 per-preparation results, matching failure details, all five record verdicts,
 proof exclusions, the immutable artifact-owner manifest and artifact digests.
+
+The final tree is rebased onto landed #774 at
+`5d2ad99f6ed9c4d36681e30ea342821158dc2bd4`. Both Rust files remain byte-equal
+to the formatted proof source above. The intervening changes contain no compiler,
+runtime, corpus or test262 record edits. All original artifact digests were
+rechecked; the original proof pins and cohorts remain unchanged. The rebased
+layout/selector/consumer/timing batch, using the actual test-host preload,
+passes 135 controls; host ownership and strict tooling checks pass too.
+The companion JSON retains that source-equivalence receipt separately.
