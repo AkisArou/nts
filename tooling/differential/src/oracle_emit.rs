@@ -892,6 +892,7 @@ enum ObservationKind {
     Readlink,
     RuntimeEntries,
     RuntimeKind,
+    Stat,
 }
 impl ObservationKind {
     fn as_str(self) -> &'static str {
@@ -904,6 +905,7 @@ impl ObservationKind {
             Self::Readlink => "readlink",
             Self::RuntimeEntries => "runtimeEntries",
             Self::RuntimeKind => "runtimeKind",
+            Self::Stat => "stat",
         }
     }
 }
@@ -969,6 +971,7 @@ fn host_answer(observation: &HostObservation) -> Result<Value> {
     match observation.kind.as_str() {
         "runtimeEntries" => runtime_entries(observation),
         "runtimeKind" => runtime_kind(observation),
+        "stat" => host_stat(observation),
         "file" => {
             if !observation.value.is_null()
                 && !observation.value.as_str().is_some_and(|value| {
@@ -1045,6 +1048,31 @@ fn host_answer(observation: &HostObservation) -> Result<Value> {
             observation.kind
         ),
     }
+}
+
+fn host_stat(observation: &HostObservation) -> Result<Value> {
+    let path = &observation.path;
+    if !observation.value.is_null()
+        && !observation.value.as_object().is_some_and(|fields| {
+            fields.len() == 3
+                && fields.get("mode").and_then(Value::as_u64).is_some()
+                && fields.get("size").and_then(Value::as_f64).is_some_and(|size| size >= 0.0)
+                && fields.get("mtimeMs").and_then(Value::as_f64).is_some()
+        })
+    {
+        bail!("invalid oracle stat observation: {path}");
+    }
+    let Some(metadata) = file_metadata(path)? else { return Ok(Value::Null); };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        // The SDK receives Node's real mode/size/mtime fields. Node represents
+        // POSIX seconds and nanoseconds as this same millisecond double.
+        let mtime_ms = metadata.mtime() as f64 * 1000.0 + metadata.mtime_nsec() as f64 / 1_000_000.0;
+        Ok(serde_json::json!({"mode":metadata.mode(),"size":metadata.len(),"mtimeMs":mtime_ms}))
+    }
+    #[cfg(not(unix))]
+    bail!("oracle stat observations require the POSIX metadata adapter: {path}");
 }
 
 fn literal_link(observation: &HostObservation) -> Result<Value> {
@@ -1977,6 +2005,32 @@ mod tests {
                 failure.contains(&format!("filesystem {kind} changed")),
                 "{failure}"
             );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn captured_sdk_stat_matches_node_without_granting_file_content() {
+        let (scratch, _manifest, source, _project) = manifest_fixture();
+        let directory = scratch.path.join("directory");
+        std::fs::create_dir(&directory).unwrap();
+        let alias = scratch.path.join("alias");
+        std::os::unix::fs::symlink(&source, &alias).unwrap();
+        let paths = [&source, &directory, &alias, &scratch.path.join("absent"), &source.join("not-a-directory")];
+        let output = std::process::Command::new("node")
+            .args(["-e", r#"const fs=require('node:fs');const rows=process.argv.slice(1).map(path=>{let value;try{const stat=fs.statSync(path);value={mode:stat.mode,size:stat.size,mtimeMs:stat.mtimeMs};}catch(error){if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;value=null;}return {kind:'stat',path,value};});process.stdout.write(JSON.stringify(rows));"#])
+            .args(paths)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let rows: Vec<HostObservation> = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(rows.len(), 5);
+        assert!(validate_observations(&rows).unwrap().is_empty());
+        std::fs::write(&source, "changed size").unwrap();
+        assert!(format!("{:#}", validate_observations(&rows).unwrap_err()).contains("filesystem stat changed"));
+        for value in [serde_json::json!({"mode":1,"size":-1,"mtimeMs":0}),serde_json::json!({"mode":1,"size":0}),serde_json::json!({"mode":1,"size":0,"mtimeMs":0,"extra":0})] {
+            let row = HostObservation { kind: ObservationKind::Stat, path: source.clone(), value };
+            assert!(host_answer(&row).unwrap_err().to_string().contains("invalid oracle stat observation"));
         }
     }
 
