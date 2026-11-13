@@ -348,10 +348,12 @@ function git(...args) {
 const startedAt = Date.now();
 const results = new Map(); // name -> { verdict, reason, ... }
 const running = new Map(); // name -> { child, slots, started, rider, elastic }
+/** @type {string|null} */
 let interrupted = null;
 let stopping = false;
 const startupAbort = new AbortController();
 let preparing = true; // the run's scopes, its memory and its capture, before any step
+/** @type {GateScopes|undefined} */
 let scopes;
 /** @type {{state:"complete"}|{state:"error",reason:string}} */
 let scopeCleanup = { state: "complete" };
@@ -855,6 +857,7 @@ const GiB = 2 ** 30;
 // asked for.
 const BLOCK = GiB;
 const SAMPLE_MS = 250;
+/** @type {import('./memory-ledger.ts').Reservation|null} */
 let reservation = null;
 // What the machine could ever give this run: MemTotal less the floor the
 // ledger keeps for the system. No step reserves more: one that needs it all
@@ -1701,6 +1704,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     if(!summaryWritten)stop('command completed before the gate finished');
     await startupClosed;await runClosed;
     growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
+    /** @type {unknown[]} */
     const failures=[];
     try{tok.close();}catch(error){failures.push(error);}
     try{await tok.closed;}catch(error){failures.push(error);}

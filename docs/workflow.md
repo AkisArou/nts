@@ -557,6 +557,20 @@ type-only import does not evaluate its target. A module that is also a command
 uses `runAsCommand(import.meta.url, main)` from `tooling/differential/command-entry/main.ts`.
 The shared entry owner starts its command only at entry, retains command-owned
 diagnostics and statuses, and gives unhandled errors one stderr/exit policy.
+It alone installs process signal handlers. Process-lifetime resources register
+named closers through `registerCommandCloser`; explicit scoped owners still
+close and await their resources before removing a report namespace. Cancellation
+stops acquisition first, while transports remain available for workers' final
+replies. Destruction follows reverse acquisition order and joins each resource's
+completion even if starting its close throws. Signals, normal return and loop
+drain share one terminal cleanup and one wedged-drain guard. A signal keeps its
+conventional status; cleanup failures are named and cannot turn a failed command
+green. An unsettled main drains its resources and retains exit 13 only if it is
+still unsettled at actual exit. Explicit output completion drains resources
+before flushing their final reports. A gate runner holds its tree lock and
+publishes its terminal summary after broker, worker and reservation completion;
+a cleanup failure is a non-green `scope_cleanup` result. The source audit checks
+listener aliases and dynamic event names against the single entry owner.
 Asynchronous fixture setup belongs in a test hook. Pure command entry scripts
 outside Worker closures may use top-level await.
 A leaf that an oracle preload reaches lives in its own directory with a one-file
@@ -950,6 +964,12 @@ the first node task.
   Missing observations remain unknown, while worker wall stays separate
   from step wall
   ([log](records/notebooks/decisions-log.md#census-phases-explain-scope-cpu-11-12)).
+
+- **Commands share one signal and shutdown owner:** resources lend named
+  closers to the entry, cancellation preserves retirement transports, and
+  terminal reports follow actual cleanup. One total wedge guard bounds a
+  drain; original failures and signal statuses survive cleanup failures
+  ([log](records/notebooks/decisions-log.md#one-command-owner-drains-process-resources-11-13)).
 
 - **Imported modules evaluate synchronously:** commands share one entry owner
   without top-level await, and fixture initialization runs in test hooks.

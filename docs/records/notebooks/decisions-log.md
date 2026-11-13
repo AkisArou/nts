@@ -2692,3 +2692,19 @@ data-dir route keeps the same hash and source-version validation.
 The previous and current generators were compared on the same pinned source;
 the byte identity, selection census, failure controls and proof are retained
 with the reader-input records.
+## One command owner drains process resources (11-13)
+
+#758 replaces import-order-dependent signal handlers with the command entry's
+single lifetime. Resources register named closers, cancellation stops acquisition
+before destruction, and one terminal drain awaits final replies and reporter
+completion. A single wedge guard bounds cleanup. Signals keep their conventional
+statuses; original errors and named cleanup failures remain visible. Unsettled
+commands still drain resources and retain Node's exit 13 at actual exit.
+
+The gate runner now publishes its summary and releases its tree lock after all
+physical cleanup: an injected late broker or ledger failure previously left a
+green summary beside exit 2. Its retained control now requires a non-green
+scope_cleanup result and an empty ledger. A private startup barrier also proves
+Chromium cancellation after profile acquisition removes the profile without
+launching a child. The source audit borrows the shared lexical facts and rejects
+signal listeners, aliases and unknown event names outside the entry owner.

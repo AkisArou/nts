@@ -53,7 +53,7 @@ export function inspectCommandSignals(facts:SourceFacts):string[]{
     return [];
   };
   for(const call of facts.calls){
-    let called=name(call.expression),target=call.expression,args:readonly Node[]=call.arguments;
+    let called=name(call.expression),target:Node=call.expression,args:readonly Node[]=call.arguments;
     if(called?.endsWith('.call')){called=called.slice(0,-5);target=receiver(target)??target;args=args.slice(1);}
     else if(called?.endsWith('.apply')){
       called=called.slice(0,-6);target=receiver(target)??target;
