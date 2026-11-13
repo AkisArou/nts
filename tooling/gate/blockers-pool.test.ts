@@ -6,13 +6,14 @@ import { spawn } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { fixturePool, fixtureWorker } from "../conformance/blockers-pool.ts";
 import { createTokenPool } from "./token-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const blockerEntry=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../conformance/blockers-check.mjs',import.meta.url)));
 const names = ["a-slow", "b-fast", "c-middle"];
 function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const root = mkdtempSync(join(tmpdir(), "nts-blockers-pool-"));
@@ -28,7 +29,7 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
     writeFileSync(join(dir, "tsconfig.json"), "{}");
     writeFileSync(join(dir, "src/main.ts"), "// expect: nothing refused\nexport function value() { return 1; }\n");
   }
-  copyModuleClosure(["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"].map(path=>"tooling/"+path),root,
+  copyModuleClosure([blockerEntry,...["conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "conformance/addon-manifest.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"].map(path=>"tooling/"+path)],root,
     {dataNamespaces:{'tests/refusals':'blocker pool private cases'}});
   assert.deepEqual(readdirSync(join(root,'tests/refusals')).sort(),[...fixtureNames].sort(),'the pool control runs only its private cases');
   const compiler = join(root, "compiler");
@@ -56,7 +57,7 @@ if(name==='b-fast') fs.writeFileSync(process.env.TRACE+'.fast-finished','');
 main().catch(error=>{console.error(error);process.exitCode=1;});
 `, {mode:0o755});
   const run = (jobs: number, extra = {}) => new Promise<{status:number|null;stdout:string;stderr:string}>((resolve, reject) => {
-    const child = spawn(process.execPath, [join(root, "tooling/conformance/blockers-check.mjs")], {
+    const child = spawn(process.execPath, [join(root, blockerEntry)], {
       cwd:root, env:{...fixtureEnvironment(t), NTS_COMPILER:compiler, NTS_GATE_JOBS:String(jobs), TMPDIR:join(root,"tmp"),
         NTS_NAPI_INCLUDE:join(root,"napi"), TRACE:trace, NTS_GATE_TOKENS:"", NTS_GATE_TOKEN_HELD:"", ...extra},
     });

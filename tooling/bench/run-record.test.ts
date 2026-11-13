@@ -20,6 +20,7 @@ import {
   publishRun,
   readRuns,
   checkRecords,
+  benchmarkRecordInputs,
   type Cell,
   type RunRecord,
 } from "./run-record.ts";
@@ -324,6 +325,12 @@ test("record check catches corruption, edited rendering and a missing committed 
     const original = readFileSync(path, "utf8"),
       fullPath = join(root, "results/benchmarks/full.md"),
       full = readFileSync(fullPath, "utf8");
+    const supplied = {...benchmarkRecordInputs(root), table: join(root, "private-table.md")};
+    writeFileSync(supplied.table, full);
+    writeFileSync(fullPath, "the caller selected a different table\n");
+    assert.equal(checkRecords(root, supplied).runs, 1, "the reader consumes its caller's locations");
+    assert.throws(() => checkRecords(root), /shared renderer/);
+    writeFileSync(fullPath, full);
     const corrupted = JSON.parse(original);
     corrupted.rows[0].verdicts["nts C"].node.kind = "LOSS";
     writeFileSync(path, JSON.stringify(corrupted));

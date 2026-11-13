@@ -6,9 +6,13 @@ import {checkRecords as checkBenchmarkRecords} from "../bench/run-record.ts";
 import {pendingFixtures,readRecords,recordPath} from "../differential/oracle-records.ts";
 import {pendingLine} from "../records/pending.ts";
 import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identities.ts";
-import {dataDirectory} from './reader-inputs/main.ts';
+import {dataDirectory,fileInput} from './reader-inputs/main.ts';
 
-const RECORD_DIRECTORY=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
+const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+const RECORD_DIRECTORY=relative(SOURCE,fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
+const BENCHMARK_RUNS=dataDirectory(new URL('../../results/benchmarks/runs/',import.meta.url));
+const BENCHMARK_TABLE=fileInput(new URL('../../results/benchmarks/full.md',import.meta.url));
+const inRoot=(root:string,input:URL)=>join(root,relative(SOURCE,fileURLToPath(input)));
 
 // Existing collisions are named, never allowed by count: fixing one cannot
 // spend its allowance on a new collision. This list only shrinks.
@@ -36,7 +40,7 @@ export function checkRecords(root:string,report:(message:string)=>void,env:NodeJ
     "renumber the later one; tooling/gate/claim-record.sh takes the next free",
   ].join("\n"));
   if(numbers.stale.length)throw new Error("fixed, so remove from KNOWN_DUPLICATE_RECORDS: "+numbers.stale.join(" "));
-  checkBenchmarkRecords(root);
+  checkBenchmarkRecords(root,{runs:inRoot(root,BENCHMARK_RUNS),table:inRoot(root,BENCHMARK_TABLE)});
   const problems=oracleIdentityProblems(root,readRecords(root).rows,env);
   report(oracleIdentityScope());
   if(problems.length)throw Error(problems.join("\n"));

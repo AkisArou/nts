@@ -3,7 +3,7 @@ import {copyModuleClosure} from './module-closure-fixture.ts';
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
-import {dirname, join, resolve} from "node:path";
+import {dirname, join, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {checkBenchmarkInputs} from "../licenses/benchmark-inputs.ts";
@@ -11,6 +11,7 @@ import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
 
 const repository = fileURLToPath(new URL("../..", import.meta.url));
+const licenceEntry=relative(repository,fileURLToPath(new URL('../licenses/licenses.ts',import.meta.url)));
 const casePath = "benchmarks/cases/input-control";
 const inputPath = `${casePath}/data`;
 // Synthetic licence metadata, never shipped as an upstream licence text.
@@ -214,13 +215,13 @@ test("inherited include rules cannot make opaque input a compiled root", () => {
 test("the real licences CLI invokes the input guard before accepting a compiler inventory", () => {
   const f = fixture();
   try {
-    copyModuleClosure(["tooling/licenses/licenses.ts"],f.root);
+    copyModuleClosure([licenceEntry],f.root);
     for (const path of ["build/node-deps/recipes.json"]) {
       mkdirSync(dirname(join(f.root, path)), {recursive: true}); cpSync(join(repository, path), join(f.root, path));
     }
     symlinkSync(resolve(repository, "node_modules"), join(f.root, "node_modules"));
     f.write(`${casePath}/case.ts`, 'import data from "./data/packed.json";');
-    const result = spawnTest(process.execPath, [join(f.root, "tooling/licenses/licenses.ts"), "--check"], {cwd: f.root, encoding: "utf8"});
+    const result = spawnTest(process.execPath, [join(f.root, licenceEntry), "--check"], {cwd: f.root, encoding: "utf8"});
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, /CC-BY benchmark input cannot be imported/);
     assert.doesNotMatch(result.stderr, /Cargo.lock|MODULE_NOT_FOUND/);

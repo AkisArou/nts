@@ -386,8 +386,12 @@ export function sealRun(value: unknown): RunRecord {
 export function parseRun(value: unknown): RunRecord {
   return decode(value, false);
 }
-export function readRuns(root: string): RunRecord[] {
-  const directory = join(root, "results/benchmarks/runs");
+export type BenchmarkRecordInputs = { runs: string; table: string };
+export function benchmarkRecordInputs(root: string): BenchmarkRecordInputs {
+  return { runs: join(root, "results/benchmarks/runs"), table: join(root, "results/benchmarks/full.md") };
+}
+export function readRuns(root: string, inputs = benchmarkRecordInputs(root)): RunRecord[] {
+  const directory = inputs.runs;
   if (!existsSync(directory)) return [];
   return readdirSync(directory)
     .filter((f) => f.endsWith(".json"))
@@ -399,8 +403,8 @@ export function readRuns(root: string): RunRecord[] {
     });
 }
 /** Gate authority: immutable evidence and its one rendered view must agree. */
-export function checkRecords(root: string): { runs: number; complete: number } {
-  const runs = readRuns(root);
+export function checkRecords(root: string, inputs = benchmarkRecordInputs(root)): { runs: number; complete: number } {
+  const runs = readRuns(root, inputs);
   // A committed observation cannot disappear or be rewritten, even with newly forged verdicts.
   const additions = git(root, [
     "log",
@@ -427,7 +431,7 @@ export function checkRecords(root: string): { runs: number; complete: number } {
         .digest("hex");
     check(identity === match[1], "immutable benchmark run was rewritten: " + match[2]);
   }
-  const full = join(root, "results/benchmarks/full.md");
+  const full = inputs.table;
   check(existsSync(full), "missing benchmark full.md");
   check(
     readFileSync(full, "utf8") === renderFull(runs, readBenchmarkGroups(root)),

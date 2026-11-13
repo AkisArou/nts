@@ -3,13 +3,15 @@ import {FIXED_AMBIENT} from "./canonical-environment.ts";
 import assert from "node:assert/strict";
 import {chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
-import {join} from "node:path";
+import {join,relative} from "node:path";
 import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {test} from "node:test";
 import {COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, calibrationRecord, withCalibratedModule, withTableLines, withCalibrationEntries, tableLines, calibrationEntries, compileArm, compileCommand, compileTimeModules, discoverCompileTimeFixtures} from "./compile-counter.ts";
 import {testScratch} from "./test-scratch.ts";
 import {ownMemoryEnv} from "./test-memory.ts";
+
+const counterEntry=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('./compile-time.mjs',import.meta.url)));
 
 test("compile-time fixture discovery requires a config and includes each configured directory", t => {
   const root = testScratch(t, "counter-discovery");
@@ -165,7 +167,7 @@ test("the real tripwire fails missed and legacy readings and stale rows, and lis
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
   for(const input of ["tests/compile-time","runtime/web-platform"])mkdirSync(join(root,input),{recursive:true});
-  copyModuleClosure(["tooling/gate/compile-time.mjs"], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
+  copyModuleClosure([counterEntry], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
   assert.deepEqual(compileTimeModules(root),["runtime/node/subject"],"the counter sees only its private project");
   const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
   const meta = { work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
@@ -175,7 +177,7 @@ test("the real tripwire fails missed and legacy readings and stale rows, and lis
   const valid = { work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, arm: "nogc", status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
   const check = (row: object) => {
     writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify(row));
-    return spawnTest(process.execPath, [join(gate, "compile-time.mjs")], { encoding: "utf8", env: {
+    return spawnTest(process.execPath, [join(root, counterEntry)], { encoding: "utf8", env: {
       ...fixtureEnvironment(t), NTS_BIN: process.execPath, NTS_COMPILE_TIMES_FROM: kept, NTS_GATE_RUN_DIR: join(root, "run"),
     } });
   };
@@ -362,7 +364,7 @@ test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns 
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
   for(const input of ["tests/compile-time","runtime/web-platform"])mkdirSync(join(root,input),{recursive:true});
-  copyModuleClosure(["tooling/gate/compile-time.mjs"], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
+  copyModuleClosure([counterEntry], root,{dataNamespaces:{"runtime/node":"compile counter CLI control","runtime/web-platform":"compile counter CLI control","tests/compile-time":"compile counter CLI control"}});
   assert.deepEqual(compileTimeModules(root),["runtime/node/subject"],"the counter sees only its private project");
   const commands = join(root, "commands.jsonl"), nts = join(root, "nts");
   writeFileSync(nts, `#!/usr/bin/env node
@@ -375,7 +377,7 @@ require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({a
   const table = `# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
   writeFileSync(join(results, "compile-times.tsv"), table);
   writeFileSync(join(results, "compile-times-rc.tsv"), `# arm: rc\n${table}`);
-  const check = (arm: string) => spawnTest(process.execPath, [join(gate, "compile-time.mjs"), "--arm", arm], {
+  const check = (arm: string) => spawnTest(process.execPath, [join(root, counterEntry), "--arm", arm], {
     encoding: "utf8", env: { ...fixtureEnvironment(t), NTS_BIN: nts, NTS_COMPILE_TIMES_FROM: kept,
       NTS_GATE_RUN_DIR: join(root, "run"), LC_ALL: "C", TZ: "Pacific/Kiritimati", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_TOKENS: "" },
   });
