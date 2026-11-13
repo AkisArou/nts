@@ -3,7 +3,7 @@
 export type InputKind='module'|'data'|'file';
 export type ReaderInput={path:string;kind:InputKind};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
-export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:InputKind};
+export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:Exclude<InputKind,'file'>};
 export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];directories:DirectoryDeclaration[]};
 
 declare const DATA_DIRECTORY:unique symbol;

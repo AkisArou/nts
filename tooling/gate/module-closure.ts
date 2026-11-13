@@ -25,7 +25,9 @@ const inside = (root: string, path: string) => {
  * computed imports and package resolution cannot invent file inputs. Each
  * graph reads fresh bytes; closures share only this graph's parsed references.
  * Module-relative URL assets are declarations too. Dot-only positions are
- * anchors, while a directory asset declares its tracked files. */
+ * anchors, while a directory asset declares its tracked files. Exact fileInput
+ * bytes stay owned but do not enter imports; moduleFiles records that separate
+ * traversal, including a later real module edge into previously owned bytes. */
 export function moduleGraph(options: ModuleClosureOptions = {}) {
   // Input provisioning imports this module before node_modules exists. Only a
   // caller actually walking a graph needs the already provisioned parser.
