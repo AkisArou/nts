@@ -1,6 +1,6 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'inspection'|'file'|'project'|'project-config'|'fixture'|'members';
+export type InputKind='module'|'data'|'inspection'|'file'|'optional-file'|'membership'|'project'|'project-config'|'fixture'|'members';
 export type DataNamespaces=Readonly<Record<string,string>>;
 export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
@@ -8,7 +8,13 @@ export type DirectoryDeclaration={reader:string;directory:string;files:readonly 
   member?:string;
   /** Private fixture reach records the declaration without claiming its production members. */
   fixture?:{entry:string;owner:string}};
-export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[]};
+export type ReaderContext={entry:string;dataNamespaces:DataNamespaces};
+export type OptionalFileDeclaration={reader:string;path:string;present:boolean;context:ReaderContext};
+export type MemberType='file'|'directory'|'symlink'|'other';
+export type DirectoryEntry={name:string;type:MemberType};
+export type MembershipDeclaration={reader:string;directory:string;entries:DirectoryEntry[];context:ReaderContext};
+export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
+  optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[]};
 
 declare const DATA_DIRECTORY:unique symbol;
 export type DataDirectory=URL&{readonly [DATA_DIRECTORY]:true};
@@ -27,6 +33,18 @@ export type FileInput=URL&{readonly [FILE_INPUT]:true};
 /** Immutable bytes read as text or data, without entering their imports or
  * launches. A file input never grants a substitutable data namespace. */
 export function fileInput(url:URL):FileInput{return url as FileInput;}
+
+declare const OPTIONAL_FILE:unique symbol;
+export type OptionalFile=URL&{readonly [OPTIONAL_FILE]:true};
+/** An exact candidate owns immutable bytes when present and absence otherwise.
+ * It never supplies executable placement or a substitutable data namespace. */
+export function optionalFile(url:URL):OptionalFile{return url as OptionalFile;}
+
+declare const DIRECTORY_MEMBERSHIP:unique symbol;
+export type DirectoryMembership=URL&{readonly [DIRECTORY_MEMBERSHIP]:true};
+/** Only immediate child names and types, including untracked children. This
+ * declares no child bytes, executable placement or private data grant. */
+export function directoryMembership(url:URL):DirectoryMembership{return url as DirectoryMembership;}
 
 export type ProjectInput={readonly kind:'project';readonly url:URL};
 export type ProjectConfig={readonly kind:'project-config';readonly url:URL};

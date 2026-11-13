@@ -105,6 +105,25 @@ function shadow(bytes:Function){bytes(new URL('./parameter.ts',import.meta.url))
   }finally{lease.dispose();api.close();}
 });
 
+test('optional files and membership keep lexical ownership, with explicit root membership only',()=>{
+  const api=new API(),source=`import {optionalFile as candidate,directoryMembership as names} from './reader-inputs/main.ts';
+import * as input from './reader-inputs/main.ts';
+import {directoryMembership as lookalike} from './lookalike.ts';
+const alias=candidate;
+candidate(new URL('./candidate.json',import.meta.url));alias(new URL('./alias.json',import.meta.url));
+input.optionalFile(new URL('./namespace.json',import.meta.url));
+names(new URL('./',import.meta.url));input.directoryMembership(new URL('../..',import.meta.url));
+new URL('./',import.meta.url);lookalike(new URL('./',import.meta.url));
+function shadow(names:Function){names(new URL('./',import.meta.url));}
+function other(candidate:Function){candidate(new URL('./ordinary.json',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [...['candidate','alias','namespace'].map(name=>({path:'./'+name+'.json',kind:'optional-file'})),
+        {path:'./',kind:'membership'},{path:'../..',kind:'membership'},{path:'./ordinary.json',kind:'module'}]);
+  }finally{lease.dispose();api.close();}
+});
+
 test('compiled project entries keep lexical factory ownership',()=>{
   const api=new API(),source=`import {projectInput as project} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';

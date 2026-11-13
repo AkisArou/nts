@@ -8,6 +8,7 @@ import {outsideSource} from "./source-containment.ts";
 import {canonicalNamespace as canonical,fixtureNamespaces,type InputSnapshot,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
+import {directoryEntries,memberType} from './reader-metadata.ts';
 export {moduleClosure} from "./module-closure.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -117,6 +118,38 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,opt
   return {files:snapshot.files.filter(file=>owned.has(file)||!names.some(directory=>under(directory,file))),manifest:{version:1,data:[...entries.values()].sort((a,b)=>a.directory.localeCompare(b.directory))} satisfies FixtureInputManifest,publish:selected.size>0};
 }
 
+/** Metadata never creates a child or copies its bytes. Verify after genuine
+ * input staging; nested fixture declarations belong to their own destination. */
+function fixtureMetadata(snapshot:InputSnapshot,destination:string,grants:Readonly<Record<string,string>>,fixtureEntries:Set<string>,hasDataManifest:boolean):void{
+  const here=(entry:string)=>entry==='<entry>'||fixtureEntries.has(entry);
+  for(const row of snapshot.optionalFiles){
+    if(!here(row.context.entry))continue;
+    const stat=info(join(destination,row.path));
+    if(!row.present){if(stat)throw Error('fixture optional file must remain absent: '+row.path);continue;}
+    if(!stat||memberType(stat)!=='file')throw Error('fixture optional file is not a regular file: '+row.path);
+  }
+  for(const row of snapshot.memberships){
+    if(!here(row.context.entry))continue;
+    const directory=join(destination,row.directory),stat=info(directory);
+    if(!stat||memberType(stat)!=='directory')throw Error('fixture membership is not an owned directory: '+row.directory);
+    // The data owner already checked its real private tree and immutable
+    // module overlap. Membership supplies no independent grant.
+    if(Object.keys(grants).some(name=>under(name,row.directory)))continue;
+    const actual=directoryEntries(directory);
+    // This exact file is an explicitly owned copier capability, rather than
+    // an unknown child hidden by a tracked-only projection.
+    const entries=row.directory===''&&hasDataManifest?actual.filter(entry=>entry.name!==FIXTURE_INPUT_MANIFEST):actual;
+    const expected=new Map(row.entries.map(entry=>[entry.name,entry.type]));
+    for(const entry of entries){
+      const type=expected.get(entry.name);
+      if(type===undefined)throw Error('fixture membership has an unowned child: '+join(row.directory,entry.name));
+      if(type!==entry.type)throw Error('fixture membership child type differs: '+join(row.directory,entry.name)+' ('+entry.type+'; expected '+type+')');
+      expected.delete(entry.name);
+    }
+    if(expected.size)throw Error('fixture membership is missing a child: '+join(row.directory,expected.keys().next().value!));
+  }
+}
+
 /** Complete the graph before callers apply private mutations. Existing equal
  * modules are harmless; a different fixture file is never overwritten. */
 export function copyModuleClosure(entries: readonly InputEntry[], root: string, options: FixtureClosureOptions = {}): string[] {
@@ -159,6 +192,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
     if (options.link) symlinkSync(from, to);
     else copyFileSync(from, to);
   }
+  fixtureMetadata(snapshot,destination,dataNamespaces,fixtureEntries,data.publish||data.manifest.data.length>0);
   if(data.publish)durableRecord(join(destination,FIXTURE_INPUT_MANIFEST),data.manifest);
   return files;
 }

@@ -3,13 +3,14 @@ import {gitArguments} from "./git-arguments/main.ts";
 // Literal relative import() is followed like a static import; computed imports
 // (variables or interpolated templates) must be named as another entry.
 import {lstatSync, readFileSync, realpathSync} from "node:fs";
-import {isAbsolute, relative, resolve, sep} from "node:path";
+import {dirname,isAbsolute, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
-import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration} from './reader-inputs/main.ts';
+import {directoryEntries} from './reader-metadata.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -77,12 +78,37 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   }
   function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput):InputSnapshot {
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     function asset(context:Context,reader:string,path:string,input:ReaderInput):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
+      if(kind==='optional-file'){
+        // A missing leaf still has a real source namespace. An existing
+        // symlinked ancestor cannot turn an absence into an outside input.
+        for(let parent=dirname(path);;parent=dirname(parent)){
+          try{if(!inside(root,realpathSync(parent)))throw Error('optional file parent escapes source root: '+nameOf(path));break;}
+          catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+        }
+        let stat:ReturnType<typeof lstatSync>|undefined;
+        try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+        const name=nameOf(path);
+        if(stat&&(!stat.isFile()||stat.isSymbolicLink()))throw Error('optional file input is not a regular file: '+name);
+        optionalFiles.push({reader,path:name,present:!!stat,context:{entry:context.entry,dataNamespaces:context.namespaces}});
+        // Even an absent candidate may become bytes in the next source tree.
+        reportByteInput?.({reader,path:name});
+        if(stat)visit(context,path,false,false);
+        return;
+      }
+      if(kind==='membership'){
+        const stat=lstatSync(path);
+        if(!stat.isDirectory()||stat.isSymbolicLink()||!inside(root,realpathSync(path)))
+          throw Error('membership input is not an owned directory: '+nameOf(path));
+        memberships.push({reader,directory:nameOf(path),entries:directoryEntries(path),context:{entry:context.entry,dataNamespaces:context.namespaces}});
+        return;
+      }
       if(kind==='fixture'){
         const namespaces=fixtureNamespaces(input.dataNamespaces??{}),entry=nameOf(path);
         const key=JSON.stringify([entry,Object.entries(namespaces).sort(([a],[b])=>a.localeCompare(b))]);
@@ -159,7 +185,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path);
     }
-    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),placingFiles:[...placing].sort(),directories};
+    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships};
   }
   return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }

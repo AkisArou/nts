@@ -728,3 +728,114 @@ test('inspection never suppresses real module, file, data or project placement i
     }finally{graph.close();}
   }
 });
+
+function metadataFixture(t:TestContext){
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const optionalFile=url=>url;export const directoryMembership=url=>url;export const fileInput=url=>url;export const dataDirectory=url=>url;');
+  f.write('entry.ts',"import {optionalFile,directoryMembership} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./present.ts',import.meta.url));optionalFile(new URL('./absent.json',import.meta.url));directoryMembership(new URL('./',import.meta.url));");
+  f.write('present.ts',"import './not-a-host-module.ts';\n");
+  return f;
+}
+
+test('optional candidates stage immutable regular bytes and preserve exact absence without placement',t=>{
+  const f=metadataFixture(t),graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const result=graph.describe(['entry.ts']);
+    assert.deepEqual(result.optionalFiles.map(row=>({reader:row.reader,path:row.path,present:row.present,entry:row.context.entry})),
+      [{reader:'entry.ts',path:'present.ts',present:true,entry:'<entry>'},{reader:'entry.ts',path:'absent.json',present:false,entry:'<entry>'}]);
+    assert.ok(result.files.includes('present.ts'));assert.ok(result.ownedFiles.includes('present.ts'));
+    assert.ok(!result.placingFiles.includes('present.ts'));assert.ok(!result.moduleFiles.includes('present.ts'));
+    assert.deepEqual(result.memberships[0]?.entries,[{name:'entry.ts',type:'file'},{name:'present.ts',type:'file'},{name:'tooling',type:'directory'}]);
+    copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source});
+    assert.equal(existsSync(join(f.destination,'absent.json')),false);
+    assert.equal(readFileSync(join(f.destination,'present.ts'),'utf8'),readFileSync(join(f.source,'present.ts'),'utf8'));
+    writeFileSync(join(f.destination,'absent.json'),'private surprise');
+    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source}),/optional file must remain absent: absent.json/);
+    rmSync(join(f.destination,'absent.json'));
+    assert.throws(()=>copyModuleClosure(['entry.ts'],join(f.destination,'linked'),{sourceRoot:f.source,link:true}),/optional file is not a regular file: present.ts/);
+  }finally{graph.close();}
+});
+
+test('optional source candidates reject links, directories and outside ancestors, and fresh graphs observe presence',t=>{
+  const f=metadataFixture(t);
+  f.write('candidate.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./absent.json',import.meta.url));");
+  const snap=()=>{const graph=moduleGraph({sourceRoot:f.source});try{return graph.describe(['candidate.ts']);}finally{graph.close();}};
+  assert.equal(snap().optionalFiles[0]?.present,false);
+  f.write('absent.json','production');assert.equal(snap().optionalFiles[0]?.present,true);
+  rmSync(join(f.source,'absent.json'));mkdirSync(join(f.source,'absent.json'));
+  assert.throws(snap,/optional file input is not a regular file: absent.json/);
+  rmSync(join(f.source,'absent.json'));symlinkSync(join(f.source,'present.ts'),join(f.source,'absent.json'));
+  assert.throws(snap,/optional file input is not a regular file: absent.json/);
+  f.write('outside.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./escape/missing.json',import.meta.url));");
+  const outside=join(f.destination,'outside');mkdirSync(outside,{recursive:true});symlinkSync(outside,join(f.source,'escape'));
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{assert.throws(()=>graph.describe(['outside.ts']),/optional file parent escapes source root: escape\/missing.json/);}finally{graph.close();}
+});
+
+test('membership alone creates no bytes and refuses missing, extra and wrong-type children',t=>{
+  const f=metadataFixture(t);
+  f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./data/',import.meta.url));");
+  f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.txt',import.meta.url));");
+  f.write('data/case.txt','production');mkdirSync(join(f.destination,'data'),{recursive:true});
+  assert.throws(()=>copyModuleClosure(['names.ts'],f.destination,{sourceRoot:f.source}),/membership is missing a child: data\/case.txt/);
+  assert.equal(existsSync(join(f.destination,'data/case.txt')),false);
+  copyModuleClosure(['names.ts','bytes.ts'],f.destination,{sourceRoot:f.source});
+  copyModuleClosure(['bytes.ts','names.ts'],f.destination,{sourceRoot:f.source});
+  f.write('data/untracked.txt','not hidden by the Git projection');
+  assert.throws(()=>copyModuleClosure(['names.ts','bytes.ts'],f.destination,{sourceRoot:f.source}),/membership is missing a child: data\/untracked.txt/);
+  rmSync(join(f.source,'data/untracked.txt'));writeFileSync(join(f.destination,'data/extra.txt'),'unknown child');
+  assert.throws(()=>copyModuleClosure(['names.ts','bytes.ts'],f.destination,{sourceRoot:f.source}),/membership has an unowned child: data\/extra.txt/);
+  rmSync(join(f.destination,'data/extra.txt'));rmSync(join(f.destination,'data/case.txt'));symlinkSync(join(f.source,'data/case.txt'),join(f.destination,'data/case.txt'));
+  assert.throws(()=>copyModuleClosure(['names.ts'],f.destination,{sourceRoot:f.source}),/membership child type differs: data\/case.txt \(symlink; expected file\)/);
+  const linked=join(f.destination,'linked');mkdirSync(join(linked,'data'),{recursive:true});
+  assert.throws(()=>copyModuleClosure(['names.ts','bytes.ts'],linked,{sourceRoot:f.source,link:true}),/membership child type differs: data\/case.txt \(symlink; expected file\)/);
+});
+
+test('metadata retains private namespace provenance without borrowing a grant or replacing immutable candidates',t=>{
+  const f=metadataFixture(t);
+  f.write('data-reader.ts',"import {dataDirectory,directoryMembership} from './tooling/gate/reader-inputs/main.ts';dataDirectory(new URL('./data/',import.meta.url));directoryMembership(new URL('./data/',import.meta.url));");
+  f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./data/',import.meta.url));");
+  f.write('bytes.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./data/prod.txt',import.meta.url));");
+  f.write('negative.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./data/missing.json',import.meta.url));");
+  f.write('data/prod.txt','production');
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
+    const ran=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(ran.status,0,ran.stderr);
+  }
+  const entry=fixtureInput(pathToFileURL(join(f.source,'data-reader.ts')),{dataNamespaces:{data:'private sample'}});
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const privateSnapshot=graph.describe([entry]);
+    assert.deepEqual(privateSnapshot.memberships[0]?.context,{entry:'data-reader.ts',dataNamespaces:{data:'private sample'}});
+    assert.ok(!privateSnapshot.files.includes('data/prod.txt'));
+    for(const entries of [[entry,'data-reader.ts'],['data-reader.ts',entry]]){
+      const snapshot=graph.describe(entries);
+      assert.ok(snapshot.files.includes('data/prod.txt'));assert.ok(snapshot.placingFiles.includes('data/prod.txt'));
+      assert.deepEqual(new Set(snapshot.memberships.map(row=>row.context.entry)),new Set(['<entry>','data-reader.ts']));
+    }
+    const invalid=fixtureInput(pathToFileURL(join(f.source,'names.ts')),{dataNamespaces:{data:'borrowed'}});
+    assert.throws(()=>graph.describe(['data-reader.ts',invalid]),/fixture data namespace is not a declared data input: data \(names.ts\)/);
+  }finally{graph.close();}
+  mkdirSync(join(f.destination,'data'),{recursive:true});writeFileSync(join(f.destination,'data/private.txt'),'private');
+  copyModuleClosure([entry],f.destination,{sourceRoot:f.source});
+  copyModuleClosure([entry],f.destination,{sourceRoot:f.source});
+  const manifest=JSON.parse(readFileSync(join(f.destination,FIXTURE_INPUT_MANIFEST),'utf8'));
+  assert.equal(manifest.data[0]?.fixtureOwner,'private sample');assert.deepEqual(manifest.data[0]?.readers,['data-reader.ts']);
+  writeFileSync(join(f.destination,'data/prod.txt'),'not production');
+  assert.throws(()=>copyModuleClosure([entry,'bytes.ts'],f.destination,{sourceRoot:f.source}),/cannot replace module-owned input: data\/prod.txt/);
+  rmSync(join(f.destination,'data/prod.txt'));writeFileSync(join(f.destination,'data/missing.json'),'private presence');
+  assert.throws(()=>copyModuleClosure([entry,'negative.ts'],f.destination,{sourceRoot:f.source}),/optional file must remain absent: data\/missing.json/);
+});
+
+test('membership and optional reach never suppress a later actual module edge in either order',t=>{
+  const f=metadataFixture(t);
+  f.write('present.ts',"import './dependency.ts';export const answer=3;");f.write('dependency.ts','export const answer=4;');
+  f.write('importer.ts',"import './present.ts';");
+  for(const entries of [['entry.ts','importer.ts'],['importer.ts','entry.ts']]){
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{
+      const result=graph.describe(entries);
+      assert.ok(result.moduleFiles.includes('dependency.ts'));assert.ok(result.placingFiles.includes('present.ts'));
+      assert.equal(result.memberships.length,1);
+    }finally{graph.close();}
+  }
+});
