@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import memberCatalogue from "../../compiler/codegen/jvm/member-names.json" with {type: "json"};
@@ -114,7 +115,6 @@ import { withToken } from "../gate/tokens.mjs";
 import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
 import { artifactResult, completeVerifier, verifierEnvironment, verifierExecution } from "../gate/artifact-reuse.ts";
 import { createFailureRun, retainRecentFailures } from "./jvm-failure-retention.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 import {createVerifierDriver,type DriverProcessResult} from "./jvm-verifier-driver.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -187,8 +187,8 @@ try {
   console.warn(`  failure retention: cleanup incomplete: ${error.message}`);
 }
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch conformance/jvm-verifies.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);

@@ -77,7 +77,7 @@
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { loadOurs } from "./surface-load.mjs";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 // **One module per invocation.** A first version swept all twenty-two in one
 // process and hung with no output for eleven minutes: constructing a class can

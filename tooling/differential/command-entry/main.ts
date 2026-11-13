@@ -79,7 +79,7 @@ class CommandExit{readonly code:number;constructor(code:number){this.code=code;}
 /** Early command completion passes through the same drain as a return. */
 export function exitCommand(code:number):never{throw new CommandExit(code);}
 
-type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;signal?:CommandSignal;finish:(code:number,reason?:CloseReason)=>Promise<void>};
+type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;signal?:CommandSignal;explicitCode?:number;finish:(code:number,reason?:CloseReason)=>Promise<void>};
 let owner:ProcessOwner|undefined;
 function processOwner():ProcessOwner{
   if(owner)return owner;
@@ -103,7 +103,7 @@ function processOwner():ProcessOwner{
   };
   const state:ProcessOwner={lifetime,pendingMain:false,finish:async(code,reason)=>{
     const drained=await lifetime.close(code,reason);
-    process.exitCode=state.signal?signalCode[state.signal]:code||drained;detach();
+    process.exitCode=state.signal?signalCode[state.signal]:(state.explicitCode??code)||drained;detach();
   }};
   owner=state;
   process.on('beforeExit',beforeExit);process.on('uncaughtException',failed);process.on('unhandledRejection',failed);
@@ -119,6 +119,19 @@ export function registerCommandCloser(name:string,closer:CommandCloser):()=>void
 export function prepareCommandExec():void{
   processOwner();
   for(const signal of ['SIGPIPE','SIGXFSZ'] as const)process.on(signal,()=>{});
+}
+
+/** A terminal verdict drains resources before flushing both output streams.
+ * Flush callbacks cannot end a process while a sampler still owns its log. */
+export function exitAfterOutput(code:number):void{
+  process.exitCode=code;
+  const state=processOwner();
+  state.pendingMain=false;state.explicitCode??=code;
+  void state.finish(code).then(()=>{
+    let open=2;
+    const flushed=()=>{if(--open===0)process.exit(Number(process.exitCode??code));};
+    process.stdout.write('',flushed);process.stderr.write('',flushed);
+  });
 }
 /** Importing the module never starts its command or makes its graph async.
  * Commands keep their own handled diagnostics and statuses. Unhandled errors

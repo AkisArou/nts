@@ -35,7 +35,7 @@
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = join(HERE, "../..");

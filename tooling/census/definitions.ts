@@ -50,7 +50,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 
 const HERE = dirname(fileURLToPath(import.meta.url));

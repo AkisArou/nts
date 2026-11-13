@@ -1,3 +1,4 @@
+import {registerCommandCloser, runAsCommand} from '../differential/command-entry/main.ts';
 // What two compilers emit differently for the runtime, per module -- and, with
 // `--axis`, what that difference does to node's own tests.
 //
@@ -77,7 +78,6 @@ import { readAxis, axisFailure } from "./compiled-axis-rows.mjs";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { reportCheckFailure, checkFailurePolicy } from "../differential/check-report.ts";
 import { armLines, oneChange } from "./pin.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -269,15 +269,16 @@ function selfTest() {
   return null;
 }
 
+runAsCommand(import.meta.url,async()=>{
 const argv = process.argv.slice(2);
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  return 2;
 }
 if (argv.includes("--self-test")) {
   console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ; a moved refusal is seen; a verdict names its unmeasured projects");
-  process.exit(0);
+  return 0;
 }
 
 /** Reference counting: the flag, or `NTS_RC` as the differential reads it. */
@@ -287,19 +288,19 @@ const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
   console.log("  usage: emitted-diff.ts <before-nts> <after-nts> [project ...] [--axis] [--one-change]");
-  process.exit(2);
+  return 2;
 }
 for (const bin of [beforeBin, afterBin]) {
   if (!existsSync(bin)) {
     console.log(`  NOT MEASURED: no compiler at ${bin}`);
-    process.exit(2);
+    return 2;
   }
 }
 if (argv.includes("--one-change")) {
   const why = oneChange(beforeBin, afterBin);
   if (why) {
     console.log(`  NOT MEASURED: --one-change, and ${why}`);
-    process.exit(2);
+    return 2;
   }
 }
 
@@ -317,8 +318,8 @@ const projects = (named.length > 0
 const base = join(homedir(), ".cache/nts-emitted-diff");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch conformance/emitted-diff.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
 const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) => {
   const dir = join(scratch, name);
   mkdirSync(join(dir, "snapshots"), { recursive: true });
@@ -424,12 +425,12 @@ console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "referenc
 const axisModules = differing.filter((p) => p.startsWith("runtime/node/")).map((p) => p.slice("runtime/node/".length));
 if (!argv.includes("--axis")) {
   if (axisModules.length > 0) console.log(`  the compiled axis for them: add --axis (${axisModules.join(" ")})`);
-  process.exit(unmeasured.length === 0 ? 0 : 1);
+  return unmeasured.length === 0 ? 0 : 1;
 }
 if (differing.includes("runtime/web-platform")) console.log("  runtime/web-platform differs and has no compiled axis: its difference is unmeasured behaviourally");
 if (axisModules.length === 0) {
   console.log("  no node module differs: the axis has nothing to run");
-  process.exit(unmeasured.length === 0 ? 0 : 1);
+  return unmeasured.length === 0 ? 0 : 1;
 }
 
 /**
@@ -508,6 +509,8 @@ console.log(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 ? `  no test 
 if (axisIncomplete.length) {
   axisCompletedFailures += lost + axisFailed;
   const failure = axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition === "operator-hold") ?? axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition !== "verdict") ?? axisIncomplete[0];
-  process.exit(reportCheckFailure(failure, process.env, axisCompletedFailures));
+  return reportCheckFailure(failure, process.env, axisCompletedFailures);
 }
-exitAfterOutput(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 && unmeasured.length === 0 ? 0 : 1);
+return lost === 0 && axisUnmeasured === 0 && axisFailed === 0 && unmeasured.length === 0 ? 0 : 1;
+
+});

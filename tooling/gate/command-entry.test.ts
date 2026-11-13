@@ -166,6 +166,19 @@ runAsCommand(import.meta.url,async()=>{
  }
 });
 
+test('explicit output completion drains reports and keeps its status while main remains pending',t=>{
+ const root=testScratch(t,'command-explicit-completion');
+ for(const status of [0,7]){
+  const file=join(root,String(status)+'.mjs');
+  writeFileSync(file,`import {runAsCommand,registerCommandCloser,exitAfterOutput} from ${JSON.stringify(helper)};
+runAsCommand(import.meta.url,async()=>{
+ registerCommandCloser('resource',{close:async()=>{await Promise.resolve();process.stdout.write('closed report');}});
+ exitAfterOutput(${status});await new Promise(()=>{});
+});`);
+  const result=run(file);assert.equal(result.status,status,result.stderr);assert.equal(result.stdout,'closed report');assert.equal(result.stderr,'');
+ }
+});
+
 test('a real SIGTERM keeps the broker alive for its worker retirement and exits 143',async t=>{
  const root=testScratch(t,'command-signal-retirement'),file=join(root,'subject.mjs'),ready=join(root,'ready.json'),done=join(root,'done.json');
  writeFileSync(file,`import assert from 'node:assert/strict';import {createServer,connect} from 'node:net';import {once} from 'node:events';

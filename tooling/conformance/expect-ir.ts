@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // The representation facts the corpora state, checked against the compiler.
 //
@@ -30,7 +31,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -43,7 +43,7 @@ if (!existsSync(NTS)) {
   process.exit(2);
 }
 mkdirSync(SCRATCH, { recursive: true });
-process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
+registerCommandCloser('scratch conformance/expect-ir.ts',{close:()=>rmSync(SCRATCH,{recursive:true,force:true})});
 
 // The compiler is self-contained; bound each isolated process to one checker.
 const env = {

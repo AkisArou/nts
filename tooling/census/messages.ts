@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 // Which refusal *messages* moved between two compilers, over both corpora.
 //
 //   node tooling/census/messages.ts <before-nts> <after-nts> [project ...]
@@ -51,7 +52,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -171,8 +171,8 @@ const projects = (named.length > 0
 const base = join(homedir(), ".cache/nts-messages");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch census/messages.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
 
 const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) => {
   const dir = join(scratch, name);

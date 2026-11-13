@@ -20,7 +20,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");

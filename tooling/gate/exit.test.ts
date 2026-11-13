@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawnTest } from "./test-wait.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const EXIT = new URL("./exit.ts", import.meta.url).href;
+const EXIT = new URL("../differential/command-entry/main.ts", import.meta.url).href;
 
 // A report several pipe buffers long, a diagnostic, then the verdict line, the
 // way a gate step prints them. Ended by process.exit() instead, the verdict
@@ -46,5 +46,5 @@ test("no tooling script ends with a bare process.exit", () => {
     }
   };
   walk(join(ROOT, "tooling"));
-  assert.deepEqual(found, [], "end a tool with exitAfterOutput(verdict) from tooling/gate/exit.ts, so its report reaches a pipe whole");
+  assert.deepEqual(found, [], "end a tool with exitAfterOutput(verdict) from tooling/differential/command-entry/main.ts, so its report reaches a pipe whole");
 });

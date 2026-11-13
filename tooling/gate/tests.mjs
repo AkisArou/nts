@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts } from "./test-artifacts.ts";
 import { TestScratch } from "./test-scratch.ts";
-import { exitAfterOutput } from "./exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");

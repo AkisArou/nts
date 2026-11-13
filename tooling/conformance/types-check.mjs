@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // Is what `nts types` prints a consistent table?
 //
@@ -48,7 +49,6 @@ import { fileURLToPath } from "node:url";
 
 import { longestFirst } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -359,8 +359,8 @@ if (!existsSync(SOURCE)) {
 const base = join(homedir(), ".cache/nts-types-check");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch conformance/types-check.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);

@@ -52,7 +52,7 @@ import { fileURLToPath } from "node:url";
 import { readAxis, AXIS_PREFIX, axisFailure } from "./compiled-axis-rows.mjs";
 import { nodeToolingEnvironment } from "./node-environment.ts";
 import { childTemporary } from "../gate/canonical-environment.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

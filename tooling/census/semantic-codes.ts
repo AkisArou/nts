@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which checker codes does valid test262 JavaScript draw once the checker
 // type-checks it (`checkJs: true`)? The measurement that decides which of
 // TypeScript's semantic codes nts may treat as an ECMAScript early error.
@@ -181,7 +182,7 @@ if (sample > 0) records = records.filter((_, i) => i % Math.max(1, Math.floor(re
 const base = join(homedir(), ".cache/nts-semantic-codes");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+registerCommandCloser('scratch census/semantic-codes.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
 
 // Seal the executable before the first case. A rebuilt instrument halfway
 // through the audit must not silently mix checker versions or source trees.

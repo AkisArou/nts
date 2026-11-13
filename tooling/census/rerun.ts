@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 // Did a change *gain* test262 cases? Re-run only the cases whose recorded
 // reason it could have moved, under the binary before and the binary after.
 //
@@ -55,7 +56,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines } from "../conformance/pin.ts";
 import { filterFrom, readRows } from "./rows.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -160,7 +160,7 @@ if (opts.out) writeFileSync(opts.out, "");
 const base = join(homedir(), ".cache/nts-rerun");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+registerCommandCloser('scratch census/rerun.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
 
 /** One arm over one directory's selection: per path, its row and the census's judged outcome. */
 function arm(name, bin, dir, paths) {

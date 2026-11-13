@@ -22,7 +22,7 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const req = createRequire(join(process.cwd(), "x.js"));
 const addons = process.argv[2];

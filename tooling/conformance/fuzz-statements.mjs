@@ -55,7 +55,7 @@ import {
   runOracle,
   scratch,
 } from "./fuzz-runtime.mjs";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const CASES = Number(process.argv[2] ?? 200);
 const SEED = Number(process.argv[3] ?? 1);

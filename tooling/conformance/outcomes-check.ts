@@ -175,7 +175,7 @@ import { judge, outcomeInventory, outcomeRecord, RECORD } from "./outcomes-verdi
 import { provenanceOf } from "./pin.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {ownCensusScratch} from '../census/census-scratch.ts';
 import {openProgramOracleResults} from '../differential/oracle-results.ts';
 import {OUTCOME_CONTROLS} from '../differential/program-oracles.ts';

@@ -97,7 +97,7 @@ export { Outcome } from "./check-report.ts";
 import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
 import { pendingContradiction, recordPath } from "./oracle-records.ts";
 import { pendingLine } from "../records/pending.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import { reserveJob } from "../gate/memory-ledger.ts";
 import { childTemporary } from "../gate/canonical-environment.ts";
 

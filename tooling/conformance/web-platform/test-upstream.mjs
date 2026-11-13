@@ -9,7 +9,7 @@ import { createContext, runInContext } from "node:vm";
 import { MessageChannel } from "node:worker_threads";
 import { UpstreamWptExecution } from "./upstream-liveness.ts";
 import { WptHungError, recordWptHung, publishWptHangs } from "../../../runtime/web-platform/test/wpt/hung.ts";
-import { exitAfterOutput } from "../../gate/exit.ts";
+import { exitAfterOutput } from "../../differential/command-entry/main.ts";
 let hungFixtures = 0;
 
 // This is the deliberately small testharness.js surface required by the complete,

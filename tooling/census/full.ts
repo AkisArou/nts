@@ -33,7 +33,7 @@ import { fullPlan, fullEnvironment } from "./full-plan.ts";
 
 import { WIDE } from "../gate/owed.mjs";
 import { gateEnvironmentError } from "../gate/environment.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
+import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");

@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { FIXED_AMBIENT } from "../gate/canonical-environment.ts";
 // Is what the backend receives whole? Nine facts about a program, checked from
@@ -166,7 +167,6 @@ import { COMPILE_WORK_PROFILE, compileWorkSettings, compileCommand } from "../ga
 import { measuredCompileEnvironment } from "../gate/canonical-environment.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {runIntegrityListing,integrityListingFailure,finishIntegrity} from "./integrity-command.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -1234,7 +1234,7 @@ function scratch() {
     const base = join(homedir(), ".cache/nts-integrity");
     mkdirSync(base, { recursive: true });
     scratchDir = mkdtempSync(join(base, "run-"));
-    process.on("exit", () => rmSync(scratchDir, { recursive: true, force: true }));
+    registerCommandCloser('scratch conformance/integrity.ts',{close:()=>rmSync(scratchDir,{recursive:true,force:true})});
   }
   return scratchDir;
 }

@@ -1,5 +1,5 @@
+import {registerCommandCloser, runAsCommand} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
-import {runAsCommand} from "../differential/command-entry/main.ts";
 // Compile the generated C for every runtime project, including web-platform.
 //
 //   NTS_BIN=<pin> node tooling/conformance/c-compiles.mjs [project ...]
@@ -102,8 +102,8 @@ async function main() {
   const base = join(process.env.TMPDIR ?? join(ROOT, "target"), "nts-c-compiles");
   mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "run-"));
-  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+  registerCommandCloser('scratch conformance/c-compiles.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
   const compiler = join(scratch, "nts");
   copyFileSync(source, compiler);
   chmodSync(compiler, 0o755);

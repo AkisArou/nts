@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Ambient behavior belongs to the gate's environment contract. Only the
 // harness's explicit inputs and child protocol cross this boundary as well.
 import {hostEnvironment,FIXED_AMBIENT,ENVIRONMENT_CONTEXT,gateEnvironment} from "../gate/canonical-environment.ts";
@@ -34,7 +35,7 @@ function own(dir:string,keep:boolean):void {
   writeFileSync(join(dir,OWNER_MARK),`${process.pid}${keep?" kept":""}\n`);
   if(made.has(dir))return;
   made.add(dir);
-  if(!keep)process.once("exit",()=>rmSync(dir,{recursive:true,force:true}));
+  if(!keep)registerCommandCloser('scratch conformance/node-environment.ts',{close:()=>rmSync(dir,{recursive:true,force:true})});
 }
 
 /** Removes the marked directories whose process is gone and which nobody kept; returns how many. */

@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Every call of a function value reached through an erased slot, and the
 // signatures they call it at.
 //
@@ -365,7 +366,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const base = join(homedir(), ".cache/nts-erased-calls");
   mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "run-"));
-  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+  registerCommandCloser('scratch census/erased-calls.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
   const NTS = join(scratch, "nts");
   copyFileSync(SOURCE, NTS);
   chmodSync(NTS, 0o755);

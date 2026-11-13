@@ -1,3 +1,4 @@
+import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // Does what `emit-llvm` emits assemble?
 //
@@ -46,7 +47,6 @@ import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { artifactShadow, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
-import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -67,8 +67,8 @@ if (!existsSync(SOURCE)) {
 const base = join(homedir(), ".cache/nts-assembles");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch conformance/assembles.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});
+
 // Pinned: a peer relinking target/release/nts mid-run must not change the
 // compiler between two modules.
 const NTS = join(scratch, "nts");
