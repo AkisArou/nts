@@ -23,6 +23,7 @@ import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSes
 import {hostEnvironment} from '../gate/canonical-environment.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {GateResource} from '../gate/gate-resource.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 
 const COMMIT = "1234567890ab".padEnd(40, "c");
 
@@ -158,7 +159,7 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private candidate inputs']);
   const script=readFileSync(new URL('../gate/pinned.sh',import.meta.url),'utf8');
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject,'tooling/gate/all.sh':`#!/bin/sh\nif [ "$1" = --list ];then echo tooling; exit 0;fi\nexec node subject.ts "$(git rev-parse HEAD)"\n`},'real pinned control');
-  const lines:string[]=[],gate=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir,CARGO_HOME:repo.dir}});
+  const lines:string[]=[],gate=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,env:{...hostEnvironment(process.env),...ownMemory(join(repo.dir,'machine')),HOME:repo.dir,CARGO_HOME:repo.dir}});
   const result=gate.run(commit,['tooling'],'core');assert.equal(result.verdict,'red',JSON.stringify(result.reasons)+'\n'+lines.join('\n')+'\n'+readFileSync(join(result.run,'full-check.log'),'utf8'));
   await assertSessionClosed(observed);
   const lock=GateResource.tryAcquire(paths.tree+'.lock');assert.ok(lock,'the run releases the tree lock');lock.close();

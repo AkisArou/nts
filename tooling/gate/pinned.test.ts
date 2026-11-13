@@ -75,11 +75,12 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
   const owned = ownMemory(join(directory, "machine"));
   // Model the actual tooling parent even in a standalone focused invocation.
-  const parent=gateEnvironment(fixtureEnvironment(t),{run:join(directory,"parent"),owned:{NTS_GATE_STEP:"tooling"}});
+  const fixture=fixtureEnvironment(t);
+  const parent=gateEnvironment(fixture,{run:join(directory,"parent"),owned:{NTS_GATE_STEP:"tooling"}});
   const env=withoutHanded(parent.env);
   assignTestValues(env,{NTS_GATE_STEP:undefined,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined,
     NTS_GATE_STEP_MEMORY_BYTES:undefined,NTS_GATE_CASE_COSTS_DIR:undefined,NTS_MEMORY_HANDOVER:undefined});
-  const git = (...args:string[]) => execFileSync("git", gitArguments(args), {cwd:root,env,encoding:"utf8"}).trim();
+  const git = (...args:string[]) => execFileSync("git", gitArguments(args), {cwd:root,env:fixture,encoding:"utf8"}).trim();
   const memory = pathToFileURL(join(tree, "tooling/gate/memory-ledger.ts")).href;
   const cargo = join(bin, "cargo");
   writeFileSync(cargo, `#!${process.execPath}
