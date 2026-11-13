@@ -47,7 +47,7 @@ test('directory snapshots remain independent and a fresh graph observes new trac
   try{
     const first=graph.describe(['entry.ts']);
     const directory=first.directories.find(row=>row.directory==='data')!;
-    directory.files.length=0;
+    assert.ok(Reflect.set(directory.files,'length',0),'a JavaScript caller may mutate its own returned array');
     const next=graph.describe(['entry.ts']);
     assert.deepEqual(next.directories.find(row=>row.directory==='data')!.files,['data/case.ts','data/nested/second.txt']);
     f.write('data/added.txt','new tracked data');
