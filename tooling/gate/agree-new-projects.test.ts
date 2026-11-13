@@ -49,6 +49,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   copyModuleClosure(["tooling/differential/agree.mjs",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],root,{dataNamespaces:{
     'tests/programs':'new-project agreement fixture','benchmarks/cases':'new-project agreement fixture'}});
   writeFileSync(join(root,"tooling/inputs/link.sh"),privateLinker);
+  assert.deepEqual(readFileSync(join(root,"tooling/inputs/link.sh")),privateLinker,"the agreement fixture keeps its private linker after staging");
   assert.deepEqual(readdirSync(join(root,'tests/programs')).sort(),['existing','new-fixture','previously-no-config','previously-unrecorded']);
   assert.deepEqual(readdirSync(join(root,'benchmarks/cases')),['.keep']);
   symlinkSync(join(fileURLToPath(new URL("../..",import.meta.url)),"node_modules"),join(root,"node_modules"));

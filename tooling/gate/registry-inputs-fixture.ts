@@ -86,6 +86,9 @@ export async function registryInputsFixture(t: TestContext,
   // Stage production before the fixture creates its private recipe bytes.
   const nodeFiles=copyModuleClosure(["tooling/inputs/node-inputs.ts"],main);
   const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),linkerDir=join(consumer,"tooling/inputs");
+  const privateRecipe=JSON.parse(readFileSync(join(main,"build/node-deps/recipes.json"),"utf8"));
+  assert.equal(privateRecipe.node,nodePin(toolingRoot),"the registry fixture owns the selected recipe version");
+  assert.deepEqual(Object.keys(privateRecipe.files),["deps/uv/source.c"],"the registry fixture uses only its private source bytes");
   const nodeInputs=join(root,"node-inputs");acquireNodeInputs(main,nodeInputs,table);
   copyModuleClosure(["tooling/inputs/dependency-inputs.ts"],consumer);
   copyFileSync(join(toolingRoot,"tooling/inputs/link.sh"),join(linkerDir,"link.sh"));

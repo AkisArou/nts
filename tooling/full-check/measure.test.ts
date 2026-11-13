@@ -146,6 +146,7 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   rmSync(linker);
   copyModuleClosure(['tooling/inputs/linker.ts'],repo.root);
   writeFileSync(linker,privateLinker);
+  assert.deepEqual(readFileSync(linker),privateLinker,"the pinned-wrapper fixture owns its no-op linker");
   writeFileSync(join(repo.root,'tooling/gate/affinity.ts'),'// affinity is checked independently\n');
   const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session'),bin=join(repo.dir,'bin');mkdirSync(bin);
   const cargo=join(bin,'cargo');writeFileSync(cargo,'#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release"\nprintf "#!/bin/sh\\n" > "$CARGO_TARGET_DIR/release/nts"\n');chmodSync(cargo,0o755);
