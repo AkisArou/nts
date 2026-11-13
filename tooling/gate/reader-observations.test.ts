@@ -223,3 +223,19 @@ test('identity walks resolve parent components after following the preceding lin
   assert.ok(rows.some(row=>row.observation.kind==='file'&&row.observation.path===join(f.source,'physical/target.md')));
   assert.ok(!rows.some(row=>row.observation.kind==='file'&&row.observation.path===join(f.source,'logical/target.md')));
 });
+
+test('source ownership reuse stays inside a graph while captured answers and fresh graphs remain live',t=>{
+  const f=fixture(t);f.write('owned.ts','export {};');f.write('entry.ts',"import './owned.ts';");
+  const graph=moduleGraph({sourceRoot:f.source,nodeMajor:26});
+  try{
+    const first=graph.describe(['entry.ts']);assert.ok(first.moduleFiles.includes('owned.ts'));
+    first.ownedFiles.length=0;first.hostFiles.length=0;
+    assert.ok(graph.describe(['entry.ts','owned.ts']).ownedFiles.includes('owned.ts'));
+    f.write('package.json','{"type":"module","changed":true}');
+    const freshAnswer=graph.describe(['entry.ts']);
+    assert.notDeepEqual(first.observations.filter(row=>row.observation.kind==='file'),freshAnswer.observations.filter(row=>row.observation.kind==='file'),'actual Node observations are read again');
+  }finally{graph.close();}
+  const outside=join(dirname(f.source),'outside.ts');writeFileSync(outside,'export {};');
+  rmSync(join(f.source,'owned.ts'));symlinkSync(outside,join(f.source,'owned.ts'));
+  assert.throws(()=>snapshot(f.source,['entry.ts']),/module is not an owned source file: owned.ts/);
+});

@@ -54,6 +54,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   if(options.nodeMajor!==undefined&&!ORACLE_NODE_RESOLUTION_RECIPE.nodeMajors.includes(options.nodeMajor))
     throw Error('unsupported host module Node recipe: '+String(options.nodeMajor));
   const references = new Map<string,ModuleDeclarations>();
+  // The same graph owns parsed source bytes and their source-file identity.
+  // Namespace/host promotion reuses that identity without repeating realpath.
+  // Captured protocol observations have their own fresh read/validation path.
+  const ownedSources=new Set<string>();
   const hostImports=new Map<string,Set<string>>();
   let tracked: string[] | undefined;
   // A graph owns one tracked inventory. Contexts select from that inventory;
@@ -186,7 +190,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
       const name=nameOf(path);
       if(enter?context.entered.has(name)&&(!host||context.host.has(name)):context.owned.has(name)){if(place)placing.add(name);return;}
-      if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
+      if(!ownedSources.has(path)){
+        if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
+        ownedSources.add(path);
+      }
       context.owned.add(name);owned.add(name);files.add(name);if(place)placing.add(name);
       if(!enter)return;
       context.entered.add(name);moduleFiles.add(name);
