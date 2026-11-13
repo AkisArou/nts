@@ -29,3 +29,15 @@ Use reader-census.ts inspect at each pinned, independently initialized source; t
 `/home/akisarou/.cache/nts-scratch/728/project-census-v2/namespace/edges.json` (3112658 bytes), SHA-256 `62fba5524e80c9b16365119ee7bf07e6bd995d93f6d1a6d3cba9c343d2b2e616`.
 
 The existing full-check keep row protects that evidence until #728 closes. No multi-megabyte edge index is committed.
+
+## Standalone gate-inputs cost
+
+The base and current selector owners ran against the same fixed current source under `with-lock.sh --wait --key perf-count`, perf user instructions on CPU 4, in ABBA order. Each arm is a fresh Node process, with in-process graph caches only. No intentional background load was added. Peak is the resettable own-unit cgroup peak and includes the same controller plus descendants. The two private source copies and their .git directories were removed together after the run.
+
+| Engine | Instructions | Cgroup CPU s | Peak bytes | Wall s | Load (1/5/15) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| base | 47668273855.5 | 4.080620 | 1482029056 | 4.114313 | 13.48/29.98/41.47; 13.2/29.12/41 |
+| current | 47470084892.0 | 4.064072 | 1494716416 | 4.080584 | 13.52/29.72/41.32; 13.48/29.44/41.17 |
+| New/base | 0.995842 | 0.995945 | 1.008561 | 0.991802 | — |
+
+Verdict: noise. Counts and CPU do not regress beyond the arms' spread; the earlier loaded canonical wall observation is not a standalone cost increase. Raw rows, pins, counter, commands, CPU basis and file digest are in project.json and its retained result.

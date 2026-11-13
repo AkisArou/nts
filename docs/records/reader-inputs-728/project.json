@@ -164,5 +164,93 @@
     "matchedScript": "/home/akisarou/.cache/nts-scratch/728/project-census-v2.py",
     "analysisScript": "/home/akisarou/.cache/nts-scratch/728/project-analysis-v2.ts",
     "log": "/home/akisarou/.cache/nts-scratch/728/project-census-v2.log"
+  },
+  "cost": {
+    "base": "c579927b87eae3ba33e6b5181b918b85b9755d2c",
+    "current": "6ffc4f27cf0b379e9f14c5b9dee7ff64ecfead81",
+    "baseRoot": "/home/akisarou/.cache/nts-pool/2/target/728-project-cost-base",
+    "currentRoot": "/home/akisarou/.cache/nts-pool/2/target/728-project-cost-current",
+    "configuration": "ABBA, fresh process per arm; same current source tree, only selector owner changes; in-process graph caches only",
+    "node": "v26.13.0",
+    "cpuMeasure": "cgroup-v2-scope-v1",
+    "counter": "cpu_core/instructions/u",
+    "rows": [
+      {
+        "index": 0,
+        "arm": "base",
+        "instructions": 47716407349,
+        "cpuMs": 4096.726,
+        "wallMs": 4147.155025,
+        "peakBytes": 1471913984,
+        "load": [
+          13.48,
+          29.98,
+          41.47
+        ]
+      },
+      {
+        "index": 1,
+        "arm": "current",
+        "instructions": 48396687697,
+        "cpuMs": 4120.44,
+        "wallMs": 4136.801065000001,
+        "peakBytes": 1508556800,
+        "load": [
+          13.52,
+          29.72,
+          41.32
+        ]
+      },
+      {
+        "index": 2,
+        "arm": "current",
+        "instructions": 46543482087,
+        "cpuMs": 4007.705,
+        "wallMs": 4024.3660309999996,
+        "peakBytes": 1480876032,
+        "load": [
+          13.48,
+          29.44,
+          41.17
+        ]
+      },
+      {
+        "index": 3,
+        "arm": "base",
+        "instructions": 47620140362,
+        "cpuMs": 4064.513,
+        "wallMs": 4081.471236000001,
+        "peakBytes": 1492144128,
+        "load": [
+          13.2,
+          29.12,
+          41
+        ]
+      }
+    ],
+    "means": {
+      "base": {
+        "instructions": 47668273855.5,
+        "cpuMs": 4080.6195,
+        "wallMs": 4114.313130500001,
+        "peakBytes": 1482029056
+      },
+      "current": {
+        "instructions": 47470084892,
+        "cpuMs": 4064.0724999999998,
+        "wallMs": 4080.583548,
+        "peakBytes": 1494716416
+      }
+    },
+    "ratios": {
+      "instructions": 0.9958423297621226,
+      "cpuMs": 0.9959449784524139,
+      "wallMs": 0.9918018922162345,
+      "peakBytes": 1.0085608038173308
+    },
+    "verdict": "noise; no counted or CPU regression beyond the arms' spread",
+    "retainedFile": "/home/akisarou/.cache/nts-scratch/728/project-cost-v1/result.json",
+    "sha256": "46d1fe267a276d34a302474b3d2824d5bb1e98b65d6197c50b2ccd0c3237c13c",
+    "peakBasis": "resettable own-unit cgroup peak, including the same constant controller and measured descendants per arm"
   }
 }
