@@ -13,7 +13,7 @@ import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/c
 // **How each binary is run is cargo's, not this file's.** The first pass is
 // cargo itself -- the same `cargo test --workspace --no-fail-fast` -- with
 // `CARGO_TARGET_<host>_RUNNER` pointing at a recorder: cargo compiles
-// everything, runs the doctests itself (rustdoc does not use a runner), and for
+// everything, runs the doctests in its own first-pass lifetime, and for
 // every test binary calls the recorder with the exact argv, working directory
 // and environment it would have run it with. The recorder writes those down
 // and exits 0. The second pass replays every recording, several at once. So the
@@ -39,6 +39,7 @@ import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
 import {inputTraceArguments} from './rust-input-trace.ts';
 import {publishInputTrace,readTestArtifactTargets} from './rust-test-inputs.ts';
+import {testInvocation} from './test-profile.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
@@ -53,6 +54,7 @@ try {
 }
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
 const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
+const profileDirectory=testInvocation('workspace',[],process.env,ROOT).profileDirectory;
 const work = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "nts-tests-"));
 registerCommandCloser('scratch gate/tests.mjs',{close:()=>rmSync(work,{recursive:true,force:true})});
 
@@ -71,8 +73,14 @@ if (process.env[runnerVar]) {
 const recorder = join(work, "record.sh");
 const calls = join(work, "calls");
 mkdirSync(calls);
+const shellQuote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 writeFileSync(recorder, `#!/bin/sh
-n=$(mktemp "${calls}/call-XXXXXXXX")
+profile=${shellQuote(profileDirectory)}
+calls=${shellQuote(calls)}
+# Cargo also gives rustdoc this runner. Its temporary executables disappear
+# when rustdoc returns, so run those now; only profile-owned artifacts replay.
+case "$1" in "$profile/"*) ;; *) exec "$@" ;; esac
+n=$(mktemp "$calls/call-XXXXXXXX")
 node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({at: process.hrtime.bigint().toString(), cwd: process.cwd(), argv: process.argv.slice(2), env: process.env}))' "$n" "$@"
 `);
 chmodSync(recorder, 0o755);
