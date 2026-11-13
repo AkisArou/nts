@@ -6,7 +6,7 @@ export {dependencySealIdentity,dependencySealReady,dependencySealError,ownsDepen
 export type {DependencySealIdentity,DependencyRunSeal,CheckerImportRelation,OracleSnapshotReference} from './oracle-runtime.ts';
 
 import {mkdirSync,writeFileSync,readFileSync,readdirSync,readlinkSync,realpathSync,statSync,lstatSync} from 'node:fs';
-import {join,resolve,sep} from 'node:path';
+import {dirname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {validateRuntimeObservations,sameOracleObservation,type ObservationKind,type DirectoryEntries,type HostObservation,type FileStat} from './oracle-runtime.ts';
 export {OraclePathPrefixes,capturedModuleIdentity,OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,oracleLegacyMainQueries} from './oracle-runtime.ts';
 export type {ObservationKind,DirectoryEntries,HostObservation,CapturedModulePath,CapturedAlias,ResolutionPackageFact,ResolutionDomainRecord,SparseResolutionDomainRecord,ResolutionQuery,ResolutionProof} from './oracle-runtime.ts';
@@ -68,11 +68,13 @@ export function validateHostObservations(observations:HostObservation[],read:(ki
 /** One instance per preparation worker; reset between fully drained batches. */
 export class OracleFilesystem{
   private observations=new Map<string,HostObservation>();
+  private readonly onObservation:((row:HostObservation)=>void)|undefined;
+  constructor(onObservation?:(row:HostObservation)=>void){this.onObservation=onObservation;}
   clear(){this.observations.clear();}
   private record<T extends HostObservation['value']>(kind:ObservationKind,path:string,value:T):T{
     path=resolve(path);const key=JSON.stringify([kind,path]),previous=this.observations.get(key);
     if(previous&&!sameOracleObservation(previous.value,value))throw Error(`oracle filesystem ${kind} changed during preparation: ${path}`);
-    this.observations.set(key,{kind,path,value});return value;
+    const row={kind,path,value};this.observations.set(key,row);this.onObservation?.(row);return value;
   }
   readBytes(path:string):Buffer|null{
     path=resolve(path);const value=bytes(path);this.record('file',path,value===null?null:digest(value));return value;
@@ -90,6 +92,31 @@ export class OracleFilesystem{
   stat=(path:string):NonNullable<ReturnType<typeof metadata>>|undefined=>{
     path=resolve(path);const value=metadata(path);this.record('stat',path,statFact(value));return value??undefined;
   };
+  /** Canonical reader capture records the actual followed identity, including
+   * dangling targets. lstat/readlink facts retain each in-root component; a
+   * final lstat/readlink query deliberately does not follow its final link. */
+  inputIdentity(path:string,boundary:string,followFinal=true):string{
+    boundary=resolve(boundary);let pending=resolve(path),links=0;
+    const seen=new Set<string>();
+    const inside=(path:string)=>{const part=relative(boundary,path);return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
+    for(;;){
+      if(seen.has(pending))throw Error('reader input alias cycle: '+path);seen.add(pending);
+      const base=inside(pending)?boundary:parse(pending).root,parts=relative(base,pending).split(sep).filter(Boolean);
+      let current=base,restart=false;
+      if(inside(current))this.runtimeKind(current);
+      for(const [index,part]of parts.entries()){
+        current=join(current,part);
+        const kind=inside(current)?this.runtimeKind(current):runtimeKind(current),final=index===parts.length-1;
+        if(kind==='symlink'&&(!final||followFinal)){
+          const text=this.readlink(current);if(text===null)throw Error('reader input alias changed during capture: '+current);
+          if(++links>64)throw Error('reader input alias chain exceeds its bound: '+path);
+          pending=resolve(dirname(current),text,...parts.slice(index+1));restart=true;break;
+        }
+        if(kind===null||!final&&kind!=='directory')return resolve(current,...parts.slice(index+1));
+      }
+      if(!restart)return current;
+    }
+  }
   projectFor(entry:string):string|null{
     for(let dir=resolve(entry,'..');;dir=resolve(dir,'..')){
       const config=dir+sep+'tsconfig.json';if(this.fileExists(config))return config;

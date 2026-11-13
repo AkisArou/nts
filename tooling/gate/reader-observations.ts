@@ -1,10 +1,50 @@
 // Replay the original typed facts. Existence/stat never acquires bytes, and a
 // byte copier cannot silently certify source timestamps on a copied object.
 import {isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
-import {readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
+import {OracleFilesystem,readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
+import {readdirSync} from 'node:fs';
 import type {HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot,ReaderObservation} from './module-closure.ts';
 import {metadataParents,membershipIndex,type MetadataChange} from './reader-metadata.ts';
+
+/** The original callback remains unchanged. Additional real observations
+ * retain alias text, intermediate presence/kind and followed target identity.
+ * Metadata callbacks derive no content reads. */
+export function captureReaderObservations(root:string,rows:readonly HostObservation[]):Pick<ReaderObservation,'observation'|'causes'>[]{
+  let cause:{kind:HostObservation['kind'];path:string}|undefined;
+  const causes=new Map<string,Map<string,NonNullable<typeof cause>>>();
+  const filesystem=new OracleFilesystem(row=>{
+    if(!cause)throw Error('reader identity observation has no callback provenance');
+    const key=JSON.stringify([row.kind,row.path]),values=causes.get(key)??new Map();
+    values.set(JSON.stringify(cause),{...cause});causes.set(key,values);
+  });
+  for(const row of rows){
+    cause={kind:row.kind,path:row.path};filesystem.merge([row]);
+    const follow=!['readlink','runtimeKind'].includes(row.kind),physical=filesystem.inputIdentity(row.path,root,follow);
+    if(physical!==row.path){
+      switch(row.kind){
+        case 'file':filesystem.readBytes(physical);break;
+        case 'stat':filesystem.stat(physical);break;
+        case 'fileExists':filesystem.fileExists(physical);break;
+        case 'directoryExists':filesystem.directoryExists(physical);break;
+        case 'entries':filesystem.getAccessibleEntries(physical);break;
+        case 'runtimeEntries':filesystem.runtimeEntries(physical);break;
+        case 'runtimeKind':filesystem.runtimeKind(physical);break;
+        case 'readlink':filesystem.readlink(physical);break;
+        case 'realpath':filesystem.fileExists(physical);filesystem.directoryExists(physical);break;
+      }
+    }
+    if(row.kind==='entries'){
+      let names:string[];
+      try{names=readdirSync(row.path);}catch(error){if(!['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??''))throw error;names=[];}
+      for(const name of names){
+        const child=join(row.path,name),target=filesystem.inputIdentity(child,root);
+        if(target!==child){filesystem.fileExists(target);filesystem.directoryExists(target);}
+      }
+    }
+  }
+  return filesystem.captured().map(observation=>({observation:structuredClone(observation),causes:[...causes.get(JSON.stringify([observation.kind,observation.path]))!.values()]}));
+}
 
 export function readerObservationDependency(root:string,row:ReaderObservation):{path:string;bytes:boolean;directoryStat:boolean}|undefined{
   const path=relative(root,row.observation.path).split(sep).join('/');
@@ -40,7 +80,10 @@ export function readerObservationIndex<R extends ReaderObservation>(root:string,
     const merged=new Map<string,{added:boolean;deleted:boolean}>();
     for(const change of changes){
       if(!under(path,change.path))continue;
-      if(change.path===path)return true;
+      if(change.path===path){
+        if(!change.added&&!change.deleted&&change.sameMode===true)continue;
+        return true;
+      }
       const row=merged.get(change.path)??{added:false,deleted:false};row.added||=!!change.added;row.deleted||=!!change.deleted;merged.set(change.path,row);
     }
     for(const [file,change]of merged){
@@ -72,7 +115,7 @@ export function readerObservationIndex<R extends ReaderObservation>(root:string,
           changed=members.affected({directory:path,context:{entry:row.context.entry,dataNamespaces:{}}},changes)
             ||dependency.directoryStat&&changes.some(change=>(posix.dirname(change.path)==='.'?'':posix.dirname(change.path))===path);
         }else if(kind==='directoryExists'||kind==='runtimeKind')changed=typeChanged(path,kind,changes);
-        else changed=changes.some(change=>change.path===path);
+        else changed=changes.some(change=>change.path===path&&(kind==='readlink'||change.added||change.deleted||change.sameMode!==true));
       }
       if(changed)affected.set(row,[...subjects]);
     }

@@ -13,8 +13,10 @@ import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespac
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
+import {captureReaderObservations} from './reader-observations.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
-export type ReaderObservation={reader:string;context:ReaderContext;protocol:'project'|'node26';observation:HostObservation};
+export type ReaderObservation={reader:string;context:ReaderContext;protocol:'project'|'node26';observation:HostObservation;
+  causes:{kind:HostObservation['kind'];path:string}[]};
 /** The canonical graph owns derived facts; the declaration leaf has no parser
  * or oracle dependency in either import direction. */
 export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
@@ -99,7 +101,11 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
-      for(const observation of rows)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,observation:structuredClone(observation)});
+      for(const captured of captureReaderObservations(root,rows)){
+        if(captured.observation.kind==='file'&&captured.observation.value!==null&&inside(root,captured.observation.path))
+          visit(context,captured.observation.path,false,false,false);
+        observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
+      }
     };
     function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
