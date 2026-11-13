@@ -1,0 +1,2475 @@
+{
+  "version": 1,
+  "sourceProof": {
+    "version": 1,
+    "base": "7cdb7b565f38cd2594d543c0c93782b0f1b63b1f",
+    "move": "fb2c3390d5707f01804f84ccaf788e8ac82c31de",
+    "tip": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "originalBlockLines": 794,
+    "tests": 16,
+    "names": [
+      "hir::lower::tests::only_the_typed_receiver_fact_proves_its_class_representation",
+      "hir::lower::tests::semantic_computed_numbers_use_javascript_property_spelling",
+      "hir::lower::tests::a_private_template_member_needs_equal_source_arguments_and_storage",
+      "hir::lower::tests::an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order",
+      "hir::lower::tests::anonymous_reservations_survive_layout_demand_order",
+      "hir::lower::tests::one_type_laid_out_two_ways_is_recorded",
+      "hir::lower::tests::a_disputed_layout_is_reported_by_verify",
+      "hir::lower::tests::two_roots_of_one_name_declare_one_shell",
+      "hir::lower::tests::a_second_declaration_of_one_name_is_named_apart_on_merge_too",
+      "hir::lower::tests::a_foreign_layout_name_is_its_identity",
+      "hir::lower::tests::native_pointer_constant_bits_are_lossless_and_bounded",
+      "hir::lower::tests::bigint_literal_and_guard_spellings_are_exact",
+      "hir::lower::tests::no_closure_id_lands_in_a_reserved_band",
+      "hir::lower::tests::the_reserved_bands_are_disjoint",
+      "hir::lower::tests::a_literal_parses_as_the_double_it_denotes",
+      "hir::lower::tests::seventeen_significant_digits_survive"
+    ],
+    "originalBodySha256": "4a204c34b9f3e6c47fa0096b18cac6e3c15a8f9d86a30a6a3ce149305b8ad010",
+    "dedentedMovedSha256": "9805ca3df50950ca870977855adcf2449d9398131f9f16bb8bfa8ea7b80a3b53",
+    "formattedMovedSha256": "8a56c535a919473c4e5993a09587adad8f77b3a378e09538593d8e79dbae256b",
+    "productionOutsideConditionalModuleUnchanged": true,
+    "exactMoveBeforeFormatting": true,
+    "formattingOnlyJoins": [
+      {
+        "count": 2,
+        "before": "let readers =\n        super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));",
+        "after": "let readers = super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));"
+      },
+      {
+        "count": 2,
+        "before": "let (hierarchy, naming) =\n        super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);",
+        "after": "let (hierarchy, naming) = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);"
+      }
+    ],
+    "pathSensitiveMacros": [],
+    "collectorCorrection": "The first unrecorded assertion omitted two tests with intervening attributes; the compiled inventory is independent."
+  },
+  "pins": {
+    "version": 1,
+    "before": {
+      "path": "/home/akisarou/.cache/nts-pins/7cdb7b565f38/nts",
+      "sha": "7cdb7b565f38cd2594d543c0c93782b0f1b63b1f",
+      "binarySha256": "f2bc72acf36cfd8ffcb167e97c678993aef527e15ad94bd7ac7af9b5d6c8278b"
+    },
+    "after": {
+      "path": "/home/akisarou/.cache/nts-pins/4ed677760685/nts",
+      "sha": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+      "binarySha256": "f2bc72acf36cfd8ffcb167e97c678993aef527e15ad94bd7ac7af9b5d6c8278b"
+    }
+  },
+  "compiledIdentity": {
+    "ownerAuthority": "ebbef6787a69dd46fef5ee226889b1a4c0701d03",
+    "arms": [
+      {
+        "arm": "before",
+        "source": "7cdb7b565f38cd2594d543c0c93782b0f1b63b1f",
+        "identities": 628,
+        "moved": [
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_disputed_layout_is_reported_by_verify",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_foreign_layout_name_is_its_identity",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_literal_parses_as_the_double_it_denotes",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_private_template_member_needs_equal_source_arguments_and_storage",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_second_declaration_of_one_name_is_named_apart_on_merge_too",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::anonymous_reservations_survive_layout_demand_order",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::bigint_literal_and_guard_spellings_are_exact",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::native_pointer_constant_bits_are_lossless_and_bounded",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::no_closure_id_lands_in_a_reserved_band",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::one_type_laid_out_two_ways_is_recorded",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::only_the_typed_receiver_fact_proves_its_class_representation",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::semantic_computed_numbers_use_javascript_property_spelling",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::seventeen_significant_digits_survive",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::the_reserved_bands_are_disjoint",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::two_roots_of_one_name_declare_one_shell",
+            "multiplicity": 1
+          }
+        ]
+      },
+      {
+        "arm": "after",
+        "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+        "identities": 628,
+        "moved": [
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_disputed_layout_is_reported_by_verify",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_foreign_layout_name_is_its_identity",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_literal_parses_as_the_double_it_denotes",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_private_template_member_needs_equal_source_arguments_and_storage",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::a_second_declaration_of_one_name_is_named_apart_on_merge_too",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::anonymous_reservations_survive_layout_demand_order",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::bigint_literal_and_guard_spellings_are_exact",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::native_pointer_constant_bits_are_lossless_and_bounded",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::no_closure_id_lands_in_a_reserved_band",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::one_type_laid_out_two_ways_is_recorded",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::only_the_typed_receiver_fact_proves_its_class_representation",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::semantic_computed_numbers_use_javascript_property_spelling",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::seventeen_significant_digits_survive",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::the_reserved_bands_are_disjoint",
+            "multiplicity": 1
+          },
+          {
+            "crate": "nts-core",
+            "kind": "lib",
+            "file": "compiler/core/src/lib.rs",
+            "name": "hir::lower::tests::two_roots_of_one_name_declare_one_shell",
+            "multiplicity": 1
+          }
+        ]
+      }
+    ],
+    "differences": [],
+    "snapshot": {
+      "path": "/home/akisarou/.cache/nts-scratch/681/profile-owner",
+      "manifest": {
+        "version": 1,
+        "authority": "ebbef6787a69dd46fef5ee226889b1a4c0701d03",
+        "files": [
+          {
+            "file": "Cargo.toml",
+            "bytes": 4890,
+            "sha256": "76b2c7b539655150addfe37c929c836ce3e9444e233f45238117bda384366323",
+            "object": "cf3c580c3c539b309dc5e32d850a5722efc0090f"
+          },
+          {
+            "file": "results/builds/cold-inner.json",
+            "bytes": 97167,
+            "sha256": "602eee761f53c29dab7e299f410240ba977867d69ff360f7e3c4f51615f128d6",
+            "object": "1563190bcf7320f5529afabcd74a6cf50bbba4fc"
+          },
+          {
+            "file": "tooling/differential/oracle-seal/main.ts",
+            "bytes": 4495,
+            "sha256": "12b25162783980ad31c9b2bd536574ef2fabff82422606a134bd647330991551",
+            "object": "2377563da674b60a6ec2e1b03eb5c89aab9dbbfc"
+          },
+          {
+            "file": "tooling/gate/build-completion.ts",
+            "bytes": 2122,
+            "sha256": "b8b8ecd84b259b5cf5a08fca31c2222ea771d9224dad2af28a3bc29504a1afcd",
+            "object": "d5960594249ee456c572cbef332653874b61d591"
+          },
+          {
+            "file": "tooling/gate/cache-capabilities.ts",
+            "bytes": 743,
+            "sha256": "9650f64edcedaab560564032404a6528a659c743dc627212388a30bac15b39eb",
+            "object": "b58428105a8e352a602552a75f2dda7ab856f9f3"
+          },
+          {
+            "file": "tooling/gate/disk-capacity.ts",
+            "bytes": 8879,
+            "sha256": "27197cf1ff15b5e5ca755174ddd03824a960ba80d831ee9d913aac876256f4c8",
+            "object": "eb5728ef8c17201670b62df7bff7d8b3318935a9"
+          },
+          {
+            "file": "tooling/gate/durable-record.ts",
+            "bytes": 862,
+            "sha256": "253ae470ce2a9c23f6489dd1b5ec074b97c724fbd41de664518e6c0327166bdd",
+            "object": "45c49209c3b630eed2307550e37ffc30584e3062"
+          },
+          {
+            "file": "tooling/gate/git-arguments/main.ts",
+            "bytes": 353,
+            "sha256": "4b1e5490b980d576c4e9b8cfaf3169a52bd57ef74b14b356a4b337f3f8c0055c",
+            "object": "63187f7c7f3704e96d87e39e499e82b904c71fb7"
+          },
+          {
+            "file": "tooling/gate/host-observations.ts",
+            "bytes": 17206,
+            "sha256": "056cd08114e241e626c63f9939e374f5466c8c43b4de5dcc7f7fd03b13f22717",
+            "object": "d8ff8d7a8479f06df90da99d87e1bd95045c2fa8"
+          },
+          {
+            "file": "tooling/gate/infrastructure-probe.ts",
+            "bytes": 2897,
+            "sha256": "48a819240237fee55fdc33a62595d5711e5a31dc3ca1c6387a7ac3c0cc1d1e42",
+            "object": "38313daffaba013c60949d1ba95f7295e375d99b"
+          },
+          {
+            "file": "tooling/gate/run-temporary.ts",
+            "bytes": 9066,
+            "sha256": "5b6c1e5ca3d00a76a59217f65489e3a33fcb99f237eed3eda5c8cafe85a18b74",
+            "object": "5dc5d19ab695261e12ff80c01424a7840071c55a"
+          },
+          {
+            "file": "tooling/gate/state-file.ts",
+            "bytes": 2083,
+            "sha256": "1b7d01c0153cdf121258021cdff2a9ebf3ad1d297c3abbb07263a2b51eb04d3b",
+            "object": "79d0bda967297d9525621591dd7929d151436936"
+          },
+          {
+            "file": "tooling/gate/state-version.ts",
+            "bytes": 1756,
+            "sha256": "ed6b94ad0ba161897d2a739da2f233892115e7c2620e2e506a73be374bb4e24d",
+            "object": "c7fe2e64215ff850c2ca87105a2c8f6fac6d7e89"
+          },
+          {
+            "file": "tooling/gate/step-result.ts",
+            "bytes": 5072,
+            "sha256": "3eaee44509d66c2fbd835aecc739f6bf3f21f8e0c1350317f5fe004a412dcd5a",
+            "object": "012a4ef2692d6da566e7fb15e79c914a5f252ca5"
+          },
+          {
+            "file": "tooling/gate/test-profile.ts",
+            "bytes": 10886,
+            "sha256": "214f0c7503c4bdaf8fa6c9265977dcd53995c3b7bdc525532af69de7ff6634e6",
+            "object": "f88130b69dba2883440639e80300cd1594176a4a"
+          },
+          {
+            "file": "tooling/landing/git.ts",
+            "bytes": 13684,
+            "sha256": "a8cfe2c086d75f90c9244d28d7b7fbc22f15e62d26da77f4a7ad28c3fda840f2",
+            "object": "982aa8b9084b572ce2f82845bf2477588f115b23"
+          },
+          {
+            "file": "tooling/landing/lock.ts",
+            "bytes": 5322,
+            "sha256": "a6a2dd3da454d6719d5a11875ac47d22c126e2c3139e678eef477c08f5075a40",
+            "object": "6da6f5dc976b05fda791af4f782a574590f5f1c5"
+          },
+          {
+            "file": "tooling/tasks/links.ts",
+            "bytes": 1769,
+            "sha256": "f7656cee3a6139337ce22404a4f4501377ce9583c17f88c0e868277b6330e814",
+            "object": "c4dc01b7372ebdfdb20b3e52a69131bdee52a857"
+          }
+        ]
+      },
+      "relocationControl": "The original snapshot route refused before Cargo on an unresolved disk-capacity source root. The corrected route supplies the existing real DiskCapacity.pool descriptor; no pool:null or fake root."
+    }
+  },
+  "hir": {
+    "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "counts": {
+      "pairs": 4932,
+      "identical": 4932,
+      "different": 0,
+      "unproved": 0,
+      "controls": 200,
+      "controlDifferent": 0
+    },
+    "programs": 1233,
+    "successfulPairs": 4924,
+    "matchingNonzeroPairs": 8,
+    "preparations": [
+      {
+        "preparation": "c",
+        "rows": 1233,
+        "identical": 1233,
+        "different": 0,
+        "unproved": 0
+      },
+      {
+        "preparation": "llvm",
+        "rows": 1233,
+        "identical": 1233,
+        "different": 0,
+        "unproved": 0
+      },
+      {
+        "preparation": "jvm",
+        "rows": 1233,
+        "identical": 1233,
+        "different": 0,
+        "unproved": 0
+      },
+      {
+        "preparation": "c-rc",
+        "rows": 1233,
+        "identical": 1233,
+        "different": 0,
+        "unproved": 0
+      }
+    ],
+    "cleanupFailures": [],
+    "exceptions": [
+      {
+        "version": 1,
+        "index": 3624,
+        "program": "tests/programs/invalid",
+        "preparation": "c",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3624-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3624-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 32.966763999982504,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3624-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3624-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 45.41866699999082,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 3625,
+        "program": "tests/programs/invalid",
+        "preparation": "llvm",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3625-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3625-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 26.458493999991333,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3625-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3625-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 38.64022400000249,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 3626,
+        "program": "tests/programs/invalid",
+        "preparation": "jvm",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3626-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3626-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 35.980137999984436,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3626-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3626-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 28.87359699999797,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 3627,
+        "program": "tests/programs/invalid",
+        "preparation": "c-rc",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3627-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3627-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 23.922885000007227,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3627-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/3627-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 29.271859000000404,
+          "stdout": {
+            "bytes": 263,
+            "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 4592,
+        "program": "benchmarks/cases/jetstream-lebab-wtb",
+        "preparation": "c",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4592-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4592-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2170.3730240000295,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4592-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4592-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2227.7755219999817,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 4593,
+        "program": "benchmarks/cases/jetstream-lebab-wtb",
+        "preparation": "llvm",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4593-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4593-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2174.127962999977,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4593-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4593-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2209.4395829999703,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 4594,
+        "program": "benchmarks/cases/jetstream-lebab-wtb",
+        "preparation": "jvm",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4594-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4594-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2206.1116059999913,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4594-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4594-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2200.686768000014,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      },
+      {
+        "version": 1,
+        "index": 4595,
+        "program": "benchmarks/cases/jetstream-lebab-wtb",
+        "preparation": "c-rc",
+        "before": {
+          "label": "before",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4595-before.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4595-before.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2185.9734070000704,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "after": {
+          "label": "after",
+          "stdoutFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4595-after.stdout",
+          "stderrFile": "/home/akisarou/.cache/nts-scratch/681/hir-full/captures/4595-after.stderr",
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 2417.4789480000036,
+          "stdout": {
+            "bytes": 1608,
+            "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+          },
+          "stderr": {
+            "bytes": 38,
+            "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+          },
+          "classification": "build-failure"
+        },
+        "verdict": "identical"
+      }
+    ],
+    "rowIndex": {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/row-index.json",
+      "bytes": 552407,
+      "sha256": "710c77cfcef442d619a6c3b3dbacdb9250b9b517f3d1801c94a10a43766a4906"
+    },
+    "corpus": {
+      "tests/programs": 1068,
+      "benchmarks/cases": 165
+    },
+    "capturePolicy": "The original full cohort deleted fully agreeing captures after recording stream byte lengths/hashes. Its matching nonzero outcomes are hash/status-only evidence. The separately labelled retention replay keeps exact raw streams and verifies their identities against those original hashes without normalization.",
+    "configIndex": {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/config-index.json",
+      "files": 161,
+      "bytes": 29824,
+      "sha256": "0457275720f278717542e73da7123995ffe4d4ec204cad286262579a455f3daf"
+    }
+  },
+  "cRecords": [
+    {
+      "group": "language",
+      "pass": 7014,
+      "negativesAccepted": 1315,
+      "reconciled": true,
+      "changes": {
+        "REGRESSED": 0,
+        "CHANGED": 0,
+        "MISSING": 0,
+        "FIXED": 0,
+        "NEW PASS": 0,
+        "NEW FAIL": 0,
+        "UNSTABLE": 0
+      }
+    },
+    {
+      "group": "builtins",
+      "pass": 888,
+      "negativesAccepted": 185,
+      "reconciled": true,
+      "changes": {
+        "REGRESSED": 0,
+        "CHANGED": 0,
+        "MISSING": 0,
+        "FIXED": 0,
+        "NEW PASS": 0,
+        "NEW FAIL": 0,
+        "UNSTABLE": 0
+      }
+    },
+    {
+      "group": "annexb",
+      "pass": 9,
+      "negativesAccepted": 1,
+      "reconciled": true,
+      "changes": {
+        "REGRESSED": 0,
+        "CHANGED": 0,
+        "MISSING": 0,
+        "FIXED": 0,
+        "NEW PASS": 0,
+        "NEW FAIL": 0,
+        "UNSTABLE": 0
+      }
+    },
+    {
+      "group": "staging",
+      "pass": 54,
+      "negativesAccepted": 3,
+      "reconciled": true,
+      "changes": {
+        "REGRESSED": 0,
+        "CHANGED": 0,
+        "MISSING": 0,
+        "FIXED": 0,
+        "NEW PASS": 0,
+        "NEW FAIL": 0,
+        "UNSTABLE": 0
+      }
+    },
+    {
+      "group": "harness",
+      "pass": 17,
+      "negativesAccepted": 0,
+      "reconciled": true,
+      "changes": {
+        "REGRESSED": 0,
+        "CHANGED": 0,
+        "MISSING": 0,
+        "FIXED": 0,
+        "NEW PASS": 0,
+        "NEW FAIL": 0,
+        "UNSTABLE": 0
+      }
+    }
+  ],
+  "task": 681,
+  "status": "review candidate; all section proofs complete",
+  "scope": "Only the existing cfg(test) module moves, plus four cargo-fmt joins; production source outside that block is unchanged.",
+  "tripwires": {
+    "launcherSource": "4c635792ae764ff4f6fd58f416b92c36a4aea7d2",
+    "candidate": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "canonical": true,
+    "compiler": {
+      "path": "/home/akisarou/.cache/nts-gate/target/release/nts",
+      "sha256": "d8975021da9ad7d8e0af3ab95bc98c0847281ef2e06318fae452fc05fc4a5cd5",
+      "pinned": "/home/akisarou/.cache/nts-gate/bin/d8975021da9ad7d8e0af3ab95bc98c0847281ef2e06318fae452fc05fc4a5cd5/nts"
+    },
+    "verdict": "green",
+    "cleanup": {
+      "state": "complete"
+    },
+    "steps": [
+      {
+        "name": "build",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 0.162,
+        "cpu": 0.148855
+      },
+      {
+        "name": "compile-time",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 76.937,
+        "cpu": 482.817118
+      },
+      {
+        "name": "compile-time-rc",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 130.049,
+        "cpu": 465.947884
+      }
+    ],
+    "run": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761"
+  },
+  "proofPins": {
+    "supportedRed": "f55e8a396084383361d3780cd5ece95ba1a83d9e",
+    "correctedInnerAndCorpus": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "pinCompilerRecipeSha256": "f2bc72acf36cfd8ffcb167e97c678993aef527e15ad94bd7ac7af9b5d6c8278b",
+    "canonicalReleaseRecipeSha256": "d8975021da9ad7d8e0af3ab95bc98c0847281ef2e06318fae452fc05fc4a5cd5",
+    "identityScope": "Release pin byte identity compares the two independent pin.ts builds only. The canonical workspace build is a separate authenticated recipe, not a byte-identity claim against the pins."
+  },
+  "supported": {
+    "source": "f55e8a396084383361d3780cd5ece95ba1a83d9e",
+    "verdict": "red",
+    "cleanup": {
+      "state": "complete"
+    },
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-f55e8a396084-1794563595318",
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 18.721,
+        "cpu": 43.128219
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "FAIL",
+        "exit": 1,
+        "wall": 3.994,
+        "cpu": 3.894561
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 3.894,
+        "cpu": 3.025337
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 1.93,
+        "cpu": 1.86007
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 2.157,
+        "cpu": 3.515429
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 6.042,
+        "cpu": 6.875109
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 5.413,
+        "cpu": 7.218134
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 243.548,
+        "cpu": 2388.756301
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 316.075,
+        "cpu": 4470.052828
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 1.24,
+        "cpu": 3.784816
+      }
+    ],
+    "build": "PASS; see here-v1.log",
+    "ownFailure": "rustfmt only; four unchanged statements joined by cargo fmt in the extracted module; initial inner command did not launch"
+  },
+  "inner": {
+    "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "commands": [
+      {
+        "name": "fmt",
+        "verdict": "PASS",
+        "wallSeconds": 6
+      },
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "wallSeconds": 5
+      },
+      {
+        "name": "build",
+        "verdict": "PASS",
+        "wallSeconds": 1
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "wallSeconds": 507
+      }
+    ],
+    "prepared": true
+  },
+  "focused": {
+    "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "pass": 135,
+    "fail": 0,
+    "host": "test host ownership: 1892 sources, 263 entry closures, 413 reads checked",
+    "strict": "tooling strict types: 832 modules; 5695 recorded diagnostics; 0 improved modules"
+  },
+  "excluded": [
+    {
+      "cohort": "first source-name extraction",
+      "reason": "unrecorded assertion omitted two tests with intervening attributes; corrected source proof and independent compiled listings retain all sixteen"
+    },
+    {
+      "cohort": "compiled-inventory-v1",
+      "reason": "refused before Cargo; real public DiskCapacity capability supplied in v2"
+    },
+    {
+      "cohort": "here-v1",
+      "reason": "red only rustfmt; not described as a green supported run"
+    },
+    {
+      "cohort": "original pinned wrapper",
+      "reason": "named stop before gate entry; outer reservation spans too much, fixed separately by #774; no tripwire result accepted from this attempt"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/compile-time-rc.log",
+      "bytes": 464,
+      "sha256": "0d2078d8efaf81db04db8e14f3a8a7fe1298f5c342df0a1bf822be03e4ce812b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/compile-time.log",
+      "bytes": 436,
+      "sha256": "f118aecc2dea3ef7a58a3888181bad2c6b1edbfd76ee1a0dd112d0585ece732d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/prepare.cpu",
+      "bytes": 18,
+      "sha256": "439659db050fd7d2eb59233a1c4651c314f6bbf1b022460b527baff8059e22be"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/summary.json",
+      "bytes": 25572,
+      "sha256": "9766ea372c5f3b16a1ed4fc793ceaf781dce371634dee5b99ff72350592b6021"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-f55e8a396084-1794563595318/build.log",
+      "bytes": 932,
+      "sha256": "150a3b40c2d92e12fdc8878e63182ea4f6aa4e00c25ad9f93576d4151cc23c36"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-f55e8a396084-1794563595318/rustfmt.log",
+      "bytes": 75,
+      "sha256": "a90599015d470939da24c81fd75da1a8475a9420d06344ea5c77cdd3535d68dd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-f55e8a396084-1794563595318/summary.json",
+      "bytes": 722215,
+      "sha256": "07552a32c8de90a3849f6bd442337d654fc9d8f5e56aaa2e1075582eadf58e64"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compare-hir.mjs",
+      "bytes": 10747,
+      "sha256": "789df08b33466b789cdbb4f467ff57174946086093098bba33428cdac01afc84"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-after-artifacts.json",
+      "bytes": 140224,
+      "sha256": "284c2418d731fdbb0be2f33ea29836d93e4bbfb541ef23c754e7080119516942"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-after-inventory.json",
+      "bytes": 140047,
+      "sha256": "4432791024d44d1971f41e50762cd28064f1907bc254d39ad74ec4096ee12812"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-before-artifacts.json",
+      "bytes": 140227,
+      "sha256": "f750b5ab12f2b0a525bd016e4800c68c51b2276850ff29559b4666ffc82bf3c1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-before-inventory.json",
+      "bytes": 140047,
+      "sha256": "4432791024d44d1971f41e50762cd28064f1907bc254d39ad74ec4096ee12812"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-identity.json",
+      "bytes": 342317,
+      "sha256": "87892c997975f8a1c76318e601454850fe5a41f399af707edb9292b6696a3f54"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-inventory-v2.log",
+      "bytes": 449,
+      "sha256": "6855bd6c8e199e58e3dfc0446c7621cfcb9c612821630da15a201fc2e149f240"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-inventory-v2.sh",
+      "bytes": 351,
+      "sha256": "97b8c6333b4bed2670ba1c8b7652f8ba5fdbdf8e610256fc29f3db3cc28f6d2f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-inventory.log",
+      "bytes": 1624,
+      "sha256": "2385a50005863df008af5ffd0f3744976f8dcda07e55613314744a8e0b890fe7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-inventory.mjs",
+      "bytes": 5083,
+      "sha256": "96d037bc5d45afaaef9835af4a7af74e5392f94a97480067e5deb244b1458f5c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compiled-inventory.sh",
+      "bytes": 348,
+      "sha256": "731864a4d06333495339117b566a4c1e567634efe697fa11dd9daae85c097b06"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/focused.log",
+      "bytes": 12065,
+      "sha256": "94cd3b6841f5aa3f672c2025bdafde1664e7027b1d132f6b13477ed001841654"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/focused.sh",
+      "bytes": 498,
+      "sha256": "108d828141e495ab9f27d09ee963ad51cf3ba13253ca8dae8e95a2ef0d6abdc1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/here-inner-v1.sh",
+      "bytes": 307,
+      "sha256": "a0f0c6e43285329e5f8ec0881d90e2ca02f3303c61140c5bb9503dcb83295727"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/here-v1.log",
+      "bytes": 976,
+      "sha256": "f77c52ba106be2343de80e425c250c9d483429ace87c4e988aecbfa180a0b78d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-controller.mjs",
+      "bytes": 2053,
+      "sha256": "1c95e6d108d920c483facb69bef448e94066eca2b3096a4e1b106874d7fe061b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/chunks/0000.log",
+      "bytes": 11802,
+      "sha256": "d5c16a80028df8b47c0af91b3038eb5f5891778ccc26efb7962b03bc3e2d5c9c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/cohort.json",
+      "bytes": 244781,
+      "sha256": "e7b65cdd97ffc917db48a2d768f45b4e219b4c92b569b23894ac796a7f48bcd2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/row-index.json",
+      "bytes": 552407,
+      "sha256": "710c77cfcef442d619a6c3b3dbacdb9250b9b517f3d1801c94a10a43766a4906"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/summary.json",
+      "bytes": 12783,
+      "sha256": "40e0bb2152280815bbda5539940b2eed2eaffd1fb8f566671e24ec540b2a7ed5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full.log",
+      "bytes": 9361,
+      "sha256": "be6ccb4a34eb9a83d22e1a1e02170aa668e2ce5e06c1578a2c8b3f8e2002b5b7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full.sh",
+      "bytes": 329,
+      "sha256": "425362b0f9acfa5d71f629dd6c5339c678ba238e8ad455024608acfe53b22a82"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-smoke-v2.log",
+      "bytes": 561,
+      "sha256": "55c7e80b6843dddb71eafd1f8f5716764c35d61838af55c0896e368ebcde7d64"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-smoke-v2.sh",
+      "bytes": 345,
+      "sha256": "b2452b8c64ae94ffa55f30ea16ff59330d372e2b0547ff69112e146ed382ef22"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-smoke.log",
+      "bytes": 561,
+      "sha256": "55c7e80b6843dddb71eafd1f8f5716764c35d61838af55c0896e368ebcde7d64"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-smoke.sh",
+      "bytes": 430,
+      "sha256": "1d51ec0fd83b04c18dec9092b8316326663552004d97a4f7f4207f4636679761"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/host.log",
+      "bytes": 73,
+      "sha256": "b4104a613e666ec6cad8dbd86902a9ef31e412c64057552fedb8d75b495586a4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/inner-v2.log",
+      "bytes": 173299,
+      "sha256": "5a8603c71778ea9f83da31baff074fba9ee8377a82adfc467bfdc29b9943f11a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/inner-v2.sh",
+      "bytes": 177,
+      "sha256": "ae4701c65dc81e4c4b49323053d6e60ab626796e815fe4662cb8169a54e3ccd6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pin-after.log",
+      "bytes": 174,
+      "sha256": "2166eb430185d29f2c235b579adb4eb8f6cacae41423c0f9962657af1ccabfd1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pin-before.log",
+      "bytes": 174,
+      "sha256": "914ae70319d8c3805fb4c180b089c162ceb49e5d5e7cb1fff14aacd307844086"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission-created.json",
+      "bytes": 224,
+      "sha256": "67c6a84d3a92c8543463cf07f4b379ff4951cc96815ccb1fedba148c2daebef7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission-issue.json",
+      "bytes": 1996,
+      "sha256": "dcbefbe803515772269d65eaa662472d0295f0eec08578c26c575c9301c8b1e4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pins.json",
+      "bytes": 466,
+      "sha256": "32807018bcc5fce7b12ae27f4f101b53399c9b0d99b8a1cefd907a1094702ad3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pins.sh",
+      "bytes": 518,
+      "sha256": "0862b34fd35e04eeac20921e9b44d6d3c3facb1bcc9f498ff0dd9aff0ca17d05"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/profile-owner.json",
+      "bytes": 4120,
+      "sha256": "4d46988fc9a05cfc03f208db185475961355629b4c20cb51445fd973a18c98c2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/real-disk-capability.json",
+      "bytes": 129,
+      "sha256": "c4c65f4a6f6f282508c3413fe8f06c2410a83cdc6afd6c862f526f0ce69b1b26"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/source-move.json",
+      "bytes": 2552,
+      "sha256": "d42e3a9fda0e85898efe910de8a5c351d4dbbd0db190fab6980139cc58744005"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/source-move.py",
+      "bytes": 2912,
+      "sha256": "9eb6abc26507d74e9997f19511a83ff7362e7b7110caff14ae23b35a645b6f9d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/strict.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-annexb.log",
+      "bytes": 5413,
+      "sha256": "4bb6979a645875b763a7f3f068a03c92871f768aa2aadd6c4808f91e36bfb5f9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-builtins.log",
+      "bytes": 5403,
+      "sha256": "5f84881ba04a764a263113fe015f410945146ff8efca8a6446c88ef90a67c82c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-harness.log",
+      "bytes": 5402,
+      "sha256": "174bd2536705753349d3007297cc75a03acff6130f207c604956026f8bfc5d16"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-language.log",
+      "bytes": 7070,
+      "sha256": "d80c5a6b032154dc3e2c3b52dbc0a75329cf73776ca46fd176ab1984edbeaf41"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-records.sh",
+      "bytes": 785,
+      "sha256": "45872f034fecc3f23b2f0c838dcd3fdf2e2eaba44e0a3872b46a11a2fee8df6e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/test262-staging.log",
+      "bytes": 5496,
+      "sha256": "ad48758125333b7a5b30c3ce8ef208475765d9f65de38cf00585709224930db4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires-v2.log",
+      "bytes": 8905,
+      "sha256": "10011980a245c15381a68eed1d58cd0a9d3b156fcf764e44827502237a87bdb3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires-v2.sh",
+      "bytes": 406,
+      "sha256": "83993ebf6fd443c2e15314c322c86cb3545690a0614ec21e69533f3c2d12d41e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires.log",
+      "bytes": 789,
+      "sha256": "6825dab1976312da1961a6da9f5254606bd1e30eaf20219667663a689d0526f3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires.sh",
+      "bytes": 444,
+      "sha256": "bc361d21710a5ef96b86dbbe0f3b72bead151d52bac7c554771bad3534865e17"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/compare-hir-failures.mjs",
+      "bytes": 10869,
+      "sha256": "ed315bfd3ba08ded26eabf44474843fd5890ca001dc9a873ce558845acb59e2f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-after.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-before.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-control.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/0-control.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-after.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-before.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-control.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/1-control.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-after.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-before.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-control.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/2-control.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-after.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-before.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-control.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/3-control.stdout",
+      "bytes": 263,
+      "sha256": "e2b73222cced795d37d196ee26d52e88bbae9c0342321e21c062f1a7836b03c6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/4-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/4-after.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/4-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/4-before.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/5-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/5-after.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/5-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/5-before.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/6-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/6-after.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/6-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/6-before.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/7-after.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/7-after.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/7-before.stderr",
+      "bytes": 38,
+      "sha256": "3286b73d8f75cac591e6a7f3d6a427408f8c713a78102cca5b8895ea584591fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/captures/7-before.stdout",
+      "bytes": 1608,
+      "sha256": "0a50a3cddf9b527356d3c8dae201c71be22fd3d76a94129a9fe4930e698f4995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/chunks/0000.log",
+      "bytes": 9345,
+      "sha256": "9490316455243c88de70fc6198429830ee42354492a3c4675148bd31b36c855c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/cohort.json",
+      "bytes": 2262,
+      "sha256": "2fa32fbf6a420d9c98ee678d1657e02a53747dba4b5a8b8ad8f0d7c74113f00d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/comparison.json",
+      "bytes": 1069,
+      "sha256": "dccd882a175694f02f04b295d2f5e4d7010b835c3920ecc5d51c39fe161dc8ce"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/absences.tsconfig.json",
+      "bytes": 143,
+      "sha256": "3550a8bc597511aed14a3e0fff7db5b3c125b606199ec1b6c4405f4f9a9a7f3f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/accumulate.tsconfig.json",
+      "bytes": 145,
+      "sha256": "7352a29cfd1b6d1330b261fcde09a1420704170b9f8beea2e64c2e4ea3d406a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/ares6-air.tsconfig.json",
+      "bytes": 144,
+      "sha256": "bd2f86e1b3228bec3bd775655de3b502a86d204cf650b8c14b790d6887271b2b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/ares6-babylon.tsconfig.json",
+      "bytes": 148,
+      "sha256": "aa0c6495f4df9fbf2da523c32ccdc345882b509a60debb99074809b640b84008"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/ares6-basic.tsconfig.json",
+      "bytes": 146,
+      "sha256": "8f375db2fe02f6a9303fc36a0ca341760b8ed0c6227eb3844c7e3afd796534be"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/ares6-ml.tsconfig.json",
+      "bytes": 143,
+      "sha256": "8daf07b8a32173e48c5991014b127ab006866ed6ec53e8f8ac4c1c0ea142c6ef"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/array-copying-methods.tsconfig.json",
+      "bytes": 156,
+      "sha256": "3258a841e5824f5e473f03ed71c6d643f0f56a98ef2996d1539dd21418e9dae6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/array-from.tsconfig.json",
+      "bytes": 145,
+      "sha256": "593a7ee5b50d243e61e8df767f94549a5d9a8adb6e09b632636af77db22546d3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/array-methods.tsconfig.json",
+      "bytes": 148,
+      "sha256": "575b574e4b03b688b2601ad0b26bcc11ac8db782b9fcd0397091da2f6bfec41f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/array-mutations.tsconfig.json",
+      "bytes": 150,
+      "sha256": "946049d776d08d92cf1f936ea9aeb6e9b3331b8242d0395d456a7925da16b879"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/array-predicates.tsconfig.json",
+      "bytes": 151,
+      "sha256": "ad1e60f878ff37aa5ce5cacab2e7266aaaa083e3e11d0ed092971775b1d66e76"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/arrays.tsconfig.json",
+      "bytes": 141,
+      "sha256": "75878cdf7967e561795eba2acf98a355da2d2ff722b813b44aa2d9a9cfce7d19"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-bounce.tsconfig.json",
+      "bytes": 146,
+      "sha256": "2fe5d75af587d3042200b4ee502e4f65f58ce9556e6add8c3862fb49479b3a58"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-cd.tsconfig.json",
+      "bytes": 142,
+      "sha256": "0b2b353200f0c21c0fa16c39d54db9679b8a94e1fc266ff03976ae6291493224"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-havlak.tsconfig.json",
+      "bytes": 146,
+      "sha256": "2cdebcbd1d2c3db46e815891b77124d013ed690418afcd19cd4f517f1edbcb67"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-json.tsconfig.json",
+      "bytes": 144,
+      "sha256": "dc50a2f82e8cc5e78f6676f99cd3bb79da60842a64e790611bb022c9fc4b2f56"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-list.tsconfig.json",
+      "bytes": 144,
+      "sha256": "413f59a7999fe207c968fbd6f78ae5dabe005cfdfb1e69c6a5352c25bd6f961b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-mandelbrot.tsconfig.json",
+      "bytes": 150,
+      "sha256": "5216aeeb49f200b95a8534524fd381c16c28ca5473efc19d96758f1048f1267e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-nbody.tsconfig.json",
+      "bytes": 145,
+      "sha256": "9232c7205f85d42d40b6df82d54852986cb89ee41408f0fcd25b1be2e410abe5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-permute.tsconfig.json",
+      "bytes": 147,
+      "sha256": "474b3d994f73d7e735ea78855d71c087470e3efc5fae0abc9fdb362cd8e54577"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-queens.tsconfig.json",
+      "bytes": 146,
+      "sha256": "4138adde2ea5f981e83455422194ade08362f8bbf0ad3ab5776602a19d7c8a02"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-sieve.tsconfig.json",
+      "bytes": 145,
+      "sha256": "6cd0dc46b6af5b7aa6b0ebed364ab612118ccf5d8492b4a639788b0879554c10"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-storage.tsconfig.json",
+      "bytes": 147,
+      "sha256": "5b4d3a9c88b95fcbeb24cd2919916726b169d9e7e56a66d5bc3151329302e6b4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/awfy-towers.tsconfig.json",
+      "bytes": 146,
+      "sha256": "bbabcb4ab5ad72115eb3520bb85b87e5942c7f58105eff351b7d737c02c73cba"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/bigint.tsconfig.json",
+      "bytes": 141,
+      "sha256": "9a04a3342aff4a9b6f14c785e66309c5c9c2d5e5a1e59feb5c9eea692c7ff352"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/bytes.tsconfig.json",
+      "bytes": 140,
+      "sha256": "f6737bf2c2aa86de4b5c43ce19366e806afdd6f361cd2a0103491a3e67b6c46f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-cjk.tsconfig.json",
+      "bytes": 151,
+      "sha256": "04a3629bf218c46d1172a6f76d8f075d0b45955bf0b73c74b803395021bcf0a0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-greek.tsconfig.json",
+      "bytes": 153,
+      "sha256": "d78d8ec30742a0d8bebeea1894bbe01a87e5b1016aa06585c6e2079f38f4a995"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-late-change.tsconfig.json",
+      "bytes": 159,
+      "sha256": "6a583738c2fbe801ab8359a39ce1594b968d1f66b61f014e3e5af5487b01ec47"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-latin1.tsconfig.json",
+      "bytes": 154,
+      "sha256": "ace0920b7929e722ee1271243525700d295a067814c6e9338704c6b3087ec1bd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-unchanged-greek.tsconfig.json",
+      "bytes": 163,
+      "sha256": "4c374b637961ba04931459cff5cfcb1c2351a82ce973ab509b57fe11a6d6e519"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert-unchanged.tsconfig.json",
+      "bytes": 157,
+      "sha256": "2ed35438afea1285c570e5533280f3fcfa502db0be93f4ae7b00251ef82d85dd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/case-convert.tsconfig.json",
+      "bytes": 147,
+      "sha256": "10050a156b155e43bf466658e4f24e5b991c82c625306b63a3eaf9948936cd20"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/checksum.tsconfig.json",
+      "bytes": 143,
+      "sha256": "a1bd14ea4d4f9a4a263e6f5311d0d7e293a5ae6d256a26c3ab89cc08ec995a8f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-binary-trees.tsconfig.json",
+      "bytes": 152,
+      "sha256": "b9b19ca97f4653ffc33adebb4f66838a94db7f8dac588026db8a42eb8977ae5c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-fannkuch-redux.tsconfig.json",
+      "bytes": 154,
+      "sha256": "059902c2dd6621a77fdab77517799f8ab9245ecd907be89deb472f964cad0205"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-fasta.tsconfig.json",
+      "bytes": 145,
+      "sha256": "046947450afd8e99814e22dbd2959869e78bc6611f6e80dbda7cd95f4932f4f1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-k-nucleotide.tsconfig.json",
+      "bytes": 152,
+      "sha256": "34aa6b52a239f6e85f3f8479a8cfa97b9818292eab52b45929cd9a435269acf9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-mandelbrot.tsconfig.json",
+      "bytes": 150,
+      "sha256": "1be17edde530fb1b3b9b47d66ccf87a8d79eb781469ada7d7b7f6c010d41a51e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-pidigits.tsconfig.json",
+      "bytes": 148,
+      "sha256": "e1e3ee6a23e251dadb9ca3273bc88632f50d9969fc2e38fb46356f6c598b0a23"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-regex-redux.tsconfig.json",
+      "bytes": 151,
+      "sha256": "ddaa048363afef9151c76e93de00c875ef95629b1e2e4a42da04b81580b3a84c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-reverse-complement.tsconfig.json",
+      "bytes": 158,
+      "sha256": "b1e52f068a79904fd5a2ad765ebccae0cb8d9297334beef04597c50eb33efb20"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/clbg-spectral-norm.tsconfig.json",
+      "bytes": 153,
+      "sha256": "d7520de1b32bbc9227ba79442e59b767683b713302b77a16b3fca2bfc928aa19"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/closure-merge.tsconfig.json",
+      "bytes": 148,
+      "sha256": "ab91bc0e6a50bec6f7700e73eebbebaa2c0dc1c7b6807a31719c74394ee616af"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/closures.tsconfig.json",
+      "bytes": 143,
+      "sha256": "2300fd4e54bfc54c76431e2b28b6626189cb7969ffc8f35ea55c0751b03144b2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/cyclic-churn.tsconfig.json",
+      "bytes": 147,
+      "sha256": "e7774b39d1e99261efa894af3408346b042eb64b4cdf73c507e5a09ede837ade"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/dispatch.tsconfig.json",
+      "bytes": 143,
+      "sha256": "b94c63a9a637433427a969ab1df938f6e3827a60445a66967e1702e936ce6ef5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/elementwise.tsconfig.json",
+      "bytes": 146,
+      "sha256": "80c551a78acf6533b1a88582935e0010cbeabf0e8d9266a53a651b6da6cfa9fb"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/erasure-stored-typed.tsconfig.json",
+      "bytes": 155,
+      "sha256": "fad65eb6e98da2bda6fd942aa9f4e30f88920e37e72959d890f0bf508905c107"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/erasure-stored-unknown.tsconfig.json",
+      "bytes": 157,
+      "sha256": "cb80e58bc23507a7d677991cae9f2709867d929ceaaf784c3981a63077072e6f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/erasure-typed.tsconfig.json",
+      "bytes": 148,
+      "sha256": "859d1547c11376cf4a30dff5a722e36499ba1fe2eb7242c8189c7d8e996c391f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/erasure-unknown.tsconfig.json",
+      "bytes": 150,
+      "sha256": "8b8bb6ba2a0361450cbdea1854910798399e21e62573beac673fc5a73592b68c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/event-state.tsconfig.json",
+      "bytes": 146,
+      "sha256": "d78ca29dd5ceb94baff393f90fa08ed015e775943f68741537b80223c07b1b47"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/exceptions.tsconfig.json",
+      "bytes": 145,
+      "sha256": "31ea1c3305865e2504d35eda2c54fa0ba3f8237e084747ea18a41399bf1437d6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/face-fields.tsconfig.json",
+      "bytes": 146,
+      "sha256": "9b22c440dd664b2056e62cd7882b208909aa7fe62a4b1337a8704bc7b3d70110"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/fib.tsconfig.json",
+      "bytes": 138,
+      "sha256": "bdbdd1a2f9ec747b2f66838fb6ba15cc0b53aecb59e42ee4ae8aea54207dbf0b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/generator-dispatched.tsconfig.json",
+      "bytes": 155,
+      "sha256": "041ae53f3ad7647733e9d57323208bba6a9d85d864dc02fad880d22cfa5cc2bf"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/generator.tsconfig.json",
+      "bytes": 144,
+      "sha256": "89a7c7dc69b4d8ef614060bf39d35b98abba22c31a73f78cfdc11bf482df045e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/generic-classes.tsconfig.json",
+      "bytes": 150,
+      "sha256": "f4aa68f54c1c92a26d76d3e7aca303a092af4f5022d7394736fd927559ec6d4b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/growth-fixed.tsconfig.json",
+      "bytes": 147,
+      "sha256": "5379217a321b66d873a07bc4830077465836cb10f980c8b9002bbc90f99cebd1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/growth-grown.tsconfig.json",
+      "bytes": 147,
+      "sha256": "f80f675531cb50fb9bee4c6f98c510f167b99c6979528325b74d5a2a9febfedb"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/immutable-update.tsconfig.json",
+      "bytes": 151,
+      "sha256": "9a3b5648b5a1e8335d7bf2a447507225483be9b10d1780065fd680df7b966f84"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/in-narrowing.tsconfig.json",
+      "bytes": 147,
+      "sha256": "833c89eda17a0d3f57b42a1990b74ac32cbc8b61945128925762965acb6889f1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/instanceof.tsconfig.json",
+      "bytes": 145,
+      "sha256": "3b1d4bf99bcbebcc062e2b5ddb908d7599b1e1fff8b1768a0050ed03c5e3a2b6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-acorn-wtb.tsconfig.json",
+      "bytes": 154,
+      "sha256": "5bf7cd2ca85a4616a95f7da568c5608e62c02e19c6abecfbadb853785fd5f87d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-ai-astar.tsconfig.json",
+      "bytes": 153,
+      "sha256": "28a397c93bfa5804225a8765f5c359ddba12e8b9a84da23fb0ab0c8d310d72b7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-babylon-wtb.tsconfig.json",
+      "bytes": 156,
+      "sha256": "5cc8ca5199d978d49755db5540e9d6ff9e3ef01642e972460a3b050195981a0e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-bigint-bigdenary.tsconfig.json",
+      "bytes": 161,
+      "sha256": "357069b7471d6c383a6b73b25580ba50b15f2ad879a689722ef807c06c9cd32d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-bigint-paillier.tsconfig.json",
+      "bytes": 160,
+      "sha256": "dba8cc7b0537c7c273ac66fbdcf1cad13e960f22ded22dc52be808715b2eccbe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-crypto-md5-sp.tsconfig.json",
+      "bytes": 158,
+      "sha256": "bf361110571a7cf985686b1d73d6186679fbee6c2471d964f307ccd78cd632f5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-crypto-sha1-sp.tsconfig.json",
+      "bytes": 159,
+      "sha256": "abb4d59db32b08f2d84b6bc708e7bb291bf75ceb44bd810335b9033ac38590e8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-datetimeformat-intl.tsconfig.json",
+      "bytes": 164,
+      "sha256": "ec766ca0d42129d498743d8759dd77416b0cdc12f4298bb7afe802ca0e21544d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-espree-wtb.tsconfig.json",
+      "bytes": 155,
+      "sha256": "cab802e29bdbcfa1f2885bf3f302e46bc410ca20eef99fbc7e83e14b0a2b5f2b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-esprima-next-wtb.tsconfig.json",
+      "bytes": 161,
+      "sha256": "1a3404dffde7d127cde22ed2cc5a7bbd35984ddbb07b19ec6340b9dc7e72eaca"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-flight-planner.tsconfig.json",
+      "bytes": 159,
+      "sha256": "cba37b67de6d31e044b6dea20a35140a17484a9830cb182d5f78d23bb3056737"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-gaussian-blur.tsconfig.json",
+      "bytes": 158,
+      "sha256": "c90c4c0d84a3c1b80c24bb213a94428dbeba4502802926c1d06d8b7195e988ce"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-hash-map.tsconfig.json",
+      "bytes": 153,
+      "sha256": "d56c04c1cefee4e2861eede13f938a3f9b488d363f1366b20117721efe627eec"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-json-parse-inspector.tsconfig.json",
+      "bytes": 165,
+      "sha256": "a96cb824e8d6ee516513a781bca0e0dc356a3dce5cd780688028732eaf52bb1e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-json-stringify-inspector.tsconfig.json",
+      "bytes": 169,
+      "sha256": "bc800ac3b17d36fbd7fe1f5c3908c77c712094f0a987b6a379fe66532887fa11"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-lazy-collections.tsconfig.json",
+      "bytes": 161,
+      "sha256": "a2e575ba016176d9b32854edee2ab37090076428c943288f7a2d226b5cba68c1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-lebab-wtb.tsconfig.json",
+      "bytes": 154,
+      "sha256": "e64c2157519ca7e54afea553f9eea4df9a528cf2cb4a50189b129420fc43ef93"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-listformat-intl.tsconfig.json",
+      "bytes": 160,
+      "sha256": "04e69abecce7a49e1ba5d7800a2e5b1e99f4fd64009041fea14448acc066abec"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-numberformat-intl.tsconfig.json",
+      "bytes": 162,
+      "sha256": "d24b1d1d44c072d10b30cc58caa07af1fa549e922b45ea3af8d89d9605e644c9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-offline-assembler.tsconfig.json",
+      "bytes": 162,
+      "sha256": "5b957a8191cceff7edfa0dddefd6f8623f692392aef92731f0938674fdf917d3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-pluralrules-intl.tsconfig.json",
+      "bytes": 161,
+      "sha256": "3cec5b8994fe732ffa24ec0b3e504703288073f65ca8c26ca8b1bddf61ea9513"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-raytrace-private-class-fields.tsconfig.json",
+      "bytes": 174,
+      "sha256": "b05c513d5a4ec95fd3b9b8ccd890a1adb6a9b6192e22bdfb999de7c2a65a01d0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-raytrace-public-class-fields.tsconfig.json",
+      "bytes": 173,
+      "sha256": "ae9bc934113c63960ec24572711d7b5e779b0fa501671f6231d304b2e8cc8060"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-regexp-octane.tsconfig.json",
+      "bytes": 158,
+      "sha256": "aa185ca834bfe139e20b939c0f27167f4322f60eccb7060143bca948af3993d2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-relativetimeformat-intl.tsconfig.json",
+      "bytes": 168,
+      "sha256": "59af6044c19b6e4064b2de71a013051653adf7ecbbfef24b4ea2bc7e246ba6aa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-stanford-crypto-aes.tsconfig.json",
+      "bytes": 164,
+      "sha256": "af5d8d49d5e0f67000ab9a385755118425facc849b5dda1cceb139a76b1adc07"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-stanford-crypto-pbkdf2.tsconfig.json",
+      "bytes": 167,
+      "sha256": "c036a972bdd40ed51c0feec219a345f33dba77fee613229bda49e513fea9c947"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-stanford-crypto-sha256.tsconfig.json",
+      "bytes": 167,
+      "sha256": "c4bac3d525318059692a445aee16518c55f8f8caa016908dcc3b646988dfb7e2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-string-unpack-code-sp.tsconfig.json",
+      "bytes": 166,
+      "sha256": "5e9944dfccf3478dba1340a7c8426deabd36b16f21828ad0da38e2e8f6f2afd9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-sync-fs.tsconfig.json",
+      "bytes": 152,
+      "sha256": "a2dfcb284e345c06414961e3edf7dbcc317f44779339d553772e919320263057"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-threejs.tsconfig.json",
+      "bytes": 152,
+      "sha256": "036de71b54c9bcd9d72edb79716498443e4bae16869f8b1882854e0121d500ea"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-typescript-octane.tsconfig.json",
+      "bytes": 162,
+      "sha256": "bb4e4586ad515d3851258e080999ab38c1f933e56f9c889ef48c0627e735de8c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-unipoker.tsconfig.json",
+      "bytes": 153,
+      "sha256": "15dc50add76bffb3c6475856008c282051065b46cceb17e395699007f60b27a6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-validatorjs.tsconfig.json",
+      "bytes": 156,
+      "sha256": "1e3cb08e54825d75ce5d464fdde3bcd171c9fd914b25dc66603ead648323ce1d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-wsl.tsconfig.json",
+      "bytes": 148,
+      "sha256": "58d11bce4266d8f340b85674ccad7fc4b952919f73fead941626ea3c759ec9b6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-build-append.tsconfig.json",
+      "bytes": 152,
+      "sha256": "94c45aa8ef33ccf47531de2b28d476d69535fbd024690b5f07940cc1c7de48e3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-build-join.tsconfig.json",
+      "bytes": 150,
+      "sha256": "f02593e8cad4db7e7c5f5ae73fc7a4b28312c4a33fdf768bfa881e90d548cb0f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-parse-typed.tsconfig.json",
+      "bytes": 151,
+      "sha256": "295a8a343068c530fa235948eb1ce23fe4b1a91f101c744b9b097f531eaac7a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-parse.tsconfig.json",
+      "bytes": 145,
+      "sha256": "718acd9720f128425ff9815ce632f808779d52fdbf27b941a3d481d94c796225"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-quote.tsconfig.json",
+      "bytes": 145,
+      "sha256": "d1031c689610b001317a7c975d2a0217dc3605be8f35eba597b8e3208c074487"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-scan.tsconfig.json",
+      "bytes": 144,
+      "sha256": "d0e3252cc8f18650c5c58959797fe8ce5661036ca4049958f4dbe89d0e31caed"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-serialize.tsconfig.json",
+      "bytes": 149,
+      "sha256": "b09ab53838f0d91bbd6b5b4b0e776a6636c3e417f740d5966479b0e650f94197"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-stringify-builtin.tsconfig.json",
+      "bytes": 157,
+      "sha256": "01b6ebca555baeb3e8a2cce2d32c876e27ae656690bebc532057186e059649fe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-stringify-doc.tsconfig.json",
+      "bytes": 153,
+      "sha256": "b2eb17d33ec3e4d705f410ea5ef5d99431904677d59415768e1cee8947b0d4b5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-stringify-fused.tsconfig.json",
+      "bytes": 155,
+      "sha256": "cddaf1ede713704f7b2557cfb2b28c706d8a26d9fc775151acb42807cbc96c5f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-stringify-inline.tsconfig.json",
+      "bytes": 156,
+      "sha256": "cda07ea649a8e21d9a2eb1f6e6186aeb3477553ebba79c8dab6cce58a0ea1ff6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/json-stringify-typed.tsconfig.json",
+      "bytes": 155,
+      "sha256": "2904f6cf86fb96aa76a6a07099b5e7fe332beea1c61127c6f6050f19cedc046e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/logical-assignment.tsconfig.json",
+      "bytes": 153,
+      "sha256": "e981678f901da637bdd6416f29fb87f53bedfdc9682588247638c6ea53e88056"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/loop.tsconfig.json",
+      "bytes": 139,
+      "sha256": "28840628cc070faa5f558e0ae5e056012eb1349e68a6fcf2f4d587bff51ac058"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/map-and-set.tsconfig.json",
+      "bytes": 146,
+      "sha256": "736254f665535a85b46bc9c9a21bd9aadb905fdabfb2794d236a03f5a590539d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/map-entries-top-k.tsconfig.json",
+      "bytes": 152,
+      "sha256": "3504a260024cfc1905d03a33922a140d85bef1494b8e2f283017051448d1a6a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/map-literal-keys.tsconfig.json",
+      "bytes": 151,
+      "sha256": "dad8f9c51e11a7441214738d98b1738fbb6dbf949efbf57ab73dd6f3580ba700"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/map-word-counts.tsconfig.json",
+      "bytes": 150,
+      "sha256": "1996249e987c5d5639868d65ed085c2d69e7defc69445138873dca796a73bc7e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/module-closures.tsconfig.json",
+      "bytes": 150,
+      "sha256": "572f86170c59e56e2a26db59e8bb0fc878141a1426668a934a0f9217eeebccf4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/node-utf8.tsconfig.json",
+      "bytes": 144,
+      "sha256": "6a85cfd74c728917e11b25a31a580ba3982bbe2acb5e3edb8e2de812f77b287a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/number-format-double.tsconfig.json",
+      "bytes": 155,
+      "sha256": "3ec7d179143640e6019af74a0ed8517b2c77198bd6295d0f20d732fd855f66dc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/number-format.tsconfig.json",
+      "bytes": 148,
+      "sha256": "e72e12997e82a7c41e1a28f7c5e294178ae5301b5b11d3a3b82f08256f61ba1b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/objects.tsconfig.json",
+      "bytes": 142,
+      "sha256": "07f2e1f8a63800dba98925e5ec68c19930c7e1c9287027446a0916d65e0d652f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/octane-box2d.tsconfig.json",
+      "bytes": 147,
+      "sha256": "e7344f717fa8f48b96d23b09b98878d825994824082bcf1fb278b8712ffc7cdd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/octane-crypto.tsconfig.json",
+      "bytes": 148,
+      "sha256": "2e12a3cb9fe49daeb826cfe1bc17eb6f84d23093365397691d02a4c7002c1e91"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/octane-navier-stokes.tsconfig.json",
+      "bytes": 155,
+      "sha256": "d221050a7f4b4de1d6977a7cb1e3079cbf491c2a64f8be2442a31c22a22ed740"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/octane-raytrace.tsconfig.json",
+      "bytes": 150,
+      "sha256": "ade8f24034ae252f81cebc98621e6037f97635ed1e8e8af4725dc70a82c40f34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/octane-splay.tsconfig.json",
+      "bytes": 147,
+      "sha256": "5343775d71cfb38a7343d47fa54b656e7b20f03e6e2ba382f4265705bbe30eb3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/optional-chain.tsconfig.json",
+      "bytes": 149,
+      "sha256": "2747fa31fe2efe9d6c916a9fc3f4a8ab2e7dd7769d5fad4dae5e6d8f40fd62ac"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/parse-int-decimal.tsconfig.json",
+      "bytes": 152,
+      "sha256": "0eaeaf615dcb8be4f9670eb4585c1877b19133655c06bf108306fbf1f8689b4b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/parse-int-default.tsconfig.json",
+      "bytes": 152,
+      "sha256": "641e8cce0da3e3225e129909f6cf461ca7437e5e8dcd56c67c149059dafbf6f1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/parse-int-runtime.tsconfig.json",
+      "bytes": 152,
+      "sha256": "9bfcaebb7470ffad2f67f4411eb65a6c75212763fd04f497cfd953a69b7127c7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/pipeline.tsconfig.json",
+      "bytes": 143,
+      "sha256": "d2584ee4bbebce06eb4f625bce1e812c565be3ca19ab35e740fc5ec20d63c4e8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/printer-erased.tsconfig.json",
+      "bytes": 149,
+      "sha256": "598b8ea4b7d581644ba8318ee05785ff12232a124456f98c78712d679946e329"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/record-word-counts.tsconfig.json",
+      "bytes": 153,
+      "sha256": "6b9ff7eb1d5a3377021bbb362eb5f7528fa5905ba88e6fded870c434d60dd31e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/release-acyclic.tsconfig.json",
+      "bytes": 150,
+      "sha256": "157c8ebc6cc024cc7427c00cb30a17cb3319f5a156b88b58aa18886638df3da4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/sort-objects.tsconfig.json",
+      "bytes": 147,
+      "sha256": "d9c86f705bdbfeefd5cc090f8e89b06e6bfef6ffd86c19484e7309bcf4a732f3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-append-length.tsconfig.json",
+      "bytes": 152,
+      "sha256": "3f988196997478a904e54e2190ef4aa5f27b4dd947556b1edefa2de44bf6d12c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-append-loop.tsconfig.json",
+      "bytes": 150,
+      "sha256": "bb3c1b323a5ff9a61ae8447c106ec00b7a7130ce6b676b1b8008213854fd13a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-compare.tsconfig.json",
+      "bytes": 146,
+      "sha256": "084af30b2f8165a62632e91a607abe8aebecb94e6b2e354bce1144cdb5c26f5e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-concat-pair.tsconfig.json",
+      "bytes": 150,
+      "sha256": "43385ef3513835b10a01e97620f4e368d14a313545b82857107db2dcff031595"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-equal.tsconfig.json",
+      "bytes": 144,
+      "sha256": "2e8a06db8575fbbb80d4b90c6d2ff7ede3d9547b807b0816949bef3cd51ee190"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-index-of.tsconfig.json",
+      "bytes": 147,
+      "sha256": "b891e2c770e75a2985d13f7a97fb22efc1cd2a6e68572bbdeb5ce27a323873e2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-index-read.tsconfig.json",
+      "bytes": 149,
+      "sha256": "030acc6730de6d62aa09be0219d69c512ca648021499508549bc018bf93e324d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-join.tsconfig.json",
+      "bytes": 143,
+      "sha256": "ffc95809e06dc3d63c6e5fa773509eca39a7f6f56cbd53412e98b40afcc84d79"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-map-keys.tsconfig.json",
+      "bytes": 147,
+      "sha256": "7a7d6a8b31a8132e89dc9c103448badff8bcd63521d9de07719fc0e153d8260e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-search-defaults.tsconfig.json",
+      "bytes": 154,
+      "sha256": "955b18e5c2738f7e1e482cb09af9ccbf955a8780b023703e11cb69bef77f0ad7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-slice-keep.tsconfig.json",
+      "bytes": 149,
+      "sha256": "e8a6a14ef8b3d8316cd7ae5aac9ff374f2c0b7a2a6741a87d86e756a21dc0e13"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-split.tsconfig.json",
+      "bytes": 144,
+      "sha256": "366ea1f7ca10708bd539ce98fd3f6899b894d04f9713feec7e4e05a4d6e173cc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-template.tsconfig.json",
+      "bytes": 147,
+      "sha256": "0f9accfdbaf791cae3c65d2ea27a9ec59b386065d5adb158f69e06c6efb278ad"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/str-to-number.tsconfig.json",
+      "bytes": 148,
+      "sha256": "7bb59c9874b0dc74917e17fee2a955e2db3ab2f0fedd6fea7a348f50efb99208"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/strings.tsconfig.json",
+      "bytes": 142,
+      "sha256": "0a0c535b9267cc991f2ad397b106d7a4352c2a6472ff796a09712799770cc21e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/substrings.tsconfig.json",
+      "bytes": 145,
+      "sha256": "eedbbfa29ca0be7905a0e17f1c5c186479cdf4b41bca1496f446119776968bba"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/symbol-keyed-map.tsconfig.json",
+      "bytes": 151,
+      "sha256": "e7ee019af25cb1013de1072469227c866d6cbd060700aab4dff2eff0c380935e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/symbol-keys.tsconfig.json",
+      "bytes": 146,
+      "sha256": "2bf29218ced09baedd3ce511baaafc1e7a555d1d08c4bb1380527575fb55f478"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/tree-teardown.tsconfig.json",
+      "bytes": 148,
+      "sha256": "a8a12dfe73e7431ec2fd25d9e08539252627d3ce5d43067850cae4d5de3bd870"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/uniform-callback-arguments.tsconfig.json",
+      "bytes": 161,
+      "sha256": "382a7cfd4738ec870f31a682d5aa93e0c6ab4172aff8b5e6971a32fc70cef1a8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/uniform-callback-default.tsconfig.json",
+      "bytes": 159,
+      "sha256": "df3fb69399fc9cafa8254690e91f63ae862c5e91e8c9421281285eef1b9c3062"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/uniform-callback.tsconfig.json",
+      "bytes": 151,
+      "sha256": "236dd7fa09ca516b15484220e453f37ee852835116e1626949c03df59a4266ba"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/upcast.tsconfig.json",
+      "bytes": 141,
+      "sha256": "12e40782b422a6575d09eec4828ce034481c23d2fc5a27f495d542259d1f2f6b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/user-iterable.tsconfig.json",
+      "bytes": 148,
+      "sha256": "56b98928c882ec66804252854a1122f78b4dd137027b723cb932e168b2ea5fb3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/utf8-encode.tsconfig.json",
+      "bytes": 146,
+      "sha256": "ecd13190b727bea9b002f8c985bffd949478dd958dbac155f440517c981800ca"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000000.json",
+      "bytes": 1327,
+      "sha256": "7662f29fd3e0783acf4fda69e924a31f24b3c1361944a7c4e9c713e44d7b37fe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000001.json",
+      "bytes": 1330,
+      "sha256": "61ce220912062cfc6b7e334be468d891e053bcfca80a1bd522a1785e6bdcd7b1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000002.json",
+      "bytes": 1323,
+      "sha256": "0302391c127773e5966eeb441237d322cd96cde9f6c3804cfd7f53a26e25f452"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000003.json",
+      "bytes": 1330,
+      "sha256": "dca805e97a8134daa5f9ebe10c40ebdc843234bab9c199403f16ca7da8c3a780"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000004.json",
+      "bytes": 1323,
+      "sha256": "31bd541f21616ae441764e3cfaf80548896a8c1ee277e4a519ed26f6791ab39a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000005.json",
+      "bytes": 1332,
+      "sha256": "c6b13896336c31bfe42535d26504fe37e4b410f004cddf515dc334336bef3399"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000006.json",
+      "bytes": 1320,
+      "sha256": "a3f529d0a4ea2af036477fd6bc409856ad61843c45c6e6005d307a91cf97dad5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/rows/000007.json",
+      "bytes": 1332,
+      "sha256": "c9bb491f6cb641243f13ceed53636f7d1005951d8e4c691949ab9bcea5f5672b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures/summary.json",
+      "bytes": 12799,
+      "sha256": "251f6ebc0c0df9f82c577213dfd2b4f65747c3af7b909a1c7503d2d0b9863c2d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures-controller.mjs",
+      "bytes": 2062,
+      "sha256": "959b715f929b59200272c3936db0045e205cd693676b638f4afd951ba02d8f38"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures.log",
+      "bytes": 9345,
+      "sha256": "9490316455243c88de70fc6198429830ee42354492a3c4675148bd31b36c855c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-failures.sh",
+      "bytes": 346,
+      "sha256": "a2bed6a132093422b5ab57640ce2c4076af6e299dfc90192260064cbb436f544"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/hir-full/config-index.json",
+      "bytes": 29824,
+      "sha256": "0457275720f278717542e73da7123995ffe4d4ec204cad286262579a455f3daf"
+    }
+  ],
+  "retentionReplay": {
+    "version": 1,
+    "purpose": "Supplemental raw retention only; not successful HIR evidence or replacement of the original full cohort",
+    "pairs": 8,
+    "controls": 4,
+    "mismatches": [],
+    "rawStreamsVerified": 32,
+    "configInputs": [
+      {
+        "program": "tests/programs/invalid",
+        "original": "/home/akisarou/.cache/nts-pool/3/tests/programs/invalid/tsconfig.json",
+        "replay": "/home/akisarou/.cache/nts-pool/3/tests/programs/invalid/tsconfig.json",
+        "bytesEqual": true,
+        "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+      },
+      {
+        "program": "benchmarks/cases/jetstream-lebab-wtb",
+        "original": "/home/akisarou/.cache/nts-scratch/681/hir-full/configs/jetstream-lebab-wtb.tsconfig.json",
+        "replay": "/home/akisarou/.cache/nts-scratch/681/hir-failures/configs/jetstream-lebab-wtb.tsconfig.json",
+        "bytesEqual": true,
+        "sha256": "e64c2157519ca7e54afea553f9eea4df9a528cf2cb4a50189b129420fc43ef93"
+      }
+    ],
+    "cleanupFailures": [],
+    "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9"
+  }
+}
