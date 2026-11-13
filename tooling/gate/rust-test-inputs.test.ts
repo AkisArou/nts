@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {testArtifactTargets,RustInputPhases,publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {testArtifactTargets,testBuildStatus,RustInputPhases,publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
 import {readCompressedRecords,type InputAttempt,type ByteFact} from './file-input-observer.ts';
 import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -13,6 +13,9 @@ const artifact={package_id:'pkg-id',executable:'/source/target/nts-dev/deps/arbi
 const evidence=(artifacts:unknown[]= [artifact])=>({version:1,status:0,buildFinished:true,artifacts});
 
 test('Cargo artifacts bind arbitrary binary paths to source targets without naming guesses',()=>{
+  assert.equal(testBuildStatus({...evidence(),status:101}),101);
+  for(const value of [{...evidence(),version:2},{...evidence(),status:-1},{...evidence(),status:256},{...evidence(),status:null}])
+    assert.throws(()=>testBuildStatus(value),/invalid Cargo completion/);
   const targets=testArtifactTargets(evidence(),'/source');
   assert.deepEqual(targets.get(artifact.executable),{package:'pkg-id',name:'integration',kind:['test'],source:'crate/tests/integration.rs'});
   assert.throws(()=>testArtifactTargets({...evidence(),status:7},'/source'),/incomplete Cargo/);

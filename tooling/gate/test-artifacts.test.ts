@@ -88,6 +88,20 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
       NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'trace-control',NTS_GATE_STEP_RESULT:stepResult})});
     assert.notEqual(product.status,0,product.stdout+'\n'+product.stderr);
     assert.match(product.stdout,/2 passed, 1 failed/);assert.equal(existsSync(stepResult),false);
+    // The first pass executes doctests. Break its census too, without hiding
+    // the actual Cargo owner's failed doctest status behind the observer's 2.
+    writeFileSync(observer,before.replace('bool complete = drained && !errors && !output_failed;',
+      'bool complete = false;'));
+    appendFileSync(join(root,'src/lib.rs'),'\n/// ```\n/// panic!("doctest-product-control");\n/// ```\npub fn failing_doc_input() {}\n');
+    const doctest=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:testEnvironment({
+      CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+      NTS_TESTS_JOBS:'1',NTS_GATE_COSTS_DIR:join(root,'costs'),NTS_RUST_INPUT_TRACE:join(root,'failed-doctest-trace'),
+      NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'trace-control',NTS_GATE_STEP_RESULT:stepResult})});
+    assert.equal(doctest.status,1,doctest.stdout+'\n'+doctest.stderr);
+    assert.match(doctest.stdout,/test result: FAILED\. 1 passed; 1 failed/);
+    assert.match(doctest.stdout,/test-profile workspace .* exited 101/);
+    assert.match(doctest.stderr,/NOT MEASURED: Rust test inputs: Error: file input observer: incomplete census/);
+    assert.equal(existsSync(stepResult),false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

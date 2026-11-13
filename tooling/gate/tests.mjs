@@ -38,7 +38,7 @@ import { TestScratch } from "./test-scratch.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
 import {fileObserverArguments,prepareFileObserver} from './file-input-observer.ts';
-import {publishInputTrace,readTestArtifactTargets,readDoctestCalls} from './rust-test-inputs.ts';
+import {publishInputTrace,readTestArtifactTargets,readTestBuildStatus,readDoctestCalls} from './rust-test-inputs.ts';
 import {testInvocation} from './test-profile.ts';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 
@@ -112,10 +112,24 @@ const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverA
   maxBuffer: 1 << 28,
 });
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
+/** @type {ToolingInstrumentError|undefined} */
+let cargoTraceFailure;
 if(cargoTrace){
   try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
-  catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);publishToolingFailure(failure);console.error('NOT MEASURED: '+failure.message);exitCommand(2);}
+  catch(error){if(isCommandExit(error))throw error;cargoTraceFailure=traceFailure(error);}
 }
+let cargoStatus=first.status,cargoStatusKnown=!cargoTrace;
+if(artifactFile)try{cargoStatus=readTestBuildStatus(artifactFile);cargoStatusKnown=true;}
+catch(error){if(isCommandExit(error))throw error;cargoTraceFailure??=traceFailure(error);}
+if(cargoStatusKnown&&cargoStatus!==0){
+  // The first pass executes real doctests. Its owner's Cargo status is product
+  // evidence even when the separate filesystem census could not complete.
+  console.log(firstOut.split("\n").filter((l)=>/^(error|warning: unused|test .* FAILED|failures:|---- |test result:)/.test(l)).slice(0,60).join("\n"));
+  console.log(`  test-profile workspace (building, doctests, recording) exited ${cargoStatus??first.signal}`);
+  if(cargoTraceFailure)console.error('NOT MEASURED: '+cargoTraceFailure.message);
+  exitCommand(1);
+}
+if(cargoTraceFailure){publishToolingFailure(cargoTraceFailure);console.error('NOT MEASURED: '+cargoTraceFailure.message);exitCommand(2);}
 const recorded = readdirSync(calls)
   .map((f) => JSON.parse(readFileSync(join(calls, f), "utf8")))
   .sort((a, b) => (BigInt(a.at) < BigInt(b.at) ? -1 : 1));
