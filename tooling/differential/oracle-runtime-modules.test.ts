@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from '../gate/test-environment.ts';
 import {compileRuntimeModules,stripRuntimeSource} from './oracle-runtime-modules.ts';
-import {runtimeAssets,runtimeModuleName} from './runtime-paths/main.ts';
+import {runtimeAssets,runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
 
 function fixture(t:{after(callback:()=>void):void},files:Record<string,string>){
   const root=mkdtempSync(join(tmpdir(),'runtime-modules-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -52,4 +52,11 @@ test('the pinned child bootstrap is exactly its reviewed JavaScript source',()=>
   const record=JSON.parse(readFileSync(new URL('./oracle-toolchain.json',import.meta.url),'utf8'));
   const argument=record.execution.args[record.execution.args.indexOf('--import')+1];
   assert.equal(decodeURIComponent(argument.slice('data:text/javascript,'.length)),stripRuntimeSource(readFileSync(new URL('./oracle-child-bootstrap.ts',import.meta.url),'utf8'))+'\nawait startOracleChild();\n');
+});
+
+test('the producer refuses an over-limit graph before publishing any modules',t=>{
+  const files:Record<string,string>={};
+  for(let index=0;index<=RUNTIME_MODULE_LIMIT;index++)files['module-'+index+'.ts']=index===RUNTIME_MODULE_LIMIT?'export const value=19;':"export * from './module-"+(index+1)+".ts';";
+  const root=fixture(t,files);
+  assert.throws(()=>compileRuntimeModules(root,'module-0.ts'),/oracle runtime module: module limit 128 exceeded/);
 });

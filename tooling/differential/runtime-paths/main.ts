@@ -1,3 +1,4 @@
+export const RUNTIME_MODULE_LIMIT=128;
 // Generated module names are capability keys, never arbitrary filesystem paths.
 export function runtimeModuleName(name:unknown):name is string{
   return typeof name==='string'&&name.endsWith('.mjs')&&name.split('/').every(part=>
@@ -6,6 +7,6 @@ export function runtimeModuleName(name:unknown):name is string{
 export function runtimeAssets(assets:unknown,required:readonly string[]):assets is Record<string,string>{
   if(!assets||typeof assets!=='object'||Array.isArray(assets))return false;
   const rows=Object.entries(assets);
-  return rows.length>0&&rows.length<=128&&required.every(name=>Object.hasOwn(assets,name))&&
+  return rows.length>0&&rows.length<=RUNTIME_MODULE_LIMIT&&required.every(name=>Object.hasOwn(assets,name))&&
     rows.every(([name,hash])=>runtimeModuleName(name)&&typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash));
 }

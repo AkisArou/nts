@@ -6,11 +6,11 @@ import {isAbsolute,posix,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {SourceFacts} from '../gate/source-facts.ts';
-import {runtimeModuleName} from './runtime-paths/main.ts';
+import {runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
 
 type Module={source:string;name:string;text:string;sourceSha256:string};
 export type RuntimeModules={entry:string;modules:Module[]};
-const failure=(reason:string):never=>{throw Error('oracle runtime module: '+reason);};
+function failure(reason:string):never{throw Error('oracle runtime module: '+reason);}
 const hash=(bytes:string)=>createHash('sha256').update(bytes).digest('hex');
 /** The bootstrap uses the same strip-only producer without entering its dynamic loader. */
 export const stripRuntimeSource=(source:string):string=>stripTypeScriptTypes(source,{mode:'strip'});
@@ -31,11 +31,13 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
   const visit=(file:string):void=>{
     const name=sourceName(file);if(modules.has(name))return;
     if(!/\.(?:m?ts|m?js)$/.test(name))failure('unsupported source: '+name);
+    if(modules.size>=RUNTIME_MODULE_LIMIT)failure('module limit '+RUNTIME_MODULE_LIMIT+' exceeded at '+name);
     const emitted=outputName(name),alias=outputs.get(emitted);
     if(alias&&alias!==name)failure('two sources select '+emitted+': '+alias+' and '+name);
     const source=readFileSync(file,'utf8'),text=stripRuntimeSource(source);
     const module={source:name,name:emitted,text,sourceSha256:hash(source)};
     modules.set(name,module);outputs.set(emitted,name);
+    const targets=new Set<string>();
     const lease=api.createSourceFile(file+'.runtime.mjs',text);
     try{
       const facts=new SourceFacts(name,text,lease.sourceFile),ast=facts.ast;
@@ -54,7 +56,7 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
         const target=fileURLToPath(new URL(spec,pathToFileURL(file))),targetName=sourceName(target);
         let canonical=posix.relative(posix.dirname(name),targetName);if(!canonical.startsWith('.'))canonical='./'+canonical;
         if(canonical!==spec)failure('aliased import '+spec+' in '+name);
-        visit(target);
+        targets.add(target);
         let replacement=posix.relative(posix.dirname(emitted),outputName(targetName));if(!replacement.startsWith('.'))replacement='./'+replacement;
         // The AST selects the literal; retain its leading comments/trivia.
         const original=text.slice(specifier.pos,specifier.end),trivia=/^(?:\s|\/\/[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)*/.exec(original)![0];
@@ -62,6 +64,8 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
       }
       for(const change of changes.sort((a,b)=>b.pos-a.pos))module.text=module.text.slice(0,change.pos)+change.text+module.text.slice(change.end);
     }finally{lease.dispose();}
+    // Only primitive paths survive the lease; graph depth retains no SDK ASTs.
+    for(const target of targets)visit(target);
   };
   try{visit(resolve(root,entry));return {entry:outputName(sourceName(resolve(root,entry))),modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name))};}
   finally{api.close();}
