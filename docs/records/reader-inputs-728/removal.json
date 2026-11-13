@@ -1,0 +1,598 @@
+{
+  "version": 1,
+  "base": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+  "source": "9307db1c39003ae7a81c2413c3e64964a648f532",
+  "status": "Part of #728: scanner removed; offline generator freshness remains owed",
+  "rawReach": {
+    "retired": 84344,
+    "added": [
+      [
+        "results/benchmarks/c/outcomes.tsv",
+        "records"
+      ],
+      [
+        "results/benchmarks/count-bands.json",
+        "records"
+      ],
+      [
+        "results/benchmarks/jvm/outcomes.tsv",
+        "records"
+      ],
+      [
+        "results/benchmarks/llvm/outcomes.tsv",
+        "records"
+      ]
+    ],
+    "classifications": {
+      "caller-project-not-library-adjacency": 84,
+      "private-records-population": 507,
+      "private-unrouted-population": 40,
+      "producer-freshness-still-owed": 3,
+      "retained-by-other-routing-owner": 228,
+      "reviewed-data-text": 83482
+    },
+    "completeIndex": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-classification-v1.json",
+      "bytes": 14843001,
+      "sha256": "6d7ff6385852582b79a3a25b221c3c68aef8445f778fa6b92d26763b8e984454"
+    },
+    "comparison": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/comparison.json",
+      "bytes": 8795566,
+      "sha256": "fe664815e6a0ea2101c07c6f40be2e3b22039a88674c621b4c7aa98730a54b40"
+    }
+  },
+  "actualRouting": {
+    "rawReachRetired": 84344,
+    "actualRoutingRetired": 51497,
+    "rawReachStillRouted": 32290,
+    "rawReachNotPreviouslyRouted": 624,
+    "actualRetirementsByClass": {
+      "caller-project-not-library-adjacency": 56,
+      "derived-program-oracle": 53,
+      "derived-rc-companion": 1,
+      "derived-typescript-oracle": 4,
+      "existing-records-only-policy": 9,
+      "private-unrouted-population": 40,
+      "producer-freshness-still-owed": 3,
+      "reviewed-data-text": 51331
+    },
+    "routes": {
+      "base/routes.json": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/base/routes.json",
+        "sha256": "10d5dfcf119d93d37b7c0cc109aa7e518eb8fdfd97a93b1aaee98608e8b8f6c7"
+      },
+      "namespace/routes.json": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/namespace/routes.json",
+        "sha256": "e66562e8a7ce28607a4f051d567de95996e4416d66db0cb8ce8d3a8412311a51"
+      },
+      "actual-routing.json": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/actual-routing.json",
+        "sha256": "ddde3b7e5e11cf29c0e5c5e39389f846bb36c2b6d2ebf16e4011e221a3988e11"
+      }
+    }
+  },
+  "switchOff": {
+    "before": 83648,
+    "after": 0,
+    "beforeIndex": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/base/edges.json",
+      "bytes": 3112930,
+      "sha256": "f19a021d52d5a679c84702df9b1e314dc05b2e1642d713bf8dd70e7a6ae9b9aa"
+    },
+    "afterIndex": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/namespace/edges.json",
+      "bytes": 264,
+      "sha256": "9fc722a25439cb71b18a5e1577a2fcd238fa4dade3126feee77c260b41bebccd"
+    }
+  },
+  "frontiers": {
+    "before": {
+      "sites": 334,
+      "readers": 133
+    },
+    "after": {
+      "sites": 0,
+      "readers": 0
+    }
+  },
+  "fallback": {
+    "base": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    },
+    "namespace": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    }
+  },
+  "projectContexts": {
+    "file": "removal-project-contexts.tsv",
+    "readers": 32,
+    "pairs": 84
+  },
+  "dependentRoutes": {
+    "file": "removal-dependent-routes.tsv",
+    "pairs": 67,
+    "evidence": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-routing-classification-v1.json",
+      "bytes": 18593,
+      "sha256": "d2a9444f3b03501dd4496e05d596948be9215722bd859afd2c32592e4f53dc86"
+    }
+  },
+  "freshnessStillOwed": {
+    "source": "tooling/unicode-cases/url-hosts.ts",
+    "inferredExecutionEdges": [
+      [
+        "tooling/unicode-cases/url-hosts.ts",
+        "typescript-c"
+      ],
+      [
+        "tooling/unicode-cases/url-hosts.ts",
+        "typescript-jvm"
+      ],
+      [
+        "tooling/unicode-cases/url-hosts.ts",
+        "typescript-llvm"
+      ]
+    ],
+    "derivedCompanion": "typescript-oracles",
+    "currentDisposition": "standalone generator; settled rule with no gate step",
+    "required": "offline SHA-pinned IdnaTestV2 input; run the existing --check as a freshness obligation, prove stale/missing/extra generated output refuses; do not execute backend suites for a provenance-only reader"
+  },
+  "proof": {
+    "focused": {
+      "source": "9307db1c39003ae7a81c2413c3e64964a648f532",
+      "counts": {
+        "tests": 214,
+        "pass": 214,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "/home/akisarou/.cache/nts-scratch/728/fixture-context-focused-v5.log"
+    },
+    "host": {
+      "sources": 1880,
+      "closures": 258,
+      "reads": 413
+    },
+    "strict": {
+      "modules": 821,
+      "diagnostics": 5707,
+      "improved": 15
+    },
+    "canonical": {
+      "command": "node tooling/landing/check.ts c2401276d7ac49103c0bb900584530cd77ac1b30 --here",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-c2401276d7ac-1794541863821",
+      "verdict": "green",
+      "wall_s": 823.015,
+      "admission_wait_s": 555.7900000000001,
+      "cli_wall_s": 903,
+      "tooling": {
+        "tests": 2212,
+        "pass": 2210,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      },
+      "rust": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3044,
+        "fail": 0,
+        "ignored": 8
+      },
+      "steps": [
+        {
+          "name": "gate-inputs",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 6.80619,
+          "wall": 5.632,
+          "memory_peak_bytes": 241975296
+        },
+        {
+          "name": "tooling",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 2501.503351,
+          "wall": 259.127,
+          "memory_peak_bytes": 12784492544
+        },
+        {
+          "name": "tests",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 5365.77802,
+          "wall": 535.876,
+          "memory_peak_bytes": 11868626944
+        }
+      ],
+      "source": "c2401276d7ac49103c0bb900584530cd77ac1b30"
+    },
+    "frozen": {
+      "source": "08852c508f035ff4e946eb91e36dd180ace498ec",
+      "command": "node tooling/gate/reader-census.ts reproduce /home/akisarou/.cache/nts-scratch/728/removal-frozen-v1",
+      "log": "/home/akisarou/.cache/nts-scratch/728/removal-frozen-v1.log",
+      "index": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-frozen-v1/edges.json",
+        "bytes": 6754577,
+        "sha256": "0c409f453dee0c913ef9dcebadc2968a7361f295469f47f10c49dd37d64a5475"
+      }
+    },
+    "excluded": [
+      "The first narrowing census removal-census-v1 retired 3,217 config pairs without proving their metadata use. That experiment was refused. Mixed data/module-members and an explicit projectConfig restore the metadata population in the final census.",
+      "The first focused run failed two controls: the canonical namespace diagnostic and actual nts.config module membership. Both were corrected at their owners; its counts are excluded.",
+      "The next focused run passed its controls but strict found one newly implicit member parameter. JSDoc fixed it, including two pre-existing diagnostics; the final source proof is separate.",
+      "The first standalone cost attempt could not run the old traversal on the new source: it entered the intentional absent dynamic-import fixture. No arm completed. Its failed log and cleaned source-copy protocol are retained; completed costs use the same fixed base source for both engines.",
+      "The first cache control batch passed its tests but strict rejected mutation through the readonly TypeScript list. The JavaScript mutation is now exercised with Reflect; the repeated final batch is green."
+    ],
+    "uncachedFocused": {
+      "counts": {
+        "tests": 213,
+        "pass": 213,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "/home/akisarou/.cache/nts-scratch/728/fixture-context-focused-v3.log"
+    },
+    "graphCache": {
+      "source": "9307db1c39003ae7a81c2413c3e64964a648f532",
+      "directoryMembershipLifetime": "one moduleGraph tracked inventory; no cross-run cache",
+      "completeCoverageAndRoutesEqualTo": "c2401276d7ac49103c0bb900584530cd77ac1b30",
+      "equalityLog": "/home/akisarou/.cache/nts-scratch/728/removal-cache-census-v1.log",
+      "finalIndex": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-cache-census-v1/namespace/edges.json",
+        "bytes": 264,
+        "sha256": "2aaa8c3a992f5ed1d46d62891a56f5da3b4b459658adedb4491ba828fc38fb05"
+      },
+      "frozenIndex": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-cache-frozen-v1/edges.json",
+        "bytes": 6754577,
+        "sha256": "0c409f453dee0c913ef9dcebadc2968a7361f295469f47f10c49dd37d64a5475"
+      },
+      "profile": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-profile-v1/current.cpuprofile",
+        "bytes": 1971703,
+        "sha256": "84d64df5a8c4cba0c696da9850eea0643b69200be456f53a1e85166ffef4cf04"
+      },
+      "coverage.json": {
+        "before": {
+          "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/namespace/coverage.json",
+          "bytes": 6333915,
+          "sha256": "e38db4b32a317cd1826e1fb90d60d9e7e8ab9bfe3340ac107653b77a8f2cf90c"
+        },
+        "after": {
+          "file": "/home/akisarou/.cache/nts-scratch/728/removal-cache-census-v1/namespace/coverage.json",
+          "bytes": 6333915,
+          "sha256": "e38db4b32a317cd1826e1fb90d60d9e7e8ab9bfe3340ac107653b77a8f2cf90c"
+        }
+      },
+      "routes.json": {
+        "before": {
+          "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2/namespace/routes.json",
+          "bytes": 10632624,
+          "sha256": "e66562e8a7ce28607a4f051d567de95996e4416d66db0cb8ce8d3a8412311a51"
+        },
+        "after": {
+          "file": "/home/akisarou/.cache/nts-scratch/728/removal-cache-census-v1/namespace/routes.json",
+          "bytes": 10632624,
+          "sha256": "e66562e8a7ce28607a4f051d567de95996e4416d66db0cb8ce8d3a8412311a51"
+        }
+      }
+    }
+  },
+  "reproduction": {
+    "captureCommand": "node /home/akisarou/.cache/nts-pool/4/tooling/gate/reader-census.ts inspect <isolated-source> <output> /home/akisarou/.cache/nts-pool/4/docs/records/reader-inputs-728/namespace-sites.tsv",
+    "sourceContract": "each pinned archive has its own GIT_DIR/GIT_WORK_TREE and immutable provisioned node_modules; source copies and their .git are removed together",
+    "matchedScript": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2.py",
+      "bytes": 2906,
+      "sha256": "7543f88a702c8264246bd585be4363b9ebeb1fedec8f4ba7c4aab0ebb3879f55"
+    },
+    "analysisScript": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/removal-analysis-v2.ts",
+      "bytes": 3219,
+      "sha256": "ad231aa50009c432eb5b4a75afcb390b78a0ff8d23bb8e605da9439f456e216b"
+    },
+    "log": "/home/akisarou/.cache/nts-scratch/728/removal-census-v2.log"
+  },
+  "cost": {
+    "uncachedAgainstBase": {
+      "base": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "current": "c2401276d7ac49103c0bb900584530cd77ac1b30",
+      "baseRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v2-base",
+      "currentRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v2-current",
+      "configuration": "ABBA, fresh process per arm; same fixed base source tree, only selector owner changes; in-process graph caches only",
+      "node": "v26.13.0",
+      "cpuMeasure": "cgroup-v2-scope-v1",
+      "counter": "cpu_core/instructions/u",
+      "rows": [
+        {
+          "index": 0,
+          "arm": "base",
+          "instructions": 46947128876,
+          "cpuMs": 3955.43,
+          "wallMs": 3986.923056,
+          "peakBytes": 1465499648,
+          "load": [
+            9.51,
+            17.47,
+            28.38
+          ]
+        },
+        {
+          "index": 1,
+          "arm": "current",
+          "instructions": 54746971723,
+          "cpuMs": 4249.3,
+          "wallMs": 4266.6449379999995,
+          "peakBytes": 1442582528,
+          "load": [
+            9.51,
+            17.47,
+            28.38
+          ]
+        },
+        {
+          "index": 2,
+          "arm": "current",
+          "instructions": 54527786375,
+          "cpuMs": 4169.542,
+          "wallMs": 4186.86879,
+          "peakBytes": 1445982208,
+          "load": [
+            9.15,
+            17.26,
+            28.26
+          ]
+        },
+        {
+          "index": 3,
+          "arm": "base",
+          "instructions": 47223378967,
+          "cpuMs": 3986.518,
+          "wallMs": 4003.383904000002,
+          "peakBytes": 1448374272,
+          "load": [
+            9.3,
+            17.16,
+            28.17
+          ]
+        }
+      ],
+      "fixedSource": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "means": {
+        "base": {
+          "instructions": 47085253921.5,
+          "cpuMs": 3970.974,
+          "peakBytes": 1456936960.0,
+          "wallMs": 3995.153480000001
+        },
+        "current": {
+          "instructions": 54637379049.0,
+          "cpuMs": 4209.421,
+          "peakBytes": 1444282368.0,
+          "wallMs": 4226.756864
+        }
+      },
+      "ratios": {
+        "instructions": 1.160392575138085,
+        "cpuMs": 1.0600474845717953,
+        "peakBytes": 0.9913142487647509,
+        "wallMs": 1.0579710855063318
+      },
+      "result": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-cost-v2/result.json",
+        "bytes": 1508,
+        "sha256": "0d10247e1359638c667037953f48eaeb4fb9cd83ef95e0a252745cfc3dc86b3a"
+      },
+      "reproduce": "sh /home/akisarou/.cache/nts-scratch/728/removal-cost-v2.sh"
+    },
+    "cachedAgainstBase": {
+      "base": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "current": "9307db1c39003ae7a81c2413c3e64964a648f532",
+      "baseRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v3-base",
+      "currentRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v3-current",
+      "configuration": "ABBA, fresh process per arm; same fixed base source tree, only selector owner changes; in-process graph caches only",
+      "node": "v26.13.0",
+      "cpuMeasure": "cgroup-v2-scope-v1",
+      "counter": "cpu_core/instructions/u",
+      "rows": [
+        {
+          "index": 0,
+          "arm": "base",
+          "instructions": 46493927822,
+          "cpuMs": 3863.611,
+          "wallMs": 3891.737405,
+          "peakBytes": 1414086656,
+          "load": [
+            6.41,
+            9.67,
+            20.67
+          ]
+        },
+        {
+          "index": 1,
+          "arm": "current",
+          "instructions": 43144651730,
+          "cpuMs": 3621.314,
+          "wallMs": 3636.7780350000003,
+          "peakBytes": 1405792256,
+          "load": [
+            6.41,
+            9.67,
+            20.67
+          ]
+        },
+        {
+          "index": 2,
+          "arm": "current",
+          "instructions": 44229292957,
+          "cpuMs": 3745.612,
+          "wallMs": 3760.2689170000003,
+          "peakBytes": 1413435392,
+          "load": [
+            6.7,
+            9.68,
+            20.62
+          ]
+        },
+        {
+          "index": 3,
+          "arm": "base",
+          "instructions": 46734120154,
+          "cpuMs": 3922.055,
+          "wallMs": 3938.073403999999,
+          "peakBytes": 1436110848,
+          "load": [
+            6.57,
+            9.6,
+            20.53
+          ]
+        }
+      ],
+      "fixedSource": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "means": {
+        "base": {
+          "instructions": 46614023988.0,
+          "cpuMs": 3892.8329999999996,
+          "peakBytes": 1425098752.0,
+          "wallMs": 3914.9054044999993
+        },
+        "current": {
+          "instructions": 43686972343.5,
+          "cpuMs": 3683.4629999999997,
+          "peakBytes": 1409613824.0,
+          "wallMs": 3698.5234760000003
+        }
+      },
+      "ratios": {
+        "instructions": 0.9372066302352803,
+        "cpuMs": 0.9462165471778522,
+        "peakBytes": 0.9891341368601522,
+        "wallMs": 0.9447286955512952
+      },
+      "result": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-cost-v3/result.json",
+        "bytes": 1514,
+        "sha256": "2e16e8c2a1502d87977fb5cb3cad3bd2be27e65562d93282000a6896a9235bdc"
+      },
+      "reproduce": "sh /home/akisarou/.cache/nts-scratch/728/removal-cost-v3.sh"
+    },
+    "cachedAgainstUncached": {
+      "base": "c2401276d7ac49103c0bb900584530cd77ac1b30",
+      "fixed": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "current": "9307db1c39003ae7a81c2413c3e64964a648f532",
+      "baseRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v4-base",
+      "currentRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v4-current",
+      "fixedRoot": "/home/akisarou/.cache/nts-pool/4/target/728-removal-cost-v4-fixed",
+      "configuration": "ABBA, fresh process per arm; same fixed base source tree, only selector owner changes; in-process graph caches only",
+      "node": "v26.13.0",
+      "cpuMeasure": "cgroup-v2-scope-v1",
+      "counter": "cpu_core/instructions/u",
+      "rows": [
+        {
+          "index": 0,
+          "arm": "base",
+          "instructions": 54801204795,
+          "cpuMs": 4182.308,
+          "wallMs": 4207.719324,
+          "peakBytes": 2004590592,
+          "load": [
+            6.87,
+            9.07,
+            19.34
+          ]
+        },
+        {
+          "index": 1,
+          "arm": "current",
+          "instructions": 44127431966,
+          "cpuMs": 3705.169,
+          "wallMs": 3720.152126000001,
+          "peakBytes": 1993535488,
+          "load": [
+            6.96,
+            9.05,
+            19.28
+          ]
+        },
+        {
+          "index": 2,
+          "arm": "current",
+          "instructions": 44049637174,
+          "cpuMs": 3734.544,
+          "wallMs": 3750.085518,
+          "peakBytes": 2013888512,
+          "load": [
+            7.28,
+            9.08,
+            19.23
+          ]
+        },
+        {
+          "index": 3,
+          "arm": "base",
+          "instructions": 54807800876,
+          "cpuMs": 4192.024,
+          "wallMs": 4209.301834,
+          "peakBytes": 2005950464,
+          "load": [
+            7.34,
+            9.06,
+            19.17
+          ]
+        }
+      ],
+      "fixedSource": "1609caa6b55b71cf785b4b4fa3bd16e0e8fbcb5b",
+      "means": {
+        "base": {
+          "instructions": 54804502835.5,
+          "cpuMs": 4187.166,
+          "peakBytes": 2005270528.0,
+          "wallMs": 4208.510579
+        },
+        "current": {
+          "instructions": 44088534570.0,
+          "cpuMs": 3719.8565,
+          "peakBytes": 2003712000.0,
+          "wallMs": 3735.1188220000004
+        }
+      },
+      "ratios": {
+        "instructions": 0.8044692003198202,
+        "cpuMs": 0.8883947997285037,
+        "peakBytes": 0.9992227841689,
+        "wallMs": 0.8875156072169162
+      },
+      "result": {
+        "file": "/home/akisarou/.cache/nts-scratch/728/removal-cost-v4/result.json",
+        "bytes": 1641,
+        "sha256": "df76c5b3391fedbaeae91d25b9a5cee0a502fd29e3fe0d35fb6d5433fcde8520"
+      },
+      "reproduce": "sh /home/akisarou/.cache/nts-scratch/728/removal-cost-v4.sh"
+    },
+    "verdict": "improvement beyond arm spread; graph-local directory membership removes repeated scans",
+    "profileFinding": "module-closure tracked.filter repeatedly expanded the same directory membership in successive descriptions; per-graph directory/basename maps remove this duplication",
+    "initialFailedLog": "/home/akisarou/.cache/nts-scratch/728/removal-cost-v1.log"
+  },
+  "censusSource": "c2401276d7ac49103c0bb900584530cd77ac1b30"
+}
