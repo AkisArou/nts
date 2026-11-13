@@ -1,6 +1,6 @@
 // Small shared child runtime: checked metadata reads and run seals only.
 import {createHash,hash as cryptoHash} from 'node:crypto';
-import {appendFileSync,openSync,closeSync,readSync,fstatSync,lstatSync,statSync,readFileSync,constants} from 'node:fs';
+import {openSync,closeSync,readSync,fstatSync,lstatSync,statSync,readFileSync,constants} from 'node:fs';
 import {dirname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
@@ -12,7 +12,7 @@ const EXECUTION_INPUTS=[
   new URL('./oracle-execution-policy.ts',import.meta.url),
   new URL('./oracle-batch.ts',import.meta.url),
   new URL('./command-entry/main.ts',import.meta.url),
-  new URL('./oracle-seal.ts',import.meta.url),
+  new URL('./oracle-seal/main.ts',import.meta.url),
 ] as const;
 const RECIPE_INPUTS={
   emitter:new URL('./oracle-emit.ts',import.meta.url),
@@ -73,8 +73,8 @@ export type CheckerImportRelation={file:string;specifier:string;pos:number;end:n
 export function checkerImportIdentity(relation:CheckerImportRelation):string{
   return createHash('sha256').update(JSON.stringify([relation.file,relation.specifier,relation.pos,relation.end,relation.target,relation.sourceSha256])).digest('hex');
 }
-export {dependencySealIdentity,dependencySealReady,dependencySealError,ownsDependencyRun,DEPENDENCY_SEAL_FIELDS} from './oracle-seal.ts';
-export type {DependencySealIdentity,DependencyRunSeal} from './oracle-seal.ts';
+export {dependencySealIdentity,dependencySealReady,dependencySealError,ownsDependencyRun,DEPENDENCY_SEAL_FIELDS} from './oracle-seal/main.ts';
+export type {DependencySealIdentity,DependencyRunSeal} from './oracle-seal/main.ts';
 
 /** A parent-pinned metadata file. Its path is relative to one snapshot. */
 export type OracleSnapshotReference=Readonly<{path:string;sha256:string}>;

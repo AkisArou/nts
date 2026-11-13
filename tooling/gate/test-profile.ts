@@ -8,7 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {ToolingInstrumentError} from './step-result.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
-import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal.ts';
+import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';

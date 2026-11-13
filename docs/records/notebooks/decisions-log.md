@@ -2430,16 +2430,6 @@ edges. Selected generated sources share their own index. Parser leases are
 batched at sixteen modules or two MiB, with an oversized module inspected
 alone and leases released immediately after use. Shell command facts retain
 redirections without adding another policy.
-Contributors run `inner.ts --no-agree`. It prepares the sealed oracle
-environment, builds a fresh nts, sets NTS_BIN and installs the scratch runner
-before invoking test-profile.ts over the touched crates and all backends.
-The invocation owner keeps nts-dev, NTS_CHECKERS=1 and --no-fail-fast. Its
-executing inner route refuses missing preparation before Cargo starts and
-names the supported command; compile-only invocations need no runtime setup.
-Oracle fixtures and the invocation preflight share the node-only oracle seal
-verifier. The canonical environment boundary only adds instrument classification;
-test-profile imports the leaf directly, keeping launcher dependencies outside
-the Rust test steps' input closure.
 
 Separate inspector walks had grown the audit's cost each time a rule joined
 it. The fixed-tree inventory is unchanged, and locked instruction counts show
@@ -2729,3 +2719,14 @@ requiring a handshake to beat a short deadline. Bounded-entry wiring likewise
 keeps readiness and observed exit separate from its supplied inactivity policy.
 The native addon control validates ownership before it acquires workers, and
 distinguishes a guard/KILL result from a native crash.
+## Prepared test invocations verify a leaf seal (11-13)
+
+#753's invocation preflight checks the complete existing run seal and the
+compiler path before Cargo or disk admission. The verifier moves unchanged
+into differential/oracle-seal/main.ts, with its own one-file project so oracle
+preloads and Rust test selection never inherit the launchers. Canonical
+environment classification remains at its boundary; both callers share the
+same verifier. The exact contributor command remains printed as runnable text.
+
+The runtime recipe includes the leaf. This intentionally changes budget
+freshness, while oracle count population identity is unchanged.

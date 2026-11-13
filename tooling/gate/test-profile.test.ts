@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {fileURLToPath} from 'node:url';
+import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
+import {setupOracleTestEnvironment,oracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 import {spawnSync} from 'node:child_process';
 import {copyFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -14,7 +17,11 @@ import {inspectRecordPublications} from './test-readiness.ts';
 
 const manifest=readFileSync(TEST_PROFILE_MANIFEST,'utf8');
 test('the run seal verifier is a node-only leaf, so test entries cannot inherit launcher selection',()=>{
-  assert.deepEqual(moduleClosure(['tooling/differential/oracle-seal.ts']),['tooling/differential/oracle-seal.ts']);
+  assert.deepEqual(moduleClosure(['tooling/differential/oracle-seal/main.ts']),['tooling/differential/oracle-seal/main.ts']);
+  const config=new OracleFilesystem().projectFor(fileURLToPath(new URL('../differential/oracle-seal/main.ts',import.meta.url)));
+  assert.equal(config,fileURLToPath(new URL('../differential/oracle-seal/tsconfig.json',import.meta.url)));
+  const project=JSON.parse(readFileSync(config,'utf8'));
+  assert.deepEqual(project.files,['main.ts']);assert.deepEqual(project.include,[]);
 });
 for(const route of TEST_ROUTES)test(route+' checks the actual invocation against profile and incremental mutations',()=>{
   const invocation=testInvocation(route,[],{});
@@ -110,6 +117,19 @@ test('an unprepared inner differential invocation names its setup before Cargo o
   assert.match(ran.stderr,/NOT MEASURED.*inner tests need prepared NTS_GATE_ENV_CONTEXT, NTS_ORACLE_DEPENDENCIES, NTS_BIN/);
   assert.match(ran.stderr,/node tooling\/gate\/inner\.ts --no-agree/);
   assert.equal(existsSync(capture),false,'preparation refuses before invoking Cargo');
+});
+
+test('an inner run accepts its complete seal and requires the executable in its selected profile',async t=>{
+  await setupOracleTestEnvironment();
+  const root=newTestScratch('prepared-inner');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const target=join(root,'target'),compiler=join(target,'nts-dev/nts');mkdirSync(dirname(compiler),{recursive:true});
+  writeFileSync(compiler,'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const env={...oracleTestEnvironment(t),NTS_BIN:compiler,CARGO_TARGET_DIR:target};
+  const invocation=testInvocation('inner',[],env,root);
+  assert.doesNotThrow(()=>assertPreparedInnerTests(invocation));
+  assert.throws(()=>assertPreparedInnerTests({...invocation,env:{...env,NTS_BIN:join(root,'other-nts')}}),/inner NTS_BIN must name the compiler built by node tooling\/gate\/inner\.ts --no-agree/);
+  rmSync(compiler);
+  assert.throws(()=>assertPreparedInnerTests(invocation),/inner NTS_BIN is unavailable/);
 });
 
 test('compile-only inner builds do not need runtime preparation and a test filter cannot pretend to be no-run',()=>{

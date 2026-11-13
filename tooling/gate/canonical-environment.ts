@@ -90,8 +90,8 @@ const EXPERIMENTS = new Set([
   // set by a launcher, any of them makes the run an experiment.
   ...HOST_OBSERVATION_ENVIRONMENT,
 ]);
-import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal.ts';
-export {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal.ts';
+import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
+export {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
 export function nodeCompileCacheRoot(env:NodeJS.ProcessEnv=process.env):string{
   return cacheLocation('NODE_COMPILE_CACHE',env[FIXTURE_ENVIRONMENT]!==undefined?env:{},()=>join(userInfo().homedir,'.cache/nts/node-compile-cache/v1'));
