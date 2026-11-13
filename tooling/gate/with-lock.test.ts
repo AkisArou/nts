@@ -126,6 +126,7 @@ for (const name of ["first case", "second case"]) {
   const job = await reserveJob({ key: "bench-host-columns", what: name }, { report: () => {} });
   cases.push({ inherited: job.inherited, id: job.id });
   job.release();
+  await job.closed;
 }
 const view = readLedger();
 process.stdout.write(JSON.stringify({ cases, session: process.env.NTS_MEMORY_RESERVATION, cpus: process.env.NTS_BENCH_CPUS,

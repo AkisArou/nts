@@ -2634,3 +2634,16 @@ missing old sequence stays retired, while a new unpublished report survives.
 State publication also restores any omitted current reports before applying
 the answered-only retention rule. A pre-answer/answer/expiry/stale-publication
 replay covers the defect, alongside a new unpublished report and sequence checks.
+## Sampler failures still drain reservations (11-13)
+
+A scoped job's terminal boundary waits for both its sampler and the locked
+ledger deletion even when the sampler fails. The release barrier observes the
+ledger's closure after release has assigned it. Named failures remain visible;
+multiple failures retain both causes. Fixtures await and consume expected
+terminal failures before removing their reports or private observations.
+
+A landing of #765 passed the missing-observation control's assertions and then
+failed on its sampler rejection after teardown. That fixture omitted `closed`,
+and the sampled job's rejection path also skipped pending ledger cleanup.
+The private-lock control waits for the real sampler's named error, retains the
+lock through release, and proves the terminal boundary cannot bypass it. #772.

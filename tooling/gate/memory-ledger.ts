@@ -1421,6 +1421,8 @@ export async function reserveJob(request: JobRequest,
   const before = new Map(Object.keys(held.env).map(name => [name, env[name]]));
   Object.assign(env, held.env);
   let released = false;
+  let releaseComplete!:()=>void;
+  const afterRelease=new Promise<void>(resolve=>{releaseComplete=resolve;});
   const release = () => {
     // A second call does nothing: the peak goes to the history once.
     if (released) return;
@@ -1430,19 +1432,30 @@ export async function reserveJob(request: JobRequest,
     let peak:number;
     try{peak=sampler.stop();}
     finally {
-      held.release();
-      for (const [name, value] of Object.entries(held.env)) {
-        if (env[name] !== value) continue;
-        const was = before.get(name);
-        if (was === undefined) delete env[name];
-        else env[name] = was;
-      }
+      try {
+        held.release();
+        for (const [name, value] of Object.entries(held.env)) {
+          if (env[name] !== value) continue;
+          const was = before.get(name);
+          if (was === undefined) delete env[name];
+          else env[name] = was;
+        }
+      } finally {releaseComplete();}
     }
     if (peak <= 0) return;
     const warning = writeCostHistory(sizing.history, { jobs: [{key:request.key,peak,basis:sizing.sampleBasis,width:sizing.units}] });
     if (warning) report(`memory: ${request.key}'s peak is not in its history: ${warning}`);
   };
-  const closed=sampler.closed.then(()=>held.closed);
+  // held.closed is assigned by release(). A failed sampler must neither
+  // bypass that locked cleanup nor read its initially resolved promise.
+  const closed=Promise.allSettled([sampler.closed,afterRelease.then(()=>held.closed)]).then(results=>{
+    const errors=results.filter(result=>result.status==='rejected').map(result=>result.reason);
+    if(errors.length===1)throw errors[0];
+    if(errors.length>1)throw new AggregateError(errors,`memory: ${request.key} close failed: ${errors.map(String).join('; ')}`);
+  });
+  // Process-lifetime owners report sampler failure through its lifecycle.
+  // Scoped owners still receive the rejection when they await this boundary.
+  void closed.catch(()=>{});
   const finish=async()=>{release();try{await closed;}catch{/* the lifecycle already reported its named failure */}};
   process.once("beforeExit",finish);
   process.once("exit", release);

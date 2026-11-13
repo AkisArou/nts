@@ -7,7 +7,8 @@ import {test} from 'node:test';
 import {HOST_OBSERVATIONS,HOST_OBSERVATION_ENVIRONMENT,hostObservations,parseCgroupCpu} from './host-observations.ts';
 import {gateEnvironment,hostEnvironment,assertLandingEnvironment} from './canonical-environment.ts';
 import {TemporaryAdmission} from './admission.ts';
-import {reserveJob,readLedger} from './memory-ledger.ts';
+import {reserveJob,readLedger,lockLedger} from './memory-ledger.ts';
+import {waitFor} from './test-wait.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {compileActive,closeMemoryRun} from '../census/worker-memory.ts';
@@ -120,11 +121,27 @@ test('temporary admission obeys the same owned disk even when the path cannot be
 
 test('a missing sampler observation fails its job and still releases the owned ledger',async t=>{
   const root=testScratch(t,'host-observations-sampler'),env=ownMemory(root);
-  const job=await reserveJob({key:'fixture-job',what:'owned sampler control'},{env,report:()=>{}});
+  const reports:string[]=[];
+  const job=await reserveJob({key:'fixture-job',what:'owned sampler control'},{env,report:line=>reports.push(line)});
   const file=env.NTS_HOST_OBSERVATIONS,value=JSON.parse(readFileSync(file,'utf8'));
   delete value.resident;
   writeFileSync(file,JSON.stringify(value));
-  assert.throws(()=>job.release(),/host observation resident/);
+  let settled=false;
+  const closed=job.closed.then(()=>{settled=true;},error=>{settled=true;throw error;});
+  const failure=assert.rejects(closed,/memory: fixture-job sampler failed: host observation resident/);
+  t.after(async()=>{
+    try{job.release();}catch(error){assert.match(String(error),/host observation resident/);}
+    await failure;
+  });
+  await waitFor('the sampler to report the missing resident observation',()=>reports.some(line=>line.includes('sampler failed: host observation resident')));
+  const lock=lockLedger(env.NTS_MEMORY_LEDGER);assert.ok(lock);
+  try{
+    assert.throws(()=>job.release(),/host observation resident/);
+    await Promise.resolve();
+    assert.equal(settled,false,'a sampler failure cannot bypass the pending ledger deletion');
+    assert.equal(readLedger(env.NTS_MEMORY_LEDGER).admitted.length,1);
+  }finally{lock.release();}
+  await failure;
   assert.deepEqual(readLedger(env.NTS_MEMORY_LEDGER),{waiting:[],admitted:[]});
   assert.equal((env as NodeJS.ProcessEnv).NTS_MEMORY_RESERVATION,undefined);
 });

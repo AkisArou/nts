@@ -1048,6 +1048,9 @@ the first node task.
   Its sampler starts and stops by message, replies with its final sample and
   exits itself. A scoped owner awaits `closed` before tearing down any state
   its sampler or reporter can use; process-lifetime jobs drain at `beforeExit`.
+  A failed sampler still waits for the reservation's locked deletion before
+  `closed` rejects. Its named failure is retained, together with any cleanup
+  failure; a fixture consumes expected failures before teardown.
   A valid final reply also certifies a reservation that ended by handover.
   The exec CLI's watcher samples in a collected sibling scope under the run's
   tooling slice, outside the command service. At command end it moves itself

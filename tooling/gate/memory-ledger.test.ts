@@ -669,7 +669,7 @@ const job = await reserveJob({ key: "job", atMostBytes: 2 ** 30, what: "job" }, 
 const named = process.env.NTS_MEMORY_RESERVATION === job.id;
 const again = await reserveJob({ key: "a-later-call", atMostBytes: 2 ** 31, what: "a later call of the job" });
 const held = readLedger().admitted.map(e => [e.what, e.bytes, e.priority]);
-if (keep !== "--keep") job.release();
+if (keep !== "--keep") { job.release(); await job.closed; }
 process.stdout.write(JSON.stringify({ inherited: job.inherited, named, again: [again.inherited, again.id === job.id], held,
   cleared: process.env.NTS_MEMORY_RESERVATION === undefined,
   restored: process.env.NTS_MEMORY_LEDGER === given && process.listenerCount("exit") === listening }));`;
@@ -761,6 +761,7 @@ const held = {length:96 * 2 ** 20};
 const entry = readLedger().admitted.find(e => e.id === job.id);
 job.release();
 job.release();
+await job.closed;
 process.stdout.write(JSON.stringify({ bytes: entry.bytes, unmeasured: entry.unmeasured ?? [], held: held.length }));`;
 
 test("a job reserves what its earlier runs held per worker, and the peak it held goes to its history as it releases", t => {
@@ -934,7 +935,9 @@ test("a request that cannot fit now holds nobody behind it, then holds the queue
 const IDLE_JOB = `const [ledger] = process.argv.slice(1);
 const { reserveJob } = await import(ledger);
 const job = await reserveJob({ key: "idle-job", what: "idle reserveJob job" }, { report: () => {} });
-process.stdin.on("data", () => {}).on("end", () => job.release());`;
+process.stdin.on("data", () => {}).on("end", () => {
+  job.release();void job.closed.catch(error=>{console.error(error);process.exitCode=1;});
+});`;
 
 /** A process of its own that holds a reservation until the test ends its input. */
 function idleHolder(t: TestContext, f: Fixture, args: string[], what: string) {
