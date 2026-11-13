@@ -78,7 +78,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     assert.equal(unmeasured.status,2,unmeasured.stdout+'\n'+unmeasured.stderr);
     assert.match(unmeasured.stdout,/NOT MEASURED: Rust test inputs: Error: file input observer: incomplete census/);
     const instrument=readStepInstrument(stepResult,'tests','trace-control');
-    assert.equal(instrument?.verdict,'INSTRUMENT');assert.equal(instrument.kind,'tooling-setup');
+    assert.ok(instrument);assert.equal(instrument.verdict,'INSTRUMENT');assert.equal(instrument.kind,'tooling-setup');
     assert.match(instrument.reason,/file input observer: incomplete census/);
     // A completed product failure remains a failure even with the same broken census.
     rmSync(stepResult);appendFileSync(join(root,'src/lib.rs'),'\n#[test] fn real_failure() { panic!("product-control"); }\n');
