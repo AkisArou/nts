@@ -93,7 +93,7 @@ const first = spawnSync(traceDirectory?'strace':process.execPath, cargoTrace?inp
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 if(cargoTrace){
   try{await publishInputTrace({raw:cargoTrace,output:join(traceDirectory,'cargo.json'),cwd:ROOT,root:ROOT});}
-  catch(error){console.error('NOT MEASURED: '+String(error));exitCommand(2);}
+  catch(error){if(isCommandExit(error))throw error;console.error('NOT MEASURED: '+String(error));exitCommand(2);}
 }
 const recorded = readdirSync(calls)
   .map((f) => JSON.parse(readFileSync(join(calls, f), "utf8")))
@@ -138,7 +138,7 @@ const runOne = (key) =>
     child.on("close", async (status, signal) => {
       if(trace){
         try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw$/,'.json'),cwd:r.cwd,root:ROOT,target});}
-        catch(error){traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
+        catch(error){if(isCommandExit(error))throw error;traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;
       const leftovers = scratch.finish();
