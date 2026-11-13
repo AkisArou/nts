@@ -122,22 +122,25 @@ export class RustInputPhases{
     const path=byteFactText(row.image,'actual task image'),cwd=byteFactText(row.cwd,'actual task cwd');
     const actualArgv=row.argvRead?row.argv.hex:'';
     if(previous?.path===path&&previous.cwd===cwd&&this.argvFacts.get(identity)===actualArgv)return previous;
+    // A chdir changes later pathname anchors, not the source argument already
+    // bound when this invocation entered. Actual image/argv changes rebind it.
+    const invocationChanged=previous?.path!==path||this.argvFacts.get(identity)!==actualArgv;
     const args=row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):[];
     const parent=this.tasks.get(key(row.ppid,row.parentBirth));
     if(!this.target&&!previous&&!parent&&row.tgid!==this.root)fail('unattributed task '+identity+' parent '+key(row.ppid,row.parentBirth));
     let phase:TracePhase=this.target?{phase:'test-runtime',source:this.target.source}:{...(previous?.phase??parent?.phase??{phase:'cargo-setup'})};
-    if(!this.target&&phase.phase!=='doctest-runtime'&&basename(path)==='rustdoc'&&args.includes('--test')){
+    if(!this.target&&invocationChanged&&phase.phase!=='doctest-runtime'&&basename(path)==='rustdoc'&&args.includes('--test')){
       const sources=args.filter(arg=>arg.endsWith('.rs')).map(arg=>resolve(cwd,arg)).filter(path=>inside(this.tree,path));
       if(sources.length!==1)fail('rustdoc has no unique source entry: '+path);
       phase={phase:'rustdoc-setup',source:relative(this.tree,sources[0]!).split(sep).join('/')};
     }
     const call=this.calls.get(identity);
-    if(call&&path===call.argv[0]){
+    if(call&&path===call.argv[0]&&phase.phase!=='doctest-runtime'){
       if(phase.phase!=='rustdoc-setup'||!phase.source)fail('doctest entry has no rustdoc source: '+identity);
       phase={phase:'doctest-runtime',source:phase.source};this.entered.add(identity);
     }
     const image:Image={id:++this.nextImage,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
-      reason:!previous?'first-observation':previous.path!==path?'actual-image':previous.cwd!==cwd?'actual-cwd':'actual-argv'};
+      reason:!previous?'first-observation':previous.path!==path?'actual-image':invocationChanged?'actual-argv':'actual-cwd'};
     this.tasks.set(identity,image);this.argvFacts.set(identity,actualArgv);return image;
   }
   finish():void{for(const identity of this.calls.keys())if(!this.entered.has(identity))fail('recorded doctest has no matching entered image: '+identity);}

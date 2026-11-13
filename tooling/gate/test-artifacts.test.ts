@@ -45,7 +45,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
       assert!(cfg!(debug_assertions));
     }\n`);
     mkdirSync(join(root,'runtime-data'));writeFileSync(join(root,'runtime-data/value'),'runtime');
-    appendFileSync(join(root,'src/lib.rs'),'\n/// ```\n/// assert_eq!(std::fs::read_to_string("runtime-data/value").unwrap(), "runtime");\n/// ```\npub fn doc_input() {}\n#[test] fn runtime_input() {\nassert_eq!(std::fs::read_to_string("runtime-data/value").unwrap(), "runtime");\nassert!(std::fs::read_to_string("runtime-data/missing").is_err());\nassert_eq!(std::fs::read_dir("runtime-data").unwrap().count(), 1);\n}\n');
+    appendFileSync(join(root,'src/lib.rs'),'\n/// ```\n/// std::env::set_current_dir("runtime-data").unwrap();\n/// assert_eq!(std::fs::read_to_string("value").unwrap(), "runtime");\n/// ```\npub fn doc_input() {}\n#[test] fn runtime_input() {\nassert_eq!(std::fs::read_to_string("runtime-data/value").unwrap(), "runtime");\nassert!(std::fs::read_to_string("runtime-data/missing").is_err());\nassert_eq!(std::fs::read_dir("runtime-data").unwrap().count(), 1);\n}\n');
     const trace=join(root,'input-trace');
     const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
       cwd: root, encoding: "utf8",
@@ -59,7 +59,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     const index=await readInputTraceIndex(join(trace,'binary-0.index.jsonl.gz'),row=>{if(row.kind==='observation')binary.observations.push(row);});
     assert.equal(index.header.target?.source,'src/lib.rs');
     const named=(subject:InputSubject)=>subject.kind==='descriptor'?subject.target:subject.anchor.kind==='absolute'?subject.name:subject.anchor.path+'/'+subject.name;
-    assert.ok(cargo.observations.some(row=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.subjects.some(subject=>named(subject)===join(root,'runtime-data/value'))));
+    assert.ok(cargo.observations.some(row=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.cwd===join(root,'runtime-data')&&row.subjects.some(subject=>subject.kind==='path'&&subject.name==='value'&&named(subject)===join(root,'runtime-data/value'))));
     assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));
     assert.ok(binary.observations.some(row=>row.subjects.some(subject=>named(subject)===join(root,'runtime-data/missing'))&&row.outcome==='unknown'));
     assert.ok(binary.observations.some(row=>row.subjects.some(subject=>named(subject)===join(root,'runtime-data'))&&row.operation==='directory'));

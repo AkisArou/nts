@@ -98,13 +98,29 @@ test('same-image rustdoc facts with different actual source arguments update the
   assert.equal(phases.observe(image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/second.rs'])).id,next.id);
 });
 
-test('same-image cwd changes update actual rustdoc context without claiming another exec',()=>{
+test('same-image cwd changes preserve the bound invocation source while updating the attempt anchor',()=>{
   const phases=new RustInputPhases('/source');phases.start(1);phases.observe(image(1,0,'/observer'));
   const first=phases.observe(image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']));
   const changed={...image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']),cwd:bytes('/source/moved')};
   const next=phases.observe(changed);
   assert.notEqual(next.id,first.id);assert.equal(next.reason,'actual-cwd');
-  assert.equal(next.cwd,'/source/moved');assert.equal(next.phase.source,'moved/src/lib.rs');
+  assert.equal(next.cwd,'/source/moved');assert.deepEqual(next.phase,first.phase);
+  const changedArgv={...changed,argv:bytes(['rustdoc','--test','src/second.rs'].join('\0')+'\0')};
+  const rebound=phases.observe(changedArgv);
+  assert.equal(rebound.reason,'actual-argv');assert.equal(rebound.phase.source,'moved/src/second.rs');
+});
+
+test('an entered doctest can change cwd without entering its recorded command again',()=>{
+  const phases=new RustInputPhases('/source',undefined,[{version:1,pid:5,birth:'5',cwd:'/source/crate',argv:['/private/program']}]);
+  phases.start(1);phases.observe(image(1,0,'/observer'));
+  phases.observe(image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']));
+  const first=phases.observe(image(5,2,'/private/program'));
+  const changed={...image(5,2,'/private/program'),cwd:bytes('/source/moved')};
+  const next=phases.observe(changed);
+  assert.equal(next.reason,'actual-cwd');assert.equal(next.cwd,'/source/moved');
+  assert.deepEqual(next.phase,{phase:'doctest-runtime',source:'crate/src/lib.rs'});
+  assert.equal(phases.observe(changed).id,next.id);assert.notEqual(next.id,first.id);
+  phases.finish();
 });
 
 test('attempt groups retain kernel path order, two-path positions and actual changing anchors',async t=>{
