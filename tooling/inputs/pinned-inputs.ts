@@ -10,6 +10,7 @@ import {cacheLocation,contentCacheEnvironment} from '../gate/cache-environment.t
 import {durableRecord} from '../gate/durable-record.ts';
 import {GateResource} from '../gate/gate-resource.ts';
 import {ToolingInstrumentError,publishToolingFailure} from '../gate/step-result.ts';
+import {assertStateVersion} from '../gate/state-version.ts';
 
 export type PinnedInput=Readonly<{name:string;url:string;sha256:string;version:string}>;
 type Catalog={version:1;inputs:Record<string,{url:string;sha256:string;version:string}>};
@@ -49,6 +50,7 @@ export function readPinnedInput(input:PinnedInput,options:{cache?:string;env?:No
     if((error as NodeJS.ErrnoException).code==='ENOENT')throw failure(`missing ${input.name} at ${file}; acquire it with node tooling/inputs/pinned-inputs.ts --acquire ${input.name}`);
     throw failure(`cannot read ${input.name} at ${file}: ${String(error)}`);
   }
+  try{assertStateVersion(record,1,file);}catch(error){throw failure(String(error));}
   const row=record as {version?:unknown;sha256?:unknown;bytesBase64?:unknown}|null;
   if(row?.version!==1||row.sha256!==input.sha256||typeof row.bytesBase64!=='string')
     throw failure(`invalid content record for ${input.name} at ${file}; left untouched`);

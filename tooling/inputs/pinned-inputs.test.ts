@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
 import {test} from 'node:test';
 import {testScratch} from '../gate/test-scratch.ts';
 import {acquirePinnedInput,pinnedInput,pinnedInputCache,pinnedInputFile,readPinnedInput} from './pinned-inputs.ts';
@@ -38,7 +37,7 @@ test('an unsupported content record survives acquisition byte for byte',async t=
   const cache=testScratch(t,'pinned-input-version'),file=pinnedInputFile(input,cache),record='{"version":2,"future":"owned elsewhere"}\n';
   writeFileSync(file,record);
   const fetcher:typeof fetch=async()=>{throw Error('future content must not fetch');};
-  await assert.rejects(acquirePinnedInput(input,{cache,fetcher}),/invalid content record.*left untouched/);
+  await assert.rejects(acquirePinnedInput(input,{cache,fetcher}),/unsupported future state version 2.*left untouched/);
   assert.equal(readFileSync(file,'utf8'),record);
 });
 
