@@ -1,6 +1,11 @@
 // Resource observations are a capability of a run. Tests provide a complete
 // owned view, including observations made by dependencies and child processes.
-import {closeSync,existsSync,openSync,readFileSync,readSync,statfsSync,writeSync} from 'node:fs';
+import {closeSync,existsSync,openSync,readFileSync,readSync,statSync,statfsSync,writeSync} from 'node:fs';
+import {monitorEventLoopDelay} from 'node:perf_hooks';
+import {HostObservationError} from './host-observation-error.ts';
+export {HostObservationError} from './host-observation-error.ts';
+import {PRESSURE_RESOURCES,loopDelay,parsePressure,pressureReading,type PressureReading,type LoopDelay,type LoopDelayMeter} from './host-pressure.ts';
+export type {PressureReading,LoopDelay,LoopDelayMeter} from './host-pressure.ts';
 import {availableParallelism,cpus,loadavg} from 'node:os';
 import {FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -8,7 +13,6 @@ import {dirname,resolve} from 'node:path';
 
 export const HOST_OBSERVATIONS = 'NTS_HOST_OBSERVATIONS';
 export const HOST_OBSERVATION_ENVIRONMENT = [HOST_OBSERVATIONS,'NTS_MEMINFO','NTS_VMSTAT','NTS_MEMORY_LEDGER','NTS_GATE_COSTS_DIR','NTS_DISK_CAPACITY'] as const;
-export class HostObservationError extends Error { override name='HostObservationError'; }
 /** A cgroup counter's object has ended. Only an owner which already opened
  * that exact group may interpret this as retirement rather than failure. */
 export class CgroupDeparted extends HostObservationError {
@@ -33,6 +37,8 @@ export type HostObservationFixture = {
   width:{logical:number;available:number};
   load:[number,number,number];
   clock:{kind:'live'}|{kind:'fixed';now:number}|{kind:'file';file:string};
+  pressure:{kind:'live'}|{kind:'fixed';ownGroup:string;machine:PressureReading;default:PressureReading;cgroups?:Record<string,PressureReading>};
+  loopDelay:{kind:'live'}|{kind:'fixed';value:LoopDelay};
 };
 
 export interface HostObservations {
@@ -51,6 +57,39 @@ export interface HostObservations {
   machineWidth():number;
   availableWidth():number;
   now():number;
+  ownCgroup():string;
+  machinePressure():PressureReading;
+  cgroupPressure(group:string):PressureReading;
+  loopDelay():LoopDelayMeter;
+}
+
+function checkedGroup(group:string):string{
+  if(!group.startsWith('/')||group.split('/').includes('..')||group.includes('\n')||group.includes('\0'))throw new HostObservationError('host observation pressure cgroup path is invalid');
+  return group;
+}
+function liveOwnCgroup():string{
+  const match=/^0::(\/.*)$/m.exec(textFile('/proc/self/cgroup','pressure.ownCgroup'));
+  if(!match)throw new HostObservationError('host observation pressure.ownCgroup is missing');
+  return checkedGroup(match[1]!);
+}
+function livePressure(group?:string):PressureReading{
+  const root=group===undefined?'/proc/pressure':`/sys/fs/cgroup${checkedGroup(group)}`;
+  try{
+    const identity=statSync(root,{bigint:true}),resources={} as PressureReading['resources'];
+    for(const resource of PRESSURE_RESOURCES)resources[resource]=parsePressure(readFileSync(`${root}/${resource}${group===undefined?'':'.pressure'}`,'utf8'),`pressure.${root}.${resource}`);
+    const after=statSync(root,{bigint:true});
+    if(identity.dev!==after.dev||identity.ino!==after.ino)throw Error('scope identity changed during sampling');
+    return {identity:`${root}:${identity.dev}:${identity.ino}`,resources};
+  }catch(error){throw new HostObservationError(`host observation pressure ${root} failed: ${String(error)}`);}
+}
+function liveLoopDelay():LoopDelayMeter{
+  const histogram=monitorEventLoopDelay({resolution:20});histogram.enable();let closed=false;
+  const opened=()=>{if(closed)throw new HostObservationError('host observation loopDelay meter is closed');};
+  return {
+    read:()=>{opened();return loopDelay({count:histogram.count,maxMs:histogram.count?histogram.max/1e6:null,p99Ms:histogram.count?histogram.percentile(99)/1e6:null});},
+    reset:()=>{opened();histogram.reset();},
+    close:()=>{if(!closed){closed=true;histogram.disable();}},
+  };
 }
 
 function number(value:unknown,name:string):number {
@@ -182,6 +221,11 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       if(value.clock?.kind==='fixed')number(value.clock.now,'clock.now');
       else if(value.clock?.kind==='file'){if(!value.clock.file)throw new HostObservationError('host observation clock.file is missing or invalid');}
       else if(value.clock?.kind!=='live')throw new HostObservationError('host observation clock is missing or invalid');
+      if(value.pressure?.kind==='fixed'){
+        checkedGroup(value.pressure.ownGroup);pressureReading(value.pressure.machine,'pressure.machine');pressureReading(value.pressure.default,'pressure.default');
+      }else if(value.pressure?.kind!=='live')throw new HostObservationError('host observation pressure is missing or invalid');
+      if(value.loopDelay?.kind==='fixed')loopDelay(value.loopDelay.value);
+      else if(value.loopDelay?.kind!=='live')throw new HostObservationError('host observation loopDelay is missing or invalid');
       return value;
     };
     read();
@@ -214,6 +258,14 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       machineWidth:()=>number(read().width?.logical,'width.logical'),
       availableWidth:()=>number(read().width?.available,'width.available'),
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
+      ownCgroup:()=>{const value=read().pressure;return value.kind==='live'?liveOwnCgroup():checkedGroup(value.ownGroup);},
+      machinePressure:()=>{const value=read().pressure;return value.kind==='live'?livePressure():pressureReading(value.machine,'pressure.machine');},
+      cgroupPressure:group=>{checkedGroup(group);const value=read().pressure;return value.kind==='live'?livePressure(group):pressureReading(value.cgroups?.[group]??{...value.default,identity:group+':'+value.default.identity},'pressure.cgroups.'+group);},
+      loopDelay:()=>{
+        const initial=read().loopDelay;if(initial.kind==='live')return liveLoopDelay();let closed=false;
+        const opened=()=>{if(closed)throw new HostObservationError('host observation loopDelay meter is closed');};
+        return {read:()=>{opened();const value=read().loopDelay;if(value.kind!=='fixed')throw new HostObservationError('host observation loopDelay meter changed kind');return loopDelay(value.value);},reset:()=>{opened();},close:()=>{closed=true;}};
+      },
     };
   }
   if(env[FIXTURE_ENVIRONMENT]!==undefined)throw new HostObservationError('fixture host observation capability missing: '+HOST_OBSERVATIONS);
@@ -235,6 +287,10 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     machineWidth:()=>cpus().length,
     availableWidth:()=>availableParallelism(),
     now:()=>performance.now(),
+    ownCgroup:liveOwnCgroup,
+    machinePressure:()=>livePressure(),
+    cgroupPressure:livePressure,
+    loopDelay:liveLoopDelay,
   };
 }
 

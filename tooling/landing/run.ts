@@ -1,4 +1,5 @@
 import {GNU_CPU_MEASURE,type GnuTime} from '../gate/step-time.ts';
+import type {StepDiagnostics} from '../gate/step-result.ts';
 // Run a change's landing steps in a tree: the gate's own steps, through its own
 // runner, in the landing check's profile.
 //
@@ -58,6 +59,7 @@ export type StepResult = {
   cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; accepted?: boolean; attempt?: number;
   instrument?: { kind?: string; verdict?: string; completedFailures?: number };
   binaries?: BinaryIdentities;
+  diagnostics?:StepDiagnostics;
 };
 export type Ran = { state: "green" | "red" | "held"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
   contract?: VerdictContract; binaries?: BinaryIdentities };

@@ -1,4 +1,5 @@
 import {GNU_CPU_MEASURE,cpuByMeasure,zeroGnuTime,type GnuTime} from '../gate/step-time.ts';
+import type {StepDiagnostics} from '../gate/step-result.ts';
 // Combine the exact commit's landing evidence with its newly measured work.
 // The caller supplies the candidate's current contract under its tree lock.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import type { VerdictContract } from "../gate/verdict-contract.ts";
 import type { RunRecord } from "./state.ts";
 import { verdictOf, type Measurement } from "./measure.ts";
 
-type Step = { name: string; verdict: string; reason?: string; accepted?: boolean; cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; origin?: Record<string, unknown> };
+type Step = { name: string; verdict: string; reason?: string; accepted?: boolean; cpu?: number;cpu_measure?:string;gnu_time?:GnuTime;wall?: number; log?: string; origin?: Record<string, unknown>;diagnostics?:StepDiagnostics };
 type Summary = {
   schema?: number; environment?: Record<string, unknown>; identities?: Record<string, unknown>;
   steps?: Step[]; wall_s?: number; [key: string]: unknown;
@@ -64,9 +65,9 @@ export function measureWithLanding(options: {
     const name = reused.outcome.name, log = join(run, name + ".log");
     writeFileSync(log, [...reused.notices, ...reused.platforms.map(platform => platform.line)].join("\n") + "\n");
     steps[name] = "PASS";
-    rows.set(name, { ...reused.outcome,cpu_measure:reused.outcome.cpu_measure??GNU_CPU_MEASURE,gnu_time:zeroGnuTime(),cpu: 0, wall: 0, log,
+    rows.set(name, { ...reused.outcome,diagnostics:undefined,cpu_measure:reused.outcome.cpu_measure??GNU_CPU_MEASURE,gnu_time:zeroGnuTime(),cpu: 0, wall: 0, log,
       origin: { kind: "landing", commit: plan.receipt.commit, landing: plan.receipt.landing, run: plan.receipt.run,
-        profile: plan.receipt.profile, contract: plan.receipt.contract.identity, cpu: reused.outcome.cpu,cpu_measure:reused.outcome.cpu_measure??GNU_CPU_MEASURE,gnu_time:reused.outcome.gnu_time,wall: reused.outcome.wall } });
+        profile: plan.receipt.profile, contract: plan.receipt.contract.identity, cpu: reused.outcome.cpu,cpu_measure:reused.outcome.cpu_measure??GNU_CPU_MEASURE,gnu_time:reused.outcome.gnu_time,wall: reused.outcome.wall,diagnostics:reused.outcome.diagnostics } });
   }
   for (const name of plan.execute) {
     if (!steps[name]) { steps[name] = "HELD"; reasons[name] = "fresh measurement omitted the requested step"; }

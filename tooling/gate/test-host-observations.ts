@@ -11,8 +11,8 @@ export type OwnMemory = Record<(typeof HOST_OBSERVATION_ENVIRONMENT)[number],str
  * Called again, it changes the reading at once, as a reader polling it sees
  * it: whole, never half written.
  */
-export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak }:
-  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak']} = {}): OwnMemory {
+export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = Math.max(availableKiB, 64_000_000), disk, allocated, resident, clock, cpu, selfCpu, scopePeak, pressure, loopDelay }:
+  {availableKiB?:number;totalKiB?:number;disk?:HostObservationFixture['disk'];allocated?:HostObservationFixture['allocated'];resident?:HostObservationFixture['resident'];clock?:HostObservationFixture['clock'];cpu?:HostObservationFixture['cpu'];selfCpu?:HostObservationFixture['selfCpu'];scopePeak?:HostObservationFixture['scopePeak'];pressure?:HostObservationFixture['pressure'];loopDelay?:HostObservationFixture['loopDelay']} = {}): OwnMemory {
   mkdirSync(dir, { recursive: true });
   const meminfo = join(dir, "meminfo"), vmstat = join(dir, "vmstat");
   writeFileSync(`${meminfo}.next`, `MemTotal:       ${totalKiB} kB\nMemFree:        ${availableKiB} kB\nMemAvailable:   ${availableKiB} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
@@ -28,10 +28,17 @@ export function ownMemory(dir: string, { availableKiB = 64_000_000, totalKiB = M
     cpu:cpu??previous?.cpu??{kind:'fixed',default:{usageUsec:0,userUsec:0,systemUsec:0}},
     selfCpu:selfCpu??previous?.selfCpu??{kind:'fixed',value:{userUsec:0,systemUsec:0}},
     scopePeak:scopePeak??previous?.scopePeak??{kind:'fixed',bytes:0,resettable:true},
+    pressure:pressure??previous?.pressure??{kind:'fixed',ownGroup:'/fixture-runner',machine:emptyPressure('machine'),default:emptyPressure('cgroup')},
+    loopDelay:loopDelay??previous?.loopDelay??{kind:'fixed',value:{count:0,maxMs:null,p99Ms:null}},
     width:previous?.width??{logical:32,available:30},load:previous?.load??[0,0,0],clock:clock??previous?.clock??{kind:'live'}};
   writeFileSync(capability+'.next',JSON.stringify(observations)+'\n');renameSync(capability+'.next',capability);
   const capacity=join(dir,'disk-capacity.json');
   if(!existsSync(capacity))writeFileSync(capacity,JSON.stringify({version:1,pool:null})+'\n');
   return { [HOST_OBSERVATIONS]:capability, NTS_MEMINFO: meminfo, NTS_VMSTAT: vmstat, NTS_MEMORY_LEDGER: join(dir, "ledger"), NTS_GATE_COSTS_DIR: join(dir, "costs"),NTS_DISK_CAPACITY:capacity };
+}
+
+function emptyPressure(identity:string):import('./host-pressure.ts').PressureReading{
+  const resource=()=>({some:{avg10:0,totalUsec:0},full:{avg10:0,totalUsec:0}});
+  return {identity,resources:{cpu:resource(),memory:resource(),io:resource()}};
 }
 

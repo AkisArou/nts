@@ -94,6 +94,8 @@ import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../d
 //   NTS_GATE_COSTS_DIR    the run's history and cost files (<target>/gate-costs,
 //                         unless the launcher's code owns another, as a test does)
 
+import {appendFileSync} from "node:fs";
+import {RunDiagnostics} from "./run-diagnostics.ts";
 import {clippyTarget} from "./build-targets.ts";
 import {hostObservations,HostObservationError} from "./host-observations.ts";
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
@@ -446,6 +448,7 @@ function stepEnv(step, slots, scope) {
   return oracleStepEnvironment(e,step.name);
 }
 
+let diagnostics,diagnosticsFailure;
 function finish(name, verdict, reason, extra = {}) {
   results.set(name, { verdict, reason, ...extra });
 }
@@ -1228,6 +1231,7 @@ function start(step, slots, rider = false) {
     finish(step.name, "INSTRUMENT", `step scope setup failed: ${error.message}`, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT" } });
     report(step.name); stop(`step scope setup failed: ${error.message}`); return;
   }
+  try{diagnostics?.beginStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);stop(`host observation: ${error}`);return;}
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.gnu-time`);
   rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
@@ -1305,6 +1309,8 @@ function start(step, slots, rider = false) {
       scopeCleanup = { state: "error", reason: cleanupError };
       stop(cleanupError);
     }
+    let stepDiagnostics;
+    try{stepDiagnostics=diagnostics?.endStep(step.name);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);cleanupError=`step host observation failed: ${error}`;stop(cleanupError);}
     running.delete(step.name);
     const wall = (Date.now() - started) / 1000;
     let gnuTime,measurement;
@@ -1344,7 +1350,7 @@ function start(step, slots, rider = false) {
     if (owned.grown > 0) memoryRecord.steps_grown++;
     if (memory.killed > 0) memoryRecord.steps_killed++;
     const extra = { exit: code, signal, wall, cpu, user, sys, cpu_measure:measurement?.cpu_measure,gnu_time:gnuTime,maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
-      memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
+      diagnostics:stepDiagnostics, memory, memory_peak_bytes: scope.memoryPeakBytes, bound_s: bound.seconds, bound_basis: bound.basis,
       bound_clock: { execution_s: boundState.used_s, admission_wait_s: boundState.waited_s, ...(STEP_CEILING === undefined ? {} : { wall_ceiling_s: STEP_CEILING }) } };
     caseMemory.flush(step.name);
     if (oracleCapture) extra.oracle_capture = oracleCapture;
@@ -1515,7 +1521,7 @@ function writeSummary() {
     if (r.verdict === "SKIPPED" && ACCEPT_SKIP.has(name)) { r.accepted = true; continue; }
     red.push(name);
   }
-  const green = red.length === 0 && scopeCleanup.state === "complete";
+  const green = red.length === 0 && scopeCleanup.state === "complete" && !diagnosticsFailure;
   let oracleSetup;
   const setupLog=join(RUN_DIR,"oracle-setup.log");
   try { if(!existsSync(setupLog))writeFileSync(setupLog,"");oracleSetup=captureCost(null,setupLog); }
@@ -1563,6 +1569,7 @@ function writeSummary() {
 
   const summary = {
     schema: 1,
+    diagnostics:diagnostics?.report()??{version:1,state:"incomplete",error:diagnosticsFailure??"host observations did not start"},
     cpu_measure:STEP_CPU_MEASURE,
     environment: normalized.report,
     temporary,
@@ -1706,6 +1713,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
     /** @type {unknown[]} */
     const failures=[];
+    try{diagnostics?.close();}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);failures.push(error);}
     try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
@@ -1750,6 +1758,15 @@ function settings() {
 let setupFailure, dependencySealFailure;
 try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); }
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
+if (!setupFailure) {
+  try{
+    diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,workersGroup:scopes.group,startedAt,
+      emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),
+      log:line=>process.stderr.write(line+'\n'),
+      failed:error=>{diagnosticsFailure=String(error);stop(`host observation: ${error}`);}});
+    diagnostics.start();
+  }catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);setupFailure=`host observation setup failed: ${error}`;}
+}
 if (!setupFailure) {
   try { await reserveMemory(); }
   catch (error) {if(isCommandExit(error))throw error; if (!stopping) setupFailure = error.message; }

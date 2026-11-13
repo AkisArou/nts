@@ -1,5 +1,6 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+export type {StepDiagnostics,DiagnosticsSummary} from './run-diagnostics.ts';
 export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "step-bound" | "selector-setup"; step: string; attempt: string; reason: string; completedFailures?: number };
 type Disposition={verdict:InstrumentResult["verdict"];disposition:"retry"|"operator-hold"|"verdict"};
 export const INSTRUMENT_DISPOSITIONS={
