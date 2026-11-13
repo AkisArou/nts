@@ -48,7 +48,7 @@ export function readDoctestCalls(directory:string):DoctestCall[]{
     return row as DoctestCall;
   });
 }
-type Image={id:number;parent:number;pid:number;birth:string;path:string;cwd:string;args:string[];phase:TracePhase};
+type Image={id:number;parent:number;pid:number;birth:string;path:string;cwd:string;args:string[];phase:TracePhase;reason:'first-observation'|'actual-image'|'actual-argv'};
 export type RuntimeObservation=TracePhase&{path:string;rawPath:string;operation:string;syscall:string;outcome:'unknown';image:number;count:number;canceled:boolean};
 const key=(pid:number,birth:string)=>pid+':'+birth;
 /** Image facts come from the stopped task, never the target of an exec attempt.
@@ -74,11 +74,11 @@ export class RustInputPhases{
     if(!row.factsComplete||!row.birth||row.birth==='0')fail('missing task identity/image facts');
     const identity=key(row.tgid,row.birth),previous=this.tasks.get(identity);
     const path=byteFactText(row.image,'actual task image'),cwd=byteFactText(row.cwd,'actual task cwd');
-    if(previous?.path===path)return previous;
+    const args=row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):[];
+    if(previous?.path===path&&JSON.stringify(previous.args)===JSON.stringify(args))return previous;
     const parent=this.tasks.get(key(row.ppid,row.parentBirth));
     if(!this.target&&!previous&&!parent&&row.tgid!==this.root)fail('unattributed task '+identity+' parent '+key(row.ppid,row.parentBirth));
     let phase:TracePhase=this.target?{phase:'test-runtime',source:this.target.source}:{...(previous?.phase??parent?.phase??{phase:'cargo-setup'})};
-    const args=row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):[];
     if(!this.target&&phase.phase!=='doctest-runtime'&&basename(path)==='rustdoc'&&args.includes('--test')){
       const sources=args.filter(arg=>arg.endsWith('.rs')).map(arg=>resolve(cwd,arg)).filter(path=>inside(this.tree,path));
       if(sources.length!==1)fail('rustdoc has no unique source entry: '+path);
@@ -89,7 +89,8 @@ export class RustInputPhases{
       if(phase.phase!=='rustdoc-setup'||!phase.source)fail('doctest entry has no rustdoc source: '+identity);
       phase={phase:'doctest-runtime',source:phase.source};this.entered.add(identity);
     }
-    const image:Image={id:this.images.length+1,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase};
+    const image:Image={id:this.images.length+1,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
+      reason:!previous?'first-observation':previous.path===path?'actual-argv':'actual-image'};
     this.images.push(image);this.tasks.set(identity,image);return image;
   }
   finish():void{for(const identity of this.calls.keys())if(!this.entered.has(identity))fail('recorded doctest has no matching entered image: '+identity);}
@@ -120,7 +121,18 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
     if(row.kind!=='attempt')return;
     const image=phases.observe(row);
     for(const path of row.paths){
-      if(path.value.null){probe(image,'null-path','',0);continue;}
+      if(path.value.null){
+        probe(image,'null-path','',0);
+        // NULL is accepted with AT_EMPTY_PATH by current statx kernels. Keep
+        // its actual descriptor candidate without claiming syscall success.
+        const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);
+        if(descriptor&&!descriptor.target.error&&!descriptor.target.null){
+          const target=byteFactText(descriptor.target,'null-path descriptor');
+          if(isAbsolute(target))retain(row,image,target,descriptor.target.hex,'descriptor');
+          else probe(image,'non-file-descriptor',descriptor.target.hex,0,descriptor.fd);
+        }
+        continue;
+      }
       const named=factPath(path.value,'attempted path')!;
       let resolved:string;
       if(isAbsolute(named))resolved=resolve(named);
@@ -128,7 +140,9 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
       else{
         const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!descriptor)fail('missing path directory descriptor');
         if(descriptor.fd<0&&descriptor.fd!==-100){probe(image,'invalid-dirfd',path.value.hex,descriptor.target.error,descriptor.fd);continue;}
-        resolved=resolve(byteFactText(descriptor.target,'path directory descriptor'),named);
+        const target=byteFactText(descriptor.target,'path directory descriptor');
+        if(!isAbsolute(target)){probe(image,'non-file-dirfd',descriptor.target.hex,0,descriptor.fd);continue;}
+        resolved=resolve(target,named);
       }
       retain(row,image,resolved,path.value.hex,row.operation);
     }

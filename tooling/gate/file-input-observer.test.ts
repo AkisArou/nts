@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
+import {publishInputTrace} from './rust-test-inputs.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -14,11 +15,13 @@ const subject=String.raw`
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/stat.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -32,6 +35,11 @@ int main(int argc,char **argv){
     if(write(1,b,(size_t)n)!=n)return 95;
     if(openat(dir,"missing",O_RDONLY)!=-1||errno!=ENOENT)return 96;
     if(openat(-2,"invalid-fd",O_RDONLY)!=-1||errno!=EBADF)return 97;
+    struct statx st;
+    if(syscall(SYS_statx,value,NULL,AT_EMPTY_PATH,STATX_BASIC_STATS,&st))return 113;
+    int socket_fd=socket(AF_UNIX,SOCK_STREAM,0);if(socket_fd<0)return 114;
+    if(openat(socket_fd,"socket-relative",O_RDONLY)!=-1||errno!=ENOTDIR)return 115;
+    close(socket_fd);
     char entries[4096];if(syscall(SYS_getdents64,dir,entries,sizeof(entries))<0)return 98;
     close(value);close(dir);if(write(2,"err",3)!=3)return 104;return 7;
   }
@@ -75,8 +83,16 @@ test('the native observer retains actual images, attempted inputs and original p
   assert.equal(byteFactText(missing.dirfds[0]!.target,'directory'),root);
   assert.ok(attempts.some(row=>row.operation==='directory'&&byteFactText(row.dirfds[0]!.target,'directory')===root));
   assert.ok(attempts.some(row=>row.dirfds.some(fd=>fd.fd===-2&&fd.target.error!==0)&&row.factsComplete));
+  assert.ok(attempts.some(row=>row.syscall==='statx'&&row.paths.some(path=>path.value.null)&&row.dirfds.some(fd=>byteFactText(fd.target,'AT_EMPTY_PATH target')===join(root,'value'))));
+  assert.ok(attempts.some(row=>row.paths.some(path=>!path.value.null&&byteFactText(path.value,'relative socket path')==='socket-relative')&&row.dirfds.some(fd=>byteFactText(fd.target,'socket dirfd').startsWith('socket:['))));
   const exec=attempts.find(row=>row.operation==='execute');assert.ok(exec);
   assert.notEqual(byteFactText(exec.image,'pre-exec image'),program,'an exec attempt does not claim the requested program entered');
+  const published=join(root,'facts.json');
+  await publishInputTrace({raw:record,output:published,cwd:root,root,target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
+  const decoded=JSON.parse(readFileSync(published,'utf8')) as {observations:{operation:string;syscall:string;path:string;outcome:string}[];descriptorProbes:{kind:string}[]};
+  assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.operation==='descriptor'&&row.path===join(root,'value')&&row.outcome==='unknown'));
+  assert.ok(decoded.descriptorProbes.some(row=>row.kind==='non-file-dirfd'));
+  assert.ok(decoded.observations.every(row=>!row.path.includes('socket:[')&&!row.path.endsWith('/socket-relative')));
 
   const descriptor=join(root,'descriptor');writeFileSync(descriptor,'def');
   const {openSync,closeSync}=await import('node:fs');
