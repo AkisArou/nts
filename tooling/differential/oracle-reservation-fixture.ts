@@ -6,7 +6,7 @@ import {testEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {cpSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {hostEnvironment,gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
@@ -25,12 +25,13 @@ const own=newTestScratch('oracle-reservation'),tree=join(own,'tree'),run=join(ow
 const cleanup:(()=>void)[]=[];
 const unit='nts-oracle-reservation-'+randomUUID()+'.scope';
 try{
-  mkdirSync(tree);cpSync(join(SOURCE,'tooling'),join(tree,'tooling'),{recursive:true});
+  mkdirSync(tree);
   copyModuleClosure(['tooling/gate/run.mjs'],tree);
-  // An archived helper is used only by the retained before control. The real
-  // library binary authenticates its own implementation bytes in either arm.
-  if(previousHelper)writeFileSync(join(tree,'tooling/differential/oracle-execution.ts'),readFileSync(previousHelper));
   oracleWorkspaceFixture({after:fn=>cleanup.push(fn)},tree);
+  // Apply a retained before control only after the executed closure and the
+  // recipe owner's immutable inputs have both been staged. The real library
+  // binary authenticates its own implementation bytes in either arm.
+  if(previousHelper)writeFileSync(join(tree,'tooling/differential/oracle-execution.ts'),readFileSync(previousHelper));
   mkdirSync(home);writeFileSync(join(tree,'.tool-versions'),`nodejs ${process.versions.node}\n`);
   // The run reserves against an ample reading and a ledger of its own. Its
   // tests step reads a machine with no memory at all: a preparation that asked
