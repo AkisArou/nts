@@ -23,6 +23,7 @@ export function inputTraceArguments(output:string,command:string,args:readonly s
 function problem(message:string):never{throw Error('Rust input trace: '+message);}
 export function traceString(value:string):string{
   if(!/^"(?:[^"\\]|\\.)*"$/.test(value))problem('incomplete path string '+value.slice(0,160));
+  if(!value.includes('\\'))return value.slice(1,-1);
   const chunks:Buffer[]=[];
   for(let at=1;at<value.length-1;){
     const char=String.fromCodePoint(value.codePointAt(at)!);at+=char.length;
