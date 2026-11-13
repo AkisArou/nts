@@ -46,12 +46,16 @@ function recordsRun(t:{after(fn:()=>void):void}){
   mkdirSync(join(root,'tests/outcomes'),{recursive:true});
   mkdirSync(join(root,'tests/programs'),{recursive:true});
   mkdirSync(join(root,'benchmarks/cases'),{recursive:true});
+  const otherData=['runtime/node','runtime/web-platform','tests/compile-time','docs/foundations'];
+  for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
   copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{
     'tests/typescript':'pending-outcome records fixture','tests/outcomes':'one pending outcome fixture',
-    'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture'}});
+    'tests/programs':'pending-outcome records fixture','benchmarks/cases':'pending-outcome records fixture',
+    ...Object.fromEntries(otherData.map(area=>[area,'pending-outcome records fixture']))}});
   assert.deepEqual(readdirSync(join(root,'tests/typescript')),[],'an outcome fixture stages no production TypeScript cases');
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[],'the pending outcome starts without production records');
   for(const area of ['tests/programs','benchmarks/cases'])assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
+  for(const area of otherData)assert.deepEqual(readdirSync(join(root,area)),[],'the outcome control stages no production '+area);
   for(const file of ["tsconfig.base.json","tsconfig.fixtures.json","runtime/jvm/test-vm-flags.txt"]){
     mkdirSync(dirname(join(root,file)),{recursive:true});copyFileSync(join(SOURCE,file),join(root,file));
   }

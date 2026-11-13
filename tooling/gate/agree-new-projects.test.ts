@@ -7,7 +7,7 @@ import {testEnvironmentHandoff,fixtureEnvironment} from './test-environment.ts';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync,rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/new-projects.ts";
 import { spawnTest } from "./test-wait.ts";
@@ -43,7 +43,10 @@ function fixture(t:{after(fn:()=>void):void}) {
   rmSync(join(root,"results/oracle-counts.json"));
   writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded","previously-no-config"].map(row)});
   git("add",".");git("commit","-qm","candidate");
-  copyModuleClosure(["tooling/differential/agree.mjs",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],root);
+  copyModuleClosure(["tooling/differential/agree.mjs",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],root,{dataNamespaces:{
+    'tests/programs':'new-project agreement fixture','benchmarks/cases':'new-project agreement fixture'}});
+  assert.deepEqual(readdirSync(join(root,'tests/programs')).sort(),['existing','new-fixture','previously-no-config','previously-unrecorded']);
+  assert.deepEqual(readdirSync(join(root,'benchmarks/cases')),['.keep']);
   symlinkSync(join(fileURLToPath(new URL("../..",import.meta.url)),"node_modules"),join(root,"node_modules"));
   const binaries=["before","after"].map(role=>{
     const path=join(directory,role,"nts");mkdirSync(dirname(path));
