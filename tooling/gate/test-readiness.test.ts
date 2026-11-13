@@ -89,15 +89,18 @@ const put=(fd,bytes)=>{
  fs.readSync(0,Buffer.alloc(1),0,1,null);
  fs.writeSync(fd,bytes.slice(half));
 };
-mock.module('node:fs',{namedExports:{closeSync:fs.closeSync,fsyncSync:fs.fsyncSync,mkdirSync:fs.mkdirSync,openSync:fs.openSync,renameSync:fs.renameSync,rmSync:fs.rmSync,writeFileSync:put}});
+const facade={...fs.default,writeFileSync:put},exports={...fs,default:facade,writeFileSync:put};
+if('module.exports' in exports)exports['module.exports']=facade;
+mock.module('node:fs',{exports});
 const {durableRecord}=await import(${JSON.stringify(new URL('./durable-record.ts',import.meta.url).href)});
 durableRecord(target,{ready:true,payload:'complete bytes'});`;
   const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--quiet',...toolingSliceArgs(),'--unit='+unit,'-p','LimitCORE=0','-p','RuntimeMaxSec=300s',
     ...Object.entries(env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>'--setenv='+key+'='+value),
     process.execPath,'--experimental-test-module-mocks','--input-type=module','-e',source,target,ready],{env,stdio:['pipe','pipe','pipe']});
   let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
-  const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
-  await waitFor('the owner to pause after writing half its temporary',()=>existsSync(ready));
+  let ended=false;
+  const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',status=>{ended=true;resolve(status);});});
+  await waitFor('the owner to pause after writing half its temporary',()=>existsSync(ready),{stopped:()=>ended?output||'publisher exited before readiness':undefined});
   assert.equal(existsSync(target),false,'the reader cannot see the unfinished record');
   const pending=readdirSync(root).filter(name=>name.startsWith('record.json.'));assert.equal(pending.length,1);
   assert.throws(()=>JSON.parse(readFileSync(join(root,pending[0]!), 'utf8')),'the control really stopped halfway through JSON');

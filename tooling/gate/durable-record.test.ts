@@ -31,7 +31,7 @@ test('a compressed record can exceed one JavaScript string while keeping bounded
   assert.ok(existsSync(path));let bytes=0,lines=0,maxChunk=0;
   await pipeline(createReadStream(path),createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
     bytes+=chunk.length;maxChunk=Math.max(maxChunk,chunk.length);
-    for(const byte of chunk)if(byte===10)lines++;
+    for(let at=chunk.indexOf(10);at>=0;at=chunk.indexOf(10,at+1))lines++;
     callback();
   }}));
   assert.equal(bytes,repeats*Buffer.byteLength(row));assert.ok(bytes>constants.MAX_STRING_LENGTH);assert.equal(lines,repeats);
