@@ -1,0 +1,554 @@
+{
+  "version": 1,
+  "base": "bf6f9a20d25ce525523044596f167dbed88db07e",
+  "source": "f95490693f142d58d5b55353ecd8b813cb1105f3",
+  "before": {
+    "source": "bf6f9a20d25ce525523044596f167dbed88db07e",
+    "tracked": 28523,
+    "lostEdges": 109294,
+    "lostPaths": 24959,
+    "sites": 8145,
+    "withoutProvenance": 0,
+    "byStep": {
+      "old-paths": 8104,
+      "tooling": 4267,
+      "test-host": 20723,
+      "bench-agree": 3408,
+      "examples": 3408,
+      "rc": 3408,
+      "records": 3922,
+      "test262-cases": 1225,
+      "test262-builtins-cases": 1225,
+      "test262-rest-cases": 1225,
+      "test262-jvm": 1225,
+      "test262-llvm": 1225,
+      "test262-census-c": 1225,
+      "test262-census-llvm": 1225,
+      "test262-census-jvm": 1225,
+      "typescript-oracles": 1130,
+      "typescript-c": 1226,
+      "typescript-llvm": 1226,
+      "typescript-jvm": 1226,
+      "outcomes": 1151,
+      "integrity": 1154,
+      "compile-time": 1150,
+      "compile-time-rc": 3290,
+      "integrity-runtime": 1154,
+      "assembles": 1159,
+      "jvm-verifies": 1162,
+      "corpus": 1127,
+      "benches": 13326,
+      "sweep": 1127,
+      "llvm": 1132,
+      "llvm-rc": 1132,
+      "jvm": 1132,
+      "program-oracles": 3349,
+      "blockers": 1165,
+      "definitions": 1154,
+      "audit": 98,
+      "test262": 91,
+      "gate-inputs": 9,
+      "licenses": 84,
+      "frontend-tsrs": 89,
+      "addons": 9,
+      "tests": 2,
+      "interop": 2,
+      "dex": 12194,
+      "tooling-types": 1,
+      "expect-ir": 1,
+      "c-compiles": 1,
+      "types": 1
+    }
+  },
+  "after": {
+    "source": "f95490693f142d58d5b55353ecd8b813cb1105f3",
+    "tracked": 28523,
+    "lostEdges": 84571,
+    "lostPaths": 24935,
+    "sites": 8174,
+    "withoutProvenance": 0,
+    "byStep": {
+      "old-paths": 8104,
+      "tooling": 4233,
+      "test-host": 20722,
+      "bench-agree": 62,
+      "examples": 62,
+      "rc": 62,
+      "test262-cases": 1222,
+      "test262-builtins-cases": 1222,
+      "test262-rest-cases": 1222,
+      "test262-jvm": 1222,
+      "test262-llvm": 1222,
+      "test262-census-c": 1222,
+      "test262-census-llvm": 1222,
+      "test262-census-jvm": 1222,
+      "typescript-oracles": 1127,
+      "typescript-c": 1223,
+      "typescript-llvm": 1223,
+      "typescript-jvm": 1223,
+      "integrity": 1144,
+      "compile-time": 1140,
+      "compile-time-rc": 1139,
+      "integrity-runtime": 1144,
+      "assembles": 1128,
+      "jvm-verifies": 1134,
+      "corpus": 1127,
+      "sweep": 1127,
+      "blockers": 1155,
+      "definitions": 1144,
+      "audit": 98,
+      "test262": 91,
+      "outcomes": 17,
+      "gate-inputs": 9,
+      "benches": 12199,
+      "licenses": 84,
+      "frontend-tsrs": 89,
+      "llvm": 8,
+      "llvm-rc": 8,
+      "jvm": 8,
+      "addons": 9,
+      "tests": 2,
+      "interop": 2,
+      "records": 546,
+      "dex": 12194,
+      "tooling-types": 1,
+      "expect-ir": 1,
+      "c-compiles": 1,
+      "types": 1,
+      "program-oracles": 4
+    }
+  },
+  "live": {
+    "retired": [
+      [
+        "tooling/conformance/web-platform/compiled/tsconfig.json",
+        "test-host"
+      ]
+    ],
+    "added": [
+      [
+        "package.json",
+        "outcomes"
+      ],
+      [
+        "package.json",
+        "program-oracles"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/check.sh",
+        "bench-agree"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/check.sh",
+        "examples"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/check.sh",
+        "rc"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.domains.json",
+        "bench-agree"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.domains.json",
+        "examples"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.domains.json",
+        "rc"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.ts",
+        "bench-agree"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.ts",
+        "examples"
+      ],
+      [
+        "tooling/conformance/web-platform/compiled/src/main.ts",
+        "rc"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "assembles"
+      ],
+      [
+        "tooling/gate/memory-watch.ts",
+        "jvm-verifies"
+      ],
+      [
+        "tsconfig.fixtures.json",
+        "bench-agree"
+      ],
+      [
+        "tsconfig.fixtures.json",
+        "examples"
+      ],
+      [
+        "tsconfig.fixtures.json",
+        "rc"
+      ]
+    ],
+    "realReaderLosses": 0
+  },
+  "retirement": {
+    "command": "strace -f -qq -e trace=%file -o /home/akisarou/.cache/nts-scratch/728/bench-host-files.trace node tooling/gate/test-host-audit.ts",
+    "trace": "/home/akisarou/.cache/nts-scratch/728/bench-host-files.trace",
+    "sha256": "cb855090cd5e807f666a09083d592a61fd02ef0427eaf1945bf7393503005b37",
+    "bytes": 1384336,
+    "source": "a73d2b1707af188e1e76c13ce5c9c5f1eed8123d",
+    "positive": {
+      "path": "tooling/differential/check-consumers.ts",
+      "calls": 1,
+      "sample": [
+        "396045 openat(AT_FDCWD, \"/home/akisarou/.cache/nts-pool/4/tooling/differential/check-consumers.ts\", O_RDONLY|O_CLOEXEC) = 22"
+      ]
+    },
+    "subject": {
+      "path": "tooling/conformance/web-platform/compiled/tsconfig.json",
+      "calls": 0
+    },
+    "audit": "test host ownership: 1871 sources, 254 entry closures, 412 reads checked"
+  },
+  "switchOff": {
+    "closed": 24723,
+    "added": 0,
+    "netClosed": 24723
+  },
+  "fallback": {
+    "base": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    },
+    "namespace": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    }
+  },
+  "frontier": {
+    "before": {
+      "sites": 477,
+      "readers": 150
+    },
+    "after": {
+      "sites": 415,
+      "readers": 141
+    }
+  },
+  "remaining": [
+    {
+      "group": "tooling",
+      "assignedEdges": 2110,
+      "remaining": 169,
+      "sites": 73,
+      "readers": [
+        "compiler/frontend-tsrs/names.test.ts",
+        "compiler/frontend-tsrs/roles.test.ts",
+        "compiler/frontend-tsrs/vendor.test.ts",
+        "compiler/frontend-tsrs/vendor.ts",
+        "tooling/android/dex-record.ts",
+        "tooling/bootstrap/node.ts",
+        "tooling/full-check/count.ts",
+        "tooling/gate/agree-new-projects.test.ts",
+        "tooling/gate/benchmark-inputs.test.ts",
+        "tooling/gate/benchmark-shadow.test.ts",
+        "tooling/gate/blockers-log.test.ts",
+        "tooling/gate/blockers-pool.test.ts",
+        "tooling/gate/check-report-consumers.test.ts",
+        "tooling/gate/corpus.test.ts",
+        "tooling/gate/dex-bound.test.ts",
+        "tooling/gate/dex-shadow.test.ts",
+        "tooling/gate/environment.ts",
+        "tooling/gate/gate-resource.ts",
+        "tooling/gate/inner.ts",
+        "tooling/gate/jvm-launcher-audit.test.ts",
+        "tooling/gate/module-closure-fixture.test.ts",
+        "tooling/gate/module-closure-fixture.ts",
+        "tooling/gate/oracle-record.test.ts",
+        "tooling/gate/owner-emission-calls.test.ts",
+        "tooling/gate/records.ts",
+        "tooling/gate/source-unavailable.test.ts",
+        "tooling/gate/step-result.test.ts",
+        "tooling/gate/tooling-discovery.ts",
+        "tooling/gate/tooling-types.ts",
+        "tooling/gate/unicode-census.test.ts",
+        "tooling/gate/unicode-version.test.ts",
+        "tooling/inputs/linker.ts",
+        "tooling/inputs/node-inputs.ts",
+        "tooling/jvm/member-name.test.ts",
+        "tooling/licenses/licenses.ts",
+        "tooling/tasks/audit.ts"
+      ],
+      "byStep": {
+        "tooling": 1354,
+        "test262-cases": 7,
+        "test262-builtins-cases": 7,
+        "test262-rest-cases": 7,
+        "test262-jvm": 7,
+        "test262-llvm": 7,
+        "test262-census-c": 7,
+        "test262-census-llvm": 7,
+        "test262-census-jvm": 7,
+        "typescript-c": 7,
+        "typescript-llvm": 7,
+        "typescript-jvm": 7,
+        "outcomes": 8,
+        "gate-inputs": 9,
+        "jvm-verifies": 8,
+        "benches": 8,
+        "licenses": 84,
+        "llvm": 7,
+        "llvm-rc": 7,
+        "jvm": 7,
+        "frontend-tsrs": 3,
+        "records": 504,
+        "dex": 3,
+        "tooling-types": 1,
+        "test262": 1,
+        "addons": 1,
+        "typescript-oracles": 2,
+        "integrity": 2,
+        "compile-time": 2,
+        "compile-time-rc": 2,
+        "integrity-runtime": 2,
+        "assembles": 2,
+        "corpus": 2,
+        "sweep": 2,
+        "bench-agree": 2,
+        "program-oracles": 2,
+        "examples": 2,
+        "rc": 2,
+        "blockers": 2,
+        "definitions": 2
+      }
+    },
+    {
+      "group": "benches-and-oracles",
+      "assignedEdges": 115,
+      "remaining": 54,
+      "sites": 33,
+      "readers": [
+        "tooling/bench/layouts-heap.test.ts",
+        "tooling/bench/run-record.ts",
+        "tooling/differential/agree.mjs",
+        "tooling/differential/check-consumers.ts",
+        "tooling/differential/oracle-emit.ts",
+        "tooling/differential/oracle-filesystem.ts",
+        "tooling/differential/oracle-records.ts",
+        "tooling/differential/program-oracles.ts",
+        "tooling/gate/compile-counter.test.ts",
+        "tooling/gate/compile-counter.ts"
+      ],
+      "byStep": {
+        "records": 41,
+        "tooling": 7,
+        "outcomes": 6,
+        "integrity": 6,
+        "compile-time": 6,
+        "compile-time-rc": 6,
+        "integrity-runtime": 6,
+        "blockers": 6,
+        "definitions": 6,
+        "test262-cases": 1,
+        "test262-builtins-cases": 1,
+        "test262-rest-cases": 1,
+        "test262-jvm": 1,
+        "test262-llvm": 1,
+        "test262-census-c": 1,
+        "test262-census-llvm": 1,
+        "test262-census-jvm": 1,
+        "typescript-oracles": 1,
+        "typescript-c": 1,
+        "typescript-llvm": 1,
+        "typescript-jvm": 1,
+        "assembles": 1,
+        "jvm-verifies": 1,
+        "corpus": 1,
+        "benches": 1,
+        "sweep": 1,
+        "llvm": 1,
+        "llvm-rc": 1,
+        "jvm": 1,
+        "dex": 1,
+        "bench-agree": 1,
+        "program-oracles": 1,
+        "examples": 1,
+        "rc": 1
+      }
+    },
+    {
+      "group": "runtime-and-config",
+      "assignedEdges": 52,
+      "remaining": 2,
+      "sites": 16,
+      "readers": [
+        "tooling/conformance/assembles.ts",
+        "tooling/conformance/blockers-check.mjs",
+        "tooling/conformance/c-compiles.mjs",
+        "tooling/conformance/expect-ir.ts",
+        "tooling/conformance/integrity.ts",
+        "tooling/conformance/jvm-verifies.ts",
+        "tooling/conformance/outcomes-check.ts",
+        "tooling/conformance/outcomes-project.ts",
+        "tooling/conformance/types-check.mjs",
+        "tooling/conformance/web-platform/unrouted.mjs"
+      ],
+      "byStep": {
+        "tooling": 40,
+        "outcomes": 1,
+        "expect-ir": 1,
+        "integrity": 1,
+        "integrity-runtime": 1,
+        "assembles": 1,
+        "c-compiles": 1,
+        "types": 1,
+        "jvm-verifies": 1,
+        "program-oracles": 1,
+        "blockers": 1,
+        "definitions": 1,
+        "compile-time": 1
+      }
+    },
+    {
+      "group": "test262-and-typescript",
+      "assignedEdges": 2,
+      "remaining": 0,
+      "sites": 5,
+      "readers": [
+        "tooling/census/generate/integration.test.ts",
+        "tooling/census/generate/precheck.ts",
+        "tooling/census/generate/reduce.test.ts",
+        "tooling/census/generate/writer.ts",
+        "tooling/records/record-pending.ts"
+      ],
+      "byStep": {
+        "tooling": 2
+      }
+    }
+  ],
+  "index": {
+    "path": "/home/akisarou/.cache/nts-scratch/728/bench-census-v3/namespace/edges.json",
+    "edges": 84571,
+    "bytes": 3200810,
+    "sha256": "9e29771f8d4afe82c9efbc1445c86ef3eb92dabc5e7df2c09817973ce8a77fba"
+  },
+  "oracleIdentity": {
+    "beforeProducer": "33d1a6e0f137328ca8871bda58be225ddb03d3457d987e2f0cdddc2035284858",
+    "afterProducer": "14cf179cdcad28eafcfb9d2460cf66ce31155a835792f2fa7c1675d8f7e651fe",
+    "rows": 1231,
+    "pending": 0,
+    "unplanned": 0,
+    "budgets": [
+      {
+        "source": "benchmarks/cases/jetstream-lazy-collections/case.ts",
+        "signature": "d463a7db26e84921e8ec05192824e39c79f71f9985731f38dd9981da8853db75",
+        "recordedProducer": "4fcbce137ae8d4da4fa0caecb57fadafe3906f1f93400b641d5a71e1ba77a7db",
+        "fresh": false
+      }
+    ],
+    "changedRecipeFields": [
+      "emitterSha256",
+      "runtimeSha256"
+    ],
+    "newlyStaleBudgets": 0,
+    "recordBytesChanged": false
+  },
+  "proof": {
+    "staging": {
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "log": "/home/akisarou/.cache/nts-scratch/728/bench-staging-proof.log"
+    },
+    "focused": {
+      "counts": {
+        "tests": 208,
+        "pass": 208,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "/home/akisarou/.cache/nts-scratch/728/bench-focused-v3.log"
+    },
+    "host": {
+      "sources": 1871,
+      "closures": 254,
+      "reads": 412
+    },
+    "strict": {
+      "modules": 812,
+      "newDiagnostics": 0
+    },
+    "canonical": {
+      "command": "node tooling/landing/check.ts f95490693f142d58d5b55353ecd8b813cb1105f3 --here",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-f95490693f14-1794530462345",
+      "verdict": "green",
+      "wall_s": 1123.827,
+      "ledgerWait_s": 888.3190000000001,
+      "tooling": {
+        "tests": 2159,
+        "pass": 2157,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      },
+      "rust": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3043,
+        "fail": 0,
+        "ignored": 8
+      },
+      "steps": [
+        {
+          "name": "tooling",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 2312.890578,
+          "wall": 226.073,
+          "memory_peak_bytes": 12662235136
+        },
+        {
+          "name": "tests",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 4356.805262,
+          "wall": 361.256,
+          "memory_peak_bytes": 10755837952
+        }
+      ]
+    },
+    "excludedRuns": [
+      {
+        "run": "/home/akisarou/.cache/nts-landing/runs/here-9f095b86f01f-1794529504763",
+        "reason": "extra docs/foundations grant was undeclared; removed and the shared staging helper is now proved without a compiler"
+      },
+      {
+        "run": "/home/akisarou/.cache/nts-landing/runs/here-49afa045233a-1794528686517",
+        "reason": "ten agreement cases lacked private population grants; pending-outcome staged production workspace files; fixture setup corrected"
+      }
+    ]
+  },
+  "reproduction": {
+    "command": "node \"$tool_tree/tooling/gate/reader-census.ts\" inspect \"$PWD\" \"$output\" \"$tool_tree/docs/records/reader-inputs-728/namespace-sites.tsv\"",
+    "capture": "/home/akisarou/.cache/nts-scratch/728/bench-census-v3.py",
+    "analysis": "/home/akisarou/.cache/nts-scratch/728/bench-analysis-v3.ts",
+    "node": "v26.13.0"
+  }
+}
