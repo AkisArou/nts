@@ -1,5 +1,6 @@
 import {fixtureInput,moduleMembers,projectConfig,projectInput} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
+import {createServer} from 'node:net';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
 import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
@@ -769,7 +770,7 @@ test('optional source candidates reject links, directories and outside ancestors
   f.write('outside.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./escape/missing.json',import.meta.url));");
   const outside=join(f.destination,'outside');mkdirSync(outside,{recursive:true});symlinkSync(outside,join(f.source,'escape'));
   const graph=moduleGraph({sourceRoot:f.source});
-  try{assert.throws(()=>graph.describe(['outside.ts']),/optional file parent escapes source root: escape\/missing.json/);}finally{graph.close();}
+  try{assert.throws(()=>graph.describe(['outside.ts']),/optional file ancestor is not an owned directory: .*escape/);}finally{graph.close();}
 });
 
 test('membership alone creates no bytes and refuses missing, extra and wrong-type children',t=>{
@@ -857,4 +858,32 @@ test('root membership keeps unknown source children and the copier explicitly ow
   assert.equal(lstatSync(join(f.destination,FIXTURE_INPUT_MANIFEST)).isFile(),true);
   f.write('untracked-child.txt','not in Git');
   assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,options),/membership is missing a child: untracked-child.txt/);
+});
+
+test('metadata-only paths cannot escape through dangling source or destination parent links',t=>{
+  const f=metadataFixture(t),outside=join(f.destination,'outside');mkdirSync(outside,{recursive:true});
+  f.write('dangling.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./escape/missing.json',import.meta.url));");
+  symlinkSync(join(outside,'not-created'),join(f.source,'escape'));
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{assert.throws(()=>graph.describe(['dangling.ts']),/optional file ancestor is not an owned directory: .*escape/);}finally{graph.close();}
+  assert.equal(existsSync(join(outside,'not-created')),false);
+  mkdirSync(join(f.source,'nest/data'),{recursive:true});mkdirSync(join(outside,'data'));
+  f.write('negative.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./nest/absent.json',import.meta.url));");
+  f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./nest/data/',import.meta.url));");
+  symlinkSync(outside,join(f.destination,'nest'));
+  assert.throws(()=>copyModuleClosure(['negative.ts'],f.destination,{sourceRoot:f.source}),/fixture optional file ancestor is not an owned directory: .*nest/);
+  assert.throws(()=>copyModuleClosure(['names.ts'],f.destination,{sourceRoot:f.source}),/fixture membership ancestor is not an owned directory: .*nest/);
+  assert.equal(existsSync(join(outside,'absent.json')),false);
+});
+
+test('membership refuses unsupported socket children instead of certifying a common other type',async t=>{
+  const f=metadataFixture(t);
+  f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./data/',import.meta.url));");
+  mkdirSync(join(f.source,'data'));
+  const socket=join(f.source,'data/member'),server=createServer();
+  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(socket,resolve);});
+  try{
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{assert.throws(()=>graph.describe(['names.ts']),/reader metadata has an unsupported child type: .*data\/member/);}finally{graph.close();}
+  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });

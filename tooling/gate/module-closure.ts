@@ -3,14 +3,14 @@ import {gitArguments} from "./git-arguments/main.ts";
 // Literal relative import() is followed like a static import; computed imports
 // (variables or interpolated templates) must be named as another entry.
 import {lstatSync, readFileSync, realpathSync} from "node:fs";
-import {dirname,isAbsolute, relative, resolve, sep} from "node:path";
+import {isAbsolute, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
 import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration} from './reader-inputs/main.ts';
-import {directoryEntries} from './reader-metadata.ts';
+import {directoryEntries,metadataParents} from './reader-metadata.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -86,12 +86,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
       if(kind==='optional-file'){
-        // A missing leaf still has a real source namespace. An existing
-        // symlinked ancestor cannot turn an absence into an outside input.
-        for(let parent=dirname(path);;parent=dirname(parent)){
-          try{if(!inside(root,realpathSync(parent)))throw Error('optional file parent escapes source root: '+nameOf(path));break;}
-          catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-        }
+        metadataParents(root,path,'optional file');
         let stat:ReturnType<typeof lstatSync>|undefined;
         try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
         const name=nameOf(path);
@@ -103,6 +98,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         return;
       }
       if(kind==='membership'){
+        if(path!==root)metadataParents(root,path,'membership input');
         const stat=lstatSync(path);
         if(!stat.isDirectory()||stat.isSymbolicLink()||!inside(root,realpathSync(path)))
           throw Error('membership input is not an owned directory: '+nameOf(path));

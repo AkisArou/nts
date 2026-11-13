@@ -8,7 +8,7 @@ import {outsideSource} from "./source-containment.ts";
 import {canonicalNamespace as canonical,fixtureNamespaces,type InputSnapshot,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
-import {directoryEntries,memberType} from './reader-metadata.ts';
+import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
 export {moduleClosure} from "./module-closure.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -124,14 +124,16 @@ function fixtureMetadata(snapshot:InputSnapshot,destination:string,grants:Readon
   const here=(entry:string)=>entry==='<entry>'||fixtureEntries.has(entry);
   for(const row of snapshot.optionalFiles){
     if(!here(row.context.entry))continue;
+    metadataParents(destination,join(destination,row.path),'fixture optional file');
     const stat=info(join(destination,row.path));
     if(!row.present){if(stat)throw Error('fixture optional file must remain absent: '+row.path);continue;}
-    if(!stat||memberType(stat)!=='file')throw Error('fixture optional file is not a regular file: '+row.path);
+    if(!stat||memberType(stat,join(destination,row.path))!=='file')throw Error('fixture optional file is not a regular file: '+row.path);
   }
   for(const row of snapshot.memberships){
     if(!here(row.context.entry))continue;
+    if(row.directory!=='')metadataParents(destination,join(destination,row.directory),'fixture membership');
     const directory=join(destination,row.directory),stat=info(directory);
-    if(!stat||memberType(stat)!=='directory')throw Error('fixture membership is not an owned directory: '+row.directory);
+    if(!stat||memberType(stat,directory)!=='directory')throw Error('fixture membership is not an owned directory: '+row.directory);
     // The data owner already checked its real private tree and immutable
     // module overlap. Membership supplies no independent grant.
     if(Object.keys(grants).some(name=>under(name,row.directory)))continue;
