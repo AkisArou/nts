@@ -29,7 +29,7 @@ test('legacy task rows migrate once with stable distinct identities and no answe
 
 test('answers survive a controller publication from before the answer',t=>{
   const file=join(testScratch(t,'task-stale-writer'),'state-v2.json'),state=emptyState();
-  state.tasks.push(newTask(AT,'- a report'));
+  state.tasks.push(newTask(state,AT,'- a report'));
   writeState(file,state);
   const stale=readState(file),id=state.tasks[0]!.id;
   const answered=answerTask(file,id,{issue:746},new Date(AT));
@@ -45,20 +45,50 @@ test('answers survive a controller publication from before the answer',t=>{
 
 test('only answered history expires by supplied time, without stale resurrection',t=>{
   const file=join(testScratch(t,'task-retention'),'state-v2.json'),state=emptyState();
-  const open=newTask('2020-01-01T00:00:00.000Z','- still owed');
-  const old=newTask('2026-01-01T00:00:00.000Z','- handled long ago');old.answer={reason:'accounted for',at:'2026-01-02T00:00:00.000Z'};
-  const recent=newTask(AT,'- handled recently');recent.answer={issue:592,at:AT};
+  const open=newTask(state,'2020-01-01T00:00:00.000Z','- still owed');
+  const old=newTask(state,'2026-01-01T00:00:00.000Z','- handled long ago');old.answer={reason:'accounted for',at:'2026-01-02T00:00:00.000Z'};
+  const recent=newTask(state,AT,'- handled recently');recent.answer={issue:592,at:AT};
   state.tasks=[open,old,recent];writeState(file,state);
   const stale=readState(file);
   retainTaskHistory(state,new Date('2026-11-14T00:00:00.000Z'));writeState(file,state);
   assert.deepEqual(readState(file).tasks.map(task=>task.id),[open.id,recent.id]);
   writeState(file,stale);
   assert.deepEqual(readState(file).tasks.map(task=>task.id),[open.id,recent.id]);
+  const omitted=readState(file);omitted.tasks=[];writeState(file,omitted);
+  assert.deepEqual(readState(file).tasks.map(task=>task.id),[open.id,recent.id],'a progress writer cannot silently delete open or retained answered rows');
+});
+
+test('a pre-answer snapshot cannot reopen a retired report but keeps its new report',t=>{
+  const file=join(testScratch(t,'task-before-answer'),'state-v2.json'),state=emptyState();
+  const original=newTask(state,AT,'- the original report');state.tasks.push(original);writeState(file,state);
+  const stale=readState(file);
+  answerTask(file,original.id,{issue:592},new Date(AT));
+  const current=readState(file);retainTaskHistory(current,new Date('2026-12-15T00:00:00.000Z'));writeState(file,current);
+  assert.deepEqual(readState(file).tasks,[]);
+  assert.equal(readState(file).task_sequence,1,'retirement retains the published high-water');
+  const fresh=newTask(stale,'2026-12-15T00:00:00.000Z','- a new report');stale.tasks.push(fresh);
+  writeState(file,stale);
+  assert.deepEqual(readState(file).tasks.map(task=>task.id),[fresh.id]);
+  assert.equal(readState(file).task_sequence,2);
+});
+
+test('task row sequences are validated against their retained publication counter',t=>{
+  const file=join(testScratch(t,'task-sequence'),'state-v2.json'),state=emptyState();
+  state.tasks.push(newTask(state,AT,'- a report'));writeState(file,state);
+  const original=readFileSync(file,'utf8');
+  for(const counter of [-1,0,1.5]){
+    writeFileSync(file,JSON.stringify({...state,task_sequence:counter}));
+    assert.throws(()=>readState(file),/invalid task/);
+  }
+  writeFileSync(file,original);
+  const malformed=readState(file);malformed.tasks[0]!.sequence=2;
+  assert.throws(()=>writeState(file,malformed),/invalid task/);
+  assert.equal(readFileSync(file,'utf8'),original);
 });
 
 test('the answer CLI owns only answers and works beside the controller lifetime lock',t=>{
   const env=fixtureEnvironment(t),where=layout(join(env.HOME!,'.cache')),state=emptyState();
-  state.tasks=[newTask(AT,'- first report'),newTask(AT,'- second report')];
+  state.tasks=[newTask(state,AT,'- first report'),newTask(state,AT,'- second report')];
   writeState(where.state,state);
   mkdirSync(where.lock);writeFileSync(join(where.lock,'pid'),String(process.pid));
   const call=(args:string[])=>spawnTest(process.execPath,['tooling/full-check/service.ts',...args],{env,encoding:'utf8'});

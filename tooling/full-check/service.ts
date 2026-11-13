@@ -335,7 +335,7 @@ function doing<T>(fx: Effects, state: State, what: Doing["doing"], commit: strin
 }
 
 function task(fx: Effects, state: State, line: string): void {
-  state.tasks.push(newTask(fx.now().toISOString(),line,state.tasks));
+  state.tasks.push(newTask(state,fx.now().toISOString(),line));
   fx.log(`TASK for an issue: ${line}`);
 }
 

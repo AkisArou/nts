@@ -242,13 +242,15 @@ export type State = {
   push_failed_at?: string;
   /** Open tasks and retained answers, newest last. Only answered rows expire. */
   tasks: TaskRecord[];
+  /** Published report sequence, retained even after its answered row expires. */
+  task_sequence: number;
   /** Monotonic retention boundary; a stale writer cannot restore expired history. */
   task_history_since?: string;
   now?: Doing;
 };
 
 export function emptyState(): State {
-  return { version: 2, core: {}, wide: {}, culprits: [], probes: [], tasks: [] };
+  return { version: 2, core: {}, wide: {}, culprits: [], probes: [], tasks: [], task_sequence: 0 };
 }
 
 export function readState(file: string): State {
@@ -257,7 +259,7 @@ export function readState(file: string): State {
   const legacy = basename(file) === 'state-v2.json' ? join(dirname(file), 'state.json') : file;
   const source = existsSync(file) ? file : legacy;
   if (!existsSync(source)) return emptyState();
-  const value = JSON.parse(readFileSync(source, "utf8")) as Omit<State,'version'|'tasks'> & { version: number; records?: RecordsRun; tasks?: Array<TaskRecord | Omit<TaskRecord,'id'>> };
+  const value = JSON.parse(readFileSync(source, "utf8")) as Omit<State,'version'|'tasks'|'task_sequence'> & { version: number; records?: RecordsRun; task_sequence?: number; tasks?: Array<TaskRecord | Omit<TaskRecord,'id'|'sequence'>> };
   assertStateVersion(value,2,source);
   if (value.version !== 1 && value.version !== 2) throw new Error(`${source}: unknown state version ${String(value.version)}`);
   // One records run for both parts, from before each part kept its own: it was the core's.
@@ -267,28 +269,45 @@ export function readState(file: string): State {
   if (rest.wide) delete (rest.wide as PartState & { slot?: string }).slot;
   // The count the cycle kept, from before the count had a timer and a file of its own.
   delete (rest as { count?: unknown }).count;
-  const tasks: TaskRecord[] = [];
+  const migrated = emptyState(), tasks = migrated.tasks;
   for (const row of rest.tasks ?? []) {
-    if (value.version === 1) tasks.push(newTask(row.at, row.line, tasks));
+    if (value.version === 1) tasks.push(newTask(migrated,row.at,row.line));
     else {
-      if (!('id' in row) || !/^[0-9a-f]{16}$/.test(row.id) || tasks.some(task => task.id === row.id)) throw Error(`${source}: invalid task identity`);
-      tasks.push(row);
+      tasks.push(row as TaskRecord);
     }
   }
-  return { ...emptyState(), ...rest, version: 2, tasks };
+  validateTasks(tasks,value.version === 1 ? migrated.task_sequence : rest.task_sequence!,source);
+  return { ...emptyState(), ...rest, version: 2, tasks, task_sequence: value.version === 1 ? migrated.task_sequence : rest.task_sequence! };
 }
 
 export type TaskAnswer = { issue: number; reason?: never } | { reason: string; issue?: never };
-export type TaskRecord = { id: string; at: string; line: string; answer?: TaskAnswer & { at: string } };
+export type TaskRecord = { id: string; sequence: number; at: string; line: string; answer?: TaskAnswer & { at: string } };
 /** Human acknowledgement history; unanswered work has no age or count ceiling. */
 export const ANSWER_RETENTION_MS = 30 * 24 * 60 * 60_000;
 
-export function newTask(at: string, line: string, existing: readonly TaskRecord[] = []): TaskRecord {
+const taskId = (at: string, line: string, sequence: number) => createHash('sha256').update(JSON.stringify([at,line,sequence])).digest('hex').slice(0,16);
+const validAnswer = (answer: TaskAnswer) => (answer.issue !== undefined) !== (answer.reason !== undefined)
+  && (answer.issue !== undefined ? Number.isSafeInteger(answer.issue) && answer.issue > 0 : typeof answer.reason === 'string' && !!answer.reason.trim());
+function validateTasks(tasks: readonly TaskRecord[], sequence: number, file: string): void {
+  if (!Number.isSafeInteger(sequence) || sequence < 0) throw Error(`${file}: invalid task sequence`);
+  const ids = new Set<string>(), sequences = new Set<number>();
+  for (const task of tasks) {
+    if (!task || typeof task.at !== 'string' || !Number.isFinite(Date.parse(task.at)) || typeof task.line !== 'string' || !task.line.trim()
+      || !Number.isSafeInteger(task.sequence) || task.sequence <= 0 || task.sequence > sequence || task.id !== taskId(task.at,task.line,task.sequence)
+      || ids.has(task.id) || sequences.has(task.sequence)) throw Error(`${file}: invalid task immutable identity`);
+    if (task.answer !== undefined && (!task.answer || !validAnswer(task.answer) || typeof task.answer.at !== 'string' || !Number.isFinite(Date.parse(task.answer.at)))) throw Error(`${file}: invalid task answer`);
+    ids.add(task.id); sequences.add(task.sequence);
+  }
+}
+
+export function newTask(state: State, at: string, line: string): TaskRecord {
   if (!Number.isFinite(Date.parse(at)) || !line.trim()) throw Error('invalid task timestamp or text');
-  let ordinal = 0, id: string;
-  do { id = createHash('sha256').update(JSON.stringify([at, line, ordinal++])).digest('hex').slice(0, 16); }
-  while (existing.some(task => task.id === id));
-  return { id, at, line };
+  const sequence = state.task_sequence + 1;
+  if (!Number.isSafeInteger(sequence)) throw Error('task sequence is exhausted');
+  const id = taskId(at,line,sequence);
+  if (state.tasks.some(task => task.id === id)) throw Error('task identity collision');
+  state.task_sequence = sequence;
+  return { id, sequence, at, line };
 }
 
 /** Pure retention decision from the cycle's supplied wall clock. */
@@ -302,17 +321,29 @@ export function writeState(file: string, state: State): void {
   withStateWrite(file,2,() => {
     assertStateVersion(state,2,file);
     if (state.version !== 2) throw Error(`${file}: refusing a non-v2 controller publication`);
+    validateTasks(state.tasks,state.task_sequence,file);
     const current = existsSync(file) ? readState(file) : emptyState();
     const persisted = new Map(current.tasks.map(task => [task.id, task]));
-    for (const task of state.tasks) {
+    const proposed = new Map(state.tasks.map(task => [task.id, task]));
+    // Progress publication cannot delete reports. Only the supplied retention
+    // boundary may remove an answered row, and unanswered rows always remain.
+    for (const task of current.tasks) if (!proposed.has(task.id)) proposed.set(task.id,task);
+    const retained: TaskRecord[] = [];
+    for (const task of proposed.values()) {
       const previous = persisted.get(task.id);
-      if (!previous) continue;
-      if (previous.at !== task.at || previous.line !== task.line) throw Error(`${file}: task ${task.id} changed its immutable identity`);
-      if (previous.answer) {
+      // Every published sequence at or below the high-water was already seen.
+      // Missing now means its answered history expired, even if this snapshot
+      // predates its answer. Only genuinely new reports can pass that boundary.
+      if (!previous && task.sequence <= current.task_sequence) continue;
+      if (previous && (previous.at !== task.at || previous.line !== task.line || previous.sequence !== task.sequence)) throw Error(`${file}: task ${task.id} changed its immutable identity`);
+      if (previous?.answer) {
         if (task.answer && (task.answer.at !== previous.answer.at || task.answer.issue !== previous.answer.issue || task.answer.reason !== previous.answer.reason)) throw Error(`${file}: task ${task.id} has conflicting answers`);
         task.answer = previous.answer;
       }
+      retained.push(task);
     }
+    state.tasks = retained.sort((a,b)=>a.sequence-b.sequence);
+    state.task_sequence = Math.max(state.task_sequence,current.task_sequence);
     if (current.task_history_since && (!state.task_history_since || current.task_history_since > state.task_history_since)) state.task_history_since = current.task_history_since;
     if (state.task_history_since) state.tasks = state.tasks.filter(task => !task.answer || task.answer.at >= state.task_history_since!);
     durableRecord(file,state);
@@ -322,7 +353,7 @@ export function writeState(file: string, state: State): void {
 /** A narrow writer shares the state flock, never the controller's lifetime lock. */
 export function answerTask(file: string, id: string, answer: TaskAnswer, now: Date): TaskRecord {
   if (!/^[0-9a-f]{16}$/.test(id)) throw Error(`invalid task id ${JSON.stringify(id)}`);
-  if ((answer.issue !== undefined) === (answer.reason !== undefined) || (answer.issue !== undefined ? !Number.isSafeInteger(answer.issue) || answer.issue <= 0 : !answer.reason?.trim())) throw Error('a task answer needs a positive issue or a nonempty reason');
+  if (!validAnswer(answer)) throw Error('a task answer needs a positive issue or a nonempty reason');
   return withStateWrite(file,2,() => {
     if (!existsSync(file) || (JSON.parse(readFileSync(file,'utf8')) as {version?:number}).version !== 2) throw Error('task answers wait for the controller to adopt state-v2.json');
     const state = readState(file), task = state.tasks.find(task => task.id === id);

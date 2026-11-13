@@ -2622,3 +2622,15 @@ only when their immutable task identity agrees. A monotonic retention boundary
 prevents stale snapshots from restoring expired history. The controller imports
 legacy state once into state-v2.json; older writers keep their original path,
 and the answer command waits for the new controller's first publication.
+
+
+## Published task sequences survive answered history (11-13)
+
+Review of #765 found that retention time alone cannot distinguish a task retired
+after an answer from a stale snapshot taken before that answer. The preceding
+entry's boundary was therefore insufficient on its own. Each report now has a
+validated publication sequence; the high-water remains after rows expire. A
+missing old sequence stays retired, while a new unpublished report survives.
+State publication also restores any omitted current reports before applying
+the answered-only retention rule. A pre-answer/answer/expiry/stale-publication
+replay covers the defect, alongside a new unpublished report and sequence checks.

@@ -351,7 +351,10 @@ What follows from a run:
   tasks have no age or count ceiling. Answered rows remain in state history
   for thirty days, with retention decided from the cycle's supplied clock.
   Answer writes share the state file's lock with controller publications,
-  which preserve answers received during a run. The controller imports the
+  which preserve answers received during a run. A retained publication
+  sequence distinguishes expired reports from new unpublished ones, so a
+  snapshot taken before an answer cannot reopen it after its history expires.
+  The controller imports the
   old state only before its versioned state path exists; older processes
   keep writing their old path. The answer command refuses until the new
   controller has published that state, so it cannot freeze an incomplete

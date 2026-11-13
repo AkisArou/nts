@@ -1697,8 +1697,8 @@ test("the status model: what a live controller does, how far verified is behind 
 });
 
 test('open task ids stay in status while their answers stay in state history',()=>{
-  const state=readState('/nonexistent'),open=newTask('2020-01-01T00:00:00.000Z','- an old open task');
-  const done=newTask('2026-11-13T00:00:00.000Z','- an answered task');done.answer={issue:592,at:'2026-11-13T01:00:00.000Z'};
+  const state=readState('/nonexistent'),open=newTask(state,'2020-01-01T00:00:00.000Z','- an old open task');
+  const done=newTask(state,'2026-11-13T00:00:00.000Z','- an answered task');done.answer={issue:592,at:'2026-11-13T01:00:00.000Z'};
   state.tasks=[open,done];
   const status=fullCheckStatus(state,{main:null,verified:null,unverified:null,landedAt:()=>'',controller:null,count:null,now:new Date('2026-11-13T02:00:00.000Z')});
   assert.deepEqual(status.tasks,[open]);
@@ -1708,9 +1708,9 @@ test('open task ids stay in status while their answers stay in state history',()
 });
 
 test('an unanswered task survives more than fifty newer reports and another core task',async t=>{
-  const repo=repository(t),state=readState(repo.layout.state),old=newTask('2020-01-01T00:00:00.000Z','- the unanswered original');
+  const repo=repository(t),state=readState(repo.layout.state),old=newTask(state,'2020-01-01T00:00:00.000Z','- the unanswered original');
   state.tasks.push(old);
-  for(let index=0;index<75;index++)state.tasks.push(newTask('2026-11-06T01:00:00.000Z',`- report ${index}`,state.tasks));
+  for(let index=0;index<75;index++)state.tasks.push(newTask(state,'2026-11-06T01:00:00.000Z',`- report ${index}`));
   writeState(repo.layout.state,state);
   repo.commit({'RED/tests':'red\n'},'a core with no green predecessor');
   await cycle(harness(repo,fakeGate(repo)));
