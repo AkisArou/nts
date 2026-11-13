@@ -62,6 +62,7 @@ function answer(kind:ObservationKind,path:string):HostObservation['value']{
     case 'stat':return statFact(metadata(path));
   }
 }
+export {answer as readHostObservation};
 export function validateHostObservations(observations:HostObservation[],read:(kind:ObservationKind,path:string)=>HostObservation['value']=answer):{count:number;wallMs:number}{return validateRuntimeObservations(observations,read);}
 
 /** One instance per preparation worker; reset between fully drained batches. */

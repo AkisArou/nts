@@ -9,6 +9,7 @@ import {canonicalNamespace as canonical,fixtureNamespaces,type InputEntry} from 
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
+import {validateReaderSourceObservations,replayFixtureReaderObservations} from './reader-observations.ts';
 export {moduleClosure} from "./module-closure.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -170,6 +171,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe(entries);}
   finally {graph.close();}
+  validateReaderSourceObservations(snapshot,source);
   const data=fixtureData(snapshot,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
   const inputs=files.map(name=>{
     const from=resolve(source,name),to=resolve(destination,name);
@@ -196,5 +198,6 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   }
   fixtureMetadata(snapshot,destination,dataNamespaces,fixtureEntries,data.publish||data.manifest.data.length>0);
   if(data.publish)durableRecord(join(destination,FIXTURE_INPUT_MANIFEST),data.manifest);
+  replayFixtureReaderObservations(snapshot,source,destination,fixtureEntries,!!(options.link||options.reuseSourceLinks));
   return files;
 }
