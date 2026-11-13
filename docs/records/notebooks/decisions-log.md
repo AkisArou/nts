@@ -2651,3 +2651,27 @@ lock through release, and proves the terminal boundary cannot bypass it. #772.
 ## Compiled entry projects are declared (11-13)
 
 Part of #728. projectInput carries one compiled-entry descriptor to the runtime copier and the parsed selector. The existing project-discovery and pinned-parser implementation moves into one shared owner; owningProject is removed. Actual config reads remain leaf bytes and declared roots enter modules, including when ordinary, data or byte ownership reached the entry first. The preload fixture declares the typed runtime entry it compiles, so its project context is selected and staged by the same snapshot. Generic adjacent tsconfig strings remain distinct from actual discovery.
+
+
+## Reader contexts replace module-text inference (11-13)
+
+Part of #728. Module imports, literal relative import(), declared URL assets and
+reader descriptors own the module input graph; quoted paths and printed commands
+in module text no longer create dependencies. Shell/Python launch adapters keep
+their parsed continuation into JavaScript without placing unknown paths.
+
+fixtureInput carries the actual copier grants into that graph. Grants are
+validated against each child's own declared data directories, and traversal
+keeps namespace contexts separate so production reach is never suppressed by a
+fixture-first walk. Module-owned bytes remain immutable. A records fixture can
+therefore run a production validator against its private observations without
+making every production observation a tooling input.
+
+moduleMembers supplies one literal recursive basename to runtime discovery,
+tracked module snapshots and added/deleted path matching. Hidden and installed
+dependency paths stay excluded. Its explicit data role preserves metadata/data
+populations while selected modules retain ownership. projectConfig selects a
+compiler command's exact config through the existing pinned parser; projectInput
+continues to discover a compiled entry's project through OracleFilesystem.
+The config audit keeps its metadata populations and declares its workspace
+solution build, rather than spending uncertain coverage to remove the scanner.

@@ -127,10 +127,14 @@ and fixtures land the same way, in seconds. A new gate step needs a
 change owes only what it reaches.
 
 Modules declare the inputs they read (static imports,
-`new URL(asset, import.meta.url)`); text inference only adds checks. On
+`new URL(asset, import.meta.url)` and reader descriptors); shell/Python
+text inference only adds checks. On
 2026-11-12 a fixture's glob literal placed unknown paths and discharged their
 full fallback. [The workflow](docs/workflow.md#landing-the-landing-check)
-defines anchors, directory claims and the `gate-inputs` ratchet.
+defines anchors, directory claims and the `gate-inputs` ratchet. Quoted module
+text does not declare a reader. A staged fixture carries its private grants in
+`fixtureInput`; a discovered module set uses `moduleMembers`, and a compiler's
+explicit config uses `projectConfig`, from the shared reader-input owner.
 
 **After landing, the full check** (`nts-full-check`) runs the core on every
 new `main` and the wide steps on `verified` a few times a day. A red there is

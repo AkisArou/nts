@@ -152,8 +152,10 @@ static module imports and module-relative `new URL("asset", import.meta.url)`
 expressions. A literal containing only `.` and `..` segments is an anchor and
 declares no input. A named asset declares the file it resolves to, or every
 tracked file beneath it when it resolves to a directory. The census names
-each directory declaration, its reader and its breadth. Conservative path
-inference may add checks; it cannot place a path or remove its full fallback.
+each directory declaration, its reader and its breadth. Module text, including
+printed commands and fixture paths, grants no reader reach. Conservative shell
+and Python path inference may add checks; it cannot place a path or remove its
+full fallback.
 `dataDirectory(new URL("directory/", import.meta.url))`, from
 `tooling/gate/reader-inputs/main.ts`, declares a data directory: its tracked members
 are inputs, not host modules to parse. Entry modules, imports and unbranded
@@ -170,6 +172,20 @@ shared closure copier too. `OracleFilesystem.projectFor` owns discovery and the
 pinned parser supplies the actual config reads, inherited configs, project
 references and roots. Configs remain leaf bytes; roots enter the module graph.
 Discovery runs only for project declarations and is fresh for each graph.
+`projectConfig(new URL("tsconfig.solution.json", import.meta.url))` selects the
+config named by a compiler command directly, through that same parser.
+`moduleMembers(new URL("population/", import.meta.url), "nts.config.ts")`
+selects recursively discovered modules with that literal basename, excluding
+hidden and dependency paths. The runtime walker consumes the same descriptor.
+Its current members enter imports; additions and deletions match only that
+basename. An explicit `{data:true}` also retains the population's data and
+metadata membership without treating other members as host modules.
+`fixtureInput(new URL("entry.ts", import.meta.url), {dataNamespaces: {...}})`
+carries a fixture's actual private data grants to both selection and staging.
+Only that child's declared data directories may be granted. The graph tracks
+module plus namespace context, so independent production reach retains its
+production inputs regardless of traversal order. Entries, imports, exact
+file inputs and selected module members remain immutable production bytes.
 The declaration rows are independent of source language; other reader adapters
 can supply the same module and data edges. A shell or Python launch into
 JavaScript continues through the parsed module graph. An inferred launch adds
@@ -889,6 +905,12 @@ the first node task.
   and exact byte inputs enter that graph only when an independent module edge
   reaches them
   ([log](records/notebooks/decisions-log.md#exact-input-bytes-do-not-enter-modules-11-13)).
+- **Fixture contexts and discovered members are explicit:** `fixtureInput`
+  carries the copier's private data grants into selection. `moduleMembers`
+  shares its literal basename with runtime discovery and future path matching;
+  a directly selected config uses `projectConfig`. Module text cannot infer
+  dependencies, and every module context retains its immutable inputs
+  ([log](records/notebooks/decisions-log.md#reader-contexts-replace-module-text-inference-11-13)).
 - **Compiled entries declare their project context:** selection and staging
   consume the same `projectInput` descriptor. Discovery uses the oracle's
   existing owner and parsed inputs, with no guessed neighbouring config or
@@ -1000,9 +1022,10 @@ the first node task.
 
 - **Fixture tooling comes from its declared closure.** A private test repository
   stages command entries through `copyModuleClosure`, including their imports
-  and named assets. A fixture that compiles TypeScript uses its owning-project
-  mode: `OracleFilesystem.projectFor` discovers the project, and the pinned
-  parser supplies its inherited config files and declared roots, unchanged.
+  and named assets. A fixture that compiles TypeScript supplies the same
+  `projectInput` or `projectConfig` descriptor as its compiling reader. The
+  shared project owner supplies inherited configs, references and roots;
+  nearest-entry discovery remains with `OracleFilesystem.projectFor`.
   Private mutations follow staging. A fixture may grant its own populated
   namespace only at an exact declared data directory. The copier refuses an
   undeclared namespace or any replacement of module-owned bytes, and publishes
