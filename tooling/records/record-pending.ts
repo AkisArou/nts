@@ -242,11 +242,11 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       // One run per fixture: the recorder writes nothing when any fixture it
       // was given cannot be measured, so one such fixture would keep every
       // other pending one unrecorded.
-      return [...new Set(pending.map(one => one.name))].map(name => ["tooling/differential/record-oracles.ts", name]);
+      return [...new Set(pending.map(one => one.name))].map(name => [relative(SOURCE_ROOT,fileURLToPath(new URL('../differential/record-oracles.ts',import.meta.url))), name]);
     case "typescript":
       // Each backend's census takes most of an hour: only one with a row to write runs.
       return BACKENDS.filter(backend => pending.some(one => one.record === typescriptRecord(backend)))
-        .map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
+        .map(backend => [relative(SOURCE_ROOT,fileURLToPath(new URL('../census/conformance262.ts',import.meta.url))), "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
     case "test262":
       // One writer per record, over exactly the cases listed in it, believed
       // only where three fresh repeats agree.
@@ -254,24 +254,24 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
         const where = test262Slice(record);
         if (!where) return [];
         const cases = [...new Set(listed.map(one => one.name))].sort();
-        return [["tooling/census/conformance262.ts", "--suite", "test262", "--backend", where.backend, "--under", where.under,
+        return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../census/conformance262.ts',import.meta.url))), "--suite", "test262", "--backend", where.backend, "--under", where.under,
           "--record-pending", record, "--repeats", "3", ...cases.flatMap(name => ["--case", name])]];
       });
     case "benchmarks":
-      return [["tooling/bench/build-records.ts", "--record-pending"]];
+      return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../bench/build-records.ts',import.meta.url))), "--record-pending"]];
     case "benchmark-runs":
       // The JVM, which bench-agree checks (BENCH_AGREE_BACKENDS).
-      return [["tooling/differential/check-consumers.ts", "benchmarks", "--record-pending"]];
+      return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../differential/check-consumers.ts',import.meta.url))), "benchmarks", "--record-pending"]];
     case "outcomes":
-      return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
+      return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../conformance/outcomes-check.ts',import.meta.url))), "--record-pending"]];
     case "dex":
-      return [["tooling/android/dex-record.ts", "record-pending"]];
+      return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../android/dex-record.ts',import.meta.url))), "record-pending"]];
     case "compile-times": {
       // One calibration per module and arm, which writes both of its records.
       const runs = new Map<string, string[]>();
       for (const one of pending) {
         const arm = compileTimeArm(one.record);
-        if (arm) runs.set(`${arm}\0${one.name}`, ["tooling/gate/compile-counter-calibrate.ts", "--arm", arm, "--module", one.name, "--record"]);
+        if (arm) runs.set(`${arm}\0${one.name}`, [relative(SOURCE_ROOT,fileURLToPath(new URL('../gate/compile-counter-calibrate.ts',import.meta.url))), "--arm", arm, "--module", one.name, "--record"]);
       }
       return [...runs.keys()].sort().map(key => runs.get(key)!);
     }
