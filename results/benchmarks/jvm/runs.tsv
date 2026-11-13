@@ -1,0 +1,166 @@
+# nts-benchmark-runs {"version":1,"backend":"jvm","commit":"ebc0b70cefcf0cfe4167512bc160e64f91ad85e1","compiler":"69f8d829aaedc6ef","under":"benchmarks/cases"}
+benchmarks/cases/absences	{"kind":"agrees"}
+benchmarks/cases/accumulate	{"kind":"agrees"}
+benchmarks/cases/ares6-air	{"kind":"refused","diagnostic":"NTS1001 a module-scope variable of nothing, which a global has no storage for is not supported by this lowering yet"}
+benchmarks/cases/ares6-babylon	{"kind":"refused","diagnostic":"NTS1001 a module-scope variable of unrepresentable type (`RegExp`) is not supported by this lowering yet"}
+benchmarks/cases/ares6-basic	{"kind":"refused","diagnostic":"NTS1001 a `new Map` or `new Set` over something that is not an array, which needs the iteration protocol is not supported by this lowering yet"}
+benchmarks/cases/ares6-ml	{"kind":"refused","diagnostic":"NTS1001 `Math.tanh`, a member of `Math` read as a value is not supported by this lowering yet"}
+benchmarks/cases/array-copying-methods	{"kind":"agrees"}
+benchmarks/cases/array-from	{"kind":"agrees"}
+benchmarks/cases/array-methods	{"kind":"agrees"}
+benchmarks/cases/array-mutations	{"kind":"agrees"}
+benchmarks/cases/array-predicates	{"kind":"agrees"}
+benchmarks/cases/arrays	{"kind":"agrees"}
+benchmarks/cases/awfy-bounce	{"kind":"agrees"}
+benchmarks/cases/awfy-cd	{"kind":"refused","diagnostic":"NTS1001 a property `storage` of unrepresentable type (a union of an array | null) is not supported by this lowering yet"}
+benchmarks/cases/awfy-havlak	{"kind":"refused","diagnostic":"NTS1001 a property `storage` of unrepresentable type (a union of an array | null) is not supported by this lowering yet"}
+benchmarks/cases/awfy-json	{"kind":"aborted","failure":"java.lang.VerifyError: Expecting a stackmap frame at branch target 0"}
+benchmarks/cases/awfy-list	{"kind":"agrees"}
+benchmarks/cases/awfy-mandelbrot	{"kind":"agrees"}
+benchmarks/cases/awfy-nbody	{"kind":"agrees"}
+benchmarks/cases/awfy-permute	{"kind":"agrees"}
+benchmarks/cases/awfy-queens	{"kind":"agrees"}
+benchmarks/cases/awfy-sieve	{"kind":"agrees"}
+benchmarks/cases/awfy-storage	{"kind":"aborted","failure":"nts: refused at run time: `Storage#benchmark` was refused: a call result of unrepresentable type (a recursive array type) is not supported by this lowering yet"}
+benchmarks/cases/awfy-towers	{"kind":"agrees"}
+benchmarks/cases/bigint	{"kind":"agrees"}
+benchmarks/cases/bytes	{"kind":"agrees"}
+benchmarks/cases/case-convert	{"kind":"agrees"}
+benchmarks/cases/case-convert-cjk	{"kind":"agrees"}
+benchmarks/cases/case-convert-greek	{"kind":"agrees"}
+benchmarks/cases/case-convert-late-change	{"kind":"agrees"}
+benchmarks/cases/case-convert-latin1	{"kind":"agrees"}
+benchmarks/cases/case-convert-unchanged	{"kind":"agrees"}
+benchmarks/cases/case-convert-unchanged-greek	{"kind":"agrees"}
+benchmarks/cases/checksum	{"kind":"agrees"}
+benchmarks/cases/clbg-binary-trees	{"kind":"agrees"}
+benchmarks/cases/clbg-fannkuch-redux	{"kind":"agrees"}
+benchmarks/cases/clbg-fasta	{"kind":"agrees"}
+benchmarks/cases/clbg-k-nucleotide	{"kind":"agrees"}
+benchmarks/cases/clbg-mandelbrot	{"kind":"agrees"}
+benchmarks/cases/clbg-pidigits	{"kind":"aborted","failure":"nts: refused at run time: a bigint past 128 bits, which this runtime does not hold"}
+benchmarks/cases/clbg-regex-redux	{"kind":"refused","diagnostic":"NTS1001 an array literal of unrepresentable type (an array of `RegExp`) is not supported by this lowering yet"}
+benchmarks/cases/clbg-reverse-complement	{"kind":"refused","diagnostic":"NTS1001 a spread element is not supported by this lowering yet"}
+benchmarks/cases/clbg-spectral-norm	{"kind":"agrees"}
+benchmarks/cases/closure-merge	{"kind":"agrees"}
+benchmarks/cases/closures	{"kind":"agrees"}
+benchmarks/cases/cyclic-churn	{"kind":"agrees"}
+benchmarks/cases/dispatch	{"kind":"agrees"}
+benchmarks/cases/elementwise	{"kind":"no-scalar-exports"}
+benchmarks/cases/erasure-stored-typed	{"kind":"agrees"}
+benchmarks/cases/erasure-stored-unknown	{"kind":"agrees"}
+benchmarks/cases/erasure-typed	{"kind":"agrees"}
+benchmarks/cases/erasure-unknown	{"kind":"agrees"}
+benchmarks/cases/event-state	{"kind":"agrees"}
+benchmarks/cases/exceptions	{"kind":"agrees"}
+benchmarks/cases/face-fields	{"kind":"agrees"}
+benchmarks/cases/fib	{"kind":"agrees"}
+benchmarks/cases/generator	{"kind":"agrees"}
+benchmarks/cases/generator-dispatched	{"kind":"agrees"}
+benchmarks/cases/generic-classes	{"kind":"agrees"}
+benchmarks/cases/growth-fixed	{"kind":"agrees"}
+benchmarks/cases/growth-grown	{"kind":"agrees"}
+benchmarks/cases/immutable-update	{"kind":"agrees"}
+benchmarks/cases/in-narrowing	{"kind":"agrees"}
+benchmarks/cases/instanceof	{"kind":"agrees"}
+benchmarks/cases/jetstream-acorn-wtb	{"kind":"refused","diagnostic":"NTS1001 the anonymous `{ startsExpr }` where `TokenConfiguration` is wanted -- `TokenConfiguration` declares 8 fields and the anonymous `{ startsExpr }` holds 1, so `beforeExpr` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"}
+benchmarks/cases/jetstream-ai-astar	{"kind":"agrees"}
+benchmarks/cases/jetstream-babylon-wtb	{"kind":"refused","diagnostic":"NTS1001 a property `value` of unrepresentable type (a union of `RegExp` | a boolean literal | an object | null | number | string | undefined) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-bigint-bigdenary	{"kind":"refused","diagnostic":"NTS1001 `toString` on an erased value, which has no method table here is not supported by this lowering yet"}
+benchmarks/cases/jetstream-bigint-paillier	{"kind":"refused","diagnostic":"NTS1001 a function returning the type parameter `T` is not supported by this lowering yet"}
+benchmarks/cases/jetstream-crypto-md5-sp	{"kind":"agrees"}
+benchmarks/cases/jetstream-crypto-sha1-sp	{"kind":"agrees"}
+benchmarks/cases/jetstream-datetimeformat-intl	{"kind":"refused","diagnostic":"NTS1001 a base `DateTimeFormatOptions` of unrepresentable type (`DateTimeFormatOptions`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-espree-wtb	{"kind":"refused","diagnostic":"NTS1001 `Object.create(null)` where nothing says what dictionary it is -- `Object.create` answers `any`, so the type has to come from an annotation or a cast, as in `Object.create(null) as Record<string, string>` is not supported by this lowering yet"}
+benchmarks/cases/jetstream-esprima-next-wtb	{"kind":"refused","diagnostic":"NTS1001 a property `NonAsciiIdentifierStart` of unrepresentable type (`RegExp`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-flight-planner	{"kind":"refused","diagnostic":"NTS1001 `match`, which a string does not have here is not supported by this lowering yet"}
+benchmarks/cases/jetstream-gaussian-blur	{"kind":"agrees"}
+benchmarks/cases/jetstream-hash-map	{"kind":"refused","diagnostic":"NTS1001 `==` between values whose types are not known to agree, which coerces -- and this compiler has no `ToPrimitive` to coerce with is not supported by this lowering yet"}
+benchmarks/cases/jetstream-json-parse-inspector	{"kind":"refused","diagnostic":"NTS1001 a module-scope variable of unrepresentable type (a recursive array type) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-json-stringify-inspector	{"kind":"agrees"}
+benchmarks/cases/jetstream-lazy-collections	{"kind":"agrees"}
+benchmarks/cases/jetstream-lebab-wtb	{"kind":"timeout","stage":"compile"}
+benchmarks/cases/jetstream-listformat-intl	{"kind":"refused","diagnostic":"NTS1001 a number where a string is wanted is not supported by this lowering yet"}
+benchmarks/cases/jetstream-numberformat-intl	{"kind":"refused","diagnostic":"NTS1001 a base `NumberFormatOptions` of unrepresentable type (`NumberFormatOptions`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-offline-assembler	{"kind":"invalid-hir","validator":"invalid HIR: BrokenBase { layout: \"TypeError\", base: \"Error\" }\ninvalid HIR: BrokenBase { layout: \"ReferenceError\", base: \"Error\" }\ninvalid HIR: BrokenBase { layout: \"Ctor_True\", base: \"Type666\" }\ninvalid HIR: BrokenBase { layout: \"Ctor_False\", base: \"Type666\" }"}
+benchmarks/cases/jetstream-pluralrules-intl	{"kind":"refused","diagnostic":"NTS1001 a base `PluralRulesOptions` of unrepresentable type (`PluralRulesOptions`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-raytrace-private-class-fields	{"kind":"refused","diagnostic":"NTS1001 an erased value where a concrete representation is wanted is not supported by this lowering yet"}
+benchmarks/cases/jetstream-raytrace-public-class-fields	{"kind":"refused","diagnostic":"NTS1001 an erased value where a concrete representation is wanted is not supported by this lowering yet"}
+benchmarks/cases/jetstream-regexp-octane	{"kind":"wrong","node":"work 2 41396c6c00000000","compiled":"work 2 nts: uncaught TypeError: Cannot read properties of null (reading 'run')"}
+benchmarks/cases/jetstream-relativetimeformat-intl	{"kind":"refused","diagnostic":"NTS1001 a base `RelativeTimeFormatOptions` of unrepresentable type (`RelativeTimeFormatOptions`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-stanford-crypto-aes	{"kind":"agrees"}
+benchmarks/cases/jetstream-stanford-crypto-pbkdf2	{"kind":"refused","diagnostic":"NTS1001 a conditional of unrepresentable type (a union of a boolean literal | an array) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-stanford-crypto-sha256	{"kind":"refused","diagnostic":"NTS1001 a conditional of unrepresentable type (a union of a boolean literal | an array) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-string-unpack-code-sp	{"kind":"refused","diagnostic":"NTS1001 a loop assigning a name declared outside it is not supported by this lowering yet"}
+benchmarks/cases/jetstream-sync-fs	{"kind":"agrees"}
+benchmarks/cases/jetstream-threejs	{"kind":"refused","diagnostic":"NTS1001 a property `value` of unrepresentable type (an array of `never`, which no value inhabits) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-typescript-octane	{"kind":"refused","diagnostic":"NTS1001 a module-scope variable of unrepresentable type (`RegExp`) is not supported by this lowering yet"}
+benchmarks/cases/jetstream-unipoker	{"kind":"refused","diagnostic":"NTS1001 a `sort` with a comparator over elements that may be `undefined`, which go last without being compared is not supported by this lowering yet"}
+benchmarks/cases/jetstream-validatorjs	{"kind":"refused","diagnostic":"NTS1001 an `Object` static over something that is not an object here is not supported by this lowering yet"}
+benchmarks/cases/jetstream-wsl	{"kind":"refused","diagnostic":"NTS1001 a `new Proxy`, a builtin this compiler does not construct is not supported by this lowering yet"}
+benchmarks/cases/json-build-append	{"kind":"agrees"}
+benchmarks/cases/json-build-join	{"kind":"agrees"}
+benchmarks/cases/json-parse	{"kind":"agrees"}
+benchmarks/cases/json-parse-typed	{"kind":"agrees"}
+benchmarks/cases/json-quote	{"kind":"agrees"}
+benchmarks/cases/json-scan	{"kind":"agrees"}
+benchmarks/cases/json-serialize	{"kind":"agrees"}
+benchmarks/cases/json-stringify-builtin	{"kind":"agrees"}
+benchmarks/cases/json-stringify-doc	{"kind":"agrees"}
+benchmarks/cases/json-stringify-fused	{"kind":"agrees"}
+benchmarks/cases/json-stringify-inline	{"kind":"agrees"}
+benchmarks/cases/json-stringify-typed	{"kind":"agrees"}
+benchmarks/cases/logical-assignment	{"kind":"agrees"}
+benchmarks/cases/loop	{"kind":"agrees"}
+benchmarks/cases/map-and-set	{"kind":"agrees"}
+benchmarks/cases/map-entries-top-k	{"kind":"agrees"}
+benchmarks/cases/map-literal-keys	{"kind":"agrees"}
+benchmarks/cases/map-word-counts	{"kind":"agrees"}
+benchmarks/cases/module-closures	{"kind":"agrees"}
+benchmarks/cases/module-loop-plain	{"kind":"agrees"}
+benchmarks/cases/module-loop-retained	{"kind":"agrees"}
+benchmarks/cases/node-buffer-alloc-small	{"kind":"refused","diagnostic":"NTS1100 `Buffer.allocUnsafe` is not provided by this compiler"}
+benchmarks/cases/node-buffer-string-small	{"kind":"refused","diagnostic":"NTS1100 `Buffer.from` is not provided by this compiler"}
+benchmarks/cases/node-utf8	{"kind":"agrees"}
+benchmarks/cases/number-format	{"kind":"agrees"}
+benchmarks/cases/number-format-double	{"kind":"agrees"}
+benchmarks/cases/objects	{"kind":"agrees"}
+benchmarks/cases/octane-box2d	{"kind":"refused","diagnostic":"NTS1001 a meta property is not supported by this lowering yet"}
+benchmarks/cases/octane-crypto	{"kind":"refused","diagnostic":"NTS1001 a declared `const` no one gives a value -- no initializer, no literal type, no `@ntsConstant` -- which the compiler cannot know; declare it with its value (`const x = 1`, or `const x: 1`) is not supported by this lowering yet"}
+benchmarks/cases/octane-navier-stokes	{"kind":"refused","diagnostic":"NTS4001 storing a `Fn44__4` where a `Closure10` is declared, and the first does not extend the second here -- the IR relates them and `Layout.base` does not, so the JVM would refuse the class (in `Closure23#call`)"}
+benchmarks/cases/octane-raytrace	{"kind":"refused","diagnostic":"NTS1001 `Object.assign` into fields from a source without string-record storage is not supported by this lowering yet"}
+benchmarks/cases/octane-splay	{"kind":"refused","diagnostic":"NTS1001 `Error`, a class this compiler provides, called without `new` is not supported by this lowering yet"}
+benchmarks/cases/optional-chain	{"kind":"agrees"}
+benchmarks/cases/parse-int-decimal	{"kind":"agrees"}
+benchmarks/cases/parse-int-default	{"kind":"agrees"}
+benchmarks/cases/parse-int-runtime	{"kind":"agrees"}
+benchmarks/cases/pipeline	{"kind":"agrees"}
+benchmarks/cases/printer-erased	{"kind":"agrees"}
+benchmarks/cases/record-word-counts	{"kind":"agrees"}
+benchmarks/cases/release-acyclic	{"kind":"agrees"}
+benchmarks/cases/sort-objects	{"kind":"agrees"}
+benchmarks/cases/str-append-length	{"kind":"agrees"}
+benchmarks/cases/str-append-loop	{"kind":"agrees"}
+benchmarks/cases/str-compare	{"kind":"agrees"}
+benchmarks/cases/str-concat-pair	{"kind":"agrees"}
+benchmarks/cases/str-equal	{"kind":"agrees"}
+benchmarks/cases/str-index-of	{"kind":"agrees"}
+benchmarks/cases/str-index-read	{"kind":"agrees"}
+benchmarks/cases/str-join	{"kind":"agrees"}
+benchmarks/cases/str-map-keys	{"kind":"agrees"}
+benchmarks/cases/str-search-defaults	{"kind":"agrees"}
+benchmarks/cases/str-slice-keep	{"kind":"agrees"}
+benchmarks/cases/str-split	{"kind":"agrees"}
+benchmarks/cases/str-template	{"kind":"agrees"}
+benchmarks/cases/str-to-number	{"kind":"agrees"}
+benchmarks/cases/strings	{"kind":"agrees"}
+benchmarks/cases/substrings	{"kind":"agrees"}
+benchmarks/cases/symbol-keyed-map	{"kind":"agrees"}
+benchmarks/cases/symbol-keys	{"kind":"agrees"}
+benchmarks/cases/tree-teardown	{"kind":"agrees"}
+benchmarks/cases/uniform-callback	{"kind":"agrees"}
+benchmarks/cases/uniform-callback-arguments	{"kind":"agrees"}
+benchmarks/cases/uniform-callback-default	{"kind":"agrees"}
+benchmarks/cases/upcast	{"kind":"agrees"}
+benchmarks/cases/user-iterable	{"kind":"agrees"}
+benchmarks/cases/utf8-encode	{"kind":"refused","diagnostic":"NTS1001 a `new` of unrepresentable type (`TextEncoder`) is not supported by this lowering yet"}
