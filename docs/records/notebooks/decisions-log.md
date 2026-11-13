@@ -2730,3 +2730,16 @@ same verifier. The exact contributor command remains printed as runnable text.
 
 The runtime recipe includes the leaf. This intentionally changes budget
 freshness, while oracle count population identity is unchanged.
+
+## Oracle publication owns its emitted module closure (11-13)
+
+#753's verifier extraction exposed two fixed-three runtime publishers: the
+result reader missed the nested seal, and ordinary children still relied on
+Node stripping it. Both now use a producer-only closure compiler over stripped
+ESM imports and re-exports. The result writer is separate from its SDK-free
+reader. Canonical relative module maps remain bound to the existing root or
+snapshot authentication, with checked loaded bytes and fixed required entries.
+Typed bootstrap source is erased before encoding the pinned startup argument.
+The source inventories authenticate the publisher and compiler in JavaScript
+and Rust. A publication owns fresh traversal state, a bounded module map and
+one parser lease at a time.

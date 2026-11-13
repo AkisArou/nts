@@ -584,6 +584,13 @@ Asynchronous fixture setup belongs in a test hook. Pure command entry scripts
 outside Worker closures may use top-level await.
 A leaf that an oracle preload reaches lives in its own directory with a one-file
 `tsconfig.json`, so importing it never compiles an unrelated aggregate project.
+Oracle producers derive emitted runtime modules from stripped imports and
+re-exports. Both child bootstrap and completed-result publication use the same
+closure compiler; result readers load no preparation or parser dependencies.
+Each publication reads fresh source bytes, bounds its module map and releases
+one parser lease before visiting another module. Canonical relative module
+names and their hashes belong to the authenticated snapshot or result root;
+the pinned bootstrap checks the bytes it supplies before a module body runs.
 
 
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
@@ -897,6 +904,11 @@ the first node task.
   requires complete facts on both admission and read, so an infrastructure
   failure cannot permanently prevent reuse after the instrument is repaired.
   ([record](records/notebooks/759-jvm-verifier.md)).
+
+- **Oracle publication owns its emitted module closure.** A runtime import may
+  add a nested leaf without editing a second module list. Parsing belongs to
+  the producer; SDK-free readers consume canonical, hash-bound JavaScript
+  through the pinned bootstrap.
 
 - **Contributor proof uses the prepared inner loop.** `inner.ts` prepares the
   oracle seal, builds the compiler and owns the per-binary runner before

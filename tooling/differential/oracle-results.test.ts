@@ -109,10 +109,10 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
   }
   const leaf=join(root.runtime.directory,'oracle-seal/main.mjs'),original=readFileSync(leaf),outside=join(f.root,'outside.mjs');
   writeFileSync(outside,original);unlinkSync(leaf);symlinkSync(outside,leaf);
-  try{const alias=run();assert.notEqual(alias.status,0);assert.match(alias.stderr,/program oracle reader path changed/);}
+  try{const alias=run();assert.notEqual(alias.status,0);assert.match(alias.stderr,/program oracle reader (?:path changed|module was not published)/);}
   finally{unlinkSync(leaf);writeFileSync(leaf,original,{mode:0o444});}
   unlinkSync(leaf);
-  try{const missing=run();assert.notEqual(missing.status,0);assert.match(missing.stderr,/ENOENT.*oracle-seal\/main\.mjs/);}
+  try{const missing=run();assert.notEqual(missing.status,0);assert.match(missing.stderr,/(?:ENOENT|Cannot find module).*oracle-seal\/main\.mjs/);}
   finally{writeFileSync(leaf,original,{mode:0o444});}
   const entry=join(root.runtime.directory,'oracle-results.mjs'),entryBytes=readFileSync(entry,'utf8');
   const extended="import './unlisted.mjs';\n"+entryBytes;
