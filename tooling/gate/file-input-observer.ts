@@ -1,7 +1,6 @@
 // The native supervisor records attempted operations and actual task facts.
 // It never substitutes a syscall result or claims a path was opened.
 import {createReadStream,mkdirSync} from 'node:fs';
-import {createInterface} from 'node:readline';
 import {join,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -33,6 +32,15 @@ export function fileObserverArguments(record:string,command:string,args:readonly
   if(!isAbsolute(record))throw Error('file input observer: record must be absolute');
   return [record,'--',command,...args];
 }
+/** The recorder shell keeps this identity when it execs the doctest. The same
+ * native /proc reader supplies notification and publication birth facts. */
+export function fileObserverBirth(binary:string,pid:number,env:NodeJS.ProcessEnv):string{
+  if(!Number.isSafeInteger(pid)||pid<1)throw Error('file input observer: invalid recorder PID');
+  const result=infrastructureProbe({purpose:'bind a Rust doctest recorder to its process birth',command:binary,args:['--birth',String(pid)],env});
+  const birth=result.stdout.trim();
+  if(result.status!==0||!/^\d+$/.test(birth)||birth==='0')throw Error('file input observer: recorder process identity unavailable: '+result.stderr);
+  return birth;
+}
 export function byteFactText(fact:ByteFact,purpose:string):string{
   if(fact.error||fact.truncated||fact.null)throw Error('file input observer: '+purpose+' is unreadable, null or truncated');
   try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.from(fact.hex,'hex'));}
@@ -43,6 +51,10 @@ function object(value:unknown):Record<string,unknown>{
   return value as Record<string,unknown>;
 }
 function integer(value:unknown):value is number{return typeof value==='number'&&Number.isSafeInteger(value);}
+function natural(value:unknown):value is number{return integer(value)&&value>=0;}
+function exitStatus(exit:unknown,signal:unknown):boolean{
+  return integer(exit)&&exit>=-1&&exit<=255&&natural(signal)&&signal<128&&(signal===0?exit>=0:exit===-1);
+}
 function byteFact(value:unknown):value is ByteFact{
   const row=object(value);return typeof row.hex==='string'&&/^(?:[0-9a-f]{2})*$/.test(row.hex)&&integer(row.error)&&row.error>=0&&typeof row.truncated==='boolean'&&typeof row.null==='boolean';
 }
@@ -50,9 +62,10 @@ export function readObservationRow(value:unknown):ObservationRow{
   const row=object(value);let valid=false;
   if(row.kind==='start')valid=row.version===2&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true;
   else if(row.kind==='complete')valid=typeof row.complete==='boolean'&&typeof row.entered==='boolean'&&typeof row.drainComplete==='boolean'
-    &&['root','execErrno','exit','signal','attempts','errors','observerSignal'].every(key=>integer(row[key]));
+    &&['root','execErrno','attempts','errors','observerSignal'].every(key=>natural(row[key]))&&row.root!==0
+    &&exitStatus(row.exit,row.signal)&&!(row.entered&&row.execErrno!==0);
   else if(row.kind==='root-start')valid=integer(row.root)&&row.root>0;
-  else if(row.kind==='root-exit')valid=['root','exit','signal'].every(key=>integer(row[key]));
+  else if(row.kind==='root-exit')valid=natural(row.root)&&row.root>0&&exitStatus(row.exit,row.signal);
   else if(row.kind==='error')valid=typeof row.message==='string'&&integer(row.errno);
   else if(row.kind==='signal')valid=integer(row.signal)&&row.signal>0&&typeof row.rootAlive==='boolean';
   else if(row.kind==='inherited')valid=integer(row.fd)&&integer(row.flags)&&byteFact(row.target);
@@ -71,17 +84,40 @@ export function readObservationRow(value:unknown):ObservationRow{
  * filter peer and closed. Rows stay bounded by the producer's pathname/argv
  * buffers; no entire raw trace is loaded as a string. */
 export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void):Promise<ObservationEnd>{
-  const lines=createInterface({input:createReadStream(file),crlfDelay:Infinity});let start=false,end:ObservationEnd|undefined,attempts=0;
-  for await(const line of lines){
-    if(Buffer.byteLength(line)>256*1024)throw Error('file input observer: record exceeds bounded row size');
-    const row=readObservationRow(JSON.parse(line) as unknown);
+  let start=false,end:ObservationEnd|undefined,attempts=0,root:number|undefined,exited:RootExit|undefined;
+  let pending=Buffer.alloc(0);
+  const consume=(line:Buffer)=>{
+    const row=readObservationRow(JSON.parse(line.toString('utf8')) as unknown);
     if(end)throw Error('file input observer: data follows completion');
     if(!start){if(row.kind!=='start')throw Error('file input observer: missing header');start=true;}
     else if(row.kind==='start')throw Error('file input observer: duplicate header');
-    if(row.kind==='attempt')attempts++;
-    if(row.kind==='complete')end=row;
+    if(row.kind==='root-start'){
+      if(root!==undefined)throw Error('file input observer: duplicate root start');root=row.root;
+    }
+    if(row.kind==='root-exit'){
+      if(exited||row.root!==root)throw Error('file input observer: inconsistent root exit');exited=row;
+    }
+    if(row.kind==='attempt'){
+      attempts++;
+      if(!row.factsComplete)throw Error('file input observer: unreadable or truncated attempt facts');
+    }
+    if(row.kind==='complete'){
+      if(!exited||row.root!==root||row.exit!==exited.exit||row.signal!==exited.signal)
+        throw Error('file input observer: inconsistent terminal root status');
+      end=row;
+    }
     visit(row);
+  };
+  for await(const chunk of createReadStream(file)){
+    pending=Buffer.concat([pending,chunk as Buffer]);
+    for(;;){
+      const at=pending.indexOf(10);if(at<0)break;
+      if(at>256*1024)throw Error('file input observer: record exceeds bounded row size');
+      consume(pending.subarray(0,at));pending=pending.subarray(at+1);
+    }
+    if(pending.length>256*1024)throw Error('file input observer: record exceeds bounded row size');
   }
+  if(pending.length)throw Error('file input observer: unterminated raw record');
   if(!end||!end.complete||!end.drainComplete||end.errors||end.attempts!==attempts)
     throw Error('file input observer: incomplete census'+(end?' (attempts '+attempts+'/'+end.attempts+', errors '+end.errors+')':''));
   return end;

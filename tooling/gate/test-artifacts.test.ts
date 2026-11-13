@@ -57,7 +57,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     assert.equal(binary.target.source,'src/lib.rs');
     assert.ok(cargo.observations.some((row:{phase:string;source?:string;path:string})=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.path===join(root,'runtime-data/value')));
     assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));
-    assert.ok(binary.observations.some((row:{path:string;success:boolean})=>row.path===join(root,'runtime-data/missing')&&!row.success));
+    assert.ok(binary.observations.some((row:{path:string;outcome:string})=>row.path===join(root,'runtime-data/missing')&&row.outcome==='unknown'));
     assert.ok(binary.observations.some((row:{path:string;operation:string})=>row.path===join(root,'runtime-data')&&row.operation==='directory'));
     assert.ok(existsSync(join(root,"target/nts-dev/incremental")));
     assert.equal(existsSync(join(root,"target/debug")),false);

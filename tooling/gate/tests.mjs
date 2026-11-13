@@ -37,14 +37,15 @@ import { pruneTestArtifacts } from "./test-artifacts.ts";
 import { TestScratch } from "./test-scratch.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
-import {inputTraceArguments} from './rust-input-trace.ts';
-import {publishInputTrace,readTestArtifactTargets} from './rust-test-inputs.ts';
+import {fileObserverArguments,prepareFileObserver} from './file-input-observer.ts';
+import {publishInputTrace,readTestArtifactTargets,readDoctestCalls} from './rust-test-inputs.ts';
 import {testInvocation} from './test-profile.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
 if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('Rust test inputs: trace destination must be absolute');
 if(traceDirectory)mkdirSync(traceDirectory,{recursive:true});
+const fileObserver=traceDirectory?prepareFileObserver(join(traceDirectory,'observer'),process.env):undefined;
 try {
   const layout=assertTestLayout(ROOT);
   console.log(`  Rust integration layout: ${layout.harnesses.length} checked harnesses`);
@@ -73,13 +74,18 @@ if (process.env[runnerVar]) {
 const recorder = join(work, "record.sh");
 const calls = join(work, "calls");
 mkdirSync(calls);
+const doctestCalls=traceDirectory?join(work,"doctest-calls"):undefined;
+if(doctestCalls)mkdirSync(doctestCalls);
+const CALL_RECORDER=fileURLToPath(new URL("./rust-test-inputs.ts",import.meta.url));
 const shellQuote=(/** @type {string} */ value)=>"'"+value.replaceAll("'","'\\''")+"'";
 writeFileSync(recorder, `#!/bin/sh
 profile=${shellQuote(profileDirectory)}
 calls=${shellQuote(calls)}
 # Cargo also gives rustdoc this runner. Its temporary executables disappear
 # when rustdoc returns, so run those now; only profile-owned artifacts replay.
-case "$1" in "$profile/"*) ;; *) exec "$@" ;; esac
+case "$1" in "$profile/"*) ;; *)
+  ${doctestCalls?`node ${shellQuote(CALL_RECORDER)} --record-doctest-call ${shellQuote(doctestCalls)} ${shellQuote(fileObserver)} "$$" "$@" || exit 2`:""}
+  exec "$@" ;; esac
 n=$(mktemp "$calls/call-XXXXXXXX")
 node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({at: process.hrtime.bigint().toString(), cwd: process.cwd(), argv: process.argv.slice(2), env: process.env}))' "$n" "$@"
 `);
@@ -89,7 +95,7 @@ const started = Date.now();
 const artifactFile=traceDirectory?join(traceDirectory,'artifacts.json'):undefined;
 const ownerArgs=[...(artifactFile?['--artifacts',artifactFile]:[]),"workspace"];
 const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw'):undefined;
-const first = spawnSync(traceDirectory?'strace':process.execPath, cargoTrace?inputTraceArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
+const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
   cwd: ROOT,
   env: {
     ...process.env,
@@ -100,7 +106,7 @@ const first = spawnSync(traceDirectory?'strace':process.execPath, cargoTrace?inp
 });
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 if(cargoTrace){
-  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.json'),cwd:ROOT,root:ROOT});}
+  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.json'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
   catch(error){if(isCommandExit(error))throw error;console.error('NOT MEASURED: '+String(error));exitCommand(2);}
 }
 const recorded = readdirSync(calls)
@@ -138,7 +144,7 @@ const runOne = (key) =>
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw'):undefined;
-    const child = spawn(trace?'strace':r.argv[0], trace?inputTraceArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(fileObserver??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
@@ -192,7 +198,7 @@ function failureReport(out) {
   for (const line of lines) {
     if (/^---- .* ----$/.test(line)) inBlock = true;
     else if (/^(failures:|test result:)/.test(line)) inBlock = false;
-    if (inBlock || /^(test .* FAILED|error)/.test(line)) kept.push(line);
+    if (inBlock || /^(test .* FAILED|error|NOT MEASURED:)/.test(line)) kept.push(line);
   }
   return kept.length <= 80 ? kept : [...kept.slice(0, 80), `... ${kept.length - 80} more line(s) in the step's log`];
 }

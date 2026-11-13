@@ -461,7 +461,7 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     }
   fputs("]}\n", output);
   attempts++;
-  if (!complete && !canceled)
+  if (!complete)
     errors++;
   check_output();
 }
@@ -526,6 +526,17 @@ static void child_error(int fd, int stage) {
 }
 
 int main(int argc, char **argv) {
+  if (argc == 3 && !strcmp(argv[1], "--birth")) {
+    char *end;
+    unsigned long pid = strtoul(argv[2], &end, 10);
+    unsigned long long birth = !*end && pid ? process_birth(pid) : 0;
+    if (!birth) {
+      fputs("file input observer: recorder process identity is unavailable\n", stderr);
+      return 2;
+    }
+    printf("%llu\n", birth);
+    return 0;
+  }
   if (argc < 4 || strcmp(argv[2], "--")) {
     fputs("usage: file-input-observer <record> -- <command> [args...]\n",
           stderr);

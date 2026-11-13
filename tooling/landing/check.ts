@@ -75,7 +75,7 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
   const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
     // An agent's own pre-check: it yields its unused reservation to a queued landing (#672).
     priority: "agent",
-    ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs')}}:{}),
+    ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs'),NTS_GATE_COSTS_DIR:join(run,'observation-costs')}}:{}),
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
   for (const line of ran.pending) console.log(`  ${line}`);

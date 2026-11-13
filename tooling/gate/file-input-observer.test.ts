@@ -137,7 +137,7 @@ test('the native wedged-phase decision uses supplied elapsed observations',t=>{
   const input=join(root,'bound.c'),binary=join(root,'bound');
   writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\nint main(void){assert(phase_timeout_ms(false,UINT64_MAX)==-1);assert(phase_timeout_ms(true,0)==300000);assert(phase_timeout_ms(true,WEDGED_NS-1)==1);assert(phase_timeout_ms(true,WEDGED_NS)==0);assert(phase_timeout_ms(true,UINT64_MAX)==0);return 0;}\n');
   const env=fixtureEnvironment(t),compiled=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-o',binary],{env,encoding:'utf8'});
-  assert.equal(compiled.status,0,compiled.stderr);assert.equal(spawnTest(binary,[],{env}).status,0);
+  assert.equal(compiled.status,0,compiled.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
 test('malformed and incomplete raw observations cannot publish a complete census',async t=>{
