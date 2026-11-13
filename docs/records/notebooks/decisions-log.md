@@ -2839,3 +2839,14 @@ receipts before interpreting requested open flags. Missing legacy ABI evidence
 stays unknown, and descriptor creation grants no later byte or enumeration
 access. Runtime declarations, operation coverage and ALWAYS retirement remain
 separate work under #761.
+## Runner delay and pressure (11-14)
+
+The run records native event-loop histograms and machine, runner and worker-root
+PSI through its HostObservations capability. A fresh paired wall/monotonic
+anchor precedes synchronous setup; the worker pressure window attaches only
+when that root exists. Histograms belong to run, minute and step windows so p99
+is never reconstructed from percentiles. Pressure deltas retain scope identity
+and cumulative counter continuity. They describe overlapping shared exposure,
+not a causal step allocation. Missing facts are named instrument failures.
+Meters drain before the final timeline record and before scopes disappear;
+reused diagnostics preserve the original source run under origin.

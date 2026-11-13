@@ -854,6 +854,21 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   wedged-peer backstop is a named `tooling-cleanup` instrument failure carrying
   the lease and group. It is never a case outcome. Ledger lock contention
   yields the runner's event loop so it can continue serving these peers.
+- **Runner stalls have recorded observations.** `diagnostics.jsonl` retains
+  timestamped CPU, memory and IO PSI `some`/`full` avg10 and cumulative
+  microsecond counters for the machine, runner cgroup and worker accounting
+  root. Cgroup device/inode identity and monotonic counters bind each endpoint;
+  missing observations or resets fail the instrument. The worker window starts
+  when that root attaches, with no observation claimed before it exists.
+  `HostObservations` also owns the wall anchor and native event-loop meters.
+  Run, minute and active-step histograms report their own max and p99, with
+  count zero and unavailable percentiles for an empty histogram. Minute windows
+  close on the first sample after the minute, retaining their actual duration;
+  a blocked loop can delay that sample. Delay maxima above one second log their
+  detection time and sample window. Shared pressure endpoint deltas on steps
+  overlap and are exposure, not additive causal charges. Meters drain before
+  terminal publication and scope removal. Imported step diagnostics stay under
+  `origin` with their original source run, never as fresh measurements.
 - **Resource observations belong to the run.** `HostObservations`
   (`tooling/gate/host-observations.ts`) is the resource-reading boundary for
   admission, oracle dependency capture, temporary pruning, the memory ledger,
@@ -965,6 +980,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Stall diagnostics preserve scope and time.** Native histograms retain real
+  percentiles per window, and PSI retains each scope's identity and cumulative
+  counters. Shared exposure is distinct from a causal step charge; all meters
+  close before the terminal record
+  ([log](records/notebooks/decisions-log.md#runner-delay-and-pressure-11-14)).
 
 - **Derived reader facts preserve the operation and context.** Project callbacks
   and explicitly selected Node scope discovery retain typed non-placing facts,
