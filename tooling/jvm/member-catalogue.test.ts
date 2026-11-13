@@ -72,6 +72,7 @@ test('the actual exclusivity scanner retains NUL, unknown data, ZIP and declared
   assert.equal(added.status,0,added.stderr);assert.equal(run().status,1,'a tracked ignored path remains in cached enumeration');
   const removed=spawnSync('git',gitArguments(['rm','--force','--',ignored]),{cwd:root,encoding:'utf8',env:testEnvironment()});
   assert.equal(removed.status,0,removed.stderr);assert.equal(run().status,0);
+  mkdirSync(join(root,'tooling'),{recursive:true});
   const unknown='tooling/namespace-probe.data';writeFileSync(join(root,unknown),`${String.fromCharCode(0)}${model.prefix}`);
   const data=run();assert.equal(data.status,1,'unknown NUL-bearing data must remain under exclusivity');assert(data.stderr.includes(unknown),data.stderr);
   rmSync(join(root,unknown));

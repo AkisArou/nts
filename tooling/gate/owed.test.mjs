@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 import * as policy from "./owed.mjs";
+import {preciseChange} from "./precise-changes.ts";
 import {auditTestHost} from "./test-host-audit.ts";
 import {spawnTest} from './test-wait.ts';
 
@@ -106,7 +107,7 @@ test('declared byte consumers survive the actual comments-only precision decisio
   const model=JSON.parse(readFileSync(new URL('../../compiler/codegen/jvm/member-names.json',import.meta.url),'utf8'));
   const change={path:'tooling/jvm/member-name.ts',before:'// plain prose\nexport const value=1;\n',
     after:'// '+model.prefix+'\nexport const value=1;\n',sameMode:true};
-  assert.equal(policy.preciseChange(change),'comments');
+  assert.equal(preciseChange(change),'comments');
   assert.ok(gateSteps(owed([change])).includes('jvm-members'));
   assert.ok(!gateSteps(owed([{...change,path:'docs/architecture.md'}])).includes('jvm-members'));
 });
@@ -134,7 +135,8 @@ const child=fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:
   for(const args of [['init','--quiet'],['add','.']]){
     const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   }
-  const script=`import {owed,gateSteps,preciseChange,stepInputs,covering} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+  const script=`import {owed,gateSteps,stepInputs,covering} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+import {preciseChange} from ${JSON.stringify(new URL('./precise-changes.ts',import.meta.url).href)};
 const paths=['tooling/private/data/case.ts','tooling/private/bytes.ts','tooling/private/code.ts'];
 const rows=paths.map(path=>{const change={path,before:'// plain prose\\nexport const value=1;\\n',after:'// altered prose\\nexport const value=1;\\n',sameMode:true};return {path,precise:preciseChange(change),steps:gateSteps(owed([change]))};});
 const future=['tooling/private/data/new.bin','tooling/private/data/deleted.bin'].map(path=>({path,steps:[...covering(stepInputs(),path)]}));
