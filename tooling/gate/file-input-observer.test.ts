@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {spawn,spawnSync} from 'node:child_process';
+import {spawn,spawnSync,type StdioOptions} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -184,7 +184,8 @@ test('the native observer retains actual images, attempted inputs and original p
       int exited=(int)syscall(SYS_pidfd_open,root,0);if(exited<0)fatal("controlled root pidfd");
       struct pollfd ready={.fd=exited,.events=POLLIN};
       int result;do{result=poll(&ready,1,-1);}while(result<0&&errno==EINTR);
-      if(result!=1||!(ready.revents&POLLIN))fatal("controlled root exit readiness");close(exited);
+      if(result!=1||!(ready.revents&POLLIN)){fatal("controlled root exit readiness");}
+      close(exited);
     }
     attempt_json(listener, request);`;
     let staged=original.replace('attempt_json(listener, request);',barrier);assert.notEqual(staged,original);
@@ -193,7 +194,8 @@ test('the native observer retains actual images, attempted inputs and original p
     const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',...(before?['-Wno-unused-variable']:[]),queuedSource,'-lz','-o',queuedBinary],{env,encoding:'utf8'});
     assert.equal(built.status,0,built.stderr);
     const record=join(root,'queued-'+before+'.gz');
-    const child=spawn(queuedBinary,fileObserverArguments(record,program,['cancel-exit']),{env,stdio:['ignore','pipe','pipe','pipe','pipe','pipe']});
+    const channels:StdioOptions=['ignore','pipe','pipe','pipe','pipe','pipe'];
+    const child=spawn(queuedBinary,fileObserverArguments(record,program,['cancel-exit']),{env,stdio:channels});
     let ready='',closed=false,error='';child.stdout!.resume();child.stderr!.on('data',part=>error+=part);
     const notify=child.stdio[3],resume=child.stdio[4],stop=child.stdio[5];
     assert.ok(notify&&'on' in notify&&resume&&'end' in resume&&stop&&'end' in stop);
