@@ -235,6 +235,46 @@ console.log(JSON.stringify({steps:gateSteps(owed([{path:'docs/data/new.md',added
   }
 });
 
+test('actual project facts retain typed precision, metadata-only fallback and runner handover',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-project-facts-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('Cargo.toml','[package]\nname="project-facts"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' profile addons tooling; exit; fi
+step "profile" node tooling/private/reader.ts
+step "addons" node tooling/private/receiver.ts
+step "tooling" node tooling/empty.test.ts
+`);
+  put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
+  put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
+  put('tooling/gate/reader-inputs/main.ts','export const projectInput=url=>({kind:"project",url});');
+  put('tooling/private/reader.ts',"import {projectInput} from '../gate/reader-inputs/main.ts';projectInput(new URL('../../docs/data/src/main.ts',import.meta.url));projectInput(new URL('../census/data/src/main.ts',import.meta.url));");
+  for(const prefix of ['docs/data','tooling/census/data']){
+    put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');
+    put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
+  }
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name)};};
+const first=inputMetadataDeclarations();for(const row of first.observations){row.steps.length=0;row.context.entry='mutated';if(row.observation.value&&typeof row.observation.value==='object'&&'files' in row.observation.value)row.observation.value.files.length=0;}
+console.log(JSON.stringify({edit:select([{path:'docs/data/src/notes.md',before:'old prose',after:'new prose',sameMode:true}]),
+add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
+renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
+nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
+config:select([{path:'docs/data/tsconfig.json',before:'// old\\n{"include":["src/**/*.ts"]}\\n',after:'// new\\n{"include":["src/**/*.ts"]}\\n',sameMode:true}]),
+unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),metadata:inputMetadataDeclarations()}));`;
+  const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);const value=JSON.parse(result.stdout);
+  for(const step of ['profile','addons']){
+    assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
+    for(const key of ['add','removed','renamed','nearer','config'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
+  }
+  assert.ok(value.unknown.fallback,'enumeration never supplies placement for an unexecuted utility');
+  assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='fileExists'&&row.observation.value===false));
+});
+
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');

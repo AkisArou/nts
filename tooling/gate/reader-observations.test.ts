@@ -7,7 +7,8 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {moduleGraph,type InputSnapshot,type ModuleDeclarations} from './module-closure.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectInput,projectConfig} from './reader-inputs/main.ts';
-import {validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation} from './reader-observations.ts';
+import {validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import type {ReaderObservation} from './module-closure.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest} from './test-wait.ts';
 import {gitArguments} from './git-arguments/main.ts';
@@ -129,4 +130,31 @@ test('nested fixture contexts inherit compiled/type-only roles and promote on a 
       }
     }
   }finally{graph.close();}
+});
+
+test('typed selection distinguishes bytes, shallow names, existence and real directory stats',()=>{
+  const fact=(kind:ReaderObservation['observation']['kind'],path:string,value:ReaderObservation['observation']['value']):ReaderObservation=>({reader:'reader.ts',protocol:'project',context:{entry:'child.ts',dataNamespaces:{data:'not authority for these facts'}},observation:{kind,path:'/source/'+path,value}});
+  const entries=fact('entries','data',{files:['plain.md'],directories:['nested']}),directory=fact('directoryExists','data/nested',true);
+  const optional=fact('fileExists','data/optional.json',false),stat=fact('stat','data',{mode:0o40755,size:4096,mtimeMs:0});
+  const bytes=fact('file','data/plain.md','0'.repeat(64)),identity=fact('realpath','data/alias','/source/data/target');
+  const paths=['data/plain.md','data/nested/one.ts','data/nested/two.ts'],index=readerObservationIndex('/source',[entries,directory,optional,stat,bytes,identity],paths);
+  assert.equal(readerObservationDependency('/source',stat)?.bytes,false);
+  assert.equal(readerObservationDependency('/source',bytes)?.bytes,true);
+  assert.equal(readerObservationDependency('/source',fact('file','../outside',null)),undefined);
+  assert.equal(index.affected([{path:'data/plain.md',sameMode:true}]).has(entries),false);
+  assert.equal(index.affected([{path:'data/plain.md',sameMode:true}]).has(stat),true,'a recreated direct child may change directory stat');
+  assert.equal(index.affected([{path:'data/nested/one.ts',sameMode:true}]).has(stat),false);
+  assert.equal(index.affected([{path:'data/new.md',added:true}]).has(entries),true);
+  assert.equal(index.affected([{path:'data/nested/new.md',added:true}]).has(entries),false);
+  const removed=[{path:'data/nested/one.ts',deleted:true},{path:'data/nested/two.ts',deleted:true}];
+  assert.equal(index.affected(removed).has(directory),true);assert.equal(index.affected(removed).has(entries),true);
+  assert.equal(index.affected([{path:'data/nested/one.ts',deleted:true}]).has(directory),false);
+  assert.equal(index.affected([{path:'data/optional.json',added:true}]).has(optional),true);
+  assert.equal(index.affected([{path:'data/optional.json/child.ts',added:true}]).has(optional),false,'an absent file becoming a directory remains fileExists false');
+  assert.equal(index.affected([{path:'data/alias',sameMode:true}]).has(identity),true);
+  assert.equal(index.affected([{path:'data/nested/one.ts',sameMode:true}]).has(identity),false);
+  const rename=[{path:'data/plain.md',deleted:true},{path:'data/renamed.md',added:true}];
+  assert.equal(index.affected(rename).has(entries),true);
+  const after=readerObservationIndex('/source',[directory],['data/plain.md']);
+  assert.equal(after.affected(removed).has(directory),true,'both endpoint inventories reconstruct the same disappearance');
 });

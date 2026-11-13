@@ -1,6 +1,6 @@
 // Replay the original typed facts. Existence/stat never acquires bytes, and a
 // byte copier cannot silently certify source timestamps on a copied object.
-import {dirname,isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
+import {isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
 import {readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
 import type {HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot,ReaderObservation} from './module-closure.ts';
