@@ -8,12 +8,12 @@ import {fixtureEnvironment} from "./test-environment.ts";
 //
 //   node --test tooling/gate/dex-bound.test.ts
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync,writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { testScratch } from "./test-scratch.ts";
-import { written, type DexOutcome } from "../android/dex-record.ts";
+import { DEX_RECORD,written, type DexOutcome } from "../android/dex-record.ts";
 import { spawnTest } from "./test-wait.ts";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
 
@@ -29,6 +29,10 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
   copyModuleClosure(["tooling/gate/token-command.ts","tooling/gate/case-bound.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"], root);
+  // This control starts without d8 observations; individual cases can publish
+  // their own record below, after the production closure has been staged.
+  rmSync(join(root,DEX_RECORD),{force:true});
+  assert.equal(existsSync(join(root,DEX_RECORD)),false,'the control has no production d8 outcomes');
   copyFileSync(new URL('./token.sh',import.meta.url),join(root, "tooling/gate/token.sh"));
   // d8 refuses what a `*-refused` target emits and accepts the rest; javap
   // names one method of each class.

@@ -32,8 +32,10 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   acquire(old,cache,table);acquire(next,cache,table);
   const trees=[join(root,'catalog-old'),join(root,'catalog-next')],oldVersion=nodePin(old),nextVersion=nodePin(next);
   for(const [source,tree,release] of [[old,trees[0]!,oldVersion],[next,trees[1]!,nextVersion]] as const){
-    candidate(source,tree);
     copyModuleClosure(['tooling/inputs/node-inputs.ts'],tree);
+    // Stage production bytes first; this tree's catalog and recipe are the
+    // explicit private mutation exercised by the two-version control.
+    candidate(source,tree);
     writeFileSync(join(tree,'tooling/inputs/node-inputs.json'),JSON.stringify({version:1,releases:{[release]:table.releases[release]}}));
     writeFileSync(join(tree,'tooling/inputs/link.sh'),readFileSync(new URL('./link.sh',import.meta.url)));
     // This guard exercises Node provisioning; registry installation has its
