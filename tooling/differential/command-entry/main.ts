@@ -130,7 +130,7 @@ export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?
   if(!entry||pathToFileURL(realpath?realpathSync(entry):resolve(entry)).href!==url)return;
   const state=processOwner();state.pendingMain=true;
   const unsettled=()=>{
-    if(!state.pendingMain)return;
+    if(!state.pendingMain||state.signal)return;
     writeSync(2,`INSTRUMENT: command entry ${url}: main did not settle before the event loop drained\n`);
     process.exitCode=13;
   };

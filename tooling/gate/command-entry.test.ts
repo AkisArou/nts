@@ -153,6 +153,19 @@ runAsCommand(import.meta.url,async()=>{
  }
 });
 
+test('a signal arriving during loop-drain cleanup outranks the unsettled-main status',t=>{
+ const root=testScratch(t,'command-signal-during-drain');
+ for(const [signal,status] of [['SIGINT',130],['SIGTERM',143],['SIGHUP',129]] as const){
+  const file=join(root,signal+'.mjs');
+  writeFileSync(file,`import {runAsCommand,registerCommandCloser} from ${JSON.stringify(helper)};
+runAsCommand(import.meta.url,async()=>{
+ registerCommandCloser('resource',{close:()=>{process.emit(${JSON.stringify(signal)});process.stdout.write('closed');}});
+ await new Promise(()=>{});
+});`);
+  const result=run(file);assert.equal(result.status,status,result.stderr);assert.equal(result.stdout,'closed');assert.equal(result.stderr,'');
+ }
+});
+
 test('a real SIGTERM keeps the broker alive for its worker retirement and exits 143',async t=>{
  const root=testScratch(t,'command-signal-retirement'),file=join(root,'subject.mjs'),ready=join(root,'ready.json'),done=join(root,'done.json');
  writeFileSync(file,`import assert from 'node:assert/strict';import {createServer,connect} from 'node:net';import {once} from 'node:events';
