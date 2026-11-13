@@ -9,15 +9,13 @@ import {fixtureEnvironment} from "./test-environment.ts";
 //   node --test tooling/gate/dex-bound.test.ts
 import assert from "node:assert/strict";
 import { copyFileSync, existsSync, mkdirSync, rmSync,writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { testScratch } from "./test-scratch.ts";
 import { DEX_RECORD,written, type DexOutcome } from "../android/dex-record.ts";
 import { spawnTest } from "./test-wait.ts";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
-
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 /** A scratch tree whose compiler spins on every target named `*-spin` and declines the rest. */
 function sandbox(t: TestContext, recorded: Record<string, object>) {

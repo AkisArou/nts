@@ -2,7 +2,7 @@ import {testEnvironment} from "./test-environment.ts";
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {writeFileSync,readFileSync,rmSync,chmodSync} from 'node:fs';
-import {join,dirname} from 'node:path';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {newTestScratch} from './test-scratch.ts';
