@@ -14,7 +14,7 @@ import {test} from "node:test";
 import {pathToFileURL} from "node:url";
 import {OracleWorker,TypeScriptDiagnosticError,REPOSITORY,verifyToolchain,oracleLoaderReady,oracleRuntimeFile} from "./oracle-emit.ts";
 import {type HostObservation} from './oracle-filesystem.ts';
-import {toolchain,oracleExecution,prepareOracle,workspace,execute,prepare} from './oracle-emit-fixture.ts';
+import {toolchain,oracleExecution,prepareOracle,workspace,execute,prepare,changedSnapshot} from './oracle-emit-fixture.ts';
 
 test('standalone project emission retains owner graphs and module formats without a Program',async t=>{
   for(const format of ['esnext','module','commonjs'] as const)await t.test(format,async()=>{
@@ -163,8 +163,16 @@ test('generated child bootstrap bytes are checked before their module body evalu
   const assets=Reflect.get(prepared.snapshot!,'assets') as Record<string,string>|undefined;
   assert.ok(assets?.['assets/oracle-seal/main.mjs'],'the nested seal dependency is emitted');
   assert.ok(assets?.['assets/runtime-paths/main.mjs'],'the nested manifest dependency is emitted');
-  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...prepared.args,join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...prepared.env}});
+  // Stripping is a recorded Node execution option. The private control binds
+  // that option into its own descriptor instead of bypassing the identity check.
+  const noStripPrepared=await prepare(root,'src/main.ts',{directory:join(root,'no-strip')});
+  const noStripExecution=oracleExecution(changedSnapshot(noStripPrepared,records=>{
+    const descriptor=records.get('descriptor') as {resolution:{options:{flags:string[]}}};
+    descriptor.resolution.options.flags.push('--no-experimental-strip-types');
+  }));
+  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...noStripExecution.args,join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...noStripExecution.env}});
   assert.equal(noStrip.status,0,noStrip.stderr);assert.equal(noStrip.stdout,'19\n');
+  assert.deepEqual(oracleOwner.finishOracleSnapshot(noStripExecution),{ready:true});
   for(const name of Object.keys(assets??{}))await t.test(name,()=>{
     const file=join(dirname(prepared.manifest),name),original=readFileSync(file),effect=join(root,'forbidden-'+name.replaceAll('/','-'));
     assert.equal(createHash('sha256').update(original).digest('hex'),assets![name]);
