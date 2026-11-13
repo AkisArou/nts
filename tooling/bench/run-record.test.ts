@@ -20,7 +20,6 @@ import {
   publishRun,
   readRuns,
   checkRecords,
-  benchmarkRecordInputs,
   type Cell,
   type RunRecord,
 } from "./run-record.ts";
@@ -325,12 +324,6 @@ test("record check catches corruption, edited rendering and a missing committed 
     const original = readFileSync(path, "utf8"),
       fullPath = join(root, "results/benchmarks/full.md"),
       full = readFileSync(fullPath, "utf8");
-    const supplied = {...benchmarkRecordInputs(root), table: join(root, "private-table.md")};
-    writeFileSync(supplied.table, full);
-    writeFileSync(fullPath, "the caller selected a different table\n");
-    assert.equal(checkRecords(root, supplied).runs, 1, "the reader consumes its caller's locations");
-    assert.throws(() => checkRecords(root), /shared renderer/);
-    writeFileSync(fullPath, full);
     const corrupted = JSON.parse(original);
     corrupted.rows[0].verdicts["nts C"].node.kind = "LOSS";
     writeFileSync(path, JSON.stringify(corrupted));
@@ -351,41 +344,6 @@ test("record check catches corruption, edited rendering and a missing committed 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
-
-test("a caller's run store owns both its observations and immutable history", () => {
-  const root = temp();
-  try {
-    git(root, ["init", "-q"]);
-    git(root, ["config", "user.email", "test@example.invalid"]);
-    git(root, ["config", "user.name", "record control"]);
-    writeFileSync(join(root, "README"), "fixture\n");
-    git(root, ["add", "README"]);
-    git(root, ["commit", "-qm", "fixture"]);
-    const unrelated = publishRun(root, fixture("default-store"));
-    const directory = "observations [private]/café runs";
-    const inputs = {runs: join(root, directory), table: join(root, "private-table.md")};
-    mkdirSync(inputs.runs, {recursive: true});
-    const original = fixture("selected-store"), path = join(inputs.runs, original.id + ".json");
-    const bytes = JSON.stringify(original, null, 2) + "\n";
-    writeFileSync(path, bytes);
-    writeFileSync(inputs.table, renderFull([original]));
-    git(root, ["add", "--", directory, "private-table.md"]);
-    git(root, ["commit", "-qm", "selected store"]);
-    rmSync(unrelated);
-    assert.equal(checkRecords(root, inputs).runs, 1, "unrelated default history does not decide this store");
-    const changed = structuredClone(original);
-    changed.rows[0]!.cells["nts C"]!.nanoseconds = 70;
-    const rewritten = sealRun(changed);
-    writeFileSync(path, JSON.stringify(rewritten, null, 2) + "\n");
-    writeFileSync(inputs.table, renderFull([rewritten]));
-    assert.throws(() => checkRecords(root, inputs), /immutable benchmark run was rewritten/);
-    writeFileSync(path, bytes);
-    writeFileSync(inputs.table, renderFull([original]));
-    assert.equal(checkRecords(root, inputs).runs, 1);
-    rmSync(path);
-    assert.throws(() => checkRecords(root, inputs), /missing immutable benchmark run/);
-  } finally {rmSync(root, {recursive: true, force: true});}
 });
 
 test("the real check CLI detects a one-change renderer drift", () => {

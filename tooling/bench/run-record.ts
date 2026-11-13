@@ -14,7 +14,7 @@ import {
   fsyncSync,
   closeSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
@@ -386,12 +386,8 @@ export function sealRun(value: unknown): RunRecord {
 export function parseRun(value: unknown): RunRecord {
   return decode(value, false);
 }
-export type BenchmarkRecordInputs = { runs: string; table: string };
-export function benchmarkRecordInputs(root: string): BenchmarkRecordInputs {
-  return { runs: join(root, "results/benchmarks/runs"), table: join(root, "results/benchmarks/full.md") };
-}
-export function readRuns(root: string, inputs = benchmarkRecordInputs(root)): RunRecord[] {
-  const directory = inputs.runs;
+export function readRuns(root: string): RunRecord[] {
+  const directory = join(root, "results/benchmarks/runs");
   if (!existsSync(directory)) return [];
   return readdirSync(directory)
     .filter((f) => f.endsWith(".json"))
@@ -403,11 +399,8 @@ export function readRuns(root: string, inputs = benchmarkRecordInputs(root)): Ru
     });
 }
 /** Gate authority: immutable evidence and its one rendered view must agree. */
-export function checkRecords(root: string, inputs = benchmarkRecordInputs(root)): { runs: number; complete: number } {
-  const runDirectory = relative(resolve(root), resolve(inputs.runs)).split(sep).join("/");
-  check(runDirectory && !isAbsolute(runDirectory) && runDirectory !== ".." && !runDirectory.startsWith("../"),
-    "benchmark run directory is outside its repository: " + inputs.runs);
-  const runs = readRuns(root, inputs);
+export function checkRecords(root: string): { runs: number; complete: number } {
+  const runs = readRuns(root);
   // A committed observation cannot disappear or be rewritten, even with newly forged verdicts.
   const additions = git(root, [
     "log",
@@ -416,29 +409,25 @@ export function checkRecords(root: string, inputs = benchmarkRecordInputs(root))
     "--no-renames",
     "--abbrev=40",
     "--diff-filter=A",
-    "-z",
     "--",
-    ":(literal)" + runDirectory + "/",
+    "results/benchmarks/runs/",
   ]);
-  const entries = additions.split("\0");
-  for (let index = 0; index < entries.length;) {
-    const header = entries[index++]!.trim();
-    if (!header) continue;
-    const match = /^:000000 [0-7]{6} 0{40} ([a-f0-9]{40}) A$/.exec(header);
+  for (const line of additions.split("\n").filter(Boolean)) {
+    const match =
+      /^:000000 [0-7]{6} 0{40} ([a-f0-9]{40}) A\t(results\/benchmarks\/runs\/[^\t]+\.json)$/.exec(
+        line,
+      );
     check(match, "unrecognized benchmark history entry");
-    const name = entries[index++];
-    check(name?.startsWith(runDirectory + "/") && name.slice(runDirectory.length + 1).endsWith(".json")
-      && !name.slice(runDirectory.length + 1).includes("/"), "unrecognized benchmark history path: " + name);
-    const path = join(root, name);
-    check(existsSync(path), "missing immutable benchmark run: " + name);
+    const path = join(root, match[2]);
+    check(existsSync(path), "missing immutable benchmark run: " + match[2]);
     const bytes = readFileSync(path),
       identity = createHash("sha1")
         .update("blob " + bytes.length + "\0")
         .update(bytes)
         .digest("hex");
-    check(identity === match[1], "immutable benchmark run was rewritten: " + name);
+    check(identity === match[1], "immutable benchmark run was rewritten: " + match[2]);
   }
-  const full = inputs.table;
+  const full = join(root, "results/benchmarks/full.md");
   check(existsSync(full), "missing benchmark full.md");
   check(
     readFileSync(full, "utf8") === renderFull(runs, readBenchmarkGroups(root)),
