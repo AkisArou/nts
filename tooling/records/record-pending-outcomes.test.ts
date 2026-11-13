@@ -32,12 +32,8 @@ function git(root:string,...args:string[]):string{
     GIT_AUTHOR_NAME:"Records fixture",GIT_AUTHOR_EMAIL:"records-fixture@invalid",GIT_COMMITTER_NAME:"Records fixture",GIT_COMMITTER_EMAIL:"records-fixture@invalid"}}).trim();
 }
 
-/** A tree with one pending outcome, a clean pin of the gate's compiler, and the records unit's canonical environment. */
-function recordsRun(t:{after(fn:()=>void):void}){
-  assert.ok(existsSync(binary),`compiler missing: ${binary}; set NTS_BIN to a built pin`);
-  const scratch=newTestScratch("record-pending-outcomes");
-  t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
-  const root=join(scratch,"tree");
+/** Stage exactly the same private tree for the setup control and compiler proof. */
+function stageRecordsTree(t:{after(fn:()=>void):void},root:string):void{
   // The whole tooling tree, as the records run has it: the oracle compiles the
   // outcomes preload, and what it imports, inside the tooling projects that
   // own them, and checks each of those projects whole.
@@ -46,7 +42,7 @@ function recordsRun(t:{after(fn:()=>void):void}){
   mkdirSync(join(root,'tests/outcomes'),{recursive:true});
   mkdirSync(join(root,'tests/programs'),{recursive:true});
   mkdirSync(join(root,'benchmarks/cases'),{recursive:true});
-  const otherData=['runtime/node','runtime/web-platform','tests/compile-time','docs/foundations'];
+  const otherData=['runtime/node','runtime/web-platform','tests/compile-time'];
   for(const area of otherData)mkdirSync(join(root,area),{recursive:true});
   copyModuleClosure(['tooling/records/record-pending.ts'],root,{dataNamespaces:{
     'tests/typescript':'pending-outcome records fixture','tests/outcomes':'one pending outcome fixture',
@@ -67,6 +63,21 @@ function recordsRun(t:{after(fn:()=>void):void}){
   assert.deepEqual(readdirSync(join(root,'tests/outcomes')),[FIXTURE.split('/').at(-1)]);
   assert.equal(existsSync(join(root,RECORD)),false,'the fixture owns a pending case, never its production record');
   git(root,"add","-f","tsconfig.fixtures.json",FIXTURE);git(root,"commit","-qm","one pending outcome");
+}
+
+test('records fixture stages only its declared private populations',t=>{
+  const scratch=newTestScratch('record-pending-outcome-staging');
+  t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
+  stageRecordsTree(t,join(scratch,'tree'));
+});
+
+/** A tree with one pending outcome, a clean pin of the gate's compiler, and the records unit's canonical environment. */
+function recordsRun(t:{after(fn:()=>void):void}){
+  assert.ok(existsSync(binary),`compiler missing: ${binary}; set NTS_BIN to a built pin`);
+  const scratch=newTestScratch("record-pending-outcomes");
+  t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
+  const root=join(scratch,"tree");
+  stageRecordsTree(t,root);
   const pin=publishPin(binary,join(scratch,"pin"),provenanceOf(binary)??{sha:git(SOURCE,"rev-parse","HEAD"),
     subject:"test fixture copy of the gate compiler",clean:true,applied:null,built_at:new Date().toISOString()});
   // A launcher's host capabilities alone, never this test's own context: a
