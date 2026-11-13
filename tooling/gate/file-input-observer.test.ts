@@ -32,7 +32,7 @@ int main(int argc,char **argv){
     if(write(1,b,(size_t)n)!=n)return 95;
     if(openat(dir,"missing",O_RDONLY)!=-1||errno!=ENOENT)return 96;
     if(openat(-2,"invalid-fd",O_RDONLY)!=-1||errno!=EBADF)return 97;
-    if(syscall(SYS_getdents64,dir,b,sizeof(b))<0)return 98;
+    char entries[4096];if(syscall(SYS_getdents64,dir,entries,sizeof(entries))<0)return 98;
     close(value);close(dir);if(write(2,"err",3)!=3)return 104;return 7;
   }
   if(!strcmp(argv[1],"streams")){
