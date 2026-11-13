@@ -4,6 +4,112 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 type Command=()=>number|void|Promise<number|void>;
+export type CommandSignal='SIGINT'|'SIGTERM'|'SIGHUP';
+export type CloseReason={kind:'completion'}|{kind:'failure'}|{kind:'signal';signal:CommandSignal};
+export type CommandCloser={cancel?:(reason:Exclude<CloseReason,{kind:'completion'}>)=>void;close:()=>void|Promise<void>};
+export const COMMAND_CLOSE_MS=5*60_000;
+type CloseHost={arm:(callback:()=>void,milliseconds:number)=>()=>void;report:(line:string)=>void;exit:(code:number)=>void};
+const signalCode={SIGINT:130,SIGTERM:143,SIGHUP:129} as const;
+
+/** One terminal drain, including repeated signals and resources registered
+ * during cancellation. Cancellation never destroys a peer's reply transport.
+ * Destruction follows reverse acquisition order, under one total wedge guard. */
+export class CommandLifetime{
+  #resources=new Map<number,{name:string;owner:CommandCloser;cancelled:boolean}>();
+  #next=0;
+  #reason:CloseReason={kind:'completion'};
+  #code=0;
+  #closing:Promise<number>|undefined;
+  #ended=false;
+  #problems:string[]=[];
+  constructor(private readonly host:CloseHost){}
+  register(name:string,owner:CommandCloser):()=>void{
+    if(!name.trim()||typeof owner.close!=='function')throw Error('command closer needs a name and close function');
+    if(this.#ended)throw Error('INSTRUMENT: command resource acquired after shutdown: '+name);
+    const id=++this.#next,row={name,owner,cancelled:false};this.#resources.set(id,row);
+    this.#cancel(row);
+    return()=>{this.#resources.delete(id);};
+  }
+  #problem(name:string,error:unknown):void{
+    const line=`INSTRUMENT: command cleanup ${name}: ${String(error)}`;
+    this.#problems.push(line);this.host.report(line);
+  }
+  #cancel(row:{name:string;owner:CommandCloser;cancelled:boolean}):void{
+    if(this.#reason.kind==='completion'||row.cancelled)return;
+    row.cancelled=true;
+    try{row.owner.cancel?.(this.#reason);}catch(error){this.#problem(row.name+' cancellation',error);}
+  }
+  close(code:number,reason:CloseReason={kind:'completion'}):Promise<number>{
+    if(this.#ended)return this.#closing!;
+    if(this.#reason.kind!=='signal'){
+      this.#reason=reason;
+      if(reason.kind==='signal')this.#code=signalCode[reason.signal];
+      else if(this.#code===0)this.#code=code;
+    }
+    for(const row of this.#resources.values())this.#cancel(row);
+    if(this.#closing)return this.#closing;
+    let resolve!:(code:number)=>void;
+    this.#closing=new Promise<number>(done=>{resolve=done;});
+    const result=()=>this.#code||(this.#problems.length?2:0);
+    const cancel=this.host.arm(()=>{
+      if(this.#ended)return;
+      this.#ended=true;
+      this.#problem('wedged drain',`did not finish within ${COMMAND_CLOSE_MS} ms; remaining: ${[...this.#resources.values()].map(row=>row.name).join(', ')||'<none>'}`);
+      const code=result();resolve(code);this.host.exit(code);
+    },COMMAND_CLOSE_MS);
+    const drain=async()=>{
+      for(;;){
+        const next=[...this.#resources.entries()].at(-1);if(!next)break;
+        const [id,row]=next;
+        try{await row.owner.close();}catch(error){if(!this.#ended)this.#problem(row.name,error);}
+        if(this.#ended)return;
+        this.#resources.delete(id);
+      }
+      if(this.#ended)return;
+      this.#ended=true;cancel();resolve(result());
+    };
+    void drain();return this.#closing;
+  }
+}
+
+class CommandExit{constructor(readonly code:number){}}
+/** Early command completion passes through the same drain as a return. */
+export function exitCommand(code:number):never{throw new CommandExit(code);}
+
+type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;trackedMain:boolean;finish:(code:number,reason?:CloseReason)=>Promise<void>};
+let owner:ProcessOwner|undefined;
+function processOwner():ProcessOwner{
+  if(owner)return owner;
+  const report=(line:string)=>{try{writeSync(2,line+'\n');}catch{/* a departed output reader cannot prevent cleanup */}};
+  const lifetime=new CommandLifetime({report,exit:code=>process.exit(code),arm:(callback,milliseconds)=>{
+    const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);
+  }});
+  const onSignal=(signal:CommandSignal)=>{void state.finish(signalCode[signal],{kind:'signal',signal}).then(()=>process.exit(signalCode[signal]));};
+  const signals={SIGINT:()=>onSignal('SIGINT'),SIGTERM:()=>onSignal('SIGTERM'),SIGHUP:()=>onSignal('SIGHUP')};
+  const failed=(error:unknown)=>{console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure'}).then(()=>process.exit(Number(process.exitCode)||1));};
+  const beforeExit=()=>{if(!state.pendingMain)void state.finish(Number(process.exitCode??0));};
+  const detach=()=>{
+    process.off('beforeExit',beforeExit);process.off('uncaughtException',failed);process.off('unhandledRejection',failed);
+    for(const signal of Object.keys(signals) as CommandSignal[])process.off(signal,signals[signal]);
+  };
+  const state:ProcessOwner={lifetime,pendingMain:false,trackedMain:false,finish:async(code,reason)=>{
+    process.exitCode=await lifetime.close(code,reason);detach();
+  }};
+  owner=state;
+  process.on('beforeExit',beforeExit);process.on('uncaughtException',failed);process.on('unhandledRejection',failed);
+  for(const signal of Object.keys(signals) as CommandSignal[])process.on(signal,signals[signal]);
+  return state;
+}
+
+/** Resource acquisition lends its cleanup to the process's one command owner.
+ * An eval parent and a standalone entry use the same beforeExit boundary. */
+export function registerCommandCloser(name:string,closer:CommandCloser):()=>void{return processOwner().lifetime.register(name,closer);}
+
+/** execve resets caught signal dispositions, unlike ignored dispositions. */
+export function prepareCommandExec():void{
+  processOwner();
+  for(const signal of ['SIGPIPE','SIGXFSZ'] as const)process.on(signal,()=>{});
+}
 /** Importing the module never starts its command or makes its graph async.
  * Commands keep their own handled diagnostics and statuses. Unhandled errors
  * share one stderr/exit policy; a void result preserves a status set by main.
@@ -12,14 +118,23 @@ type Command=()=>number|void|Promise<number|void>;
 export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?:boolean}={}):void{
   const entry=process.argv[1];
   if(!entry||pathToFileURL(realpath?realpathSync(entry):resolve(entry)).href!==url)return;
+  const state=processOwner();state.trackedMain=true;state.pendingMain=true;
   const unsettled=()=>{
     writeSync(2,`INSTRUMENT: command entry ${url}: main did not settle before the event loop drained\n`);
     process.exitCode=13;
   };
   const arm=()=>process.once('exit',unsettled);
   const finished=()=>{process.removeListener('beforeExit',arm);process.removeListener('exit',unsettled);};
-  const failed=(error:unknown)=>{finished();console.error(error);process.exitCode=1;};
+  const complete=(code:number|void)=>{
+    finished();state.pendingMain=false;
+    return state.finish(code??Number(process.exitCode??0));
+  };
+  const failed=(error:unknown)=>{
+    finished();state.pendingMain=false;
+    if(error instanceof CommandExit)return state.finish(error.code);
+    console.error(error);return state.finish(1,{kind:'failure'});
+  };
   process.once('beforeExit',arm);
-  try{void Promise.resolve(main()).then(code=>{finished();if(code!==undefined)process.exitCode=code;}).catch(failed);}
-  catch(error){failed(error);}
+  try{void Promise.resolve(main()).then(complete,failed);}
+  catch(error){void failed(error);}
 }
