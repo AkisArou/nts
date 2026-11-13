@@ -204,7 +204,7 @@ Discovery runs only for project declarations and is fresh for each graph.
 config named by a compiler command directly, through that same parser.
 The parser's filesystem callbacks retain their actual typed answers, including
 negative lookups, followed directory entries, real paths and stat mode, size
-and Date timestamp. These observations grant no placement or content-open
+and Date timestamp. Metadata facts grant no placement or content-open
 authority. Captured file reads retain immutable bytes; existence and stat alone
 never copy a child. Callback provenance retains the actual link chain and
 followed target facts without changing the original answer. Followed parser

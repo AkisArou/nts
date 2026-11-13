@@ -1050,6 +1050,36 @@ fn host_answer(observation: &HostObservation) -> Result<Value> {
     }
 }
 
+#[cfg(unix)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The finite rounded value is checked against Date's integer range before conversion"
+)]
+fn node_date_millis(milliseconds: f64) -> Result<i64> {
+    // Node 26's Stats dateFromMs uses Math.round before constructing Date.
+    // Separate the integer/fraction decision: adding 0.5 first can itself
+    // round a representable neighbor, and Rust round has different negative ties.
+    let integer = milliseconds.floor();
+    let rounded = if milliseconds - integer < 0.5 {
+        integer
+    } else {
+        integer + 1.0
+    };
+    if !rounded.is_finite() || rounded.abs() > 8_640_000_000_000_000.0 {
+        bail!("oracle stat timestamp is outside the SDK Date range");
+    }
+    Ok(rounded as i64)
+}
+
+#[cfg(unix)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Replay the same intentional binary64 seconds/nanoseconds arithmetic as Node Stats"
+)]
+fn node_stat_millis(seconds: i64, nanoseconds: i64) -> Result<i64> {
+    node_date_millis(seconds as f64 * 1000.0 + nanoseconds as f64 / 1_000_000.0)
+}
+
 fn host_stat(observation: &HostObservation) -> Result<Value> {
     let path = &observation.path;
     if !observation.value.is_null()
@@ -1058,7 +1088,7 @@ fn host_stat(observation: &HostObservation) -> Result<Value> {
                 && fields
                     .get("mode")
                     .and_then(Value::as_u64)
-                    .is_some_and(|mode| mode <= u64::from(u32::MAX))
+                    .is_some_and(|mode| u32::try_from(mode).is_ok())
                 && fields
                     .get("size")
                     .and_then(Value::as_u64)
@@ -1077,13 +1107,8 @@ fn host_stat(observation: &HostObservation) -> Result<Value> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt as _;
-        // The SDK receives Node's real mode/size/mtime fields. Node represents
-        // POSIX time as milliseconds; the SDK receives Date's integer time clip.
-        let mtime_ms =
-            metadata.mtime() as f64 * 1000.0 + metadata.mtime_nsec() as f64 / 1_000_000.0;
-        Ok(
-            serde_json::json!({"mode":metadata.mode(),"size":metadata.len(),"mtimeMs":mtime_ms as i64}),
-        )
+        let mtime_ms = node_stat_millis(metadata.mtime(), metadata.mtime_nsec())?;
+        Ok(serde_json::json!({"mode":metadata.mode(),"size":metadata.len(),"mtimeMs":mtime_ms}))
     }
     #[cfg(not(unix))]
     bail!("oracle stat observations require the POSIX metadata adapter: {path}");
@@ -2024,6 +2049,51 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn node_date_conversion_matches_fractional_neighbors_and_negative_ties() {
+        let cases = [
+            (f64::from_bits(0.5_f64.to_bits() - 1), 0),
+            (0.5, 1),
+            (f64::from_bits(0.5_f64.to_bits() + 1), 1),
+            (f64::from_bits((-0.5_f64).to_bits() - 1), 0),
+            (-0.5, 0),
+            (f64::from_bits((-0.5_f64).to_bits() + 1), -1),
+            (-1.5, -1),
+            (4_503_599_627_370_495.0, 4_503_599_627_370_495),
+            (4_503_599_627_370_496.0, 4_503_599_627_370_496),
+            (8_640_000_000_000_000.0, 8_640_000_000_000_000),
+            (-8_640_000_000_000_000.0, -8_640_000_000_000_000),
+        ];
+        let values: Vec<_> = cases.iter().map(|(value, _)| value).collect();
+        let output = std::process::Command::new("node")
+            .args([
+                "-e",
+                "process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(Math.round)))",
+            ])
+            .arg(serde_json::to_string(&values).unwrap())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let node: Vec<i64> = serde_json::from_slice(&output.stdout).unwrap();
+        for ((value, expected), actual) in cases.iter().zip(node) {
+            assert_eq!(actual, *expected, "Node input {value:?}");
+            assert_eq!(node_date_millis(*value).unwrap(), actual, "input {value:?}");
+        }
+        for value in [
+            f64::NAN,
+            f64::INFINITY,
+            8_640_000_000_000_001.0,
+            -8_640_000_000_000_001.0,
+        ] {
+            assert!(node_date_millis(value).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn captured_sdk_stat_matches_node_without_granting_file_content() {
         let (scratch, _manifest, source, _project) = manifest_fixture();
         let directory = scratch.path.join("directory");
@@ -2037,19 +2107,59 @@ mod tests {
             &scratch.path.join("absent"),
             &source.join("not-a-directory"),
         ];
-        let output = std::process::Command::new("node")
-            .args(["-e", r#"const fs=require('node:fs');const rows=process.argv.slice(1).map(path=>{let value;try{const stat=fs.statSync(path);value={mode:stat.mode,size:stat.size,mtimeMs:stat.mtime.getTime()};}catch(error){if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;value=null;}return {kind:'stat',path,value};});process.stdout.write(JSON.stringify(rows));"#])
-            .args(paths)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let rows: Vec<HostObservation> = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(rows.len(), 5);
-        assert!(validate_observations(&rows).unwrap().is_empty());
+        let read_node = || {
+            let output = std::process::Command::new("node")
+                .args(["-e", "const fs=require('node:fs');const rows=process.argv.slice(1).map(path=>{let value;try{const stat=fs.statSync(path);value={mode:stat.mode,size:stat.size,mtimeMs:stat.mtime.getTime()};}catch(error){if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;value=null;}return {kind:'stat',path,value};});process.stdout.write(JSON.stringify(rows));"])
+                .args(paths)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let rows: Vec<HostObservation> = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(rows.len(), 5);
+            for row in &rows {
+                assert_eq!(
+                    host_answer(row).unwrap(),
+                    row.value,
+                    "Node/native stat {}",
+                    row.path
+                );
+            }
+            assert!(validate_observations(&rows).unwrap().is_empty());
+            rows
+        };
+        read_node();
+        for nanos in [
+            1_790_000_000_123_499_000_i64,
+            1_790_000_000_123_500_000,
+            1_790_000_000_123_501_000,
+            -1_500_000,
+            -500_001,
+            -500_000,
+            -499_999,
+            0,
+            499_999,
+            500_000,
+            500_001,
+        ] {
+            let duration = std::time::Duration::from_nanos(nanos.unsigned_abs());
+            let time = if nanos < 0 {
+                std::time::UNIX_EPOCH - duration
+            } else {
+                std::time::UNIX_EPOCH + duration
+            };
+            std::fs::File::options()
+                .write(true)
+                .open(&source)
+                .unwrap()
+                .set_times(std::fs::FileTimes::new().set_modified(time))
+                .unwrap();
+            read_node();
+        }
+        let rows = read_node();
         std::fs::write(&source, "changed size").unwrap();
         assert!(
             format!("{:#}", validate_observations(&rows).unwrap_err())
