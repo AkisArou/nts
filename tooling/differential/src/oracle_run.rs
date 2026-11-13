@@ -71,7 +71,10 @@ pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
         "oracle-seal/main.ts",
         include_bytes!("../oracle-seal/main.ts"),
     ),
-    ("runtime-paths/main.ts", include_bytes!("../runtime-paths/main.ts")),
+    (
+        "runtime-paths/main.ts",
+        include_bytes!("../runtime-paths/main.ts"),
+    ),
 ];
 
 pub(super) fn execution_identity() -> Result<String> {

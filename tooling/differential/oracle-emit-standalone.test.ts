@@ -163,7 +163,7 @@ test('generated child bootstrap bytes are checked before their module body evalu
   const assets=Reflect.get(prepared.snapshot!,'assets') as Record<string,string>|undefined;
   assert.ok(assets?.['assets/oracle-seal/main.mjs'],'the nested seal dependency is emitted');
   assert.ok(assets?.['assets/runtime-paths/main.mjs'],'the nested manifest dependency is emitted');
-  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...prepared.args,oracleRuntimeFile(prepared,join(root,'src/main.ts'))],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...prepared.env}});
+  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...prepared.args,join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...prepared.env}});
   assert.equal(noStrip.status,0,noStrip.stderr);assert.equal(noStrip.stdout,'19\n');
   for(const name of Object.keys(assets??{}))await t.test(name,()=>{
     const file=join(dirname(prepared.manifest),name),original=readFileSync(file),effect=join(root,'forbidden-'+name.replaceAll('/','-'));

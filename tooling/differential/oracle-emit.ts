@@ -650,6 +650,7 @@ async function compileChildAssets(directory:string,sessionDirectory:string,ident
       const ready=record+'.'+process.pid;writeFileSync(ready,JSON.stringify({version:1,key,sha256:hash(text)})+'\n');renameSync(ready,record);
     }
     const output='assets/'+name;mkdirSync(dirname(join(directory,output)),{recursive:true});
+    if(realpathSync(dirname(join(directory,output)))!==dirname(join(directory,output)))throw Error('oracle child publication directory is aliased: '+output);
     writeFileSync(join(directory,output),text,{flag:'wx',mode:0o444});return [output,hash(text)];
   }));
 }
