@@ -21,7 +21,7 @@ export function capturedPackageMetadata(directory:string):{valid:boolean;main:st
 const absent=(error:unknown)=>['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'');
 const compare=(a:string,b:string)=>Buffer.compare(Buffer.from(a),Buffer.from(b));
 function metadata(path:string){try{return statSync(path);}catch(error){if(absent(error))return null;throw error;}}
-const statFact=(value:ReturnType<typeof metadata>):FileStat|null=>value===null?null:{mode:value.mode,size:value.size,mtimeMs:value.mtimeMs};
+const statFact=(value:ReturnType<typeof metadata>):FileStat|null=>value===null?null:{mode:value.mode,size:value.size,mtimeMs:value.mtime.getTime()};
 function bytes(path:string){try{return readFileSync(path);}catch(error){if(absent(error))return null;throw error;}}
 function directoryEntries(path:string):DirectoryEntries{
   let names:Buffer[];
