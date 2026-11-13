@@ -4,10 +4,12 @@ import {spawn,spawnSync} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync,symlinkSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {testScratch} from './test-scratch.ts';
 import {testEnvironment} from './test-environment.ts';
 import {CommandLifetime,COMMAND_CLOSE_MS} from '../differential/command-entry/main.ts';
 import {waitFor} from './test-wait.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
 
 const helper=new URL('../differential/command-entry/main.ts',import.meta.url).href;
 function run(file:string){return spawnSync(process.execPath,[file],{env:testEnvironment(),encoding:'utf8'});}
@@ -203,4 +205,43 @@ runAsCommand(import.meta.url,async()=>{
  await waitFor('the retirement command to be ready',()=>existsSync(ready),{stopped:()=>ended?'subject ended: '+output:undefined});
  const sent=spawnSync('systemctl',['--user','kill','--signal=SIGTERM',unit],{env:testEnvironment(),encoding:'utf8'});assert.equal(sent.status,0,sent.stderr);
  assert.equal(await closed,143,output);assert.deepEqual(JSON.parse(readFileSync(done,'utf8')),{retired:true});
+});
+
+test('browser cancellation after profile acquisition drains startup without launching a child',async t=>{
+ const root=testScratch(t,'command-browser-startup'),subject=join(root,'subject.mjs');
+ const browser=new URL('../chromium/browser.ts',import.meta.url);
+ copyModuleClosure([browser.pathname],root);
+ const staged=join(root,'tooling/chromium/browser.ts'),original=readFileSync(staged,'utf8');
+ const boundary='  // Unix socket paths are short. Keep the private bus in a short, owned\n';
+ assert.equal(original.split(boundary).length,2,'one private startup barrier after the closer registration');
+ writeFileSync(staged,original.replace(boundary,`  await new Promise<void>(resolve=>{
+    process.stdout.write(JSON.stringify({profile})+'\\n');
+    process.stdin.once('data',()=>resolve());
+  });\n`+boundary));
+ const entry=pathToFileURL(join(root,'tooling/differential/command-entry/main.ts')).href;
+ writeFileSync(subject,`import {runAsCommand} from ${JSON.stringify(entry)};
+import {openPage} from ${JSON.stringify(pathToFileURL(staged).href)};
+runAsCommand(import.meta.url,async()=>{
+ process.once('SIGTERM',()=>process.stdout.write('signal observed\\n'));
+ await openPage('/must-not-launch-before-cancellation','about:blank',{temporary:${JSON.stringify(root)}});
+});`);
+ const env=testEnvironment(),unit='nts-command-browser-'+randomUUID();
+ const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--unit='+unit,'-p','LimitCORE=0','--',
+  'taskset','-c','0-3,6-31',process.execPath,subject],{env,stdio:['pipe','pipe','pipe']});
+ let output='',errors='',ended=false;
+ child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>errors+=bytes);
+ const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',error=>{ended=true;reject(error);});child.once('close',code=>{ended=true;resolve(code);});});
+ try{
+  await waitFor('the browser profile acquisition',()=>output.includes('"profile"'),{stopped:()=>ended?errors:undefined});
+  const profile=(JSON.parse(output.trim()) as {profile:string}).profile;assert.ok(existsSync(profile));
+  const sent=spawnSync('systemctl',['--user','kill','--signal=SIGTERM',unit],{env,encoding:'utf8'});assert.equal(sent.status,0,sent.stderr);
+  await waitFor('the installed command signal handler',()=>output.includes('signal observed'),{stopped:()=>ended?errors:undefined});
+  assert.equal(ended,false,'startup remains owned while its private barrier is held');
+  child.stdin.end('release\n');
+  assert.equal(await closed,143,errors);assert.equal(existsSync(profile),false);
+  assert.match(errors,/Chromium launch cancelled before entry/);
+  assert.doesNotMatch(errors,/must-not-launch-before-cancellation/);
+ }finally{
+  child.stdin.end();spawnSync('systemctl',['--user','stop',unit],{env,stdio:'ignore'});await closed;
+ }
 });
