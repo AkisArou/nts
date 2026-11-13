@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -58,7 +59,8 @@ public final class NetworkPrimitives implements AutoCloseable {
     private final ThreadPoolExecutor connects;
     private final ThreadPoolExecutor reads;
     private final ThreadPoolExecutor writes;
-    private final ScheduledThreadPoolExecutor clock;
+    private final ScheduledExecutorService clock;
+    private final boolean ownsClock;
     private final AtomicInteger ids = new AtomicInteger(1);
     private final AtomicInteger timerIds = new AtomicInteger(1);
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -94,18 +96,33 @@ public final class NetworkPrimitives implements AutoCloseable {
     /** A custom factory may supply a private CA; endpoint verification is still mandatory. */
     public NetworkPrimitives(Executor runtime, CleartextPolicy cleartext, ErrorReporter errors,
                              int maxConnections, SSLSocketFactory tlsFactory) {
+        this(runtime, cleartext, errors, maxConnections, tlsFactory, newClock(), true);
+    }
+    /** Supplied scheduling is borrowed; its owner closes it after this instance. */
+    NetworkPrimitives(Executor runtime, CleartextPolicy cleartext, ErrorReporter errors,
+                      int maxConnections, SSLSocketFactory tlsFactory, ScheduledExecutorService clock) {
+        this(runtime, cleartext, errors, maxConnections, tlsFactory, clock, false);
+    }
+    private NetworkPrimitives(Executor runtime, CleartextPolicy cleartext, ErrorReporter errors,
+                              int maxConnections, SSLSocketFactory tlsFactory,
+                              ScheduledExecutorService clock, boolean ownsClock) {
         if (maxConnections < 1 || maxConnections > 1024) throw new IllegalArgumentException("maxConnections must be 1..1024");
         this.runtime = Objects.requireNonNull(runtime);
         this.cleartext = Objects.requireNonNull(cleartext);
         this.errors = Objects.requireNonNull(errors);
         this.tlsFactory = Objects.requireNonNull(tlsFactory);
+        this.clock = Objects.requireNonNull(clock);
+        this.ownsClock = ownsClock;
         capacity = new Semaphore(maxConnections);
         // Separate pools prevent blocked reads from starving writes or TLS setup.
         connects = workers("nts-web-connect", maxConnections);
         reads = workers("nts-web-read", maxConnections);
         writes = workers("nts-web-write", maxConnections);
-        clock = new ScheduledThreadPoolExecutor(1, threads("nts-web-clock"));
+    }
+    private static ScheduledThreadPoolExecutor newClock() {
+        ScheduledThreadPoolExecutor clock = new ScheduledThreadPoolExecutor(1, threads("nts-web-clock"));
         clock.setRemoveOnCancelPolicy(true);
+        return clock;
     }
     private static SSLSocketFactory defaultTlsFactory() {
         javax.net.SocketFactory factory = SSLSocketFactory.getDefault();
@@ -498,6 +515,7 @@ public final class NetworkPrimitives implements AutoCloseable {
         if (!closed.compareAndSet(false, true)) return;
         for (Integer id : sockets.keySet()) closeSocket(id);
         for (Integer id : timers.keySet()) clearTimer(id);
-        connects.shutdownNow(); reads.shutdownNow(); writes.shutdownNow(); clock.shutdownNow();
+        connects.shutdownNow(); reads.shutdownNow(); writes.shutdownNow();
+        if (ownsClock) clock.shutdownNow();
     }
 }
