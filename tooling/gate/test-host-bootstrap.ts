@@ -4,6 +4,8 @@
 import {assignTestValues,testEnvironment} from './test-environment.ts';
 import {HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-capabilities.ts';
+import {beforeEach} from 'node:test';
+import {setImmediate} from 'node:timers/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 export function poisonedTestEnvironment(source:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
@@ -26,4 +28,11 @@ export function installTestHost():void {
   });
 }
 // node --test also preloads in the parent which forks its entry workers.
-if(process.env.NODE_TEST_CONTEXT)installTestHost();
+if(process.env.NODE_TEST_CONTEXT){
+  installTestHost();
+  // Child test events are serialized asynchronously. Flush completed reports
+  // before a following synchronous body can block this worker's event loop.
+  // Capture the scheduler before a test can replace timers with its own clock.
+  const reportTurn=setImmediate;
+  beforeEach(()=>reportTurn());
+}
