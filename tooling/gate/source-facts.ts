@@ -182,7 +182,7 @@ export class SourceFacts {
         :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
       if(!specifier||!ast.isStringLiteralLikeNode(specifier)||!/^\.\.?\//.test(specifier.text))continue;
       all.push(specifier.text);
-      const typeOnly=ast.isImportDeclaration(node)?node.importClause?.isTypeOnly
+      const typeOnly=ast.isImportDeclaration(node)?node.importClause?.phaseModifier===ast.SyntaxKind.TypeKeyword
         :(ast.isExportDeclaration(node)||ast.isImportEqualsDeclaration(node))&&node.isTypeOnly;
       if(!typeOnly)host.push(specifier.text);
     }

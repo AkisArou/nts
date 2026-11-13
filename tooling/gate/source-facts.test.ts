@@ -7,6 +7,18 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
 
+test('host edges exclude erased type declarations while retaining source ownership and side-effect imports',()=>{
+  const api=new API(),source="import type {A} from './types.ts';export type {B} from './more-types.ts';import {type C} from './effects.ts';export {type D} from './more-effects.ts';import './side-effect.ts';";
+  const lease=api.createSourceFile('host-edges.ts',source);
+  try{
+    const facts=new SourceFacts('host-edges.ts',source,lease.sourceFile);
+    assert.deepEqual(facts.moduleDeclarations().imports,['./types.ts','./effects.ts','./side-effect.ts','./more-types.ts','./more-effects.ts']);
+    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./more-effects.ts']);
+    const detached=facts.hostModuleImports();detached.length=0;
+    assert.deepEqual(facts.hostModuleImports(),['./effects.ts','./side-effect.ts','./more-effects.ts']);
+  }finally{lease.dispose();api.close();}
+});
+
 test('the oracle compiles the data declaration leaf under its own one-file project',()=>{
   const entry=fileURLToPath(new URL('./reader-inputs/main.ts',import.meta.url));
   const project=new OracleFilesystem().projectFor(entry);
