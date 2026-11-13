@@ -1,13 +1,16 @@
 import {gitArguments} from "./git-arguments/main.ts";
 import {fixtureEnvironment} from './test-environment.ts';
-import { launcherPolicyNames } from "./canonical-environment.ts";
-import { spawnTest } from "./test-wait.ts";
+import { gateEnvironment, launcherPolicyNames } from "./canonical-environment.ts";
+import { spawnTest, waitFor } from "./test-wait.ts";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import {pathToFileURL} from "node:url";
+import {ownMemory} from "./test-memory.ts";
+import {admittedEntry,readLedger} from "./memory-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
 import { testScratch } from "./test-scratch.ts";
 
@@ -58,3 +61,59 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     }
   });
 }
+
+for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit ${status}, before the gate`, async t => {
+  const directory = testScratch(t, "pinned-admission"), root = join(directory, "repo"), tree = join(directory, "tree");
+  const target = join(directory, "target"), bin = join(directory, "bin");
+  mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts"], root);
+  writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
+  writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
+  writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
+  const owned = ownMemory(join(directory, "machine"));
+  const env = fixtureEnvironment(t);
+  const git = (...args:string[]) => execFileSync("git", gitArguments(args), {cwd:root,env,encoding:"utf8"}).trim();
+  const memory = pathToFileURL(join(tree, "tooling/gate/memory-ledger.ts")).href;
+  const cargo = join(bin, "cargo");
+  writeFileSync(cargo, `#!${process.execPath}
+(async()=>{
+  const assert=await import('node:assert/strict'),fs=await import('node:fs');
+  const {admittedEntry}=await import(${JSON.stringify(memory)});
+  const id=process.env.NTS_MEMORY_RESERVATION,ledger=process.env.NTS_MEMORY_LEDGER;
+  assert.ok(id,'Cargo preparation has no memory reservation');
+  const entry=admittedEntry(ledger,id);assert.ok(entry,'Cargo preparation reservation is not live');
+  assert.equal(process.env.CARGO_TARGET_DIR,${JSON.stringify(target)});
+  process.stdout.write('BUILD '+JSON.stringify({id,pid:process.pid})+'\\n');
+  const release=Buffer.alloc(1);assert.equal(fs.readSync(0,release,0,1,null),1);
+  process.exitCode=${status};
+})().catch(error=>{console.error(error);process.exitCode=97;});
+`);chmodSync(cargo,0o755);
+  writeFileSync(join(root, "tooling/gate/all.sh"), `#!/bin/sh
+node --input-type=module - <<'JS'
+import assert from 'node:assert/strict';
+import {admittedEntry,readLedger} from './tooling/gate/memory-ledger.ts';
+assert.equal(process.env.NTS_MEMORY_RESERVATION,undefined,'the build reservation leaked into gate entry');
+for(const entry of readLedger(process.env.NTS_MEMORY_LEDGER).admitted){
+  assert.equal(admittedEntry(process.env.NTS_MEMORY_LEDGER,entry.id),null,'a live build owner survives gate entry');
+}
+console.log('GATE after build owner exited');
+JS
+`);
+  git("init","-q");git("add",".");git("commit","-qm","candidate");const candidate=git("rev-parse","HEAD");
+  const planned = gateEnvironment(env, {run:join(directory,"run"),owned:{...owned,NTS_GATE_TREE:tree,NTS_GATE_TARGET:target,PATH:bin+":"+env.PATH}});
+  const child=spawn("sh",[join(root,"tooling/gate/pinned.sh"),candidate,"compile-time"],{cwd:root,env:planned.env,stdio:["pipe","pipe","pipe"]});
+  let stdout="",stderr="",closed=false;child.stdout.on("data",part=>stdout+=part);child.stderr.on("data",part=>stderr+=part);
+  const done=new Promise<{status:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{
+    child.once("error",reject);child.once("close",(status,signal)=>{closed=true;resolve({status,signal});});
+  });
+  try{
+    await waitFor("pinned Cargo admitted barrier",()=>/^BUILD (.*)$/m.test(stdout),{stopped:()=>closed?stdout+stderr:undefined});
+    const row=JSON.parse(/^BUILD (.*)$/m.exec(stdout)![1]!) as {id:string;owner:number;cargo:number};
+    assert.equal(admittedEntry(owned.NTS_MEMORY_LEDGER,row.id)?.owner.pid,row.owner);
+    assert.doesNotMatch(stdout,/GATE after build owner exited/);assert.equal(readLedger(owned.NTS_MEMORY_LEDGER).admitted.length,1);
+    child.stdin.end("x");assert.deepEqual(await done,{status,signal:null},stdout+stderr);
+    assert.equal(stdout.includes("GATE after build owner exited"),status===0);
+    assert.equal(admittedEntry(owned.NTS_MEMORY_LEDGER,row.id),null,'the preparation owner is gone before the route returns');
+    if(status===0)assert.match(stdout,/GATE after build owner exited/);
+  }finally{child.stdin.end();if(!closed)await done;}
+});

@@ -38,6 +38,8 @@ if [ "${1:-}" = --environment-ready ]; then
 else
   exec node "$(dirname -- "$0")/canonical-environment.ts" --pinned "$0" "$@"
 fi
+# Admission is supplied by this launcher, even for a historical candidate.
+pinned_launcher=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # nts-gate-tree-lock-handoff: 8
 
 # A physical P-core (both threads, 4-5) belongs to timed measurements.
@@ -138,10 +140,13 @@ echo "gate: $sha in $tree"
 # Set up and stop: what this script's own test asks.
 [ -n "${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 cd "$tree"
+# Only Cargo owns this job. Once it exits the shell has no reservation to
+# carry into run.mjs, whose admission discards the exited build owner.
 if [ -x /usr/bin/time ] && [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
-  /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" env CARGO_TARGET_DIR="$target" cargo build --release -q
+  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- \
+    /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" cargo build --release -q
 else
-  CARGO_TARGET_DIR="$target" cargo build --release -q
+  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- cargo build --release -q
 fi
 NTS_CHECKERS=1 \
 NTS_BIN="$target/release/nts" \
