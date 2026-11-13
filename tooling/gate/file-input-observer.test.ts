@@ -197,7 +197,7 @@ test('the native observer retains actual images, attempted inputs and original p
     const channels:StdioOptions=['ignore','pipe','pipe','pipe','pipe','pipe'];
     const child=spawn(queuedBinary,fileObserverArguments(record,program,['cancel-exit']),{env,stdio:channels});
     let ready='',closed=false,error='';child.stdout!.resume();child.stderr!.on('data',part=>error+=part);
-    const notify=child.stdio[3],resume=child.stdio[4],stop=child.stdio[5];
+    const notify=child.stdio[3],resume=child.stdio[4],stop=child.stdio.at(5);
     assert.ok(notify&&'on' in notify&&resume&&'end' in resume&&stop&&'end' in stop);
     notify.on('data',part=>ready+=part);
     const done=new Promise<{status:number|null;signal:NodeJS.Signals|null}>(resolve=>child.on('close',(status,signal)=>{closed=true;resolve({status,signal});}));
