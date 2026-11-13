@@ -121,17 +121,22 @@ test("outside a gate the command runs; inside one, a runner that is gone is an e
 test("a runner that accepted and then died: every waiting worker exits non-zero, none runs", async () => {
   const p = await pool(1);
   const holder = spawn(TOKEN, ["--step", "--", process.execPath, "-e", "process.stdin.resume()"], { env: { ...testEnvironment(), ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
-  await waitFor("the token holder to be granted",()=>p.total===1);
-  const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
-  await waitFor("three queued token clients",()=>p.waiting.length===3);
-  // The runner goes: its server and every connection it held.
-  p.close();await p.closed;
-  for (const w of p.waiting) w.sock.destroy();
-  for (const r of await Promise.all(waiting)) {
-    assert.equal(r.status, 75, r.out);
-    assert.ok(!r.out.split("\n").includes("ran"), r.out);
+  const holderClosed=new Promise(resolve=>holder.once('close',resolve));
+  try{
+    await waitFor("the token holder to be granted",()=>p.total===1);
+    const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
+    await waitFor("three queued token clients",()=>p.waiting.length===3);
+    // This is abrupt broker loss, not a graceful drain of live peers. Break
+    // its connections before awaiting the server's physical completion.
+    const lost=[...p.waiting,...p.active];p.close();
+    for(const request of lost)request.sock.destroy();
+    for (const r of await Promise.all(waiting)) {
+      assert.equal(r.status, 75, r.out);
+      assert.ok(!r.out.split("\n").includes("ran"), r.out);
+    }
+  }finally{
+    holder.stdin.end();await holderClosed;p.close();await p.closed;
   }
-  holder.kill("SIGKILL");
 });
 
 test("the highest claim among waiting steps gets the freed token", async () => {
