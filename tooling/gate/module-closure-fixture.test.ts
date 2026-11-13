@@ -3,7 +3,7 @@ import {pathToFileURL} from 'node:url';
 import {createServer} from 'node:net';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
-import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test, type TestContext} from "node:test";
 import {copyModuleClosure, moduleClosure, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
@@ -880,10 +880,16 @@ test('membership refuses unsupported socket children instead of certifying a com
   const f=metadataFixture(t);
   f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./data/',import.meta.url));");
   mkdirSync(join(f.source,'data'));
-  const socket=join(f.source,'data/member'),server=createServer();
-  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(socket,resolve);});
+  const directory=openSync(join(f.source,'data'),'r'),server=createServer();
   try{
+    // The canonical run's directory can exceed Unix socket address limits.
+    // Keep the descriptor until server closure; the graph reads the real path.
+    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen('/proc/self/fd/'+directory+'/member',resolve);});
+    assert.ok(lstatSync(join(f.source,'data/member')).isSocket());
     const graph=moduleGraph({sourceRoot:f.source});
     try{assert.throws(()=>graph.describe(['names.ts']),/reader metadata has an unsupported child type: .*data\/member/);}finally{graph.close();}
-  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+  }finally{
+    try{if(server.listening)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+    finally{closeSync(directory);}
+  }
 });
