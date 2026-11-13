@@ -103,6 +103,8 @@ static const Call CALLS[] = {
     PLAIN(chdir, "context"),
 #endif
     {SYS_fchdir, "fchdir", "context", {-1, -1}, {0, -1}, 0},
+    {SYS_exit, "exit", "lifetime", {-1, -1}, {-1, -1}, 0},
+    {SYS_exit_group, "exit_group", "lifetime", {-1, -1}, {-1, -1}, 0},
 #ifdef SYS_link
     {SYS_link, "link", "link", {0, 1}, {-1, -1}, 2},
 #endif
@@ -562,6 +564,11 @@ int main(int argc, char **argv) {
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair) ||
       pipe2(exec_error, O_CLOEXEC))
     fatal("private handoff");
+  // Orphaned descendants must remain beneath this observer: otherwise Linux's
+  // ancestor check can revoke process_vm_readv before their last operation.
+  // Reap them here as well, so filter HUP proves the complete lifetime drained.
+  if (prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0))
+    fatal("descendant lifetime ownership");
   uint64_t startup = now_ns();
   pid_t root = fork();
   if (root < 0)
@@ -660,9 +667,11 @@ int main(int argc, char **argv) {
         close(exec_error[0]);
       }
     }
-    if (!reaped) {
-      pid_t child = waitpid(root, &root_status, WNOHANG);
+    for (;;) {
+      int status = 0;
+      pid_t child = waitpid(-1, &status, WNOHANG);
       if (child == root) {
+        root_status = status;
         reaped = true;
         ended = now_ns();
         fprintf(
@@ -672,8 +681,10 @@ int main(int argc, char **argv) {
             WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0);
         if (fflush(output))
           output_failed = true;
-      } else if (child < 0 && errno != EINTR)
+      } else if (child < 0 && errno != EINTR && errno != ECHILD)
         fatal("wait observed root");
+      if (child <= 0)
+        break;
     }
     int timeout = phase_timeout_ms(reaped, reaped ? now_ns() - ended : 0);
     if (!timeout) {
