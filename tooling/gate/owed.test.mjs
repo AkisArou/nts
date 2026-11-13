@@ -92,9 +92,12 @@ const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added
 const changeOwes = (changes) => gateSteps(owed(changes));
 
 test('the JVM member audit owns its actual source roots and stays outside documentation',()=>{
-  for(const path of ['compiler/core/src/lib.rs','runtime/jvm/README.md','tooling/full-check/keep.json'])
+  for(const path of ['compiler/core/src/lib.rs','runtime/jvm/NtsRuntime.java','tooling/full-check/keep.json'])
     assert.ok([...covering(stepInputs(),path)].includes('jvm-members'),path);
   assert.ok(![...covering(stepInputs(),'docs/architecture.md')].includes('jvm-members'));
+  assert.ok(!stepsFor('docs/architecture.md').includes('jvm-members'));
+  for(const change of [{path:'tooling/jvm/new-input.data',added:true},{path:'runtime/jvm/removed-input.java',deleted:true}])
+    assert.ok(changeOwes([change]).includes('jvm-members'),change.path);
   for(const path of ['tooling/jvm/members.ts','tooling/jvm/member-catalogue.ts','tooling/jvm/member-grammar.ts'])
     assert.ok(stepsFor(path).includes('jvm-members'),path);
 });

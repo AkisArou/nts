@@ -252,7 +252,7 @@ export const LANDING = {
   licenses: { form: "tree" },
   audit: { form: "tree" },
   "unicode-freshness": { form: "as-is" },
-  "jvm-members": { form: "tree" },
+  "jvm-members": { form: "as-is" },
   build: { form: "as-is" },
   clippy: { form: "as-is" },
   tests: { form: "as-is" },
@@ -1658,6 +1658,9 @@ function stepInputGraph() {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
       const key=[reader,row.directory,row.member??"",row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
       if(row.member)map.declareMember(row.directory,row.member,step);
+      // A declared data population includes future members. Private grants
+      // suppress only their production population and never claim it here.
+      if(row.kind==='data'&&!row.fixture)map.add(row.directory,step);
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };

@@ -1,24 +1,30 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {copyFileSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
-import {fileURLToPath} from 'node:url';
 import {catalogueFiles,runMemberCatalogue} from './member-catalogue.ts';
 import {gitArguments} from '../gate/git-arguments/main.ts';
 import {testEnvironment} from '../gate/test-environment.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {removable} from '../gate/run-temporary.ts';
 
-const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const CATALOGUE='compiler/codegen/jvm/member-names.json';
 function fixture(t:TestContext){
   const root=newTestScratch('jvm-members');t.after(()=>{removable(root);rmSync(root,{recursive:true,force:true});});
-  const inputs=catalogueFiles(SOURCE);
-  for(const input of inputs){const target=join(root,input);mkdirSync(dirname(target),{recursive:true});copyFileSync(join(SOURCE,input),target);}
+  const model={version:1,prefix:'@synthetic.',observer:{legacy_raising_suffix:'raising'},
+    name_escape:{ascii_literal:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_',escaped_non_ascii:[]},
+    roles:[{rust:'FIXED',stem:'fixed',key:'none'},{rust:'body',stem:'body',key:'name'}],
+    java_templates:[{template:'runtime/jvm/member-templates/Synthetic.java.in',output:'runtime/jvm/Synthetic.java'}]};
+  mkdirSync(dirname(join(root,CATALOGUE)),{recursive:true});writeFileSync(join(root,CATALOGUE),JSON.stringify(model));
+  const template=join(root,model.java_templates[0]!.template);mkdirSync(dirname(template),{recursive:true});
+  writeFileSync(template,'class Synthetic { String marker = "@@FIXED@@"; }\n');
+  writeFileSync(join(root,'runtime/jvm/nts-runtime.jar'),Buffer.from([0x50,0x4b,0x03,0x04]));
+  const generated=runMemberCatalogue({root,check:false,directories:['compiler','runtime/jvm','tooling'],report:()=>{}});
+  assert.equal(generated,0);
+  const inputs=catalogueFiles(root),baseline=new Map(inputs.map(path=>[path,readFileSync(join(root,path))]));
   const initialized=spawnSync('git',gitArguments(['init','--quiet']),{cwd:root,encoding:'utf8',env:testEnvironment()});
   assert.equal(initialized.status,0,initialized.stderr);
-  const model=JSON.parse(readFileSync(join(root,CATALOGUE),'utf8')) as {prefix:string};
   const run=(check=true)=>{
     const stdout:string[]=[],stderr:string[]=[];let status:number;
     try{status=runMemberCatalogue({root,check,directories:['compiler','runtime/jvm','tooling'],
@@ -26,19 +32,19 @@ function fixture(t:TestContext){
     catch(error){status=1;stderr.push(String(error));}
     return {status,stdout:stdout.join('\n'),stderr:stderr.join('\n')};
   };
-  return {root,inputs,model,run};
+  return {root,inputs,baseline,model,run};
 }
 
 // Migrated from catalogue_sources_are_fresh_and_exclusive. The real step
 // applies this same operation to its declared production population.
 test('the actual catalogue operation retains fresh outputs and reproduces their exact bytes',t=>{
-  const {root,inputs,run}=fixture(t),clean=run();
+  const {root,inputs,baseline,run}=fixture(t),clean=run();
   assert.equal(clean.status,0,clean.stderr);assert.match(clean.stdout,/checked \d+ JVM member sources/);
   const generated=join(root,'compiler/codegen/jvm/generated-members.json');
   writeFileSync(generated,readFileSync(generated,'utf8')+' ');
   const stale=run();assert.equal(stale.status,1,stale.stderr);assert.match(stale.stderr,/source is stale/);
   const repaired=run(false);assert.equal(repaired.status,0,repaired.stderr);
-  for(const input of inputs)assert.deepEqual(readFileSync(join(root,input)),readFileSync(join(SOURCE,input)),input);
+  for(const input of inputs)assert.deepEqual(readFileSync(join(root,input)),baseline.get(input),input);
   assert.equal(run().status,0);
 });
 
