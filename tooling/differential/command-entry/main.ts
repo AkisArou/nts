@@ -22,7 +22,8 @@ export class CommandLifetime{
   #closing:Promise<number>|undefined;
   #ended=false;
   #problems:string[]=[];
-  constructor(private readonly host:CloseHost){}
+  readonly host:CloseHost;
+  constructor(host:CloseHost){this.host=host;}
   register(name:string,owner:CommandCloser):()=>void{
     if(!name.trim()||typeof owner.close!=='function')throw Error('command closer needs a name and close function');
     if(this.#ended)throw Error('INSTRUMENT: command resource acquired after shutdown: '+name);
@@ -72,7 +73,7 @@ export class CommandLifetime{
   }
 }
 
-class CommandExit{constructor(readonly code:number){}}
+class CommandExit{readonly code:number;constructor(code:number){this.code=code;}}
 /** Early command completion passes through the same drain as a return. */
 export function exitCommand(code:number):never{throw new CommandExit(code);}
 
