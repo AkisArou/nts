@@ -1,10 +1,84 @@
 // Replay the original typed facts. Existence/stat never acquires bytes, and a
 // byte copier cannot silently certify source timestamps on a copied object.
-import {isAbsolute,join,relative,resolve,sep} from 'node:path';
+import {dirname,isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
 import {readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
 import type {HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot,ReaderObservation} from './module-closure.ts';
-import {metadataParents} from './reader-metadata.ts';
+import {metadataParents,membershipIndex,type MetadataChange} from './reader-metadata.ts';
+
+export function readerObservationDependency(root:string,row:ReaderObservation):{path:string;bytes:boolean;directoryStat:boolean}|undefined{
+  const path=relative(root,row.observation.path).split(sep).join('/');
+  if(path==='..'||path.startsWith('../')||isAbsolute(path))return;
+  const value=row.observation.value,directoryStat=row.observation.kind==='stat'&&!!value&&typeof value==='object'&&'mode' in value&&(value.mode&0o170000)===0o040000;
+  return {path,bytes:row.observation.kind==='file'||row.observation.kind==='stat'&&!directoryStat,directoryStat};
+}
+
+/** Typed facts retain their original kinds. Only facts beside a changed path,
+ * or below a changed ancestor, are considered; a full census never rescans
+ * every observation for every tracked file. */
+export function readerObservationIndex<R extends ReaderObservation>(root:string,rows:Iterable<R>,paths:Iterable<string>,names?:ReturnType<typeof membershipIndex>){
+  const tracked=new Set(paths),members=names??membershipIndex(tracked),directories=new Map<string,Set<R>>(),ancestors=new Map<string,Set<R>>();
+  const dependencies=new Map<R,NonNullable<ReturnType<typeof readerObservationDependency>>>();
+  const add=(map:Map<string,Set<R>>,path:string,row:R)=>{const values=map.get(path)??new Set<R>();values.add(row);map.set(path,values);};
+  for(const row of rows){
+    const dependency=readerObservationDependency(root,row);if(!dependency)continue;dependencies.set(row,dependency);
+    for(let parent=dependency.path;;parent=posix.dirname(parent)){
+      add(ancestors,parent==='.'?'':parent,row);if(parent===''||parent==='.')break;
+    }
+    if(dependency.directoryStat||['entries','runtimeEntries','directoryExists','runtimeKind'].includes(row.observation.kind))add(directories,dependency.path,row);
+  }
+  let nested:Map<string,number>|undefined;
+  const descendants=(path:string)=>{
+    if(!nested){nested=new Map();for(const file of tracked)for(let parent=posix.dirname(file);;parent=posix.dirname(parent)){
+      const key=parent==='.'?'':parent;nested.set(key,(nested.get(key)??0)+1);if(parent==='.')break;
+    }}
+    return nested.get(path)??0;
+  };
+  const under=(path:string,file:string)=>path===''||file===path||file.startsWith(path+'/');
+  function typeChanged(path:string,kind:string,changes:readonly MetadataChange[]):boolean{
+    const before={leaf:Number(tracked.has(path)),nested:descendants(path)},after={...before};
+    const merged=new Map<string,{added:boolean;deleted:boolean}>();
+    for(const change of changes){
+      if(!under(path,change.path))continue;
+      if(change.path===path)return true;
+      const row=merged.get(change.path)??{added:false,deleted:false};row.added||=!!change.added;row.deleted||=!!change.deleted;merged.set(change.path,row);
+    }
+    for(const [file,change]of merged){
+      if(!change.added&&!change.deleted)continue;
+      if(tracked.has(file)){before.nested--;after.nested--;}
+      if(change.deleted)before.nested++;if(change.added)after.nested++;
+    }
+    if(kind==='directoryExists')return (before.nested>0)!==(after.nested>0);
+    const shape=(value:typeof before)=>value.nested?'directory':value.leaf?'leaf':'absent';
+    return shape(before)!==shape(after);
+  }
+  return {affected(changes:readonly MetadataChange[]):Map<R,string[]>{
+    const candidates=new Map<R,Set<string>>();
+    const touch=(row:R,path:string)=>{const subjects=candidates.get(row)??new Set<string>();subjects.add(path);candidates.set(row,subjects);};
+    for(const change of changes){
+      for(const row of ancestors.get(change.path)??[])touch(row,change.path);
+      for(let parent=change.path;;parent=posix.dirname(parent)){
+        for(const row of directories.get(parent==='.'?'':parent)??[])touch(row,change.path);
+        if(parent==='.')break;
+      }
+    }
+    const affected=new Map<R,string[]>();
+    for(const [row,subjects]of candidates){
+      const dependency=dependencies.get(row)!,path=dependency.path,kind=row.observation.kind;
+      const ancestor=changes.some(change=>change.path!==path&&under(change.path,path));
+      let changed=ancestor;
+      if(!changed&&!dependency.bytes){
+        if(['entries','runtimeEntries'].includes(kind)||dependency.directoryStat){
+          changed=members.affected({directory:path,context:{entry:row.context.entry,dataNamespaces:{}}},changes)
+            ||dependency.directoryStat&&changes.some(change=>(posix.dirname(change.path)==='.'?'':posix.dirname(change.path))===path);
+        }else if(kind==='directoryExists'||kind==='runtimeKind')changed=typeChanged(path,kind,changes);
+        else changed=changes.some(change=>change.path===path);
+      }
+      if(changed)affected.set(row,[...subjects]);
+    }
+    return affected;
+  }};
+}
 
 function nameIn(root:string,path:string):string{
   const name=relative(root,path);

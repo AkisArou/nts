@@ -85,6 +85,8 @@ import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { moduleGraph } from "./module-closure.ts";
+import {readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {sameOracleObservation} from '../differential/oracle-runtime.ts';
 import {matchesModuleMember} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
@@ -1657,6 +1659,8 @@ function stepInputGraph() {
     const optionalFiles=new Map();
     /** @type {Map<string,import('./reader-inputs/main.ts').MembershipDeclaration&{steps:Set<string>}>} */
     const memberships=new Map();
+    /** @type {Map<string,import('./module-closure.ts').ReaderObservation&{steps:Set<string>}>} */
+    const observations=new Map();
     const modules = moduleGraph({sourceRoot:TREE});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
@@ -1668,7 +1672,7 @@ function stepInputGraph() {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'>} */ snapshot,/** @type {string} */ step)=>{
+    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'>} */ snapshot,/** @type {string} */ step)=>{
       for(const row of snapshot.optionalFiles){
         const key=JSON.stringify([row.reader,row.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=optionalFiles.get(key)??{...row,steps:new Set()};fact.steps.add(step);optionalFiles.set(key,fact);
@@ -1678,8 +1682,16 @@ function stepInputGraph() {
         const key=JSON.stringify([row.reader,row.directory,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=memberships.get(key)??{...row,steps:new Set()};fact.steps.add(step);memberships.set(key,fact);
       }
+      for(const row of snapshot.observations){
+        const key=JSON.stringify([row.reader,row.protocol,row.observation.kind,row.observation.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
+        const previous=observations.get(key);
+        if(previous&&!sameOracleObservation(previous.observation.value,row.observation.value))throw Error('reader observation changed during selection: '+row.observation.path);
+        const fact=previous??{...row,steps:new Set()};fact.steps.add(step);observations.set(key,fact);
+        const dependency=readerObservationDependency(TREE,row);
+        if(dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
+      }
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'>}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1800,9 +1812,10 @@ function stepInputGraph() {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
-      for(const facts of [optionalFiles,memberships])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
+      for(const facts of [optionalFiles,memberships,observations])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,
+    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,
+      observationIndex:observations.size?readerObservationIndex(TREE,observations.values(),trackedFiles(),modules.membershipIndex()):undefined,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
     } finally {modules.close();}
   });
@@ -1834,7 +1847,8 @@ export function inputMetadataDeclarations(){
   const graph=stepInputGraph();
   const context=(/** @type {import('./reader-inputs/main.ts').ReaderContext} */ value)=>({entry:value.entry,dataNamespaces:{...value.dataNamespaces}});
   return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,context:context(row.context),steps:[...row.steps].sort()})),
-    memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()}))};
+    memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()})),
+    observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
@@ -2000,6 +2014,8 @@ export function owed(changes) {
   // Structural reads precede prose and record precision: a new Markdown child
   // can change an enumeration even though editing its prose cannot.
   const metadataGraph=stepInputGraph();
+  for(const [row,subjects]of metadataGraph.observationIndex?.affected(changes)??[])
+    for(const path of subjects)add(row.observation.kind+' read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
   if(metadataGraph.membershipIndex)for(const row of metadataGraph.memberships.values()){
     if(!metadataGraph.membershipIndex.affected(row,changes))continue;
     for(const change of changes)if(row.directory===''||change.path===row.directory||change.path.startsWith(row.directory+'/'))
