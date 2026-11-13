@@ -61,10 +61,13 @@ const {durableRecord}=require(${JSON.stringify(new URL('./durable-record.ts',imp
 console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(root,'target/nts-dev/deps/private'))}],profile:{test:true,debuginfo:0}}));
 process.exit(7);
 `,{mode:0o755});
-  const result=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route,...selection],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_TEST_PROFILE:undefined,CARGO_INCREMENTAL:undefined,CARGO_TARGET_DIR:join(root,'target')}});
+  const artifacts=join(root,'artifacts.json');
+  const result=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,route,...selection],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_TEST_PROFILE:undefined,CARGO_INCREMENTAL:undefined,CARGO_TARGET_DIR:join(root,'target')}});
   assert.equal(result.status,7,result.stdout+result.stderr);
   const actual=JSON.parse(readFileSync(capture,'utf8'));
   assert.deepEqual(actual,{args:testInvocation(route,selection,{}).args,incremental:'1',checkers:'1'});
+  const reported=JSON.parse(readFileSync(artifacts,'utf8'));
+  assert.equal(reported.version,1);assert.equal(reported.status,7);assert.equal(reported.buildFinished,false);assert.equal(reported.artifacts.length,1);
   rmSync(capture);
   const refused=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:'0'}});
   assert.equal(refused.status,2,refused.stdout+refused.stderr);

@@ -61,7 +61,7 @@ function dryRun(root: string, sha: string, argv: string[]): number {
   return 0;
 }
 
-async function here(root: string, sha: string): Promise<number> {
+async function here(root: string, sha: string,traceRustInputs=false): Promise<number> {
   const tree = toplevel();
   if (spawnSync("git",gitArguments( ["rev-parse", "HEAD"]), { cwd: tree, encoding: "utf8" }).stdout.trim() !== sha) { say(`--here runs in a tree at ${short(sha)}; this one is not`); return 2; }
   const dirty = spawnSync("git",gitArguments( ["status", "--porcelain", "--untracked-files=no"]), { cwd: tree, encoding: "utf8" }).stdout.trim();
@@ -75,6 +75,7 @@ async function here(root: string, sha: string): Promise<number> {
   const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
     // An agent's own pre-check: it yields its unused reservation to a queued landing (#672).
     priority: "agent",
+    ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs')}}:{}),
     ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
   for (const line of ran.pending) console.log(`  ${line}`);
@@ -217,12 +218,13 @@ async function main(argv: string[]): Promise<number> {
   if (first === "serve") return serve(root);
   if (first === "withdraw" && second) { const done = new Queue(LANDING_HOME).withdraw(second); say(done === "unknown" ? `no queued, checked or held change is ${second}` : done === "requested" ? `${second} is being checked: it will be answered withdrawn when its check ends, and never land` : `${second} withdrawn`); return done === "unknown" ? 1 : 0; }
   if (first === "retry" && second) { const entry = new Queue(LANDING_HOME).retry(second); say(`${entry.id} queued again, first; ${ensureService(root)}`); return 0; }
-  if (!first || ["withdraw", "retry"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --here | --no-wait] [--branch <name>] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
+  if (!first || ["withdraw", "retry"].includes(first)) { console.error("usage: check.ts <commit> [--dry-run | --here [--trace-rust-inputs] | --no-wait] [--branch <name>] | status [--json] | withdraw <id|commit> | retry <id> | serve"); return 2; }
   let sha: string;
   try { sha = revParse({ root: toplevel() || root }, first); } catch (error) { say((error as Error).message); return 2; }
   if (argv.includes("--dry-run")) return dryRun(root, sha, argv);
   try { assertLandingEnvironment(); } catch (error) { say((error as Error).message); return 2; }
-  if (argv.includes("--here")) return here(root, sha);
+  if (argv.includes("--here")) return here(root, sha,argv.includes('--trace-rust-inputs'));
+  if(argv.includes('--trace-rust-inputs')){say('--trace-rust-inputs is an observation of --here, never a queued verdict policy');return 2;}
   // The steps every change with Rust in reach owes need the JVM and the SDK: say so before queueing.
   const missing = gateEnvironmentError(root, ["tests", "tooling"], null);
   if (missing) { say(missing); return 2; }

@@ -9,6 +9,7 @@ import {ToolingInstrumentError} from './step-result.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {ENVIRONMENT_CONTEXT,assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
+import {durableRecord} from './durable-record.ts';
 
 export const TEST_PROFILE='nts-dev';
 export const TEST_INCREMENTAL='1';
@@ -82,7 +83,8 @@ export function assertTestArtifact(invocation:TestInvocation,value:unknown):bool
   return true;
 }
 
-export async function runTestProfile(route:TestRoute,selection:readonly string[]=[],env:NodeJS.ProcessEnv=process.env,cwd=process.cwd()):Promise<number> {
+export async function runTestProfile(route:TestRoute,selection:readonly string[]=[],env:NodeJS.ProcessEnv=process.env,cwd=process.cwd(),evidence?:{artifacts:string}):Promise<number> {
+  if(evidence&&!isAbsolute(evidence.artifacts))fail('artifact evidence needs an absolute path');
   const invocation=testInvocation(route,selection,env,cwd);
   assertPreparedInnerTests(invocation);
   assertTestProfileManifest(readFileSync(resolve(cwd,'Cargo.toml'),'utf8'));
@@ -92,12 +94,13 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   try{
   const child=spawn('cargo',invocation.args,{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
   let pending='',artifacts=0,buildFinished=false,problem:unknown;
+  const artifactRows:unknown[]=[];
   const line=(text:string)=>{
     let value:unknown;
     try{value=JSON.parse(text);}catch{process.stdout.write(text+'\n');return;}
     const event=value as {reason?:unknown;message?:{rendered?:unknown}};
     if(!buildFinished&&event&&typeof event==='object'&&['compiler-artifact','compiler-message','build-script-executed','build-finished'].includes(String(event.reason))){
-      try{if(assertTestArtifact(invocation,event))artifacts++;}catch(error){problem??=error;}
+      try{if(assertTestArtifact(invocation,event)){artifacts++;if(evidence)artifactRows.push(event);}}catch(error){problem??=error;}
       if(event.reason==='compiler-message'&&typeof event.message?.rendered==='string')process.stdout.write(event.message.rendered);
       if(event.reason==='build-finished'){
         buildFinished=true;
@@ -113,6 +116,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
     child.once('close',(code,signal)=>{if(signal)reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cargo killed by '+signal));else done(code??2);});
   });
   if(pending)line(pending);
+  if(evidence)durableRecord(evidence.artifacts,{version:1,status,buildFinished,artifacts:artifactRows});
   if(problem)throw problem;
   if(status===0&&!artifacts)fail(route+' produced no compiler-artifact evidence');
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');
@@ -138,6 +142,7 @@ export function assertPreparedInnerTests(invocation:TestInvocation):void{
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
-  const [route,...selection]=process.argv.slice(2);
-  runTestProfile(route as TestRoute,selection).then(status=>{process.exitCode=status;},error=>{console.error('NOT MEASURED: '+String(error));process.exitCode=2;});
+  const args=process.argv.slice(2),artifacts=args[0]==='--artifacts'?args.splice(0,2)[1]:undefined;
+  const [route,...selection]=args;
+  runTestProfile(route as TestRoute,selection,process.env,process.cwd(),artifacts?{artifacts}:undefined).then(status=>{process.exitCode=status;},error=>{console.error('NOT MEASURED: '+String(error));process.exitCode=2;});
 }

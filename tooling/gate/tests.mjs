@@ -30,15 +30,20 @@ import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/c
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts } from "./test-artifacts.ts";
 import { TestScratch } from "./test-scratch.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
+import {inputTraceArguments} from './rust-input-trace.ts';
+import {publishInputTrace,readTestArtifactTargets} from './rust-test-inputs.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
+if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('Rust test inputs: trace destination must be absolute');
+if(traceDirectory)mkdirSync(traceDirectory,{recursive:true});
 try {
   const layout=assertTestLayout(ROOT);
   console.log(`  Rust integration layout: ${layout.harnesses.length} checked harnesses`);
@@ -73,7 +78,10 @@ node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify
 chmodSync(recorder, 0o755);
 
 const started = Date.now();
-const first = spawnSync(process.execPath, [TEST_OWNER, "workspace"], {
+const artifactFile=traceDirectory?join(traceDirectory,'artifacts.json'):undefined;
+const ownerArgs=[...(artifactFile?['--artifacts',artifactFile]:[]),"workspace"];
+const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw'):undefined;
+const first = spawnSync(traceDirectory?'strace':process.execPath, cargoTrace?inputTraceArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
   cwd: ROOT,
   env: {
     ...process.env,
@@ -83,6 +91,10 @@ const first = spawnSync(process.execPath, [TEST_OWNER, "workspace"], {
   maxBuffer: 1 << 28,
 });
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
+if(cargoTrace){
+  try{await publishInputTrace({raw:cargoTrace,output:join(traceDirectory,'cargo.json'),cwd:ROOT,root:ROOT});}
+  catch(error){console.error('NOT MEASURED: '+String(error));exitCommand(2);}
+}
 const recorded = readdirSync(calls)
   .map((f) => JSON.parse(readFileSync(join(calls, f), "utf8")))
   .sort((a, b) => (BigInt(a.at) < BigInt(b.at) ? -1 : 1));
@@ -100,6 +112,7 @@ if (recorded.length === 0) {
   console.log(`  NOT MEASURED: cargo ran no test binary through ${runnerVar}, so nothing was tested`);
   exitCommand(1);
 }
+const artifactTargets=artifactFile?readTestArtifactTargets(artifactFile,ROOT):undefined;
 
 // The replay.
 const name = (r) => `${r.cwd.replace(`${ROOT}/`, "")} ${r.argv[0].split("/").pop()}`;
@@ -108,17 +121,25 @@ const queue = longestFirst("tests", [...keyed.keys()], () => "/nonexistent");
 const results = new Map();
 const cost = {};
 let next = 0;
+let traceFailures=0;
 const runOne = (key) =>
   new Promise((done) => {
     const r = keyed.get(key);
+    const target=artifactTargets?.get(r.argv[0]);
+    if(artifactTargets&&!target)throw Error('Rust test inputs: Cargo named no target for '+r.argv[0]);
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
-    const child = spawn(r.argv[0], r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
+    const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw'):undefined;
+    const child = spawn(trace?'strace':r.argv[0], trace?inputTraceArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
     child.on("error", (e) => { out += `error: ${e.message}\n`; });
-    child.on("close", (status, signal) => {
+    child.on("close", async (status, signal) => {
+      if(trace){
+        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw$/,'.json'),cwd:r.cwd,root:ROOT,target});}
+        catch(error){traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
+      }
       cost[key] = (Date.now() - began) / 1000;
       const leftovers = scratch.finish();
       if (leftovers.length) out += `error: test scratch leaked by ${key} (removed):\n${leftovers.join(", ")}\n`;
@@ -176,4 +197,4 @@ if (bad.length === 0) {
   const pruned = pruneTestArtifacts(recorded.map((r) => r.argv[0]));
   console.log(`  test cache: removed ${pruned.binaries} obsolete executable(s), ${(pruned.bytes / 2 ** 30).toFixed(2)} GiB; current run kept`);
 }
-exitAfterOutput(bad.length === 0 ? 0 : 1);
+exitAfterOutput(traceFailures?2:bad.length === 0 ? 0 : 1);
