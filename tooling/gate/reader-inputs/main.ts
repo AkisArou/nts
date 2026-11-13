@@ -1,9 +1,9 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'file';
+export type InputKind='module'|'data'|'file'|'project';
 export type ReaderInput={path:string;kind:InputKind};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
-export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:Exclude<InputKind,'file'>};
+export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:Exclude<InputKind,'file'|'project'>};
 export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];directories:DirectoryDeclaration[]};
 
 declare const DATA_DIRECTORY:unique symbol;
@@ -17,3 +17,9 @@ export type FileInput=URL&{readonly [FILE_INPUT]:true};
 /** Immutable bytes read as text or data, without entering their imports or
  * launches. A file input never grants a substitutable data namespace. */
 export function fileInput(url:URL):FileInput{return url as FileInput;}
+
+export type ProjectInput={readonly kind:'project';readonly url:URL};
+export type InputEntry=string|ProjectInput;
+/** A compiled entry carries its owning-project request through runtime staging
+ * as well as the parsed reader declaration. It never guesses a config path. */
+export function projectInput(url:URL):ProjectInput{return {kind:'project',url};}

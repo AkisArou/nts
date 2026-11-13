@@ -8,7 +8,8 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
-import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind} from './reader-inputs/main.ts';
+import {projectInputs} from './project-inputs.ts';
+import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind,InputEntry} from './reader-inputs/main.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -49,10 +50,20 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       references.set(path,result);return result;
     } finally {lease.dispose();}
   }
-  function describe(entries:readonly string[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
-    const visited=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[];
+  function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
+    const visited=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[],projectEntries=new Set<string>();
     function asset(reader:string,path:string,kind:InputKind):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
+      if(kind==='project'){
+        const entry=relative(root,path).split(sep).join('/');
+        if(projectEntries.has(entry))return;
+        projectEntries.add(entry);
+        visit(path);
+        const project=projectInputs([entry],root);
+        for(const config of project.configs)visit(resolve(root,config),false);
+        for(const entry of project.roots)visit(resolve(root,entry));
+        return;
+      }
       if (!lstatSync(path).isDirectory()) {
         if(kind==='data')throw Error('declared data input is not a directory: '+relative(root,path));
         visit(path,kind!=='file');return;
@@ -82,6 +93,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
 
     for (const entry of entries) {
+      if(typeof entry!=='string'){
+        asset('<entry>',fileURLToPath(entry.url),entry.kind);
+        continue;
+      }
       if (isAbsolute(entry)) throw new Error("module entry must be repository-relative: " + entry);
       const path = resolve(root, entry);
       if (lstatSync(path).isDirectory()) asset("<entry>", path,'module');
@@ -89,11 +104,11 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
     return {files:[...visited].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),directories};
   }
-  return {describe,closure:(entries:readonly string[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
+  return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }
 
 /** A public walk always gets a fresh graph, including fresh source bytes. */
-export function moduleClosure(entries: readonly string[], options: ModuleClosureOptions = {}): string[] {
+export function moduleClosure(entries: readonly InputEntry[], options: ModuleClosureOptions = {}): string[] {
   const graph = moduleGraph(options);
   try {return graph.closure(entries);} finally {graph.close();}
 }

@@ -1,3 +1,4 @@
+import {projectInput} from '../gate/reader-inputs/main.ts';
 import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
@@ -8,7 +9,8 @@ import {spawnSync,type SpawnSyncOptionsWithStringEncoding,type SpawnSyncReturns}
 import {OracleWorker,REPOSITORY,prepareOracle,oracleExecution as newOracleExecution,oracleLoaderReady,oracleRuntimeFile,removeOracleSnapshot,finishOracleSnapshot} from '../differential/oracle-emit.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
 import {tmpdir} from 'node:os';
-import {dirname,join} from 'node:path';
+import {dirname,join,relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {test,afterEach,type TestContext} from 'node:test';
 import {readStepInstrument} from '../gate/step-result.ts';
 import {instrumentPolicy} from '../gate/step-result.ts';
@@ -42,7 +44,7 @@ function fixture(t:TestContext,{runner=false}:{runner?:boolean}={}){
   const root=mkdtempSync(join(tmpdir(),'nts-node-preloads-'));t.after(()=>removeOracleSnapshot(root));
   const write=(file:string,body:string)=>{file=join(root,file);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,body);};
   if(runner){
-    copyModuleClosure(['tooling/conformance/run.mjs'],root,{owningProject:true});
+    copyModuleClosure([relative(REPOSITORY,fileURLToPath(new URL('./run.mjs',import.meta.url))),projectInput(new URL('./node-preload-runtime.ts',import.meta.url))],root);
     copyModuleClosure(ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name),root);
   }else write('tooling/conformance/run-one.mjs',"export {};\n");
   for(const name of ['subject','sibling']){write(`runtime/node/${name}/src/main.ts`,'export const value:number=1;\n');write(`runtime/node/${name}/tsconfig.json`,'{"files":["src/main.ts"]}');}

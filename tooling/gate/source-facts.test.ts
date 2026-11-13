@@ -87,6 +87,20 @@ function shadow(bytes:Function){bytes(new URL('./parameter.ts',import.meta.url))
   }finally{lease.dispose();api.close();}
 });
 
+test('compiled project entries keep lexical factory ownership',()=>{
+  const api=new API(),source=`import {projectInput as project} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
+const alias=project;const {projectInput:destructured}=inputs;
+project(new URL('./direct.ts',import.meta.url));alias(new URL('./alias.ts',import.meta.url));
+inputs.projectInput(new URL('./namespace.ts',import.meta.url));destructured(new URL('./destructured.ts',import.meta.url));
+function shadow(project:Function){project(new URL('./shadow.ts',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.ts',kind:'project'})),{path:'./shadow.ts',kind:'module'}]);
+  }finally{lease.dispose();api.close();}
+});
+
 test('source leases are batched by both module count and bytes, with an oversized module alone',()=>{
   const api=new API(),large='/*'+'x'.repeat(SOURCE_BATCH_BYTES)+'*/';
   const inputs=[{file:'small.ts',source:'export const small=1;'}, {file:'large.ts',source:large},

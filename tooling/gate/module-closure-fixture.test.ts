@@ -1,3 +1,5 @@
+import {projectInput} from './reader-inputs/main.ts';
+import {pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
 import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
@@ -355,27 +357,70 @@ test("owning-project staging preserves inherited configs and follows newly decla
   f.write("base.json", '{"compilerOptions":{"target":"ES2024","module":"nodenext","allowImportingTsExtensions":true,"noEmit":true}}');
   f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts"]}');
   f.write("project/src/entry.ts", "export const value: number = 19; console.log(value);");
-  const first = copyModuleClosure(["project/src/entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true});
+  const first = copyModuleClosure([projectInput(pathToFileURL(join(f.source,"project/src/entry.ts")))], f.destination, {sourceRoot: f.source});
   assert.deepEqual(first, ["base.json", "project/src/entry.ts", "project/tsconfig.json"]);
   for (const file of first) assert.deepEqual(readFileSync(join(f.destination, file)), readFileSync(join(f.source, file)));
   f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts","src/registered.ts"]}');
   f.write("project/src/registered.ts", "import {value} from './dependency.ts'; console.log(value);");
   f.write("project/src/dependency.ts", "export const value: number = 23;");
   const destination = join(f.destination, "new-root");
-  const second = copyModuleClosure(["project/src/entry.ts"], destination, {sourceRoot: f.source, owningProject: true});
+  const second = copyModuleClosure([projectInput(pathToFileURL(join(f.source,"project/src/entry.ts")))], destination, {sourceRoot: f.source});
   assert.deepEqual(second, ["base.json", "project/src/dependency.ts", "project/src/entry.ts", "project/src/registered.ts", "project/tsconfig.json"]);
   assert.equal(readFileSync(join(destination, "project/tsconfig.json"), "utf8"), readFileSync(join(f.source, "project/tsconfig.json"), "utf8"));
   const result = spawnTest(process.execPath, [join(destination, "project/src/registered.ts")], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, "23\n");
 });
 
+test('project declarations promote ordinary, byte and data reach in both orders',t=>{
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts',"export const fileInput=url=>url;export const dataDirectory=url=>url;export const projectInput=url=>({kind:'project',url});");
+  f.write('data/tsconfig.json','{"files":["case.ts","registered.ts"]}');
+  f.write('data/case.ts','export const answer=19;');
+  f.write('data/registered.ts',"import './dependency.ts';");f.write('data/dependency.ts','export const answer=23;');
+  f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.ts',import.meta.url));");
+  f.write('compiled.ts',"import {projectInput} from './tooling/gate/reader-inputs/main.ts';projectInput(new URL('./data/case.ts',import.meta.url));");
+  const compiled=projectInput(pathToFileURL(join(f.source,'data/case.ts')));
+  for(const first of ['data/case.ts','bytes.ts','entry.ts'])for(const entries of [[first,compiled],[compiled,first]]){
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{
+      const result=graph.describe(entries);
+      for(const file of ['data/case.ts','data/registered.ts','data/dependency.ts'])assert.ok(result.moduleFiles.includes(file),file);
+      assert.ok(result.ownedFiles.includes('data/tsconfig.json'));
+      assert.ok(!result.moduleFiles.includes('data/tsconfig.json'),'config bytes never become module entries');
+    }finally{graph.close();}
+  }
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const parsed=graph.describe(['compiled.ts']);
+    assert.ok(parsed.files.includes('data/tsconfig.json'));
+    assert.ok(parsed.moduleFiles.includes('data/registered.ts'));
+    const copied=copyModuleClosure(['compiled.ts'],f.destination,{sourceRoot:f.source});
+    assert.deepEqual(copied,parsed.files,'selector and staging use the same project snapshot');
+  }finally{graph.close();}
+});
+
+test('project references retain their own config bytes and declared roots',t=>{
+  const f=fixture(t);
+  f.write('project/tsconfig.json','{"files":["entry.ts"],"references":[{"path":"../referenced"}]}');
+  f.write('project/entry.ts','export const answer=19;');
+  f.write('referenced/tsconfig.json','{"files":["root.ts"]}');
+  f.write('referenced/root.ts','export const answer=23;');
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const result=graph.describe([projectInput(pathToFileURL(join(f.source,'project/entry.ts')))]);
+    for(const file of ['project/tsconfig.json','referenced/tsconfig.json'])assert.ok(result.ownedFiles.includes(file)&&!result.moduleFiles.includes(file));
+    assert.ok(result.moduleFiles.includes('referenced/root.ts'));
+  }finally{graph.close();}
+});
+
 test("owning-project staging refuses missing and escaping projects before copying", t => {
   const f = fixture(t); f.write("entry.ts", "export const value = 19;");
-  assert.throws(() => copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true}), /no owning project|escapes source root/);
+  assert.deepEqual(moduleClosure(['entry.ts'],{sourceRoot:f.source}),['entry.ts'],'ordinary module discovery never asks for a project');
+  assert.throws(() => copyModuleClosure([projectInput(pathToFileURL(join(f.source,"entry.ts")))], f.destination, {sourceRoot: f.source}), /no owning project|escapes source root/);
   assert.equal(existsSync(f.destination), false);
   f.write("tsconfig.json", '{"extends":"../outside.json","files":["entry.ts"]}');
   writeFileSync(join(f.source, "../outside.json"), '{"compilerOptions":{"noEmit":true}}');
-  assert.throws(() => copyModuleClosure(["entry.ts"], f.destination, {sourceRoot: f.source, owningProject: true}), /escapes source root/);
+  assert.throws(() => copyModuleClosure([projectInput(pathToFileURL(join(f.source,"entry.ts")))], f.destination, {sourceRoot: f.source}), /escapes source root/);
   assert.equal(existsSync(f.destination), false);
 });
 

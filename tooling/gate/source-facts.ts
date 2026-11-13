@@ -187,9 +187,9 @@ export class SourceFacts {
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments.length===1&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput)$/.exec(called);
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
-        assets.push({path:literal.text,kind:owner?(owned![2]==='dataDirectory'?'data':'file'):'module'});
+        assets.push({path:literal.text,kind:owner?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':'project'):'module'});
       }
     }
     return {imports,assets};
