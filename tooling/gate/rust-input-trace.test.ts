@@ -49,6 +49,17 @@ test('shared cwd and copied cwd follow clone ownership',()=>{
   }
 });
 
+test('invalid-argument capability probes and non-file descriptors remain explicit',()=>{
+  const trace=parse([
+    '10 statx(0<socket:[1984676155]>, NULL, AT_STATX_SYNC_AS_STAT, STATX_ALL, NULL) = -1 EFAULT (Bad address)',
+    '10 newfstatat(1<pipe:[123]>, "", {st_mode=S_IFIFO|0600}, AT_EMPTY_PATH) = 0',
+    '10 getdents64(-1, 0x123, 32768) = -1 EBADF (Bad file descriptor)',
+    '10 statx(3</source/data>, NULL, AT_EMPTY_PATH, STATX_ALL, {stx_mode=S_IFDIR|0755}) = 0',
+  ]);
+  assert.deepEqual(trace.descriptorProbes.map(row=>row.kind),['invalid-argument','non-file-descriptor','non-file-descriptor']);
+  assert.deepEqual(trace.observations.map(row=>[row.operation,row.path]),[['lookup','/source/data']]);
+});
+
 test('path decoder preserves escaped bytes and does not invent truncated observations',()=>{
   assert.equal(traceString('"a\\040b\\n\\x2c"'),'a b\n,');
   assert.equal(traceString('"caf\\303\\251"'),'café');

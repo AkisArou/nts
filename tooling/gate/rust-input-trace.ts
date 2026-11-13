@@ -7,7 +7,8 @@ import {basename,isAbsolute,resolve} from 'node:path';
 
 export type FileObservation={pid:number;image:number;operation:'open'|'lookup'|'directory'|'execute'|'write';path:string;success:boolean;syscall:string};
 export type TraceEvent={pid:number;syscall:string;args:string[];result:string;order:number};
-export type TraceResult={observations:FileObservation[];executions:{id:number;parent:number;pid:number;path:string;cwd:string;args:string[];order:number}[]};
+export type DescriptorProbe={pid:number;image:number;syscall:string;kind:'invalid-argument'|'non-file-descriptor';argument:string;result:string};
+export type TraceResult={observations:FileObservation[];descriptorProbes:DescriptorProbe[];executions:{id:number;parent:number;pid:number;path:string;cwd:string;args:string[];order:number}[]};
 
 /** One tracer follows every descendant. Decoded fd paths supply the actual
  * dirfd/cwd at the syscall, including failed openat probes. No environment or
@@ -66,6 +67,7 @@ export class InputTraceParser{
   private readonly cwd=new Map<number,{path:string}>();
   private readonly images=new Map<number,number>();
   private readonly observations=new Map<string,FileObservation>();
+  private readonly descriptorProbes=new Map<string,DescriptorProbe>();
   private readonly executions:TraceResult['executions']=[];
   private readonly initialCwd:string;
   constructor(initialCwd:string){this.initialCwd=initialCwd;}
@@ -104,6 +106,10 @@ export class InputTraceParser{
       const match=/^(?:AT_FDCWD|-?\d+)<(.*)>$/.exec(value);return match?.[1];
     };
       const {pid,syscall,args,result,order}=event,success=!/^-1\b|^\?/.test(result),current=state(pid);
+      const descriptor=(kind:DescriptorProbe['kind'])=>{
+        const row:DescriptorProbe={pid,image:this.images.get(pid)??0,syscall,kind,argument:args.slice(0,2).join(', '),result};
+        this.descriptorProbes.set(JSON.stringify(row),row);
+      };
       if(['clone','clone3','fork','vfork'].includes(syscall)){
         const child=/^(\d+)\b/.exec(result);if(child){const id=Number(child[1]);cwd.set(id,args.join(',').includes('CLONE_FS')?current:{path:current.path});this.images.set(id,this.images.get(pid)??0);}
         return;
@@ -118,8 +124,17 @@ export class InputTraceParser{
       if(syscall==='chdir'){if(success)current.path=pathAt(0);return;}
       if(syscall==='fchdir'){if(success)current.path=decoded(args[0])??problem('undecoded fchdir');return;}
       if(syscall==='getdents64'){
-        const path=decoded(args[0]);if(!path)problem('undecoded directory enumeration');record({pid,syscall,path,success,operation:'directory'});return;
+        const path=decoded(args[0]);
+        if(!path||!isAbsolute(path)){
+          if(!success&&/\bEBADF\b|\bENOTDIR\b/.test(result)){descriptor('non-file-descriptor');return;}
+          problem('undecoded directory enumeration');
+        }
+        record({pid,syscall,path,success,operation:'directory'});return;
       }
+      const at=['openat','openat2','execveat','newfstatat','fstatat64','statx','faccessat','faccessat2','readlinkat'].includes(syscall),token=args[at?1:0];
+      // Capability probes may deliberately supply a null pathname/output.
+      // EFAULT with a null pathname cannot depend on any repository file.
+      if(token==='NULL'&&!success&&/\bEFAULT\b/.test(result)){descriptor('invalid-argument');return;}
       let path:string,operation:FileObservation['operation'];
       if(syscall==='execve'||syscall==='execveat'){
         const index=syscall==='execve'?0:1;path=pathAt(index,index?0:undefined);operation='execute';
@@ -137,13 +152,17 @@ export class InputTraceParser{
         operation=syscall==='creat'||/\bO_WRONLY\b/.test(args.slice(at?2:1).join(','))?'write':'open';
       }else if(['access','stat','lstat','stat64','lstat64','readlink'].includes(syscall)){path=pathAt(0);operation='lookup';}
       else if(['newfstatat','fstatat64','statx','faccessat','faccessat2','readlinkat'].includes(syscall)){
-        if(args[1]==='""'){path=decoded(args[0])??problem('undecoded empty-path lookup');}else path=pathAt(1,0);operation='lookup';
+        if(args[1]==='""'||args[1]==='NULL'){
+          const file=decoded(args[0]);
+          if(!file||!isAbsolute(file)){descriptor('non-file-descriptor');return;}
+          path=file;
+        }else path=pathAt(1,0);operation='lookup';
       }else problem('unrecognized traced file syscall '+syscall);
       record({pid,syscall,path,success,operation});
   }
   finish():TraceResult{
     if(this.pending.size||this.ready.size)problem('trace ended with unfinished syscalls: '+[...this.pending.keys()].join(', '));
-    return {observations:[...this.observations.values()],executions:this.executions};
+    return {observations:[...this.observations.values()],descriptorProbes:[...this.descriptorProbes.values()],executions:this.executions};
   }
 }
 

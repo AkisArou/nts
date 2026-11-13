@@ -56,7 +56,8 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
     const phase=phases.get(row.image);if(!phase)fail('observation has no executable image: '+row.image);
     return {...row,...phase};
   });
-  durableRecord(options.output,{version:1,target:options.target??null,executions:trace.executions,observations:observed});
+  durableRecord(options.output,{version:1,target:options.target??null,executions:trace.executions,
+    descriptorProbes:trace.descriptorProbes.map(row=>({...row,...phases.get(row.image)})),observations:observed});
 }
 
 export const readTestArtifactTargets=(path:string,root:string)=>testArtifactTargets(JSON.parse(readFileSync(path,'utf8')) as unknown,root);

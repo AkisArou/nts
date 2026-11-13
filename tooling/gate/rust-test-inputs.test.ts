@@ -18,7 +18,7 @@ test('Cargo artifacts bind arbitrary binary paths to source targets without nami
 
 test('rustdoc setup, its compiler and entered test programs retain distinct phases',()=>{
   const command=(id:number,parent:number,path:string,args:string[]=[])=>({id,parent,pid:id,path,cwd:'/source/crate',args,order:id});
-  const trace:TraceResult={observations:[],executions:[
+  const trace:TraceResult={observations:[],descriptorProbes:[],executions:[
     command(1,0,'/bin/cargo'),command(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']),
     command(3,2,'/toolchain/rustc'),command(4,3,'/bin/ld'),command(5,2,'/private/doctest/rust_out'),
     command(6,5,'/bin/node'),
@@ -29,5 +29,5 @@ test('rustdoc setup, its compiler and entered test programs retain distinct phas
   for(const id of [5,6])assert.deepEqual(phases.get(id),{phase:'doctest-runtime',source:'crate/src/lib.rs'});
   const binary=testArtifactTargets(evidence(),'/source').get(artifact.executable)!;
   assert.ok([...tracePhases(trace,'/source',binary).values()].every(row=>row.phase==='test-runtime'&&row.source===binary.source));
-  assert.throws(()=>tracePhases({observations:[],executions:[command(1,0,'/bin/rustdoc',['rustdoc','--test'])]},'/source'),/no unique source entry/);
+  assert.throws(()=>tracePhases({observations:[],descriptorProbes:[],executions:[command(1,0,'/bin/rustdoc',['rustdoc','--test'])]},'/source'),/no unique source entry/);
 });
