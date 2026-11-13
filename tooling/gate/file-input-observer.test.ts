@@ -120,6 +120,26 @@ test('the native observer retains actual images, attempted inputs and original p
     }finally{releasePipe.end();if(!closed)await done;}
   }
 
+  // The private staged child pauses before it can publish its listener. A
+  // signal in that interval must preserve its authority through failed setup.
+  const startupSource=join(root,'startup.c'),startupBinary=join(root,'startup');
+  const original=readFileSync(source,'utf8'),paused=original.replace('int listener = install_filter();',
+    'if(write(3,"ready",5)!=5)_exit(111); char release; if(read(4,&release,1)!=1)_exit(112); int listener = install_filter();');
+  assert.notEqual(paused,original);writeFileSync(startupSource,paused);
+  const startupBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-o',startupBinary],{env,encoding:'utf8'});
+  assert.equal(startupBuild.status,0,startupBuild.stderr);
+  const startupRecord=join(root,'startup.jsonl'),starting=spawn(startupBinary,fileObserverArguments(startupRecord,program,['streams']),{env,stdio:['ignore','pipe','pipe','pipe','pipe']});
+  let startupReady='',startupClosed=false;starting.stdout!.resume();starting.stderr!.resume();
+  const startReady=starting.stdio[3],startRelease=starting.stdio[4];assert.ok(startReady&&'on' in startReady&&startRelease&&'end' in startRelease);
+  startReady.on('data',part=>startupReady+=part);
+  const startupDone=new Promise<NodeJS.Signals|null>(resolve=>starting.on('close',(_status,signal)=>{startupClosed=true;resolve(signal);}));
+  try{
+    await waitFor('listener startup barrier',()=>startupReady==='ready',{stopped:()=>startupClosed?'observer closed before its barrier':undefined});
+    starting.kill('SIGTERM');assert.equal(await startupDone,'SIGTERM');
+    const final=readFileSync(startupRecord,'utf8').trim().split('\n').map(line=>JSON.parse(line)).at(-1);
+    assert.equal(final.observerSignal,15);assert.equal(final.drainComplete,true);assert.equal(final.complete,false);
+  }finally{startRelease.end();if(!startupClosed)await startupDone;}
+
   const sanitized=join(root,'sanitized');
   const sanitizer=spawnTest('clang',['-O0','-fsanitize=address',input,'-o',sanitized],{env,encoding:'utf8'});assert.equal(sanitizer.status,0,sanitizer.stderr);
   for(const clean of [true,false]){

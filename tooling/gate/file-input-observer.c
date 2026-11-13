@@ -524,6 +524,15 @@ static void child_error(int fd, int stage) {
   (void)write(fd, &value, sizeof(value));
   _exit(127);
 }
+static int terminal_status(int signal, const sigset_t *original) {
+  struct sigaction action_default = {0};
+  action_default.sa_handler = SIG_DFL;
+  sigemptyset(&action_default.sa_mask);
+  sigaction(signal, &action_default, NULL);
+  sigprocmask(SIG_SETMASK, original, NULL);
+  raise(signal);
+  return 128 + signal;
+}
 
 int main(int argc, char **argv) {
   if (argc == 3 && !strcmp(argv[1], "--birth")) {
@@ -531,7 +540,8 @@ int main(int argc, char **argv) {
     unsigned long pid = strtoul(argv[2], &end, 10);
     unsigned long long birth = !*end && pid ? process_birth(pid) : 0;
     if (!birth) {
-      fputs("file input observer: recorder process identity is unavailable\n", stderr);
+      fputs("file input observer: recorder process identity is unavailable\n",
+            stderr);
       return 2;
     }
     printf("%llu\n", birth);
@@ -633,9 +643,13 @@ int main(int argc, char **argv) {
   if (listener < 0) {
     (void)read(exec_error[0], &launch_error, sizeof(launch_error));
     close(exec_error[0]);
-    int status;
-    while (waitpid(root, &status, 0) < 0 && errno == EINTR) {
-    }
+    int status = 0;
+    pid_t waited;
+    do {
+      waited = waitpid(root, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited != root)
+      fatal("reap failed listener startup");
     fprintf(output,
             "{\"kind\":\"root-exit\",\"root\":%d,\"exit\":%d,\"signal\":%d}\n",
             root, WIFEXITED(status) ? WEXITSTATUS(status) : -1,
@@ -649,6 +663,8 @@ int main(int argc, char **argv) {
             WIFSIGNALED(status) ? WTERMSIG(status) : 0, terminal_signal,
             launch_error.stage, launch_error.error);
     fclose(output);
+    if (terminal_signal)
+      return terminal_status(terminal_signal, &original);
     fprintf(stderr,
             "file input observer: listener setup failed at stage %d: %s\n",
             launch_error.stage, strerror(launch_error.error));
@@ -783,13 +799,7 @@ int main(int argc, char **argv) {
   }
   if (terminal_signal || WIFSIGNALED(root_status)) {
     int signal = terminal_signal ? terminal_signal : WTERMSIG(root_status);
-    struct sigaction action_default = {0};
-    action_default.sa_handler = SIG_DFL;
-    sigemptyset(&action_default.sa_mask);
-    sigaction(signal, &action_default, NULL);
-    sigprocmask(SIG_SETMASK, &original, NULL);
-    raise(signal);
-    return 128 + signal;
+    return terminal_status(signal, &original);
   }
   return WEXITSTATUS(root_status);
 }
