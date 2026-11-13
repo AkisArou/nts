@@ -78,6 +78,11 @@
       "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
       "cohort": "original nts-681-tripwires",
       "reason": "whole pinned command wrapped by outer admission; stopped by unit before gate entry; incomplete, not proof"
+    },
+    {
+      "source": "7a51afbc5beb1e93cca9b01c57f0c04167539dad",
+      "cohort": "focused-v4 before here-v2",
+      "reason": "model canonical parent dropped private Git author identity; private repository setup refused before here; no compiler or gate verdict obtained"
     }
   ],
   "baselineMethod": "Exact old pinned.sh bytes supplied only to the test fixture script read through a narrow --import preload; live source never reverted. Both old-owner arms refuse admission before gate entry.",
@@ -206,6 +211,283 @@
       "path": "/home/akisarou/.cache/nts-scratch/681/tripwires.sh",
       "bytes": 444,
       "sha256": "bc361d21710a5ef96b86dbbe0f3b72bead151d52bac7c554771bad3534865e17"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v4.log",
+      "bytes": 21298,
+      "sha256": "3797a67a4bf7adc4f790900d96b363f9c53aa21d036f974caa3dc1069d061286"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v4.sh",
+      "bytes": 648,
+      "sha256": "c62aa6d285474dd2b2318082fe9857a38247fc7d8bbd9f25d33af2002de1f0de"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v5.log",
+      "bytes": 16605,
+      "sha256": "61910138b2abd23c42d526cb33f67c18df194cdc6c757b364448f50294ed1e16"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v5.sh",
+      "bytes": 648,
+      "sha256": "aef644824b415ad6d3ce269e08641e9b2e0529eede5e4eea3f0d4922c08a987d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/here-v2.sh",
+      "bytes": 363,
+      "sha256": "2620e53e492d774466f80468f461572906dda5bd02fc5969f77f184116d59333"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/here-v3.log",
+      "bytes": 1376,
+      "sha256": "7a42664d107f8c79c126e73edf05eff439dd3a16e7e91bdf86b644c38fd519b4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/here-v3.sh",
+      "bytes": 363,
+      "sha256": "3e77d81562866f61254dc7e62cb1f43b92fa21aa1fb245b5cee988c90af602a1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/host-v5.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/strict-v5.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-control-v2.log",
+      "bytes": 3556,
+      "sha256": "3e2aa96e968e7f86af30e4eb671dceefc4e3a0630f7b54ba169604bd732d6695"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-control-v2.sh",
+      "bytes": 852,
+      "sha256": "8d01a287f99287898ab8cea04192d1341a261582667e43fd050fea2e9a52cf95"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/final-v2.sh",
+      "bytes": 550,
+      "sha256": "ebb87e6a2a0746ab8c770c6df92fb3b949b62c54aabef6982f2709cae2faf979"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/dry-run-v2.log",
+      "bytes": 2300,
+      "sha256": "fb93d0a52904e2123cb690024ac6287f880176796982c855938cf6fe6c11a819"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/host-final-v2.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/strict-final-v2.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060/summary.json",
+      "bytes": 646016,
+      "sha256": "cb4f74bc04ef21f73ee4e4d536ad51961891fb1ddd07f8eac696f43272b025c8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060/tooling.log",
+      "bytes": 24221,
+      "sha256": "37f412dbdcb221eed63b5132594c884802ff394b5a4c894c65af3780bffc8ee1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060/tests.log",
+      "bytes": 1202,
+      "sha256": "6c800c682dfddec114f2e9037b130c367f2281eadb95e0010c1a159b93f2493a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060/test-host.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060/tooling-types.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/31c116530aad-1794570229434/summary.json",
+      "bytes": 754963,
+      "sha256": "eec4a97ed8be8689664592dba14c36659d7ad7765a702c6bc73b95f0a0c68881"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/31c116530aad-1794570229434/tooling.log",
+      "bytes": 29107,
+      "sha256": "c500a1611a092e44dd66aa0353042b10aebda532aea421be2d3128a1162267b1"
     }
-  ]
+  ],
+  "correctedSource": "12a21f72ce2dd706af9db70c72824cf13ecd38bc",
+  "productionUnchangedFrom": "f35afa5e4813ec8c0f9ffe037f6b7f3e292ac40f",
+  "landingRefusal": {
+    "commit": "31c116530aad21423d528d47d6aa8cddff9c6c52",
+    "queue": "31c116530aad-c23b9b90",
+    "run": "/home/akisarou/.cache/nts-landing/runs/31c116530aad-1794570229434",
+    "tooling": {
+      "pass": 2257,
+      "fail": 3,
+      "todo": 2
+    },
+    "cause": [
+      "measure.test.ts omitted newly executed admit.ts closure",
+      "two pinned controls inherited the canonical parent step marker and correctly hit the production nested-run refusal"
+    ],
+    "fix": "Stage both actual entry closures; retain affinity exports while disabling its private CLI; give the full-check fixture complete ownMemory; explicitly isolate the private pinned child from a model canonical tooling parent. Private Git setup keeps the fixture author environment."
+  },
+  "correctedProof": {
+    "source": "12a21f72ce2dd706af9db70c72824cf13ecd38bc",
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-12a21f72ce2d-1794571296060",
+    "verdict": "green",
+    "canonical": true,
+    "experiments": [],
+    "cleanup": {
+      "state": "complete"
+    },
+    "gateWallSeconds": 474.441,
+    "tooling": {
+      "pass": 2260,
+      "fail": 0,
+      "todo": 2,
+      "total": 2262
+    },
+    "native": {
+      "pass": 3047,
+      "fail": 0,
+      "ignored": 8,
+      "binaries": 55,
+      "doctestCrates": 18
+    },
+    "focused": {
+      "pass": 180,
+      "fail": 0,
+      "bootstrap": "tooling/gate/test-host-bootstrap.ts",
+      "includes": [
+        "pinned.test.ts",
+        "measure.test.ts",
+        "canonical-environment.test.ts",
+        "test-environment.test.ts",
+        "test-timing.test.ts",
+        "owed.test.mjs",
+        "selection.test.ts",
+        "check-report-consumers.test.ts"
+      ]
+    },
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "wall": 0.87,
+        "cpu": 0.913771
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "wall": 2.326,
+        "cpu": 2.29641
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "wall": 3.4,
+        "cpu": 3.342036
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "wall": 0.109,
+        "cpu": 0.067263
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "wall": 1.18,
+        "cpu": 1.315044
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "wall": 3.258,
+        "cpu": 2.423241
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "wall": 0.112,
+        "cpu": 0.078888
+      },
+      {
+        "name": "unicode-freshness",
+        "verdict": "PASS",
+        "wall": 0.241,
+        "cpu": 0.212462
+      },
+      {
+        "name": "doctests",
+        "verdict": "PASS",
+        "wall": 5.398,
+        "cpu": 4.769626
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "wall": 2.584,
+        "cpu": 1.404983
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "wall": 1.899,
+        "cpu": 3.495026
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "wall": 3.656,
+        "cpu": 4.963758
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "wall": 3.937,
+        "cpu": 5.521235
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "wall": 198.909,
+        "cpu": 2249.048027
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "wall": 0.073,
+        "cpu": 0.046093
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "wall": 268.808,
+        "cpu": 4102.735643
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "wall": 0.882,
+        "cpu": 3.154402
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "wall": 0.584,
+        "cpu": 0.591673
+      }
+    ],
+    "baselineRefusals": 2
+  }
 }

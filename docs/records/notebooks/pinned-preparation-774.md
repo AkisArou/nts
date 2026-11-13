@@ -34,3 +34,20 @@ The [companion record](pinned-preparation-774.json) retains the precise checks,
 checkpoint, route identities, rusage basis and artifact digests. No speedup is
 claimed. The Cargo rusage excludes its admission wait; run-unit CPU excludes
 work executed in separate owned scopes, so those figures are not substituted.
+
+The first landing was refused on three fixture failures: the full-check pinned
+fixture had not staged the new admission entry, and both new controls inherited
+the canonical parent's step marker. The corrections stage the executed closure,
+retain the private affinity module's exports, supply complete owned observations,
+and construct then explicitly isolate a canonical tooling parent. The production
+nested-entry guard and `pinned.sh` bytes are unchanged.
+
+At corrected source `12a21f72ce2dd706af9db70c72824cf13ecd38bc`, the focused batch
+runs with the real test-host preload and passes 180 controls. The supported
+`check.ts --here` passes every requested step, with 2,260 tooling passes and two
+existing TODOs, and 3,047 native passes with eight ignored. Its summary is canonical,
+contains no experiments, and reports completed scope cleanup. The old owner still
+refuses both corrected admission controls. The intervening private Git identity
+setup refusal is retained and excluded. The earlier canonical tripwire proof
+remains pinned to its original launcher and candidate; it is not relabelled as
+this later run. The companion JSON records both cohorts and the refused landing.
