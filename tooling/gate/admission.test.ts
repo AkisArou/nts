@@ -118,7 +118,7 @@ test("token pool: a running case finishes through a hold, and the next waits unt
     hold.on = false; pool.grant();
     await running.done;
     if (queued) await queued.done;
-    pool.close();
+    pool.close();await pool.closed;
   }
 });
 

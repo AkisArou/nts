@@ -77,7 +77,7 @@ fs.writeFileSync(base+'.end',String(process.hrtime.bigint()));console.log('done 
   assert.equal(p.peakTotal(), 3);
   await waitFor("all token releases",()=>p.total===0);
   assert.equal(p.total, 0);
-  p.close();
+  p.close();await p.closed;
 });
 
 test("a token comes back when its holder is SIGKILLed", async () => {
@@ -91,7 +91,7 @@ test("a token comes back when its holder is SIGKILLed", async () => {
   assert.equal(p.total, 0);
   const r = await run(TOKEN, ["true"], tokenEnv(p));
   assert.equal(r.status, 0);
-  p.close();
+  p.close();await p.closed;
 });
 
 test("exit status, signals and stdin are the command's own", async () => {
@@ -100,7 +100,7 @@ test("exit status, signals and stdin are the command's own", async () => {
   // A deliberate fault leaves no core file, whatever limit the caller set.
   assert.equal((await run(TOKEN, ["sh", "-c", "ulimit -c 0; kill -SEGV $$"], tokenEnv(p))).signal, "SIGSEGV");
   assert.equal((await run(TOKEN, ["cat"], tokenEnv(p), "from stdin\n")).out, "from stdin\n");
-  p.close();
+  p.close();await p.closed;
 });
 
 test("a holder that runs token.sh again does not wait for a second token", async () => {
@@ -108,7 +108,7 @@ test("a holder that runs token.sh again does not wait for a second token", async
   const r = await run(TOKEN, [TOKEN, "sh", "-c", "echo nested"], tokenEnv(p));
   assert.equal(r.status, 0);
   assert.equal(r.out.trim(), "nested");
-  p.close();
+  p.close();await p.closed;
 });
 
 test("outside a gate the command runs; inside one, a runner that is gone is an error", async () => {
@@ -125,7 +125,7 @@ test("a runner that accepted and then died: every waiting worker exits non-zero,
   const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
   await waitFor("three queued token clients",()=>p.waiting.length===3);
   // The runner goes: its server and every connection it held.
-  p.close();
+  p.close();await p.closed;
   for (const w of p.waiting) w.sock.destroy();
   for (const r of await Promise.all(waiting)) {
     assert.equal(r.status, 75, r.out);
@@ -157,7 +157,7 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   holder.stdin.end();
   await Promise.all([a, b, released]);
   assert.deepEqual(order, ["long", "short"]);
-  p.close();
+  p.close();await p.closed;
 });
 
 test("tokens.mjs holds a token around fn and returns it", async () => {
@@ -182,7 +182,7 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
   // What the tool spawns inherits the guard, so it does not ask again.
   const child = await run("sh", ["-c", "echo $NTS_GATE_TOKEN_HELD"], {NTS_GATE_TOKEN_HELD:process.env.NTS_GATE_TOKEN_HELD});
   assert.equal(child.out.trim(), "1");
-  p.close();
+  p.close();await p.closed;
   // And a runner that is gone rejects rather than running untokened.
   await assert.rejects(withToken(async () => "ran", {scope:"step"}), /went away|cannot be reached/);
 });
@@ -195,7 +195,7 @@ test("a failed telemetry observer changes neither grants nor the command's exit"
     assert.equal(r.out, "original");
     await waitFor("the token release",()=>p.total===0);
     assert.equal(p.total, 0);
-  } finally { p.close(); }
+  } finally { p.close();await p.closed; }
 });
 
 test("case telemetry preserves project names without adding protocol lines", async () => {
@@ -208,7 +208,7 @@ test("case telemetry preserves project names without adding protocol lines", asy
     const request = observations.find(e => e.event === "token.request");
     assert.equal(JSON.parse(Buffer.from(request.context.slice(7),'base64url').toString()).project, project);
     assert.equal(observations.filter(e => e.event === "token.grant").length, 1);
-  } finally { p.close(); }
+  } finally { p.close();await p.closed; }
 });
 
 // A request line as tokens.mjs and token.sh send it, on its own connection:
@@ -234,7 +234,7 @@ test('both token endpoints refuse a request with no declared lease',async()=>{
     assert.equal(await raw.go,false);assert.match(raw.answer(),/requires an explicit case or step lease/);raw.close();assert.equal(p.total,0);
     const result=await run('bash',[TOKEN,'true'],tokenEnv(p));
     assert.equal(result.status,75);assert.match(result.out,/needs --case or an explicit --step lease/);
-  }finally{p.close();}
+  }finally{p.close();await p.closed;}
 });
 
 test("a sized request that fits goes before an older one of its step that does not, and each token counts at its size", async () => {
@@ -260,7 +260,7 @@ test("a sized request that fits goes before an older one of its step that does n
     small.close(); large.close();
     await waitFor("every token back", () => q.total === 0);
     assert.deepEqual(q.sized.get("oracles"), { count: 0, bytes: 0 });
-  } finally { q.close(); }
+  } finally { q.close();await q.closed; }
 });
 
 test("requests of a step's unit are asked about once per step, oldest first, exactly as before sizes", async () => {
@@ -285,7 +285,7 @@ test("requests of a step's unit are asked about once per step, oldest first, exa
     assert.deepEqual(grants.map(([step]) => step), ["x", "x", "x"]);
     assert.equal(q.sized.size, 0, "no sized books for a step of its unit");
     for (const r of [b, c, d, e]) r.close();
-  } finally { q.close(); }
+  } finally { q.close();await q.closed; }
 });
 
 test("a malformed size is refused without a token, and a sized token is answered only once its step's limits hold it", async () => {
@@ -313,5 +313,5 @@ test("a malformed size is refused without a token, and a sized token is answered
     assert.equal(await sized.go, true);
     assert.deepEqual(writes, ["go\n"]);
     unit.close(); sized.close();
-  } finally { q.close(); }
+  } finally { q.close();await q.closed; }
 });

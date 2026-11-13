@@ -55,7 +55,7 @@ async function gatePool(n: number) {
     token: (path: string, signal: AbortSignal) => client.acquire({ project: path }, signal),
     /** Every control ends here: no token held, no request waiting. */
     settled: () => waitFor("every token returned and no request waiting", () => pool.total === 0 && pool.waiting.length === 0),
-    close: () => pool.close(),
+    close: async () => {pool.close();await pool.closed;},
   };
 }
 

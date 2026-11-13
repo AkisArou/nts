@@ -76,7 +76,7 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   const observations: any[]=[];
   const pool=createTokenPool({free:()=>open ? 2-pool.total : 0,claim:()=>1,observe:(e: any)=>observations.push(e)});
   await pool.start();
-  t.after(()=>pool.close());
+  t.after(async()=>{pool.close();await pool.closed;});
   const ran=h.run(3,{ORDER_BARRIER:"1",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
   let ended: Awaited<typeof ran> | undefined;
   void ran.then(result=>{ended=result;});
@@ -102,7 +102,7 @@ test("a missing worker import exits before token admission and never starts a co
   const h=harness(t);
   rmSync(join(h.root,"tooling/conformance/node-deps.mjs"));
   const pool=createTokenPool({free:()=>0,claim:()=>1});
-  await pool.start();t.after(()=>pool.close());
+  await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers"});
   assert.notEqual(result.status,0);
   assert.match(result.stderr,/ERR_MODULE_NOT_FOUND/);
@@ -175,7 +175,7 @@ await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage
 `);
   const observations: any[]=[];
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1,observe:(e: any)=>observations.push(e)});
-  await pool.start();t.after(()=>pool.close());
+  await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{PATH:`${join(h.root,"bin")}:${fixtureEnvironment(t).PATH}`,
     NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
   assert.equal(result.status,0,result.stdout+result.stderr);
@@ -189,7 +189,7 @@ await withToken(async()=>{appendFileSync(process.env.TRACE,JSON.stringify({stage
 test("fixtures queued for a token do not start after an admitted fixture fails", async t => {
   const h=harness(t);
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>1});
-  await pool.start();t.after(()=>pool.close());
+  await pool.start();t.after(async()=>{pool.close();await pool.closed;});
   const result=await h.run(3,{FAIL_FIXTURE:"a-slow",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers"});
   assert.notEqual(result.status,0);
   assert.match(result.stderr,/compiler child failed: status=7/);

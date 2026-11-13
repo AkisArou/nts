@@ -73,7 +73,7 @@ if(args[0]==='hir')process.stdout.write('func control() -> void {\\n}\\n\\n1 fun
         staged.push(latest[0]!.at(-1)!);
       }
       assert.equal(pool.total,0);broker.flush('integrity');
-    }finally{pool.close();}
+    }finally{pool.close();await pool.closed;}
   }
   const key=caseMemoryKey({step:'integrity',backend:'c',path:PROJECT});
   assert.equal(identities.length,8);assert.ok(identities.every(identity=>identity===key));

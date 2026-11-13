@@ -50,7 +50,7 @@ test('bounded entry publishes readiness only after its complete cgroup path',asy
 
 test('registration distinguishes incomplete data from a missing lease owner',async t=>{
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,now:()=>0});
-  const address=await pool.start();assert.ok(address);t.after(()=>pool.close());
+  const address=await pool.start();assert.ok(address);t.after(async()=>{pool.close();await pool.closed;});
   const release=await tokenClient(address,'control').acquire({scope:'step'});assert.ok(release?.case);
   try{
     await assert.rejects(registerCaseScope(release.case,'/worker',1024,''),/incomplete case scope registration/);
