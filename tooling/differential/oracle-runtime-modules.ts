@@ -5,7 +5,6 @@ import {lstatSync,readFileSync,realpathSync} from 'node:fs';
 import {isAbsolute,posix,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {SourceFacts} from '../gate/source-facts.ts';
 import {runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
 
 type Module={source:string;name:string;text:string;sourceSha256:string};
@@ -19,7 +18,8 @@ const outputName=(name:string)=>name.replace(/\.(?:m?ts|m?js)$/,'.mjs');
 export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeModules{
   const root=resolve(sourceRoot);
   if(realpathSync(root)!==root)failure('source root is an alias: '+root);
-  const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync'),api=new API();
+  const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
+  const ast=require('typescript/ast') as typeof import('typescript/ast'),api=new API();
   const modules=new Map<string,Module>(),outputs=new Map<string,string>();
   const sourceName=(file:string)=>{
     const name=relative(root,file).split(sep).join('/');
@@ -40,9 +40,14 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
     const targets=new Set<string>();
     const lease=api.createSourceFile(file+'.runtime.mjs',text);
     try{
-      const facts=new SourceFacts(name,text,lease.sourceFile),ast=facts.ast;
+      const declarations:import('typescript/ast').Node[]=[];
+      const collect=(node:import('typescript/ast').Node):void=>{
+        if(ast.isImportDeclaration(node)||ast.isExportDeclaration(node)||ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword)declarations.push(node);
+        node.forEachChild(collect);
+      };
+      collect(lease.sourceFile);
       const changes:{pos:number;end:number;text:string}[]=[];
-      for(const node of [...facts.imports,...facts.ofKind(ast.SyntaxKind.ExportDeclaration),...facts.calls]){
+      for(const node of declarations){
         let specifier;
         if(ast.isImportDeclaration(node)||ast.isExportDeclaration(node))specifier=node.moduleSpecifier;
         else if(ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword){

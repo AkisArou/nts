@@ -1,3 +1,4 @@
+// Bound authenticated handoff IO in producers and both bootstrap consumers.
 export const RUNTIME_MODULE_LIMIT=128;
 // Generated module names are capability keys, never arbitrary filesystem paths.
 export function runtimeModuleName(name:unknown):name is string{
