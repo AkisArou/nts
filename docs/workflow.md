@@ -164,6 +164,12 @@ imports or launches. Only entered modules take part in host-reference traversal;
 data members and exact file inputs keep their input obligations without making
 their strings or imports into readers. A later real import enters a file even
 if an earlier reader reached it as data or exact bytes.
+`projectInput(new URL("entry.ts", import.meta.url))` declares an entry compiled
+under its owning TypeScript project. Its runtime descriptor is accepted by the
+shared closure copier too. `OracleFilesystem.projectFor` owns discovery and the
+pinned parser supplies the actual config reads, inherited configs, project
+references and roots. Configs remain leaf bytes; roots enter the module graph.
+Discovery runs only for project declarations and is fresh for each graph.
 The declaration rows are independent of source language; other reader adapters
 can supply the same module and data edges. A shell or Python launch into
 JavaScript continues through the parsed module graph. An inferred launch adds
@@ -883,6 +889,11 @@ the first node task.
   and exact byte inputs enter that graph only when an independent module edge
   reaches them
   ([log](records/notebooks/decisions-log.md#exact-input-bytes-do-not-enter-modules-11-13)).
+- **Compiled entries declare their project context:** selection and staging
+  consume the same `projectInput` descriptor. Discovery uses the oracle's
+  existing owner and parsed inputs, with no guessed neighbouring config or
+  separate copier option
+  ([log](records/notebooks/decisions-log.md#compiled-entry-projects-are-declared-11-13)).
 - **Unknown reach and explicit full policies have separate inventories:** only
   the unplaced fallback set is ratcheted. Full-by-policy paths name their
   governing rules, and a rule change owes the full gate

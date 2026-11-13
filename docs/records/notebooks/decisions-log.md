@@ -2648,3 +2648,6 @@ failed on its sampler rejection after teardown. That fixture omitted `closed`,
 and the sampled job's rejection path also skipped pending ledger cleanup.
 The private-lock control waits for the real sampler's named error, retains the
 lock through release, and proves the terminal boundary cannot bypass it. #772.
+## Compiled entry projects are declared (11-13)
+
+Part of #728. projectInput carries one compiled-entry descriptor to the runtime copier and the parsed selector. The existing project-discovery and pinned-parser implementation moves into one shared owner; owningProject is removed. Actual config reads remain leaf bytes and declared roots enter modules, including when ordinary, data or byte ownership reached the entry first. The preload fixture declares the typed runtime entry it compiles, so its project context is selected and staged by the same snapshot. Generic adjacent tsconfig strings remain distinct from actual discovery.
