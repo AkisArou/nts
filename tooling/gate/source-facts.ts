@@ -202,7 +202,7 @@ export class SourceFacts {
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|inspectionDirectory|fileInput|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
         if(owner&&owned![2]==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
@@ -221,7 +221,7 @@ export class SourceFacts {
           }
           assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text),...(data?{data}:{})});
         }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
-          ?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':owned![2]==='projectConfig'?'project-config':'project'):'module'});
+          ?(owned![2]==='dataDirectory'?'data':owned![2]==='inspectionDirectory'?'inspection':owned![2]==='fileInput'?'file':owned![2]==='projectConfig'?'project-config':'project'):'module'});
       }
     }
     return {imports,assets};

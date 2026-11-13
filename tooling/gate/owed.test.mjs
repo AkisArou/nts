@@ -122,10 +122,10 @@ step "proof" node tooling/private/reader.ts
 step "private" node tooling/private/fixture.ts
 `);
   put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');
-  put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;export const fileInput=url=>url;export const fixtureInput=(url,options)=>({url,...options});');
-  put('tooling/private/reader.ts',`import {dataDirectory,fileInput} from '../gate/reader-inputs/main.ts';
+  put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;export const inspectionDirectory=url=>url;export const fileInput=url=>url;export const fixtureInput=(url,options)=>({url,...options});');
+  put('tooling/private/reader.ts',`import {dataDirectory,inspectionDirectory,fileInput} from '../gate/reader-inputs/main.ts';
 import './code.ts';import '../utility-samples/owned.cjs';
-const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=dataDirectory(new URL('../census/',import.meta.url));const utilities=dataDirectory(new URL('../utility-samples/',import.meta.url));const platform=dataDirectory(new URL('../apple/',import.meta.url));
+const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=inspectionDirectory(new URL('../census/',import.meta.url));const utilities=inspectionDirectory(new URL('../utility-samples/',import.meta.url));const platform=dataDirectory(new URL('../apple/',import.meta.url));
 `);
   put('tooling/private/fixture.ts',`import {fixtureInput} from '../gate/reader-inputs/main.ts';
 const child=fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:{'tooling/private/data':'private-fixture'}});
@@ -148,17 +148,19 @@ const paths=['tooling/private/data/case.ts','tooling/private/bytes.ts','tooling/
 const rows=paths.map(path=>{const change={path,before:'// plain prose\\nexport const value=1;\\n',after:'// altered prose\\nexport const value=1;\\n',sameMode:true};return {path,precise:preciseChange(change),steps:gateSteps(owed([change]))};});
 const future=['tooling/private/data/new.bin','tooling/private/data/deleted.bin'].map(path=>({path,steps:[...covering(stepInputs(),path)]}));
 const inspected=owed([{path:'tooling/census/unexecuted.ts',added:false}]);
+const inspectionChanges=['tooling/utility-samples/future.ts','tooling/utility-samples/deleted.json'].map((path,index)=>{const change={path,...(index?{deleted:true}:{added:true})};const selected=owed([change]);return {path,steps:gateSteps(selected),full:selected.some(row=>row.fallback)};});
 const utilities=${JSON.stringify([...['host.cjs','host.mjs','host.js','host.mts','host.cts','host.ts','host.tsx','host.jsx','host.sh','host.py','Host.java'],'command','executable','owned.cjs','types.d.ts','types.d.mts','types.d.cts','named-list','metadata.json'])}.map(name=>{const path='tooling/utility-samples/'+name;return {name,full:owed([{path,added:false}]).some(row=>row.fallback),reach:[...covering(stepInputs(),path)]};});
 const explicit=owed([{path:'tooling/apple/owned.sh',added:false}]);
-console.log(JSON.stringify({rows,future,utilities,explicit:{steps:gateSteps(explicit),full:explicit.some(row=>row.fallback),reach:[...covering(stepInputs(),'tooling/apple/owned.sh')]},inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
+console.log(JSON.stringify({rows,future,utilities,inspectionChanges,explicit:{steps:gateSteps(explicit),full:explicit.some(row=>row.fallback),reach:[...covering(stepInputs(),'tooling/apple/owned.sh')]},inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
   const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
-  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,utilities,explicit,inspected}=JSON.parse(result.stdout);
+  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,utilities,inspectionChanges,explicit,inspected}=JSON.parse(result.stdout);
   for(const row of rows)assert.equal(row.precise,'comments',row.path);
   assert.ok(rows[0].steps.includes('proof'));assert.ok(!rows[0].steps.includes('private'));
   for(const step of ['proof','private']){assert.ok(rows[1].steps.includes(step));assert.ok(!rows[2].steps.includes(step));}
   for(const row of future){assert.ok(row.steps.includes('proof'),row.path);assert.ok(!row.steps.includes('private'),row.path);}
   assert.ok(inspected.reach.includes('proof'));assert.ok(inspected.full,'a tracked instrument inspected only as bytes keeps its execution fallback');
-  for(const row of utilities){assert.ok(row.reach.includes('proof'));assert.equal(row.full,[...programs,'command','executable'].includes(row.name),row.name);}
+  for(const row of utilities){assert.ok(row.reach.includes('proof'));assert.equal(row.full,row.name!=='owned.cjs',row.name+' inspection alone never places code or metadata');}
+  for(const row of inspectionChanges){assert.ok(row.steps.includes('proof'),row.path);assert.ok(row.full,row.path+' keeps fallback despite its byte reader');}
   assert.ok(explicit.reach.includes('proof'));assert.ok(explicit.steps.includes('interop'));assert.ok(!explicit.full,'an existing explicit validation rule retains its ownership');
 });
 

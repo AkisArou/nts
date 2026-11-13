@@ -30,7 +30,9 @@ const inside = (root: string, path: string) => {
  * Module-relative URL assets are declarations too. Dot-only positions are
  * anchors, while a directory asset declares its tracked files. Exact fileInput
  * bytes stay owned but do not enter imports; moduleFiles records that separate
- * traversal, including a later real module edge into previously owned bytes. */
+ * traversal, including a later real module edge into previously owned bytes.
+ * placingFiles retains every declared role except inspection-only membership,
+ * including immutable project configs and inherited configs. */
 export function moduleGraph(options: ModuleClosureOptions = {}) {
   // Input provisioning imports this module before node_modules exists. Only a
   // caller actually walking a graph needs the already provisioned parser.
@@ -74,7 +76,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     } finally {lease.dispose();}
   }
   function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput):InputSnapshot {
-    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
@@ -104,7 +106,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         return;
       }
       if (!lstatSync(path).isDirectory()) {
-        if(kind==='data')throw Error('declared data input is not a directory: '+nameOf(path));
+        if(kind==='data'||kind==='inspection')throw Error('declared '+kind+' input is not a directory: '+nameOf(path));
         if(kind==='members')throw Error('declared module members input is not a directory: '+nameOf(path));
         if(kind==='file')reportByteInput?.({reader,path:nameOf(path)});
         visit(context,path,kind!=='file');return;
@@ -125,14 +127,17 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         ...(grant?{fixture:{entry:context.entry,owner:context.namespaces[grant]!}}:{})};
       directories.push(row);reportDirectory?.(row);
       if(grant)return;
-      for(const file of members){if(kind==='data')files.add(file);else visit(context,resolve(root,file));}
+      for(const file of members){
+        if(kind==='data'){files.add(file);placing.add(file);}
+        else visit(context,resolve(root,file),kind!=='inspection',kind!=='inspection');
+      }
     }
-    function visit(context:Context,path:string,enter=true):void {
+    function visit(context:Context,path:string,enter=true,place=true):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
       const name=nameOf(path);
-      if(enter?context.entered.has(name):context.owned.has(name))return;
+      if(enter?context.entered.has(name):context.owned.has(name)){if(place)placing.add(name);return;}
       if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
-      context.owned.add(name);owned.add(name);files.add(name);
+      context.owned.add(name);owned.add(name);files.add(name);if(place)placing.add(name);
       if(!enter)return;
       context.entered.add(name);moduleFiles.add(name);
       // Aggregate ownership never suppresses another namespace context. A
@@ -154,7 +159,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path);
     }
-    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),directories};
+    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),placingFiles:[...placing].sort(),directories};
   }
   return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }

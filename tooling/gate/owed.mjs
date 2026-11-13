@@ -75,11 +75,10 @@ import {gitArguments} from "./git-arguments/main.ts";
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { closeSync, existsSync, globSync, openSync, readSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
-import {toolingInputRole} from "./tooling-input-role.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
 import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
@@ -798,7 +797,8 @@ export const RULES = [
     // `.ts` since the lanes' tools became TypeScript (2026-09-29): until then
     // this matched none of them, and no instrument change owed a self-test.
     // The fixture trees are programs, not instruments, and have rules below.
-    when: toolingInstrument,
+    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p)
+      && p !== "tooling/census/fixtures/resident-worker.ts",
     // Owes what runs it, from the derived map of what each step runs (see
     // `stepInputs`); an instrument that map cannot place owes the full gate.
     placedBy: "stepInputs",
@@ -1358,22 +1358,6 @@ const rel = (abs) => relative(TREE, abs).split("\\").join("/");
 /** @returns {string[]} */
 function trackedFiles() {return once("tracked-files", () => execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd:TREE,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean));}
 
-/** A broad byte population cannot certify an implementation or utility.
- * Unknown names use bounded source metadata, not a suffix-only exemption. */
-function toolingInstrument(/** @type {string} */ path){
-  if(!path.startsWith('tooling/')||path==='tooling/census/fixtures/resident-worker.ts'
-    ||path.split('/').some(part=>part===''||part==='.'||part==='..'))return false;
-  const role=once('tooling-input-role:'+path,()=>toolingInputRole(path,()=>{
-    const source=join(TREE,path);
-    if(!existsSync(source))return undefined;
-    const stat=statSync(source);if(!stat.isFile())return undefined;
-    const fd=openSync(source,'r'),prefix=Buffer.alloc(128);
-    try{const length=readSync(fd,prefix,0,prefix.length,0);return {executable:(stat.mode&0o111)!==0,prefix:prefix.subarray(0,length).toString('latin1')};}
-    finally{closeSync(fd);}
-  }));
-  return role==='program'||role==='unknown';
-}
-
 /** Every step all.sh defines, in its order: what "the full gate" means. */
 export function allSteps() {
   return once("steps", () => {
@@ -1672,11 +1656,11 @@ function stepInputGraph() {
     const modules = moduleGraph({sourceRoot:TREE});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
-      const key=[reader,row.directory,row.member??"",row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
+      const key=[reader,row.directory,row.kind,row.member??"",row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
       if(row.member)map.declareMember(row.directory,row.member,step);
       // A declared data population includes future members. Private grants
       // suppress only their production population and never claim it here.
-      if(row.kind==='data'&&!row.fixture){map.add(row.directory,step);byteReaders.add(row.directory,step);}
+      if((row.kind==='data'||row.kind==='inspection')&&!row.fixture){map.add(row.directory,step);byteReaders.add(row.directory,step);}
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
@@ -1727,9 +1711,10 @@ function stepInputGraph() {
         if (!batch.length) break;
         const snapshot=modules.describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
         for(const input of snapshot.moduleFiles)moduleDeclared.add(input);
+        for(const input of snapshot.placingFiles)declared.add(input);
         for (const input of snapshot.files) {
           if (placed.has(input)) continue;
-          placed.add(input); declared.add(input); add(input, step);
+          placed.add(input); add(input, step);
         }
         // Corpus bytes are inputs, not host modules: their quoted paths and
         // imports must never turn into readers of unrelated repository data.
@@ -2030,15 +2015,12 @@ export function owed(changes) {
     let unplaced = null; // why the path owes the full gate, when it does
     let unrun = false; // an instrument no step's scripts were found to run
     const matchedRules=rulesFor(path,added);
-    // Existing reviewed validation rules retain their own authority. Neither
-    // byte/inferred readers nor ALWAYS can manufacture such an owner.
-    const validationOwned=matchedRules.some(rule=>!rule.placedBy&&(rule.steps.length>0||rule.settled||rule.full));
     for (const rule of matchedRules) {
       add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full, wide: rule.wide }, rule.interop?.());
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && !declaredInput(path,true) && !validationOwned) unrun = true;
+      if (rule.placedBy === "stepInputs" && !declaredInput(path,true)) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.

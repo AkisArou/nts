@@ -676,3 +676,55 @@ test('exact byte reports survive either module promotion order',t=>{
     assert.deepEqual(reports,[{reader:'text.ts',path:'both.ts'}]);
   }
 });
+
+
+test('inspection membership stages immutable code and metadata without placing either',t=>{
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;export const inspectionDirectory=url=>url;');
+  f.write('inspect.ts',"import {inspectionDirectory} from './tooling/gate/reader-inputs/main.ts';inspectionDirectory(new URL('./data/',import.meta.url));");
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const snapshot=graph.describe(['inspect.ts']);
+    for(const name of ['data/case.ts','data/nested/second.txt']){
+      assert.ok(snapshot.files.includes(name));assert.ok(snapshot.ownedFiles.includes(name));
+      assert.ok(!snapshot.placingFiles.includes(name));assert.ok(!snapshot.moduleFiles.includes(name));
+    }
+    assert.equal(snapshot.directories.find(row=>row.directory==='data')?.kind,'inspection');
+    const copied=copyModuleClosure(['inspect.ts'],f.destination,{sourceRoot:f.source});
+    assert.deepEqual(copied,snapshot.files);
+    for(const name of copied)assert.deepEqual(readFileSync(join(f.source,name)),readFileSync(join(f.destination,name)));
+    f.privateData();
+    assert.throws(()=>copyModuleClosure(['inspect.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'private'}}),/not a declared data input: data/);
+    for(const entries of [['inspect.ts','entry.ts'],['entry.ts','inspect.ts']])
+      assert.throws(()=>copyModuleClosure(entries,f.destination,{sourceRoot:f.source,dataNamespaces:{data:'private'}}),/cannot replace module-owned input: data\/case.ts/);
+    f.write('bad.ts',"import {inspectionDirectory} from './tooling/gate/reader-inputs/main.ts';inspectionDirectory(new URL('./data/case.ts',import.meta.url));");
+    assert.throws(()=>graph.describe(['bad.ts']),/declared inspection input is not a directory: data\/case.ts/);
+  }finally{graph.close();}
+});
+
+test('inspection never suppresses real module, file, data or project placement in either order',t=>{
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const inspectionDirectory=url=>url;export const dataDirectory=url=>url;export const fileInput=url=>url;export const projectInput=url=>({kind:"project",url});export const projectConfig=url=>({kind:"project-config",url});');
+  f.write('inspect.ts',"import {inspectionDirectory} from './tooling/gate/reader-inputs/main.ts';inspectionDirectory(new URL('./data/',import.meta.url));");
+  f.write('data/case.ts',"import '../dependency.ts';export const answer=19;");
+  f.write('dependency.ts','export const answer=23;');
+  f.write('data/base.json','{"compilerOptions":{"strict":true}}');
+  f.write('data/tsconfig.json','{"extends":"./base.json","files":["case.ts"]}');
+  f.write('importer.ts',"import './data/case.ts';");
+  f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.ts',import.meta.url));");
+  f.write('compiled.ts',"import {projectInput} from './tooling/gate/reader-inputs/main.ts';projectInput(new URL('./data/case.ts',import.meta.url));");
+  f.write('configured.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./data/tsconfig.json',import.meta.url));");
+  const added=spawnTest('git',gitArguments(['add','.']),{cwd:f.source,encoding:'utf8'});assert.equal(added.status,0,added.stderr);
+  for(const real of ['entry.ts','importer.ts','bytes.ts','compiled.ts','configured.ts'])for(const entries of [['inspect.ts',real],[real,'inspect.ts']]){
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{
+      const result=graph.describe(entries);
+      assert.ok(result.placingFiles.includes('data/case.ts'),entries.join(','));
+      if(real==='compiled.ts'||real==='configured.ts')for(const config of ['data/tsconfig.json','data/base.json']){
+        assert.ok(result.placingFiles.includes(config),config);assert.ok(result.ownedFiles.includes(config),config);
+        assert.ok(!result.moduleFiles.includes(config),config+' stays leaf-owned');
+      }
+      assert.equal(result.moduleFiles.includes('dependency.ts'),['importer.ts','compiled.ts','configured.ts'].includes(real));
+    }finally{graph.close();}
+  }
+});

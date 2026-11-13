@@ -1,20 +1,26 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'file'|'project'|'project-config'|'fixture'|'members';
+export type InputKind='module'|'data'|'inspection'|'file'|'project'|'project-config'|'fixture'|'members';
 export type DataNamespaces=Readonly<Record<string,string>>;
 export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
-export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:'module'|'data';
+export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:'module'|'data'|'inspection';
   member?:string;
   /** Private fixture reach records the declaration without claiming its production members. */
   fixture?:{entry:string;owner:string}};
-export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];directories:DirectoryDeclaration[]};
+export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[]};
 
 declare const DATA_DIRECTORY:unique symbol;
 export type DataDirectory=URL&{readonly [DATA_DIRECTORY]:true};
 /** A pure identity brand. The graph recognizes calls to this owner through
  * lexical bindings; the caller uses the same URL to read its production data. */
 export function dataDirectory(url:URL):DataDirectory{return url as DataDirectory;}
+
+declare const INSPECTION_DIRECTORY:unique symbol;
+export type InspectionDirectory=URL&{readonly [INSPECTION_DIRECTORY]:true};
+/** Immutable bytes inspected by a guard. Reading a population does not place
+ * its members under that guard's execution or validation authority. */
+export function inspectionDirectory(url:URL):InspectionDirectory{return url as InspectionDirectory;}
 
 declare const FILE_INPUT:unique symbol;
 export type FileInput=URL&{readonly [FILE_INPUT]:true};

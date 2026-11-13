@@ -70,6 +70,24 @@ function local(){function data(url:URL){return url;}data(new URL('./function/',i
   }finally{lease.dispose();api.close();}
 });
 
+test('inspection directories are recognized by their lexical owner, including aliases but not shadows',()=>{
+  const api=new API(),source=`import {inspectionDirectory as data} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
+import {inspectionDirectory as other} from './lookalike.ts';
+const alias=data;const {inspectionDirectory:destructured}=inputs;
+data(new URL('./direct/',import.meta.url));alias(new URL('./alias/',import.meta.url));
+inputs.inspectionDirectory(new URL('./namespace/',import.meta.url));destructured(new URL('./destructured/',import.meta.url));
+other(new URL('./lookalike/',import.meta.url));
+function shadow(data:Function){data(new URL('./parameter/',import.meta.url));}
+function local(){function data(url:URL){return url;}data(new URL('./function/',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    const declarations=new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations();
+    assert.deepEqual(declarations.assets,[...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'/',kind:'inspection'})),
+      ...['lookalike','parameter','function'].map(name=>({path:'./'+name+'/',kind:'module'}))]);
+  }finally{lease.dispose();api.close();}
+});
+
 test('exact byte inputs have the same lexical ownership rule as data directories',()=>{
   const api=new API(),source=`import {fileInput as bytes} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';
