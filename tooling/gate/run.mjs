@@ -1727,7 +1727,7 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
 });
 mkdirSync(RUN_DIR, { recursive: true });
 try{
-  diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:Date.now(),
+  diagnostics=new RunDiagnostics({host,sourceRun:RUN_DIR,startedAt:host.wallNow(),
     emit:row=>appendFileSync(join(RUN_DIR,'diagnostics.jsonl'),JSON.stringify(row)+'\n'),
     log:line=>process.stderr.write(line+'\n'),
     failed:error=>{diagnosticsFailure=String(error);stop(`host observation: ${error}`);}});

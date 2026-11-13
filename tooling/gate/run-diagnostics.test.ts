@@ -51,7 +51,7 @@ test('missing pressure or delay is named and empty native windows remain unavail
   const root=testScratch(t,'diagnostics-missing'),env=ownMemory(root),host=hostObservations(env),meter=host.loopDelay();
   assert.deepEqual(meter.read(),{count:0,maxMs:null,p99Ms:null});meter.close();assert.throws(()=>meter.read(),/loopDelay meter is closed/);
   const complete=JSON.parse(readFileSync(env.NTS_HOST_OBSERVATIONS,'utf8'));
-  for(const field of ['pressure','loopDelay']){
+  for(const field of ['pressure','loopDelay','wallClock']){
     const broken=structuredClone(complete);delete broken[field];writeFileSync(env.NTS_HOST_OBSERVATIONS,JSON.stringify(broken));
     assert.throws(()=>hostObservations(env),new RegExp('host observation '+field));
   }
@@ -90,8 +90,8 @@ test('a meter close failure still closes every acquired diagnostic meter',t=>{
 test('delayed acquisition pairs its own wall clock and attaches a later worker root at its own endpoint',t=>{
   const root=testScratch(t,'diagnostics-delayed-start'),clock=join(root,'clock');writeFileSync(clock,'5000');
   const pressure=(total:number)=>({kind:'fixed' as const,ownGroup:'/runner',machine:reading('machine',total),default:reading('cgroup',total)});
-  const env=ownMemory(root,{clock:{kind:'file',file:clock},pressure:pressure(100)});
-  const rows:unknown[]=[],diagnostics=new RunDiagnostics({host:hostObservations(env),sourceRun:'/run',startedAt:10_000,emit:row=>rows.push(row),log:()=>{},failed:()=>{}});
+  const env=ownMemory(root,{clock:{kind:'file',file:clock},wallClock:{kind:'fixed',now:10_000},pressure:pressure(100)}),host=hostObservations(env);
+  const rows:unknown[]=[],diagnostics=new RunDiagnostics({host,sourceRun:'/run',startedAt:host.wallNow(),emit:row=>rows.push(row),log:()=>{},failed:()=>{}});
   assert.equal(diagnostics.report().startedAt,new Date(10_000).toISOString());
   assert.equal(diagnostics.report().pressureExposure?.workers,null);assert.equal(diagnostics.report().workersStartedAt,null);
   writeFileSync(clock,'7000');ownMemory(root,{pressure:pressure(900)});diagnostics.attachWorkers('/late-root');

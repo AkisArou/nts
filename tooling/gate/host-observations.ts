@@ -37,6 +37,7 @@ export type HostObservationFixture = {
   width:{logical:number;available:number};
   load:[number,number,number];
   clock:{kind:'live'}|{kind:'fixed';now:number}|{kind:'file';file:string};
+  wallClock:{kind:'live'}|{kind:'fixed';now:number};
   pressure:{kind:'live'}|{kind:'fixed';ownGroup:string;machine:PressureReading;default:PressureReading;cgroups?:Record<string,PressureReading>};
   loopDelay:{kind:'live'}|{kind:'fixed';value:LoopDelay};
 };
@@ -57,6 +58,7 @@ export interface HostObservations {
   machineWidth():number;
   availableWidth():number;
   now():number;
+  wallNow():number;
   ownCgroup():string;
   machinePressure():PressureReading;
   cgroupPressure(group:string):PressureReading;
@@ -221,6 +223,8 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       if(value.clock?.kind==='fixed')number(value.clock.now,'clock.now');
       else if(value.clock?.kind==='file'){if(!value.clock.file)throw new HostObservationError('host observation clock.file is missing or invalid');}
       else if(value.clock?.kind!=='live')throw new HostObservationError('host observation clock is missing or invalid');
+      if(value.wallClock?.kind==='fixed')number(value.wallClock.now,'wallClock.now');
+      else if(value.wallClock?.kind!=='live')throw new HostObservationError('host observation wallClock is missing or invalid');
       if(value.pressure?.kind==='fixed'){
         checkedGroup(value.pressure.ownGroup);pressureReading(value.pressure.machine,'pressure.machine');pressureReading(value.pressure.default,'pressure.default');
       }else if(value.pressure?.kind!=='live')throw new HostObservationError('host observation pressure is missing or invalid');
@@ -258,6 +262,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
       machineWidth:()=>number(read().width?.logical,'width.logical'),
       availableWidth:()=>number(read().width?.available,'width.available'),
       now:()=>{const value=read().clock;if(value?.kind==='live')return performance.now();if(value?.kind==='fixed')return number(value.now,'clock.now');if(value?.kind==='file'){const text=textFile(value.file,'clock.file').trim();if(!text)throw new HostObservationError('host observation clock.now is missing or invalid');return number(Number(text),'clock.now');}throw new HostObservationError('host observation clock is missing or invalid');},
+      wallNow:()=>{const value=read().wallClock;return value.kind==='live'?Date.now():number(value.now,'wallClock.now');},
       ownCgroup:()=>{const value=read().pressure;return value.kind==='live'?liveOwnCgroup():checkedGroup(value.ownGroup);},
       machinePressure:()=>{const value=read().pressure;return value.kind==='live'?livePressure():pressureReading(value.machine,'pressure.machine');},
       cgroupPressure:group=>{checkedGroup(group);const value=read().pressure;return value.kind==='live'?livePressure(group):pressureReading(value.cgroups?.[group]??{...value.default,identity:group+':'+value.default.identity},'pressure.cgroups.'+group);},
@@ -287,6 +292,7 @@ export function hostObservations(env:NodeJS.ProcessEnv=process.env):HostObservat
     machineWidth:()=>cpus().length,
     availableWidth:()=>availableParallelism(),
     now:()=>performance.now(),
+    wallNow:()=>Date.now(),
     ownCgroup:liveOwnCgroup,
     machinePressure:()=>livePressure(),
     cgroupPressure:livePressure,
