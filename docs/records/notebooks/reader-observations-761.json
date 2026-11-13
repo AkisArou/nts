@@ -1,0 +1,2185 @@
+{
+  "version": 1,
+  "issue": 761,
+  "parent": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+  "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+  "scope": "Part of #761: typed project/explicit Node scope observations, host contexts, strict replay and operation-specific selector projection. No runtime table, coverage certification or ALWAYS change.",
+  "sourceReceipts": [
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "docs/records/notebooks/decisions-log.md",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/docs/records/notebooks/decisions-log.md",
+      "gitBlob": "64e6be7da1071f03c701bd8deaabd1c2ea647bb3",
+      "bytes": 168001,
+      "sha256": "d323f28dcfceba6d7fb2480f5da8e3a59ba96bee22ecf69cfcd3475f87d9472b"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "docs/workflow.md",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/docs/workflow.md",
+      "gitBlob": "cdc110dcaaba436da92038d1cac851857ba5eee3",
+      "bytes": 93466,
+      "sha256": "be704b3cba5f9148381c40e2464eb3558943eb9f8e2a4a29af6f423eeeedbc9e"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/differential/oracle-filesystem.test.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-filesystem.test.ts",
+      "gitBlob": "16672a1d206e68046008a88083e68d5fff5c8e6e",
+      "bytes": 32436,
+      "sha256": "1b6183fbba128c816b0e4aa7bfd9f079117ed8d4ac9f37be4aeb477c209c0c52"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/differential/oracle-filesystem.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-filesystem.ts",
+      "gitBlob": "608c38edebd353a2ea3b53306d1c38202a9b2114",
+      "bytes": 11690,
+      "sha256": "6f84c7c7e5627acbb000e79f0861d2cf03154c77a878a04423ea35d002ea2470"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/differential/oracle-runtime.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-runtime.ts",
+      "gitBlob": "dd8ce013f9d07f7759cd234d2169850ffb823ffd",
+      "bytes": 40154,
+      "sha256": "a9523ec9fb735cdca0d4acace5d3cf60dac6bc489dc14ecd611e114c4e354e14"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/differential/src/oracle_emit.rs",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/src/oracle_emit.rs",
+      "gitBlob": "a7bc03387a59e574baade7930db169a9fe68ecb4",
+      "bytes": 93149,
+      "sha256": "1daaf3c61f8cb4a4c9e3218aaedf31853866fe6d1478c1dc2bfea47a4ee4af31"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/module-closure-fixture.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/module-closure-fixture.ts",
+      "gitBlob": "b7dd559bf7b5744153aa20becce53f0a63c25813",
+      "bytes": 14133,
+      "sha256": "99e6af6f96335216d03f06e2afa2649b53e74db35e65972faea58e6cac108e2a"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/module-closure.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/module-closure.ts",
+      "gitBlob": "9d47c4a86b362143b737bc53c09c468f6156dd78",
+      "bytes": 12386,
+      "sha256": "0324aa7d1247520fedcdfa76930aa74e711128f91b7be04cfb4d7ff50d2603d4"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/owed.mjs",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/owed.mjs",
+      "gitBlob": "8b49a72429952e7a7fc147671115156b746a663b",
+      "bytes": 128734,
+      "sha256": "4b5126247c8cd7454e864e211bd6453475a12e08d31a57301256065c0882a2bd"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/owed.test.mjs",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/owed.test.mjs",
+      "gitBlob": "2641e567fd34e3d1e255f0509a999023c30446a9",
+      "bytes": 82778,
+      "sha256": "d148ce61cba4bcf01119817d9a22b8f7eb6ffbeb4da14da898479cf29c033990"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/project-inputs.test.ts",
+      "arm": "base",
+      "absent": true
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/project-inputs.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/project-inputs.ts",
+      "gitBlob": "6af0f942c0e6cc46d848db316c0b7e75289f3a24",
+      "bytes": 3076,
+      "sha256": "523da477366082b05ce642f3e32c29fd9a7eb5bcd2cb8591d4d701dd924ab150"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/reader-inputs/main.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/reader-inputs/main.ts",
+      "gitBlob": "2ea28fea28e5f552ca74d778d6e6a705d972bade",
+      "bytes": 6575,
+      "sha256": "cad43bd9b458bbde0867af2638e0070c67c9768f8ea3c8fb152542b162f45a3d"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/reader-observations.test.ts",
+      "arm": "base",
+      "absent": true
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/reader-observations.ts",
+      "arm": "base",
+      "absent": true
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/rust-runtime-declarations.test.ts",
+      "arm": "base",
+      "absent": true
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/rust-runtime-declarations.ts",
+      "arm": "base",
+      "absent": true
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/source-facts.test.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/source-facts.test.ts",
+      "gitBlob": "399cdb118de68bee60874e503d4000661e5e982c",
+      "bytes": 15113,
+      "sha256": "e20ddcae7a7190c7faf44705c844f6ca6d2d527648791b039a274634b6cac748"
+    },
+    {
+      "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+      "path": "tooling/gate/source-facts.ts",
+      "arm": "base",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/source-facts.ts",
+      "gitBlob": "7d05ac2fe163e32ff0764787fce64e77fc4567fd",
+      "bytes": 19403,
+      "sha256": "167a8023f03e41145ca7691d2b728bdcae3b7c86cddc44f46fcde0d448bef5e5"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "docs/records/notebooks/decisions-log.md",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/docs/records/notebooks/decisions-log.md",
+      "gitBlob": "bbaffaa42c5b1a511d7589b01cddab4595a5a082",
+      "bytes": 168943,
+      "sha256": "8518eb477aa57e117931c02ab3444dc3463ad94553b3b26dbb07bd22ad724c90"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "docs/workflow.md",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/docs/workflow.md",
+      "gitBlob": "b433c768dad8366a18ddefcd6defa76e9b31ad61",
+      "bytes": 95671,
+      "sha256": "6c2e0049a604bb85800f4fe35432f13f973564005693445248cd3d495a63edbe"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/differential/oracle-filesystem.test.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-filesystem.test.ts",
+      "gitBlob": "d0329193ad2c551be36f06448a13f09ab282c438",
+      "bytes": 32932,
+      "sha256": "5c5d96a4e2ab04b9f628aa9fee675ac0826b0dae80c8ce18f0446ff12264b001"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/differential/oracle-filesystem.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-filesystem.ts",
+      "gitBlob": "1ed7f5553d099bac8571382511c556f6226ad8ef",
+      "bytes": 14315,
+      "sha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/differential/oracle-runtime.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-runtime.ts",
+      "gitBlob": "139d9cbab52eb087d4b1338580602fc4377a478f",
+      "bytes": 41090,
+      "sha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/differential/src/oracle_emit.rs",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/src/oracle_emit.rs",
+      "gitBlob": "69cb24c7c2250197d7135ba4279df677a77fa4d0",
+      "bytes": 96986,
+      "sha256": "23ab263102d555ffe33181e8c1a4085432360595237bc7a769a91e22b4279cb9"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/module-closure-fixture.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/module-closure-fixture.ts",
+      "gitBlob": "87c85d175c6431b42807f444a252ff492b1cf122",
+      "bytes": 14415,
+      "sha256": "e7ab01fe88e7756057628f5e62f2498ade1c588674366edebd10a0a06825751a"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/module-closure.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/module-closure.ts",
+      "gitBlob": "c9b1fb33f52d73eb16a67546995e6bcd15cf7570",
+      "bytes": 15738,
+      "sha256": "df649f7200bac128886fc8e756cde9955a74b67e206665a456c39db1288eb3a3"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/owed.mjs",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/owed.mjs",
+      "gitBlob": "7565cb0c7439648d58bdeb7d8cc5c2d090c57ae4",
+      "bytes": 130594,
+      "sha256": "cf4c711fcf83884b1bee4eaef589837b63f18c3d5615b6b01e83736210425af7"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/owed.test.mjs",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/owed.test.mjs",
+      "gitBlob": "478e2dd7b9c29792cbccd264a4879bd9dd4f5655",
+      "bytes": 88190,
+      "sha256": "46ccdd560aed703696208615f186a6b836bef67aa43110537143b30083983f23"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/project-inputs.test.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/project-inputs.test.ts",
+      "gitBlob": "64d24e2f2bf6de8325b8e219847b79854c6bf765",
+      "bytes": 5792,
+      "sha256": "d20dc310ec500301de73354af2e31603ffb7efe0bc0507ede03b3b3bb0745c7a"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/project-inputs.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/project-inputs.ts",
+      "gitBlob": "bb87adf35230cdbed0ba6231374f58e653273da4",
+      "bytes": 3133,
+      "sha256": "1c076bcb0c8af623c6f5cf20bd11b3c989eeb18329d5887514b0b5e8f104e836"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/reader-inputs/main.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-inputs/main.ts",
+      "gitBlob": "48b3174ec2abd5bd4c01a3e69ed93801483dc1a8",
+      "bytes": 6354,
+      "sha256": "8a5a91582240d57de82dde07495160ae4f87b1d7da2f1894c18554d9ddc06e52"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/reader-observations.test.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-observations.test.ts",
+      "gitBlob": "2b1d30abe0240f0cd39aff74d61c901eafe38fb1",
+      "bytes": 19810,
+      "sha256": "8c4d2468852fc94bbd47afc00417a4d7d3ded56b63903723a2dd8b02eba9771e"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/reader-observations.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-observations.ts",
+      "gitBlob": "0f284c58a2df6f675c47d947a4f71c2068c9eac2",
+      "bytes": 10930,
+      "sha256": "1015c7ba830ccad552712d696c2c02b4a1fefa21ecb88a50caa21d7e93d0a936"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/rust-runtime-declarations.test.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/rust-runtime-declarations.test.ts",
+      "gitBlob": "5f77568f0530bb8edef61bfabff287962025fb66",
+      "bytes": 2540,
+      "sha256": "5c3f143f9a6d60bc702425c35e94d536d8986e2e04d8ab772f8b997067a251d7"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/rust-runtime-declarations.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/rust-runtime-declarations.ts",
+      "gitBlob": "87727910be673a7f27917c035fc4da63109b1a8a",
+      "bytes": 6537,
+      "sha256": "601c2c97e6ae0541ae4d2aebc090ea7e6ce78f80d1f11d214974774662ff3656"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/source-facts.test.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/source-facts.test.ts",
+      "gitBlob": "2ffd62c8550d7498d1f4dc512906620cc091b0b3",
+      "bytes": 16042,
+      "sha256": "7b7adce191297bce874cebb8c678f965854026a05148fc7242dd46bdcfc4dbaf"
+    },
+    {
+      "source": "3b3a8946d4e10af8c2d35c5abfb0ea62d0a519f6",
+      "path": "tooling/gate/source-facts.ts",
+      "arm": "proof",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/source-facts.ts",
+      "gitBlob": "a7717dd1fcba6eb51c53d5994a3d73fb728b11af",
+      "bytes": 20112,
+      "sha256": "997966f65f0fe1045add7ac2bfbca904c5172f260d3d7e7e711423630ea611a6"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "docs/records/notebooks/decisions-log.md",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/docs/records/notebooks/decisions-log.md",
+      "bytes": 168943,
+      "sha256": "8518eb477aa57e117931c02ab3444dc3463ad94553b3b26dbb07bd22ad724c90"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "docs/workflow.md",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/docs/workflow.md",
+      "bytes": 95667,
+      "sha256": "ee01a469cb44ea9c21e22ef3f423f5e0e86e8fb53680c189eaf54b16c48d4dab"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/differential/oracle-filesystem.test.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-filesystem.test.ts",
+      "bytes": 32932,
+      "sha256": "5c5d96a4e2ab04b9f628aa9fee675ac0826b0dae80c8ce18f0446ff12264b001"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/differential/oracle-filesystem.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-filesystem.ts",
+      "bytes": 14315,
+      "sha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/differential/oracle-runtime.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-runtime.ts",
+      "bytes": 41090,
+      "sha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/differential/src/oracle_emit.rs",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/src/oracle_emit.rs",
+      "bytes": 100846,
+      "sha256": "a02d4e32649ff8db65db2b7e30296fd359a88771d7ce9c3b1d4be3df52ced077"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/module-closure-fixture.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/module-closure-fixture.ts",
+      "bytes": 14415,
+      "sha256": "e7ab01fe88e7756057628f5e62f2498ade1c588674366edebd10a0a06825751a"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/module-closure.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/module-closure.ts",
+      "bytes": 15738,
+      "sha256": "df649f7200bac128886fc8e756cde9955a74b67e206665a456c39db1288eb3a3"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/owed.mjs",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/owed.mjs",
+      "bytes": 130594,
+      "sha256": "cf4c711fcf83884b1bee4eaef589837b63f18c3d5615b6b01e83736210425af7"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/owed.test.mjs",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/owed.test.mjs",
+      "bytes": 88190,
+      "sha256": "46ccdd560aed703696208615f186a6b836bef67aa43110537143b30083983f23"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/project-inputs.test.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/project-inputs.test.ts",
+      "bytes": 5792,
+      "sha256": "d20dc310ec500301de73354af2e31603ffb7efe0bc0507ede03b3b3bb0745c7a"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/project-inputs.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/project-inputs.ts",
+      "bytes": 3133,
+      "sha256": "1c076bcb0c8af623c6f5cf20bd11b3c989eeb18329d5887514b0b5e8f104e836"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/reader-inputs/main.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-inputs/main.ts",
+      "bytes": 6354,
+      "sha256": "8a5a91582240d57de82dde07495160ae4f87b1d7da2f1894c18554d9ddc06e52"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/reader-observations.test.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-observations.test.ts",
+      "bytes": 19810,
+      "sha256": "8c4d2468852fc94bbd47afc00417a4d7d3ded56b63903723a2dd8b02eba9771e"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/reader-observations.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-observations.ts",
+      "bytes": 10930,
+      "sha256": "1015c7ba830ccad552712d696c2c02b4a1fefa21ecb88a50caa21d7e93d0a936"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/rust-runtime-declarations.test.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/rust-runtime-declarations.test.ts",
+      "bytes": 2540,
+      "sha256": "5c3f143f9a6d60bc702425c35e94d536d8986e2e04d8ab772f8b997067a251d7"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/rust-runtime-declarations.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/rust-runtime-declarations.ts",
+      "bytes": 6537,
+      "sha256": "601c2c97e6ae0541ae4d2aebc090ea7e6ce78f80d1f11d214974774662ff3656"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/source-facts.test.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/source-facts.test.ts",
+      "bytes": 16042,
+      "sha256": "7b7adce191297bce874cebb8c678f965854026a05148fc7242dd46bdcfc4dbaf"
+    },
+    {
+      "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+      "path": "tooling/gate/source-facts.ts",
+      "arm": "corrected",
+      "artifact": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/source-facts.ts",
+      "bytes": 20112,
+      "sha256": "997966f65f0fe1045add7ac2bfbca904c5172f260d3d7e7e711423630ea611a6"
+    }
+  ],
+  "countedEngineEquivalence": {
+    "counted": "d32ad9bdfab88dfa0d0d49b3ef4c7d87379528c8",
+    "correctedProof": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+    "scope": "all changed tooling TS/JS source and tests; native Rust conversion is separately corrected and not included in the standalone JS cost claim",
+    "rows": [
+      {
+        "path": "tooling/differential/oracle-filesystem.test.ts",
+        "bytes": 32932,
+        "sha256": "5c5d96a4e2ab04b9f628aa9fee675ac0826b0dae80c8ce18f0446ff12264b001"
+      },
+      {
+        "path": "tooling/differential/oracle-filesystem.ts",
+        "bytes": 14315,
+        "sha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674"
+      },
+      {
+        "path": "tooling/differential/oracle-runtime.ts",
+        "bytes": 41090,
+        "sha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3"
+      },
+      {
+        "path": "tooling/gate/module-closure-fixture.ts",
+        "bytes": 14415,
+        "sha256": "e7ab01fe88e7756057628f5e62f2498ade1c588674366edebd10a0a06825751a"
+      },
+      {
+        "path": "tooling/gate/module-closure.ts",
+        "bytes": 15738,
+        "sha256": "df649f7200bac128886fc8e756cde9955a74b67e206665a456c39db1288eb3a3"
+      },
+      {
+        "path": "tooling/gate/owed.mjs",
+        "bytes": 130594,
+        "sha256": "cf4c711fcf83884b1bee4eaef589837b63f18c3d5615b6b01e83736210425af7"
+      },
+      {
+        "path": "tooling/gate/owed.test.mjs",
+        "bytes": 88190,
+        "sha256": "46ccdd560aed703696208615f186a6b836bef67aa43110537143b30083983f23"
+      },
+      {
+        "path": "tooling/gate/project-inputs.test.ts",
+        "bytes": 5792,
+        "sha256": "d20dc310ec500301de73354af2e31603ffb7efe0bc0507ede03b3b3bb0745c7a"
+      },
+      {
+        "path": "tooling/gate/project-inputs.ts",
+        "bytes": 3133,
+        "sha256": "1c076bcb0c8af623c6f5cf20bd11b3c989eeb18329d5887514b0b5e8f104e836"
+      },
+      {
+        "path": "tooling/gate/reader-inputs/main.ts",
+        "bytes": 6354,
+        "sha256": "8a5a91582240d57de82dde07495160ae4f87b1d7da2f1894c18554d9ddc06e52"
+      },
+      {
+        "path": "tooling/gate/reader-observations.test.ts",
+        "bytes": 19810,
+        "sha256": "8c4d2468852fc94bbd47afc00417a4d7d3ded56b63903723a2dd8b02eba9771e"
+      },
+      {
+        "path": "tooling/gate/reader-observations.ts",
+        "bytes": 10930,
+        "sha256": "1015c7ba830ccad552712d696c2c02b4a1fefa21ecb88a50caa21d7e93d0a936"
+      },
+      {
+        "path": "tooling/gate/rust-runtime-declarations.test.ts",
+        "bytes": 2540,
+        "sha256": "5c3f143f9a6d60bc702425c35e94d536d8986e2e04d8ab772f8b997067a251d7"
+      },
+      {
+        "path": "tooling/gate/rust-runtime-declarations.ts",
+        "bytes": 6537,
+        "sha256": "601c2c97e6ae0541ae4d2aebc090ea7e6ce78f80d1f11d214974774662ff3656"
+      },
+      {
+        "path": "tooling/gate/source-facts.test.ts",
+        "bytes": 16042,
+        "sha256": "7b7adce191297bce874cebb8c678f965854026a05148fc7242dd46bdcfc4dbaf"
+      },
+      {
+        "path": "tooling/gate/source-facts.ts",
+        "bytes": 20112,
+        "sha256": "997966f65f0fe1045add7ac2bfbca904c5172f260d3d7e7e711423630ea611a6"
+      }
+    ]
+  },
+  "supported": {
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912",
+    "canonical": true,
+    "experiments": [],
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "wall": 0.96,
+        "cpu": 0.592106,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/clippy.log"
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "wall": 1.973,
+        "cpu": 1.981752,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/format.log"
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "wall": 3.925,
+        "cpu": 3.84904,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/rustfmt.log"
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "wall": 0.1,
+        "cpu": 0.06055,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/reformat.log"
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "wall": 1.36,
+        "cpu": 1.590816,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/records.log"
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "wall": 2.301,
+        "cpu": 2.244378,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/old-paths.log"
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "wall": 0.125,
+        "cpu": 0.054836,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/audit.log"
+      },
+      {
+        "name": "unicode-freshness",
+        "verdict": "PASS",
+        "wall": 0.155,
+        "cpu": 0.165952,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/unicode-freshness.log"
+      },
+      {
+        "name": "jvm-members",
+        "verdict": "PASS",
+        "wall": 0.196,
+        "cpu": 0.18843,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/jvm-members.log"
+      },
+      {
+        "name": "doctests",
+        "verdict": "PASS",
+        "wall": 6.014,
+        "cpu": 4.80902,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/doctests.log"
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "wall": 2.786,
+        "cpu": 1.535691,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/test262.log"
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "wall": 2.171,
+        "cpu": 3.717203,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling-types.log"
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "wall": 3.755,
+        "cpu": 5.234828,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/gate-inputs.log"
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "wall": 3.949,
+        "cpu": 5.570124,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/test-host.log"
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "wall": 193.311,
+        "cpu": 2254.691754,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling.log"
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "wall": 0.066,
+        "cpu": 0.041454,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/primitives.log"
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "wall": 270.384,
+        "cpu": 4113.916213,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tests.log"
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "wall": 0.883,
+        "cpu": 3.284733,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/config.log"
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "wall": 1.441,
+        "cpu": 0.904909,
+        "log": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/licenses.log"
+      }
+    ],
+    "runnerWallSeconds": 470.26,
+    "summedMemoryAdmissionWaitSeconds": 270.30199999999996,
+    "waitInterpretation": "Summed admission intervals can overlap; they are separate from execution CPU and are not subtracted as one serial interval.",
+    "cleanup": {
+      "state": "complete"
+    }
+  },
+  "focused": {
+    "source": "d32ad9bdfab88dfa0d0d49b3ef4c7d87379528c8",
+    "tests": 260,
+    "passed": 260,
+    "log": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v8.log",
+    "host": "test host ownership: 1907 sources, 271 entry closures, 413 reads checked",
+    "strict": "tooling strict types: 848 modules; 5694 recorded diagnostics; 0 improved modules",
+    "equivalence": "All changed TS/JS source and test bytes are identical at the corrected proof pin; native Rust is separately corrected and executed."
+  },
+  "inner": {
+    "log": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-inner-v2.log",
+    "source": "0b07f526eef07fc3f7b26273fc825c5bfa1f48f9",
+    "summary": "inner loop summary\n  PASS  fmt              3s\n  PASS  clippy           2s\n  PASS  build            3s\n  PASS  tests          406s\ngreen: queue it with node tooling/landing/check.ts <commit>"
+  },
+  "placement": {
+    "sourceBaseline": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+    "enginePreflightSource": "7cfa7da5d32bcbfe84b7160817cd97262870c1bd",
+    "fullEqual": true,
+    "unplacedEqual": true,
+    "policyEqual": true,
+    "counts": {
+      "full": 178,
+      "unplaced": 142,
+      "policy": 36
+    }
+  },
+  "oracle": {
+    "before": {
+      "identity": {
+        "version": 1,
+        "typescript": {
+          "version": "7.1.0-beta",
+          "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+          "packageSha256": "74a328c3e4325de5fe0bc69b7452c6f81b5dc7f4acb1ee14fc24b0c9cad9b21e",
+          "nativeSha256": "a183b1956edbe7e7d98f2249858eedf2d8a9790809cc4909db1276e202faaa70",
+          "nativePackageSha256": "b835edebd8bf1fdbda9a04860d23977d5483374348d5cac4636245af3f6a4b46"
+        },
+        "executionSha256": "b7cfb241ed658ad0ef55d0e6e5760cd6acc36c2f742cd2e39929a1df58179f52",
+        "emitterSha256": "ba035f92727d1954c9fcbe934f76e9ba4d36f08717ec12479204e7d131877cd2",
+        "loaderSha256": "500c277b8bdf87ff8ca9fd6c60cb133b16b9eed39128cd9dc15b8da8c482586e",
+        "filesystemSha256": "6f84c7c7e5627acbb000e79f0861d2cf03154c77a878a04423ea35d002ea2470",
+        "runtimeSha256": "a9523ec9fb735cdca0d4acace5d3cf60dac6bc489dc14ecd611e114c4e354e14",
+        "resolutionSha256": "926f285822840147f850ccc0c9ab3c6d5680e6a07f791d9f0c327ae4ecf25bf6",
+        "assetsSha256": "28428a3d17120736532046cd2325d8869a6cdcc72c2cc934f65937aff4f05cd5",
+        "publisherSha256": "d994e31ddcb6af6a4cbc39e79fae7bf67188948a0e116642b66678e0642a14f5",
+        "runtimeModulesSha256": "f3e354f529e53ed19db031266c8eaeae8835d72ff2d96c4afb084a4801f52808",
+        "childBootstrapSha256": "cc75f82389dbc1d6d8234f8bd20e899ab33a8a49a1581ac6d4e2e78f841469ad",
+        "toolchainRecordSha256": "9dbc18df3d80db4d290d8018fd452b223eb121a7106cbf0ca9f7b4029b1d9a37",
+        "options": "source-resolved public Program.emitToString; original configured owner roots/options; complete input-byte/file/import/checking-diagnostic identity gate; owner-partitioned output with exact TS2877 obligations retained; pinned ES2026 with owner module/class-field defaults/library inputs; noEmit=false; noEmitOnError=false; rewriteRelativeImportExtensions=true; owner map options unchanged; status0 and emitSkipped=false required; producer sourceFileName output ownership; source index v9; parent prepare/finalize original proofs; authenticated Node-probed resolution and use-time loaded bytes; closed delegated child/Worker ownership; authored-JS CommonJS outside capture; unproved captured routes hold"
+      },
+      "rows": 1231,
+      "rowsSha256": "69cb274396e7908dbaa7ef5379d2ca1d263daec4fd45b126831d8e7ff0e955b9",
+      "unplanned": [],
+      "pending": [],
+      "budgets": [
+        {
+          "source": "benchmarks/cases/jetstream-lazy-collections/case.ts",
+          "signature": "d463a7db26e84921e8ec05192824e39c79f71f9985731f38dd9981da8853db75",
+          "recorded": {
+            "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
+            "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+            "producer": "4fcbce137ae8d4da4fa0caecb57fadafe3906f1f93400b641d5a71e1ba77a7db",
+            "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
+          },
+          "current": {
+            "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
+            "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+            "producer": "d5ecdfd3ad20a6c5664d3b3d95e6c66c2d5676f7b7b8ecca0113277b89855cd1",
+            "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
+          },
+          "fresh": false
+        }
+      ]
+    },
+    "after": {
+      "identity": {
+        "version": 1,
+        "typescript": {
+          "version": "7.1.0-beta",
+          "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+          "packageSha256": "74a328c3e4325de5fe0bc69b7452c6f81b5dc7f4acb1ee14fc24b0c9cad9b21e",
+          "nativeSha256": "a183b1956edbe7e7d98f2249858eedf2d8a9790809cc4909db1276e202faaa70",
+          "nativePackageSha256": "b835edebd8bf1fdbda9a04860d23977d5483374348d5cac4636245af3f6a4b46"
+        },
+        "executionSha256": "b7cfb241ed658ad0ef55d0e6e5760cd6acc36c2f742cd2e39929a1df58179f52",
+        "emitterSha256": "ba035f92727d1954c9fcbe934f76e9ba4d36f08717ec12479204e7d131877cd2",
+        "loaderSha256": "500c277b8bdf87ff8ca9fd6c60cb133b16b9eed39128cd9dc15b8da8c482586e",
+        "filesystemSha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674",
+        "runtimeSha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3",
+        "resolutionSha256": "926f285822840147f850ccc0c9ab3c6d5680e6a07f791d9f0c327ae4ecf25bf6",
+        "assetsSha256": "28428a3d17120736532046cd2325d8869a6cdcc72c2cc934f65937aff4f05cd5",
+        "publisherSha256": "d994e31ddcb6af6a4cbc39e79fae7bf67188948a0e116642b66678e0642a14f5",
+        "runtimeModulesSha256": "f3e354f529e53ed19db031266c8eaeae8835d72ff2d96c4afb084a4801f52808",
+        "childBootstrapSha256": "cc75f82389dbc1d6d8234f8bd20e899ab33a8a49a1581ac6d4e2e78f841469ad",
+        "toolchainRecordSha256": "9dbc18df3d80db4d290d8018fd452b223eb121a7106cbf0ca9f7b4029b1d9a37",
+        "options": "source-resolved public Program.emitToString; original configured owner roots/options; complete input-byte/file/import/checking-diagnostic identity gate; owner-partitioned output with exact TS2877 obligations retained; pinned ES2026 with owner module/class-field defaults/library inputs; noEmit=false; noEmitOnError=false; rewriteRelativeImportExtensions=true; owner map options unchanged; status0 and emitSkipped=false required; producer sourceFileName output ownership; source index v9; parent prepare/finalize original proofs; authenticated Node-probed resolution and use-time loaded bytes; closed delegated child/Worker ownership; authored-JS CommonJS outside capture; unproved captured routes hold"
+      },
+      "rows": 1231,
+      "rowsSha256": "69cb274396e7908dbaa7ef5379d2ca1d263daec4fd45b126831d8e7ff0e955b9",
+      "unplanned": [],
+      "pending": [],
+      "budgets": [
+        {
+          "source": "benchmarks/cases/jetstream-lazy-collections/case.ts",
+          "signature": "d463a7db26e84921e8ec05192824e39c79f71f9985731f38dd9981da8853db75",
+          "recorded": {
+            "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
+            "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+            "producer": "4fcbce137ae8d4da4fa0caecb57fadafe3906f1f93400b641d5a71e1ba77a7db",
+            "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
+          },
+          "current": {
+            "entry": "92d455d6cb81629eaf89d9ba4cc1add3c321a4a6cb50f4dad15efaec91388a39",
+            "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+            "producer": "03f8bf86b734c91b2861d85c61a63bd0b7d46a24efb25b821068390832f6e80b",
+            "policy": "107a794ccdddc63115352b76fec22bcf4edcc9bd27929c408f6d4885db52f8da"
+          },
+          "fresh": false
+        }
+      ]
+    },
+    "rowsEqual": true,
+    "pendingEqual": true,
+    "newlyStaleBudgets": [],
+    "identityInterpretation": "Shared filesystem/runtime source hashes intentionally change; population rows and their digest remain equal."
+  },
+  "cost": {
+    "v1": {
+      "version": 1,
+      "complete": true,
+      "prepared": {
+        "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+        "engines": {
+          "old": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+          "current": "7cfa7da5d32bcbfe84b7160817cd97262870c1bd"
+        },
+        "node": {
+          "path": "/home/akisarou/.asdf/installs/nodejs/26.13.0/bin/node",
+          "sha256": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
+        },
+        "driver": {
+          "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1.ts",
+          "sha256": "7625d9eb9064321173ca20c49d9a7e1aa314c73ad541e831c5cb3e9cc3922b15"
+        },
+        "cwd": "/home/akisarou/.cache/nts-pool/1"
+      },
+      "order": [
+        "old",
+        "current",
+        "current",
+        "old"
+      ],
+      "rows": [
+        {
+          "engine": "old",
+          "index": "arm-0",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 44379623713,
+            "user_s": 2.940793,
+            "sys_s": 0.342439,
+            "cpu_s": 3.2832320000000004
+          },
+          "cpu": 3.299582,
+          "wall": 3.3377998640000004,
+          "peakBytes": 464035840,
+          "load": [
+            0.78,
+            0.96,
+            2
+          ]
+        },
+        {
+          "engine": "current",
+          "index": "arm-1",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 48192637873,
+            "user_s": 3.21763,
+            "sys_s": 0.372551,
+            "cpu_s": 3.5901810000000003
+          },
+          "cpu": 3.608998,
+          "wall": 3.6225461319999996,
+          "peakBytes": 482574336,
+          "load": [
+            1.04,
+            1.01,
+            2.01
+          ]
+        },
+        {
+          "engine": "current",
+          "index": "arm-2",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 48399410076,
+            "user_s": 3.214765,
+            "sys_s": 0.377283,
+            "cpu_s": 3.5920479999999997
+          },
+          "cpu": 3.607328,
+          "wall": 3.6356732820000017,
+          "peakBytes": 442687488,
+          "load": [
+            1.43,
+            1.1,
+            2.04
+          ]
+        },
+        {
+          "engine": "old",
+          "index": "arm-3",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 44364398245,
+            "user_s": 2.935717,
+            "sys_s": 0.333173,
+            "cpu_s": 3.26889
+          },
+          "cpu": 3.287089,
+          "wall": 3.299389346,
+          "peakBytes": 445263872,
+          "load": [
+            1.64,
+            1.14,
+            2.05
+          ]
+        }
+      ],
+      "means": {
+        "old": {
+          "instructions": 44372010979,
+          "cpu": 3.2933355,
+          "wall": 3.3185946050000004,
+          "peakBytes": 454649856
+        },
+        "current": {
+          "instructions": 48296023974.5,
+          "cpu": 3.6081630000000002,
+          "wall": 3.6291097070000005,
+          "peakBytes": 462630912
+        }
+      },
+      "ratios": {
+        "instructions": 1.088434418655425,
+        "cpu": 1.0955953318451765,
+        "wall": 1.0935682537216684,
+        "peakBytes": 1.0175542912742064
+      },
+      "cpuBasis": "own cgroup CPU across perf launch through waited child exit, including descendants; post-arm validation excluded",
+      "peakBasis": "retained own-scope memory.peak descriptor, reset per arm when supported; controller inclusive",
+      "peakResettable": true,
+      "sourceBasis": "same frozen source tree for both engines; complete full/unplaced/policy arrays compared after every arm"
+    },
+    "v2": {
+      "version": 1,
+      "complete": true,
+      "prepared": {
+        "source": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+        "engines": {
+          "old": "017159e94e8bc7efbf9dbf643ec3f6c22548362a",
+          "current": "d32ad9bdfab88dfa0d0d49b3ef4c7d87379528c8"
+        },
+        "node": {
+          "path": "/home/akisarou/.asdf/installs/nodejs/26.13.0/bin/node",
+          "sha256": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
+        },
+        "driver": {
+          "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2.ts",
+          "sha256": "231d5208a985f2e474121354d5443e7487aa1f6665f7d10d3631da58fb423836"
+        },
+        "cwd": "/home/akisarou/.cache/nts-pool/1"
+      },
+      "order": [
+        "old",
+        "current",
+        "current",
+        "old"
+      ],
+      "rows": [
+        {
+          "engine": "old",
+          "index": "arm-0",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 44749065638,
+            "user_s": 3.016551,
+            "sys_s": 0.378239,
+            "cpu_s": 3.3947900000000004
+          },
+          "cpu": 3.414119,
+          "wall": 3.4324315860000008,
+          "peakBytes": 455884800,
+          "load": [
+            1.11,
+            1.06,
+            1.74
+          ]
+        },
+        {
+          "engine": "current",
+          "index": "arm-1",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 45876330103,
+            "user_s": 3.0447,
+            "sys_s": 0.258036,
+            "cpu_s": 3.3027360000000003
+          },
+          "cpu": 3.320309,
+          "wall": 3.332241143000001,
+          "peakBytes": 436232192,
+          "load": [
+            1.18,
+            1.08,
+            1.74
+          ]
+        },
+        {
+          "engine": "current",
+          "index": "arm-2",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 45886516324,
+            "user_s": 3.045318,
+            "sys_s": 0.280557,
+            "cpu_s": 3.325875
+          },
+          "cpu": 3.343302,
+          "wall": 3.3557682220000005,
+          "peakBytes": 437825536,
+          "load": [
+            1.18,
+            1.08,
+            1.74
+          ]
+        },
+        {
+          "engine": "old",
+          "index": "arm-3",
+          "output": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.json",
+          "error": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.stderr",
+          "counter": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.perf.txt",
+          "measurement": {
+            "counter_scope": "exec-inherited-user-instructions-v1",
+            "instructions": 44624404456,
+            "user_s": 2.974956,
+            "sys_s": 0.337683,
+            "cpu_s": 3.3126390000000003
+          },
+          "cpu": 3.333094,
+          "wall": 3.3457488139999985,
+          "peakBytes": 466456576,
+          "load": [
+            1.24,
+            1.09,
+            1.75
+          ]
+        }
+      ],
+      "means": {
+        "old": {
+          "instructions": 44686735047,
+          "cpu": 3.3736065,
+          "wall": 3.3890901999999996,
+          "peakBytes": 461170688
+        },
+        "current": {
+          "instructions": 45881423213.5,
+          "cpu": 3.3318054999999998,
+          "wall": 3.3440046825000005,
+          "peakBytes": 437028864
+        }
+      },
+      "ratios": {
+        "instructions": 1.0267347382896395,
+        "cpu": 0.9876094025785164,
+        "wall": 0.9866968670529929,
+        "peakBytes": 0.9476510007505073
+      },
+      "cpuBasis": "own cgroup CPU across perf launch through waited child exit, including descendants; post-arm validation excluded",
+      "peakBasis": "retained own-scope memory.peak descriptor, reset per arm when supported; controller inclusive",
+      "peakResettable": true,
+      "sourceBasis": "same frozen source tree for both engines; complete full/unplaced/policy arrays compared after every arm"
+    },
+    "interpretation": "Real +2.67% remaining user-instruction cost. V2 CPU arms overlap; no CPU speed or native-runtime performance claim. Peak includes controller. Warm stdout was validated then overwritten by warm-row metadata; measured arm outputs are retained."
+  },
+  "exclusions": [
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383",
+      "reason": "Own native stat disagreement and Clippy errors; exact original numeric stat answers were not logged and scratch was removed. Tooling passed. This is RED, not acceptance evidence."
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v5.log",
+      "reason": "A new control attempted a file symlink refused by the unchanged owned-file boundary; changed to an allowed in-root aliased ancestor."
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v6.log",
+      "reason": "One untyped report-clone callback; fixed before V7."
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/result.json",
+      "reason": "Retained initial real cost before the profiled source-ownership reuse; not discarded as noise."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/build.log",
+      "bytes": 412,
+      "sha256": "c82adb2fd0ecb6877b4f943f048c2e1204902d73d4213dda2dc0106d37111bec"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/clippy.time",
+      "bytes": 334,
+      "sha256": "0d5f6e344a8c93ec06eb8e99b46415a3af0a079c84d09bd749c4ac247acc78c7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/gate-inputs.log",
+      "bytes": 136,
+      "sha256": "0fccc201cb9fd8c174df3e4dc45506aa7a8f11992e566b48c606d37aad4c5f0f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/gate-inputs.time",
+      "bytes": 337,
+      "sha256": "6f00fd1a1d1caad03e82cddddcd8e704b05ef38be433dd949173f9fe5d98eb59"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/gate.log",
+      "bytes": 49235,
+      "sha256": "9507eb63ace9934b6c4b51fb84059df2ca7609cec2cd05a9bf03d0f4b87ca3db"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/oracle-setup.log",
+      "bytes": 747,
+      "sha256": "d66073bef4490c0b40e3d8486051d72dd166f5055acbaecf0bbdb85955bcd10f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/records.log",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/summary.json",
+      "bytes": 650227,
+      "sha256": "3802d6672620c0a6948bf9314b3f464ecc70ff26830453023a5dacafc5e80ecb"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/test-host.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tests.log",
+      "bytes": 1203,
+      "sha256": "1b57042e03e37a795718d76a1728c6df815625732c78e503c39b406914431c9e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tests.time",
+      "bytes": 356,
+      "sha256": "4e5af2c27d8b450a64f53e47844e6976ebbe5b9ace70271a19c8a354c7dc801f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling-tests.raw.log",
+      "bytes": 1447362,
+      "sha256": "b15102b072de9b4301d02f49f999fd9d1d779e9be4c1a142982f468cfbb71eb8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling-types.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling.log",
+      "bytes": 24856,
+      "sha256": "7e69a050f4fbde0c0e9ccfe259240b7e11a8b634cc29ba1ade0e545cce596c60"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/tooling.time",
+      "bytes": 356,
+      "sha256": "605092bc832b5a13b586cb1afcb5f5c2cc3fa1f178ab18727af08f5c4e6391dd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-0b07f526eef0-1794603927912/verdict-contract.json",
+      "bytes": 5377,
+      "sha256": "04e11b165ed9aff3bb0eccb76ebed1a4d7279f545bcb0f6e923330d3f3051992"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/build.log",
+      "bytes": 3757,
+      "sha256": "1362c495ad08957c98665cc1e603265cc83fbc0e183bacb9ee2bc8b5901ece2f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/clippy.log",
+      "bytes": 611,
+      "sha256": "20e638cac71cfbdfcf613dd53f23334dacba260334bd285aabc38b1fe7706820"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/clippy.time",
+      "bytes": 332,
+      "sha256": "e8b49e3749fe72ff2708a620aeb3e1395bbd6ce07df8cfa6efbe2957baab60fe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/gate-inputs.log",
+      "bytes": 136,
+      "sha256": "0fccc201cb9fd8c174df3e4dc45506aa7a8f11992e566b48c606d37aad4c5f0f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/gate-inputs.time",
+      "bytes": 325,
+      "sha256": "147ec66f5ba6a2c44cba4f8580edd57b36a2dfdd329a4ec45f2602f579a2ddcf"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/gate.log",
+      "bytes": 51370,
+      "sha256": "5e3da90f4b4318f7029b5880f705572c8954f6ab43cd6c3f96f41fdcdb18034a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/oracle-setup.log",
+      "bytes": 744,
+      "sha256": "b63d560616205f65ed56f5676bed101e066c0af8e8a8dc966eb9763473a90b89"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/records.log",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/summary.json",
+      "bytes": 761871,
+      "sha256": "61876aa964e1b4d235ab14f751be1895df6956f9eecdadc30562acfd28c99f67"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/test-host.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tests.log",
+      "bytes": 1555,
+      "sha256": "88780fb05b25fe54aad882b717a3ee8b2cad1624600f601116ec94477a7807be"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tests.time",
+      "bytes": 355,
+      "sha256": "50b600353edf55a7a7a68a7b1eadf27a0e3397cf410bb32e4776436123c0b91a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tooling-tests.raw.log",
+      "bytes": 1476053,
+      "sha256": "4b8f14e2b64df7d7f378fb55a45a4628957fc2ad7ce9cf52319e4f3ca2fb3ad3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tooling-types.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tooling.log",
+      "bytes": 25028,
+      "sha256": "78a33b870dc7affd53240869008999ae323db0334e019104796fd366fb9b3c59"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/tooling.time",
+      "bytes": 354,
+      "sha256": "618f6e374292aa661a1134a12977979cd607f6553a9da92ebfb661813501d9a2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-3b3a8946d4e1-1794602771383/verdict-contract.json",
+      "bytes": 5377,
+      "sha256": "22358a00b2e3076836fff9189508c83171339edaffcacf6976f35de693fc7a86"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/node-stat-implementation-v1.json",
+      "bytes": 497,
+      "sha256": "0c0200071d3e407c886390d525f7c3d520205c8e7b2de2e51b9f30448e705d79"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/node-stat-reproduction-v1.json",
+      "bytes": 4475,
+      "sha256": "ce4075ad8965f255689656fff11e21b1ff5170a66952a479c414f4a4860f9bff"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/node-stat-reproduction-v2.json",
+      "bytes": 4784,
+      "sha256": "493353c2d55946cb6e780392ee6a2460119fa609060806487cfcb19de3aa4c67"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/node-stat-reproduction-v2.py",
+      "bytes": 2147,
+      "sha256": "e1927a9d6f1807abbf90d8f5cc28de83a84eafbd37e7456419987ca20d6bb3ce"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-observations-761.md.in",
+      "bytes": 6653,
+      "sha256": "c598113076845a2a19e4bb20c15f78493aeb271189ec99f39ce3d6b3c0d07c47"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.perf.txt",
+      "bytes": 524,
+      "sha256": "5e3b9cfc626a59a0d6699148ae27be7d381699413ebdde5e7917f61b92907e81"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-0.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.perf.txt",
+      "bytes": 534,
+      "sha256": "905053c44ae9f0861484f0ab39cf250650eea91618db6fe277bd20a916ab89de"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-1.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.perf.txt",
+      "bytes": 524,
+      "sha256": "30d072a6a2e02fdb2380e6eff7726dd289395f15c36a9ee55280ffb3070a9926"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.perf.txt",
+      "bytes": 524,
+      "sha256": "26d62a51514001b3351dc674c17a2aed239d35c30e5a4cecd236d1563ba8c376"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/arm-3.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/prepared.json",
+      "bytes": 585,
+      "sha256": "e107cf755321b8592c3dbbffafe81345dc4a743b87cd4e770622d93bee728fac"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/result.json",
+      "bytes": 4488,
+      "sha256": "d540239ef1eee1389321c083fac6650169c742f4fa5b48ceb206cb68d3e0b5b4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/rows.json",
+      "bytes": 3539,
+      "sha256": "1c46e82a4df5138d01db7cd2f1949909d75ce999d08f7f1cfe20cf0bead91360"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/warm-current.json",
+      "bytes": 364,
+      "sha256": "20d1557837fb7637a8bb26ab3adf5407566af8036a29f1a0d0a838dfc6e1b1a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/warm-current.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/warm-old.json",
+      "bytes": 342,
+      "sha256": "292bc3423d97a0c9d21f21f1411f329957530e38eb0e4a99215ee1b2db0f4513"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1/warm-old.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1.log",
+      "bytes": 2467,
+      "sha256": "a8bce7225139d1eaa9baf044b21721b4c4e3a1e15476af909f1369166a0b4c38"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1.sh",
+      "bytes": 245,
+      "sha256": "4d5f9d7b61d9078a4c409162e878906b8cfeb6c11f8fe9abdac1d55605416b6e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v1.ts",
+      "bytes": 5101,
+      "sha256": "7625d9eb9064321173ca20c49d9a7e1aa314c73ad541e831c5cb3e9cc3922b15"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.perf.txt",
+      "bytes": 524,
+      "sha256": "17bddeb8004d76a1b1b85e0f4430e5c3cf90ed88ca4ffe5fb89fdffe5c0cfa96"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-0.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.perf.txt",
+      "bytes": 524,
+      "sha256": "8bdacae316a8013dcf1cce3d55a20223286ea0489acab10f80bb1981f5238b1a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-1.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.perf.txt",
+      "bytes": 524,
+      "sha256": "24c0da7f106f99cbd116055b00c6128eafa5993c3919be15c7dc4e50949f8d05"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.perf.txt",
+      "bytes": 524,
+      "sha256": "18bef57d8b61dd6faf5b8134911965f4c0bfb2405ac35f84af13d4edc91724f4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/arm-3.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/prepared.json",
+      "bytes": 585,
+      "sha256": "2c9798ab9620e9858d967125dd81225355a21d33e082219854382b27bf90b480"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/result.json",
+      "bytes": 4499,
+      "sha256": "36cd20fb798ae973a7b508e40a1e381580fa0e1a0ed5f20518ffaeba99ab87cc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/rows.json",
+      "bytes": 3549,
+      "sha256": "5b91a3021d7663373927335bc9c5509d9da2368f995ba3c165f525eb2050d096"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/warm-current.json",
+      "bytes": 367,
+      "sha256": "4ad654e7dc1ec061b3465c13d9e24a0e8992779283c7135c6c5702d9e90773fe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/warm-current.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/warm-old.json",
+      "bytes": 351,
+      "sha256": "3aa6a3a745b18abe9a34db20818b39b722bef9454536948574ad0bdbe764f6e5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2/warm-old.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2.log",
+      "bytes": 2381,
+      "sha256": "5adf9d4766063fcedefe2bf4ec001cd8118640dd3c1e4a7180a1d668a911f6be"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2.sh",
+      "bytes": 245,
+      "sha256": "bd8eaccb2eebd81cfd0a32bf4b7787ad7d263035d719da640e6f9226251acc5b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-count-v2.ts",
+      "bytes": 5101,
+      "sha256": "231d5208a985f2e474121354d5443e7487aa1f6665f7d10d3631da58fb423836"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-profile-v1/census.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-profile-v1/current.cpuprofile",
+      "bytes": 1708203,
+      "sha256": "b8b0d79514c69aafc7b0e4fe4ad513c4429f1e014d9a07979bf029b2e9c4c691"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-profile-v1/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-census-profile-v1.sh",
+      "bytes": 431,
+      "sha256": "d818353507ed9451dd55f64b24019fd7a0f5cef782cfbcfa86c06267cd02a685"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-baseline-source-v1.txt",
+      "bytes": 41,
+      "sha256": "0913893cea8f52377c4c4458ab08e60dd3ad50f388f69adfa8b1573baecc6e1c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-baseline-source-v2.txt",
+      "bytes": 41,
+      "sha256": "0913893cea8f52377c4c4458ab08e60dd3ad50f388f69adfa8b1573baecc6e1c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-dry-run-v1.log",
+      "bytes": 2484,
+      "sha256": "cc2cc35fd0374c36dd965e8d6837a66a5b6cf9aa07e6951f0d26417fb7108919"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-dry-run-v2.log",
+      "bytes": 2484,
+      "sha256": "4ab0c749286a2a4fdb60d90ac032e713b7399cf03c58ca4b457618a1995da65f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/counted-engine-equivalence.json",
+      "bytes": 3028,
+      "sha256": "74499cb0eaabc8fd1f369d92a9033276b169ad478c8611b75e691d6fc24a57b2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/source-receipts.json",
+      "bytes": 23470,
+      "sha256": "ff19aacb9ec57abfcc726c8c9678df71a5e6549af51d6b118e0fb7eb5cb2f900"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/docs/records/notebooks/decisions-log.md",
+      "bytes": 168001,
+      "sha256": "d323f28dcfceba6d7fb2480f5da8e3a59ba96bee22ecf69cfcd3475f87d9472b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/docs/workflow.md",
+      "bytes": 93466,
+      "sha256": "be704b3cba5f9148381c40e2464eb3558943eb9f8e2a4a29af6f423eeeedbc9e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-filesystem.test.ts",
+      "bytes": 32436,
+      "sha256": "1b6183fbba128c816b0e4aa7bfd9f079117ed8d4ac9f37be4aeb477c209c0c52"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-filesystem.ts",
+      "bytes": 11690,
+      "sha256": "6f84c7c7e5627acbb000e79f0861d2cf03154c77a878a04423ea35d002ea2470"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/oracle-runtime.ts",
+      "bytes": 40154,
+      "sha256": "a9523ec9fb735cdca0d4acace5d3cf60dac6bc489dc14ecd611e114c4e354e14"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/differential/src/oracle_emit.rs",
+      "bytes": 93149,
+      "sha256": "1daaf3c61f8cb4a4c9e3218aaedf31853866fe6d1478c1dc2bfea47a4ee4af31"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/module-closure-fixture.ts",
+      "bytes": 14133,
+      "sha256": "99e6af6f96335216d03f06e2afa2649b53e74db35e65972faea58e6cac108e2a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/module-closure.ts",
+      "bytes": 12386,
+      "sha256": "0324aa7d1247520fedcdfa76930aa74e711128f91b7be04cfb4d7ff50d2603d4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/owed.mjs",
+      "bytes": 128734,
+      "sha256": "4b5126247c8cd7454e864e211bd6453475a12e08d31a57301256065c0882a2bd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/owed.test.mjs",
+      "bytes": 82778,
+      "sha256": "d148ce61cba4bcf01119817d9a22b8f7eb6ffbeb4da14da898479cf29c033990"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/project-inputs.ts",
+      "bytes": 3076,
+      "sha256": "523da477366082b05ce642f3e32c29fd9a7eb5bcd2cb8591d4d701dd924ab150"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/reader-inputs/main.ts",
+      "bytes": 6575,
+      "sha256": "cad43bd9b458bbde0867af2638e0070c67c9768f8ea3c8fb152542b162f45a3d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/source-facts.test.ts",
+      "bytes": 15113,
+      "sha256": "e20ddcae7a7190c7faf44705c844f6ca6d2d527648791b039a274634b6cac748"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/base/tooling/gate/source-facts.ts",
+      "bytes": 19403,
+      "sha256": "167a8023f03e41145ca7691d2b728bdcae3b7c86cddc44f46fcde0d448bef5e5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/docs/records/notebooks/decisions-log.md",
+      "bytes": 168943,
+      "sha256": "8518eb477aa57e117931c02ab3444dc3463ad94553b3b26dbb07bd22ad724c90"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/docs/workflow.md",
+      "bytes": 95667,
+      "sha256": "ee01a469cb44ea9c21e22ef3f423f5e0e86e8fb53680c189eaf54b16c48d4dab"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-filesystem.test.ts",
+      "bytes": 32932,
+      "sha256": "5c5d96a4e2ab04b9f628aa9fee675ac0826b0dae80c8ce18f0446ff12264b001"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-filesystem.ts",
+      "bytes": 14315,
+      "sha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/oracle-runtime.ts",
+      "bytes": 41090,
+      "sha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/differential/src/oracle_emit.rs",
+      "bytes": 100846,
+      "sha256": "a02d4e32649ff8db65db2b7e30296fd359a88771d7ce9c3b1d4be3df52ced077"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/module-closure-fixture.ts",
+      "bytes": 14415,
+      "sha256": "e7ab01fe88e7756057628f5e62f2498ade1c588674366edebd10a0a06825751a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/module-closure.ts",
+      "bytes": 15738,
+      "sha256": "df649f7200bac128886fc8e756cde9955a74b67e206665a456c39db1288eb3a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/owed.mjs",
+      "bytes": 130594,
+      "sha256": "cf4c711fcf83884b1bee4eaef589837b63f18c3d5615b6b01e83736210425af7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/owed.test.mjs",
+      "bytes": 88190,
+      "sha256": "46ccdd560aed703696208615f186a6b836bef67aa43110537143b30083983f23"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/project-inputs.test.ts",
+      "bytes": 5792,
+      "sha256": "d20dc310ec500301de73354af2e31603ffb7efe0bc0507ede03b3b3bb0745c7a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/project-inputs.ts",
+      "bytes": 3133,
+      "sha256": "1c076bcb0c8af623c6f5cf20bd11b3c989eeb18329d5887514b0b5e8f104e836"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-inputs/main.ts",
+      "bytes": 6354,
+      "sha256": "8a5a91582240d57de82dde07495160ae4f87b1d7da2f1894c18554d9ddc06e52"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-observations.test.ts",
+      "bytes": 19810,
+      "sha256": "8c4d2468852fc94bbd47afc00417a4d7d3ded56b63903723a2dd8b02eba9771e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/reader-observations.ts",
+      "bytes": 10930,
+      "sha256": "1015c7ba830ccad552712d696c2c02b4a1fefa21ecb88a50caa21d7e93d0a936"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/rust-runtime-declarations.test.ts",
+      "bytes": 2540,
+      "sha256": "5c3f143f9a6d60bc702425c35e94d536d8986e2e04d8ab772f8b997067a251d7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/rust-runtime-declarations.ts",
+      "bytes": 6537,
+      "sha256": "601c2c97e6ae0541ae4d2aebc090ea7e6ce78f80d1f11d214974774662ff3656"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/source-facts.test.ts",
+      "bytes": 16042,
+      "sha256": "7b7adce191297bce874cebb8c678f965854026a05148fc7242dd46bdcfc4dbaf"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/corrected/tooling/gate/source-facts.ts",
+      "bytes": 20112,
+      "sha256": "997966f65f0fe1045add7ac2bfbca904c5172f260d3d7e7e711423630ea611a6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/docs/records/notebooks/decisions-log.md",
+      "bytes": 168943,
+      "sha256": "8518eb477aa57e117931c02ab3444dc3463ad94553b3b26dbb07bd22ad724c90"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/docs/workflow.md",
+      "bytes": 95671,
+      "sha256": "6c2e0049a604bb85800f4fe35432f13f973564005693445248cd3d495a63edbe"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-filesystem.test.ts",
+      "bytes": 32932,
+      "sha256": "5c5d96a4e2ab04b9f628aa9fee675ac0826b0dae80c8ce18f0446ff12264b001"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-filesystem.ts",
+      "bytes": 14315,
+      "sha256": "ac720fba98cd0d9867a63653cf06c64418402f10ce4458a539f5e264b3bf1674"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/oracle-runtime.ts",
+      "bytes": 41090,
+      "sha256": "7fac9f8e460d23d3b84ffdf06d410ad8b75d5a506c3014d28e001db4908f8ea3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/differential/src/oracle_emit.rs",
+      "bytes": 96986,
+      "sha256": "23ab263102d555ffe33181e8c1a4085432360595237bc7a769a91e22b4279cb9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/module-closure-fixture.ts",
+      "bytes": 14415,
+      "sha256": "e7ab01fe88e7756057628f5e62f2498ade1c588674366edebd10a0a06825751a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/module-closure.ts",
+      "bytes": 15738,
+      "sha256": "df649f7200bac128886fc8e756cde9955a74b67e206665a456c39db1288eb3a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/owed.mjs",
+      "bytes": 130594,
+      "sha256": "cf4c711fcf83884b1bee4eaef589837b63f18c3d5615b6b01e83736210425af7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/owed.test.mjs",
+      "bytes": 88190,
+      "sha256": "46ccdd560aed703696208615f186a6b836bef67aa43110537143b30083983f23"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/project-inputs.test.ts",
+      "bytes": 5792,
+      "sha256": "d20dc310ec500301de73354af2e31603ffb7efe0bc0507ede03b3b3bb0745c7a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/project-inputs.ts",
+      "bytes": 3133,
+      "sha256": "1c076bcb0c8af623c6f5cf20bd11b3c989eeb18329d5887514b0b5e8f104e836"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-inputs/main.ts",
+      "bytes": 6354,
+      "sha256": "8a5a91582240d57de82dde07495160ae4f87b1d7da2f1894c18554d9ddc06e52"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-observations.test.ts",
+      "bytes": 19810,
+      "sha256": "8c4d2468852fc94bbd47afc00417a4d7d3ded56b63903723a2dd8b02eba9771e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/reader-observations.ts",
+      "bytes": 10930,
+      "sha256": "1015c7ba830ccad552712d696c2c02b4a1fefa21ecb88a50caa21d7e93d0a936"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/rust-runtime-declarations.test.ts",
+      "bytes": 2540,
+      "sha256": "5c3f143f9a6d60bc702425c35e94d536d8986e2e04d8ab772f8b997067a251d7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/rust-runtime-declarations.ts",
+      "bytes": 6537,
+      "sha256": "601c2c97e6ae0541ae4d2aebc090ea7e6ce78f80d1f11d214974774662ff3656"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/source-facts.test.ts",
+      "bytes": 16042,
+      "sha256": "7b7adce191297bce874cebb8c678f965854026a05148fc7242dd46bdcfc4dbaf"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-evidence/sources/proof/tooling/gate/source-facts.ts",
+      "bytes": 20112,
+      "sha256": "997966f65f0fe1045add7ac2bfbca904c5172f260d3d7e7e711423630ea611a6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v1.log",
+      "bytes": 26656,
+      "sha256": "ec488ffb5058e2f8ac5c9c427096ce591bf35f6da481ba8283caedc3abfadcf3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v1.sh",
+      "bytes": 827,
+      "sha256": "e5e918ed2a91947f3361befe8a76c3ce059347626f9facdf0add7427b78e6187"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v2.log",
+      "bytes": 26976,
+      "sha256": "e374b245501f8704051b3c36d35d976bb862ad323a2abd68b6106445564eedd8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v2.sh",
+      "bytes": 827,
+      "sha256": "7ac69871a846fef5338d8ff5d411394d7fa5c260b948a39bf1f687cc04df1591"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v3.log",
+      "bytes": 27092,
+      "sha256": "7d7a4cd6588a19ff14aaf73b575863659175584394548b026a51d7cae7e5ce0c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v3.sh",
+      "bytes": 827,
+      "sha256": "b362c101cbe865aade10acc3db14f773785bc64abe227d19392daae946cd5977"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v4.log",
+      "bytes": 27285,
+      "sha256": "a4680e94a80211e3873f58a6acbe58e11699f4cd2c0f6f6553e248fd81cb3378"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v4.sh",
+      "bytes": 827,
+      "sha256": "87b5763c0f5294f1bd5f14430858f755acb3ca92850aca993f42e9f158371d1b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v5.log",
+      "bytes": 29673,
+      "sha256": "5ca7fb5efbb123e6fce38919a0a75173a6f4d5741610891c159712231b218102"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v5.sh",
+      "bytes": 827,
+      "sha256": "738e55e1c0450671658a6571c0c0bf6d00a156798f2469c0764f313032f6cbb5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v6.log",
+      "bytes": 27710,
+      "sha256": "a39aceb3c29499e86b82048893118362eb1c9fc705d0d756273a939c83218f04"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v6.sh",
+      "bytes": 827,
+      "sha256": "3003f04a0e397f3d487a8a66cf6ffef26ac6ad2c1701bf1e5e76ab889759363b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v7.log",
+      "bytes": 27711,
+      "sha256": "cf9d7855be97db968978ccaf419daf02ecce67e9857d9bcdaf2007a232d8e829"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v7.sh",
+      "bytes": 827,
+      "sha256": "4870466259d9e73a0ffcca70a8adb7e9e7e320eaa631c0764ab602b22791f13a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v8.log",
+      "bytes": 27820,
+      "sha256": "630d3adaffe5eea9df4578c6bf1f721fcaaf07d56653b84032858073350fafcc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-focused-v8.sh",
+      "bytes": 827,
+      "sha256": "a3751d78834d4efa286a054ae7e595dcaffc69c94dd6af1ee6b001e3d69a92c9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-here-inner-v1.sh",
+      "bytes": 305,
+      "sha256": "68b644b2ded67a8e3baeb9e380fd8d28e4856e0742accbf729a920bf9710423e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-here-v1.log",
+      "bytes": 1552,
+      "sha256": "153524e9b14cc67e2317b7cd87642c756dfd1fa2371a02a30b1fc0929f0ee0fa"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-here-v2.log",
+      "bytes": 1440,
+      "sha256": "0dc8f6776fdbd3565e76952d972841a9f6ed8b90ec16db619c1678918b515be9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v1.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v2.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v3.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v4.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v6.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v7.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-host-v8.log",
+      "bytes": 73,
+      "sha256": "a4ddb1dee94150b41b3112e1a7b6176860fd5d07b8969c04d511eb2dd3b2df51"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-inner-here-v2.sh",
+      "bytes": 305,
+      "sha256": "8cf52db9b2b64f7dbbfa66258cdeb58c9216cfc3cb55fe5debd353b912b6449e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-inner-v2.log",
+      "bytes": 76531,
+      "sha256": "10188bc52fc6f38a1ab4367481ffe10859382167e382f8f56600b2a745d88da5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-after-v1.json",
+      "bytes": 3288,
+      "sha256": "39a0c2da35f1f2793633bf74a9e48bc8a13ff068d9a8d707dc519aa0c8897132"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-after-v1.log",
+      "bytes": 908,
+      "sha256": "e981d2a74a797fbf4ee4512d4db99ab4abf789d4342329c42f60a9e39f6aec6f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-after-v2.json",
+      "bytes": 3288,
+      "sha256": "c013c58c01b8067403c22600e3a6cc818ac4113a2aa5d0d749d1de3b7c726a03"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-after-v2.log",
+      "bytes": 908,
+      "sha256": "ec50fe7fd67fd85f5eab6a67e40d311a4ccd54a4813c4e72fddc25820c2883b8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-before-v1.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-before-v1.log",
+      "bytes": 908,
+      "sha256": "89d40a6c06c05fb197c4e8f373698ac3cf71e17a987b510e31bd050c931d6a6a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-before-v2.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-oracle-before-v2.log",
+      "bytes": 908,
+      "sha256": "89d40a6c06c05fb197c4e8f373698ac3cf71e17a987b510e31bd050c931d6a6a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-compiled-fixture-host-v1.mjs",
+      "bytes": 2294,
+      "sha256": "da2b3b55e62049820caf846d4f23d5a248eb141f7c89d0571dd2cc09b86a7e6f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-compiled-fixture-host-v2.mjs",
+      "bytes": 2282,
+      "sha256": "944e2fcb51e3afb05d4592f46315342be74e67c1fcf9abed484fad4180bd2103"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-nts-761-compiled-fixture-peer-v1.log",
+      "bytes": 625,
+      "sha256": "d77eff63df2f43839e8f05e48d6e47ea36a6092c830665842a02debafefebd3a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-nts-761-compiled-fixture-peer-v2.log",
+      "bytes": 650,
+      "sha256": "15fed5a3a16b0480a4ad8c389f5e2b443da0765a843876dbe7e21cf3bf3ca69f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-nts-761-observation-alias-peer-v1.log",
+      "bytes": 1087,
+      "sha256": "a5dd4ed4fc783f12a782f4a4599ab7a081e23465a2638ca8281a49ea279b4cd6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-nts-761-observation-alias-peer-v2.log",
+      "bytes": 695,
+      "sha256": "585ed51fdba3526e44dfdb6fce070decf612db4a77618ebd27bc66000781a4f1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-observation-alias-v1.mjs",
+      "bytes": 3122,
+      "sha256": "ece6a2ef7510c48747e4f141294fc923e96a8639c331ae3526b4194724c1cb96"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-peer-observation-alias-v2.mjs",
+      "bytes": 3506,
+      "sha256": "2934c6b3b3fde25cb957dfb9c3476cc1cfd6cbc5c63e5460eeb2e001375e6a4f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-after-v1.json",
+      "bytes": 66240,
+      "sha256": "4f400cb1bf84a7bfb74dbd7eaa125e441fdb4f530cef5e37f1c42383da39c9b5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-after-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-after-v2.json",
+      "bytes": 66240,
+      "sha256": "4f400cb1bf84a7bfb74dbd7eaa125e441fdb4f530cef5e37f1c42383da39c9b5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-after-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-before-v1.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-before-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-before-v2.json",
+      "bytes": 66240,
+      "sha256": "a3586a77048e2b1ca05b888f112ad8fdf7b1963acbdcaad1cb1b45ea8e12b32f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-placement-before-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-preflight-v1.sh",
+      "bytes": 1289,
+      "sha256": "e55b6fcac67d6b5f476c8644a4bd195f13c8c4de66e5ba6f53d018468e42d30f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-preflight-v2.sh",
+      "bytes": 1289,
+      "sha256": "87ccf23fc52c9fa6199f7e268c24e415c43f1b2cfef9e0ab94b2116c17e7508b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v1.log",
+      "bytes": 171,
+      "sha256": "ca7ad18ad3736ec9d5c0831cf6e825336a0eef061cf5f956d38da7a44f04314d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v2.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v3.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v4.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v6.log",
+      "bytes": 19869,
+      "sha256": "c9f9db366baea439adb79ec76cf2228ef33afbe72cafe70f1aeeb52428791ad7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v7.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/resolver-observations-strict-v8.log",
+      "bytes": 81,
+      "sha256": "2ce014e033d2fbfc7b7bb09e99ea7a4bb1f1153f0f7fbeef8729508161b6450a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/write-reader-observations-record.py",
+      "bytes": 8081,
+      "sha256": "204ca21069a5012cfa141ee227820ac32faa77cc635b55ccf24107aaeb5979fa"
+    }
+  ]
+}
