@@ -180,41 +180,36 @@ export const allSteps=()=>['tooling'];\n`;
 });
 
 test("concurrent range preflights collect the same stale pin and only their own trees", async t => {
-  const trace=(phase:string,detail:unknown={})=>process.stderr.write("selector preflight: "+JSON.stringify({phase,detail})+"\n");
-  trace("begin");
   const directory=mkdtempSync(join(tmpdir(),"owed-concurrent-")),repo=join(directory,"repo");
   const sockets=new Set<Socket>(),seen:string[]=[];
   let pair:Socket[]=[],collections:Socket[]=[],aborted=false;
   const server=createServer(socket=>{
-    trace("connection");
-    sockets.add(socket);socket.on("close",()=>{sockets.delete(socket);trace("socket closed",{remaining:sockets.size});});
+    sockets.add(socket);socket.on("close",()=>sockets.delete(socket));
     let input="";
     socket.on("data",bytes=>{
       input+=bytes;
       if(!input.endsWith("\n"))return;
-      const message=JSON.parse(input);trace("message",message);
+      const message=JSON.parse(input);
       if(message?.collection){
-        collections.push(socket);trace("collection",collections.length);
+        collections.push(socket);
         if(collections.length===2){for(const waiting of collections)waiting.end("release\n");collections=[];}
         return;
       }
-      seen.push(message);pair.push(socket);trace("endpoint",{seen:seen.length,pending:pair.length});
+      seen.push(message);pair.push(socket);
       // Both real endpoint imports must be live before either may proceed.
       if(pair.length===2||aborted){for(const waiting of pair)waiting.end("release\n");pair=[];}
     });
   });
   const children:ReturnType<typeof spawn>[]=[];
   t.after(async()=>{
-    trace("teardown begin",{sockets:sockets.size,children:children.map(child=>({pid:child.pid,code:child.exitCode,signal:child.signalCode}))});
     for(const socket of sockets)socket.destroy();
     for(const child of children)if(child.exitCode===null)child.kill();
     await Promise.all(children.map(child=>child.exitCode!==null?Promise.resolve():new Promise<void>(done=>child.once("close",()=>done()))));
     await new Promise<void>(done=>server.close(()=>done()));
-    rmSync(directory,{recursive:true,force:true});trace("teardown complete");
+    rmSync(directory,{recursive:true,force:true});
   });
   await new Promise<void>((done,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",()=>done());});
   const address=server.address();assert.ok(address&&typeof address!=="string");
-  trace("server listening",address);
   const env={...fixtureEnvironment(t),HOME:join(directory,"home"),OWED_TEST_BARRIER_PORT:String(address.port),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),`
@@ -234,7 +229,7 @@ export const allSteps=()=>["tooling"];
   writeFileSync(join(repo,"candidate"),"candidate\n");git("add","candidate");git("commit","-qm","candidate");
   const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
   const stale=`refs/nts-selector/${process.pid}-0-${boot}-concurrent/base`;
-  git("update-ref",stale,base);trace("repository prepared");
+  git("update-ref",stale,base);
   const actual=execFileSync("sh",["-c","command -v git"],{env:fixtureEnvironment(t),encoding:"utf8"}).trim(),bin=join(directory,"bin"),deletions=join(directory,"deletions.jsonl");mkdirSync(bin);
   writeFileSync(join(bin,"git"),`#!${process.execPath}
 import {spawnSync} from 'node:child_process';import {appendFileSync} from 'node:fs';import {createConnection} from 'node:net';
@@ -249,10 +244,10 @@ process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');
 `);chmodSync(join(bin,"git"),0o755);env.PATH=`${bin}:${env.PATH}`;
   const script=`import {selectRange} from ${JSON.stringify(new URL("./owed-range.ts",import.meta.url).href)};console.log(JSON.stringify(selectRange(process.argv[1],process.argv[2]).checks));`;
   const run=()=>{
-    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,`${base}..HEAD`],{env:{...env,OWED_TEST_COLLECT:"1"},stdio:["ignore","pipe","pipe"]});children.push(child);trace("child spawned",child.pid);
+    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,`${base}..HEAD`],{env:{...env,OWED_TEST_COLLECT:"1"},stdio:["ignore","pipe","pipe"]});children.push(child);
     let out="",err="";child.stdout!.on("data",bytes=>out+=bytes);child.stderr!.on("data",bytes=>err+=bytes);
     return new Promise<{code:number|null,out:string,err:string}>((done,reject)=>{
-      child.once("error",error=>{trace("child error",String(error));reject(error);});child.once("close",code=>{trace("child close",{pid:child.pid,code,out,err});
+      child.once("error",reject);child.once("close",code=>{
         if(code!==0){aborted=true;for(const socket of sockets)socket.end("release\n");pair=[];}
         done({code,out,err});
       });
@@ -260,9 +255,8 @@ process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');
   };
   const results:Awaited<ReturnType<typeof run>>[]=[];
   const pending=[run(),run()].map(result=>result.then(value=>{results.push(value);}));
-  trace("waiting for children");
   await waitFor("both concurrent selector preflights to finish",()=>results.length===2);
-  await Promise.all(pending);trace("children complete");
+  await Promise.all(pending);
   for(const result of results){assert.equal(result.code,0,result.err);assert.deepEqual(JSON.parse(result.out).steps,["tooling"]);}
   assert.equal(seen.length,4,"both selectors evaluate both real endpoint trees");
   assert.equal(new Set(seen.map(path=>basename(path))).size,4,`shared registry basenames: ${JSON.stringify(seen)}`);
