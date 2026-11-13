@@ -69,12 +69,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           throw Error('fixture data namespace is not a declared data input: '+directory+' ('+entry+')');
         return;
       }
-      if(kind==='project'){
+      if(kind==='project'||kind==='project-config'){
         const entry=nameOf(path);
-        if(context.projects.has(entry))return;
-        context.projects.add(entry);
-        visit(context,path);
-        const project=projectInputs([entry],root);
+        const key=kind+'\0'+entry;
+        if(context.projects.has(key))return;
+        context.projects.add(key);
+        visit(context,path,kind==='project');
+        const project=projectInputs([{kind:kind==='project'?'entry':'config',path:entry}],root);
         for(const config of project.configs)visit(context,resolve(root,config),false);
         for(const entry of project.roots)visit(context,resolve(root,entry));
         return;
@@ -90,6 +91,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       const member=kind==='members'?moduleMemberName(input.member):undefined;
       const directory=nameOf(path),members=tracked.filter(file=>(directory===''||file.startsWith(directory+'/'))
         &&(!member||matchesModuleMember(directory?file.slice(directory.length+1):file,member)));
+      // One descriptor may retain a reader's existing metadata/data population
+      // while entering only its named executable members. Private data grants
+      // never remove the immutable member modules visited below.
+      if(kind==='members'&&input.data)asset(context,reader,path,{path:input.path,kind:'data'});
       if(kind==='data')context.data.add(directory);
       const grant=kind==='data'?Object.keys(context.namespaces).find(name=>directory===name||directory.startsWith(name+'/')):undefined;
       const row:DirectoryDeclaration={reader,directory,files:grant?[]:members,kind:kind==='members'?'module':kind,
@@ -118,7 +123,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     for(const entry of entries){
       if(typeof entry!=='string'){
         asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
-          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member}:{})});
+          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member,...(entry.data?{data:true}:{})}:{})});
         continue;
       }
       if(isAbsolute(entry))throw Error('module entry must be repository-relative: '+entry);

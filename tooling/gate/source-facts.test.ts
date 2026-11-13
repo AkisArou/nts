@@ -158,3 +158,19 @@ test('module members require their lexical owner and a literal basename',()=>{
     }
   }finally{api.close();}
 });
+
+
+test('explicit config and mixed data roles are literal declarations of the same owner',()=>{
+  const api=new API();
+  try{
+    const source="import {projectConfig,moduleMembers} from './reader-inputs/main.ts';projectConfig(new URL('./solution.json',import.meta.url));moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',{data:true});";
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [{path:'./solution.json',kind:'project-config'},{path:'./population/',kind:'members',member:'nts.config.ts',data:true}]);}finally{lease.dispose();}
+    for(const option of ['options','{data:false}','{data:true,other:true}','{...options}','{[name]:true}']){
+      const text="import {moduleMembers} from './reader-inputs/main.ts';moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',"+option+");";
+      const lease=api.createSourceFile('tooling/gate/reader.ts',text);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});

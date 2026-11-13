@@ -1,4 +1,4 @@
-import {fixtureInput,moduleMembers,projectInput} from './reader-inputs/main.ts';
+import {fixtureInput,moduleMembers,projectConfig,projectInput} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
@@ -595,5 +595,54 @@ test('module members select a literal basename, follow its imports and skip hidd
     assert.deepEqual(copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),runtime.files);
     assert.throws(()=>moduleMembers(pathToFileURL(f.source),'**/nts.config.ts'),/literal basename/);
     assert.throws(()=>moduleMembers(pathToFileURL(f.source),'.hidden.ts'),/literal basename/);
+  }finally{graph.close();}
+});
+
+
+test('a mixed data/member population keeps private metadata and immutable executable configs',t=>{
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts',"export const moduleMembers=(url,member,options)=>({kind:'members',url,member,...options});export const fixtureInput=(url,options)=>({kind:'fixture',url,...options});");
+  f.write('reader.ts',"import {moduleMembers} from './tooling/gate/reader-inputs/main.ts';moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',{data:true});");
+  f.write('fixture.ts',"import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:{population:'private metadata'}});");
+  f.write('population/meta.txt','production metadata');f.write('population/one/nts.config.ts',"import './dependency.ts';");f.write('population/one/dependency.ts','export const value=42;');
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
+    const result=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  }
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const production=graph.describe(['reader.ts']);assert.ok(production.files.includes('population/meta.txt'));
+    const descriptor=fixtureInput(pathToFileURL(join(f.source,'reader.ts')),{dataNamespaces:{population:'private metadata'}});
+    const privateInputs=graph.describe([descriptor]),parsed=graph.describe(['fixture.ts']);
+    assert.deepEqual(parsed.files.filter(file=>file!=='fixture.ts'),privateInputs.files);
+    assert.ok(!privateInputs.files.includes('population/meta.txt'));
+    assert.ok(privateInputs.moduleFiles.includes('population/one/nts.config.ts'));
+    assert.ok(privateInputs.moduleFiles.includes('population/one/dependency.ts'));
+    mkdirSync(join(f.destination,'population'),{recursive:true});writeFileSync(join(f.destination,'population/meta.txt'),'private metadata');
+    assert.deepEqual(copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),privateInputs.files);
+    assert.equal(readFileSync(join(f.destination,'population/meta.txt'),'utf8'),'private metadata');
+    writeFileSync(join(f.destination,'population/one/nts.config.ts'),'private replacement');
+    assert.throws(()=>copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),/cannot replace module-owned input/);
+  }finally{graph.close();}
+});
+
+test('an explicit project config uses the same parser without nearest-entry discovery',t=>{
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts',"export const projectConfig=url=>({kind:'project-config',url});");
+  f.write('reader.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./project/tsconfig.solution.json',import.meta.url));");
+  f.write('base.json','{"compilerOptions":{"strict":true}}');
+  f.write('project/tsconfig.json','{"files":["unrelated.ts"]}');f.write('project/unrelated.ts',"import './must-not-enter.ts';");
+  f.write('project/tsconfig.solution.json','{"files":[],"references":[{"path":"./sub"}]}');
+  f.write('project/sub/tsconfig.json','{"extends":"../../base.json","files":["entry.ts"]}');
+  f.write('project/sub/entry.ts',"import './dependency.ts';");f.write('project/sub/dependency.ts','export const value=42;');
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const descriptor=projectConfig(pathToFileURL(join(f.source,'project/tsconfig.solution.json'))),snapshot=graph.describe([descriptor]);
+    assert.deepEqual(snapshot.files,['base.json','project/sub/dependency.ts','project/sub/entry.ts','project/sub/tsconfig.json','project/tsconfig.solution.json']);
+    assert.ok(!snapshot.moduleFiles.includes('project/tsconfig.solution.json'));
+    assert.ok(!snapshot.moduleFiles.includes('project/sub/tsconfig.json'));
+    const parsed=graph.describe(['reader.ts']);
+    assert.deepEqual(parsed.files.filter(file=>file!=='reader.ts'&&file!=='tooling/gate/reader-inputs/main.ts'),snapshot.files);
+    assert.deepEqual(copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),snapshot.files);
+    assert.throws(()=>graph.describe([projectConfig(pathToFileURL(join(f.source,'project/missing.json')))]),/ENOENT/);
   }finally{graph.close();}
 });

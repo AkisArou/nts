@@ -202,17 +202,26 @@ export class SourceFacts {
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|fixtureInput|moduleMembers)$/.exec(called);
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
         if(owner&&owned![2]==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
         }else if(owner&&owned![2]==='moduleMembers'){
-          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
+          if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
             throw Error('moduleMembers needs a directory and literal member name: '+this.file);
-          assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text)});
+          let data:true|undefined;
+          if(parent.arguments.length===3){
+            const options=parent.arguments[2];
+            const property=options&&ast.isObjectLiteralExpression(options)&&options.properties.length===1?options.properties[0]:undefined;
+            if(!property||!ast.isPropertyAssignment(property)||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))
+              ||property.name.text!=='data'||property.initializer.kind!==ast.SyntaxKind.TrueKeyword)
+              throw Error('moduleMembers data role must be literal {data:true}: '+this.file);
+            data=true;
+          }
+          assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text),...(data?{data}:{})});
         }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
-          ?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':'project'):'module'});
+          ?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':owned![2]==='projectConfig'?'project-config':'project'):'module'});
       }
     }
     return {imports,assets};

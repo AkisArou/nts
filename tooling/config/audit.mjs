@@ -1,4 +1,4 @@
-import {dataDirectory,moduleMembers,moduleMemberDirectory} from "../gate/reader-inputs/main.ts";
+import {dataDirectory,moduleMembers,moduleMemberDirectory,projectConfig} from "../gate/reader-inputs/main.ts";
 /**
  * Audit `nts.config.ts` against the type package: coverage, drift, duplication.
  *
@@ -23,6 +23,7 @@ import { register } from "node:module";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
 const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
+const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url));
 
 // Resolve `@nts/config` the way tsconfig.configs.json's `paths` does, so the
 // configs are evaluated against the same package tsc checks them against.
@@ -58,10 +59,10 @@ const walk = (dir, member, out = []) => {
 };
 // The four directories that were one, `examples`, until 2026-10-14: named, not
 // `tests` as a whole, so no fixture kind joins the audit by being added.
-const configPaths = [moduleMembers(new URL("../../tests/programs/",import.meta.url),'nts.config.ts'),
-  moduleMembers(new URL("../../tests/interop/",import.meta.url),'nts.config.ts'),
-  moduleMembers(new URL("../../tests/gjs/",import.meta.url),'nts.config.ts'),
-  moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts')]
+const configPaths = [moduleMembers(new URL("../../tests/programs/",import.meta.url),'nts.config.ts',{data:true}),
+  moduleMembers(new URL("../../tests/interop/",import.meta.url),'nts.config.ts',{data:true}),
+  moduleMembers(new URL("../../tests/gjs/",import.meta.url),'nts.config.ts',{data:true}),
+  moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true})]
   .flatMap((input) => walk(fileURLToPath(input.url),input.member))
   .sort();
 
@@ -403,7 +404,7 @@ if (process.env.NTS_AUDIT_NO_TSC || !existsSync(tsc)) {
 } else {
   let out = "";
   try {
-    execFileSync(tsc, ["-b", "tsconfig.solution.json", "--force"], {
+    execFileSync(tsc, ["-b", relative(join(repo,"tests/workspace"),fileURLToPath(workspaceProject.url)), "--force"], {
       cwd: join(repo, "tests/workspace"), encoding: "utf8", stdio: "pipe",
     });
   } catch (e) {

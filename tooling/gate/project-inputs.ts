@@ -5,11 +5,12 @@ import {join,relative,resolve,sep} from 'node:path';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 export type ProjectInputs={configs:string[];roots:string[]};
+export type ProjectRequest={kind:'entry'|'config';path:string};
 const info=(path:string)=>{try{return lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}};
 /** The oracle owns project discovery; the pinned parser owns config inheritance,
  * include/exclude expansion and declared roots. Observe its actual config reads
  * rather than maintaining a second interpretation of extends. */
-export function projectInputs(entries: readonly string[], source: string): ProjectInputs {
+export function projectInputs(entries: readonly ProjectRequest[], source: string): ProjectInputs {
   const require = createRequire(import.meta.url);
   const {API} = require("typescript/sync") as typeof import("typescript/sync");
   const {serverFS} = require("typescript/fs") as typeof import("typescript/fs");
@@ -45,8 +46,8 @@ export function projectInputs(entries: readonly string[], source: string): Proje
   }
   try {
     for (const entry of entries) {
-      const project = filesystem.projectFor(resolve(source, entry));
-      if (!project) throw new Error("compiled input has no owning project: " + entry);
+      const project = entry.kind==='config'?resolve(source,entry.path):filesystem.projectFor(resolve(source, entry.path));
+      if (!project) throw new Error("compiled input has no owning project: " + entry.path);
       add(project);
     }
     return {configs:[...configs],roots:[...roots]};

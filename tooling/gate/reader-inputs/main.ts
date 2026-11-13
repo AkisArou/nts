@@ -1,8 +1,8 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'file'|'project'|'fixture'|'members';
+export type InputKind='module'|'data'|'file'|'project'|'project-config'|'fixture'|'members';
 export type DataNamespaces=Readonly<Record<string,string>>;
-export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string};
+export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
 export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:'module'|'data';
   member?:string;
@@ -23,12 +23,15 @@ export type FileInput=URL&{readonly [FILE_INPUT]:true};
 export function fileInput(url:URL):FileInput{return url as FileInput;}
 
 export type ProjectInput={readonly kind:'project';readonly url:URL};
+export type ProjectConfig={readonly kind:'project-config';readonly url:URL};
 export type FixtureInput={readonly kind:'fixture';readonly url:URL;readonly dataNamespaces:DataNamespaces};
-export type ModuleMembers={readonly kind:'members';readonly url:URL;readonly member:string};
-export type InputEntry=string|ProjectInput|FixtureInput|ModuleMembers;
+export type ModuleMembers={readonly kind:'members';readonly url:URL;readonly member:string;readonly data?:true};
+export type InputEntry=string|ProjectInput|ProjectConfig|FixtureInput|ModuleMembers;
 /** A compiled entry carries its owning-project request through runtime staging
  * as well as the parsed reader declaration. It never guesses a config path. */
 export function projectInput(url:URL):ProjectInput{return {kind:'project',url};}
+/** A compiler command that names its config selects that file directly. */
+export function projectConfig(url:URL):ProjectConfig{return {kind:'project-config',url};}
 
 export const canonicalNamespace=(name:string)=>name.length>0&&!name.startsWith('/')&&!/[\\\x00-\x1f]/.test(name)
   &&name.split('/').every(part=>part!==''&&part!=='.'&&part!=='..');
@@ -65,6 +68,7 @@ export function matchesModuleMember(path:string,member:string):boolean{
 }
 /** Recursively discovered modules have one literal basename, consumed by the
  * runtime walker as well as tracked snapshots and added/deleted path matching. */
-export function moduleMembers(url:URL,member:string):ModuleMembers{
-  return {kind:'members',url,member:moduleMemberName(member)};
+export function moduleMembers(url:URL,member:string,options?:{data:true}):ModuleMembers{
+  if(options&&options.data!==true)throw Error('module member data role must be explicit');
+  return {kind:'members',url,member:moduleMemberName(member),...(options?{data:true}:{})};
 }
