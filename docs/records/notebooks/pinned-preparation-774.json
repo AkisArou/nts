@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "task": 774,
+  "source": "f35afa5e4813ec8c0f9ffe037f6b7f3e292ac40f",
+  "actualLauncher": "4c635792ae764ff4f6fd58f416b92c36a4aea7d2",
+  "baseline": "9b3d95c5d900d3f989bee8a4dcd2c482557dd0af",
+  "scope": "initial pinned Cargo preparation only; no compiler behavior or admission policy changes",
+  "key": {
+    "name": "pinned-build",
+    "basis": "whole job",
+    "target": "CARGO_TARGET_DIR set before admission"
+  },
+  "checks": {
+    "boundaryPass": 2,
+    "baselineRefusals": 2,
+    "focusedPass": 170,
+    "focusedFail": 0,
+    "host": "test host ownership: 1891 sources, 263 entry closures, 413 reads checked",
+    "strict": "tooling strict types: 832 modules; 5695 recorded diagnostics; 0 improved modules"
+  },
+  "actualTransition": {
+    "checkpoint": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/actual-gate-ledger.json",
+    "at": "2026-11-13T11:35:31.246Z",
+    "onlyAdmitted": "gate run /home/akisarou/.cache/nts-gate/runs/1794569503786-2815761",
+    "preparationOwnerLive": false,
+    "waiting": 0
+  },
+  "actualRoute": {
+    "candidate": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+    "compiler": {
+      "path": "/home/akisarou/.cache/nts-gate/target/release/nts",
+      "sha256": "d8975021da9ad7d8e0af3ab95bc98c0847281ef2e06318fae452fc05fc4a5cd5",
+      "pinned": "/home/akisarou/.cache/nts-gate/bin/d8975021da9ad7d8e0af3ab95bc98c0847281ef2e06318fae452fc05fc4a5cd5/nts"
+    },
+    "canonical": true,
+    "verdict": "green",
+    "cleanup": {
+      "state": "complete"
+    },
+    "run": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761",
+    "steps": [
+      {
+        "name": "build",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 0.162,
+        "cpu": 0.148855
+      },
+      {
+        "name": "compile-time",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 76.937,
+        "cpu": 482.817118
+      },
+      {
+        "name": "compile-time-rc",
+        "verdict": "PASS",
+        "exit": 0,
+        "wall": 130.049,
+        "cpu": 465.947884
+      }
+    ],
+    "prepareRusage": "93.67 276.84 4.06"
+  },
+  "excluded": [
+    {
+      "source": "ec4c154ab",
+      "cohort": "focused-v1",
+      "reason": "stopped private fixture barrier with incorrectly escaped newline; no accepted result"
+    },
+    {
+      "source": "2b4b5134f",
+      "cohort": "boundary-v2",
+      "reason": "private empty affinity stub omitted exports required by the newly staged admission owner; both controls failed before Cargo"
+    },
+    {
+      "source": "4ed677760685a98b374ddc7877ade7d4ddbcd9b9",
+      "cohort": "original nts-681-tripwires",
+      "reason": "whole pinned command wrapped by outer admission; stopped by unit before gate entry; incomplete, not proof"
+    }
+  ],
+  "baselineMethod": "Exact old pinned.sh bytes supplied only to the test fixture script read through a narrow --import preload; live source never reverted. Both old-owner arms refuse admission before gate entry.",
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/build.log",
+      "bytes": 62,
+      "sha256": "90c8a1a69c0155761cff4bfe0e61bbee007961d2b96729d2127c2e0c291489dd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/compile-time-rc.log",
+      "bytes": 464,
+      "sha256": "0d2078d8efaf81db04db8e14f3a8a7fe1298f5c342df0a1bf822be03e4ce812b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/compile-time.log",
+      "bytes": 436,
+      "sha256": "f118aecc2dea3ef7a58a3888181bad2c6b1edbfd76ee1a0dd112d0585ece732d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/prepare.cpu",
+      "bytes": 18,
+      "sha256": "439659db050fd7d2eb59233a1c4651c314f6bbf1b022460b527baff8059e22be"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-gate/runs/1794569503786-2815761/summary.json",
+      "bytes": 25572,
+      "sha256": "9766ea372c5f3b16a1ed4fc793ceaf781dce371634dee5b99ff72350592b6021"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/actual-gate-ledger.json",
+      "bytes": 784,
+      "sha256": "5f123acd6c600710431a1677474072a80eea0db00c10e4b94e2d04f5167b6d2c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-control.log",
+      "bytes": 3344,
+      "sha256": "90312699c581c1cd696ddcefab59bd23d4dfee3cf7bc333b824e71bec29f233d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-control.sh",
+      "bytes": 799,
+      "sha256": "f8d3a6915a3151823b864f6e7e2b2e64581a794f6163dac8bcef6ee9b8debfc7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-pinned.sh",
+      "bytes": 7462,
+      "sha256": "49bceb7ca10eb4b0ef184e5d8b308143775fd8efe9fe935e16a4a9c6fc45eac2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/baseline-preload.mjs",
+      "bytes": 450,
+      "sha256": "459aeead5fd4eb395bca2f99c8cfa9a7d7bba1794564ff27e8ac21997243bc1c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/boundary-v2.log",
+      "bytes": 3930,
+      "sha256": "babf7443b159b776d8a78a32c53e4e745fa143e4da841664cdcd12691f3db9a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/boundary-v3.log",
+      "bytes": 281,
+      "sha256": "b3c4e332c1415d0b014a569ec13d99cb3bc8ade81dc4a70db06b1e39866a7aef"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v1.log",
+      "bytes": 19804,
+      "sha256": "0ad67a90efb808971d116a02f1fa4aee77542f55917e0b7e9ca397f27e841e22"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v2.sh",
+      "bytes": 785,
+      "sha256": "b16a922a180b9696a865b73a0bc05c67ad05ccb9129d4e31247fb3940f4ed42d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v3.log",
+      "bytes": 15663,
+      "sha256": "daee6a85145af014d36923f4c33d30837698954b44c9cac2eceebe63b7e6a663"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused-v3.sh",
+      "bytes": 785,
+      "sha256": "37a135766f9c507974b8c0bd7fecc284f85e41eca40c6e9d09bb8f42ba62f000"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/focused.sh",
+      "bytes": 632,
+      "sha256": "8e373cb91a9c194ce1543ab76291ab5aee7ff3f9f0f588053a13a4e2efb6514b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/host-v3.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission/strict-v3.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission-created.json",
+      "bytes": 224,
+      "sha256": "67c6a84d3a92c8543463cf07f4b379ff4951cc96815ccb1fedba148c2daebef7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/pinned-admission-issue.json",
+      "bytes": 1996,
+      "sha256": "dcbefbe803515772269d65eaa662472d0295f0eec08578c26c575c9301c8b1e4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires-v2.log",
+      "bytes": 8905,
+      "sha256": "10011980a245c15381a68eed1d58cd0a9d3b156fcf764e44827502237a87bdb3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires-v2.sh",
+      "bytes": 406,
+      "sha256": "83993ebf6fd443c2e15314c322c86cb3545690a0614ec21e69533f3c2d12d41e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires.log",
+      "bytes": 789,
+      "sha256": "6825dab1976312da1961a6da9f5254606bd1e30eaf20219667663a689d0526f3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/681/tripwires.sh",
+      "bytes": 444,
+      "sha256": "bc361d21710a5ef96b86dbbe0f3b72bead151d52bac7c554771bad3534865e17"
+    }
+  ]
+}
