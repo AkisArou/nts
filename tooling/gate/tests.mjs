@@ -28,7 +28,7 @@ import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/c
 // incremental nts-dev build for this route and every other test route.
 
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -84,7 +84,7 @@ calls=${shellQuote(calls)}
 # Cargo also gives rustdoc this runner. Its temporary executables disappear
 # when rustdoc returns, so run those now; only profile-owned artifacts replay.
 case "$1" in "$profile/"*) ;; *)
-  ${doctestCalls?`node ${shellQuote(CALL_RECORDER)} --record-doctest-call ${shellQuote(doctestCalls)} ${shellQuote(fileObserver)} "$$" "$@" || exit 2`:""}
+  ${doctestCalls&&fileObserver?`node ${shellQuote(CALL_RECORDER)} --record-doctest-call ${shellQuote(doctestCalls)} ${shellQuote(fileObserver)} "$$" "$@" || exit 2`:""}
   exec "$@" ;; esac
 n=$(mktemp "$calls/call-XXXXXXXX")
 node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({at: process.hrtime.bigint().toString(), cwd: process.cwd(), argv: process.argv.slice(2), env: process.env}))' "$n" "$@"

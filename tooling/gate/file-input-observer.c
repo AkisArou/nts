@@ -637,11 +637,17 @@ int main(int argc, char **argv) {
     while (waitpid(root, &status, 0) < 0 && errno == EINTR) {
     }
     fprintf(output,
+            "{\"kind\":\"root-exit\",\"root\":%d,\"exit\":%d,\"signal\":%d}\n",
+            root, WIFEXITED(status) ? WEXITSTATUS(status) : -1,
+            WIFSIGNALED(status) ? WTERMSIG(status) : 0);
+    fprintf(output,
             "{\"kind\":\"complete\",\"complete\":false,\"entered\":false,"
-            "\"root\":%d,\"exit\":-1,\"signal\":0,\"attempts\":0,\"errors\":1,"
+            "\"root\":%d,\"exit\":%d,\"signal\":%d,\"attempts\":0,\"errors\":1,"
             "\"drainComplete\":true,\"observerSignal\":%d,\"stage\":%d,"
             "\"execErrno\":%d}\n",
-            root, terminal_signal, launch_error.stage, launch_error.error);
+            root, WIFEXITED(status) ? WEXITSTATUS(status) : -1,
+            WIFSIGNALED(status) ? WTERMSIG(status) : 0, terminal_signal,
+            launch_error.stage, launch_error.error);
     fclose(output);
     fprintf(stderr,
             "file input observer: listener setup failed at stage %d: %s\n",
@@ -681,7 +687,7 @@ int main(int argc, char **argv) {
     for (;;) {
       int status = 0;
       pid_t child = waitpid(-1, &status, WNOHANG);
-      if (child == root) {
+      if (child == root && !reaped) {
         root_status = status;
         reaped = true;
         ended = now_ns();

@@ -61,6 +61,17 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     assert.ok(binary.observations.some((row:{path:string;operation:string})=>row.path===join(root,'runtime-data')&&row.operation==='directory'));
     assert.ok(existsSync(join(root,"target/nts-dev/incremental")));
     assert.equal(existsSync(join(root,"target/debug")),false);
+    // Mutate only the private staged observer: successful product tests with
+    // incomplete observations must keep their named instrument diagnostic.
+    const observer=join(root,'tooling/gate/file-input-observer.c'),before=readFileSync(observer,'utf8');
+    const broken=before.replace('bool complete = drained && !errors && !output_failed;',
+      'bool complete = drained && !errors && !output_failed && strstr(argv[3], "/deps/") == NULL;');
+    assert.notEqual(broken,before);writeFileSync(observer,broken);
+    const unmeasured=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:{...testEnvironment(),
+      CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+      NTS_TESTS_JOBS:'1',NTS_GATE_COSTS_DIR:join(root,'costs'),NTS_RUST_INPUT_TRACE:join(root,'broken-trace')}});
+    assert.equal(unmeasured.status,2,unmeasured.stdout+'\n'+unmeasured.stderr);
+    assert.match(unmeasured.stdout,/NOT MEASURED: Error: file input observer: incomplete census/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
