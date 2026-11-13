@@ -251,6 +251,7 @@ export const LANDING = {
   config: { form: "tree" },
   licenses: { form: "tree" },
   audit: { form: "tree" },
+  "unicode-freshness": { form: "tree" },
   build: { form: "as-is" },
   clippy: { form: "as-is" },
   tests: { form: "as-is" },
@@ -373,6 +374,7 @@ export const ASKS = {
   "test262-census-llvm": ["answers", "the same on LLVM"],
   "test262-census-jvm": ["answers", "the same on the JVM"],
   "program-oracles": ["answers", "one authenticated Node answer for each example and outcome program"],
+  "unicode-freshness": ["hygiene", "do committed URL-host cases match the pinned offline Unicode source and Node oracle"],
   "typescript-oracles": ["answers", "one authenticated Node reference for every TypeScript case the backend steps check"],
   "typescript-c": ["answers", "does every recorded TypeScript conformance case still do what it did, on C"],
   "typescript-llvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on LLVM"],
@@ -969,10 +971,9 @@ export const RULES = [
     arms: [],
   },
   {
-    // Offline Node generators write committed tests/typescript/unicode cases.
-    // Neither the gate nor the product executes them; their fixture outputs
-    // owe the conformance suite through their own paths. A future gate reader
-    // still adds its step through stepInputs below, as for standalone drivers.
+    // Generators do not execute with their fixture outputs. A declared
+    // freshness reader (URL hosts) adds that check through stepInputs; the
+    // remaining standalone generators keep no inferred product reach.
     name: "the standalone Unicode fixture generators",
     when: (p) => p.startsWith("tooling/unicode-cases/"),
     settled: true,

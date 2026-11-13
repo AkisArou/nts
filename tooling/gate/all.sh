@@ -287,6 +287,7 @@ tests() {
 }
 step "doctests" node tooling/gate/doctests.ts
 step "audit" node tooling/census/audit.ts --metadata-only
+step "unicode-freshness" node tooling/unicode-cases/url-hosts.ts --check
 
 # The cross-product of value kinds and the operations that read them, settled
 # by node.

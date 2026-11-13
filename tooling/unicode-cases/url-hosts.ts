@@ -3,7 +3,8 @@
 //   node tooling/unicode-cases/url-hosts.ts --data-dir /path/to/unicode-data
 //   node tooling/unicode-cases/url-hosts.ts --data-dir /path/to/unicode-data --check
 // Use --output-dir=/path/to/empty-directory to compare another generated set.
-// Without --data-dir the exact, hash-pinned official source is fetched in memory.
+// Provision the default input explicitly before using this offline consumer:
+//   node tooling/inputs/pinned-inputs.ts --acquire unicode-idna-17
 // No source rows are skipped. Expected results come from WHATWG URL in Node,
 // not the UTS #46 expected column: URL and strict UTS #46 have different flags.
 // Relaxed flags explain only some differences. Other observed Node/UTS #46
@@ -17,11 +18,12 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {pinnedInput,readPinnedInput} from '../inputs/pinned-inputs.ts';
+import {dataDirectory} from '../gate/reader-inputs/main.ts';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const nodeEntries = readFileSync(join(repositoryRoot, ".tool-versions"), "utf8")
+const nodeEntries = readFileSync(new URL('../../.tool-versions',import.meta.url), "utf8")
   .split(/\r?\n/).map(line => line.split("#")[0].trim()).filter(line => /^nodejs(?:\s|$)/.test(line));
 const nodeMatch = nodeEntries.length === 1 ? /^nodejs\s+(\d+\.\d+\.\d+)$/.exec(nodeEntries[0]) : null;
 if (nodeMatch === null) {
@@ -35,8 +37,8 @@ for (const [name, version] of Object.entries(pinned)) {
   }
 }
 
-const sourceUrl = "https://www.unicode.org/Public/17.0.0/idna/IdnaTestV2.txt";
-const sourceSha256 = "beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf";
+const sourceInput=pinnedInput('unicode-idna-17');
+const sourceUrl=sourceInput.url,sourceSha256=sourceInput.sha256;
 const expectedRows = 6391;
 const chunkSize = 256;
 const unicodeLicense = `UNICODE LICENSE V3
@@ -100,16 +102,14 @@ for (let index = 2; index < process.argv.length; index++) {
 
 async function dataBytes(): Promise<Uint8Array> {
   if (dataDir !== undefined) return readFileSync(join(dataDir, "IdnaTestV2.txt"));
-  const response = await fetch(sourceUrl);
-  if (!response.ok) throw new Error(`${sourceUrl}: HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  return readPinnedInput(sourceInput);
 }
 
 const bytes = await dataBytes();
 const hash = createHash("sha256").update(bytes).digest("hex");
 if (hash !== sourceSha256) throw new Error(`IdnaTestV2.txt SHA-256 mismatch: ${hash}`);
 const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-if (!source.includes("# Version: 17.0.0\n")) throw new Error("Wrong IDNA source version");
+if (!source.includes('# Version: '+sourceInput.version+'\n')) throw new Error("Wrong IDNA source version");
 
 function quote(value: string): string {
   let escaped = '"';
@@ -248,7 +248,8 @@ assert.throws(TypeError, () => new URL("\\u0068\\u0074\\u0074\\u0070\\u0073\\u00
   inventory.push({ file, description: negative.description });
 }
 
-const directory = outputDir ?? join(repositoryRoot, "tests/typescript/unicode");
+const generatedDirectory=dataDirectory(new URL('../../tests/typescript/unicode/',import.meta.url));
+const directory = outputDir ?? fileURLToPath(generatedDirectory);
 const existing = existsSync(directory) ? readdirSync(directory).filter((file) => file.startsWith("url-hosts-") && file.endsWith(".ts")) : [];
 const stale = existing.filter((file) => !generated.has(file));
 if (stale.length > 0) throw new Error(`Unexpected existing URL cases; nothing deleted: ${stale.join(", ")}`);
