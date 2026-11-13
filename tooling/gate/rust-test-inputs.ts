@@ -113,8 +113,9 @@ export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexObservat
 const emptyCounts=():InputIndexCounts=>({images:0,observations:0,probes:0,terminalFacts:0,inherited:0});
 
 /** Versioned line records keep both publication and consumption independent of
- * the document's total size. Only current task contexts and a 64 KiB output
- * batch remain in memory; the lossless native record stays separately retained. */
+ * the document's total size. Current task contexts and an output batch with a
+ * 64 KiB flush target remain in memory; a row is bounded at 256 KiB. The
+ * lossless native record stays separately retained. */
 export async function publishInputTrace(options:{raw:string;output:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[]}):Promise<void>{
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   await durableRecordStream(options.output,async append=>{

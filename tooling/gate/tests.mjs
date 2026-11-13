@@ -40,12 +40,19 @@ import {assertTestLayout} from './test-layout.ts';
 import {fileObserverArguments,prepareFileObserver} from './file-input-observer.ts';
 import {publishInputTrace,readTestArtifactTargets,readDoctestCalls} from './rust-test-inputs.ts';
 import {testInvocation} from './test-profile.ts';
+import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
+
+/** @param {unknown} error */
+function traceFailure(error){return new ToolingInstrumentError('tooling-setup','Rust test inputs: '+String(error),{cause:error});}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
-if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('Rust test inputs: trace destination must be absolute');
-if(traceDirectory)mkdirSync(traceDirectory,{recursive:true});
-const fileObserver=traceDirectory?prepareFileObserver(join(traceDirectory,'observer'),process.env):undefined;
+/** @type {string|undefined} */
+let fileObserver;
+try{
+  if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('trace destination must be absolute');
+  if(traceDirectory){mkdirSync(traceDirectory,{recursive:true});fileObserver=prepareFileObserver(join(traceDirectory,'observer'),process.env);}
+}catch(error){if(isCommandExit(error))throw error;throw traceFailure(error);}
 try {
   const layout=assertTestLayout(ROOT);
   console.log(`  Rust integration layout: ${layout.harnesses.length} checked harnesses`);
@@ -107,7 +114,7 @@ const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverA
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 if(cargoTrace){
   try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
-  catch(error){if(isCommandExit(error))throw error;console.error('NOT MEASURED: '+String(error));exitCommand(2);}
+  catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);publishToolingFailure(failure);console.error('NOT MEASURED: '+failure.message);exitCommand(2);}
 }
 const recorded = readdirSync(calls)
   .map((f) => JSON.parse(readFileSync(join(calls, f), "utf8")))
@@ -126,7 +133,10 @@ if (recorded.length === 0) {
   console.log(`  NOT MEASURED: cargo ran no test binary through ${runnerVar}, so nothing was tested`);
   exitCommand(1);
 }
-const artifactTargets=artifactFile?readTestArtifactTargets(artifactFile,ROOT):undefined;
+/** @type {ReturnType<typeof readTestArtifactTargets>|undefined} */
+let artifactTargets;
+try{artifactTargets=artifactFile?readTestArtifactTargets(artifactFile,ROOT):undefined;}
+catch(error){if(isCommandExit(error))throw error;throw traceFailure(error);}
 
 // The replay.
 const name = (r) => `${r.cwd.replace(`${ROOT}/`, "")} ${r.argv[0].split("/").pop()}`;
@@ -135,12 +145,13 @@ const queue = longestFirst("tests", [...keyed.keys()], () => "/nonexistent");
 const results = new Map();
 const cost = {};
 let next = 0;
-let traceFailures=0;
+/** @type {string[]} */
+const traceFailures=[];
 const runOne = (key) =>
   new Promise((done) => {
     const r = keyed.get(key);
     const target=artifactTargets?.get(r.argv[0]);
-    if(artifactTargets&&!target)throw Error('Rust test inputs: Cargo named no target for '+r.argv[0]);
+    if(artifactTargets&&!target)throw traceFailure('Cargo named no target for '+r.argv[0]);
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
@@ -152,7 +163,7 @@ const runOne = (key) =>
     child.on("close", async (status, signal) => {
       if(trace){
         try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target});}
-        catch(error){if(isCommandExit(error))throw error;traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
+        catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);traceFailures.push(failure.message);out+='NOT MEASURED: '+failure.message+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;
       const leftovers = scratch.finish();
@@ -211,4 +222,6 @@ if (bad.length === 0) {
   const pruned = pruneTestArtifacts(recorded.map((r) => r.argv[0]));
   console.log(`  test cache: removed ${pruned.binaries} obsolete executable(s), ${(pruned.bytes / 2 ** 30).toFixed(2)} GiB; current run kept`);
 }
-exitAfterOutput(traceFailures?2:bad.length === 0 ? 0 : 1);
+// An incomplete census cannot judge the product, or erase a completed failed assertion.
+if(traceFailures.length&&failed===0)publishToolingFailure(new ToolingInstrumentError('tooling-setup',traceFailures.join('\n')));
+exitAfterOutput(traceFailures.length?2:bad.length === 0 ? 0 : 1);

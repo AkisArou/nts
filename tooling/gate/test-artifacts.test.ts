@@ -3,6 +3,7 @@ import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {readInputTraceIndex,type InputIndexObservation} from "./rust-test-inputs.ts";
+import {readStepInstrument} from "./step-result.ts";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,11 +70,24 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     const broken=before.replace('bool complete = drained && !errors && !output_failed;',
       'bool complete = drained && !errors && !output_failed && strstr(argv[3], "/deps/") == NULL;');
     assert.notEqual(broken,before);writeFileSync(observer,broken);
-    const unmeasured=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:{...testEnvironment(),
+    const stepResult=join(root,'step-result.json');
+    const unmeasured=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:testEnvironment({
       CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
-      NTS_TESTS_JOBS:'1',NTS_GATE_COSTS_DIR:join(root,'costs'),NTS_RUST_INPUT_TRACE:join(root,'broken-trace')}});
+      NTS_TESTS_JOBS:'1',NTS_GATE_COSTS_DIR:join(root,'costs'),NTS_RUST_INPUT_TRACE:join(root,'broken-trace'),
+      NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'trace-control',NTS_GATE_STEP_RESULT:stepResult})});
     assert.equal(unmeasured.status,2,unmeasured.stdout+'\n'+unmeasured.stderr);
-    assert.match(unmeasured.stdout,/NOT MEASURED: Error: file input observer: incomplete census/);
+    assert.match(unmeasured.stdout,/NOT MEASURED: Rust test inputs: Error: file input observer: incomplete census/);
+    const instrument=readStepInstrument(stepResult,'tests','trace-control');
+    assert.equal(instrument?.verdict,'INSTRUMENT');assert.equal(instrument.kind,'tooling-setup');
+    assert.match(instrument.reason,/file input observer: incomplete census/);
+    // A completed product failure remains a failure even with the same broken census.
+    rmSync(stepResult);appendFileSync(join(root,'src/lib.rs'),'\n#[test] fn real_failure() { panic!("product-control"); }\n');
+    const product=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:testEnvironment({
+      CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined,
+      NTS_TESTS_JOBS:'1',NTS_GATE_COSTS_DIR:join(root,'costs'),NTS_RUST_INPUT_TRACE:join(root,'failed-product-trace'),
+      NTS_GATE_STEP:'tests',NTS_GATE_STEP_ATTEMPT:'trace-control',NTS_GATE_STEP_RESULT:stepResult})});
+    assert.notEqual(product.status,0,product.stdout+'\n'+product.stderr);
+    assert.match(product.stdout,/2 passed, 1 failed/);assert.equal(existsSync(stepResult),false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
