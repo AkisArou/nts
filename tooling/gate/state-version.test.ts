@@ -63,11 +63,11 @@ test('supported v3 memory migrates, and a stale controller cannot erase a newer 
 
 test('future full-check state and outcomes refuse read, overwrite and restart deletion',t=>{
  const root=testScratch(t,'controller-future'),state=join(root,'state.json'),outcome=join(root,'outcome.json');
- const future='{ "version": 2, "unrecognized": "preserved" }\n';
- for(const [file,read,write] of [[state,()=>readState(state),()=>writeState(state,emptyState())],
-   [outcome,()=>readOutcome(outcome),()=>writeOutcome(outcome,{status:0})]] as const){
-  writeFileSync(file,future);assert.throws(read,/future state version 2/);assert.throws(write,/future state version 2/);
-  assert.equal(readFileSync(file,'utf8'),future);
+ const controllerFuture='{ "version": 3, "unrecognized": "preserved" }\n',future='{ "version": 2, "unrecognized": "preserved" }\n';
+ for(const [file,read,write,bytes,version] of [[state,()=>readState(state),()=>writeState(state,emptyState()),controllerFuture,3],
+   [outcome,()=>readOutcome(outcome),()=>writeOutcome(outcome,{status:0}),future,2]] as const){
+  writeFileSync(file,bytes);assert.throws(read,new RegExp('future state version '+version));assert.throws(write,new RegExp('future state version '+version));
+  assert.equal(readFileSync(file,'utf8'),bytes);
  }
  let called=false;const units:Units={start(){called=true;return null;},running:()=>false};
  const job=newJob('future-job',outcome,new Date(0));

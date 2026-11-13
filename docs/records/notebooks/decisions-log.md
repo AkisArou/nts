@@ -2610,3 +2610,15 @@ The cycle-entry and post-run checks share the same retry and settlement rules.
 ## Exact input bytes do not enter modules (11-13)
 
 Part of #728. The reader-input owner adds fileInput for immutable files read as text or data. InputSnapshot keeps byte ownership separate from the set of entered modules, so a launcher audit reading a TypeScript source cannot execute its import graph in the selector. The copier still refuses replacement of those bytes under a private data grant. A later module edge upgrades either exact bytes or data-directory membership to real traversal, regardless of entry order. The language-neutral declaration rows carry the distinction for non-JavaScript readers too.
+
+
+## Task lines stay open until answered (11-13)
+
+#765 replaces the full check's last-fifty window with stable task identities
+and explicit acknowledgements by issue or reason. Open tasks never expire;
+answered rows remain for thirty days. The answer CLI uses the state file flock,
+not the controller lifetime lock, and controller writes merge concurrent answers
+only when their immutable task identity agrees. A monotonic retention boundary
+prevents stale snapshots from restoring expired history. The controller imports
+legacy state once into state-v2.json; older writers keep their original path,
+and the answer command waits for the new controller's first publication.

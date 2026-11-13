@@ -20,7 +20,7 @@ import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, contr
 import {FULL_MD, measureJob, RUNS, type Bench, type Publisher} from "./bench.ts";
 import {DELTA_FILE, serializeDelta} from "../records/delta.ts";
 import {reopenIssue, type Gh} from "./revert.ts";
-import {readCount, readState, type CountRecord, type Part} from "./state.ts";
+import {readCount, readState, writeState, newTask, type CountRecord, type Part} from "./state.ts";
 import {BENCH_UNIT, recordsUnitName} from "./unit.ts";
 import {GateResource} from "../gate/gate-resource.ts";
 import {Git} from "./git.ts";
@@ -1694,6 +1694,36 @@ test("the status model: what a live controller does, how far verified is behind 
   assert.equal(fullCheckStatus(state, { ...inputs, count: null }).count, null, "before the first count");
   assert.deepEqual(parseOptions(["--status", "--json"]).json, true);
   assert.throws(() => parseOptions(["--json"]), /--json is for --status/);
+});
+
+test('open task ids stay in status while their answers stay in state history',()=>{
+  const state=readState('/nonexistent'),open=newTask('2020-01-01T00:00:00.000Z','- an old open task');
+  const done=newTask('2026-11-13T00:00:00.000Z','- an answered task');done.answer={issue:592,at:'2026-11-13T01:00:00.000Z'};
+  state.tasks=[open,done];
+  const status=fullCheckStatus(state,{main:null,verified:null,unverified:null,landedAt:()=>'',controller:null,count:null,now:new Date('2026-11-13T02:00:00.000Z')});
+  assert.deepEqual(status.tasks,[open]);
+  assert.match(statusText(status),new RegExp(open.id+' 2020-01-01'));
+  assert.ok(!statusText(status).includes(done.id));
+  assert.equal(state.tasks.length,2);
+});
+
+test('an unanswered task survives more than fifty newer reports and another core task',async t=>{
+  const repo=repository(t),state=readState(repo.layout.state),old=newTask('2020-01-01T00:00:00.000Z','- the unanswered original');
+  state.tasks.push(old);
+  for(let index=0;index<75;index++)state.tasks.push(newTask('2026-11-06T01:00:00.000Z',`- report ${index}`,state.tasks));
+  writeState(repo.layout.state,state);
+  repo.commit({'RED/tests':'red\n'},'a core with no green predecessor');
+  await cycle(harness(repo,fakeGate(repo)));
+  const current=readState(repo.layout.state);
+  assert.ok(current.tasks.some(task=>task.id===old.id));
+  assert.equal(current.tasks.length,77);
+});
+
+test('task acknowledgement arguments are complete and exclusive',()=>{
+  const id='a'.repeat(16);
+  assert.deepEqual(parseOptions(['--answer',id,'--issue','592']).answer,{id,answer:{issue:592}});
+  assert.deepEqual(parseOptions([`--answer=${id}`,'--reason=fixed forward']).answer,{id,answer:{reason:'fixed forward'}});
+  for(const args of [['--answer',id],['--issue','592'],['--answer',id,'--issue','0'],['--answer',id,'--reason',' '],['--answer',id,'--issue','592','--reason','both'],['--answer',id,'--issue','592','--status'],['--answer',id,'--answer',id,'--issue','592']])assert.throws(()=>parseOptions(args));
 });
 
 test("each part records after its own green run: the wide kinds after the wide run, at the commit the core recorded too", async t => {

@@ -1,12 +1,16 @@
 import {assertStateVersion} from '../gate/state-version.ts';
-import {versionedRecord} from '../gate/state-file.ts';
+import {withStateWrite} from '../gate/state-file.ts';
+import {durableRecord} from '../gate/durable-record.ts';
+import {createHash} from 'node:crypto';
 // Where the full check keeps its trees, target, runs and state, and the state
 // itself: one JSON file, written whole and renamed into place, so a stopped
 // service resumes from the last complete write and never from half of one.
-// The controller is its only writer; the hourly count keeps its own file.
+// The controller owns progress; the answer command changes only task answers.
+// Both use one state flock, and progress writes merge persisted answers. The
+// hourly count keeps its own file.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Job } from "./background.ts";
 import type { ProbeVerdict } from "./culprit.ts";
 import type { LandingAnswer } from "./queue.ts";
@@ -55,7 +59,7 @@ export function layout(cache = join(homedir(), ".cache")): Layout {
     records: { core: join(home, "records", "core"), wide: join(home, "records", "wide") },
     bench: join(home, "bench"),
     runs: join(home, "runs"),
-    state: join(home, "state.json"),
+    state: join(home, "state-v2.json"),
     count: join(home, "count.json"),
     lock: join(home, "service.lock"),
   };
@@ -217,7 +221,7 @@ export type BenchmarksDue = {
 export type PartState = { last_run?: RunRecord; last_green?: RunRecord; records?: RecordsRun; waiting?: string; since?: string };
 
 export type State = {
-  version: 1;
+  version: 2;
   core: PartState;
   wide: PartState;
   culprits: Culprit[];
@@ -236,20 +240,26 @@ export type State = {
   /** The last commit `verified` was pushed at, and when a push last failed. */
   pushed?: string;
   push_failed_at?: string;
-  /** Task lines printed for the coordinator, newest last. */
-  tasks: { at: string; line: string }[];
+  /** Open tasks and retained answers, newest last. Only answered rows expire. */
+  tasks: TaskRecord[];
+  /** Monotonic retention boundary; a stale writer cannot restore expired history. */
+  task_history_since?: string;
   now?: Doing;
 };
 
 export function emptyState(): State {
-  return { version: 1, core: {}, wide: {}, culprits: [], probes: [], tasks: [] };
+  return { version: 2, core: {}, wide: {}, culprits: [], probes: [], tasks: [] };
 }
 
 export function readState(file: string): State {
-  if (!existsSync(file)) return emptyState();
-  const value = JSON.parse(readFileSync(file, "utf8")) as State & { records?: RecordsRun };
-  assertStateVersion(value,1,file);
-  if (value.version !== 1) throw new Error(`${file}: unknown state version ${String(value.version)}`);
+  // Import the old controller's last publication only before the new path exists.
+  // Older controllers/candidates keep their own file and never overwrite v2.
+  const legacy = basename(file) === 'state-v2.json' ? join(dirname(file), 'state.json') : file;
+  const source = existsSync(file) ? file : legacy;
+  if (!existsSync(source)) return emptyState();
+  const value = JSON.parse(readFileSync(source, "utf8")) as Omit<State,'version'|'tasks'> & { version: number; records?: RecordsRun; tasks?: Array<TaskRecord | Omit<TaskRecord,'id'>> };
+  assertStateVersion(value,2,source);
+  if (value.version !== 1 && value.version !== 2) throw new Error(`${source}: unknown state version ${String(value.version)}`);
   // One records run for both parts, from before each part kept its own: it was the core's.
   const { records, ...rest } = value;
   if (records && !rest.core?.records) rest.core = { ...rest.core, records };
@@ -257,11 +267,75 @@ export function readState(file: string): State {
   if (rest.wide) delete (rest.wide as PartState & { slot?: string }).slot;
   // The count the cycle kept, from before the count had a timer and a file of its own.
   delete (rest as { count?: unknown }).count;
-  return { ...emptyState(), ...rest };
+  const tasks: TaskRecord[] = [];
+  for (const row of rest.tasks ?? []) {
+    if (value.version === 1) tasks.push(newTask(row.at, row.line, tasks));
+    else {
+      if (!('id' in row) || !/^[0-9a-f]{16}$/.test(row.id) || tasks.some(task => task.id === row.id)) throw Error(`${source}: invalid task identity`);
+      tasks.push(row);
+    }
+  }
+  return { ...emptyState(), ...rest, version: 2, tasks };
+}
+
+export type TaskAnswer = { issue: number; reason?: never } | { reason: string; issue?: never };
+export type TaskRecord = { id: string; at: string; line: string; answer?: TaskAnswer & { at: string } };
+/** Human acknowledgement history; unanswered work has no age or count ceiling. */
+export const ANSWER_RETENTION_MS = 30 * 24 * 60 * 60_000;
+
+export function newTask(at: string, line: string, existing: readonly TaskRecord[] = []): TaskRecord {
+  if (!Number.isFinite(Date.parse(at)) || !line.trim()) throw Error('invalid task timestamp or text');
+  let ordinal = 0, id: string;
+  do { id = createHash('sha256').update(JSON.stringify([at, line, ordinal++])).digest('hex').slice(0, 16); }
+  while (existing.some(task => task.id === id));
+  return { id, at, line };
+}
+
+/** Pure retention decision from the cycle's supplied wall clock. */
+export function retainTaskHistory(state: State, now: Date): void {
+  const since = new Date(now.getTime() - ANSWER_RETENTION_MS).toISOString();
+  state.task_history_since = state.task_history_since && state.task_history_since > since ? state.task_history_since : since;
+  state.tasks = state.tasks.filter(task => !task.answer || task.answer.at >= state.task_history_since!);
 }
 
 export function writeState(file: string, state: State): void {
-  versionedRecord(file,1,state);
+  withStateWrite(file,2,() => {
+    assertStateVersion(state,2,file);
+    if (state.version !== 2) throw Error(`${file}: refusing a non-v2 controller publication`);
+    const current = existsSync(file) ? readState(file) : emptyState();
+    const persisted = new Map(current.tasks.map(task => [task.id, task]));
+    for (const task of state.tasks) {
+      const previous = persisted.get(task.id);
+      if (!previous) continue;
+      if (previous.at !== task.at || previous.line !== task.line) throw Error(`${file}: task ${task.id} changed its immutable identity`);
+      if (previous.answer) {
+        if (task.answer && (task.answer.at !== previous.answer.at || task.answer.issue !== previous.answer.issue || task.answer.reason !== previous.answer.reason)) throw Error(`${file}: task ${task.id} has conflicting answers`);
+        task.answer = previous.answer;
+      }
+    }
+    if (current.task_history_since && (!state.task_history_since || current.task_history_since > state.task_history_since)) state.task_history_since = current.task_history_since;
+    if (state.task_history_since) state.tasks = state.tasks.filter(task => !task.answer || task.answer.at >= state.task_history_since!);
+    durableRecord(file,state);
+  });
+}
+
+/** A narrow writer shares the state flock, never the controller's lifetime lock. */
+export function answerTask(file: string, id: string, answer: TaskAnswer, now: Date): TaskRecord {
+  if (!/^[0-9a-f]{16}$/.test(id)) throw Error(`invalid task id ${JSON.stringify(id)}`);
+  if ((answer.issue !== undefined) === (answer.reason !== undefined) || (answer.issue !== undefined ? !Number.isSafeInteger(answer.issue) || answer.issue <= 0 : !answer.reason?.trim())) throw Error('a task answer needs a positive issue or a nonempty reason');
+  return withStateWrite(file,2,() => {
+    if (!existsSync(file) || (JSON.parse(readFileSync(file,'utf8')) as {version?:number}).version !== 2) throw Error('task answers wait for the controller to adopt state-v2.json');
+    const state = readState(file), task = state.tasks.find(task => task.id === id);
+    if (!task) throw Error(`unknown task ${id}`);
+    if (task.answer) {
+      if (task.answer.issue !== answer.issue || task.answer.reason !== answer.reason) throw Error(`task ${id} was already answered`);
+      return task;
+    }
+    task.answer = {...answer, at: now.toISOString()};
+    retainTaskHistory(state,now);
+    writeState(file,state);
+    return task;
+  });
 }
 
 /** What the hourly count found, and when (service.ts --count). */

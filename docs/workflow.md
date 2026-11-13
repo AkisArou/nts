@@ -111,7 +111,9 @@ follows; this page is the why and the whole picture.
   signalbox) is decided separately; this page does not depend on it.
 - **The coordinator** keeps the issues: it makes and slices them with
   `tooling/tasks/new.ts`, and makes an issue of each task line the full
-  check leaves. It agrees designs, reads the diffs of risky changes (the
+  check leaves, or answers it with a named reason. Task lines remain open
+  until `node tooling/full-check/service.ts --answer <id> --issue <N>` or
+  `--answer <id> --reason <text>` records that acknowledgement. It agrees designs, reads the diffs of risky changes (the
   compiler's core, the gate, the landing and full-check tools) before they
   are queued, starts an agent for each task in the plan's order, and sees
   that an issue a revert reopened is taken again. It works in sittings: each
@@ -343,6 +345,17 @@ What follows from a run:
   that names no issue leaves a task line in the full check's status, for an
   issue. When that part goes green with the commit still in, it
   was no culprit: a revert of it still waiting to land is withdrawn.
+- **Task lines stay open until answered.** Status names each unanswered task
+  by its stable ID. An issue number or a named reason closes it; the same
+  acknowledgement is idempotent, and a conflicting answer is refused. Open
+  tasks have no age or count ceiling. Answered rows remain in state history
+  for thirty days, with retention decided from the cycle's supplied clock.
+  Answer writes share the state file's lock with controller publications,
+  which preserve answers received during a run. The controller imports the
+  old state only before its versioned state path exists; older processes
+  keep writing their old path. The answer command refuses until the new
+  controller has published that state, so it cannot freeze an incomplete
+  migration while an older run is still in flight.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
   result, and only until the full check finds it: within about an hour for
   the core, and at the next eligible idle run for a wide step. A build or unit test that a
@@ -931,6 +944,10 @@ the first node task.
   Undone work stays visible until main evidence, a retained duplicate scope
   or an adopted superseding decision accounts for it
   ([log](records/notebooks/decisions-log.md#streams-groups-and-tasks-11-10)).
+- **Task lines require an acknowledgement:** a stable identity and an issue
+  or named reason account for each report. Unanswered rows never age out;
+  the controller preserves concurrent answers and only answered history
+  expires ([log](records/notebooks/decisions-log.md#task-lines-stay-open-until-answered-11-13)).
 - **Records refresh their landing answer before new recording:** the answer
   read before a long core or wide run cannot hold back rows after the previous
   commit has landed or been withdrawn. Both checks use one settlement owner

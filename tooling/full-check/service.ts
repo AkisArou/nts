@@ -8,6 +8,8 @@
 //   node tooling/full-check/service.ts                     the loop the unit runs
 //   node tooling/full-check/service.ts --once              one cycle, then exit
 //   node tooling/full-check/service.ts --status [--json]   what it is doing, what it last did, and the task lines
+//   node tooling/full-check/service.ts --answer <id> (--issue <N> | --reason <text>)
+//                                                          acknowledge one task without waiting for a core run
 //   node tooling/full-check/service.ts --count             the hourly count once, written to its own file (the timer's command)
 //   node tooling/full-check/service.ts --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>
 //                                                          a records unit's work, in the records tree it runs from (recordsUnit)
@@ -94,7 +96,7 @@ import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } f
 import { issuesNamed } from "../tasks/links.ts";
 import { benchWithLock, FULL_MD, measureJob, publishAt, publishRecord, slowerRows, type MeasureJob, type MeasureOutcome, type Publisher } from "./bench.ts";
 import { DEFAULT_SCHEDULE, dueNightly, nextNightly, parseTimes, wideDecision, wideMemoryWaiter, WIDE_MIN_GAP_MS, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, type BenchOutcome, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RecordsRunOutcome, type RunRecord, type State } from "./state.ts";
+import { layout as defaultLayout, PARTS, probeKey, readCount, readState, writeCount, writeState, answerTask, newTask, retainTaskHistory, type TaskAnswer, type BenchOutcome, type BenchRun, type CountRecord, type Culprit, type Doing, type Layout, type Measuring, type Part, type PartState, type RecordsRun, type RecordsRunOutcome, type RunRecord, type State } from "./state.ts";
 import { BENCH_UNIT, lowPriority, recordsUnitName } from "./unit.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
@@ -142,6 +144,8 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 /** One cycle: the first due piece of work, or nothing. */
 export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "idle" | "restart"> {
   const state = readState(fx.layout.state);
+  retainTaskHistory(state,fx.now());
+  writeState(fx.layout.state,state);
   try {
     beforeRun(fx);
     if (state.now?.doing === "restarting") { delete state.now; writeState(fx.layout.state, state); }
@@ -331,8 +335,7 @@ function doing<T>(fx: Effects, state: State, what: Doing["doing"], commit: strin
 }
 
 function task(fx: Effects, state: State, line: string): void {
-  state.tasks.push({ at: fx.now().toISOString(), line });
-  state.tasks = state.tasks.slice(-50);
+  state.tasks.push(newTask(fx.now().toISOString(),line,state.tasks));
   fx.log(`TASK for an issue: ${line}`);
 }
 
@@ -1476,7 +1479,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     culprits: state.culprits,
     benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
     count: inputs.count,
-    tasks: state.tasks,
+    tasks: state.tasks.filter(task => !task.answer),
   };
 }
 
@@ -1507,7 +1510,7 @@ export function statusText(s: FullCheckStatus): string {
           : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
     `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,
     ...s.count?.lines.map(line => `  ${line}`) ?? [],
-    "tasks for an issue:", ...s.tasks.map(t => `  ${t.at} ${t.line}`),
+    "tasks for an issue:", ...s.tasks.map(t => `  ${t.id} ${t.at} ${t.line}`),
   ].join("\n");
 }
 
@@ -1525,6 +1528,7 @@ export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus
 
 export type Options = {
   once: boolean; status: boolean; json: boolean; count: boolean;
+  answer: { id: string; answer: TaskAnswer } | null;
   /** A records unit's work (--record), or the benchmarks unit's (--benchmarks). */
   record: RecordJob | null; benchmarks: MeasureJob | null;
   schedule: Schedule; ignored: string[];
@@ -1538,6 +1542,7 @@ export function parseOptions(argv: readonly string[]): Options {
   const schedule = { ...DEFAULT_SCHEDULE };
   let once = false, status = false, json = false, count = false, benchmarks = false, part: Part | undefined;
   const ignored: string[] = [], values: Partial<Record<JobValue, string>> = {};
+  const response: Partial<Record<'answer'|'issue'|'reason',string>> = {};
   const value = (arg: string, name: JobValue) => {
     const given = arg.slice(name.length + 3);
     if (name === "commit" ? !/^[0-9a-f]{40}$/.test(given) : !isAbsolute(given)) throw new Error(`--${name} takes ${name === "commit" ? "a full commit name" : "an absolute path"}, not ${JSON.stringify(given)}`);
@@ -1550,7 +1555,16 @@ export function parseOptions(argv: readonly string[]): Options {
     if (other.length) throw new Error(`${other.map(name => `--${name}`).join(", ")} is not ${what}'s`);
     return Object.fromEntries(needs.map(name => [name, values[name]])) as T;
   }
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index]!;
+    const responseName = /^--(answer|issue|reason)(?:=|$)/.exec(arg)?.[1] as keyof typeof response | undefined;
+    if (responseName) {
+      const given = arg.includes('=') ? arg.slice(arg.indexOf('=')+1) : argv[++index];
+      if (!given || given.startsWith('--')) throw Error(`--${responseName} needs a value`);
+      if (response[responseName] !== undefined) throw Error(`--${responseName} was given twice`);
+      response[responseName] = given;
+      continue;
+    }
     if (arg === "--once") once = true;
     else if (arg === "--status") status = true;
     else if (arg === "--json") json = true;
@@ -1567,20 +1581,37 @@ export function parseOptions(argv: readonly string[]): Options {
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
     } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json] | --count | --record=<part> --commit=<sha> --run=<dir> --pin=<nts> --outcome=<file>`
-      + ` | --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file>] [--nightly-at=HH:MM]`);
+      + ` | --benchmarks --commit=<sha> --run=<dir> --bench=<nts-bench> --history=<dir> --outcome=<file> | --answer <id> (--issue <N> | --reason <text>)] [--nightly-at=HH:MM]`);
+  }
+  let answer: Options['answer'] = null;
+  if (Object.keys(response).length) {
+    if (!response.answer || !/^[0-9a-f]{16}$/.test(response.answer)) throw Error('--answer takes a task id from --status');
+    if ((response.issue !== undefined) === (response.reason !== undefined)) throw Error('--answer takes exactly one of --issue or --reason');
+    if (response.issue !== undefined) {
+      if (!/^[1-9][0-9]*$/.test(response.issue) || !Number.isSafeInteger(Number(response.issue))) throw Error('--issue takes a positive issue number');
+      answer = {id:response.answer,answer:{issue:Number(response.issue)}};
+    } else {
+      if (!response.reason?.trim()) throw Error('--reason needs nonempty text');
+      answer = {id:response.answer,answer:{reason:response.reason}};
+    }
   }
   if (json && !status) throw new Error("--json is for --status");
   if (part && benchmarks) throw new Error("--record and --benchmarks are each a command of its own");
   const record = part ? { part, ...job<Omit<RecordJob, "part">>("--record", ["commit", "run", "pin", "outcome"]) } : null;
   const measure = benchmarks ? job<MeasureJob>("--benchmarks", ["commit", "run", "bench", "history", "outcome"]) : null;
   if (!record && !measure && Object.keys(values).length) throw new Error(`${Object.keys(values).map(name => `--${name}`).join(", ")} are for --record or --benchmarks`);
-  if ([once, status, count, !!record || !!measure].filter(Boolean).length > 1) throw new Error("--once, --status, --count, --record and --benchmarks are each a command of its own");
-  return { once, status, json, count, record, benchmarks: measure, schedule, ignored };
+  if ([once, status, count, !!record || !!measure, !!answer].filter(Boolean).length > 1) throw new Error("--once, --status, --count, --record, --benchmarks and --answer are each a command of its own");
+  return { once, status, json, count, answer, record, benchmarks: measure, schedule, ignored };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
   const layout = defaultLayout();
+  if (options.answer) {
+    const task = answerTask(layout.state,options.answer.id,options.answer.answer,new Date());
+    console.log(`answered ${task.id}: ${task.answer!.issue !== undefined ? `issue #${task.answer!.issue}` : task.answer!.reason}`);
+    return 0;
+  }
   if (options.status) {
     const status = machineStatus(layout);
     console.log(options.json ? JSON.stringify(status, null, 2) : statusText(status));
