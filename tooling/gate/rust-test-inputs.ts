@@ -293,7 +293,9 @@ function receiptValid(value:unknown):value is FileObserverReceipt{
  * No partial visit is accepted.
  * A legacy normalized index must be rederived from its retained raw capture. */
 export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=>void|Promise<void>):Promise<{header:InputIndexStart;complete:InputIndexEnd}>{
-  const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:InputIndexExecution|undefined;
+  const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:{pid:number;path:string}|undefined;
+  // Keep only each task's current attribution, never its historical argv rows.
+  const tasks=new Map<string,{id:number;cwd:string;phase:TracePhase['phase'];source?:string}>();
   await readCompressedRecords(file,async value=>{
     const row=indexObject(value);
     if(complete)fail('data after input index completion');
@@ -310,10 +312,12 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       header=row as InputIndexStart;
     }else if(row.kind==='execution'){
       if(!integer(row.id)||row.id!==counts.images+1||!integer(row.parent)||row.parent<0||row.parent>=row.id
-        ||!integer(row.pid)||row.pid<1||typeof row.birth!=='string'||!/^\d+$/.test(row.birth)||!absolute(row.path)
+        ||!integer(row.pid)||row.pid<1||typeof row.birth!=='string'||!/^\d+$/.test(row.birth)||row.birth==='0'||!absolute(row.path)
         ||!absolute(row.cwd)||!hex(row.argvRaw)||!phaseValid(indexObject(row.phase))
         ||!['first-observation','actual-image','actual-argv','actual-cwd'].includes(String(row.reason)))fail('malformed input index execution');
-      firstImage??=row as InputIndexExecution;counts.images++;
+      firstImage??={pid:row.pid,path:row.path};counts.images++;
+      const phase=indexObject(row.phase);
+      tasks.set(key(row.pid,row.birth),{id:row.id,cwd:row.cwd,phase:phase.phase as TracePhase['phase'],...(typeof phase.source==='string'?{source:phase.source}:{})});
     }else if(row.kind==='observation'){
       if(!integer(row.image)||row.image<1||row.image>counts.images||!phaseValid(row)||!absolute(row.cwd)
         ||typeof row.operation!=='string'||typeof row.syscall!=='string'||row.outcome!=='unknown'||typeof row.canceled!=='boolean'
@@ -323,6 +327,9 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       if(typeof attempt.id!=='string'||!/^\d{1,20}$/.test(attempt.id)||['tid','tgid','ppid'].some(field=>!integer(attempt[field]))
         ||!integer(attempt.tid)||attempt.tid<1||!integer(attempt.tgid)||attempt.tgid<1||!integer(attempt.ppid)||attempt.ppid<0
         ||typeof attempt.birth!=='string'||!/^\d+$/.test(attempt.birth)||attempt.birth==='0'||typeof attempt.parentBirth!=='string'||!/^\d+$/.test(attempt.parentBirth))fail('malformed raw attempt identity');
+      const context=tasks.get(key(attempt.tgid,attempt.birth));
+      if(!context||context.id!==row.image||context.cwd!==row.cwd||context.phase!==row.phase||context.source!==row.source)
+        fail('input attempt differs from its current execution context');
       for(const value of row.subjects)readSubject(value,row.cwd,row.args);
       for(const value of row.probes)readProbe(value);
       counts.attempts++;counts.observations+=row.subjects.length;counts.probes+=row.probes.length;

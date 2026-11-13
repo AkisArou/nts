@@ -148,6 +148,21 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   assert.deepEqual(rows[1]!.args,after.args);assert.equal(rows[1]!.cwd,'/source/moved');
   assert.equal(result.complete.raw.sha256,createHash('sha256').update(readFileSync(raw)).digest('hex'));
   assert.equal(result.complete.raw.bytes,readFileSync(raw).length);
+  const records:unknown[]=[];await readCompressedRecords(output,row=>{records.push(row);});
+  const current=rows[1]!;
+  const changes:InputIndexObservation[]=[
+    {...current,attempt:{...current.attempt,tgid:2}},
+    {...current,attempt:{...current.attempt,birth:'2'}},
+    {...current,phase:'cargo-setup'},
+    {...current,source:'another/source.rs'},
+    {...current,cwd:'/source/wrong',subjects:current.subjects.map(subject=>subject.kind==='path'&&subject.anchor.kind==='cwd'?{...subject,anchor:{...subject.anchor,path:'/source/wrong'}}:subject)},
+    {...current,image:rows[0]!.image},
+  ];
+  for(const [index,changed]of changes.entries()){
+    const path=join(root,'context-'+index+'.gz');
+    writeFileSync(path,gzipSync(records.map(row=>JSON.stringify((row as {kind:string;attempt?:{id:string}}).kind==='observation'&&(row as InputIndexObservation).attempt.id===current.attempt.id?changed:row)).join('\n')+'\n'));
+    await assert.rejects(readInputTraceIndex(path,()=>{}),/differs from its current execution context/);
+  }
 });
 
 test('descriptor-backed null paths are retained and non-filesystem dirfds never invent path anchors',async t=>{
@@ -209,7 +224,7 @@ test('input index publication and its typed reader exceed one string with bounde
   await durableRecordStream(output,async append=>{
     const put=async(row:unknown)=>{const line=JSON.stringify(row)+'\n';encodedBytes+=Buffer.byteLength(line);await append(line);};
     await put({kind:'index-start',version:4,mechanism:'seccomp-user-notification',outcomes:'unknown',observer:null,target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
-    for(let id=1;id<=repeats;id++){await put({...context,id,pid:id});await put({kind:'observation',image:id,attempt:{id:String(id),tid:id,tgid:id,ppid:0,birth:String(id),parentBirth:'0'},cwd:'/source',args:['0','0','0','0','0','0'],operation:'lifetime',syscall:'exit',outcome:'unknown',canceled:false,phase:'test-runtime',source:'src/lib.rs',subjects:[],probes:[]});}
+    for(let id=1;id<=repeats;id++){await put({...context,id,pid:id,birth:String(id)});await put({kind:'observation',image:id,attempt:{id:String(id),tid:id,tgid:id,ppid:0,birth:String(id),parentBirth:'0'},cwd:'/source',args:['0','0','0','0','0','0'],operation:'lifetime',syscall:'exit',outcome:'unknown',canceled:false,phase:'test-runtime',source:'src/lib.rs',subjects:[],probes:[]});}
     await put({kind:'index-complete',terminal:{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:repeats,errors:0,drainComplete:true,observerSignal:0},
       raw:{path:'/private/raw.gz',sha256:'0'.repeat(64),bytes:1},counts:{images:repeats,attempts:repeats,observations:0,probes:0,terminalFacts:0,inherited:0}});
   },{gzip:true});
