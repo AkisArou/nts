@@ -175,6 +175,21 @@ project declarations retain their placement in either discovery order.
 Inspection-owned bytes cannot be substituted by a fixture data grant. The
 census reports each directory's role. Declared byte readers survive both prose
 precision and explicit execution-reader overrides.
+`optionalFile(new URL("candidate", import.meta.url))` declares immutable regular
+bytes when present and the exact negative dependency when absent. It grants no
+placement or substitution. `directoryMembership(new URL("directory/",
+import.meta.url))` declares immediate physical child names and types, including
+untracked children. It owns metadata only: it neither copies child bytes nor
+places them. Unsupported filesystem types refuse by name. These explicit
+metadata readers may name the repository root; ordinary dot-only URL anchors
+remain non-readers. The shared graph retains each reader's fixture context.
+The copier stages genuine inputs before verifying metadata, refuses symlink
+ancestors and validates absent candidates without creating them. A private data
+grant changes membership only within that already declared namespace and never
+substitutes immutable bytes. Selection compares complete before/after child
+membership, including first or last descendants and batched renames, before
+prose or records shortcuts. Parsed runner handovers propagate these obligations
+alongside byte readers.
 The `jvm-members` step owns generated JVM catalogue freshness and reserved-name
 exclusivity. Its strict tooling operation scans its declared compiler, JVM
 runtime and tooling populations; synthetic controls exercise that same operation.
@@ -1020,6 +1035,12 @@ the first node task.
   declarations. Repository-wide JVM member checks belong to their declared
   tooling step, with synthetic controls of the same operation
   ([log](records/notebooks/decisions-log.md#inspection-does-not-place-inputs-11-13)).
+- **Negative candidates and membership retain their own roles:** optional
+  immutable bytes and immediate names/types share the canonical reader graph
+  and fixture context without granting placement. Structural changes remain
+  owed through prose shortcuts and runner handovers; the copier verifies
+  metadata after genuine input staging
+  ([log](records/notebooks/decisions-log.md#metadata-readers-keep-structural-obligations-11-13)).
 - **Byte ownership and module traversal are separate:** an exact `fileInput`
   keeps production bytes without entering their graph. Data-directory members
   and exact byte inputs enter that graph only when an independent module edge

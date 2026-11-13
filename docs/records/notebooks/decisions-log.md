@@ -2793,3 +2793,19 @@ fallback or authorize private substitution; byte consumers remain owed through
 prose precision and explicit execution-reader overrides. The public census
 retains each directory's role. Rust runtime declarations and ALWAYS retirement
 remain separate work.
+
+## Metadata readers keep structural obligations (11-13)
+
+Part of #761 adds shared optional-file and shallow directory-membership roles.
+The canonical graph retains immutable candidate bytes or their exact absence,
+and immediate physical child names/types, without treating either metadata role
+as placement or a fixture grant. Existing owned inputs are staged first; strict
+ancestor/type checks then verify metadata without inventing children. Private
+data contexts retain their declared namespace boundary. Unsupported types refuse
+rather than sharing an undifferentiated type.
+
+The selector compares complete endpoint membership before prose/records
+shortcuts and propagates metadata through its existing parsed runner handovers.
+Root membership is explicit; ordinary dot-only anchors remain non-readers.
+Runtime declarations, operation-aware trace coverage and removal of Rust checks
+from ALWAYS remain separate review boundaries.
