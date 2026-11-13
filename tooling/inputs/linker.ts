@@ -13,15 +13,16 @@
 // tree missing an input does not fail, it answers emptily.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, relative,resolve } from "node:path";
+import { fileURLToPath,pathToFileURL } from "node:url";
 
 export type Use = "gate" | "work";
 export type Linker = { script: string; args: [string] };
 
 /** `tree`'s own linker for `use`, as its commit names it; null when the tree has none. */
 export function linkerOf(tree: string, use: Use): Linker | null {
-  const script = join(tree, "tooling/inputs/link.sh");
+  const name=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('./link.sh',import.meta.url)));
+  const script = join(tree, name);
   if (existsSync(script)) return { script, args: [use] };
   const before = join(tree, "tooling/lanes/inputs.sh");
   if (existsSync(before)) return { script: before, args: [use === "work" ? "lane" : use] };

@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 
 const ROOT=resolve(import.meta.dirname,'../..');
@@ -71,7 +72,7 @@ export function resolveRecipe(source:string,output=join(ROOT,'build/node-deps/re
  const stage=mkdtempSync(join(dirname(output),'.node-recipe-'));
  try {
   const generated=join(stage,'recipes.json');
-  execFileSync('python3',['-B',join(ROOT,'tooling/bootstrap/node_recipe.py'),resolve(source),generated],{stdio:['ignore','pipe','pipe']});
+  execFileSync('python3',['-B',fileURLToPath(new URL('./node_recipe.py',import.meta.url)),resolve(source),generated],{stdio:['ignore','pipe','pipe']});
   const bytes=readFileSync(generated);
   if(check){if(!bytes.equals(readFileSync(output)))throw Error('committed Node recipe differs from fresh GYP evaluation; run bootstrap with --resolve-recipe');}
   else writeFileSync(output,bytes);

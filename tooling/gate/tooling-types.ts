@@ -7,7 +7,7 @@ import {createRequire} from 'node:module';
 import type {API as CheckerAPI} from 'typescript/sync';
 
 export const TOOLING_PROJECT=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../tsconfig.json',import.meta.url))).split(sep).join('/');
-export const TOOLING_DIAGNOSTICS='results/tooling-types/diagnostics.json';
+export const TOOLING_DIAGNOSTICS=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../results/tooling-types/diagnostics.json',import.meta.url))).split(sep).join('/');
 export type DiagnosticCounts=Record<string,number>;
 export type DiagnosticRecord={version:1;modules:DiagnosticCounts};
 export type TypeDiagnostic={fileName?:string;code:number;text:string;startPosition?:{line:number;character:number}};

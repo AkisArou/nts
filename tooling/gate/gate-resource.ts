@@ -3,11 +3,13 @@
 // a caller that started first may hold it while waiting for pinned.sh's tree lock.
 import { spawnSync, type StdioOptions } from "node:child_process";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join,relative } from "node:path";
+import {fileURLToPath} from 'node:url';
 
 const HANDOFF = 8;
 export function supportsResourceHandoff(root: string): boolean {
-  return readFileSync(join(root,"tooling/gate/pinned.sh"),"utf8").includes("\n# nts-gate-tree-lock-handoff: 8\n");
+  const script=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('./pinned.sh',import.meta.url)));
+  return readFileSync(join(root,script),"utf8").includes("\n# nts-gate-tree-lock-handoff: 8\n");
 }
 export class GateResource {
   readonly fd: number;

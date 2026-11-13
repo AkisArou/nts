@@ -8,11 +8,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkBenchmarkInputs } from "./benchmark-inputs.ts";
+import {dataDirectory} from '../gate/reader-inputs/main.ts';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(directory, "../..");
-const destination = join(root, "licenses");
-const nodeRecipePath = "build/node-deps/recipes.json";
+const destination = fileURLToPath(dataDirectory(new URL('../../licenses/',import.meta.url)));
+const runtimeC=dataDirectory(new URL('../../runtime/c/',import.meta.url));
+const nodeRecipePath = relative(root,fileURLToPath(new URL('../../build/node-deps/recipes.json',import.meta.url)));
 const nodeRecipe = JSON.parse(readFileSync(join(root, nodeRecipePath), "utf8")) as { node: string; notices: Record<string, string> };
 // Compiler and program attributions read the same resolved notice bytes.
 function licenseInput(path: string): Buffer {
@@ -44,12 +46,12 @@ const declaredComponents = [
 // file. Verification fails when a declared file is missing or unrecorded,
 // so vendoring data without its license stops at --check, not at release.
 const declaredData: { name: string; license: string }[] = [
-  { name: "Unicode Character Database 17.0.0", license: "compiler/unicode/data/LICENSE" },
+  { name: "Unicode Character Database 17.0.0", license: relative(root,fileURLToPath(new URL('../../compiler/unicode/data/LICENSE',import.meta.url))) },
   ...Object.keys(nodeRecipe.notices).sort().map(name => ({
     name: `Node ${nodeRecipe.node} bundled ${name} sources`, license: `${nodeRecipePath}#notice/${name}`,
   })),
 ];
-const lock = readFileSync(join(root, "Cargo.lock"), "utf8");
+const lock = readFileSync(new URL('../../Cargo.lock',import.meta.url), "utf8");
 const packages: Package[] = lock.split("[[package]]").slice(1).map((entry) => {
   const field = (name: string) => new RegExp(`^${name} = "([^"]+)"$`, "m").exec(entry)?.[1];
   const name = field("name"), version = field("version");
@@ -84,7 +86,7 @@ const dataPath = join(destination, "vendored-data.json");
 const componentsPath = join(destination, "components.json");
 const ownPackages = new Set<string>();
 const ownLicense = "Apache-2.0 WITH LLVM-exception";
-const workspaceManifest = readFileSync(join(root, "Cargo.toml"), "utf8");
+const workspaceManifest = readFileSync(new URL('../../Cargo.toml',import.meta.url), "utf8");
 const workspacePackage = workspaceManifest.split("[workspace.package]")[1]?.split("\n[")[0] ?? "";
 const workspaceLicense = /^license\s*=\s*"([^"]+)"/m.exec(workspacePackage)?.[1];
 if (workspaceLicense !== ownLicense) throw new Error(`nts workspace licence must be ${ownLicense}`);
@@ -190,9 +192,9 @@ const data: VendoredData[] = JSON.parse(readFileSync(dataPath, "utf8"));
 const components: Component[] = JSON.parse(readFileSync(componentsPath, "utf8"));
 const loadText = (digest: string) => readFileSync(join(destination, "texts", `${digest}.txt`));
 const loadLicense = (path: string) => licenseInput(join(root, path));
-const discoverComponents = () => readdirSync(join(root, "runtime/c"), { withFileTypes: true })
-  .filter(entry => entry.isDirectory() && licenceNames(join(root, "runtime/c", entry.name)).length)
-  .map(entry => `runtime/c/${entry.name}`);
+const discoverComponents = () => readdirSync(runtimeC, { withFileTypes: true })
+  .filter(entry => entry.isDirectory() && licenceNames(join(fileURLToPath(runtimeC), entry.name)).length)
+  .map(entry => relative(root,join(fileURLToPath(runtimeC),entry.name)));
 function verifyComponents(records: Component[], readText = loadText, readLicense = loadLicense, discovered = discoverComponents()): Set<string> {
   const byDirectory = new Map(records.map(record => [record.directory, record]));
   if (byDirectory.size !== records.length) throw new Error("duplicate embedded component attribution");

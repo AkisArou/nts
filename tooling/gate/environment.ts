@@ -3,7 +3,13 @@ import { HOST_CAPABILITIES, FIXED_AMBIENT, hostEnvironment } from "./canonical-e
 // require them. The launcher and both gate entry points read this one list.
 import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-probe.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join,relative } from "node:path";
+import {fileURLToPath} from 'node:url';
+import {dataDirectory} from './reader-inputs/main.ts';
+
+const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+const RUNNER=new URL('./run.mjs',import.meta.url);
+const INTEROP=dataDirectory(new URL('../../tests/interop/',import.meta.url));
 
 type Capability = "android" | "jvm" | "valgrind";
 type Variable = { name: string; capability?: Capability };
@@ -39,7 +45,7 @@ export function missingEnvironment(sites: readonly CapabilitySite[], env: NodeJS
 
 /** Read declarations from the exact tree whose steps are about to run. */
 export function gateCapabilities(tree: string, requested: readonly string[] | "all", interop: string | null = null, probe:InfrastructureProbe=infrastructureProbe): CapabilitySite[] {
-  const queried = probe({purpose:"read gate capability declarations",command:process.execPath,args:["tooling/gate/run.mjs", "--capabilities"],cwd:tree});
+  const queried = probe({purpose:"read gate capability declarations",command:process.execPath,args:[relative(SOURCE,fileURLToPath(RUNNER)), "--capabilities"],cwd:tree});
   const table = JSON.parse(queried.stdout) as Record<string, string[]>;
   const steps = requested === "all" ? Object.keys(table) : requested;
   const sites: CapabilitySite[] = steps.map(step => {
@@ -47,7 +53,7 @@ export function gateCapabilities(tree: string, requested: readonly string[] | "a
     return { step, capabilities: table[step] };
   });
   if (steps.includes("interop")) {
-    const directory = join(tree, "tests/interop");
+    const directory = join(tree, relative(SOURCE,fileURLToPath(INTEROP)));
     const selected = interop?.trim() ? interop.trim().split(/\s+/) : readdirSync(directory).sort();
     for (const project of selected) {
       if (project.includes("/") || project === "." || project === "..") throw new Error(`invalid interop project ${project}`);

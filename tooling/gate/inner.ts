@@ -47,7 +47,7 @@ import { existsSync, realpathSync, writeFileSync, chmodSync } from "node:fs";
 import { availableParallelism,homedir } from "node:os";
 import {gateEnvironment,sealOracleRun} from "./canonical-environment.ts";
 import {finishRunTemporary} from "./run-temporary.ts";
-import { join } from "node:path";
+import { join,relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { machineMemory, parseBytes, SYSTEM_FLOOR_BYTES } from "./memory-ledger.ts";
 import { defaultSlots } from "./budget.ts";
@@ -237,7 +237,7 @@ function main(argv: readonly string[],capacity:DiskCapacity): number {
         break;
       }
       fine = step(`agree ${backend}${rc === "1" ? " rc" : ""}`, () =>
-        heavy({ key: "inner-agree", what: "agree", memoryMax: "12G", workers: 4 }, "node", ["tooling/differential/agree.mjs", before, after, `--base=${base}`], {
+        heavy({ key: "inner-agree", what: "agree", memoryMax: "12G", workers: 4 }, "node", [relative(ROOT,fileURLToPath(new URL('../differential/agree.mjs',import.meta.url))), before, after, `--base=${base}`], {
           NTS_BACKEND: backend,
           NTS_RC: rc,
           NTS_AGREE_JOBS: "4",

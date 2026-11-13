@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {chmodSync,copyFileSync,cpSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,readlinkSync,realpathSync,renameSync,rmSync,rmdirSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {nodePin,verifySource} from '../bootstrap/node.ts';
 import {cacheLocation} from '../gate/cache-capabilities.ts';
@@ -70,7 +70,8 @@ function identityOf(node:string,source:string,release:string,identity:Identity){
   verifySource(source,release);
 }
 function verifyRecipe(tree:string,source:string,release:string){
-  const recipe=JSON.parse(readFileSync(join(tree,'build/node-deps/recipes.json'),'utf8'));
+  const recipeName=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../build/node-deps/recipes.json',import.meta.url)));
+  const recipe=JSON.parse(readFileSync(join(tree,recipeName),'utf8'));
   if(recipe.node!==release)throw Error('node inputs: recipe Node '+recipe.node+' differs from tree pin '+release);
   const sourceRecord=JSON.parse(readFileSync(join(source,'NTS-SOURCE.json'),'utf8'));
   if(recipe.source_sha256!==sourceRecord.archive_sha256)throw Error('node inputs: recipe archive identity differs from Node '+release);

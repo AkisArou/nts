@@ -2,11 +2,12 @@ import {gitArguments} from "./git-arguments/main.ts";
 // Discover test entries, rather than maintaining a second catalogue of folders.
 import {execFileSync} from "node:child_process";
 import {readdirSync,readFileSync} from "node:fs";
-import {dirname,join,resolve} from "node:path";
+import {dirname,join,relative,resolve} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
-export const TOOLING_TEST_EXCLUSIONS="tooling/gate/tooling-test-exclusions.json";
+const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+export const TOOLING_TEST_EXCLUSIONS=relative(SOURCE,fileURLToPath(new URL('./tooling-test-exclusions.json',import.meta.url)));
 export type ToolingTestExclusion={path:string;reason:string;step:string};
 export function isToolingTest(path:string):boolean {
   return /^tooling\/(?:[^/]+\/)*[^/]+\.test\.(?:ts|mjs)$/.test(path)
@@ -17,7 +18,7 @@ function observe<T>(name:string,read:()=>T):T {
   catch(error){throw new ToolingInstrumentError("tooling-setup",`cannot observe ${name}: ${String(error)}`,{cause:error});}
 }
 export function toolingStepNames(root:string):string[] {
-  return observe("gate step names",()=>execFileSync("sh",[join(root,"tooling/gate/all.sh"),"--list"],{
+  return observe("gate step names",()=>execFileSync("sh",[join(root,relative(SOURCE,fileURLToPath(new URL('./all.sh',import.meta.url)))),"--list"],{
     cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"],
   }).trim().split("\n").filter(Boolean));
 }
