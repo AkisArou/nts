@@ -7,26 +7,12 @@ import {pendingFixtures,readRecords,recordPath} from "../differential/oracle-rec
 import {pendingLine} from "../records/pending.ts";
 import {oracleIdentityProblems,oracleIdentityScope} from "./oracle-record-identities.ts";
 import {dataDirectory} from './reader-inputs/main.ts';
+import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from './record-numbers.ts';
 
-const RECORD_DIRECTORY=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
-
-// Existing collisions are named, never allowed by count: fixing one cannot
-// spend its allowance on a new collision. This list only shrinks.
-export const KNOWN_DUPLICATE_RECORDS=["0099","0102","0116","0120"] as const;
-
-export function recordNumbers(names:readonly string[],known:readonly string[]=KNOWN_DUPLICATE_RECORDS) {
-  const files=new Map<string,string[]>();
-  for(const name of [...names].sort()) {
-    const number=/^[0-9]{4}/.exec(name)?.[0];
-    if(number)files.set(number,[...(files.get(number)??[]),name]);
-  }
-  const duplicates=[...files].filter(([,names])=>names.length>1);
-  return {
-    count:[...files.values()].reduce((count,names)=>count+names.length,0),
-    unexpected:duplicates.filter(([number])=>!known.includes(number)),
-    stale:known.filter(number=>!duplicates.some(([duplicate])=>duplicate===number)),
-  };
-}
+const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+const RECORD_DIRECTORY=relative(SOURCE,fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
+const BENCHMARK_STORE=dataDirectory(new URL('../../results/benchmarks/',import.meta.url));
+const inRoot=(root:string,input:URL)=>join(root,relative(SOURCE,fileURLToPath(input)));
 
 export function checkRecords(root:string,report:(message:string)=>void,env:NodeJS.ProcessEnv):void {
   const numbers=recordNumbers(readdirSync(join(root,RECORD_DIRECTORY)));
@@ -36,7 +22,8 @@ export function checkRecords(root:string,report:(message:string)=>void,env:NodeJ
     "renumber the later one; tooling/gate/claim-record.sh takes the next free",
   ].join("\n"));
   if(numbers.stale.length)throw new Error("fixed, so remove from KNOWN_DUPLICATE_RECORDS: "+numbers.stale.join(" "));
-  checkBenchmarkRecords(root);
+  const store=inRoot(root,BENCHMARK_STORE);
+  checkBenchmarkRecords(root,{runs:join(store,'runs'),table:join(store,'full.md')});
   const problems=oracleIdentityProblems(root,readRecords(root).rows,env);
   report(oracleIdentityScope());
   if(problems.length)throw Error(problems.join("\n"));

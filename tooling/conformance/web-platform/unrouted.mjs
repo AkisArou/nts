@@ -25,11 +25,21 @@
 // two hours old and reported green over a broken tree -- so counting generated
 // declarations as references would keep dead exports alive by their own shadows.
 import { readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import {fileURLToPath} from "node:url";
+import {dataDirectory} from "../../gate/reader-inputs/main.ts";
 
-const SOURCE = "runtime/web-platform/src";
-/** Every place a caller could live. Add to this rather than narrowing it. */
-const CORPUS = ["runtime", "tooling", "tests", "benchmarks"];
+const ROOT=fileURLToPath(new URL('../../..',import.meta.url));
+/** Every place a caller could live. The same declared namespaces are read
+ * relative to the selected repository, including a fixture's private copy. */
+const RUNTIME=dataDirectory(new URL('../../../runtime/',import.meta.url));
+const CORPUS = [
+  RUNTIME,
+  dataDirectory(new URL('../../../tooling/',import.meta.url)),
+  dataDirectory(new URL('../../../tests/',import.meta.url)),
+  dataDirectory(new URL('../../../benchmarks/',import.meta.url)),
+].map(url=>relative(ROOT,fileURLToPath(url)));
+const SOURCE=join(relative(ROOT,fileURLToPath(RUNTIME)),"web-platform/src");
 /** Generated: it declares what source no longer has. */
 const GENERATED = new Set(["node_modules", ".tsbuild", "dist", "target", "build"]);
 const BARRELS = [join(SOURCE, "index.ts"), join(SOURCE, "provider.ts")];

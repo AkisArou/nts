@@ -1,3 +1,5 @@
+import {fixtureInput} from './reader-inputs/main.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -6,13 +8,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+function stageUnrouted(root:string):string{
+  for(const name of ['runtime','tooling','tests','benchmarks'])mkdirSync(join(root,name),{recursive:true});
+  copyModuleClosure([fixtureInput(new URL('../conformance/web-platform/unrouted.mjs',import.meta.url),{dataNamespaces:{
+    runtime:'unrouted corpus control',tooling:'unrouted corpus control',tests:'unrouted corpus control',benchmarks:'unrouted corpus control',
+  }})],root);
+  return join(root,'tooling/conformance/web-platform/unrouted.mjs');
+}
+
 test("unrouted names a broken corpus link and fails without an unhandled stack", t => {
   const root = mkdtempSync(join(tmpdir(), "nts-unrouted-link-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, "runtime/web-platform/src"), { recursive: true });
-  mkdirSync(join(root, "tooling"));
+  const script=stageUnrouted(root);
   symlinkSync("missing-config", join(root, "tooling/broken-config"));
-  const script = new URL("../conformance/web-platform/unrouted.mjs", import.meta.url).pathname;
   const result = spawnSync(process.execPath, [script], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /unrouted: cannot inspect tooling\/broken-config -> missing-config \(ENOENT\)/);
@@ -27,8 +36,8 @@ for (const platform of ["linux", "darwin"]) {
     mkdirSync(join(root, "runtime/web-platform/src"), { recursive: true });
     const dir = join(root, "tests/interop/macos-pods/Pods/Headers/Public/Chirp");
     mkdirSync(dir, { recursive: true });
+    const script=stageUnrouted(root);
     symlinkSync("../../../Target Support Files/Chirp/Chirp-umbrella.h", join(dir, "Chirp-umbrella.h"));
-    const script = new URL("../conformance/web-platform/unrouted.mjs", import.meta.url).pathname;
     const preload = "data:text/javascript," + encodeURIComponent(`Object.defineProperty(process, "platform", {value:${JSON.stringify(platform)}});`);
     const result = spawnSync(process.execPath, ["--import", preload, script], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" });
     if (platform === "linux") {
@@ -49,8 +58,8 @@ test("a different target at a named CocoaPods link still fails", t => {
   mkdirSync(join(root, "runtime/web-platform/src"), { recursive: true });
   const dir = join(root, "tests/interop/macos-pods/Pods/Headers/Public/Chirp");
   mkdirSync(dir, { recursive: true });
+  const script=stageUnrouted(root);
   symlinkSync("unexpected-target.h", join(dir, "Chirp-umbrella.h"));
-  const script = new URL("../conformance/web-platform/unrouted.mjs", import.meta.url).pathname;
   const result = spawnSync(process.execPath, [script], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /cannot inspect.*Chirp-umbrella.h -> unexpected-target.h/);
@@ -63,8 +72,8 @@ test("a ninth dangling CocoaPods link is not covered by the named exceptions", t
   mkdirSync(join(root, "runtime/web-platform/src"), { recursive: true });
   const dir = join(root, "tests/interop/macos-pods/Pods/Headers/Public/Chirp");
   mkdirSync(dir, { recursive: true });
+  const script=stageUnrouted(root);
   symlinkSync("../../../Target Support Files/Chirp/Extra.h", join(dir, "Extra.h"));
-  const script = new URL("../conformance/web-platform/unrouted.mjs", import.meta.url).pathname;
   const result = spawnSync(process.execPath, [script], {env:fixtureEnvironment(t), cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /cannot inspect.*Chirp\/Extra.h/);

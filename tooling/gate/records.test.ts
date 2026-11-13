@@ -1,3 +1,4 @@
+import {fixtureInput} from './reader-inputs/main.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testEnvironment} from "./test-environment.ts";
@@ -8,7 +9,7 @@ import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {COLUMNS,COMPARATORS,POLICY,publishRun,sealRun,renderFull} from "../bench/run-record.ts";
-import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./records.ts";
+import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./record-numbers.ts";
 // The records step and tooling both exercise the canonical validator controls.
 import "../bench/run-record.test.ts";
 import {newTestScratch} from "./test-scratch.ts";
@@ -31,7 +32,7 @@ test("the real records step validates benchmark evidence and its rendered table"
   const call=()=>spawnSync("sh",["tooling/gate/all.sh","--call","records"],{env:testEnvironment(),cwd:root,encoding:"utf8"});
   try {
     for(const input of ["docs/records","docs/foundations","results/benchmarks/runs","tests/programs","benchmarks/cases"])mkdirSync(join(root,input),{recursive:true});
-    copyModuleClosure(["tooling/gate/records.ts"],root,{dataNamespaces:{"docs/records":"records CLI control","docs/foundations":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}});
+    copyModuleClosure([fixtureInput(new URL("./records.ts",import.meta.url),{dataNamespaces:{"docs/records":"records CLI control","docs/foundations":"records CLI control","results/benchmarks":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}})],root);
     assert.deepEqual(readdirSync(join(root,'docs/records')),[],'the record-number control starts with no production records');
     writeFileSync(join(root,"docs/primitives.md"),"fixture\n");
     assert.deepEqual(readdirSync(join(root,"results/benchmarks/runs")),[]);
