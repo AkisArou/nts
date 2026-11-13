@@ -366,7 +366,7 @@ test("a quoted runtime/* fixture alias does not make tooling read the Chromium r
   for(const path of ["runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts"])
     for(const added of [false, true]) {
       const rules = owed([{path,added}]);
-      assert.deepEqual([...gateSteps(rules)].sort(), [...stepsFor("tooling/gate/times.tsv")].sort(), path);
+      assert.deepEqual([...gateSteps(rules)].sort(), [...stepsFor("tooling/gate/times.tsv")].filter((/** @type {string} */ step)=>step!=='jvm-members').sort(), path);
       assert.ok(rules.some(rule => rule.name === "the Chromium runtime"));
     }
   assert.deepEqual([...stepsFor("tooling/chromium/processes.ts")].sort(), actualReader);
@@ -998,7 +998,7 @@ test("runtime/c is compiled into the C backend, so it owes at least what the C b
   const backend = stepsFor("compiler/codegen/c/src/lib.rs");
   assert.ok(backend.includes('jvm-members'),'the audit reads compiler source bytes');
   assert.ok(!reach('runtime/c/nts_runtime.c').includes('jvm-members'),'the audit does not read runtime/c');
-  const semantic=backend.filter(step=>step!=='jvm-members');
+  const semantic=backend.filter((/** @type {string} */ step)=>step!=='jvm-members');
   superset(reach("runtime/c/nts_runtime.c"), semantic, "runtime/c/nts_runtime.c");
   // A new file there, which nothing includes yet, owes the same.
   superset(reach("runtime/c/a-file-nobody-includes-yet.c"), semantic, "a new runtime/c file");
