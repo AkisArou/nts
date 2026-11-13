@@ -30,20 +30,43 @@ export function inspectCommandSignals(facts:SourceFacts):string[]{
       const base=name(node.expression,seen),key=facts.resolve(node.argumentExpression,false);
       return base?`${base}.${ast.isStringLiteralLikeNode(key)?key.text:'<dynamic>'}`.replace(/^(global|globalThis)\.process/,'process'):undefined;
     }
-    if(ast.isCallExpression(node)&&name(node.expression,seen)==='require'&&node.arguments[0]){
-      const module=facts.resolve(node.arguments[0],false);
-      if(ast.isStringLiteralLikeNode(module)&&/^(?:node:)?(?:process|events)$/.test(module.text))return module.text.replace(/^node:/,'');
+    if(ast.isCallExpression(node)){
+      const called=name(node.expression,seen);
+      if(called?.endsWith('.bind'))return called.slice(0,-5);
+      if(called==='require'&&node.arguments[0]){
+        const module=facts.resolve(node.arguments[0],false);
+        if(ast.isStringLiteralLikeNode(module)&&/^(?:node:)?(?:process|events)$/.test(module.text))return module.text.replace(/^node:/,'');
+      }
     }
     return;
   };
+  const receiver=(input:Node):Node|undefined=>{
+    const node=facts.unwrap(input);
+    return ast.isPropertyAccessExpression(node)||ast.isElementAccessExpression(node)?node.expression:undefined;
+  };
+  const bound=(input:Node,seen=new Set<Node>()):readonly Node[]=>{
+    const node=facts.resolve(input,false);if(seen.has(node))return [];seen.add(node);
+    if(ast.isCallExpression(node)&&name(node.expression)?.endsWith('.bind')){
+      const target=receiver(node.expression);
+      return [...(target?bound(target,seen):[]),...node.arguments.slice(1)];
+    }
+    return [];
+  };
   for(const call of facts.calls){
-    const called=name(call.expression);let event:Node|undefined,relevant=false;
+    let called=name(call.expression),target=call.expression,args:readonly Node[]=call.arguments;
+    if(called?.endsWith('.call')){called=called.slice(0,-5);target=receiver(target)??target;args=args.slice(1);}
+    else if(called?.endsWith('.apply')){
+      called=called.slice(0,-6);target=receiver(target)??target;
+      const list=args[1]&&facts.resolve(args[1],false);
+      args=list&&ast.isArrayLiteralExpression(list)?list.elements:[];
+    }
+    args=[...bound(target),...args];
+    let event:Node|undefined,relevant=false;
     if(called?.startsWith('process.')){
       const method=called.slice('process.'.length);
-      if(methods.has(method)||method==='<dynamic>'){event=call.arguments[0];relevant=true;}
-      else if(method.endsWith('.call')&&methods.has(method.slice(0,-5))){event=call.arguments[1];relevant=true;}
-    }else if((called==='events.on'||called==='events.once')&&call.arguments[0]&&name(call.arguments[0])==='process'){
-      event=call.arguments[1];relevant=true;
+      if(methods.has(method)||method==='<dynamic>'){event=args[0];relevant=true;}
+    }else if((called==='events.on'||called==='events.once')&&args[0]&&name(args[0])==='process'){
+      event=args[1];relevant=true;
     }
     if(!relevant)continue;
     const value=event&&facts.resolve(event,false),literal=value&&ast.isStringLiteralLikeNode(value)?value.text:undefined;

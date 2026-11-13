@@ -32,6 +32,12 @@ test('process and events aliases, imports, globals and detached methods keep own
     `import {once as listen} from 'node:events';listen(process,'SIGTERM');`,
     `const events=require('node:events');events.on(process,'SIGHUP');`,
     `const listen=process.once;listen.call(process,'SIGTERM',()=>{});`,
+    `process.on.apply(process,['SIGTERM',()=>{}]);`,
+    `process.on.apply(process,unknownArguments);`,
+    `const listen=process.on.bind(process);listen('SIGTERM',()=>{});`,
+    `const listen=process.on.bind(process,'SIGTERM');listen(()=>{});`,
+    `const first=process.on.bind(process);const second=first.bind(process);second.apply(null,['SIGTERM',()=>{}]);`,
+    `import {once} from 'node:events';const listen=once.bind(null,process);listen('SIGTERM');`,
   ])assert.ok(inspect(source).length,source);
 });
 
@@ -43,5 +49,7 @@ function other(){const process={on(){}};process.on('SIGTERM',handler);}
 function globalShadow(globalThis:unknown){globalThis.process.on('SIGTERM',handler);}
 const fixture="process.on('SIGTERM',()=>process.exit(0))";
 const events={once(){}};events.once(process,'SIGTERM');
+const observe=process.on.bind(process,'message');observe(handler);
+process.on.apply(process,['warning',handler]);
 `),[]);
 });
