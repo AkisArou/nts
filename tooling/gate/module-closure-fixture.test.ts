@@ -42,6 +42,21 @@ test('a declared data directory copies all tracked data without parsing it as ho
   assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false);
 });
 
+test('directory snapshots remain independent and a fresh graph observes new tracked members',t=>{
+  const f=dataFixture(t),graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const first=graph.describe(['entry.ts']);
+    const directory=first.directories.find(row=>row.directory==='data')!;
+    directory.files.length=0;
+    const next=graph.describe(['entry.ts']);
+    assert.deepEqual(next.directories.find(row=>row.directory==='data')!.files,['data/case.ts','data/nested/second.txt']);
+    f.write('data/added.txt','new tracked data');
+    const added=spawnTest('git',gitArguments(['add','data/added.txt']),{cwd:f.source,encoding:'utf8'});
+    assert.equal(added.status,0,added.stderr);
+  }finally{graph.close();}
+  assert.ok(moduleClosure(['entry.ts'],{sourceRoot:f.source}).includes('data/added.txt'));
+});
+
 test('an exact file input owns bytes without entering imports, and cannot be substituted',t=>{
   const f=dataFixture(t);
   f.write('tooling/gate/reader-inputs/main.ts','export const dataDirectory=(url:URL)=>url;export const fileInput=(url:URL)=>url;');

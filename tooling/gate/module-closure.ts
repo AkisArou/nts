@@ -37,6 +37,27 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   const root = realpathSync(options.sourceRoot ?? SOURCE);
   const references = new Map<string,ModuleDeclarations>();
   let tracked: string[] | undefined;
+  // A graph owns one tracked inventory. Contexts select from that inventory;
+  // they never need to rescan every tracked path for the same directory.
+  const directoryFiles=new Map<string,string[]>(),memberFiles=new Map<string,Map<string,string[]>>();
+  function membersOf(directory:string,member?:string):string[]{
+    let files=directoryFiles.get(directory);
+    if(!files){
+      tracked??=execFileSync("git",gitArguments(["ls-files","-z","--cached"]),{cwd:root,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean);
+      const prefix=directory?directory+'/':'';
+      files=prefix?tracked.filter(file=>file.startsWith(prefix)):tracked;
+      directoryFiles.set(directory,files);
+    }
+    if(!member)return files;
+    let selections=memberFiles.get(directory);
+    if(!selections){selections=new Map();memberFiles.set(directory,selections);}
+    let selected=selections.get(member);
+    if(!selected){
+      selected=files.filter(file=>matchesModuleMember(directory?file.slice(directory.length+1):file,member));
+      selections.set(member,selected);
+    }
+    return selected;
+  }
   let api:import('typescript/sync').API|undefined;
   function parsed(path: string) {
     const known = references.get(path);
@@ -87,17 +108,16 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       }
       if(kind==='file')throw Error('declared file input is not a file: '+nameOf(path));
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
-      tracked ??= execFileSync("git",gitArguments(["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
       const member=kind==='members'?moduleMemberName(input.member):undefined;
-      const directory=nameOf(path),members=tracked.filter(file=>(directory===''||file.startsWith(directory+'/'))
-        &&(!member||matchesModuleMember(directory?file.slice(directory.length+1):file,member)));
+      const directory=nameOf(path);
       // One descriptor may retain a reader's existing metadata/data population
       // while entering only its named executable members. Private data grants
       // never remove the immutable member modules visited below.
       if(kind==='members'&&input.data)asset(context,reader,path,{path:input.path,kind:'data'});
       if(kind==='data')context.data.add(directory);
       const grant=kind==='data'?Object.keys(context.namespaces).find(name=>directory===name||directory.startsWith(name+'/')):undefined;
-      const row:DirectoryDeclaration={reader,directory,files:grant?[]:members,kind:kind==='members'?'module':kind,
+      const members=grant?[]:membersOf(directory,member);
+      const row:DirectoryDeclaration={reader,directory,files:[...members],kind:kind==='members'?'module':kind,
         ...(member?{member}:{}),
         ...(grant?{fixture:{entry:context.entry,owner:context.namespaces[grant]!}}:{})};
       directories.push(row);reportDirectory?.(row);
