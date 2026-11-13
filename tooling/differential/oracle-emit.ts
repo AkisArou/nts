@@ -627,7 +627,7 @@ function dependencies():DependencyHandle{
 type RuntimeIndexInput={trees:{root:string;paths:string[];absent:string[];coverage:RuntimeCoverage}[];files:{source:string;output:string;group:string;execution:string;tree:string}[];links:{output:string;target:string;text?:string;present?:boolean}[];checkerImports:CheckerImportRelation[]};
 /** Type erasure and import rewriting happen once in this registered run.
  * Cached code is still read and hashed before each snapshot publishes it. */
-async function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string,parser:RuntimeParser):Promise<Record<string,string>>{
+function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string,parser:RuntimeParser):Record<string,string>{
   const root=join(directory,'assets');
   for(const [name,expected] of [['oracle-loader.ts',identity.loaderSha256],['oracle-runtime.ts',identity.runtimeSha256],['oracle-assets.ts',identity.assetsSha256]] as const){
     if(hash(readFileSync(join(root,name)))!==expected)throw Error('oracle child source changed before compilation: '+name);
@@ -660,7 +660,7 @@ async function publishNodeRoutes(directory:string,stored:OracleManifest,descript
   const execution=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args as string[];
   const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
   const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),ownerPid);
-  descriptor.runtimeAssets=await compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node,parser);
+  descriptor.runtimeAssets=compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node,parser);
   stored.runtimeAssets=descriptor.runtimeAssets;Object.assign(stored.outputs,descriptor.runtimeAssets);
   if(!session)return;
   descriptor.resolution=session;

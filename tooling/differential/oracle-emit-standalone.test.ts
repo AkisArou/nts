@@ -317,3 +317,14 @@ test('declaration diagnostics are requested only for an owner that enables decla
   const options=JSON.parse(readFileSync(project,'utf8'));options.compilerOptions.declaration=true;writeFileSync(project,JSON.stringify(options));
   await assert.rejects(prepare(root,'src/main.ts',{directory:join(root,'declarations')}),error=>error instanceof TypeScriptDiagnosticError&&error.diagnostics.includes('TS4058'));
 });
+
+test('runtime publication borrows only an idle open captured SDK owner',async t=>{
+  const root=workspace(t,{'src/main.ts':'console.log(19);\n'}),worker=new OracleWorker(join(root,'producer'),toolchain);
+  try{
+    const graph=worker.runtimeModules(root,'src/main.ts');assert.equal(graph.entry,'src/main.mjs');
+    const pending=worker.prepare({entry:join(root,'src/main.ts'),project:join(root,'tsconfig.json'),directory:join(root,'prepared')});
+    assert.throws(()=>worker.runtimeModules(root,'src/main.ts'),/oracle runtime compiler is unavailable/);
+    await pending;
+  }finally{worker.close();}
+  assert.throws(()=>worker.runtimeModules(root,'src/main.ts'),/oracle runtime compiler is unavailable/);
+});

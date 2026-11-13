@@ -1,3 +1,4 @@
+import {generatedJavaScript} from '../gate/generated-javascript.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
@@ -144,4 +145,23 @@ test('a planner past its bound planned no driver, so its budget answers each dri
   const reader=openProgramOracleResults(programOracleHandoff(f.directory),f.identity);
   for(const driver of ['d'.repeat(64),'e'.repeat(64)])assert.deepEqual(reader.calls(f.project,f.entry,driver),value);
   assert.throws(()=>reader.calls(f.project,f.entry+'.other','d'.repeat(64)),/call population changed/);
+});
+
+test('a failed result transform closes its private captured SDK owner',t=>{
+  const f=fixture(t),source=generatedJavaScript(`
+import assert from 'node:assert/strict';
+import {existsSync} from 'node:fs';
+import {join} from 'node:path';
+import {OracleWorker,oracleRecipeIdentity} from ${JSON.stringify(new URL('./oracle-emit.ts',import.meta.url).href)};
+import {createProgramOracleResults} from ${JSON.stringify(new URL('./oracle-result-publisher.ts',import.meta.url).href)};
+let closed=0;const close=OracleWorker.prototype.close;
+OracleWorker.prototype.close=function(){closed++;return close.call(this);};
+OracleWorker.prototype.runtimeModules=function(){throw Error('runtime transform control');};
+const directory=${JSON.stringify(f.directory)};
+assert.throws(()=>createProgramOracleResults(directory,oracleRecipeIdentity()).publish(),/runtime transform control/);
+assert.equal(closed,1);assert.equal(existsSync(join(directory,'reader-producer')),false);assert.equal(existsSync(join(directory,'ready.json')),false);
+console.log('private runtime owner closed');
+`);
+  const run=spawnSync(process.execPath,['--input-type=module','-e',source],{encoding:'utf8',env:{...fixtureEnvironment(t),NTS_ORACLE_TYPESCRIPT:oracleToolchainLocation()}});
+  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'private runtime owner closed\n');
 });
