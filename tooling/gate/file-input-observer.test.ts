@@ -124,7 +124,7 @@ test('the native observer retains actual images, attempted inputs and original p
   // signal in that interval must preserve its authority through failed setup.
   const startupSource=join(root,'startup.c'),startupBinary=join(root,'startup');
   const original=readFileSync(source,'utf8'),paused=original.replace('int listener = install_filter();',
-    'if(write(3,"ready",5)!=5)_exit(111); char release; if(read(4,&release,1)!=1)_exit(112); int listener = install_filter();');
+    'if(write(3,"ready",5)!=5){_exit(111);}\n    char release;\n    if(read(4,&release,1)!=1){_exit(112);}\n    int listener = install_filter();');
   assert.notEqual(paused,original);writeFileSync(startupSource,paused);
   const startupBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-o',startupBinary],{env,encoding:'utf8'});
   assert.equal(startupBuild.status,0,startupBuild.stderr);

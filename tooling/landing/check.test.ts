@@ -67,6 +67,10 @@ test("the command refuses before it acts: usage, policy variables, a tree not at
   const c = cli(t);
   assert.equal(c.run([]).status, 2);
   assert.equal(c.run(["no-such-commit"]).status, 2);
+  for(const args of [["HEAD","--trace-rust-inputs"],["HEAD","--dry-run","--trace-rust-inputs"],["status","--here","--trace-rust-inputs"]]){
+    const observed=c.run(args);assert.equal(observed.status,2,observed.out);
+    assert.match(observed.out,/trace-rust-inputs is an observation of --here/);
+  }
   const policy = c.run(["HEAD", "--here"], c.s.root, { NTS_GATE_SLOTS: "4" });
   assert.equal(policy.status, 2);
   assert.match(policy.out, /verdict-policy overrides are not allowed.*NTS_GATE_SLOTS/);

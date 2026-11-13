@@ -212,6 +212,9 @@ async function serve(root: string): Promise<number> {
 
 async function main(argv: string[]): Promise<number> {
   const [first, second] = argv.filter((arg, i) => !arg.startsWith("--") && !["--branch", "--note", "--costs"].includes(argv[i - 1] ?? ""));
+  if(argv.includes('--trace-rust-inputs')&&(!argv.includes('--here')||argv.includes('--dry-run')||['status','serve','withdraw','retry'].includes(first??''))){
+    say('--trace-rust-inputs is an observation of --here, never a queued verdict policy');return 2;
+  }
   let root: string;
   try { root = sharedCheckout(); } catch (error) { say((error as Error).message); return 2; }
   if (first === "status") return status(root, argv.includes("--json"));
@@ -224,7 +227,6 @@ async function main(argv: string[]): Promise<number> {
   if (argv.includes("--dry-run")) return dryRun(root, sha, argv);
   try { assertLandingEnvironment(); } catch (error) { say((error as Error).message); return 2; }
   if (argv.includes("--here")) return here(root, sha,argv.includes('--trace-rust-inputs'));
-  if(argv.includes('--trace-rust-inputs')){say('--trace-rust-inputs is an observation of --here, never a queued verdict policy');return 2;}
   // The steps every change with Rust in reach owes need the JVM and the SDK: say so before queueing.
   const missing = gateEnvironmentError(root, ["tests", "tooling"], null);
   if (missing) { say(missing); return 2; }
