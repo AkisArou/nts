@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "base": "c579927b87eae3ba33e6b5181b918b85b9755d2c",
+  "source": "6ffc4f27cf0b379e9f14c5b9dee7ff64ecfead81",
+  "live": {
+    "retired": [],
+    "addedCount": 1287,
+    "pairs": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/project-census-v2/comparison.json",
+      "sha256": "67bdbcfa4aa8d03187bb03977663a1ac760601f537cc9b35aa6ef32f67019e21"
+    },
+    "addedByStep": {
+      "assembles": 1,
+      "bench-agree": 1,
+      "benches": 1,
+      "corpus": 1,
+      "dex": 1,
+      "examples": 1,
+      "gate-inputs": 1179,
+      "jvm": 1,
+      "jvm-verifies": 1,
+      "llvm": 1,
+      "llvm-rc": 1,
+      "program-oracles": 1,
+      "rc": 1,
+      "records": 1,
+      "sweep": 1,
+      "test262-builtins-cases": 1,
+      "test262-cases": 1,
+      "test262-census-c": 1,
+      "test262-census-jvm": 1,
+      "test262-census-llvm": 1,
+      "test262-jvm": 1,
+      "test262-llvm": 1,
+      "test262-rest-cases": 1,
+      "tooling": 82,
+      "typescript-c": 1,
+      "typescript-jvm": 1,
+      "typescript-llvm": 1,
+      "typescript-oracles": 1
+    }
+  },
+  "switchOff": {
+    "before": 82550,
+    "after": 83646,
+    "closed": 56,
+    "added": 1152
+  },
+  "frontiers": {
+    "before": {
+      "sites": 348,
+      "readers": 136
+    },
+    "after": {
+      "sites": 334,
+      "readers": 133
+    }
+  },
+  "fallback": {
+    "base": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    },
+    "namespace": {
+      "before": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "after": {
+        "unplaced": 142,
+        "policy": 33
+      }
+    }
+  },
+  "index": {
+    "file": "/home/akisarou/.cache/nts-scratch/728/project-census-v2/namespace/edges.json",
+    "bytes": 3112658,
+    "sha256": "62fba5524e80c9b16365119ee7bf07e6bd995d93f6d1a6d3cba9c343d2b2e616"
+  },
+  "proof": {
+    "focused": {
+      "counts": {
+        "tests": 242,
+        "pass": 242,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "/home/akisarou/.cache/nts-scratch/728/project-focused-v3.log"
+    },
+    "canonical": {
+      "command": "node tooling/landing/check.ts 6ffc4f27cf0b379e9f14c5b9dee7ff64ecfead81 --here",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-6ffc4f27cf0b-1794537801995",
+      "verdict": "green",
+      "wall_s": 814.866,
+      "waited_s": 445.923,
+      "tooling": {
+        "tests": 2188,
+        "pass": 2186,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      },
+      "rust": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3044,
+        "fail": 0,
+        "ignored": 8
+      },
+      "steps": [
+        {
+          "name": "gate-inputs",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 6.436898,
+          "wall": 11.911,
+          "memory_peak_bytes": 295960576
+        },
+        {
+          "name": "tooling",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 2538.752584,
+          "wall": 358.723,
+          "memory_peak_bytes": 12347740160
+        },
+        {
+          "name": "tests",
+          "verdict": "PASS",
+          "cpu_measure": "cgroup-v2-scope-v1",
+          "cpu": 4778.50835,
+          "wall": 375.375,
+          "memory_peak_bytes": 11320696832
+        }
+      ]
+    },
+    "host": {
+      "sources": 1878,
+      "closures": 257,
+      "reads": 413
+    },
+    "strict": {
+      "modules": 819,
+      "diagnostics": 5709,
+      "improved": 14
+    },
+    "excluded": [
+      "The first census stopped at the new unclassified project-inputs.ts beside-config site. Its captured ID and steps were added as project-context before the repeated capture.",
+      "The initial combined record-store/project experiment had one results-only selection failure; its record-store API is parked for the fixture-context owner. It contributes no project-only proof."
+    ]
+  },
+  "reproduction": {
+    "captureCommand": "node /home/akisarou/.cache/nts-pool/2/tooling/gate/reader-census.ts inspect <isolated-source> <output> /home/akisarou/.cache/nts-pool/2/docs/records/reader-inputs-728/namespace-sites.tsv",
+    "cwd": "<isolated-source at source or base SHA, with its own GIT_DIR and immutable provisioned node_modules>",
+    "matchedScript": "/home/akisarou/.cache/nts-scratch/728/project-census-v2.py",
+    "analysisScript": "/home/akisarou/.cache/nts-scratch/728/project-analysis-v2.ts",
+    "log": "/home/akisarou/.cache/nts-scratch/728/project-census-v2.log"
+  }
+}
