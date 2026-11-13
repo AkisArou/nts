@@ -71,7 +71,7 @@ test('a real jvm-verifies case reaches verification through a case lease without
       await broker.completed(request);completed.push(key);
     },
   });
-  dispose=async()=>{pool.close();if(!drained)await step.drain();scopes.close();};
+  dispose=async()=>{if(!drained)await step.drain();pool.close();await pool.closed;scopes.close();};
   const address=await pool.start();assert.ok(address);
   const startup=join(root,'bash-env');writeFileSync(startup,`printf read > '${trap}'\nexit 77\n`);
   assignTestValues(env,{NTS_TOOLING_SLICE:step.slice,NTS_GATE_STEP:'jvm-verifies',NTS_GATE_STEP_MEMORY_BYTES:String(2**30),NTS_GATE_TOKENS:address,BASH_ENV:startup});

@@ -1702,9 +1702,11 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     await startupClosed;await runClosed;
     growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
     const failures=[];
-    try{tok.close();await tok.closed;}catch(error){failures.push(error);}
+    try{tok.close();}catch(error){failures.push(error);}
+    try{await tok.closed;}catch(error){failures.push(error);}
     try{scopes?.close();}catch(error){failures.push(error);}
-    try{reservation?.release();await reservation?.closed;}catch(error){failures.push(error);}
+    try{reservation?.release();}catch(error){failures.push(error);}
+    try{await reservation?.closed;}catch(error){failures.push(error);}
     if(failures.length===1)throw failures[0];
     if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
   },

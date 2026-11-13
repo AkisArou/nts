@@ -19,7 +19,7 @@ import {COST_HISTORY_VERSION,historyFile as schedulingHistoryFile,RESERVATION_PE
   unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
-import {OOM_SCORE} from "./memory-ledger.ts";
+import {OOM_SCORE,readLedger} from "./memory-ledger.ts";
 
 // Scheduling vectors are fixture-owned CPU observations of the current measure.
 const fixtureBaseline=(text:string)=>text.split('\n').map(line=>line&&!line.startsWith('#')&&line.split('\t').length===4?line+'\t'+STEP_CPU_MEASURE:line).join('\n');
@@ -237,6 +237,9 @@ type MemoryFixture = {
   handoffBarrier?:'before'|'after';
   /** Observe excessive positive growth only in the private staged runner. */
   excessGrowth?:'before'|'after';
+  /** Fail only the staged terminal owner, after the actual cleanup request. */
+  lateCleanup?:'broker'|'ledger';
+  reportOrder?:'before'|'after';
 };
 
 /**
@@ -246,7 +249,7 @@ type MemoryFixture = {
  * test writes, a memory ledger of the run's own, and a history of its own in
  * which each row's step reserves what the row says.
  */
-function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield,handoffBarrier,excessGrowth }: MemoryFixture) {
+function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times, payload, availableKiB, totalKiB = 32 * 2 ** 20, liveResident=false,owned = {}, priority, oomScore = Number(readFileSync("/proc/self/oom_score_adj", "utf8")), before, acknowledgeCharge, acknowledgeYield,handoffBarrier,excessGrowth,lateCleanup,reportOrder }: MemoryFixture) {
   const own = newTestScratch("step-scheduling-memory");
   const inherited = toolingSlice(), unit = `nts-test-step-memory-${randomUUID()}`, slice = inherited ?? newToolingSlice(true);
   t.after(() => {
@@ -262,6 +265,19 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/run.mjs") {
       let source = readFileSync(original, "utf8");
+      if(lateCleanup){
+        const report="registerCommandCloser('gate run report '+RUN_DIR,{",resources="registerCommandCloser('gate run resources '+RUN_DIR,{",end='mkdirSync(RUN_DIR, { recursive: true });';
+        assert.ok(source.includes(report)&&source.includes(resources)&&source.includes(end),'cleanup control follows the actual registered owners');
+        if(lateCleanup==='broker')source=source.replace(report,"const realBrokerClose=tok.close;tok.close=()=>{realBrokerClose();throw Error('late broker cleanup control');};\n"+report);
+        else{
+          const ledger='try{await reservation?.closed;}';assert.ok(source.includes(ledger));
+          source=source.replace(ledger,"try{await reservation?.closed;throw Error('late ledger cleanup control');}");
+        }
+        if(reportOrder==='before'){
+          const first=source.indexOf(report),second=source.indexOf(resources),last=source.indexOf(end,second);
+          source=source.slice(0,first)+source.slice(second,last)+source.slice(first,second)+source.slice(last);
+        }
+      }
       if(excessGrowth){
         const condition='bytes < growth.bytes && !growth.withdrawn';
         const end='    return;\n  }\n  if (bytes <= 0 || yielding) return;';
@@ -348,13 +364,25 @@ fi
     `--working-directory=${root}`, ...setenv, process.execPath, join(gate, "run.mjs")], { encoding: "utf8" });
   assert.ok(existsSync(join(run, "summary.json")), result.stdout + result.stderr);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
-    verdict: string; steps: MemoryStep[];
+    verdict: string; steps: MemoryStep[];scope_cleanup:{state:string;reason?:string};
     memory: { priority: string; peak_bytes: number; growths: number; withdrawn: number; shrinks: number; outranked: number; waited_s: number; unmeasured: string[]; over: string[];
       steps_grown: number; steps_killed: number };
   };
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
-  return { own,result, summary, step, output: result.stdout + result.stderr, history, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
+  return { own,result, summary, step, output: result.stdout + result.stderr, history,ledger:memory.NTS_MEMORY_LEDGER, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
 }
+
+for(const lateCleanup of ['broker','ledger'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
+  const fixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
+  const before=memoryRun(t,{...fixture,reportOrder:'before'});
+  assert.equal(before.result.status,2,before.output);
+  assert.equal(before.summary.verdict,'green','publishing before cleanup hides its failure');
+  assert.equal(before.summary.scope_cleanup.state,'complete');
+  const after=memoryRun(t,{...fixture,reportOrder:'after'});
+  assert.equal(after.result.status,2,after.output);assert.equal(after.summary.verdict,'red');
+  assert.equal(after.summary.scope_cleanup.state,'error');assert.match(after.summary.scope_cleanup.reason!,new RegExp('late '+lateCleanup+' cleanup control'));
+  assert.deepEqual(readLedger(after.ledger),{waiting:[],admitted:[]},'the error does not bypass physical ledger cleanup');
+});
 
 test("steps whose memory together is more than the run can reserve run one after the other", t => {
   // 6.5 GiB available, 2 of them kept for the system: the run reserves 3 for
