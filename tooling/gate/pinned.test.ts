@@ -68,7 +68,10 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
   copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts"], root);
   writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
-  writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
+  const affinity=join(root,"tooling/gate/affinity.ts"), originalAffinity=readFileSync(affinity,"utf8");
+  const entry='if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)';
+  assert.equal(originalAffinity.split(entry).length,2);
+  writeFileSync(affinity,originalAffinity.replace(entry,'if (false)'));
   writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
   const owned = ownMemory(join(directory, "machine"));
   const env = fixtureEnvironment(t);
