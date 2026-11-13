@@ -208,6 +208,33 @@ recordAdd:choose([{path:'results/benchmarks/runs/new.json',added:true}]),metadat
   assert.ok(value.metadata.optionalFiles.every((/** @type {import('./reader-inputs/main.ts').OptionalFileDeclaration} */ row)=>row.path==='docs/optional.md'&&row.present===false));
 });
 
+test('the runner handover retains structural obligations and optional-file provenance',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-metadata-handover-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('Cargo.toml','[package]\nname="handover-fixture"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' profile addons tooling; exit; fi
+step "profile" node tooling/private/reader.ts
+step "addons" node tooling/private/receiver.ts
+step "tooling" node tooling/empty.test.ts
+`);
+  put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
+  put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
+  put('tooling/gate/reader-inputs/main.ts','export const directoryMembership=url=>url;export const optionalFile=url=>url;');
+  put('tooling/private/reader.ts',"import {directoryMembership,optionalFile} from '../gate/reader-inputs/main.ts';directoryMembership(new URL('../../docs/data/',import.meta.url));optionalFile(new URL('../../docs/candidate.md',import.meta.url));");
+  put('docs/data/existing.md','prose');
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+console.log(JSON.stringify({steps:gateSteps(owed([{path:'docs/data/new.md',added:true}])),metadata:inputMetadataDeclarations()}));`;
+  const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);const value=JSON.parse(result.stdout);
+  for(const step of ['profile','addons']){
+    assert.ok(value.steps.includes(step),step+' remains an actual structural subject');
+    assert.ok([...value.metadata.memberships,...value.metadata.optionalFiles].every((/** @type {{steps:string[]}} */ fact)=>fact.steps.includes(step)),step+' is retained in metadata provenance');
+  }
+});
+
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');

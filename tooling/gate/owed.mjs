@@ -1800,6 +1800,7 @@ function stepInputGraph() {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
+      for(const facts of [optionalFiles,memberships])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
     }
     return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
@@ -2002,7 +2003,7 @@ export function owed(changes) {
   if(metadataGraph.membershipIndex)for(const row of metadataGraph.memberships.values()){
     if(!metadataGraph.membershipIndex.affected(row,changes))continue;
     for(const change of changes)if(row.directory===''||change.path===row.directory||change.path.startsWith(row.directory+'/'))
-      add('directory membership read by '+row.reader,change.path,[...row.steps],{precise:false});
+      add('directory membership read by '+row.reader,change.path,[...row.steps],{precise:false,wide:true});
   }
   let ordinary = false;
   for (const change of changes) {
