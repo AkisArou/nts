@@ -190,6 +190,7 @@ dataDirectory(new URL('../../docs/private/',import.meta.url));directoryMembershi
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const choose=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),structural:rules.filter(row=>row.name.startsWith('directory membership')).map(row=>row.name)};};
 const prose={path:'docs/catalogue/existing.md',sameMode:true,before:'old prose',after:'new prose'};
+const detached=inputMetadataDeclarations();for(const row of detached.memberships){row.entries.length=0;row.steps.length=0;row.context.entry='mutated';row.context.dataNamespaces['docs/catalogue']='invented';}
 console.log(JSON.stringify({edit:choose([prose]),add:choose([{path:'docs/catalogue/new.md',added:true}]),
 deleted:choose([{path:'docs/catalogue/existing.md',deleted:true}]),
 rename:choose([{path:'docs/catalogue/existing.md',deleted:true},{path:'docs/catalogue/new.md',added:true}]),
@@ -202,9 +203,9 @@ recordAdd:choose([{path:'results/benchmarks/runs/new.json',added:true}]),metadat
   for(const key of ['edit','recordEdit'])for(const step of ['names','private'])assert.ok(!value[key].steps.includes(step),key+' content does not change names');
   for(const key of ['add','deleted','rename','optional','root','recordAdd'])for(const step of ['names','private'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
   assert.ok(value.privateData.steps.includes('names'));assert.ok(!value.privateData.steps.includes('private'));
-  assert.ok(value.metadata.memberships.some(row=>row.directory===''&&row.reader==='tooling/private/reader.ts'));
-  assert.ok(value.metadata.memberships.some(row=>row.context.entry==='tooling/private/reader.ts'&&row.context.dataNamespaces['docs/private']==='private data'));
-  assert.ok(value.metadata.optionalFiles.every(row=>row.path==='docs/optional.md'&&row.present===false));
+  assert.ok(value.metadata.memberships.some((/** @type {import('./reader-inputs/main.ts').MembershipDeclaration} */ row)=>row.directory===''&&row.reader==='tooling/private/reader.ts'));
+  assert.ok(value.metadata.memberships.some((/** @type {import('./reader-inputs/main.ts').MembershipDeclaration} */ row)=>row.context.entry==='tooling/private/reader.ts'&&row.context.dataNamespaces['docs/private']==='private data'));
+  assert.ok(value.metadata.optionalFiles.every((/** @type {import('./reader-inputs/main.ts').OptionalFileDeclaration} */ row)=>row.path==='docs/optional.md'&&row.present===false));
 });
 
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
