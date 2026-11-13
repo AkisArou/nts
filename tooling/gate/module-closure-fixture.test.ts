@@ -1,9 +1,8 @@
 import {fixtureInput,moduleMembers,projectConfig,projectInput} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
-import {createServer} from 'node:net';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
-import {closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test, type TestContext} from "node:test";
 import {copyModuleClosure, moduleClosure, FIXTURE_INPUT_MANIFEST} from "./module-closure-fixture.ts";
@@ -876,20 +875,24 @@ test('metadata-only paths cannot escape through dangling source or destination p
   assert.equal(existsSync(join(outside,'absent.json')),false);
 });
 
-test('membership refuses unsupported socket children instead of certifying a common other type',async t=>{
+test('membership refuses unsupported socket children instead of certifying a common other type',t=>{
   const f=metadataFixture(t);
   f.write('names.ts',"import {directoryMembership} from './tooling/gate/reader-inputs/main.ts';directoryMembership(new URL('./data/',import.meta.url));");
   mkdirSync(join(f.source,'data'));
-  const directory=openSync(join(f.source,'data'),'r'),server=createServer();
-  try{
-    // The canonical run's directory can exceed Unix socket address limits.
-    // Keep the descriptor until server closure; the graph reads the real path.
-    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen('/proc/self/fd/'+directory+'/member',resolve);});
-    assert.ok(lstatSync(join(f.source,'data/member')).isSocket());
-    const graph=moduleGraph({sourceRoot:f.source});
-    try{assert.throws(()=>graph.describe(['names.ts']),/reader metadata has an unsupported child type: .*data\/member/);}finally{graph.close();}
-  }finally{
-    try{if(server.listening)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
-    finally{closeSync(directory);}
-  }
+  // A child owns this cwd so a relative bind stays below Unix socket address
+  // limits even under the canonical run's long scratch root.
+  const result=spawnTest(process.execPath,['--input-type=module','-e',`
+import assert from 'node:assert/strict';
+import {lstatSync} from 'node:fs';
+import {createServer} from 'node:net';
+const {moduleGraph}=await import(process.argv[2]);
+const server=createServer();
+try{
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen('member',resolve);});
+  assert.ok(lstatSync('member').isSocket());
+  const graph=moduleGraph({sourceRoot:process.argv[1]});
+  try{assert.throws(()=>graph.describe(['names.ts']),/reader metadata has an unsupported child type: .*data\\/member/);}finally{graph.close();}
+}finally{if(server.listening)await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+`,f.source,new URL('./module-closure.ts',import.meta.url).href],{cwd:join(f.source,'data'),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
 });
