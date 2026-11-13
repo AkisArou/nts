@@ -60,3 +60,9 @@ test('the producer refuses an over-limit graph before publishing any modules',t=
   const root=fixture(t,files);
   assert.throws(()=>compileRuntimeModules(root,'module-0.ts'),/oracle runtime module: module limit 128 exceeded/);
 });
+
+test('canonical relative imports preserve dotted filenames',t=>{
+  const root=fixture(t,{'entry.ts':"export {value} from './.hidden.ts';",'.hidden.ts':'export const value:number=19;'});
+  const graph=compileRuntimeModules(root,'entry.ts');
+  assert.match(graph.modules.find(module=>module.name==='entry.mjs')!.text,/from "\.\/\.hidden\.mjs"/);
+});

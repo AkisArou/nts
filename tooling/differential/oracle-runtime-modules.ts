@@ -54,10 +54,10 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
         const spec=specifier.text;if(isBuiltin(spec))continue;
         if(!/^\.{1,2}\//.test(spec)||/[\\%?#]/.test(spec))failure('non-canonical import '+spec+' in '+name);
         const target=fileURLToPath(new URL(spec,pathToFileURL(file))),targetName=sourceName(target);
-        let canonical=posix.relative(posix.dirname(name),targetName);if(!canonical.startsWith('.'))canonical='./'+canonical;
+        let canonical=posix.relative(posix.dirname(name),targetName);if(!canonical.startsWith('../')&&!canonical.startsWith('./'))canonical='./'+canonical;
         if(canonical!==spec)failure('aliased import '+spec+' in '+name);
         targets.add(target);
-        let replacement=posix.relative(posix.dirname(emitted),outputName(targetName));if(!replacement.startsWith('.'))replacement='./'+replacement;
+        let replacement=posix.relative(posix.dirname(emitted),outputName(targetName));if(!replacement.startsWith('../')&&!replacement.startsWith('./'))replacement='./'+replacement;
         // The AST selects the literal; retain its leading comments/trivia.
         const original=text.slice(specifier.pos,specifier.end),trivia=/^(?:\s|\/\/[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)*/.exec(original)![0];
         changes.push({pos:specifier.pos,end:specifier.end,text:trivia+JSON.stringify(replacement)});

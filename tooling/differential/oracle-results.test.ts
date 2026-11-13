@@ -11,7 +11,7 @@ import {oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import {nodeExecutableIdentity,nodeProcessBirth,type NodeResolutionSession} from './oracle-runtime.ts';
 import * as resultAPI from './oracle-results.ts';
 import {createProgramOracleResults} from './oracle-result-publisher.ts';
-import {openProgramOracleResults,programOracleHandoff,type ProgramAnswer} from './oracle-results.ts';
+import {openProgramOracleResults,programOracleHandoff,resultHash,type ProgramAnswer} from './oracle-results.ts';
 
 function fixture(t:{after(callback:()=>void):void}){
   const root=mkdtempSync(join(tmpdir(),'program-reference-'));t.after(()=>removeOracleSnapshot(root));
@@ -101,8 +101,25 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
   const args=argumentsFor!(root),request={handoff:programOracleHandoff(f.directory),project:f.project,entry:f.entry,driverSha256:'d'.repeat(64)};
   const run=()=>spawnSync(process.execPath,['--no-experimental-strip-types',...args,'--read-program-reference',JSON.stringify(request)],{encoding:'utf8',env:{...fixtureEnvironment(t),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
   const positive=run();assert.equal(positive.status,0,positive.stderr);assert.deepEqual(JSON.parse(positive.stdout),f.value);
-  const runtime=join(f.directory,'reader/oracle-runtime.mjs');chmodSync(runtime,0o644);writeFileSync(runtime,readFileSync(runtime,'utf8')+'\n// changed reader code\n');
-  const changed=run();assert.notEqual(changed.status,0);assert.match(changed.stderr,/program oracle reader bytes changed/);
+  for(const name of Object.keys(root.runtime.assets)){
+    const runtime=join(root.runtime.directory,name),original=readFileSync(runtime);chmodSync(runtime,0o644);
+    writeFileSync(runtime,original.toString('utf8')+'\n// changed reader code\n');
+    try{const changed=run();assert.notEqual(changed.status,0);assert.match(changed.stderr,/program oracle reader bytes changed/,name);}
+    finally{writeFileSync(runtime,original);chmodSync(runtime,0o444);}
+  }
+  const leaf=join(root.runtime.directory,'oracle-seal/main.mjs'),original=readFileSync(leaf),outside=join(f.root,'outside.mjs');
+  writeFileSync(outside,original);unlinkSync(leaf);symlinkSync(outside,leaf);
+  try{const alias=run();assert.notEqual(alias.status,0);assert.match(alias.stderr,/program oracle reader path changed/);}
+  finally{unlinkSync(leaf);writeFileSync(leaf,original,{mode:0o444});}
+  unlinkSync(leaf);
+  try{const missing=run();assert.notEqual(missing.status,0);assert.match(missing.stderr,/ENOENT.*oracle-seal\/main\.mjs/);}
+  finally{writeFileSync(leaf,original,{mode:0o444});}
+  const entry=join(root.runtime.directory,'oracle-results.mjs'),entryBytes=readFileSync(entry,'utf8');
+  const extended="import './unlisted.mjs';\n"+entryBytes;
+  chmodSync(entry,0o644);writeFileSync(entry,extended);writeFileSync(join(root.runtime.directory,'unlisted.mjs'),"throw Error('unlisted-module-ran');\n");
+  root.runtime.assets['oracle-results.mjs']=resultHash(extended);
+  const unlisted=spawnSync(process.execPath,['--no-experimental-strip-types',...argumentsFor!(root),'--read-program-reference',JSON.stringify(request)],{encoding:'utf8',env:fixtureEnvironment(t)});
+  assert.notEqual(unlisted.status,0);assert.match(unlisted.stderr,/program oracle reader module was not published: .*unlisted\.mjs/);assert.doesNotMatch(unlisted.stderr,/unlisted-module-ran/);
 });
 
 test('a finalized budget answer is authenticated without inventing call rows',t=>{
