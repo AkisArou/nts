@@ -110,6 +110,7 @@ export class InputTraceParser{
       }
       const pathAt=(index:number,dirfd?:number)=>{
         const token=args[index];if(token===undefined)problem('missing '+syscall+' path');
+        if(token==='NULL')problem(syscall+' has NULL path: '+args.join(', ')+' = '+result);
         const path=traceString(token);
         return isAbsolute(path)?resolve(path):resolve(dirfd===undefined?current.path:decoded(args[dirfd])??(args[dirfd]==='AT_FDCWD'?current.path:problem('undecoded dirfd '+args[dirfd])),path);
       };
