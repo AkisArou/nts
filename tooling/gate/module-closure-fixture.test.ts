@@ -764,7 +764,7 @@ test('optional source candidates reject links, directories and outside ancestors
   f.write('absent.json','production');assert.equal(snap().optionalFiles[0]?.present,true);
   rmSync(join(f.source,'absent.json'));mkdirSync(join(f.source,'absent.json'));
   assert.throws(snap,/optional file input is not a regular file: absent.json/);
-  rmSync(join(f.source,'absent.json'));symlinkSync(join(f.source,'present.ts'),join(f.source,'absent.json'));
+  rmSync(join(f.source,'absent.json'),{recursive:true});symlinkSync(join(f.source,'present.ts'),join(f.source,'absent.json'));
   assert.throws(snap,/optional file input is not a regular file: absent.json/);
   f.write('outside.ts',"import {optionalFile} from './tooling/gate/reader-inputs/main.ts';optionalFile(new URL('./escape/missing.json',import.meta.url));");
   const outside=join(f.destination,'outside');mkdirSync(outside,{recursive:true});symlinkSync(outside,join(f.source,'escape'));
