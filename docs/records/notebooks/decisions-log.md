@@ -2675,3 +2675,20 @@ compiler command's exact config through the existing pinned parser; projectInput
 continues to discover a compiled entry's project through OracleFilesystem.
 The config audit keeps its metadata populations and declares its workspace
 solution build, rather than spending uncertain coverage to remove the scanner.
+
+## Pinned generator inputs are offline (11-13)
+
+Finishes #728's remaining URL-host generator freshness obligation. Generated
+provenance no longer makes the consuming backend suites execute a generator.
+The declared unicode-freshness step instead checks the transcription itself.
+
+One tooling/inputs catalog owns its source URL, hash and Unicode version.
+Acquisition is explicit and reuses the existing lock and durable publication
+owners; cache consumption verifies the actual payload every time and cannot
+fetch. A fixture receives a named cache capability, never a private-HOME lookup.
+Future cache headers refuse before their payload is interpreted. The existing
+data-dir route keeps the same hash and source-version validation.
+
+The previous and current generators were compared on the same pinned source;
+the byte identity, selection census, failure controls and proof are retained
+with the reader-input records.
