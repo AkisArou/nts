@@ -1,3 +1,4 @@
+import {generatedJavaScript} from './generated-javascript.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import {test} from "node:test";
@@ -6,7 +7,7 @@ import {spawnSync} from "node:child_process";
 import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {pathToFileURL} from "node:url";
+import {fileURLToPath,pathToFileURL} from "node:url";
 import {PassThrough} from "node:stream";
 import {randomUUID} from "node:crypto";
 import {waitFor,spawnTest} from "./test-wait.ts";
@@ -388,4 +389,55 @@ console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting
   const held=JSON.parse(before.stdout.trim());
   assert.equal(held.status,2);assert.equal(held.completedFailures,0);
   assert.equal(held.shortClosed,true);assert.ok(before.stderr.includes(short),before.stderr);
+});
+
+
+test('completed child reports reach the parent before a synchronous successor waits on it',t=>{
+  const directory=mkdtempSync(join(tmpdir(),'tooling-report-turn-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const probe=join(directory,'probe.mjs'),file=join(directory,'subject.test.mjs');
+  const runner=new URL('./tooling-runner.ts',import.meta.url).href,bootstrap=fileURLToPath(new URL('./test-host-bootstrap.ts',import.meta.url));
+  writeFileSync(probe,generatedJavaScript(`
+import {createServer} from 'node:net';
+import {writeFileSync} from 'node:fs';
+import {PassThrough} from 'node:stream';
+import {runTooling} from ${JSON.stringify(runner)};
+let completed=false,entered=false;const sockets=new Set();
+const server=createServer(socket=>{
+ sockets.add(socket);socket.on('close',()=>sockets.delete(socket));
+ socket.on('data',()=>{entered=true;if(completed)socket.end('release');});
+});
+await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+const address=server.address();
+const child="const{createConnection}=require('node:net');const s=createConnection({host:'127.0.0.1',port:"+address.port+"});s.on('error',error=>{console.error(error);process.exitCode=1;});s.once('connect',()=>s.write('tail'));s.once('data',()=>s.end());";
+writeFileSync(${JSON.stringify(file)},[
+ "import{test}from'node:test';import{execFileSync}from'node:child_process';",
+ ...Array.from({length:7},(_,i)=>"test('prefix "+i+"',()=>{});"),
+ "test('async marker',async()=>{await new Promise(setImmediate);});",
+ "test('synchronous tail',()=>{execFileSync(process.execPath,['-e',"+JSON.stringify(child)+"],{stdio:'inherit'});});"
+].join('\\n'));
+const output=new PassThrough();output.resume();let result;
+try{
+ result=await runTooling([${JSON.stringify(file)}],{execArgv:['--import',${JSON.stringify(bootstrap)}],output,instrument:{
+  now:()=>0,scheduleIdle:()=>()=>{},
+  event(name,data){if(name==='test:complete'&&data.name==='async marker'){completed=true;for(const socket of sockets)socket.end('release');}}
+ }});
+}finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
+console.log('NTS_REPORT_TURN '+JSON.stringify({result,completed,entered}));
+`));
+  const run=spawnTest(process.execPath,[probe],{env:fixtureEnvironment(t),encoding:'utf8'},'the completed child report to release its synchronous successor');
+  assert.equal(run.status,0,run.stdout+run.stderr);
+  const record=/^NTS_REPORT_TURN (.+)$/m.exec(run.stdout);assert.ok(record,run.stdout+run.stderr);
+  const observed=JSON.parse(record[1]);assert.equal(observed.result.status,0,run.stdout+run.stderr);assert.equal(observed.result.completedFailures,0);
+  assert.equal(observed.completed,true);assert.equal(observed.entered,true);
+});
+
+test('the reporter turn remains live under a parent test clock',t=>{
+  const directory=mkdtempSync(join(tmpdir(),'tooling-report-clock-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const file=join(directory,'subject.test.mjs'),bootstrap=fileURLToPath(new URL('./test-host-bootstrap.ts',import.meta.url));
+  writeFileSync(file,generatedJavaScript(`import{test}from'node:test';test('mocked clock',async t=>{
+ t.mock.timers.enable({apis:['setImmediate']});
+ await t.test('nested completion',()=>{console.log('nested reporter reached');});
+});\n`));
+  const run=spawnTest(process.execPath,['--test','--import',bootstrap,file],{env:fixtureEnvironment(t),encoding:'utf8'},'the nested test reporter under a supplied clock');
+  assert.equal(run.status,0,run.stdout+run.stderr);assert.match(run.stdout,/nested reporter reached/);
 });
