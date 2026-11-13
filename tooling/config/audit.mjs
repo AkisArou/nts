@@ -1,4 +1,4 @@
-import {dataDirectory} from "../gate/reader-inputs/main.ts";
+import {dataDirectory,moduleMembers,moduleMemberDirectory} from "../gate/reader-inputs/main.ts";
 /**
  * Audit `nts.config.ts` against the type package: coverage, drift, duplication.
  *
@@ -46,22 +46,22 @@ const note = (question, rows, render = (r) => r) =>
 
 // --- discovery -------------------------------------------------------------
 
-const walk = (dir, out = []) => {
+const walk = (dir, member, out = []) => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+    if (!moduleMemberDirectory(e.name)) continue;
     const p = join(dir, e.name);
-    if (e.isDirectory()) walk(p, out);
-    else if (e.name === "nts.config.ts") out.push(p);
+    if (e.isDirectory()) walk(p, member, out);
+    else if (e.name === member) out.push(p);
   }
   return out;
 };
 // The four directories that were one, `examples`, until 2026-10-14: named, not
 // `tests` as a whole, so no fixture kind joins the audit by being added.
-const configPaths = [dataDirectory(new URL("../../tests/programs/",import.meta.url)),
-  dataDirectory(new URL("../../tests/interop/",import.meta.url)),
-  dataDirectory(new URL("../../tests/gjs/",import.meta.url)),
-  dataDirectory(new URL("../../tests/workspace/",import.meta.url))]
-  .flatMap((dir) => walk(fileURLToPath(dir)))
+const configPaths = [moduleMembers(new URL("../../tests/programs/",import.meta.url),'nts.config.ts'),
+  moduleMembers(new URL("../../tests/interop/",import.meta.url),'nts.config.ts'),
+  moduleMembers(new URL("../../tests/gjs/",import.meta.url),'nts.config.ts'),
+  moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts')]
+  .flatMap((input) => walk(fileURLToPath(input.url),input.member))
   .sort();
 
 // --- the package's own shape, read from source -----------------------------

@@ -142,3 +142,19 @@ test('computed, spread, duplicate or noncanonical fixture grants are refused',()
     }
   }finally{api.close();}
 });
+
+
+test('module members require their lexical owner and a literal basename',()=>{
+  const api=new API();
+  try{
+    const source="import {moduleMembers as members} from './reader-inputs/main.ts';members(new URL('./population/',import.meta.url),'nts.config.ts');function shadow(members){members(new URL('./other/',import.meta.url),'nts.config.ts');}";
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [{path:'./population/',kind:'members',member:'nts.config.ts'},{path:'./other/',kind:'module'}]);}finally{lease.dispose();}
+    for(const member of ['name',"'**/nts.config.ts'","'../nts.config.ts'"]){
+      const text="import {moduleMembers} from './reader-inputs/main.ts';moduleMembers(new URL('./population/',import.meta.url),"+member+");";
+      const lease=api.createSourceFile('tooling/gate/reader.ts',text);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});

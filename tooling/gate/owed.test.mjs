@@ -990,6 +990,11 @@ test("an example's nts.config.ts owes config, new or changed, interop's too", ()
   owes("tests/programs/strings/nts.config.ts", ["config"]);
   superset(changeOwes([{ path: "tests/programs/a-new-one/nts.config.ts", added: true }, { path: "tests/programs/a-new-one/tsconfig.json", added: true }]), ["config"], "a new example with a config");
   owes("tests/interop/gtk-async/nts.config.ts", ["config", "interop"]);
+  const inputs=stepInputs();
+  for(const path of ['tests/programs/never-added/nts.config.ts','tests/interop/never-added/nts.config.ts'])
+    assert.ok(covering(inputs,path).has('config'),path+' is selected by its declared member name before it exists and after deletion');
+  for(const path of ['tests/programs/never-added/not.config.ts','tests/programs/.hidden/nts.config.ts','tests/programs/node_modules/pkg/nts.config.ts'])
+    assert.ok(!covering(inputs,path).has('config'),path+' is outside that actual discovery rule');
 });
 
 test("an unavailable Cargo toolchain grants no scope for compiled inputs or documentation", () => {

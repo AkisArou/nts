@@ -9,7 +9,7 @@ import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
-import {fixtureNamespaces,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry} from './reader-inputs/main.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -81,15 +81,19 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       }
       if (!lstatSync(path).isDirectory()) {
         if(kind==='data')throw Error('declared data input is not a directory: '+nameOf(path));
+        if(kind==='members')throw Error('declared module members input is not a directory: '+nameOf(path));
         visit(context,path,kind!=='file');return;
       }
       if(kind==='file')throw Error('declared file input is not a file: '+nameOf(path));
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
       tracked ??= execFileSync("git",gitArguments(["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
-      const directory=nameOf(path),members=tracked.filter(file=>directory===''||file.startsWith(directory+'/'));
+      const member=kind==='members'?moduleMemberName(input.member):undefined;
+      const directory=nameOf(path),members=tracked.filter(file=>(directory===''||file.startsWith(directory+'/'))
+        &&(!member||matchesModuleMember(directory?file.slice(directory.length+1):file,member)));
       if(kind==='data')context.data.add(directory);
       const grant=kind==='data'?Object.keys(context.namespaces).find(name=>directory===name||directory.startsWith(name+'/')):undefined;
-      const row:DirectoryDeclaration={reader,directory,files:grant?[]:members,kind,
+      const row:DirectoryDeclaration={reader,directory,files:grant?[]:members,kind:kind==='members'?'module':kind,
+        ...(member?{member}:{}),
         ...(grant?{fixture:{entry:context.entry,owner:context.namespaces[grant]!}}:{})};
       directories.push(row);reportDirectory?.(row);
       if(grant)return;
@@ -114,7 +118,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     for(const entry of entries){
       if(typeof entry!=='string'){
         asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
-          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:{})});
+          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member}:{})});
         continue;
       }
       if(isAbsolute(entry))throw Error('module entry must be repository-relative: '+entry);

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import {fixtureNamespaces,type ModuleDeclarations,type ReaderInput,type DataNamespaces} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,type ModuleDeclarations,type ReaderInput,type DataNamespaces} from './reader-inputs/main.ts';
 
 type Syntax=typeof import('typescript/ast');
 let syntax:Syntax|undefined;
@@ -202,11 +202,15 @@ export class SourceFacts {
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|fixtureInput)$/.exec(called);
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|fixtureInput|moduleMembers)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
         if(owner&&owned![2]==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
+        }else if(owner&&owned![2]==='moduleMembers'){
+          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
+            throw Error('moduleMembers needs a directory and literal member name: '+this.file);
+          assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text)});
         }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
           ?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':'project'):'module'});
       }

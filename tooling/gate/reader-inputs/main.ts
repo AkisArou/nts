@@ -1,10 +1,11 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'file'|'project'|'fixture';
+export type InputKind='module'|'data'|'file'|'project'|'fixture'|'members';
 export type DataNamespaces=Readonly<Record<string,string>>;
-export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces};
+export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};
 export type DirectoryDeclaration={reader:string;directory:string;files:readonly string[];kind:'module'|'data';
+  member?:string;
   /** Private fixture reach records the declaration without claiming its production members. */
   fixture?:{entry:string;owner:string}};
 export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];directories:DirectoryDeclaration[]};
@@ -23,7 +24,8 @@ export function fileInput(url:URL):FileInput{return url as FileInput;}
 
 export type ProjectInput={readonly kind:'project';readonly url:URL};
 export type FixtureInput={readonly kind:'fixture';readonly url:URL;readonly dataNamespaces:DataNamespaces};
-export type InputEntry=string|ProjectInput|FixtureInput;
+export type ModuleMembers={readonly kind:'members';readonly url:URL;readonly member:string};
+export type InputEntry=string|ProjectInput|FixtureInput|ModuleMembers;
 /** A compiled entry carries its owning-project request through runtime staging
  * as well as the parsed reader declaration. It never guesses a config path. */
 export function projectInput(url:URL):ProjectInput{return {kind:'project',url};}
@@ -49,4 +51,20 @@ export function fixtureNamespaces(value:DataNamespaces):DataNamespaces{
  * grants. Source modules remain immutable production inputs in either context. */
 export function fixtureInput(url:URL,options:{dataNamespaces:DataNamespaces}):FixtureInput{
   return {kind:'fixture',url,dataNamespaces:fixtureNamespaces(options.dataNamespaces)};
+}
+
+export function moduleMemberName(value:unknown):string{
+  if(typeof value!=='string'||!canonicalNamespace(value)||value.includes('/')||!moduleMemberDirectory(value)||/[*?\[\]]/.test(value))
+    throw Error('module member must be a literal basename: '+String(value));
+  return value;
+}
+/** Discovery excludes hidden paths and installed dependencies in both forms. */
+export const moduleMemberDirectory=(name:string)=>name!==''&&name!=='node_modules'&&!name.startsWith('.');
+export function matchesModuleMember(path:string,member:string):boolean{
+  const parts=path.split('/');return parts.at(-1)===member&&parts.every(moduleMemberDirectory);
+}
+/** Recursively discovered modules have one literal basename, consumed by the
+ * runtime walker as well as tracked snapshots and added/deleted path matching. */
+export function moduleMembers(url:URL,member:string):ModuleMembers{
+  return {kind:'members',url,member:moduleMemberName(member)};
 }

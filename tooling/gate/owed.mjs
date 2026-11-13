@@ -85,6 +85,7 @@ import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { moduleGraph } from "./module-closure.ts";
+import {matchesModuleMember} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
@@ -1646,7 +1647,8 @@ function stepInputGraph() {
     const modules = moduleGraph({sourceRoot:TREE});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
-      const key=[reader,row.directory,row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
+      const key=[reader,row.directory,row.member??"",row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
+      if(row.member)map.declareMember(row.directory,row.member,step);
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
@@ -1771,6 +1773,7 @@ export function stepInputs() { return stepInputGraph().reach; }
 
 function declaredInput(/** @type {string} */ path) {
   const graph=stepInputGraph();
+  if(graph.reach.declaresMember(path))return true;
   if(graph.declared.has(path))return true;
   if(!graph.tracked.has(path))return false;
   for(let input=path;;){
@@ -1783,7 +1786,7 @@ function declaredInput(/** @type {string} */ path) {
 export function inputDirectoryDeclarations() {
   return [...stepInputGraph().directories.values()].map(row => ({
     reader: row.reader, directory: row.directory, files: row.files.length, steps: [...row.steps].sort(),
-    ...(row.fixture?{fixture:row.fixture}:{}),
+    ...(row.fixture?{fixture:row.fixture}:{}),...(row.member?{member:row.member}:{}),
   })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
 }
 
@@ -1801,6 +1804,8 @@ export function covering(map, path) {
 class InputMap extends Map {
   /** @type {Map<string, number>} */
   #positions = new Map();
+  /** @type {Map<string,Map<string,Set<string>>>} */
+  #members = new Map();
   #next = 0;
   constructor() { super(); }
   /** @override */
@@ -1813,13 +1818,25 @@ class InputMap extends Map {
     if (names) names.add(name);
     else this.set(input, new Set([name]));
   }
+  declareMember(/** @type {string} */ directory,/** @type {string} */ member,/** @type {string} */ step){
+    const owners=this.#members.get(member)??new Map();
+    const steps=owners.get(directory)??new Set();steps.add(step);owners.set(directory,steps);this.#members.set(member,owners);
+  }
+  memberReaders(/** @type {string} */ path){
+    const out=new Set(),member=path.slice(path.lastIndexOf('/')+1);
+    for(const [directory,steps]of this.#members.get(member)??[])
+      if((directory===''||path.startsWith(directory+'/'))&&matchesModuleMember(directory?path.slice(directory.length+1):path,member))
+        for(const step of steps)out.add(step);
+    return out;
+  }
+  declaresMember(/** @type {string} */ path){return this.memberReaders(path).size>0;}
   /** @override */
   delete(/** @type {string} */ input) {
     this.#positions.delete(input);
     return super.delete(input);
   }
   /** @override */
-  clear() { this.#positions.clear(); super.clear(); }
+  clear() { this.#positions.clear(); this.#members.clear(); super.clear(); }
   covering(/** @type {string} */ path) {
     const inputs = [];
     for (let input = path;;) {
@@ -1831,6 +1848,7 @@ class InputMap extends Map {
     inputs.sort((a, b) => (this.#positions.get(a) ?? 0) - (this.#positions.get(b) ?? 0));
     const out = new Set();
     for (const input of inputs) for (const name of this.get(input) ?? []) out.add(name);
+    for(const name of this.memberReaders(path))out.add(name);
     return out;
   }
 }

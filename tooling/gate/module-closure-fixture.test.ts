@@ -1,4 +1,4 @@
-import {fixtureInput,projectInput} from './reader-inputs/main.ts';
+import {fixtureInput,moduleMembers,projectInput} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
@@ -111,7 +111,7 @@ test('namespace grants name an existing declared data directory and a fixture ow
   const f=dataFixture(t);f.privateData();
   const grants:Record<string,string>[]=[{unknown:'owner'},{'../data':'owner'},{data:''}];
   for(const grant of grants){
-    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:grant}),/not a declared data input|no fixture owner/);
+    assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:grant}),/not a declared data input|no fixture owner|not canonical/);
     assert.equal(existsSync(join(f.destination,'entry.ts')),false);
   }
   f.write('plain.ts',"const modules=new URL('./data/',import.meta.url);");
@@ -572,4 +572,28 @@ test('no fixture grant still copies the complete declared production data',t=>{
   const copied=copyModuleClosure([entry],f.destination,{sourceRoot:f.source});
   assert.ok(copied.includes('data/case.ts'));
   assert.equal(readFileSync(join(f.destination,'data/case.ts'),'utf8'),readFileSync(join(f.source,'data/case.ts'),'utf8'));
+});
+
+
+test('module members select a literal basename, follow its imports and skip hidden or installed trees',t=>{
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts',"export const moduleMembers=(url,member)=>({kind:'members',url,member});");
+  f.write('reader.ts',"import {moduleMembers} from './tooling/gate/reader-inputs/main.ts';moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts');");
+  f.write('population/one/nts.config.ts',"import './dependency.ts';");f.write('population/one/dependency.ts','export const answer=42;');
+  for(const name of ['population/one/not.config.ts','population/.hidden/nts.config.ts','population/node_modules/pkg/nts.config.ts'])
+    f.write(name,"import './not-a-dependency.ts';");
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
+    const result=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  }
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const descriptor=moduleMembers(pathToFileURL(join(f.source,'population/')),'nts.config.ts');
+    const snapshot=graph.describe(['reader.ts']),runtime=graph.describe([descriptor]);
+    assert.deepEqual(snapshot.files.filter(name=>name!=='reader.ts'&&name!=='tooling/gate/reader-inputs/main.ts'),runtime.files);
+    assert.deepEqual(runtime.files,['population/one/dependency.ts','population/one/nts.config.ts']);
+    assert.deepEqual(snapshot.directories,[{reader:'reader.ts',directory:'population',files:['population/one/nts.config.ts'],kind:'module',member:'nts.config.ts'}]);
+    assert.deepEqual(copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),runtime.files);
+    assert.throws(()=>moduleMembers(pathToFileURL(f.source),'**/nts.config.ts'),/literal basename/);
+    assert.throws(()=>moduleMembers(pathToFileURL(f.source),'.hidden.ts'),/literal basename/);
+  }finally{graph.close();}
 });
