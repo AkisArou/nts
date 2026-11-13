@@ -4,7 +4,7 @@ import {dirname,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {test,type TestContext} from 'node:test';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
-import {moduleGraph,type InputSnapshot} from './module-closure.ts';
+import {moduleGraph,type InputSnapshot,type ModuleDeclarations} from './module-closure.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectInput,projectConfig} from './reader-inputs/main.ts';
 import {validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation} from './reader-observations.ts';
@@ -81,7 +81,7 @@ test('private and production host visits retain their separate contexts in eithe
   for(const args of [['init','--quiet'],['add','.']]){
     const result=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   }
-  const declarations=new Map([
+  const declarations=new Map<string,ModuleDeclarations>([
     ['private.ts',{imports:[],assets:[{kind:'fixture' as const,path:'./child.ts',dataNamespaces:{data:'private fixture'}}]}],
     ['child.ts',{imports:['./data/tool.ts'],assets:[{kind:'data' as const,path:'./data/'}]}],
   ]);
