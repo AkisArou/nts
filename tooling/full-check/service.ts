@@ -278,7 +278,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
     clearCulprits(fx, state, part, commit);
     if (part === "core") moveVerified(fx, state, commit);
     writeState(fx.layout.state, state);
-    writeRecords(fx, state, part, commit, m.run, listed);
+    await writeRecords(fx, state, part, commit, m.run, listed);
     return;
   }
   fx.log(`${part} RED at ${short(commit)}: ${failed.join(", ")}; logs ${m.run}`);
@@ -526,10 +526,13 @@ const following = (records: RecordsRun | undefined): records is RecordsRun & { d
  * on with the core while it records, and follows it each cycle
  * (followRecording).
  */
-function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): void {
+async function writeRecords(fx: Effects, state: State, part: Part, commit: string, run: string, listed: Listed): Promise<void> {
   const previous = state[part].records;
   if (previous?.commit === commit) return;
   if (!listed.pending.length && !listed.accepted.length) return;
+  // The gate can run for hours after the cycle first followed this landing.
+  // Refresh through the same owner before deciding whether its rows still wait.
+  if (following(previous)) await followRecordsLanding(fx, state, part, previous);
   // One delta of a part's rows in flight at a time: recorded again now, the
   // rows still being recorded or waiting to land would be measured twice,
   // hours each, and the two records commits would race for the same cases.
@@ -807,17 +810,22 @@ async function followRecords(fx: Effects, state: State): Promise<boolean> {
       continue;
     }
     if (!following(records)) continue;
-    if (await followLanding(fx, state, records, {
-      named: submitted => `records ${submitted ? short(submitted) : "(none submitted)"} of the ${part} rows at ${short(records.commit)}`,
-      source: records.delta,
-      again: main => `their delta is applied again on main ${short(main)}`,
-      not: "not applied again",
-      gone: `its delta ${records.delta} is gone`,
-      given: result => `- The full check's ${part} records of ${short(records.commit)} did not land: ${result}. Their rows stay pending for the next records run; see ${dirname(records.delta)}.`,
-      remake: main => applyAndSubmit(fx, state, part, records, main),
-    })) again = true;
+    if (await followRecordsLanding(fx, state, part, records)) again = true;
   }
   return again;
+}
+
+/** One part's records landing, followed both at cycle entry and after a run. */
+function followRecordsLanding(fx: Effects, state: State, part: Part, records: RecordsRun & { delta: string }): Promise<boolean> {
+  return followLanding(fx, state, records, {
+    named: submitted => `records ${submitted ? short(submitted) : "(none submitted)"} of the ${part} rows at ${short(records.commit)}`,
+    source: records.delta,
+    again: main => `their delta is applied again on main ${short(main)}`,
+    not: "not applied again",
+    gone: `its delta ${records.delta} is gone`,
+    given: result => `- The full check's ${part} records of ${short(records.commit)} did not land: ${result}. Their rows stay pending for the next records run; see ${dirname(records.delta)}.`,
+    remake: main => applyAndSubmit(fx, state, part, records, main),
+  });
 }
 
 /**

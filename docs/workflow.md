@@ -364,6 +364,10 @@ in two ways:
   said, and waits for the next records run. A records commit the landing
   check refuses or holds is applied again on the newest `main`, a few times
   at most, and then is a task; while it waits, that part records nothing new.
+  Before a green run starts recording new rows, the controller refreshes the
+  previous records commit's landing answer. A commit that landed or was
+  withdrawn during the run settles in that cycle, through the same rules
+  used at cycle entry.
 - **An oracle past its own CPU or resident bound has a budget row,** with
   the phase, bound and observed stop, and no invented count. Checks retry it
   and print it loudly. A completed count is an improvement; replacing a count
@@ -918,6 +922,10 @@ the first node task.
   Undone work stays visible until main evidence, a retained duplicate scope
   or an adopted superseding decision accounts for it
   ([log](records/notebooks/decisions-log.md#streams-groups-and-tasks-11-10)).
+- **Records refresh their landing answer before new recording:** the answer
+  read before a long core or wide run cannot hold back rows after the previous
+  commit has landed or been withdrawn. Both checks use one settlement owner
+  ([log](records/notebooks/decisions-log.md#records-settle-before-new-recording-11-13)).
 - **Records and the count run beside the parts** (11-09): a part's records
   run records in a unit and a tree of its own while the core runs on each new
   `main`, and a restarted controller adopts it by name; the count runs hourly

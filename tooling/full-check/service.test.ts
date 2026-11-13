@@ -524,6 +524,40 @@ const NEW_CASE = { "LOG/typescript-c": "  pending: tests/programs/new-case is no
 const newCase = () => recording({ "results/oracle-counts/tests/programs/new-case.json": "{\"cases\": 3}\n" });
 const answer = (state: "landed" | "refused" | "held" | "withdrawn", message: string, tip?: string) => ({ state, at: "2026-11-06T12:00:00.000Z", message, ...(tip ? { tip } : {}) });
 
+for (const outcome of ["landed", "withdrawn", "waiting"] as const) {
+  test(`a green core refreshes its previous records landing after the run: ${outcome}`, async t => {
+    const repo = repository(t), gate = fakeGate(repo);
+    const fx = harness(repo, gate, { recorder: newCase() });
+    const first = repo.commit(NEW_CASE, "the first pending case");
+    assert.equal(await cycle(fx), "core");
+    await recordAndApply(fx);
+    const previous = readState(repo.layout.state).core.records!;
+    assert.equal(fx.queue.answer(previous.submitted!), "waiting");
+    const next = repo.commit({ "later.txt": "another change\n" }, "another green core owes rows");
+    const run = gate.run.bind(gate);
+    gate.run = (commit, steps, label, ...rest) => {
+      assert.equal(fx.queue.answer(previous.submitted!), "waiting", "the cycle saw it waiting before the core");
+      if (outcome !== "waiting") fx.queue.answers.set(previous.submitted!, answer(outcome, "answered while the core ran", previous.submitted!));
+      return run(commit, steps, label, ...rest);
+    };
+    assert.equal(await cycle(fx), "core");
+    const current = readState(repo.layout.state).core.records!;
+    if (outcome === "waiting") {
+      assert.equal(current.commit, first);
+      assert.equal(current.submitted, previous.submitted);
+      assert.equal(current.settled, undefined);
+      assert.equal(fx.units.specs.length, 1, "a waiting delta still prevents duplicate recording");
+      assert.ok(!fx.units.running(recordsUnitName("core")));
+    } else {
+      assert.ok(fx.lines.some(line => line.includes(`records ${previous.submitted!.slice(0, 12)}`) && line.includes(outcome === "landed" ? "landed as" : "withdrawn:")), fx.lines.join("\n"));
+      assert.equal(current.commit, next, "the new rows record in the cycle whose core observed the answer");
+      assert.equal(current.outcome, "recording");
+      assert.equal(fx.units.specs.length, 2);
+      assert.ok(fx.units.running(recordsUnitName("core")));
+    }
+  });
+}
+
 test("rows recorded at a commit land as a records commit on main as it is when they are applied", async t => {
   const repo = repository(t);
   let landed = "";

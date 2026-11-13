@@ -2598,3 +2598,12 @@ observations, and negative excess is visible rather than clamped away.
 Summed worker wall overlaps and is not subtracted from step wall.
 Missing telemetry never changes a program's verdict. Fixture CPU is supplied,
 with fixed zero explicitly owned by ownMemory. #760.
+
+
+## Records settle before new recording (11-13)
+
+A records commit can land while a core or wide run is executing. #768 refreshes
+that part's previous landing through the existing followLanding owner before
+writeRecords checks whether its rows still wait. Landed and withdrawn answers
+settle in the current cycle; a waiting answer still prevents duplicate work.
+The cycle-entry and post-run checks share the same retry and settlement rules.
