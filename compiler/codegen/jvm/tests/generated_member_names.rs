@@ -310,37 +310,6 @@ fn authored_and_inherited_protocol_lookalikes_keep_their_facades() {
 }
 
 #[test]
-fn catalogue_sources_are_fresh_and_exclusive() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let output = Command::new("node")
-        .args(["compiler/codegen/jvm/generate-members.ts", "--check"])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
-fn exclusivity_cannot_be_bypassed_by_a_literal_nul() {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let output = Command::new("node")
-        .args(["--test", "compiler/codegen/jvm/member-scanner.test.ts"])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
 fn roles_and_exact_keys_have_disjoint_names() {
     use nts_codegen_jvm::generated_members as names;
     let mut all: std::collections::BTreeSet<String> = names::SPECIMENS

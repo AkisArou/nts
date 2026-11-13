@@ -252,6 +252,7 @@ export const LANDING = {
   licenses: { form: "tree" },
   audit: { form: "tree" },
   "unicode-freshness": { form: "as-is" },
+  "jvm-members": { form: "tree" },
   build: { form: "as-is" },
   clippy: { form: "as-is" },
   tests: { form: "as-is" },
@@ -375,6 +376,7 @@ export const ASKS = {
   "test262-census-jvm": ["answers", "the same on the JVM"],
   "program-oracles": ["answers", "one authenticated Node answer for each example and outcome program"],
   "unicode-freshness": ["hygiene", "do committed URL-host cases match the pinned offline Unicode source and Node oracle"],
+  "jvm-members": ["hygiene", "are JVM member outputs fresh and reserved names exclusive to their catalogue"],
   "typescript-oracles": ["answers", "one authenticated Node reference for every TypeScript case the backend steps check"],
   "typescript-c": ["answers", "does every recorded TypeScript conformance case still do what it did, on C"],
   "typescript-llvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on LLVM"],
@@ -647,6 +649,12 @@ export const RULES = [
     when: (/** @type {string} */ p) => /^tooling\/(?:apple|windows)\/[^/]+\.sh$/.test(p),
     steps: ["interop"],
     arms: [],
+  },
+  {
+    name: "the JVM member catalogue owner",
+    when: p => /^tooling\/jvm\/(members|member-catalogue|member-grammar)(?:\.test)?\.ts$/.test(p),
+    steps: ["jvm-members", "tooling"],
+    arms: [{kind:"valid",asks:"fresh outputs and exclusive member names retain their real scanner controls",run:"node --test tooling/jvm/member-catalogue.test.ts"}],
   },
   {
     name: "the JVM catalogue launcher",

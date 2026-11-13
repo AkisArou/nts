@@ -2,7 +2,7 @@ import {exitCommand,isCommandExit,registerCommandCloser, exitAfterOutput} from '
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import memberCatalogue from "../../compiler/codegen/jvm/member-names.json" with {type: "json"};
-import {sourceName, withoutRecordedMethods} from "../../compiler/codegen/jvm/member-grammar.ts";
+import {sourceName, withoutRecordedMethods} from "../jvm/member-grammar.ts";
 // Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
 //
 //   node tooling/conformance/jvm-verifies.ts [project ...]   (default: runtime/node/*, runtime/web-platform)

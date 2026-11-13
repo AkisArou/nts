@@ -47,6 +47,7 @@ export const STEPS = [
   { name: "old-paths", slots: 1, treeOnly: true, doc: "nothing sits or points where the corpora used to be" },
   { name: "audit", slots: 1, treeOnly: true, doc: "classification reasons, authorities and suite entries" },
   { name: "unicode-freshness", slots: 1, treeOnly: true, doc: "URL-host cases match the offline pinned Unicode source and Node oracle" },
+  { name: "jvm-members", slots: 1, treeOnly: true, doc: "JVM catalogue outputs are fresh and reserved names have one owner" },
   { name: "doctests", slots: 4, min: 1, lock: "cargo", after: ["build"], bound: 3600, doc: "touched crates' doc examples compile and pass" },
   { name: "test262", slots: 1, after: ["build"], doc: "test262 pin, inventory, features audit" },
   // The conformance steps are elastic: the resident pool starts all its

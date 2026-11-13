@@ -53,8 +53,8 @@ export function withoutRecordedMethods(model: NameCatalogue, text: string): stri
   return text.split("\n").map(line => {
     if (!line.includes(model.prefix)) return line;
     const fields = line.split("\t");
-    if (fields.length !== 3 || !fields[2].startsWith("pin: invalid=[")) return line;
-    const pairs: unknown = JSON.parse(fields[2].slice("pin: invalid=".length));
+    if (fields.length !== 3 || !fields[2]!.startsWith("pin: invalid=[")) return line;
+    const pairs: unknown = JSON.parse(fields[2]!.slice("pin: invalid=".length));
     if (!Array.isArray(pairs) || pairs.length === 0) throw new Error("record pin must contain class/method pairs");
     const masked = pairs.map(pair => {
       if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(part => typeof part === "string" && part.length > 0)) throw new Error("invalid record pin pair");
