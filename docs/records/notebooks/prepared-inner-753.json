@@ -1,0 +1,629 @@
+{
+  "version": 1,
+  "issue": 753,
+  "sourcePin": "f9e99c769fdfb2dda2ab3305530526fb5b4e799c",
+  "writer": "/home/akisarou/.cache/nts-scratch/753/collect-final-record.py",
+  "verifier": {
+    "selection": "canonical-parent comment through dependencySealReady, without trailing separator whitespace",
+    "bytes": 3418,
+    "sha256": "8afc023dd9ab020eeb9f665155d8c8c556df6b1f81203ad87d0673cff547b703",
+    "byteEqualToBase": true
+  },
+  "focused": {
+    "tests": 295,
+    "pass": 295,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "targetedCorrection": {
+    "tests": 14,
+    "pass": 14,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "timing": {
+    "tests": 7,
+    "pass": 7,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "supported": {
+    "source": "f9e99c769fdfb2dda2ab3305530526fb5b4e799c",
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859",
+    "verdict": "green",
+    "wallSeconds": 1502.221,
+    "admissionWaitSeconds": 1087.5800000000002,
+    "peakBytes": 15032385536,
+    "scopeCleanup": {
+      "state": "complete"
+    },
+    "tooling": {
+      "tests": 2258,
+      "pass": 2256,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 2
+    },
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "pass": 3047,
+      "fail": 0,
+      "ignored": 8
+    },
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 24.227,
+        "cpu": 27.529074
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 9.842,
+        "cpu": 3.628293
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 18.21,
+        "cpu": 6.725376
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.219,
+        "cpu": 0.093691
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 4.368,
+        "cpu": 2.711373
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 9.078,
+        "cpu": 3.479189
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.238,
+        "cpu": 0.085246
+      },
+      {
+        "name": "unicode-freshness",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.644,
+        "cpu": 0.28586
+      },
+      {
+        "name": "doctests",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 7.981,
+        "cpu": 5.355446
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 8.035,
+        "cpu": 2.729385
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 7.258,
+        "cpu": 5.802637
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 22.124,
+        "cpu": 10.269852
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 20.182,
+        "cpu": 9.056561
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 393.348,
+        "cpu": 3250.764092
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.255,
+        "cpu": 0.077015
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 333.656,
+        "cpu": 4237.80098
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 5.052,
+        "cpu": 4.857401
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 4.03,
+        "cpu": 1.176232
+      }
+    ]
+  },
+  "inner": {
+    "steps": [
+      {
+        "name": "fmt",
+        "status": "PASS",
+        "seconds": 6
+      },
+      {
+        "name": "clippy",
+        "status": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "build",
+        "status": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "tests",
+        "status": "PASS",
+        "seconds": 1189
+      }
+    ],
+    "verdict": "green",
+    "log": "/home/akisarou/.cache/nts-scratch/753/inner-v4.log"
+  },
+  "metadata": {
+    "version": 1,
+    "pins": {
+      "base": "9711ef0043247c358ee6fcbf53d2849f636a7ed6",
+      "current": "f9e99c769fdfb2dda2ab3305530526fb5b4e799c"
+    },
+    "recordsEqual": true,
+    "pendingBefore": [],
+    "pendingAfter": [],
+    "rows": 1231,
+    "rowsSha256": "69cb274396e7908dbaa7ef5379d2ca1d263daec4fd45b126831d8e7ff0e955b9",
+    "lost": [],
+    "gained": [],
+    "actualRouteLost": [],
+    "gainedByStep": {},
+    "newBudgetStaleness": []
+  },
+  "placement": {
+    "base": {
+      "full": 178,
+      "tracked": 28562,
+      "fallback": 142,
+      "policy": 36,
+      "directoryDeclarations": 68
+    },
+    "current": {
+      "full": 178,
+      "tracked": 28570,
+      "fallback": 142,
+      "policy": 36,
+      "directoryDeclarations": 68
+    }
+  },
+  "excluded": [
+    {
+      "source": "e4c5081b9cd10bd17eb9a60a8c918a3b9cfc25a3",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767",
+      "reason": "Own native execution/materialization inventory omission. Completed native log retained; remaining tooling stopped by its named parent and recorded private slice. No combined verdict or actual inner result.",
+      "verdict": "red",
+      "wallSeconds": 1079.745,
+      "steps": [
+        {
+          "name": "tooling",
+          "verdict": "INSTRUMENT",
+          "reason": "step scope cleanup failed: ENOENT: no such file or directory, open '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/nts.slice/nts-rw429c107.slice/nts-rw429c107-rrc0i7uwp.slice/cgroup.events'"
+        },
+        {
+          "name": "tests",
+          "verdict": "FAIL",
+          "reason": "exit 1"
+        }
+      ],
+      "native": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3026,
+        "fail": 22,
+        "ignored": 8
+      }
+    },
+    {
+      "source": "3a69b3da3490c8978d209addeb0568abfb286c75",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150",
+      "reason": "Own fixed-three publisher lists omitted the seal dependency. Native suite passed; tooling failed two controls. Actual inner did not start.",
+      "verdict": "red",
+      "wallSeconds": 814.407,
+      "steps": [
+        {
+          "name": "tooling",
+          "verdict": "FAIL",
+          "reason": "exit 1"
+        }
+      ],
+      "native": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3045,
+        "fail": 0,
+        "ignored": 8
+      },
+      "tooling": {
+        "tests": 2246,
+        "pass": 2242,
+        "fail": 2,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      }
+    },
+    {
+      "source": "3eb0efbbd313a1fae53e04d137ebc1d4e14ec859",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528",
+      "reason": "Own suffix lint, portable SDK lookup, and canonical diagnostic spelling. Native suite passed. Tooling failed two leaf controls plus their failed parent node. Actual inner did not start.",
+      "verdict": "red",
+      "wallSeconds": 658.03,
+      "steps": [
+        {
+          "name": "clippy",
+          "verdict": "FAIL",
+          "reason": "exit 1"
+        },
+        {
+          "name": "tooling",
+          "verdict": "FAIL",
+          "reason": "exit 1"
+        }
+      ],
+      "native": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3045,
+        "fail": 0,
+        "ignored": 8
+      },
+      "tooling": {
+        "tests": 2254,
+        "pass": 2249,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767/summary.json",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v1/summary.json",
+      "bytes": 422041,
+      "sha256": "77df2ae8d8faf6d7e891b360ee08dd0f69a0e33a1b6ae98fa6f97509b4d20ded"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767/tests.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v1/tests.log",
+      "bytes": 14080,
+      "sha256": "d272377a4ad36d470ed69af8f172951b7430ea0d0f0359b38fb19ce1afa17a4c"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767/tooling.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v1/tooling.log",
+      "bytes": 444,
+      "sha256": "3be82291454d4562165ae045d125235ef1ac132baf04ef28e556c56be52a696b"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767/tooling-tests.raw.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v1/tooling-tests.raw.log",
+      "bytes": 1263485,
+      "sha256": "0b4666e90befa21e547737a5c48aa32925d29e5bb399a4ef2fb1ef81847da8f8"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-e4c5081b9cd1-1794547765767/clippy.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v1/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150/summary.json",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v2/summary.json",
+      "bytes": 755500,
+      "sha256": "6ae89074d2ccd0cebd7b788ab38409f764b31653a6b2335dfd78fc7182091a44"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150/tests.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v2/tests.log",
+      "bytes": 1202,
+      "sha256": "221701c1f2b50f3710c394823812e1e6b76972f28482dffb18311710de9625be"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150/tooling.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v2/tooling.log",
+      "bytes": 51315,
+      "sha256": "fc651e210297f204e8f47a5b5cb8e52bffde35abde050f01d8bd1601a70775c9"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150/tooling-tests.raw.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v2/tooling-tests.raw.log",
+      "bytes": 1461407,
+      "sha256": "52e05ae532f213216cf997f720a5e7398daaa2f5f1b113fd24460f71dfeee42e"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3a69b3da3490-1794549525150/clippy.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v2/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528/summary.json",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v3/summary.json",
+      "bytes": 757234,
+      "sha256": "59526e9d57ec7cb3dc945c3a115552b55c3e37254e81b3ca1f2ab55a6cd908ba"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528/tests.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v3/tests.log",
+      "bytes": 1201,
+      "sha256": "734f3750d43ae8cfdb55956183ed0bed089b26ee2ec5f40c03f38f27bffb34f6"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528/tooling.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v3/tooling.log",
+      "bytes": 47932,
+      "sha256": "0291b5f8a6ed59a90f33b8e9eb222720c41a9fb102e7e251204f709e616f4cd8"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528/tooling-tests.raw.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v3/tooling-tests.raw.log",
+      "bytes": 1533311,
+      "sha256": "a4d15db16a69e03626d5c1548ab87281656fe9080b052bcbd23f79dfbbd2339e"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-3eb0efbbd313-1794553294528/clippy.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/v3/clippy.log",
+      "bytes": 181,
+      "sha256": "7a39c3b90e9178f31bb345cff84dfe4fc441ea5bcc4e0f3ab63605b721248f9a"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859/summary.json",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/final/summary.json",
+      "bytes": 645993,
+      "sha256": "a58f0e33f0d4b9901a4a039e19fe19f4d559302a3a62947022c9d0f5641d3c9b"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859/tests.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/final/tests.log",
+      "bytes": 1200,
+      "sha256": "afd663a3dd9da7629f7c2d8e0baa1425244cb74e443325666b8e0172bb875045"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859/tooling.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/final/tooling.log",
+      "bytes": 24398,
+      "sha256": "0be2680a19ff5bee0e87d4499d421737bc5cafeb0214038239c5d1b5f50d0d9e"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859/tooling-tests.raw.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/final/tooling-tests.raw.log",
+      "bytes": 1395526,
+      "sha256": "b03bb8b67b837656436599e4ba5dcd1edc62f3eb6fbbb3f9b4aed83f438862b4"
+    },
+    {
+      "sourcePath": "/home/akisarou/.cache/nts-landing/runs/here-f9e99c769fdf-1794555204859/clippy.log",
+      "path": "/home/akisarou/.cache/nts-scratch/753/retained/final/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/here-v4.sh",
+      "bytes": 325,
+      "sha256": "b8ff9a209aa98e1f2e45cc4dfaa05aeb53ab305e8da6da9f7456935a9c588538"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/here-v4.log",
+      "bytes": 1386,
+      "sha256": "74327b8f04d99973569f208eb0107edbc085c473f9e409b47e3be97c6d870a22"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/inner-v4.log",
+      "bytes": 79065,
+      "sha256": "bc84622319b252e49fb1c5a0bd9156303e0a208d58b624ec84a3569e8f9ae917"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/supported-v4.complete",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-correction-v9.sh",
+      "bytes": 923,
+      "sha256": "c28a9ebdd217b86af88219eddae536ae96a247c8553e0fdb00b8c32776a5196d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-consumers-v9.log",
+      "bytes": 7743,
+      "sha256": "23496e115545f27b36a771e0c30548ae67cdc223a55add90a2e86065f7e2b6c2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-timing-v9.log",
+      "bytes": 749,
+      "sha256": "907a57bb4a1f0439ef61d23a0e014a75647143bfa28e70c1dde23388fafbba78"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-focused-v10.sh",
+      "bytes": 834,
+      "sha256": "858aa3a2b5809a7a93c6ae090019ac171defafa6978569ac9c93bf336a556c9d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-focused-v10.log",
+      "bytes": 209474,
+      "sha256": "dbf9c0dbf2b34ed61bf2ae8c0f77ae69481627da4d1d2ecae68f7a1a672f00d0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-host-v10.log",
+      "bytes": 73,
+      "sha256": "53c9ab1909cfd013967a235261be3a94996c380c4d48674123b0f754fac9d0e3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-strict-v10.log",
+      "bytes": 81,
+      "sha256": "410140f5c2c5633d22e76e441d8f8a65e7fa3edd4713da3b4c957c0b6bbe5336"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-timing-v11.log",
+      "bytes": 749,
+      "sha256": "6040bdde920d03f856522283083237a827181995becaa5a1bcf511f276205811"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-host-v11.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/publisher-strict-v11.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/preflight-v11.sh",
+      "bytes": 477,
+      "sha256": "dc65fd41f863b8ef80de749cef05466991c4de767ff6d27a589967caa2337e79"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4.py",
+      "bytes": 4020,
+      "sha256": "16d3c30694db7c19fd79d40e3b54ab8ad4e7d14a5395db5680cb9a3f4b6a6e9d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4.log",
+      "bytes": 373,
+      "sha256": "d54ede3ef26d7e7eb1e132e58b8ae98b010b29ba6a664b681afe1c9faf9400bc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/oracle-state.mjs",
+      "bytes": 1254,
+      "sha256": "8035cb29628ace690bd6a04e176c7f3a01c6bc033b09fdd52341b30069a5a7fd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/verifier-v4.json",
+      "bytes": 237,
+      "sha256": "1e3a2cb4607098e492d58a649df20f6e7271ffa7d3526478cf51191faaa9c3eb"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/here-v1-scope-owner.json",
+      "bytes": 350,
+      "sha256": "7cef5f1860d9e1a4698302373f5bb87369813bd4299c95dfc3825104775e9e36"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/comparison.json",
+      "bytes": 424,
+      "sha256": "21bc336c674bca4a20f4baea585fcf9aeb997784d00959ddb45ca64561070975"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/pins.json",
+      "bytes": 114,
+      "sha256": "1d34ae5f05ba3b0ef888e47d44fe72b20b2fb3b28a65f496afe87dace7c7245b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/base/oracle.json",
+      "bytes": 3005,
+      "sha256": "641f2dc6e5a2408876f6ce92cf27a33604b63e0ae94cbf6650336b174874b381"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/current/oracle.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/base/census.stdout",
+      "bytes": 136,
+      "sha256": "10e5eed1194c8df78074523f22668caf07662b1430b32c5ec9785e6052ff594f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/current/census.stdout",
+      "bytes": 136,
+      "sha256": "a81c4801c007bf2276cbf9a27a0f932454a3c14701c0cf904569f307aa25592a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/base/records.stdout",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/current/records.stdout",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/base/coverage.json",
+      "bytes": 6356507,
+      "sha256": "f6fb3b79d1b6d359534d5d92b08929dc1188bfa3b2fdf7a8e235c4cfdf5de3a0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/current/coverage.json",
+      "bytes": 6359514,
+      "sha256": "8c9e9d9fd3a6cbb240a6787e6f0c17f28c782bd6b8be982c2af9b97e249b99c2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/base/routes.json",
+      "bytes": 10661951,
+      "sha256": "e22ffda9dff36dbed24cffa62557383a90c2cb02acbd7aaf0ac884d19e840bb1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/753/metadata-v4/current/routes.json",
+      "bytes": 10667146,
+      "sha256": "5ef32f20a6725280892ce5a4091179b5415f12bb7137bda533b477115a71e7a2"
+    }
+  ],
+  "limits": [
+    "Admission wait can overlap execution; do not subtract summed waits to manufacture execution time.",
+    "This is a correctness/consumer-contract proof, not a performance comparison.",
+    "All earlier supported failures belong to this change and remain recorded as failures.",
+    "The complete verifier body was extracted byte-for-byte; no weaker shape check replaced it.",
+    "The runtime recipe intentionally changes budget freshness; the only current budget was already stale, so the matched comparison introduces no newly stale row or pending oracle count."
+  ]
+}
