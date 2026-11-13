@@ -4,12 +4,17 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // Exit 0: complete without errors; 1: drift; 2: incomplete measurement.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative,resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseRowLists, rowLists, type RowList } from "../bench/groups.ts";
 import { gh, type Gh } from "./new.ts";
 import { bodyProblems, labelProblems, parentProblems, parseCard, readSpec, roleOf, type LabelSpec } from "./spec.ts";
 import { issueOfBranch } from "./branch.ts";
+import {dataDirectory} from '../gate/reader-inputs/main.ts';
+
+const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
+const PLAN=relative(SOURCE,fileURLToPath(new URL('../../docs/plan.md',import.meta.url)));
+const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL('../../benchmarks/cases/',import.meta.url))));
 
 export type Issue = { number: number; title: string; body: string; labels: string[]; state: string;
   parent: number | null; children: number[]; updatedAt: string; closedAt?: string | null };
@@ -169,9 +174,9 @@ export function localRefs(root: string): string[] {
   return result.stdout.trim().split("\n").filter(Boolean).flatMap(line=>line.split("\t"));
 }
 export function projectOptions(root: string, protected_: number[]=[]): Options {
-  const plan=readFileSync(join(root,"docs/plan.md"),"utf8");
+  const plan=readFileSync(join(root,PLAN),"utf8");
   const streams=[...plan.matchAll(/^\|[^\n]+\[#([1-9][0-9]*)\]\(https:\/\/github\.com\/[^\n]+$/gm)].map(m=>Number(m[1]));
-  const cases=readdirSync(join(root,"benchmarks/cases"),{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name);
+  const cases=readdirSync(join(root,CASES),{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name);
   return {streams,cases,rows:rowLists(root),protected:protected_,exists:path=>!path.split("/").includes("..") && existsSync(join(root,path))};
 }
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

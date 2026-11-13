@@ -531,7 +531,7 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   const slices = readSlices(repo);
   return {
-    plan: git(["show", "main:docs/plan.md"]),
+    plan: git(["show", "main:"+relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../docs/plan.md',import.meta.url)))]),
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),
     remote: remote.ok ? remote.out.split("\n").filter(Boolean).map(line => line.split("\t")[1]!.slice("refs/heads/".length)) : { error: remote.error },
     pulls: pulls.ok ? JSON.parse(pulls.out) as Pull[] : { error: pulls.error },

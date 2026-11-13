@@ -22,7 +22,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative,resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
@@ -30,7 +30,7 @@ import { acceptedChange, outcomeDisposition, outcomeTransition, type OutcomeTran
 import { acceptedLine, inventory, pendingLine } from "../records/pending.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-export const DEX_RECORD = "results/dex/outcomes.tsv";
+export const DEX_RECORD = relative(ROOT,fileURLToPath(new URL('../../results/dex/outcomes.tsv',import.meta.url)));
 
 export type DexOutcome = { kind: "pass" } | { kind: "build-failure"; diagnostic: string };
 type Row = { outcome: DexOutcome };

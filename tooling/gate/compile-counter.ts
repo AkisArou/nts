@@ -36,8 +36,8 @@ export type CompileArm = "nogc" | "rc";
  * results/, where the full check's records commits may write.
  */
 export const COMPILE_ARMS = {
-  nogc: { table: "results/compile-times.tsv", calibration: "results/compile-counter-calibration.json" },
-  rc: { table: "results/compile-times-rc.tsv", calibration: "results/compile-counter-rc-calibration.json" },
+  nogc: { table: relative(SOURCE,fileURLToPath(new URL('../../results/compile-times.tsv',import.meta.url))), calibration: relative(SOURCE,fileURLToPath(new URL('../../results/compile-counter-calibration.json',import.meta.url))) },
+  rc: { table: relative(SOURCE,fileURLToPath(new URL('../../results/compile-times-rc.tsv',import.meta.url))), calibration: relative(SOURCE,fileURLToPath(new URL('../../results/compile-counter-rc-calibration.json',import.meta.url))) },
 } as const;
 export const ARMS = Object.keys(COMPILE_ARMS) as CompileArm[];
 
