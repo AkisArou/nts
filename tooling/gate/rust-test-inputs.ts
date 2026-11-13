@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord} from './durable-record.ts';
-import {byteFactText,fileObserverBirth,readFileObservation,type ByteFact,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
+import {byteFactText,canceledLifetime,fileObserverBirth,readFileObservation,type ByteFact,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -107,6 +107,7 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
   const observations=new Map<string,RuntimeObservation>();
   const probes=new Map<string,TracePhase&{image:number;kind:string;fd?:number;raw:string;rawPath?:string;error:number;count:number}>();
   const descriptors:ObservationRow[]=[];
+  const terminalFacts:InputAttempt[]=[];
   const retain=(row:InputAttempt,image:Image,path:string,rawPath:string,operation:string)=>{
     const identity=JSON.stringify([image.id,operation,row.syscall,path,row.canceled]);
     const previous=observations.get(identity);
@@ -121,6 +122,7 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
     if(row.kind==='root-start'){phases.start(row.root);return;}
     if(row.kind==='inherited'){descriptors.push(row);return;}
     if(row.kind!=='attempt')return;
+    if(canceledLifetime(row)){terminalFacts.push(row);return;}
     const image=phases.observe(row);
     for(const path of row.paths){
       if(path.value.null){
@@ -159,7 +161,7 @@ export async function publishInputTrace(options:{raw:string;output:string;cwd:st
   });
   phases.finish();
   durableRecord(options.output,{version:2,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,
-    terminal,executions:phases.images,inheritedDescriptors:descriptors,descriptorProbes:[...probes.values()],observations:[...observations.values()]});
+    terminal,terminalFacts,executions:phases.images,inheritedDescriptors:descriptors,descriptorProbes:[...probes.values()],observations:[...observations.values()]});
 }
 export const readTestArtifactTargets=(path:string,root:string)=>testArtifactTargets(JSON.parse(readFileSync(path,'utf8')) as unknown,root);
 

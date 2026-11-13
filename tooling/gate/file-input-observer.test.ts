@@ -17,6 +17,7 @@ const subject=String.raw`
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/stat.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,7 @@ const subject=String.raw`
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
+static void *thread_exit(void *unused){(void)unused;syscall(SYS_exit,0);return NULL;}
 int main(int argc,char **argv){
   if(argc<2)return 90;
   if(!strcmp(argv[1],"facts")){
@@ -62,6 +64,11 @@ int main(int argc,char **argv){
     volatile void *p=malloc(91);if(!p)return 109;memset((void *)p,1,91);
     if(argc>2)free((void *)p);return 0;
   }
+  if(!strcmp(argv[1],"cancel-exit")){
+    pthread_t worker;if(pthread_create(&worker,NULL,thread_exit,NULL))return 116;
+    char release;if(read(5,&release,1)!=1)return 117;
+    kill(getpid(),SIGKILL);return 118;
+  }
   return 110;
 }
 `;
@@ -70,7 +77,7 @@ test('the native observer retains actual images, attempted inputs and original p
   const root=newTestScratch('file-input-observer');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const env=fixtureEnvironment(t),binary=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
   writeFileSync(input,subject);
-  const build=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',input,'-o',program],{env,encoding:'utf8'});
+  const build=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',input,'-pthread','-o',program],{env,encoding:'utf8'});
   assert.equal(build.status,0,build.stderr);
   writeFileSync(join(root,'value'),'product');
   const record=join(root,'facts.jsonl'),result=spawnTest(binary,fileObserverArguments(record,program,['facts',root]),{env,encoding:'utf8'});
@@ -169,8 +176,46 @@ test('the native observer retains actual images, attempted inputs and original p
   assert.equal(closeResult.status,2,closeResult.stderr);assert.match(closeResult.stderr,/compressed artifact close failed/);
   await assert.rejects(readFileObservation(failedRecord,()=>{}),/ENOENT/,'a failed compression close cannot publish completion');
 
+  for(const before of [true,false]){
+    const queuedSource=join(root,'queued-'+before+'.c'),queuedBinary=join(root,'queued-'+before);
+    const barrier=String.raw`if(request->data.nr==SYS_exit){
+      flush_output();if(write(3,"exit-notified",13)!=13)fatal("exit barrier ready");
+      char release;if(read(4,&release,1)!=1)fatal("exit barrier release");
+      int exited=(int)syscall(SYS_pidfd_open,root,0);if(exited<0)fatal("controlled root pidfd");
+      struct pollfd ready={.fd=exited,.events=POLLIN};
+      int result;do{result=poll(&ready,1,-1);}while(result<0&&errno==EINTR);
+      if(result!=1||!(ready.revents&POLLIN))fatal("controlled root exit readiness");close(exited);
+    }
+    attempt_json(listener, request);`;
+    let staged=original.replace('attempt_json(listener, request);',barrier);assert.notEqual(staged,original);
+    if(before){const current=staged;staged=staged.replace('if (!complete && !canceled_lifetime)','if (!complete)');assert.notEqual(staged,current);}
+    writeFileSync(queuedSource,staged);
+    const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',...(before?['-Wno-unused-variable']:[]),queuedSource,'-lz','-o',queuedBinary],{env,encoding:'utf8'});
+    assert.equal(built.status,0,built.stderr);
+    const record=join(root,'queued-'+before+'.gz');
+    const child=spawn(queuedBinary,fileObserverArguments(record,program,['cancel-exit']),{env,stdio:['ignore','pipe','pipe','pipe','pipe','pipe']});
+    let ready='',closed=false,error='';child.stdout!.resume();child.stderr!.on('data',part=>error+=part);
+    const notify=child.stdio[3],resume=child.stdio[4],stop=child.stdio[5];
+    assert.ok(notify&&'on' in notify&&resume&&'end' in resume&&stop&&'end' in stop);
+    notify.on('data',part=>ready+=part);
+    const done=new Promise<{status:number|null;signal:NodeJS.Signals|null}>(resolve=>child.on('close',(status,signal)=>{closed=true;resolve({status,signal});}));
+    try{
+      await waitFor('queued thread exit notification',()=>ready==='exit-notified',{stopped:()=>closed?error||'observer exited':undefined});
+      stop.end('x');resume.end('x');
+      assert.deepEqual(await done,before?{status:2,signal:null}:{status:null,signal:'SIGKILL'},error);
+      if(before)await assert.rejects(readFileObservation(record,()=>{}),/incomplete census/);
+      else{
+        const canceled:InputAttempt[]=[];
+        const complete=await readFileObservation(record,row=>{if(row.kind==='attempt'&&row.canceled)canceled.push(row);});
+        assert.equal(complete.errors,0);assert.equal(canceled.length,1);
+        assert.equal(canceled[0]!.factsComplete,false);assert.equal(canceled[0]!.syscall,'exit');
+        assert.deepEqual(canceled[0]!.paths,[]);assert.deepEqual(canceled[0]!.dirfds,[]);
+      }
+    }finally{stop.end();resume.end();if(!closed)await done;}
+  }
+
   const sanitized=join(root,'sanitized');
-  const sanitizer=spawnTest('clang',['-O0','-fsanitize=address',input,'-o',sanitized],{env,encoding:'utf8'});assert.equal(sanitizer.status,0,sanitizer.stderr);
+  const sanitizer=spawnTest('clang',['-O0','-fsanitize=address',input,'-pthread','-o',sanitized],{env,encoding:'utf8'});assert.equal(sanitizer.status,0,sanitizer.stderr);
   for(const clean of [true,false]){
     const args=clean?['leak','free']:['leak'];
     const off=spawnTest(sanitized,args,{env,encoding:'utf8'});

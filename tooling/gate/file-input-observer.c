@@ -508,7 +508,12 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     }
   fputs("]}\n", output);
   attempts++;
-  if (!complete)
+  // An exit notification can be canceled when another thread terminates the
+  // group. Its vanished identity contains no filesystem candidate. Keep the
+  // raw terminal fact, but do not mistake it for a failed pathname read.
+  bool canceled_lifetime = canceled && !call->count && call->dirfds[0] < 0 &&
+                           !strcmp(call->operation, "lifetime");
+  if (!complete && !canceled_lifetime)
     errors++;
   check_output();
 }

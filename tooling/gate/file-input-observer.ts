@@ -22,6 +22,9 @@ export type RootStart={kind:'root-start';root:number};
 export type ObservationError={kind:'error';message:string;errno:number};
 export type SignalObservation={kind:'signal';signal:number;rootAlive:boolean};
 export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError|SignalObservation;
+export function canceledLifetime(row:InputAttempt):boolean{
+  return row.canceled&&row.operation==='lifetime'&&(row.syscall==='exit'||row.syscall==='exit_group')&&row.paths.length===0&&row.dirfds.length===0;
+}
 
 export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):string{
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
@@ -102,7 +105,7 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     if(row.kind==='attempt'){
       attempts++;
-      if(!row.factsComplete)throw Error('file input observer: unreadable or truncated attempt facts');
+      if(!row.factsComplete&&!canceledLifetime(row))throw Error('file input observer: unreadable or truncated attempt facts');
     }
     if(row.kind==='complete'){
       if(!exited||row.root!==root||row.exit!==exited.exit||row.signal!==exited.signal)
