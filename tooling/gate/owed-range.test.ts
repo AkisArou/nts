@@ -422,5 +422,5 @@ test("the real unchanged selector reaches a newly added census test without a co
   assert.deepEqual(selected.candidateNewPaths?.paths,[path]);
   assert.ok(selected.checks.steps.includes("tooling"));
   assert.equal(selected.views.some(view=>view.rules.some(rule=>rule.name==="owes the full gate")),false);
-  assert.ok(selected.checks.steps.length<10,JSON.stringify(selected.checks));
+  assert.deepEqual([...selected.checks.steps].sort(),["build","clippy","gate-inputs","jvm-members","old-paths","rustfmt","test-host","tests","tooling","tooling-types"]);
 });

@@ -25,7 +25,7 @@ test("classification prose owes audit without record replay, class/match edits o
     if (old.features) updated.features["AggregateError"].authority = "docs/language/boundaries.md";
     else updated.exclusions[0].reason += " Revised explanation.";
     const got = steps(path, text, JSON.stringify(updated));
-    assert.deepEqual(got, TREE_CHECKS);
+    assert.deepEqual(got, [...TREE_CHECKS,"jvm-members"]);
     assert.ok(!got.includes("build"));
     if (old.features) updated.features["AggregateError"].class = "supported";
     else updated.exclusions[0].match = "other.js";
@@ -45,15 +45,16 @@ test("unknown classification fields, invalid JSON and modes retain existing obli
 
 test("Rust prose owes its own doctests but no compiler or backend runs", () => {
   const rules = owed([change("compiler/core/src/hir/escape.rs", "/// old\nfn f() {}", "/// new\nfn f() {}")]);
-  assert.deepEqual(gateSteps(rules), [...TREE_CHECKS, "doctests"]);
+  assert.deepEqual(gateSteps(rules), [...TREE_CHECKS, "jvm-members", "doctests"]);
   assert.deepEqual(rules.flatMap((r: {doctests?: string[]}) => r.doctests ?? []), ["nts-core"]);
   assert.ok(steps("compiler/core/src/hir/escape.rs", "fn f() { a(); }", "fn f() { b(); }").includes("memory"));
 });
 
-test("ordinary C/TypeScript comments narrow; fixtures and unknown syntax stay guarded", () => {
+test("ordinary C/TypeScript comments retain byte audits; fixtures and unknown syntax stay guarded", () => {
   for (const path of ["tooling/example.c", "tooling/example.ts"]) {
-    assert.deepEqual(steps(path, "// old\n", "// new\n"), TREE_CHECKS);
+    assert.deepEqual(steps(path, "// old\n", "// new\n"), [...TREE_CHECKS,"jvm-members"]);
   }
+  assert.deepEqual(steps("standalone/example.ts","// old\n","// new\n"),TREE_CHECKS,"comments outside declared byte populations retain their precise checks");
   const fixture = steps("tests/programs/arith/src/main.ts", "// old\n", "// new\n");
   assert.ok(fixture.includes("examples"));
   assert.ok(steps("tooling/cli/unsupported.ts", "let r=/a/; // old", "let r=/a/; // new").includes("build"));
