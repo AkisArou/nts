@@ -253,10 +253,12 @@ int main(int argc,char **argv){
     c=read_file("over",over,sizeof(over)),d=read_file("missing",missing,sizeof(missing)),
     e=read_file("argv",large,sizeof(large)),f=remote_path(getpid(),(uintptr_t)"path",remote),
     g=remote_path(getpid(),0,null_data);
-  assert(first[3]==0xa5&&missing[0]==0xa5&&remote[4]==0xa5&&null_data[0]==0xa5);
+  // remote_path reads one 256-byte chunk before finding its terminator.
+  assert(first[3]==0xa5&&missing[0]==0xa5&&remote[256]==0xa5&&null_data[0]==0xa5);
+  memset(remote+f.size,0xa5,sizeof(remote)-f.size);
   output=stdout;Bytes *facts[]={&a,&b,&c,&d,&e,&f,&g};fputc('[',output);
   for(unsigned i=0;i<sizeof(facts)/sizeof(facts[0]);i++){if(i)fputc(',',output);bytes_json(facts[i]);}
-  fputs("]\\n",output);return 0;
+  puts("]");return 0;
 }\n`);
   const built=spawnTest('cc',['-O2','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',program],{env,encoding:'utf8'});
   assert.equal(built.status,0,built.stderr);
