@@ -46,6 +46,7 @@ const note = (question, rows, render = (r) => r) =>
 
 // --- discovery -------------------------------------------------------------
 
+/** @param {string} dir @param {string} member @param {string[]} [out] */
 const walk = (dir, member, out = []) => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (!moduleMemberDirectory(e.name)) continue;
