@@ -643,7 +643,7 @@ test("admit.ts waits its turn; a signal while it waits withdraws its request, an
   await stopped.waits();
   assert.deepEqual(readLedger(f.dir).waiting.map(e => [e.what, e.live]), [["stopped", true]]);
   stopped.child.kill("SIGTERM");
-  assert.deepEqual(await stopped.closed, [null, "SIGTERM"], "it ends by the signal it was sent");
+  assert.deepEqual(await stopped.closed, [143, null], "the command entry drains withdrawal and returns the conventional SIGTERM status");
   assert.deepEqual(readLedger(f.dir).waiting, [], "and it withdrew its request first");
 
   const killed = start("killed");

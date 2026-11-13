@@ -1,5 +1,5 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
 #!/usr/bin/env node
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // `cargo test --workspace --no-fail-fast`, with the test binaries run at once.
 //
 //   node tooling/gate/tests.mjs          (the gate's `tests` step)

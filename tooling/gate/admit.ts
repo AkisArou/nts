@@ -243,7 +243,7 @@ async function main(argv: readonly string[]): Promise<void> {
   }
 }
 
-runAsCommand(import.meta.url,async()=>{try{await main(process.argv.slice(2));}catch(error:unknown){
+runAsCommand(import.meta.url,async()=>{try{await main(process.argv.slice(2));return undefined;}catch(error:unknown){
   say(`${error instanceof MeasurementBusy ? "" : "admit: "}${error instanceof Error ? error.message : String(error)}`);
   if (error instanceof Refusal && error.usage) say(USAGE);
   return error instanceof Refusal || error instanceof MeasurementBusy ? error.status : 125;

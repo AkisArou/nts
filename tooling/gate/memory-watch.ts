@@ -90,4 +90,4 @@ async function main():Promise<void> {
   }finally{unregister();}
 }
 if(!isMainThread)startThread();
-else runAsCommand(import.meta.url,async()=>{try{await main();}catch(error){console.error(String(error));return 2;}});
+else runAsCommand(import.meta.url,async()=>{try{await main();return undefined;}catch(error){console.error(String(error));return 2;}});
