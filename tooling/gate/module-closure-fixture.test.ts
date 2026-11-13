@@ -40,6 +40,42 @@ test('a declared data directory copies all tracked data without parsing it as ho
   assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false);
 });
 
+test('an exact file input owns bytes without entering imports, and cannot be substituted',t=>{
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const dataDirectory=(url:URL)=>url;export const fileInput=(url:URL)=>url;');
+  f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.ts',import.meta.url));");
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const result=graph.describe(['bytes.ts']);
+    assert.ok(result.files.includes('data/case.ts'));
+    assert.ok(result.ownedFiles.includes('data/case.ts'));
+    assert.ok(!result.moduleFiles.includes('data/case.ts'),'a text read never enters its import-shaped content');
+  }finally{graph.close();}
+  copyModuleClosure(['bytes.ts'],f.destination,{sourceRoot:f.source});
+  assert.deepEqual(readFileSync(join(f.destination,'data/case.ts')),readFileSync(join(f.source,'data/case.ts')));
+  f.privateData();
+  assert.throws(()=>copyModuleClosure(['entry.ts','bytes.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'private cases'}}),/cannot replace module-owned input: data\/case.ts/);
+});
+
+test('a later module edge enters an earlier file input, in either entry order',t=>{
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const fileInput=(url:URL)=>url;');
+  f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./shared.ts',import.meta.url));");
+  f.write('entry.ts',"import './shared.ts';");
+  f.write('shared.ts',"import './dependency.ts';");f.write('dependency.ts','export const answer=1;');
+  for(const entries of [['bytes.ts','entry.ts'],['entry.ts','bytes.ts']]){
+    const graph=moduleGraph({sourceRoot:f.source});
+    try{
+      const result=graph.describe(entries);
+      assert.ok(result.moduleFiles.includes('shared.ts'));
+      assert.ok(result.moduleFiles.includes('dependency.ts'));
+    }finally{graph.close();}
+  }
+  f.write('directory.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/',import.meta.url));");
+  mkdirSync(join(f.source,'data'));
+  assert.throws(()=>moduleClosure(['directory.ts'],{sourceRoot:f.source}),/declared file input is not a file: data/);
+});
+
 test('a fixture data namespace stages its reader without reading the replaced production bytes',t=>{
   const f=dataFixture(t);f.privateData();rmSync(join(f.source,'data/case.ts'));
   const files=copyModuleClosure(['entry.ts'],f.destination,{sourceRoot:f.source,dataNamespaces:{data:'synthetic cases'}});

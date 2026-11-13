@@ -70,6 +70,23 @@ function local(){function data(url:URL){return url;}data(new URL('./function/',i
   }finally{lease.dispose();api.close();}
 });
 
+test('exact byte inputs have the same lexical ownership rule as data directories',()=>{
+  const api=new API(),source=`import {fileInput as bytes} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
+import {fileInput as other} from './lookalike.ts';
+const alias=bytes;const {fileInput:destructured}=inputs;
+bytes(new URL('./direct.ts',import.meta.url));alias(new URL('./alias.ts',import.meta.url));
+inputs.fileInput(new URL('./namespace.ts',import.meta.url));destructured(new URL('./destructured.ts',import.meta.url));
+other(new URL('./lookalike.ts',import.meta.url));
+function shadow(bytes:Function){bytes(new URL('./parameter.ts',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    const declarations=new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations();
+    assert.deepEqual(declarations.assets,[...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.ts',kind:'file'})),
+      ...['lookalike','parameter'].map(name=>({path:'./'+name+'.ts',kind:'module'}))]);
+  }finally{lease.dispose();api.close();}
+});
+
 test('source leases are batched by both module count and bytes, with an oversized module alone',()=>{
   const api=new API(),large='/*'+'x'.repeat(SOURCE_BATCH_BYTES)+'*/';
   const inputs=[{file:'small.ts',source:'export const small=1;'}, {file:'large.ts',source:large},

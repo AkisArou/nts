@@ -48,13 +48,14 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     } finally {lease.dispose();}
   }
   function describe(entries:readonly string[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
-    const visited=new Set<string>(),owned=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    const visited=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[];
     function asset(reader:string,path:string,kind:InputKind):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       if (!lstatSync(path).isDirectory()) {
         if(kind==='data')throw Error('declared data input is not a directory: '+relative(root,path));
-        visit(path);return;
+        visit(path,kind!=='file');return;
       }
+      if(kind==='file')throw Error('declared file input is not a file: '+relative(root,path));
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
       tracked ??= execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
       const directory = relative(root, path).split(sep).join("/");
@@ -62,12 +63,14 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       const row={reader,directory,files,kind};directories.push(row);reportDirectory?.(row);
       for(const file of files){if(kind==='data')visited.add(file);else visit(resolve(root,file));}
     }
-    function visit(path: string): void {
+    function visit(path: string,enter=true): void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
       const name = relative(root, path).split(sep).join("/");
-      if(owned.has(name))return;
+      if(enter?moduleFiles.has(name):owned.has(name))return;
       if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
       owned.add(name);visited.add(name);
+      if(!enter)return;
+      moduleFiles.add(name);
       // A non-JS reader (for example a harness manifest) can supply the same
       // detached declarations. Its adapter owns parsing that source format.
       if(!/\.[cm]?[jt]sx?$/.test(path)&&!options.declarations?.has(name))return;
@@ -82,7 +85,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if (lstatSync(path).isDirectory()) asset("<entry>", path,'module');
       else visit(path);
     }
-    return {files:[...visited].sort(),ownedFiles:[...owned].sort(),directories};
+    return {files:[...visited].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),directories};
   }
   return {describe,closure:(entries:readonly string[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }

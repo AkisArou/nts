@@ -1705,7 +1705,7 @@ function stepInputGraph() {
         }
         // Corpus bytes are inputs, not host modules: their quoted paths and
         // imports must never turn into readers of unrelated repository data.
-        queue.push(...snapshot.ownedFiles);
+        queue.push(...snapshot.moduleFiles);
       }
       const seen = new Set();
       while (queue.length) {
@@ -1742,8 +1742,8 @@ function stepInputGraph() {
         if (/\.(?:sh|py)$/.test(input)) {
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
           const launchedInputs=modules.describe(launched);
-          const ownedLaunchInputs=new Set(launchedInputs.ownedFiles);
-          references.other.push(...launchedInputs.ownedFiles);
+          const ownedLaunchInputs=new Set(launchedInputs.moduleFiles);
+          references.other.push(...launchedInputs.moduleFiles);
           references.data=launchedInputs.files.filter(path=>!ownedLaunchInputs.has(path));
         }
         }

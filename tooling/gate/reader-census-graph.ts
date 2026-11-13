@@ -35,9 +35,10 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     source='export const legacyReferences=new Map(),legacyHandoffs=new Map();\n'+source;
     source+=`\nexport function collectInvestigationCensus(){return collectFullGateCensus(trackedFiles(),path=>{const rules=owed([{path,added:false}]);return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};},inputDirectoryDeclarations());}\n`;
     const separatesData=source.includes('const launchedInputs=modules.describe(launched);');
+    const moduleFiles=source.includes('queue.push(...snapshot.moduleFiles);')?'moduleFiles':'ownedFiles';
     source=replace(source,'const body = readFileSync(abs, "utf8");',`const body = readFileSync(abs, "utf8");
         if (NO_MODULE_TEXT && /\\.[cm]?[jt]sx?$/.test(input)) {
-          ${separatesData?'const snapshot=modules.describe([input]);references={named:[],other:snapshot.ownedFiles,data:snapshot.files};':'references={named:[],other:modules.closure([input])};'}
+          ${separatesData?`const snapshot=modules.describe([input]);references={named:[],other:snapshot.${moduleFiles},data:snapshot.files};`:'references={named:[],other:modules.closure([input])};'}
           inferred.set(input,references);${separatesData?'for(const data of references.data??[])add(data,step);':''}queue.push(...references.other);continue;
         }`);
     source=replace(source,'references={named:named(body),other:[...imports(input,body),...beside]};\n        inferred.set(input,references);',`references={named:named(body),other:[...imports(input,body),...beside]};
