@@ -18,7 +18,7 @@ export function directoryEntries(path:string):DirectoryEntry[]{
  * ENOENT on realpath must never skip an existing symlinked ancestor. A missing
  * owned parent is harmless to an absence fact and is never created here. */
 export function metadataParents(root:string,path:string,purpose:string):boolean{
-  const part=relative(root,dirname(path));
+  const part=relative(root,relative(root,path)===''?root:dirname(path));
   if(isAbsolute(part)||part==='..'||part.startsWith('..'+sep))throw Error(purpose+' escapes its metadata root: '+path);
   let current=root;
   for(const component of ['',...part.split(sep).filter(Boolean)]){
