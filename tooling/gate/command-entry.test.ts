@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync,symlinkSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
-import {join} from 'node:path';
+import {join,relative} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {testScratch} from './test-scratch.ts';
 import {testEnvironment} from './test-environment.ts';
@@ -210,7 +210,7 @@ runAsCommand(import.meta.url,async()=>{
 test('browser cancellation after profile acquisition drains startup without launching a child',async t=>{
  const root=testScratch(t,'command-browser-startup'),subject=join(root,'subject.mjs');
  const browser=new URL('../chromium/browser.ts',import.meta.url);
- copyModuleClosure([browser.pathname],root);
+ copyModuleClosure([relative(new URL('../..',import.meta.url).pathname,browser.pathname)],root);
  const staged=join(root,'tooling/chromium/browser.ts'),original=readFileSync(staged,'utf8');
  const boundary='  // Unix socket paths are short. Keep the private bus in a short, owned\n';
  assert.equal(original.split(boundary).length,2,'one private startup barrier after the closer registration');
