@@ -1,0 +1,1012 @@
+{
+  "version": 1,
+  "issue": 761,
+  "scope": "Part of #761: shared optional-file and shallow membership declarations, strict copier metadata and structural selection. No Rust runtime table, trace validator or ALWAYS change.",
+  "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+  "parent": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+  "placementBaseline": "2f97e2913ed67b43fb2e38e991e4486eceb24f55",
+  "sourceReceipts": [
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "docs/records/notebooks/decisions-log.md",
+      "bytes": 167066,
+      "sha256": "9d06d98e3ef323911b6e1d80ad8796214f0d7f717ef5a33bbf927f7ebfc8f85b"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "docs/workflow.md",
+      "bytes": 91925,
+      "sha256": "373ae80c1252c8267d379e77c32031f5c44cb69dbb5e3906b691cc0440a8c758"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/module-closure-fixture.test.ts",
+      "bytes": 53058,
+      "sha256": "e5e43bbc334a11c638ffbe3a7ea3b0685cdacb0e0d58815c022fb1ad42983d9a"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/module-closure-fixture.ts",
+      "bytes": 11558,
+      "sha256": "89168fdadb58137667af5fe0c664cb69a8892601cbd3c1879a069b6775f2a47a"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/module-closure.ts",
+      "bytes": 10797,
+      "sha256": "fdba0fff7bd172e0d2a19919f34f92bb238cce49ae5b31cbcff96deb99f43067"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/owed.mjs",
+      "bytes": 125861,
+      "sha256": "a6caf17a91bd1a09e3c2d091d5bd049aeb9f60b1e77221336413844d30b590c3"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/owed.test.mjs",
+      "bytes": 75688,
+      "sha256": "eebfedd1107860e6aaa069a8c6587de34505f8f4fbd49ef892821cf80527acdb"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/reader-inputs/main.ts",
+      "bytes": 5340,
+      "sha256": "f94ce0b16c981d7a9ccaa562806b2d2708857d7db9fc5417a88bd0896eebb78e"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/reader-metadata.test.ts",
+      "absent": true
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/reader-metadata.ts",
+      "absent": true
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/source-facts.test.ts",
+      "bytes": 13166,
+      "sha256": "4155a31cfe7b88429652505f2d3a5d956880aa523d93e7a87a10eb53d56066f3"
+    },
+    {
+      "source": "7862ceb625c1618c080295bffb79528d0bbdb76b",
+      "path": "tooling/gate/source-facts.ts",
+      "bytes": 18965,
+      "sha256": "5e0ed56682dec5a50d5bcc64acb12beb0cb5eb839f3d1f52055aa18d6b336d3c"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "docs/records/notebooks/decisions-log.md",
+      "bytes": 168001,
+      "sha256": "d323f28dcfceba6d7fb2480f5da8e3a59ba96bee22ecf69cfcd3475f87d9472b"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "docs/workflow.md",
+      "bytes": 93466,
+      "sha256": "be704b3cba5f9148381c40e2464eb3558943eb9f8e2a4a29af6f423eeeedbc9e"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/module-closure-fixture.test.ts",
+      "bytes": 66869,
+      "sha256": "3563d7fc36c9853e0e8ea42b8dcf60d94d41bbc6ed6a8c5eea3d60f7c247c8b5"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/module-closure-fixture.ts",
+      "bytes": 14133,
+      "sha256": "99e6af6f96335216d03f06e2afa2649b53e74db35e65972faea58e6cac108e2a"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/module-closure.ts",
+      "bytes": 12386,
+      "sha256": "0324aa7d1247520fedcdfa76930aa74e711128f91b7be04cfb4d7ff50d2603d4"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/owed.mjs",
+      "bytes": 128734,
+      "sha256": "4b5126247c8cd7454e864e211bd6453475a12e08d31a57301256065c0882a2bd"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/owed.test.mjs",
+      "bytes": 82778,
+      "sha256": "d148ce61cba4bcf01119817d9a22b8f7eb6ffbeb4da14da898479cf29c033990"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/reader-inputs/main.ts",
+      "bytes": 6575,
+      "sha256": "cad43bd9b458bbde0867af2638e0070c67c9768f8ea3c8fb152542b162f45a3d"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/reader-metadata.test.ts",
+      "bytes": 2812,
+      "sha256": "bc9edf639225b645f7f63d707d4d2185cb6dba412f04835aa8f60ff30cfbc030"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/reader-metadata.ts",
+      "bytes": 5310,
+      "sha256": "bb884bd974cde8e49c7db70e90976719a38f409b2116515682772a1b91dc277c"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/source-facts.test.ts",
+      "bytes": 15113,
+      "sha256": "e20ddcae7a7190c7faf44705c844f6ca6d2d527648791b039a274634b6cac748"
+    },
+    {
+      "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+      "path": "tooling/gate/source-facts.ts",
+      "bytes": 19403,
+      "sha256": "167a8023f03e41145ca7691d2b728bdcae3b7c86cddc44f46fcde0d448bef5e5"
+    }
+  ],
+  "supported": {
+    "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+    "summary": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/summary.json",
+    "verdict": "green",
+    "summarySteps": 19,
+    "canonical": true,
+    "experiments": [],
+    "scopeCleanup": "complete",
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "passed": 3045,
+      "failed": 0,
+      "ignored": 8
+    },
+    "tooling": {
+      "total": 2298,
+      "passed": 2296,
+      "failed": 0,
+      "todo": 2
+    },
+    "runnerWallSeconds": 458.235,
+    "reportedMemoryWaitSeconds": 265.16900000000004
+  },
+  "actualInner": {
+    "source": "a3904a0eb395d6e7a22c42f833c159f93e1795cb",
+    "log": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-inner-v3.log",
+    "stepsSeconds": {
+      "fmt": 3,
+      "clippy": 0,
+      "build": 0,
+      "tests": 270
+    }
+  },
+  "focused": {
+    "passed": 209,
+    "failed": 0,
+    "longScratchRoot": "/home/akisarou/.cache/nts-scratch/761/metadata-long-path-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "host": {
+      "sources": 1902,
+      "closures": 268,
+      "reads": 413
+    },
+    "strict": {
+      "modules": 843,
+      "recorded": 5694,
+      "improved": 0
+    }
+  },
+  "placement": {
+    "before": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-before-v1.json",
+    "after": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-after-v3.json",
+    "full": 178,
+    "unplaced": 142,
+    "policy": 36,
+    "arraysExactlyEqual": true,
+    "trackedBefore": 28592,
+    "trackedAfter": 28596
+  },
+  "oracle": {
+    "before": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-before-v1.json",
+    "after": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-after-v3.json",
+    "exactlyEqual": true,
+    "rows": 1231,
+    "rowsSha256": "69cb274396e7908dbaa7ef5379d2ca1d263daec4fd45b126831d8e7ff0e955b9",
+    "pending": []
+  },
+  "excluded": [
+    {
+      "source": "a401a72a4785b8f74d04d5e94758cd800fc99436",
+      "summary": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/summary.json",
+      "reason": "Own socket control exceeded Unix address length only in the canonical scratch path. All other requested steps passed; tooling 2295 passed/1 failed/2 TODOs."
+    },
+    {
+      "source": "7efc69e12d888c09c66e3556e92cedde64ce1d1f",
+      "focused": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v5.log",
+      "reason": "209 long-path controls passed, but host correctly refused the direct /proc descriptor address. Chain stopped before strict or another gate; replaced by an owned-cwd child without an audit exception."
+    },
+    {
+      "reason": "Early focused fixture/root normalization and callback-type failures remain in their original v1-v4 logs; only final v6 and supported/inner v3 are accepted."
+    }
+  ],
+  "interpretation": "The prior accepted seccomp census remains unchanged. This slice defines metadata ownership and selection only; it makes no runtime coverage, successful-syscall, policy-retirement or performance claim.",
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/audit.log",
+      "bytes": 140,
+      "sha256": "527bad1d383425bfdc69c68b291423bf16590ca608c64c2c24ee5f16bed843a9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/audit.time",
+      "bytes": 318,
+      "sha256": "5e6644b9bd8fd9bb94a2cd8ca6ffc0c027866467a5b6b5176c2f17e4247b6306"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/build.log",
+      "bytes": 267,
+      "sha256": "f9d490b77f20133943db8935bf9ebe229167e05bd4c302fd88c8c0ec9a359c84"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/build.log.time",
+      "bytes": 22,
+      "sha256": "667eebc9216e657aa4a4509a42c9ef68cd38689904dbbf9a54459b14b7ee994f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/clippy.time",
+      "bytes": 324,
+      "sha256": "6b94c06d23202a2d29b1c80ea3fa2e6b12fd517be822fa4e6fa1e8eab449ab61"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/config.log",
+      "bytes": 774,
+      "sha256": "03757d7bb6550c434a7396ad836908cafbc0c36312d9ad32854f7121c497909b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/config.time",
+      "bytes": 324,
+      "sha256": "390f4e73803ad69ef55f449a17c5f09b1990a77d9e1a8729628cb938510ba836"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/doctests.log",
+      "bytes": 3369,
+      "sha256": "1624738a7aea39485a36e905b376d335990629896a93bcfffbbf2dbee5ff61b3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/doctests.time",
+      "bytes": 325,
+      "sha256": "fed8d541d58e953ce51f6679d632f37909fd9ae09893f358c28dedc3539f916c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/format.time",
+      "bytes": 324,
+      "sha256": "7b0cfbe1d6dc52dd32da094b1345849291d7226bdd6aa09b2aeec1f20af0de11"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/gate-inputs.log",
+      "bytes": 136,
+      "sha256": "6fd5ffee93e62ed11ae54d05fa3528bb7a59981b91f176f81ca9b1f0a5a343da"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/gate-inputs.time",
+      "bytes": 324,
+      "sha256": "818a7d4be3fca43d7c3098f80a050d56d7a92590e997ab28462941a0e35e7b3e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/gate.log",
+      "bytes": 48750,
+      "sha256": "04936ac7660d9f04b891fc6c09ae13fe678aeb9e0ef7ff8aa33e8e73a41b492a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/jvm-members.log",
+      "bytes": 30,
+      "sha256": "6397fd84f2f4faf80181163c3b88a1a4399f744da0de437373b850e74f41f80b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/jvm-members.time",
+      "bytes": 318,
+      "sha256": "90ec671783a0f425646c2551682c69b1b68706b3deca45958706d27106460c80"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/licenses.log",
+      "bytes": 238,
+      "sha256": "8727f5c34cf632623bc3bf2529ab62db8652390645b6381ae9fefaf278dca5af"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/licenses.time",
+      "bytes": 337,
+      "sha256": "da6b7f6483791ca540614b182eb6e6f139c4cf0067cb87d74d591528a5a2121b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/old-paths.log",
+      "bytes": 52,
+      "sha256": "8158c079244628400aea1b4c98adfe43916e3ba22d6581d78bdfae54ef04ab18"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/old-paths.time",
+      "bytes": 326,
+      "sha256": "15229465c6e00ba5ac791f49e0375a0066c6b85d58692a1797c283a6e6947bd8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/oracle-setup.log",
+      "bytes": 754,
+      "sha256": "232b522606d2a2cc9ab184f7b508728bf63d21d904826c48bd3224d336008237"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/primitives.log",
+      "bytes": 85,
+      "sha256": "05ba5ea5c75366c434797c9b9a2b671b11f01b6d6a3070c0bb3b3f8bf773303e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/primitives.time",
+      "bytes": 318,
+      "sha256": "0c70c3730802fb650ed1fd398de9ec72ccf5c3d7dddd1ff8ed9a5f253e2799b8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/records.log",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/records.time",
+      "bytes": 327,
+      "sha256": "e6accf9b4858269823a0b37d5df19812478c30570c529d191ab006d7795cecc2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/reformat.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/reformat.time",
+      "bytes": 318,
+      "sha256": "c91492a6521ff68b3198115463cdd3c1f38af738badf73eeb6c761aa57788b9b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/rustfmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/rustfmt.time",
+      "bytes": 323,
+      "sha256": "402cf3d1885aab7fa8c8e5a41284bdb3580c25c4987a21f26d64bcebaaee95e8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/summary.json",
+      "bytes": 649590,
+      "sha256": "17d2dbf21fc8e13adb4a1cda6c95a98245edb6550dc33ea3d99ae65bf6cb8d35"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/test-host.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/test-host.time",
+      "bytes": 338,
+      "sha256": "5935439cdedbd5d2b65b40d052a1f3584108a4cf17453c05144c480baf86ad03"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/test262.log",
+      "bytes": 371,
+      "sha256": "c77db163c42b7c572f5c48cde18b7a01ef874eb68a65bdaa5979d452c2106ab7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/test262.time",
+      "bytes": 328,
+      "sha256": "047b2fc33ca410fce237efacc62b8fbd099ee0b8cb3dec6a7a3a97559751d572"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tests.log",
+      "bytes": 1200,
+      "sha256": "1419d20330452caf8bbfa27b043864ebfd12f10f3a8dd8ba0e6500b9ef8c7a85"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tests.time",
+      "bytes": 355,
+      "sha256": "7b7f151492800b6a69da8f9ede39732debe6b34483f0615c4db057eac392ce26"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tooling-tests.raw.log",
+      "bytes": 1500581,
+      "sha256": "9348e1cef53dad20fde18b148c0c24c931bf9ccf252d0b709720ed77c527c15c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tooling-types.log",
+      "bytes": 81,
+      "sha256": "9da2a92155e91f1cb97efb7a2f405f0e285cbda2a5f1b0eaea734ca276536974"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tooling-types.time",
+      "bytes": 340,
+      "sha256": "37cab6421107675514b3c8976a09744fea3779f0aa1b977ab46bd40b8fdd05b1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tooling.log",
+      "bytes": 24697,
+      "sha256": "622ad31951b9142bf5119fbf7fb9220b9a83ee837648a6ec9df8b5d4b63bccc9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/tooling.time",
+      "bytes": 355,
+      "sha256": "8aa7c366565dcce5a44d09aeb835738827f20a9142c4671bb131edf90d3bfa5a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/unicode-freshness.log",
+      "bytes": 6160,
+      "sha256": "6aad977c14300e83adfd8b7a38e4e2df76cee7227e1fb0bb4f7e74a736dccce1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/unicode-freshness.time",
+      "bytes": 335,
+      "sha256": "fb12ddc0cf9c8f148475b2cef1fa65511a58b4d4fa7f87f8ead101990d2d0350"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a3904a0eb395-1794596987825/verdict-contract.json",
+      "bytes": 5377,
+      "sha256": "cdfcdceeaa990ee204813dd880c03f8c728f328d289e7b3401d7d3bae9d55351"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/audit.log",
+      "bytes": 140,
+      "sha256": "527bad1d383425bfdc69c68b291423bf16590ca608c64c2c24ee5f16bed843a9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/audit.time",
+      "bytes": 318,
+      "sha256": "91fea0e56088984277dff03c4c2a7ff1ce2e30e3c0527bb69cf991e2908b8f7c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/build.log",
+      "bytes": 264,
+      "sha256": "3714a58ebc9e9713ca951da3f7c36e1b557072d9080a67aeae6dcbf1a2609c2b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/build.log.time",
+      "bytes": 22,
+      "sha256": "909a88f044a9a7354ed25f6f1d52363cb91c9e5f33c3e527405318ff6215415b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/clippy.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/clippy.time",
+      "bytes": 323,
+      "sha256": "c4827821939037ea0ced256ec12384da3ec62a5e3b3712054e4bef5ffd063f9b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/config.log",
+      "bytes": 776,
+      "sha256": "dd7303de6ad124a6ed5435a5343614572a119ca6609f1f448f054cb2d4987e61"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/config.time",
+      "bytes": 338,
+      "sha256": "3d004ead393d150d9b80b10a8ac8d5d2ee1b9a7ea54f96f1fb87c879dbf41924"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/doctests.log",
+      "bytes": 3369,
+      "sha256": "50080a2eccc5a88ed574148cb80a77e4d0807e4a743be976899066188a3ac234"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/doctests.time",
+      "bytes": 321,
+      "sha256": "1d8fa78e019c549adc684bbd732c70accc9084e33c71ead1b56ce1976d57178d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/format.time",
+      "bytes": 322,
+      "sha256": "81eefc52477126e49886d370fac5e2908f794146d7f2753ae63d99469d9f1bb2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/gate-inputs.log",
+      "bytes": 136,
+      "sha256": "6fd5ffee93e62ed11ae54d05fa3528bb7a59981b91f176f81ca9b1f0a5a343da"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/gate-inputs.time",
+      "bytes": 324,
+      "sha256": "830ab2e0bdd7f041c725e8b0e941a563e0bcd541131575bef2ca76229fd56d70"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/gate.log",
+      "bytes": 50737,
+      "sha256": "cb8909ae4ae03ea8472cc88caec6a7e34f4d7385e86a55b2875f9bd850afb13a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/jvm-members.log",
+      "bytes": 30,
+      "sha256": "6397fd84f2f4faf80181163c3b88a1a4399f744da0de437373b850e74f41f80b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/jvm-members.time",
+      "bytes": 321,
+      "sha256": "f1ca45a6fdcf59652c445745602b6e1d92128acc9a7735b2ec6e6c7eaa9660d2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/licenses.log",
+      "bytes": 238,
+      "sha256": "8727f5c34cf632623bc3bf2529ab62db8652390645b6381ae9fefaf278dca5af"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/licenses.time",
+      "bytes": 323,
+      "sha256": "8d85c7fa87b088238ddad64779a9347891566d699c0c3660dc807045eb562c75"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/old-paths.log",
+      "bytes": 52,
+      "sha256": "8158c079244628400aea1b4c98adfe43916e3ba22d6581d78bdfae54ef04ab18"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/old-paths.time",
+      "bytes": 323,
+      "sha256": "015a274a3e8af5df7b5aabca24831bfba315e8cc763bab22a79b040030aada0c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/oracle-setup.log",
+      "bytes": 750,
+      "sha256": "a24fb02a779cd3c43ce61f2cc84125748b4a8490cfa8a3ee51f12f23f5d0bb43"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/primitives.log",
+      "bytes": 85,
+      "sha256": "05ba5ea5c75366c434797c9b9a2b671b11f01b6d6a3070c0bb3b3f8bf773303e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/primitives.time",
+      "bytes": 318,
+      "sha256": "116e1c2d820f91227effb1ee243baf69d7129b784216794d8f4ef6adab8e124c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/records.log",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/records.time",
+      "bytes": 321,
+      "sha256": "db2e892beed79a8251f5a948f0293a16468b49c50c2976b95a3b274bcace913a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/reformat.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/reformat.time",
+      "bytes": 317,
+      "sha256": "87f195f58cff91f74e6a65d949c78e41d614e347658d2b56a5ba9b55e401aec2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/rustfmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/rustfmt.time",
+      "bytes": 323,
+      "sha256": "422cf1ec6659b56ebb67808b0114ead57b45fcfc78b2c1d18ee008a0803db8c0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/summary.json",
+      "bytes": 762168,
+      "sha256": "c2597935c28d8ef476458690ebc0546968ff0a6c3adfaa324c89317719028732"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/test-host.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/test-host.time",
+      "bytes": 324,
+      "sha256": "d101aedc6752425a0540ba5d148f4456acea56b290af0cd8b277680fd48379b0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/test262.log",
+      "bytes": 371,
+      "sha256": "c77db163c42b7c572f5c48cde18b7a01ef874eb68a65bdaa5979d452c2106ab7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/test262.time",
+      "bytes": 324,
+      "sha256": "30fbc0ca221f382d4dfcb1216399df581f0476c968733b9d02db2e2c1c97e724"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tests.log",
+      "bytes": 1200,
+      "sha256": "79f47272f92f4e5a47ab196c7ee60cc9ad43916b9a7ba95b3513973c34e8fe1f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tests.time",
+      "bytes": 354,
+      "sha256": "a41985d61c34c98fa5c057d0374aec8dac46b2ed6222fd7e7dc75b1e884172ff"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tooling-tests.raw.log",
+      "bytes": 1482285,
+      "sha256": "37ca254054c23ef7c704c49eac1f31693ed62ef1956093e47b790cb465ad5629"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tooling-types.log",
+      "bytes": 81,
+      "sha256": "9da2a92155e91f1cb97efb7a2f405f0e285cbda2a5f1b0eaea734ca276536974"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tooling-types.time",
+      "bytes": 340,
+      "sha256": "b1241cc7b25056b43399c0dbc8d52dfb01933f44f4f04a4a1c37cda4bedfe0cc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tooling.log",
+      "bytes": 25921,
+      "sha256": "7f7027f36e96c8ad7f8de0c540e28f1286ae5269950afd188ea6a87bd24f2213"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/tooling.time",
+      "bytes": 355,
+      "sha256": "b015db6990a2aae568cacf49d219301c567b0fb2afce4b08afc492726a2b2494"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/unicode-freshness.log",
+      "bytes": 6160,
+      "sha256": "6aad977c14300e83adfd8b7a38e4e2df76cee7227e1fb0bb4f7e74a736dccce1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/unicode-freshness.time",
+      "bytes": 322,
+      "sha256": "7049a56b9b097c383c214ae3026ebdcab5d0a8d2f4737382ee34ddf780b93200"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-a401a72a4785-1794595957069/verdict-contract.json",
+      "bytes": 5377,
+      "sha256": "507b35ec00c77ada66bd086ae356c37e53676f9b274eb5ca77ca3dd8d99b7fe5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-baseline-pin-v1.json",
+      "bytes": 175,
+      "sha256": "21488b58541869299e57325765e3f90b5cfcf335fb590cee6a12a30b8d4691f1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-dry-run-v1.log",
+      "bytes": 2487,
+      "sha256": "c37561f3a743739b9a472e47bedf1c3d11f7179697d364dbabe16c9e8f7079e5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-dry-run-v3.log",
+      "bytes": 2487,
+      "sha256": "0a992ad370d1cc1b5eb36aff93ad82208b96d866cbaccb556395dcce6a91e7f9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v1.log",
+      "bytes": 8738,
+      "sha256": "6c70b0e9c197a5e6f80f6a90ea1b6378d623ff64c49add3ad377276d0467fcb0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v1.sh",
+      "bytes": 496,
+      "sha256": "038e18a7345763758016f27e9ad015cab2f4eea42ca11aa81f1494de14ceb5d3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v2.log",
+      "bytes": 7694,
+      "sha256": "da5b96d808411c431923296456c6e8fb77ef80184ce01295c486545a75eb524d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v2.sh",
+      "bytes": 496,
+      "sha256": "249950af29e40e424db1f50a4e9a72b1c8a06617cb4197a11765359fb7888073"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v3.log",
+      "bytes": 7913,
+      "sha256": "7a813687aeab5567645c7fc55bba1cb1e5d0791c5a832f28c65bb23e1e640515"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v3.sh",
+      "bytes": 496,
+      "sha256": "1aef5bfd45227998a713b2814e4522eeebd422cf69d6dde95b28e9a32e18eb00"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v4.log",
+      "bytes": 11271,
+      "sha256": "45a4e4fabd8ed065fdbd4d0d08da7e5d99975b0ffa1aefd0c45f3ae15cc8ed90"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v4.sh",
+      "bytes": 496,
+      "sha256": "8a458c4d6aa85a76a532cd73a83c1c3dd10f41eac1f1ea1874fcde32590b87d3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v5.log",
+      "bytes": 8135,
+      "sha256": "cc7c301ccfd916bbce04f2591c1c8a68c835dd9506f9f7054728abe76b432340"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-focused-v5.sh",
+      "bytes": 496,
+      "sha256": "046d7c83491f9e9b7f38c389c8a47aa601ad1e32e75c92bf8f456d0d498f8155"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-here-v1.log",
+      "bytes": 1530,
+      "sha256": "13632f02c4084512629d990d75cd3ea908154c90f1b5a1660874179c8e65b2fd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-here-v3.log",
+      "bytes": 1444,
+      "sha256": "98213236bef622c86e20b6ba1c2ecceb11496ba8dfde32f97e3d8d75a4d468ef"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-host-v2.log",
+      "bytes": 73,
+      "sha256": "8829b46eafb5020317a1388bb9f64ba5c79251dd56c091c4c7177f79dee18d27"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-host-v3.log",
+      "bytes": 73,
+      "sha256": "8829b46eafb5020317a1388bb9f64ba5c79251dd56c091c4c7177f79dee18d27"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-host-v5.log",
+      "bytes": 73,
+      "sha256": "8829b46eafb5020317a1388bb9f64ba5c79251dd56c091c4c7177f79dee18d27"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-inner-v3.log",
+      "bytes": 61536,
+      "sha256": "54e9cbb1721fe78dd50311d6f09214359946ff011bd66cefd628820cdd7b546b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-after-v1.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-after-v1.log",
+      "bytes": 908,
+      "sha256": "89d40a6c06c05fb197c4e8f373698ac3cf71e17a987b510e31bd050c931d6a6a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-after-v3.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-after-v3.log",
+      "bytes": 908,
+      "sha256": "89d40a6c06c05fb197c4e8f373698ac3cf71e17a987b510e31bd050c931d6a6a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-before-v1.json",
+      "bytes": 3288,
+      "sha256": "4bf51d009028730fecbbab761a9bbc618244038d0786c2b8eaff1b1edbc3a88d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-oracle-before-v1.log",
+      "bytes": 908,
+      "sha256": "89d40a6c06c05fb197c4e8f373698ac3cf71e17a987b510e31bd050c931d6a6a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-after-v1.json",
+      "bytes": 66240,
+      "sha256": "751cf4866abbb89ffc42076368aa61eee936bb723deeb4b7c452c6fd03d24d31"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-after-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-after-v3.json",
+      "bytes": 66240,
+      "sha256": "751cf4866abbb89ffc42076368aa61eee936bb723deeb4b7c452c6fd03d24d31"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-after-v3.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-before-v1.json",
+      "bytes": 66240,
+      "sha256": "0ed01df03b966e3477f8b6a59b7a4cd9deeaaf46654f29ce15d44863f86eee84"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-placement-before-v1.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v1.log",
+      "bytes": 138,
+      "sha256": "bb4bbe0f975c6dca5bd4dfd1334bb482ad4d8e365c7934a8a108f19ea99fa26c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v1.sh",
+      "bytes": 1178,
+      "sha256": "d396cccf839c85da9f0d05c73d01edad6505df09cc6949f6a993bd4351060d1c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v2.sh",
+      "bytes": 1611,
+      "sha256": "05f9c1d595c5085734fe1478e6e25d9569e0aa13cd6afbca4c080395f0e0938f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v3.log",
+      "bytes": 126,
+      "sha256": "532fb73d1306a93620bf3399b2e0522613db1e8855877feaa31844ba3e487be8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-preflight-v3.sh",
+      "bytes": 1611,
+      "sha256": "6723b5e92656e6dd753c7884a6fa88f16fdaf7d778809ee4903b82246aac8654"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v1.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v2.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v3.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v4.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v5.log",
+      "bytes": 97,
+      "sha256": "0b8ebbc2a0b3a13c5dcc0b7c620829384baf86c65083b4621f995a972ebf8fc0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-host-v6.log",
+      "bytes": 73,
+      "sha256": "93c42ededf93e499548b0451372ac069969a08454392ea02660f487893453548"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-strict-v1.log",
+      "bytes": 8496,
+      "sha256": "58025c0609d0a8420add514e40f6d7791079ac1c4d1c60fd6c62ac1696e0d3fd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-strict-v2.log",
+      "bytes": 19869,
+      "sha256": "d1f4e3f030dd3ff1663e14685562d9f2782f7f5f3234b77b57c06c5dcb852655"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-strict-v3.log",
+      "bytes": 81,
+      "sha256": "9da2a92155e91f1cb97efb7a2f405f0e285cbda2a5f1b0eaea734ca276536974"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-strict-v4.log",
+      "bytes": 81,
+      "sha256": "9da2a92155e91f1cb97efb7a2f405f0e285cbda2a5f1b0eaea734ca276536974"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-strict-v6.log",
+      "bytes": 81,
+      "sha256": "9da2a92155e91f1cb97efb7a2f405f0e285cbda2a5f1b0eaea734ca276536974"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v1.log",
+      "bytes": 19585,
+      "sha256": "bc9766ae5f507b2a95103814d9b0733ad1a966683f6a93d6c3fdace35738e3a0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v1.sh",
+      "bytes": 657,
+      "sha256": "a9a226abda6401fd894f1cbafbb1bc258201af17a02bc38805a7840d6c7c1e19"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v2.log",
+      "bytes": 19571,
+      "sha256": "cf3939a2ef307a8983ef77211c2358c13c22bfb8b4091503c5486ddbb4909e48"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v2.sh",
+      "bytes": 657,
+      "sha256": "633b6ec6b1048ac0d283bf2d8011284872d21b1f4faf553baafb31a89065060e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v3.log",
+      "bytes": 19590,
+      "sha256": "a70b3b179aa6dcdbd9862c84218bd9932f6c8d0a63ea866b51dfa466b820af91"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v3.sh",
+      "bytes": 657,
+      "sha256": "1ccb3d4d2e0b0f5eb1efb6e5e8ae86a6d3c9800b5de3dd0b23e662d4bee0e9ff"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v4.log",
+      "bytes": 19684,
+      "sha256": "4a950827b735d02e0fdbbbc7d396c0b1c9956393b9780b6087dace3ec680d778"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v4.sh",
+      "bytes": 657,
+      "sha256": "6404d29c2c7f3fc30986ba1289eed041752605ff3c844bc1713023f516f240a7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v5.log",
+      "bytes": 19924,
+      "sha256": "10fc4496ca6c79b1e7d7882b5b2ae74a3a03f03d7ea5df5be75f4de6b36b7ab6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-selector-v6.log",
+      "bytes": 19921,
+      "sha256": "8b60b8839b857029a5ef7b04e83ba4cca9f20e78257eaba3dbe549ef6a102dba"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-strict-v2.log",
+      "bytes": 81,
+      "sha256": "a310d1b00d660c3dd5fabb389263533f8cc1385eefa59b926fafe2f613cd622d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-strict-v3.log",
+      "bytes": 81,
+      "sha256": "a310d1b00d660c3dd5fabb389263533f8cc1385eefa59b926fafe2f613cd622d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-strict-v5.log",
+      "bytes": 81,
+      "sha256": "a310d1b00d660c3dd5fabb389263533f8cc1385eefa59b926fafe2f613cd622d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-supported-v1.sh",
+      "bytes": 549,
+      "sha256": "14aa13fbdee3a87d5b36d33f344d35a9cd99c8a2847ec695205f0a9cd9f1fc91"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-supported-v2.sh",
+      "bytes": 554,
+      "sha256": "821d27b424793b8437e76fa149eb3d51367397e66bd233da4a562d689ed1966f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/reader-metadata-supported-v3.sh",
+      "bytes": 554,
+      "sha256": "fdb578552c9bc48a8a57f56667b8e8d38edfebae17ad9761dc33490a1078cb90"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/write-reader-metadata-record-v1.py",
+      "bytes": 9991,
+      "sha256": "64daa8e37ec1303a7341a55f35d04efe5742e93900922daaf3724d6e6da976e7"
+    }
+  ]
+}
