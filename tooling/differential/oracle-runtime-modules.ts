@@ -1,6 +1,6 @@
 // Only producers load the parser. Consumers execute the authenticated emitted
 // module graph without TypeScript stripping or preparation dependencies.
-import {createRequire,isBuiltin,stripTypeScriptTypes} from 'node:module';
+import {isBuiltin,stripTypeScriptTypes} from 'node:module';
 import {lstatSync,readFileSync,realpathSync} from 'node:fs';
 import {isAbsolute,posix,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto';
 import {runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
 
 type Module={source:string;name:string;text:string;sourceSha256:string};
+export type RuntimeParser={api:import('typescript/sync').API;ast:typeof import('typescript/ast')};
 export type RuntimeModules={entry:string;modules:Module[]};
 function failure(reason:string):never{throw Error('oracle runtime module: '+reason);}
 const hash=(bytes:string)=>createHash('sha256').update(bytes).digest('hex');
@@ -15,11 +16,9 @@ const hash=(bytes:string)=>createHash('sha256').update(bytes).digest('hex');
 export const stripRuntimeSource=(source:string):string=>stripTypeScriptTypes(source,{mode:'strip'});
 const outputName=(name:string)=>name.replace(/\.(?:m?ts|m?js)$/,'.mjs');
 /** Every publication reads fresh source bytes and owns its traversal state. */
-export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeModules{
+export function compileRuntimeModules(sourceRoot:string,entry:string,{api,ast}:RuntimeParser):RuntimeModules{
   const root=resolve(sourceRoot);
   if(realpathSync(root)!==root)failure('source root is an alias: '+root);
-  const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
-  const ast=require('typescript/ast') as typeof import('typescript/ast'),api=new API();
   const modules=new Map<string,Module>(),outputs=new Map<string,string>();
   const sourceName=(file:string)=>{
     const name=relative(root,file).split(sep).join('/');
@@ -72,6 +71,5 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
     // Only primitive paths survive the lease; graph depth retains no SDK ASTs.
     for(const target of targets)visit(target);
   };
-  try{visit(resolve(root,entry));return {entry:outputName(sourceName(resolve(root,entry))),modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name))};}
-  finally{api.close();}
+  visit(resolve(root,entry));return {entry:outputName(sourceName(resolve(root,entry))),modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name))};
 }

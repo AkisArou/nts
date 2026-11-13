@@ -320,7 +320,8 @@ fn validate_runtime_assets(
         "oracle runtime asset set changed"
     );
     for (name, hash) in assets {
-        let canonical = name.ends_with(".mjs")
+        // This case-sensitive suffix belongs to the wire-format key grammar.
+        let canonical = name.strip_suffix(".mjs").is_some()
             && name.split('/').all(|part| {
                 !part.is_empty()
                     && part != "."
@@ -1396,6 +1397,34 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn runtime_module_keys_are_canonical_and_bound_to_the_required_entry() {
+        let assets = |name: &str| {
+            serde_json::Map::from_iter([(name.to_owned(), Value::String("a".repeat(64)))])
+        };
+        for name in ["main.mjs", "nested/main.mjs", ".hidden.mjs"] {
+            validate_runtime_assets(&assets(name), &[name]).unwrap();
+        }
+        for name in [
+            "/main.mjs",
+            "../main.mjs",
+            "nested/../main.mjs",
+            "./main.mjs",
+            "nested//main.mjs",
+            "main.MJS",
+            "main.mjs?x",
+            "main.mjs#x",
+            "%2e%2e/main.mjs",
+            "nested\\main.mjs",
+        ] {
+            assert!(
+                validate_runtime_assets(&assets(name), &[]).is_err(),
+                "{name}"
+            );
+        }
+        assert!(validate_runtime_assets(&assets("main.mjs"), &["required.mjs"]).is_err());
+    }
 
     #[test]
     fn an_acquisition_event_is_one_complete_append() {

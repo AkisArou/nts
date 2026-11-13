@@ -1,5 +1,6 @@
 import {runAsCommand} from "./command-entry/main.ts";
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
+import {compileRuntimeModules,type RuntimeParser,type RuntimeModules} from './oracle-runtime-modules.ts';
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
 import {createHash} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
@@ -626,16 +627,13 @@ function dependencies():DependencyHandle{
 type RuntimeIndexInput={trees:{root:string;paths:string[];absent:string[];coverage:RuntimeCoverage}[];files:{source:string;output:string;group:string;execution:string;tree:string}[];links:{output:string;target:string;text?:string;present?:boolean}[];checkerImports:CheckerImportRelation[]};
 /** Type erasure and import rewriting happen once in this registered run.
  * Cached code is still read and hashed before each snapshot publishes it. */
-async function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string):Promise<Record<string,string>>{
-  // Finalization also executes this materialized module. Only preparation loads
-  // the producer compiler, whose parser is deliberately absent in children.
-  const {compileRuntimeModules}=await import('./oracle-runtime-modules.ts');
+async function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string,parser:RuntimeParser):Promise<Record<string,string>>{
   const root=join(directory,'assets');
   for(const [name,expected] of [['oracle-loader.ts',identity.loaderSha256],['oracle-runtime.ts',identity.runtimeSha256],['oracle-assets.ts',identity.assetsSha256]] as const){
     if(hash(readFileSync(join(root,name)))!==expected)throw Error('oracle child source changed before compilation: '+name);
   }
   if(hash(JSON.stringify(ORACLE_EXECUTION_FILES.map(name=>hash(readFileSync(join(root,name))))))!==identity.executionSha256)throw Error('oracle child execution source changed before compilation');
-  const graph=compileRuntimeModules(root,'oracle-loader.ts');
+  const graph=compileRuntimeModules(root,'oracle-loader.ts',parser);
   const key=hash(JSON.stringify([nodeIdentity,identity.runtimeModulesSha256,graph.modules.map(item=>[item.source,item.sourceSha256,hash(item.text)])]));
   const cache=join(sessionDirectory,'compiled',key);mkdirSync(cache,{recursive:true,mode:0o700});
   return Object.fromEntries(graph.modules.map(({name,text})=>{
@@ -656,12 +654,13 @@ async function compileChildAssets(directory:string,sessionDirectory:string,ident
 }
 /** Resolve only finite captured requests. Node chooses every result. A failed
  * or incomplete plan is left to the bounded live path, with its native error. */
-async function publishNodeRoutes(directory:string,stored:OracleManifest,descriptor:OracleRuntimeDescriptor,records:Map<string,unknown>,nodes:Map<string,OracleRuntimeNode>,sources:Map<string,OracleRuntimeRoute[]>,assets:Map<string,{path:string;sha256:string}>,api:API,sessionDirectory:string,ownerPid:number){
+async function publishNodeRoutes(directory:string,stored:OracleManifest,descriptor:OracleRuntimeDescriptor,records:Map<string,unknown>,nodes:Map<string,OracleRuntimeNode>,sources:Map<string,OracleRuntimeRoute[]>,assets:Map<string,{path:string;sha256:string}>,parser:RuntimeParser,sessionDirectory:string,ownerPid:number){
+  const {api}=parser;
   const began=performance.now(),cpu=process.cpuUsage();
   const execution=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args as string[];
   const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
   const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),ownerPid);
-  descriptor.runtimeAssets=await compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node);
+  descriptor.runtimeAssets=await compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node,parser);
   stored.runtimeAssets=descriptor.runtimeAssets;Object.assign(stored.outputs,descriptor.runtimeAssets);
   if(!session)return;
   descriptor.resolution=session;
@@ -766,7 +765,7 @@ async function publishNodeRoutes(directory:string,stored:OracleManifest,descript
 }
 /** Complete parent-side publication. Children read only the resulting sparse
  * runtime facts; original checking proof stays in the audit manifest. */
-async function publishRuntimeSnapshot(directory:string,stored:OracleManifest,index:RuntimeIndexInput,api:API,sessionDirectory:string,ownerPid:number,dependency?:DependencyHandle):Promise<OracleSnapshotReference>{
+async function publishRuntimeSnapshot(directory:string,stored:OracleManifest,index:RuntimeIndexInput,parser:RuntimeParser,sessionDirectory:string,ownerPid:number,dependency?:DependencyHandle):Promise<OracleSnapshotReference>{
   const records=new Map<string,unknown>(),nodes=new Map<string,OracleRuntimeNode>();
   const node=(file:string,kind:OracleRuntimeNode['kind'])=>{
     const previous=nodes.get(file);if(previous){if(previous.kind!==kind)throw Error('oracle snapshot has conflicting kinds: '+file);return previous;}
@@ -866,7 +865,7 @@ async function publishRuntimeSnapshot(directory:string,stored:OracleManifest,ind
     if(!expected||driver.source!==source||driver.sha256!==expected||!path||nodes.get(path)?.asset!==source||nodes.get(path)?.sha256!==expected)throw Error('oracle worker driver has no exact captured identity');
     descriptor.drivers={commonjsWorker:{source,path,sha256:expected}};
   }
-  await publishNodeRoutes(directory,stored,descriptor,records,nodes,sources,assets,api,sessionDirectory,ownerPid);
+  await publishNodeRoutes(directory,stored,descriptor,records,nodes,sources,assets,parser,sessionDirectory,ownerPid);
   records.set('descriptor',descriptor);
   return writeOracleSnapshotIndex(directory,records);
 }
@@ -882,6 +881,7 @@ export class OracleWorker{
   private contexts=new Map<EmitGroup,{directory:string;producerOutput:string;record?:OwnerEmission;targets:Set<string>;expanded:Set<string>;dependencies:Set<EmitGroup>}>();
   private binding:Capture;
   private api:API;
+  private runtimeSyntax:typeof import('typescript/ast');
   private readonly toolchainInputs:ReadonlyMap<string,string>;
   private filesystem=new OracleFilesystem();
   private readonly outputRoots:OraclePathPrefixes;
@@ -916,12 +916,21 @@ export class OracleWorker{
     ]);
     try{
       const require=createRequire(pathToFileURL(join(root,'package.json'))),{API}=require('typescript/sync'),{serverFS}=require('typescript/fs');
+      this.runtimeSyntax=require('typescript/ast');
       this.api=new API({cwd:REPOSITORY,tsserverPath:this.compiler,fs:{
         readFile:(path:string)=>this.filesystem.readFile(path)??undefined,fileExists:this.filesystem.fileExists,
         directoryExists:this.filesystem.directoryExists,getAccessibleEntries:(path:string)=>({...this.filesystem.getAccessibleEntries(path),symlinks:undefined}),realpath:this.filesystem.realpath,
         stat:serverFS.fakeStat,writeFile:serverFS.error,removeFile:serverFS.error,
       }});
     }catch(error){if(this.privateCache)removeSnapshot(this.ownerCache);throw error;}
+  }
+  /** Runtime publication borrows this owner's captured SDK, never an ambient
+   * package next to copied source assets. It returns no SDK-backed objects. */
+  runtimeModules(sourceRoot:string,entry:string):RuntimeModules{
+    if(this.closed||this.busy)throw Error('oracle runtime compiler is unavailable');
+    this.busy=true;
+    try{return compileRuntimeModules(sourceRoot,entry,{api:this.api,ast:this.runtimeSyntax});}
+    finally{this.busy=false;if(this.closed)this.finishClose();}
   }
   close():void{
     if(this.closed)return;this.closed=true;
@@ -1571,7 +1580,7 @@ export class OracleWorker{
       const owner=scope?JSON.parse(process.env.NTS_GATE_ENV_CONTEXT??'null')?.resolutionOwner:undefined;
       if(scope&&(!owner||!nodeProcessAlive(owner)))throw Error('oracle resolution run owner is missing or changed');
       const sessionDirectory=scope?join(scope.directory,'oracle-resolution','node-'+process.versions.node):join(directory,'resolution');
-      stored.runtimeIndex=await publishRuntimeSnapshot(directory,stored,runtimeIndex,this.api,sessionDirectory,owner?.pid??this.resolutionOwnerPid,tree.dependency);
+      stored.runtimeIndex=await publishRuntimeSnapshot(directory,stored,runtimeIndex,{api:this.api,ast:this.runtimeSyntax},sessionDirectory,owner?.pid??this.resolutionOwnerPid,tree.dependency);
       const manifestBytes=Buffer.from(JSON.stringify(stored,null,2)+'\n');
       writeFileSync(manifest+'.pending',manifestBytes);
       const snapshot:OracleSnapshotIdentity={version:1,index:stored.runtimeIndex,manifestSha256:hash(manifestBytes),assets:stored.runtimeAssets};

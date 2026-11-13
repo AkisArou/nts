@@ -1,3 +1,4 @@
+import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {chmodSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,symlinkSync,unlinkSync} from 'node:fs';
@@ -13,6 +14,8 @@ import * as resultAPI from './oracle-results.ts';
 import {createProgramOracleResults} from './oracle-result-publisher.ts';
 import {openProgramOracleResults,programOracleHandoff,resultHash,type ProgramAnswer} from './oracle-results.ts';
 
+const createResults=(directory:string,identity:Parameters<typeof createProgramOracleResults>[1])=>createProgramOracleResults(directory,identity,oracleToolchainLocation());
+
 function fixture(t:{after(callback:()=>void):void}){
   const root=mkdtempSync(join(tmpdir(),'program-reference-'));t.after(()=>removeOracleSnapshot(root));
   const inputs=join(root,'inputs');mkdirSync(inputs);
@@ -22,7 +25,7 @@ function fixture(t:{after(callback:()=>void):void}){
   const session:NodeResolutionSession={version:1,directory:root,token:'private-test',nodeVersion:process.versions.node,nodeSha256:'b'.repeat(64),executable:nodeExecutableIdentity(process.pid),holder:owner,owner,options:{flags:[],nodeOptions:''},conditions:{esm:[],cjs:[]},helperSha256:'c'.repeat(64)};
   const value:ProgramAnswer={version:1,kind:'calls',subject:'tests/programs/private',entry,project,driverSha256:'d'.repeat(64),count:2,rows:['19','23'],stdout:[0,255,10],stderr:[]};
   const identity=oracleRecipeIdentity(),directory=join(root,'results');
-  const publish=()=>{const writer=createProgramOracleResults(directory,identity);writer.add(value,{observations:fs.captured(),session});writer.publish();return openProgramOracleResults(programOracleHandoff(directory),identity);};
+  const publish=()=>{const writer=createResults(directory,identity);writer.add(value,{observations:fs.captured(),session});writer.publish();return openProgramOracleResults(programOracleHandoff(directory),identity);};
   return {root,inputs,entry,project,fs,session,value,identity,directory,publish};
 }
 
@@ -70,7 +73,7 @@ for(const kind of ['file','failed lookup','listing','link'] as const)test('each 
 });
 
 test('incomplete results and unfinished observations cannot enter the result store',t=>{
-  const f=fixture(t),writer=createProgramOracleResults(f.directory,f.identity);
+  const f=fixture(t),writer=createResults(f.directory,f.identity);
   assert.throws(()=>writer.add({...f.value,kind:'calls',rows:['19'],count:2,driverSha256:'d'.repeat(64),stdout:[],stderr:[]},{observations:f.fs.captured(),session:f.session}),/incomplete call result/);
   const observation:ProgramAnswer={version:1,kind:'observation',subject:'tests/outcomes/private',entry:f.entry,project:f.project,observation:{result:'exit 1; nts: uncaught expected',printed:{stdout:'',stderr:''},complete:true}};
   const unfinished=JSON.parse(JSON.stringify({...observation,observation:{...observation.observation,complete:false}})) as ProgramAnswer;
@@ -123,7 +126,7 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
 });
 
 test('a finalized budget answer is authenticated without inventing call rows',t=>{
-  const f=fixture(t),writer=createProgramOracleResults(f.directory,f.identity);
+  const f=fixture(t),writer=createResults(f.directory,f.identity);
   const value:ProgramAnswer={version:1,subject:f.value.subject,project:f.project,entry:f.entry,kind:'budget',driverSha256:'d'.repeat(64),budget:{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'}};
   writer.add(value,{observations:f.fs.captured(),session:f.session});writer.publish();
   const reader=openProgramOracleResults(programOracleHandoff(f.directory),f.identity);
@@ -132,7 +135,7 @@ test('a finalized budget answer is authenticated without inventing call rows',t=
 });
 
 test('a planner past its bound planned no driver, so its budget answers each driver of its entry',t=>{
-  const f=fixture(t),writer=createProgramOracleResults(f.directory,f.identity),capture={observations:f.fs.captured(),session:f.session};
+  const f=fixture(t),writer=createResults(f.directory,f.identity),capture={observations:f.fs.captured(),session:f.session};
   const budget={phase:'plan' as const,outcome:'timeout' as const,bound:600,signal:'SIGKILL',reason:'oracle planner timed out'};
   const value:ProgramAnswer={version:1,subject:f.value.subject,project:f.project,entry:f.entry,kind:'budget',budget};
   assert.throws(()=>writer.add({...value,driverSha256:'d'.repeat(64)} as unknown as ProgramAnswer,capture),/invalid case budget/,'an unplanned population names no driver');

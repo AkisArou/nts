@@ -14,21 +14,21 @@ export async function startOracleChild(){
   const directory=new URL('./assets/',root),assets=snapshot.assets;
   if(!lstatSync(directory).isDirectory()||realpathSync(directory)!==fileURLToPath(directory).replace(/\/$/,'')||!assets||Array.isArray(assets)||Object.keys(assets).length>128||
     !['loader','runtime','assets'].every(name=>Object.hasOwn(assets,'assets/oracle-'+name+'.mjs')))throw Error('oracle generated bootstrap directory changed');
-  const files=new Map<string,string>();
+  const files=new Map<string,{name:string;sha256:string}>();
   for(const [name,expected] of Object.entries(assets)){
     const parts=name.split('/');
     if(parts.shift()!=='assets'||!name.endsWith('.mjs')||!parts.length||parts.some(part=>!part||part==='.'||part==='..'||!/^[A-Za-z0-9_.-]+$/.test(part))||typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected))throw Error('oracle generated bootstrap record is invalid');
-    files.set(new URL('./'+name,root).href,expected);
+    files.set(new URL('./'+name,root).href,{name,sha256:expected});
   }
   const io={open:openSync,close:closeSync,stat:fstatSync,read:readFileSync,real:realpathSync},digest=hash;
   const checked=(url:string)=>{
-    const expected=files.get(url);
-    if(!expected||io.real(new URL(url))!==fileURLToPath(url))throw Error('oracle generated bootstrap asset changed: '+url);
+    const asset=files.get(url),label=asset?.name??url;
+    if(!asset||io.real(new URL(url))!==fileURLToPath(url))throw Error('oracle generated bootstrap asset changed: '+label);
     const fd=io.open(new URL(url),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
     try{
-      if(!io.stat(fd).isFile())throw Error('oracle generated bootstrap asset changed: '+url);
+      if(!io.stat(fd).isFile())throw Error('oracle generated bootstrap asset changed: '+label);
       const bytes=io.read(fd);
-      if(digest('sha256',bytes,'hex')!==expected)throw Error('oracle generated bootstrap asset changed: '+url);
+      if(digest('sha256',bytes,'hex')!==asset.sha256)throw Error('oracle generated bootstrap asset changed: '+label);
       return bytes;
     }finally{io.close(fd);}
   };

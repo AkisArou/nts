@@ -3,11 +3,16 @@ import {test} from 'node:test';
 import {mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from '../gate/test-environment.ts';
-import {compileRuntimeModules,stripRuntimeSource} from './oracle-runtime-modules.ts';
+import {compileRuntimeModules as compile,stripRuntimeSource} from './oracle-runtime-modules.ts';
 import {runtimeAssets,runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
 
+const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync'),ast=require('typescript/ast') as typeof import('typescript/ast');
+function compileRuntimeModules(root:string,entry:string){
+  const api=new API();try{return compile(root,entry,{api,ast});}finally{api.close();}
+}
 function fixture(t:{after(callback:()=>void):void},files:Record<string,string>){
   const root=mkdtempSync(join(tmpdir(),'runtime-modules-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const [name,text] of Object.entries(files)){const file=join(root,name);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}

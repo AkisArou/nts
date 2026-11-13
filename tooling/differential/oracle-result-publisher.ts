@@ -6,11 +6,11 @@ import {fileURLToPath} from 'node:url';
 import {ORACLE_RUNTIME_FILES,checkNodeResolutionSession,type NodeResolutionSession} from './oracle-runtime.ts';
 import {writeOracleSnapshotIndex,validateHostObservations,type HostObservation} from './oracle-filesystem.ts';
 import {resultHash,readerSourceHash,invalid,measured,type ProgramAnswer,type ProgramCapture,type ProgramOracleRoot,type ReaderRuntime} from './oracle-results.ts';
-import type {OracleIdentity} from './oracle-emit.ts';
-import {compileRuntimeModules} from './oracle-runtime-modules.ts';
+import {OracleWorker,removeOracleSnapshot,type OracleIdentity} from './oracle-emit.ts';
+import type {RuntimeModules} from './oracle-runtime-modules.ts';
 
 export const RECIPE_SOURCES=[...ORACLE_RUNTIME_FILES,'oracle-results.ts','oracle-result-bootstrap.ts'];
-function publishReaderRuntime(directory:string):ReaderRuntime{
+function publishReaderRuntime(directory:string,identity:OracleIdentity,toolchain?:string):ReaderRuntime{
   const here=dirname(fileURLToPath(import.meta.url)),runtime=join(directory,'reader');mkdirSync(runtime,{recursive:true});
   for(const name of RECIPE_SOURCES){
     const file=join(runtime,name);mkdirSync(dirname(file),{recursive:true});
@@ -18,7 +18,15 @@ function publishReaderRuntime(directory:string):ReaderRuntime{
     writeFileSync(file,readFileSync(join(here,name)),{flag:'wx',mode:0o444});
   }
   writeFileSync(join(runtime,'package.json'),'{"type":"module"}\n',{flag:'wx',mode:0o444});
-  const graph=compileRuntimeModules(here,'oracle-results.ts'),assets:Record<string,string>={};
+  const producer=join(directory,'reader-producer');let worker:OracleWorker|undefined,graph:RuntimeModules;
+  try{
+    worker=new OracleWorker(producer,toolchain);
+    if(JSON.stringify(worker.identity)!==JSON.stringify(identity))invalid('runtime producer identity changed');
+    graph=worker.runtimeModules(here,'oracle-results.ts');
+  }finally{
+    try{worker?.close();}finally{removeOracleSnapshot(producer);}
+  }
+  const assets:Record<string,string>={};
   for(const module of graph.modules){
     const file=join(runtime,module.name);mkdirSync(dirname(file),{recursive:true});
     if(realpathSync(dirname(file))!==dirname(file))invalid('reader publication directory is aliased: '+dirname(file));
@@ -28,7 +36,7 @@ function publishReaderRuntime(directory:string):ReaderRuntime{
   return {version:2,entry:'oracle-results.mjs',directory:runtime,bootstrapSha256,assets};
 }
 
-export function createProgramOracleResults(directory:string,identity:OracleIdentity){
+export function createProgramOracleResults(directory:string,identity:OracleIdentity,toolchain=process.env.NTS_ORACLE_TYPESCRIPT){
   if(!isAbsolute(directory))invalid('directory must be absolute');
   const cases=new Map<string,unknown>(),projects=new Map<string,string>();
   const facts=new Map<string,{key:string;observation:HostObservation}>();
@@ -56,7 +64,7 @@ export function createProgramOracleResults(directory:string,identity:OracleIdent
         ...[...cases].map(([key,value])=>['case\0'+key,value] as const),
         ...[...projects].map(([key,value])=>['project\0'+key,value] as const),
         ...[...facts.values()].map(({key,observation})=>[key,observation] as const)]);
-      const root:ProgramOracleRoot={version:1,directory,identity,readerSha256,index,count:cases.size,runtime:publishReaderRuntime(directory)};
+      const root:ProgramOracleRoot={version:1,directory,identity,readerSha256,index,count:cases.size,runtime:publishReaderRuntime(directory,identity,toolchain)};
       const file=join(directory,'ready.json'),temporary=file+'.'+process.pid;
       writeFileSync(temporary,JSON.stringify(root)+'\n',{flag:'wx',mode:0o444});renameSync(temporary,file);published=true;
       return root;
