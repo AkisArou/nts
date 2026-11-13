@@ -609,6 +609,25 @@ recorded process identity. An input-free canceled exit may remain an explicitly
 unattributed terminal fact; it grants no image or input. Simultaneously live
 byte facts have independent bounded storage through serialization.
 
+The attributed index groups every attempt's original pathname and descriptor
+subjects with its notification identity, scalar arguments and actual cwd.
+Pathnames retain their unnormalized spelling and pathname/dirfd argument
+positions; lexical normalization cannot replace kernel component order through
+symlinks. A cwd change updates subsequent anchors while preserving the source
+already bound to that invocation. Actual image or argv changes remain distinct
+observations, and an entered doctest is not entered again after a chdir.
+
+The index footer identifies the compressed raw artifact by digest and length.
+The prepared observer receipt identifies its executable, source digest and ELF
+ABI. A coverage consumer authenticates both receipts against retained evidence
+before interpreting platform flags. Missing or unsupported ABI evidence keeps
+the interpretation unknown. Scalar open/openat flags describe only the requested
+access; openat2's uncaptured structure remains unknown. Path-only and
+directory-only descriptor requests grant neither a later enumeration nor a
+content read, and temporary-file creation retains its write role. A legacy
+normalized index must be rederived from raw records rather than treated as
+anchored evidence.
+
 Raw artifacts and attributed line records are compressed and published after
 their output owners finish. Consumers stream bounded records and accept an
 index only after checking its version, attribution, completion counts, native
@@ -958,6 +977,11 @@ the first node task.
   and stream publication before accepting coverage. Notification continuation
   proves neither a successful read nor exec
   ([log](records/notebooks/decisions-log.md#rust-input-observations-keep-unknown-outcomes-11-13)).
+- **Runtime attempts keep their original anchors and ABI evidence.** Grouped
+  subjects retain cwd, process identity, scalar arguments and argument positions.
+  Cwd changes preserve the bound invocation source. Platform flag interpretation
+  requires authenticated raw and observer receipts; missing evidence stays unknown
+  ([log](records/notebooks/decisions-log.md#runtime-attempts-retain-their-own-anchors-and-abi-evidence-11-14)).
 
 - **Test event transport gets a turn before each case.** Queued child reports
   get a serialization opportunity before later synchronous work. Completion

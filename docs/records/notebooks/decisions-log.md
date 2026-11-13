@@ -2825,3 +2825,17 @@ a copied object's source timestamp. Source-file ownership checks share only the
 graph's parsed-source lifetime; protocol observations remain freshly read.
 Runtime Cargo declarations, operation coverage and removal of ALWAYS remain
 separate work under #761.
+
+
+## Runtime attempts retain their own anchors and ABI evidence (11-14)
+
+The Rust input index now groups original subjects by native attempt and retains
+actual cwd, scalar arguments, pathname/dirfd positions and process identity.
+Normalization cannot replace kernel path-component order. Cwd-only observations
+preserve the bound invocation source and an already entered doctest. The footer
+retains the raw artifact digest/length; a prepared observer receipt retains the
+source and executable digests plus ELF ABI. Coverage must authenticate those
+receipts before interpreting requested open flags. Missing legacy ABI evidence
+stays unknown, and descriptor creation grants no later byte or enumeration
+access. Runtime declarations, operation coverage and ALWAYS retirement remain
+separate work under #761.

@@ -287,8 +287,10 @@ function receiptValid(value:unknown):value is FileObserverReceipt{
   return row.version===1&&absolute(row.observedPath)&&absolute(row.artifactPath)&&digestValid(row.sha256)&&digestValid(row.sourceSha256)
     &&['linux-x86_64-v1','linux-aarch64-v1'].includes(String(row.abi));
 }
-/** Visits bounded attempts and returns only after raw-artifact binding, counts,
- * footer, gzip CRC and final close are checked. No partial visit is accepted.
+/** Visits bounded attempts and returns only after the raw-artifact receipt,
+ * counts, footer, gzip CRC and final close are checked. A coverage consumer
+ * authenticates that receipt against its retained raw artifact independently.
+ * No partial visit is accepted.
  * A legacy normalized index must be rederived from its retained raw capture. */
 export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=>void|Promise<void>):Promise<{header:InputIndexStart;complete:InputIndexEnd}>{
   const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:InputIndexExecution|undefined;
