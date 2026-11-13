@@ -11,6 +11,9 @@ import {copyModuleClosure,moduleClosure} from '../gate/module-closure-fixture.ts
 import {testScratch} from '../gate/test-scratch.ts';
 import {spawnTest} from '../gate/test-wait.ts';
 import {dependencyCapability} from './oracle-dependencies.ts';
+import {createRequire} from 'node:module';
+import {runInNewContext} from 'node:vm';
+import {SourceFacts} from '../gate/source-facts.ts';
 
 const ENTRY='tooling/differential/oracle-dependencies.ts';
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
@@ -77,4 +80,25 @@ test('producer membership follows new declarations afresh and refuses missing im
   writeFileSync(extra,'export const version=2;\n');assert.notEqual(f.cap().producerSha256,after.producerSha256);
   writeFileSync(entry,text+"\nimport './missing-producer.ts';\n");
   assert.throws(f.cap,/missing-producer\.ts/);
+});
+
+
+test('the dependency helper keeps its capability namespace when emitter assets flatten',()=>{
+  const source=readFileSync(new URL('./oracle-emit.ts',import.meta.url),'utf8');
+  const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
+  const api=new API(),lease=api.createSourceFile('oracle-emit.ts',source);
+  try{
+    const facts=new SourceFacts('tooling/differential/oracle-emit.ts',source,lease.sourceFile),ast=facts.ast;
+    const owner=facts.ofKind(ast.SyntaxKind.FunctionDeclaration).find(node=>ast.isFunctionDeclaration(node)&&node.name?.text==='dependencies');
+    assert.ok(owner);
+    const declaration=facts.ofKind(ast.SyntaxKind.VariableDeclaration).find(node=>node.pos>=owner.pos&&node.end<=owner.end&&ast.isVariableDeclaration(node)&&facts.code(node.name)==='helper');
+    assert.ok(declaration&&ast.isVariableDeclaration(declaration)&&declaration.initializer);
+    const expression=facts.code(declaration.initializer).replaceAll('import.meta.url','moduleURL');
+    const cap={source:'/capability/source'};
+    for(const moduleURL of ['file:///canonical/tooling/differential/oracle-emit.ts','file:///capture/asset-bundle/oracle-emit.ts']){
+      const REPOSITORY=fileURLToPath(new URL('../..',moduleURL));
+      const actual=runInNewContext(expression,{cap,REPOSITORY,moduleURL,URL,fileURLToPath,join,relative,basename}) as string;
+      assert.equal(actual,join(cap.source,'tooling/differential/oracle-dependencies.ts'),moduleURL);
+    }
+  }finally{lease.dispose();api.close();}
 });
