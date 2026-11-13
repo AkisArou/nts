@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Test children get tool capabilities and named run handoffs, never the shell's
 // policy. Mutable state belongs to the fixture; declared content caches are shared.
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
@@ -20,11 +21,13 @@ const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG
 const roots=new Set<string>();
 type Fixture={after(fn:()=>void):void};
 const fixtures=new WeakMap<Fixture,NodeJS.ProcessEnv>();
-process.once('exit',()=>{
+registerCommandCloser('test environment roots',{close:()=>{
+  const failures:unknown[]=[];
   for(const root of roots)try{
     if(existsSync(root)){removable(root);rmSync(root,{recursive:true,force:true});}
-  }catch(error){process.stderr.write(`test environment cleanup failed for ${root}: ${String(error)}\n`);process.exitCode=1;}
-});
+  }catch(error){failures.push(error);process.stderr.write(`test environment cleanup failed for ${root}: ${String(error)}\n`);}
+  if(failures.length)throw new AggregateError(failures,'test environment root cleanup failed');
+}});
 
 /** Only allowlisted tools come from the caller. Policy, Git settings and
  * writable directories are supplied here or explicitly by the fixture. */

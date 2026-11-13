@@ -20,15 +20,14 @@
 //     It does not count itself, and once the reservation has ended (released,
 //     dropped, or its owner gone) it adds the most it saw, per worker, to the
 //     scheduling history under the job's key (step-scheduling.ts) and exits.
-import { resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { admittedEntry, entryUsage, noteOver, noteSampledPeak, WATCH_MS } from "./memory-ledger.ts";
 import {HostObservationError} from "./host-observations.ts";
 import { KEY, writeCostHistory } from "./step-scheduling.ts";
 import {enterWatcherFlush} from "./memory-watch-scope.ts";
 import {ToolingInstrumentError} from "./step-result.ts";
+import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 
 /**
  * Samples reservation `id` in `ledger` until it ends, and returns the most it
@@ -79,14 +78,16 @@ async function main():Promise<void> {
   if(!ledger||!id||!history||!scope||!key||!KEY.test(key)||(basis!=="job"&&basis!=="worker")||!Number.isSafeInteger(units)||units<1||(basis==="job"&&units!==1))
     throw new Error('usage: node tooling/gate/memory-watch.ts <ledger> <reservation> <history> <key> <job|worker> <workers> <scope>');
   const ending=new AbortController();
-  for(const signal of ['SIGINT','SIGTERM','SIGHUP'] as const)process.on(signal,()=>ending.abort());
-  const most=await watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
+  const watch=watchReservation(ledger,id,key,{exclude:process.pid,signal:ending.signal});
+  const unregister=registerCommandCloser('memory watcher '+key,{cancel:()=>ending.abort(),close:()=>ending.abort(),closed:async()=>{await watch;}});
+  try{
+  const most=await watch;
   if(most>0)try{
     enterWatcherFlush(scope,process.env);
     const warning=writeCostHistory(history,{jobs:[{key,peak:most,basis,width:units}]});
     if(warning)throw Error(warning);
   }catch(error){throw new ToolingInstrumentError('tooling-setup',`memory: ${key}'s peak is not in its history: ${String(error)}`,{cause:error});}
+  }finally{unregister();}
 }
 if(!isMainThread)startThread();
-else if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
-  void main().catch(error=>{console.error(String(error));process.exitCode=2;});
+else runAsCommand(import.meta.url,async()=>{try{await main();}catch(error){console.error(String(error));return 2;}});

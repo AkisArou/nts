@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {bundledDependencies} from './node-deps.mjs';
@@ -57,14 +58,14 @@ const RUN_ROOT = worker?.root ?? mkdtempSync(join(tmpdir(), "nts-blockers-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 let retainRun = false;
 let childSequence = 0;
-process.on("exit", () => {
+registerCommandCloser('scratch conformance/blockers-check.mjs',{close:()=>{
   if (worker) return; // The parent owns cleanup, including failed workers' artifacts.
   if (process.env.NTS_KEEP_TEMP === undefined && !retainRun) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
-});
+}});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

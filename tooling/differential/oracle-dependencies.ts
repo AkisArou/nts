@@ -1,5 +1,5 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
-import {runAsCommand} from "./command-entry/main.ts";
+import {registerCommandCloser,runAsCommand} from "./command-entry/main.ts";
 // One run-owned, offline dependency image. The existing pinned pnpm provisioner
 // owns registry integrity; an application installation is never a fallback.
 import {createHash} from 'node:crypto';
@@ -263,11 +263,15 @@ async function build(capability:DependencyCapability,inputSha256:string){
 }
 runAsCommand(import.meta.url,async()=>{
   const controller=new AbortController();
-  process.once('SIGTERM',()=>controller.abort());process.once('SIGINT',()=>controller.abort());
+  let operation:Promise<void>|undefined;
+  const unregister=registerCommandCloser('oracle dependency operation',{cancel:()=>controller.abort(),close:()=>controller.abort(),closed:async()=>{await operation;}});
+  operation=(async()=>{
   try{
     const [mode,raw,inputSha256]=process.argv.slice(2),capability:DependencyCapability=JSON.parse(raw!);
     if(mode==='--build')await build(capability,inputSha256!);
     else if(mode==='--capture')process.stdout.write(await captureDependencies(capability,controller.signal)+'\n');
     else throw Error('unknown oracle dependency operation');
   }catch(error){console.error(String(error));process.exitCode=2;}
+  })();
+  try{await operation;}finally{unregister();}
 });

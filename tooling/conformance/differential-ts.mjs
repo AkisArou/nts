@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // The TypeScript module against node's own, on inputs no pinned test uses.
 //
 //   node tooling/conformance/differential-ts.mjs querystring
@@ -39,13 +40,13 @@ import { CORPORA, makeRandom, render } from "./differential-corpora.mjs";
  * tree for anyone reducing a case by hand. */
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-differentialts-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
-process.on("exit", () => {
+registerCommandCloser('scratch conformance/differential-ts.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
-});
+}});
 
 
 const HERE = dirname(fileURLToPath(import.meta.url));

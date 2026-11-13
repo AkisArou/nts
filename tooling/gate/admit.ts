@@ -43,6 +43,7 @@
 // asks, and how long it has waited); `--json`, the same as `check.ts status
 // --json`'s envelope: version, kind ("memory") and at, numbers as numbers.
 import { accessSync, constants, existsSync, statSync, writeSync } from "node:fs";
+import {prepareCommandExec,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 import { resolve } from "node:path";
 import { gib, jobSizing, ledgerStatus, parseBytes, PRIORITIES, priorityOf, rankForOom, reserve, watchPeak, type JobSizing, type LedgerStatus, type Priority } from "./memory-ledger.ts";
 import { measurementAdmission, MeasurementBusy } from "./measurement-admission.ts";
@@ -196,16 +197,20 @@ async function main(argv: readonly string[]): Promise<void> {
   // Node ignores SIGPIPE and SIGXFSZ, and execve keeps a signal ignored while
   // it returns a caught one to its default. Catching both here gives the
   // command the dispositions it would have had had it been started directly.
-  for (const signal of ["SIGPIPE", "SIGXFSZ"] as const) process.on(signal, () => {});
+  prepareCommandExec();
   const waiting = new AbortController();
   let stoppedBy: NodeJS.Signals | undefined;
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-    process.on(signal, () => { stoppedBy ??= signal; waiting.abort(); });
-  }
-  let reservation: Awaited<ReturnType<typeof reserve>>;
+  let reservation: Awaited<ReturnType<typeof reserve>>|undefined;
   const joint = options.measurement && measurementAdmission({ ...options.measurement, priority: options.priority, report: say });
   const cleanup = () => joint?.close();
-  process.once("exit", cleanup);
+  let setupComplete!:()=>void;
+  const setupClosed=new Promise<void>(resolve=>{setupComplete=resolve;});
+  const unregister=registerCommandCloser('admission '+options.what,{
+    cancel:reason=>{if(reason.kind==='signal')stoppedBy??=reason.signal;waiting.abort();},
+    close:()=>{waiting.abort();reservation?.release();cleanup();},
+    closed:async()=>{await setupClosed;await reservation?.closed;},
+  });
+  try{
   try {
     reservation = await reserve({ bytes: options.bytes, what: options.what, priority: options.priority,
       liveUse: options.job?.basis === "live",
@@ -213,15 +218,12 @@ async function main(argv: readonly string[]): Promise<void> {
   } catch (error) {
     cleanup();
     if (stoppedBy === undefined) throw error;
-    // The request is withdrawn. End by the signal, as the command would have.
-    process.removeAllListeners(stoppedBy);
-    process.kill(process.pid, stoppedBy);
+    // The entry owns the signal status after this withdrawal is complete.
     return;
   }
   // Watched from outside: this process becomes the command, ranked for the
   // OOM killer by its priority (memory-ledger.ts's OOM_SCORE).
-  try { if (options.job && !reservation.inherited) watchPeak(reservation, options.job); }
-  catch(error){reservation.release();cleanup();throw error;}
+  if (options.job && !reservation.inherited) watchPeak(reservation, options.job);
   rankForOom(priorityOf(reservation.env), say);
   const env = { ...process.env, ...reservation.env };
   let failure: unknown;
@@ -234,13 +236,15 @@ async function main(argv: readonly string[]): Promise<void> {
     try { execve("/bin/sh", ["sh", file, ...options.args], env); }
     catch (error) { failure = error; }
   }
-  reservation.release();
-  cleanup();
   throw new Refusal(`cannot run ${options.command}: ${(failure as Error).message}`, 126);
+  }finally{
+    try{reservation?.release();cleanup();await reservation?.closed;}
+    finally{setupComplete();unregister();}
+  }
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
+runAsCommand(import.meta.url,async()=>{try{await main(process.argv.slice(2));}catch(error:unknown){
   say(`${error instanceof MeasurementBusy ? "" : "admit: "}${error instanceof Error ? error.message : String(error)}`);
   if (error instanceof Refusal && error.usage) say(USAGE);
-  process.exitCode = error instanceof Refusal || error instanceof MeasurementBusy ? error.status : 125;
-});
+  return error instanceof Refusal || error instanceof MeasurementBusy ? error.status : 125;
+}});

@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 #!/usr/bin/env node
 // `cargo test --workspace --no-fail-fast`, with the test binaries run at once.
 //
@@ -48,8 +49,7 @@ try {
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
 const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
 const work = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "nts-tests-"));
-process.on("exit", () => rmSync(work, { recursive: true, force: true }));
-for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => process.exit(130));
+registerCommandCloser('scratch gate/tests.mjs',{close:()=>rmSync(work,{recursive:true,force:true})});
 
 const host = /^host: (.+)$/m.exec(spawnSync("rustc", ["-vV"], { encoding: "utf8" }).stdout ?? "")?.[1];
 if (!host) {

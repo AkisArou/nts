@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // Does this change alter any answer? The examples differential, without the gate.
 //
@@ -418,10 +419,9 @@ const { env, dir: scratch } = childTemporary({ ...process.env, NTS_CHECKERS: "1"
 let oracleRoot;
 try { oracleRoot = comparisonOracleRoot(ROOT, binaries, join(CACHE, "tmp")); }
 catch (error) { console.log(`  NOT MEASURED: oracle compatibility: ${error.message}`); process.exit(2); }
-process.on("exit", () => oracleRoot.dispose());
+registerCommandCloser('agreement oracle root',{close:()=>oracleRoot.dispose()});
 if (oracleRoot.legacy) console.log("  legacy oracle view: comparison-private checkout; removed after this run");
-process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+registerCommandCloser('scratch differential/agree.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});
 
 /** One `nts check`, classified. */
 const check = async (pinned, example) => {

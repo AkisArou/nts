@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {fileURLToPath} from "node:url";
 // Node's own test suite, run against our implementation of a node module.
 //
@@ -75,13 +76,13 @@ const nodePaths=nodeEnvironment(process.env,{TMPDIR:join(ownedRun,'tmp')});
 let planned=gateEnvironment(process.env,{run:ownedRun,owned:{...nodeInputs(process.env),NODE_TEST_DIR:nodePaths.NODE_TEST_DIR,NTS_CHECKERS:'1'}});
 let environment=planned.env;
 let preparedModule=null;
-process.once('exit',code=>{
+registerCommandCloser('Node job temporary',{close:({code})=>{
   const snapshot=preparedModule?finishOracleSnapshot(preparedModule):null;
   if(snapshot&&!snapshot.ready)process.exitCode=reportCheckFailure(new ToolingInstrumentError('tooling-setup',snapshot.why),process.env);
   const outcome=finishRunTemporary(planned.temporary,environment.HOME,code===0&&(!snapshot||snapshot.ready)&&!environment.NTS_KEEP_TEMP);
   process.stderr.write('Node job temporary: '+JSON.stringify(outcome)+'\n');
   if(outcome.state==='removed after green')removeOracleSnapshot(ownedRun);
-});
+}});
 planned=await sealOracleRun(planned);environment=planned.env;
 // The in-process preparation worker consumes only this canonical owned handoff.
 process.env.NTS_ORACLE_DEPENDENCIES=environment.NTS_ORACLE_DEPENDENCIES;

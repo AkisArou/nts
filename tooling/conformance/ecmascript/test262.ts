@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../../differential/command-entry/main.ts';
 import {gitArguments} from "../../gate/git-arguments/main.ts";
 // Host validation of shared ECMAScript builtins using the pinned Test262
 // corpus. This does not claim compiled builtin conformance: the compiler lane's
@@ -52,7 +53,7 @@ const rowsPath = option("--rows", "target/" + profile + "-test262.jsonl");
 const sabotage = argv.includes("--sabotage");
 const timeout = Number(option("--timeout", "30000"));
 const intlProvider = profile === "intl" || argv.includes("--icu") ? icuHost(root) : undefined;
-if (intlProvider) process.on("exit", () => intlProvider.close());
+if(intlProvider)registerCommandCloser('ICU provider',{close:()=>intlProvider.close()});
 const sources = new Map<string, string>();
 async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
   const modules = new Map<string, vm.SourceTextModule>();

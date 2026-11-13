@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which single refusal, if fixed, unblocks the most functions.
 //
 //   node tooling/conformance/cascade-reach.mjs <module>
@@ -36,13 +37,13 @@ import { tmpdir } from "node:os";
  * tree for anyone reducing a case by hand. */
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-cascadereach-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
-process.on("exit", () => {
+registerCommandCloser('scratch conformance/cascade-reach.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
-});
+}});
 
 
 const HERE = dirname(fileURLToPath(import.meta.url));

@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which declared bindings have no C anywhere.
 //
 //   node tooling/conformance/native-half.mjs
@@ -49,13 +50,13 @@ const ROOT = join(HERE, "../..");
 const NODE_DIR = join(ROOT, "runtime/node");
 
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-native-"));
-process.on("exit", () => {
+registerCommandCloser('scratch conformance/native-half.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
-});
+}});
 
 /** Every `.c` under runtime/node, compiled once. */
 function definedSymbols() {

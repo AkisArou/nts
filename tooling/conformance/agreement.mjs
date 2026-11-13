@@ -1,3 +1,4 @@
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import {bundledDependencies} from './node-deps.mjs';
 // A compiled program that answers differently from node.
 //
@@ -64,13 +65,13 @@ if (!existsSync(compiler)) {
 }
 
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-agreement-"));
-process.on("exit", () => {
+registerCommandCloser('scratch conformance/agreement.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
-});
+}});
 
 const DIR = fileURLToPath(new URL("../../tests/agreements/", import.meta.url));
 const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));

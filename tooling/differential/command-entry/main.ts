@@ -5,8 +5,9 @@ import {pathToFileURL} from 'node:url';
 
 type Command=()=>number|void|Promise<number|void>;
 export type CommandSignal='SIGINT'|'SIGTERM'|'SIGHUP';
-export type CloseReason={kind:'completion'}|{kind:'failure'}|{kind:'signal';signal:CommandSignal};
-export type CommandCloser={cancel?:(reason:Exclude<CloseReason,{kind:'completion'}>)=>void;close:()=>void|Promise<void>;closed?:()=>Promise<void>};
+export type CloseReason={kind:'completion'}|{kind:'failure';error?:unknown}|{kind:'signal';signal:CommandSignal};
+export type CloseContext={reason:CloseReason;code:number};
+export type CommandCloser={cancel?:(reason:Exclude<CloseReason,{kind:'completion'}>)=>void;close:(context:CloseContext)=>void|Promise<void>;closed?:()=>Promise<void>};
 export const COMMAND_CLOSE_MS=5*60_000;
 type CloseHost={arm:(callback:()=>void,milliseconds:number)=>()=>void;report:(line:string)=>void;exit:(code:number)=>void};
 const signalCode={SIGINT:130,SIGTERM:143,SIGHUP:129} as const;
@@ -62,7 +63,7 @@ export class CommandLifetime{
       for(;;){
         const next=[...this.#resources.entries()].at(-1);if(!next)break;
         const [id,row]=next;
-        try{await row.owner.close();}catch(error){if(!this.#ended)this.#problem(row.name,error);}
+        try{await row.owner.close({reason:this.#reason,code:result()});}catch(error){if(!this.#ended)this.#problem(row.name,error);}
         // Read completion after close starts it, including when close throws.
         try{await row.owner.closed?.();}catch(error){if(!this.#ended)this.#problem(row.name+' completion',error);}
         if(this.#ended)return;
@@ -92,7 +93,7 @@ function processOwner():ProcessOwner{
     void state.finish(signalCode[signal],{kind:'signal',signal}).then(()=>process.exit(signalCode[state.signal!]));
   };
   const signals={SIGINT:()=>onSignal('SIGINT'),SIGTERM:()=>onSignal('SIGTERM'),SIGHUP:()=>onSignal('SIGHUP')};
-  const failed=(error:unknown)=>{state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure'}).then(()=>process.exit(Number(process.exitCode)||1));};
+  const failed=(error:unknown)=>{state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure',error}).then(()=>process.exit(Number(process.exitCode)||1));};
   // An unsettled body can own unref'd resources. Drain those too, but only
   // the actual exit decides its exit13; another beforeExit listener may
   // still settle main, whose eventual nonzero status remains authoritative.
@@ -103,7 +104,7 @@ function processOwner():ProcessOwner{
   };
   const state:ProcessOwner={lifetime,pendingMain:false,finish:async(code,reason)=>{
     const drained=await lifetime.close(code,reason);
-    process.exitCode=state.signal?signalCode[state.signal]:(state.explicitCode??code)||drained;detach();
+    process.exitCode=state.signal?signalCode[state.signal]:(state.explicitCode??code)||drained||Number(process.exitCode??0);detach();
   }};
   owner=state;
   process.on('beforeExit',beforeExit);process.on('uncaughtException',failed);process.on('unhandledRejection',failed);
@@ -156,7 +157,7 @@ export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?
   const failed=(error:unknown)=>{
     finished();state.pendingMain=false;
     if(error instanceof CommandExit)return state.finish(error.code);
-    console.error(error);return state.finish(1,{kind:'failure'});
+    console.error(error);return state.finish(1,{kind:'failure',error});
   };
   process.once('beforeExit',arm);
   try{void Promise.resolve(main()).then(complete,failed);}
