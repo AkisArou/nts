@@ -47,7 +47,7 @@ function traceFailure(error){return new ToolingInstrumentError('tooling-setup','
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
-/** @type {string|undefined} */
+/** @type {ReturnType<typeof prepareFileObserver>|undefined} */
 let fileObserver;
 try{
   if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('trace destination must be absolute');
@@ -91,7 +91,7 @@ calls=${shellQuote(calls)}
 # Cargo also gives rustdoc this runner. Its temporary executables disappear
 # when rustdoc returns, so run those now; only profile-owned artifacts replay.
 case "$1" in "$profile/"*) ;; *)
-  ${doctestCalls&&fileObserver?`node ${shellQuote(CALL_RECORDER)} --record-doctest-call ${shellQuote(doctestCalls)} ${shellQuote(fileObserver)} "$$" "$@" || exit 2`:""}
+  ${doctestCalls&&fileObserver?`node ${shellQuote(CALL_RECORDER)} --record-doctest-call ${shellQuote(doctestCalls)} ${shellQuote(fileObserver.executable)} "$$" "$@" || exit 2`:""}
   exec "$@" ;; esac
 n=$(mktemp "$calls/call-XXXXXXXX")
 node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({at: process.hrtime.bigint().toString(), cwd: process.cwd(), argv: process.argv.slice(2), env: process.env}))' "$n" "$@"
@@ -102,7 +102,7 @@ const started = Date.now();
 const artifactFile=traceDirectory?join(traceDirectory,'artifacts.json'):undefined;
 const ownerArgs=[...(artifactFile?['--artifacts',artifactFile]:[]),"workspace"];
 const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw.gz'):undefined;
-const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
+const first = spawnSync(fileObserver?.executable??process.execPath, cargoTrace?fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
   cwd: ROOT,
   env: {
     ...process.env,
@@ -115,7 +115,7 @@ const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 /** @type {ToolingInstrumentError|undefined} */
 let cargoTraceFailure;
 if(cargoTrace){
-  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
+  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,observer:fileObserver?.receipt,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
   catch(error){if(isCommandExit(error))throw error;cargoTraceFailure=traceFailure(error);}
 }
 let cargoStatus=first.status,cargoStatusKnown=!cargoTrace;
@@ -169,14 +169,14 @@ const runOne = (key) =>
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
-    const child = spawn(fileObserver??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
     child.on("error", (e) => { out += `error: ${e.message}\n`; });
     child.on("close", async (status, signal) => {
       if(trace){
-        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target});}
+        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target,observer:fileObserver?.receipt});}
         catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);traceFailures.push(failure.message);out+='NOT MEASURED: '+failure.message+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;

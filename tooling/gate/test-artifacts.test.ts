@@ -2,7 +2,7 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
-import {readInputTraceIndex,type InputIndexObservation} from "./rust-test-inputs.ts";
+import {readInputTraceIndex,type InputIndexObservation,type InputSubject} from "./rust-test-inputs.ts";
 import {readStepInstrument} from "./step-result.ts";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -58,10 +58,11 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     await readInputTraceIndex(join(trace,'cargo.index.jsonl.gz'),row=>{if(row.kind==='observation')cargo.observations.push(row);});
     const index=await readInputTraceIndex(join(trace,'binary-0.index.jsonl.gz'),row=>{if(row.kind==='observation')binary.observations.push(row);});
     assert.equal(index.header.target?.source,'src/lib.rs');
-    assert.ok(cargo.observations.some((row:{phase:string;source?:string;path:string})=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.path===join(root,'runtime-data/value')));
+    const named=(subject:InputSubject)=>subject.kind==='descriptor'?subject.target:subject.anchor.kind==='absolute'?subject.name:subject.anchor.path+'/'+subject.name;
+    assert.ok(cargo.observations.some(row=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.subjects.some(subject=>named(subject)===join(root,'runtime-data/value'))));
     assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));
-    assert.ok(binary.observations.some((row:{path:string;outcome:string})=>row.path===join(root,'runtime-data/missing')&&row.outcome==='unknown'));
-    assert.ok(binary.observations.some((row:{path:string;operation:string})=>row.path===join(root,'runtime-data')&&row.operation==='directory'));
+    assert.ok(binary.observations.some(row=>row.subjects.some(subject=>named(subject)===join(root,'runtime-data/missing'))&&row.outcome==='unknown'));
+    assert.ok(binary.observations.some(row=>row.subjects.some(subject=>named(subject)===join(root,'runtime-data'))&&row.operation==='directory'));
     assert.ok(existsSync(join(root,"target/nts-dev/incremental")));
     assert.equal(existsSync(join(root,"target/debug")),false);
     // Mutate only the private staged observer: successful product tests with

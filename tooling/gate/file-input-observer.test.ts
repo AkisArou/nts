@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync,type StdioOptions} from 'node:child_process';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -80,14 +81,15 @@ int main(int argc,char **argv){
 
 test('the native observer retains actual images, attempted inputs and original product streams',async t=>{
   const root=newTestScratch('file-input-observer');t.after(()=>rmSync(root,{recursive:true,force:true}));
-  const env=fixtureEnvironment(t),binary=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),binary=prepared.executable,program=join(root,'subject'),input=join(root,'subject.c');
   writeFileSync(input,subject);
   const build=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',input,'-pthread','-o',program],{env,encoding:'utf8'});
   assert.equal(build.status,0,build.stderr);
   writeFileSync(join(root,'value'),'product');
   const record=join(root,'facts.jsonl'),result=spawnTest(binary,fileObserverArguments(record,program,['facts',root]),{env,encoding:'utf8'});
   assert.equal(result.status,7,result.stderr);assert.equal(result.stdout,'product');
-  const rows:ObservationRow[]=[],end=await readFileObservation(record,row=>{rows.push(row);});
+  const rows:ObservationRow[]=[],{terminal:end,artifact}=await readFileObservation(record,row=>{rows.push(row);});
+  assert.equal(artifact.bytes,readFileSync(record).length);assert.equal(artifact.sha256,createHash('sha256').update(readFileSync(record)).digest('hex'));
   assert.equal(end.exit,7);assert.equal(end.entered,true);assert.equal(end.execErrno,0);
   const attempts=rows.filter((row):row is InputAttempt=>row.kind==='attempt');
   const missing=attempts.find(row=>row.paths.some(path=>byteFactText(path.value,'path')==='missing'));
@@ -104,12 +106,12 @@ test('the native observer retains actual images, attempted inputs and original p
   const exec=attempts.find(row=>row.operation==='execute');assert.ok(exec);
   assert.notEqual(byteFactText(exec.image,'pre-exec image'),program,'an exec attempt does not claim the requested program entered');
   const published=join(root,'facts.index.jsonl.gz');
-  await publishInputTrace({raw:record,output:published,cwd:root,root,target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
+  await publishInputTrace({raw:record,output:published,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
   const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
-  await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='probe')decoded.descriptorProbes.push(row);});
-  assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.operation==='descriptor'&&row.path===join(root,'value')&&row.outcome==='unknown'));
+  await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='observation')decoded.descriptorProbes.push(...row.probes);});
+  assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.target===join(root,'value'))&&row.outcome==='unknown'));
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'));
-  assert.ok(decoded.observations.every(row=>!row.path.includes('socket:[')&&!row.path.endsWith('/socket-relative')));
+  assert.ok(decoded.observations.every(row=>row.subjects.every(subject=>subject.kind==='descriptor'?!subject.target.includes('socket:['):subject.name!=='socket-relative')));
 
   const descriptor=join(root,'descriptor');writeFileSync(descriptor,'def');
   const {openSync,closeSync}=await import('node:fs');
@@ -130,9 +132,9 @@ test('the native observer retains actual images, attempted inputs and original p
 
   const absent=spawnTest(binary,fileObserverArguments(join(root,'absent.jsonl'),join(root,'absent'),[]),{env,encoding:'utf8'});
   assert.equal(absent.status,2);assert.match(absent.stderr,/exec errno 2/);
-  const noEntry=await readFileObservation(join(root,'absent.jsonl'),()=>{});assert.equal(noEntry.entered,false);assert.equal(noEntry.execErrno,2);
+  const {terminal:noEntry}=await readFileObservation(join(root,'absent.jsonl'),()=>{});assert.equal(noEntry.entered,false);assert.equal(noEntry.execErrno,2);
   const exited=spawnTest(binary,fileObserverArguments(join(root,'exit127.jsonl'),'sh',['-c','exit 127']),{env,encoding:'utf8'});
-  assert.equal(exited.status,127,exited.stderr);assert.equal((await readFileObservation(join(root,'exit127.jsonl'),()=>{})).entered,true);
+  assert.equal(exited.status,127,exited.stderr);assert.equal((await readFileObservation(join(root,'exit127.jsonl'),()=>{})).terminal.entered,true);
 
   for(const signal of [undefined,'SIGINT','SIGTERM','SIGHUP'] as const){
     const record=join(root,'drain-'+String(signal)+'.jsonl');
@@ -149,7 +151,7 @@ test('the native observer retains actual images, attempted inputs and original p
       if(signal){child.kill(signal);await waitFor('observer signal during drain',()=>gunzipSync(readFileSync(record+'.pending.'+child.pid),{finishFlush:constants.Z_SYNC_FLUSH}).toString('utf8').includes('\"kind\":\"signal\"'));}
       releasePipe.end('x');
       const result=await done;assert.deepEqual(result,signal?{status:null,signal}:{status:0,signal:null},stderr);
-      const terminal=await readFileObservation(record,()=>{});assert.equal(terminal.drainComplete,true);assert.equal(terminal.exit,0);
+      const {terminal}=await readFileObservation(record,()=>{});assert.equal(terminal.drainComplete,true);assert.equal(terminal.exit,0);
       assert.equal(terminal.observerSignal,signal?{SIGINT:2,SIGTERM:15,SIGHUP:1}[signal]:0);
     }finally{releasePipe.end();if(!closed)await done;}
   }
@@ -217,7 +219,7 @@ test('the native observer retains actual images, attempted inputs and original p
       if(before)await assert.rejects(readFileObservation(record,()=>{}),/incomplete census/);
       else{
         const canceled:InputAttempt[]=[];
-        const complete=await readFileObservation(record,row=>{if(row.kind==='attempt'&&row.canceled)canceled.push(row);});
+        const {terminal:complete}=await readFileObservation(record,row=>{if(row.kind==='attempt'&&row.canceled)canceled.push(row);});
         assert.equal(complete.errors,0);assert.equal(canceled.length,1);
         assert.equal(canceled[0]!.factsComplete,false);assert.equal(canceled[0]!.syscall,'exit');
         assert.deepEqual(canceled[0]!.paths,[]);assert.deepEqual(canceled[0]!.dirfds,[]);
@@ -298,5 +300,5 @@ test('malformed and incomplete raw observations cannot publish a complete census
   const large=join(root,'many-rows.gz'),descriptor={kind:'inherited',fd:1,flags:1,target:{hex:'706970653a5b315d',error:0,truncated:false,null:false}};
   const many=[start,...Array.from({length:5000},()=>descriptor),{kind:'root-start',root:1},{kind:'root-exit',root:1,exit:0,signal:0},end].map(row=>JSON.stringify(row)).join('\n')+'\n';
   assert.ok(Buffer.byteLength(many)>256*1024);writeFileSync(large,gzipSync(many));
-  assert.equal((await readFileObservation(large,()=>{})).complete,true,'the limit is per decoded row, not total stream size');
+  assert.equal((await readFileObservation(large,()=>{})).terminal.complete,true,'the limit is per decoded row, not total stream size');
 });

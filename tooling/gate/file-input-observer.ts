@@ -1,11 +1,12 @@
 // The native supervisor records attempted operations and actual task facts.
 // It never substitutes a syscall result or claims a path was opened.
-import {createReadStream,mkdirSync} from 'node:fs';
+import {createReadStream,mkdirSync,readFileSync,realpathSync} from 'node:fs';
 import {join,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createGunzip} from 'node:zlib';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {createHash} from 'node:crypto';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
@@ -26,13 +27,29 @@ export function canceledLifetime(row:InputAttempt):boolean{
   return row.canceled&&row.operation==='lifetime'&&(row.syscall==='exit'||row.syscall==='exit_group')&&row.paths.length===0&&row.dirfds.length===0;
 }
 
-export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):string{
+export type FileObserverReceipt={version:1;observedPath:string;artifactPath:string;sha256:string;sourceSha256:string;abi:'linux-x86_64-v1'|'linux-aarch64-v1'};
+const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
+/** A retained binary supplies the ABI; the decoder's own architecture does not.
+ * Its source digest is evidence to bind against the accepted build receipt. */
+export function retainedFileObserverReceipt(value:Omit<FileObserverReceipt,'version'|'abi'>):FileObserverReceipt{
+  if(!isAbsolute(value.observedPath)||!isAbsolute(value.artifactPath)||!/^([0-9a-f]{64})$/.test(value.sha256)||!/^([0-9a-f]{64})$/.test(value.sourceSha256))
+    throw Error('file input observer: invalid observer receipt');
+  const bytes=readFileSync(value.artifactPath);
+  if(digest(bytes)!==value.sha256)throw Error('file input observer: retained observer digest changed');
+  if(bytes.length<20||!bytes.subarray(0,4).equals(Buffer.from([127,69,76,70]))||bytes[4]!==2||bytes[5]!==1)
+    throw Error('file input observer: observer has no supported ELF64 little-endian ABI');
+  const machine=bytes.readUInt16LE(18),abi=machine===62?'linux-x86_64-v1':machine===183?'linux-aarch64-v1':undefined;
+  if(!abi)throw Error('file input observer: unsupported observer ELF machine '+machine);
+  return {...value,version:1,abi};
+}
+export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):{executable:string;receipt:FileObserverReceipt}{
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
-  mkdirSync(directory,{recursive:true});const binary=join(directory,'file-input-observer');
+  mkdirSync(directory,{recursive:true});const binary=join(directory,'file-input-observer'),source=fileURLToPath(new URL('./file-input-observer.c',import.meta.url)),sourceSha256=digest(readFileSync(source));
   const built=infrastructureProbe({purpose:'build the filesystem input observer',command:'cc',
-    args:['-O2','-std=c11','-Wall','-Wextra','-Werror',fileURLToPath(new URL('./file-input-observer.c',import.meta.url)),'-lz','-o',binary],env});
+    args:['-O2','-std=c11','-Wall','-Wextra','-Werror',source,'-lz','-o',binary],env});
   if(built.status!==0)throw Error('file input observer: build failed: '+built.stderr);
-  return binary;
+  if(digest(readFileSync(source))!==sourceSha256)throw Error('file input observer: source changed during preparation');
+  return {executable:binary,receipt:retainedFileObserverReceipt({observedPath:realpathSync(binary),artifactPath:binary,sha256:digest(readFileSync(binary)),sourceSha256})};
 }
 export function fileObserverArguments(record:string,command:string,args:readonly string[]):string[]{
   if(!isAbsolute(record))throw Error('file input observer: record must be absolute');
@@ -78,7 +95,7 @@ export function readObservationRow(value:unknown):ObservationRow{
   else if(row.kind==='attempt')valid=typeof row.id==='string'&&/^\d+$/.test(row.id)&&['tid','tgid','ppid'].every(key=>integer(row[key]))
     &&typeof row.birth==='string'&&/^\d+$/.test(row.birth)&&typeof row.parentBirth==='string'&&/^\d+$/.test(row.parentBirth)
     &&typeof row.syscall==='string'&&typeof row.operation==='string'&&row.outcome==='unknown'&&typeof row.canceled==='boolean'&&typeof row.factsComplete==='boolean'
-    &&Array.isArray(row.args)&&row.args.length===6&&row.args.every(arg=>typeof arg==='string'&&/^[0-9a-f]+$/.test(arg))
+    &&Array.isArray(row.args)&&row.args.length===6&&row.args.every(arg=>typeof arg==='string'&&/^[0-9a-f]{1,16}$/.test(arg))
     &&byteFact(row.cwd)&&byteFact(row.image)&&typeof row.argvRead==='boolean'&&byteFact(row.argv)
     &&Array.isArray(row.paths)&&row.paths.every(value=>{const path=object(value);return integer(path.arg)&&integer(path.dirfdArg)&&byteFact(path.value);})
     &&Array.isArray(row.dirfds)&&row.dirfds.every(value=>{const fd=object(value);return integer(fd.arg)&&integer(fd.fd)&&byteFact(fd.target);});
@@ -89,7 +106,8 @@ export function readObservationRow(value:unknown):ObservationRow{
 /** A raw record is complete only after the native writer has drained every
  * filter peer and closed. Rows stay bounded by the producer's pathname/argv
  * buffers; no entire raw trace is loaded as a string. */
-export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void|Promise<void>):Promise<ObservationEnd>{
+export type CaptureArtifact={sha256:string;bytes:number};
+export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void|Promise<void>):Promise<{terminal:ObservationEnd;artifact:CaptureArtifact}>{
   let start=false,end:ObservationEnd|undefined,attempts=0,root:number|undefined,exited:RootExit|undefined;
   const consume=async(value:unknown)=>{
     const row=readObservationRow(value);
@@ -113,16 +131,18 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     await visit(row);
   };
-  await readCompressedRecords(file,consume);
+  const artifact=await readCompressedRecords(file,consume);
   if(!end||!end.complete||!end.drainComplete||end.errors||end.attempts!==attempts)
     throw Error('file input observer: incomplete census'+(end?' (attempts '+attempts+'/'+end.attempts+', errors '+end.errors+')':''));
-  return end;
+  return {terminal:end,artifact};
 }
 
 export const MAX_OBSERVATION_ROW_BYTES=256*1024;
 /** Shared bounded codec for native records and attributed census indices. */
-export async function readCompressedRecords(file:string,visit:(value:unknown)=>void|Promise<void>):Promise<void>{
-  let pending=Buffer.alloc(0);
+export async function readCompressedRecords(file:string,visit:(value:unknown)=>void|Promise<void>):Promise<CaptureArtifact>{
+  let pending=Buffer.alloc(0),bytes=0;
+  const digest=createHash('sha256'),input=createReadStream(file);
+  input.on('data',(chunk:Buffer)=>{bytes+=chunk.length;digest.update(chunk);});
   const consumeChunk=async(chunk:Buffer)=>{
     pending=Buffer.concat([pending,chunk]);
     for(;;){
@@ -133,8 +153,9 @@ export async function readCompressedRecords(file:string,visit:(value:unknown)=>v
     }
     if(pending.length>MAX_OBSERVATION_ROW_BYTES)throw Error('file input observer: record exceeds bounded row size');
   };
-  await pipeline(createReadStream(file),createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
+  await pipeline(input,createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
     consumeChunk(chunk).then(()=>callback(),error=>callback(error instanceof Error?error:new Error(String(error))));
   }}));
   if(pending.length)throw Error('file input observer: unterminated raw record');
+  return {sha256:digest.digest('hex'),bytes};
 }

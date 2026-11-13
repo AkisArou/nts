@@ -8,6 +8,8 @@ import {newTestScratch} from './test-scratch.ts';
 import {gzipSync} from 'node:zlib';
 import {constants} from 'node:buffer';
 import {durableRecordStream} from './durable-record.ts';
+import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 
 const artifact={package_id:'pkg-id',executable:'/source/target/nts-dev/deps/arbitrary-hash',profile:{test:true},target:{name:'integration',kind:['test'],src_path:'/source/crate/tests/integration.rs'}};
 const evidence=(artifacts:unknown[]= [artifact])=>({version:1,status:0,buildFinished:true,artifacts});
@@ -77,6 +79,41 @@ test('same-image rustdoc facts with different actual source arguments update the
   assert.equal(phases.observe(image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/second.rs'])).id,next.id);
 });
 
+test('same-image cwd changes update actual rustdoc context without claiming another exec',()=>{
+  const phases=new RustInputPhases('/source');phases.start(1);phases.observe(image(1,0,'/observer'));
+  const first=phases.observe(image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']));
+  const changed={...image(2,1,'/toolchain/rustdoc',['rustdoc','--test','src/lib.rs']),cwd:bytes('/source/moved')};
+  const next=phases.observe(changed);
+  assert.notEqual(next.id,first.id);assert.equal(next.reason,'actual-cwd');
+  assert.equal(next.cwd,'/source/moved');assert.equal(next.phase.source,'moved/src/lib.rs');
+});
+
+test('attempt groups retain kernel path order, two-path positions and actual changing anchors',async t=>{
+  const root=newTestScratch('rust-input-anchors');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const rename=image(1,0,'/fixture');rename.id='41';rename.operation='rename';rename.syscall='renameat2';
+  rename.paths=[{arg:1,dirfdArg:0,value:bytes('link/../value')},{arg:3,dirfdArg:2,value:bytes('../destination')}];
+  rename.dirfds=[{arg:0,fd:3,target:bytes('/source/first')},{arg:2,fd:4,target:bytes('/source/second')}];
+  const after={...image(1,0,'/fixture'),id:'42',cwd:bytes('/source/moved'),syscall:'openat',operation:'open',
+    args:['ffffffffffffff9c','0','0','0','0','0'],paths:[{arg:1,dirfdArg:0,value:bytes('other/../input')}],
+    dirfds:[{arg:0,fd:-100,target:bytes('/source/moved')}]};
+  const raw=join(root,'raw.gz'),output=join(root,'index.gz');
+  writeFileSync(raw,gzipSync([{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},rename,after,
+    {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}].map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  await publishInputTrace({raw,output,cwd:'/source/ignored',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
+  const rows:InputIndexObservation[]=[];
+  const result=await readInputTraceIndex(output,row=>{if(row.kind==='observation')rows.push(row);});
+  assert.equal(result.header.version,4);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
+  assert.deepEqual(rows.map(row=>row.attempt.id),['41','42']);
+  assert.deepEqual(rows[0]!.subjects,[
+    {kind:'path',arg:1,dirfdArg:0,name:'link/../value',raw:bytes('link/../value').hex,anchor:{kind:'dirfd',fd:3,path:'/source/first',raw:bytes('/source/first').hex}},
+    {kind:'path',arg:3,dirfdArg:2,name:'../destination',raw:bytes('../destination').hex,anchor:{kind:'dirfd',fd:4,path:'/source/second',raw:bytes('/source/second').hex}},
+  ]);
+  assert.deepEqual(rows[1]!.subjects,[{kind:'path',arg:1,dirfdArg:0,name:'other/../input',raw:bytes('other/../input').hex,anchor:{kind:'cwd',path:'/source/moved'}}]);
+  assert.deepEqual(rows[1]!.args,after.args);assert.equal(rows[1]!.cwd,'/source/moved');
+  assert.equal(result.complete.raw.sha256,createHash('sha256').update(readFileSync(raw)).digest('hex'));
+  assert.equal(result.complete.raw.bytes,readFileSync(raw).length);
+});
+
 test('descriptor-backed null paths are retained and non-filesystem dirfds never invent path anchors',async t=>{
   const root=newTestScratch('rust-input-descriptors');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const nullPath=image(1,0,'/fixture');nullPath.syscall='statx';nullPath.operation='lookup';
@@ -89,13 +126,14 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
     {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}].map(row=>JSON.stringify(row)).join('\n')+'\n'));
   await publishInputTrace({raw,output,cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
   const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
-  await readInputTraceIndex(output,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='probe')decoded.descriptorProbes.push(row);});
-  assert.deepEqual(decoded.observations.map(row=>[row.path,row.operation,row.outcome]),[['/source/crate/value','descriptor','unknown']]);
+  await readInputTraceIndex(output,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='observation')decoded.descriptorProbes.push(...row.probes);});
+  assert.deepEqual(decoded.observations.flatMap(row=>row.subjects.map(subject=>[subject.kind==='descriptor'?subject.target:subject.name,row.operation,row.outcome])),[['/source/crate/value','lookup','unknown']]);
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='null-path'));
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
   const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);});
   const changed=(name:string,values:unknown[])=>{const path=join(root,name+'.gz');writeFileSync(path,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return path;};
-  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:4},...rows.slice(1)]),()=>{}),/unsupported input index version 4/);
+  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:5},...rows.slice(1)]),()=>{}),/unsupported input index version 5/);
+  await assert.rejects(readInputTraceIndex(changed('legacy',[{...(rows[0] as object),version:3},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   const footer=rows.at(-1) as {counts:{observations:number}};
   await assert.rejects(readInputTraceIndex(changed('counts',[...rows.slice(0,-1),{...footer,counts:{...footer.counts,observations:footer.counts.observations+1}}]),()=>{}),/count mismatch/);
   await assert.rejects(readInputTraceIndex(changed('missing',rows.slice(0,-1)),()=>{}),/incomplete input index/);
@@ -129,10 +167,10 @@ test('input index publication and its typed reader exceed one string with bounde
   let encodedBytes=0;
   await durableRecordStream(output,async append=>{
     const put=async(row:unknown)=>{const line=JSON.stringify(row)+'\n';encodedBytes+=Buffer.byteLength(line);await append(line);};
-    await put({kind:'index-start',version:3,mechanism:'seccomp-user-notification',outcomes:'unknown',target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
-    for(let id=1;id<=repeats;id++)await put({...context,id,pid:id});
+    await put({kind:'index-start',version:4,mechanism:'seccomp-user-notification',outcomes:'unknown',observer:null,target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
+    for(let id=1;id<=repeats;id++){await put({...context,id,pid:id});await put({kind:'observation',image:id,attempt:{id:String(id),tid:id,tgid:id,ppid:0,birth:String(id),parentBirth:'0'},cwd:'/source',args:['0','0','0','0','0','0'],operation:'lifetime',syscall:'exit',outcome:'unknown',canceled:false,phase:'test-runtime',source:'src/lib.rs',subjects:[],probes:[]});}
     await put({kind:'index-complete',terminal:{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:repeats,errors:0,drainComplete:true,observerSignal:0},
-      counts:{images:repeats,observations:0,probes:0,terminalFacts:0,inherited:0}});
+      raw:{path:'/private/raw.gz',sha256:'0'.repeat(64),bytes:1},counts:{images:repeats,attempts:repeats,observations:0,probes:0,terminalFacts:0,inherited:0}});
   },{gzip:true});
   let seen=0;const complete=await readInputTraceIndex(output,row=>{if(row.kind==='execution')seen++;});
   assert.ok(encodedBytes>constants.MAX_STRING_LENGTH);assert.equal(seen,repeats);assert.equal(complete.complete.counts.images,repeats);
