@@ -56,6 +56,16 @@ test('the actual exclusivity scanner retains NUL, unknown data, ZIP and declared
     assert(checked.stderr.includes(path),checked.stderr);assert(!checked.stderr.includes('source is stale'),checked.stderr);
   }
   rmSync(join(root,path));
+  const escaped=[...model.prefix].map(ch=>'\\u{'+ch.codePointAt(0)!.toString(16)+'}').join('');
+  writeFileSync(join(root,path),'// '+escaped+'\n');
+  const unicode=run();assert.equal(unicode.status,1);assert(unicode.stderr.includes(path),unicode.stderr);
+  rmSync(join(root,path));
+  const ignored='tooling/ignored.data';writeFileSync(join(root,'.gitignore'),ignored+'\n');
+  writeFileSync(join(root,ignored),model.prefix);assert.equal(run().status,0,'ignored untracked data is outside Git enumeration');
+  const added=spawnSync('git',gitArguments(['add','--force','--',ignored]),{cwd:root,encoding:'utf8',env:testEnvironment()});
+  assert.equal(added.status,0,added.stderr);assert.equal(run().status,1,'a tracked ignored path remains in cached enumeration');
+  const removed=spawnSync('git',gitArguments(['rm','--force','--',ignored]),{cwd:root,encoding:'utf8',env:testEnvironment()});
+  assert.equal(removed.status,0,removed.stderr);assert.equal(run().status,0);
   const unknown='tooling/namespace-probe.data';writeFileSync(join(root,unknown),`${String.fromCharCode(0)}${model.prefix}`);
   const data=run();assert.equal(data.status,1,'unknown NUL-bearing data must remain under exclusivity');assert(data.stderr.includes(unknown),data.stderr);
   rmSync(join(root,unknown));

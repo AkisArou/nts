@@ -91,6 +91,14 @@ test("input ancestry queries retain declaration order after replacement and rein
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
 
+test('the JVM member audit owns its actual source roots and stays outside documentation',()=>{
+  for(const path of ['compiler/core/src/lib.rs','runtime/jvm/README.md','tooling/full-check/keep.json'])
+    assert.ok([...covering(stepInputs(),path)].includes('jvm-members'),path);
+  assert.ok(![...covering(stepInputs(),'docs/architecture.md')].includes('jvm-members'));
+  for(const path of ['tooling/jvm/members.ts','tooling/jvm/member-catalogue.ts','tooling/jvm/member-grammar.ts'])
+    assert.ok(stepsFor(path).includes('jvm-members'),path);
+});
+
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');

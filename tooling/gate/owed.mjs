@@ -652,7 +652,7 @@ export const RULES = [
   },
   {
     name: "the JVM member catalogue owner",
-    when: p => /^tooling\/jvm\/(members|member-catalogue|member-grammar)(?:\.test)?\.ts$/.test(p),
+    when: (/** @type {string} */ p) => /^tooling\/jvm\/(members|member-catalogue|member-grammar)(?:\.test)?\.ts$/.test(p),
     steps: ["jvm-members", "tooling"],
     arms: [{kind:"valid",asks:"fresh outputs and exclusive member names retain their real scanner controls",run:"node --test tooling/jvm/member-catalogue.test.ts"}],
   },
