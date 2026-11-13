@@ -3,10 +3,11 @@ import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
+import {fileInput} from './reader-inputs/main.ts';
 
 test("direct launch mutations in all four languages fail the audit", () => {
   for (const [path, source] of [
@@ -37,8 +38,13 @@ test("comments, embedded source and executable lookups are not launches", () => 
 
 test("removing flags from the real follow-up launchers is detected", () => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
-  for (const path of ["tests/interop/ts-from-java/build.sh", "tests/interop/java-from-ts/build.sh", "tests/interop/android-shape/build.sh", "benchmarks/interop-copy/run.sh", "benchmarks/interop-facade/run.sh", "runtime/ecmascript/tools/icu.ts"]) {
-    const source = readFileSync(resolve(root, path), "utf8");
+  for (const input of [fileInput(new URL('../../tests/interop/ts-from-java/build.sh',import.meta.url)),
+    fileInput(new URL('../../tests/interop/java-from-ts/build.sh',import.meta.url)),
+    fileInput(new URL('../../tests/interop/android-shape/build.sh',import.meta.url)),
+    fileInput(new URL('../../benchmarks/interop-copy/run.sh',import.meta.url)),
+    fileInput(new URL('../../benchmarks/interop-facade/run.sh',import.meta.url)),
+    fileInput(new URL('../../runtime/ecmascript/tools/icu.ts',import.meta.url))]) {
+    const path=relative(root,fileURLToPath(input)),source = readFileSync(input, "utf8");
     assert.deepEqual(unsharedLaunches(path, source), [], path);
     const mutant = source.replace(/\$nts_(?:jvm|jdk)_flags\s+/g, "").replace(/\.\.\.vmToolFlags\("(?:java|javac|jar)"\),\s*/g, "");
     assert.ok(unsharedLaunches(path, mutant).length > 0, `${path}: removing the shared arguments must fail`);
