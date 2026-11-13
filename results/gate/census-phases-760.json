@@ -1,0 +1,5855 @@
+{
+  "version": 1,
+  "issue": 760,
+  "source": "3e752b875ba5843a6c09e31f6238c71b8282ba8e",
+  "writer": "/home/akisarou/.cache/nts-scratch/760/write-evidence.py",
+  "writer_source": "import json, pathlib, hashlib, subprocess\nroot=pathlib.Path('/home/akisarou/.cache/nts-scratch/760')\ntree=pathlib.Path('/home/akisarou/.cache/nts-pool/5')\ndef read(name): return json.loads((root/name).read_text())\ndef sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()\ncohorts={}\nfor name in ['real-overhead-v3','real-overhead-v4','real-cpu-v3','real-cpu-v4','real-cpu-v5','real-overhead-v6','real-cpu-v6','real-overhead-v7']:\n    path=root/name/'provenance.json'\n    if not path.exists():\n        path=root/name/'provenance.partial.json'\n    if not path.exists(): continue\n    raw=json.loads(path.read_text()); rows=raw['rows']; summary={}\n    for backend in ['c','llvm','jvm']:\n        arms=[row for row in rows if row['name'].startswith(backend+'-')]\n        off=[row for row in arms if not row['enabled']]; on=[row for row in arms if row['enabled']]\n        if not off or not on: continue\n        summary[backend]={\n          'ordinary_or_perf_cpu_ratio':sum(row['cpu_s']+row['collection_cpu_s'] for row in on)/sum(row['cpu_s'] for row in off),\n          'user_instructions_ratio':sum(row['instructions'] for row in on)/sum(row['instructions'] for row in off) if all(row['instructions'] for row in arms) else None,\n          'off_cpu_s':[row['cpu_s'] for row in off], 'on_cpu_s':[row['cpu_s'] for row in on],\n          'on_collection_cpu_s':[row['collection_cpu_s'] for row in on]}\n    cohorts[name]={'raw':str(path),'sha256':sha(path),'observer':rows[0].get('observer','perf-inherited' if 'overhead' in name else 'none'), 'provenance':raw,'summary':summary}\nidentity=read('recheck-v2/identity-summary.json')\nwiring=read('wiring-v5/summary.json')\nresult={'version':1,'issue':760,'source':subprocess.check_output(['git','--no-optional-locks','rev-parse','HEAD'],cwd=tree,text=True).strip(),\n  'writer':str(pathlib.Path(__file__)),'writer_source':pathlib.Path(__file__).read_text(),'writer_sha256':sha(pathlib.Path(__file__)),\n  'recovery_check':{'source':(root/'recover-cpu-manifest.py').read_text(),'sha256':sha(root/'recover-cpu-manifest.py')},\n  'executed_ordinary_script':{'source':(root/'real-cpu-v6.ts').read_text(),'sha256':sha(root/'real-cpu-v6.ts')},\n  'identity':{key:value for key,value in identity.items() if key!='raw_byte_classification'},\n  'identity_raw':{'path':str(root/'recheck-v2/identity-summary.json'),'sha256':sha(root/'recheck-v2/identity-summary.json')},\n  'wiring':{key:{'scope':next(row for row in wiring['rows'] if row['name']==key),'phases':value['census_phases']} for key,value in wiring['case_costs']['steps'].items() if 'census_phases' in value},\n  'cohorts':cohorts,\n  'component_profiles':{name:read(name+'/provenance.json') for name in ['profile-components','profile-components-v2','profile-components-perf']},\n  'measurement_source':'96efb519b77454da298716e54b0acb24d9094632',\n  'production_configuration':{'step_wrapper':'tooling/gate/run.mjs wraps with /usr/bin/time, never perf; the eight all.sh routes call the census directly','step_cpu_measure':'cgroup-v2-scope-v1','collection_cpu_measure':'getrusage-self-v1, synchronous collector with no children','acceptance':'ordinary step cgroup CPU plus separately charged ON collection CPU; counted instructions shown alongside, never mixed with ordinary CPU'},\n  'canonical':read('canonical-result.json'),\n  'measurement_notes':['CPU ratios include separately observed collection CPU.', 'Perf inherited-event runs include fork/PMU observer cost and are separate from ordinary execution.', 'Earlier short/cohort, cold, stopped and unmeasured attempts remain under the protected scratch root; their status is recorded in the notebook.']}\noutput=tree/'results/gate/census-phases-760.json';output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(result,indent=2)+'\\n')\nprint(output, output.stat().st_size)\nfor name,value in cohorts.items(): print(name,{backend:round(data['ordinary_or_perf_cpu_ratio'],6) for backend,data in value['summary'].items()})\n",
+  "writer_sha256": "b069a9795e062b8cf20ba9b6cd74bebf21874d4f0b70d71f9a54a2b7b8e4bebe",
+  "recovery_check": {
+    "source": "# Recovery check for a completed cohort whose final metadata write failed.\n# It never launches a target, redraws a sample, or edits the executed script.\nfrom pathlib import Path\nimport hashlib, json, subprocess\nroot=Path('/home/akisarou/.cache/nts-scratch/760')\ntree=Path('/home/akisarou/.cache/nts-pool/5')\nexpected='96efb519b77454da298716e54b0acb24d9094632'\nassert subprocess.check_output(['git','--no-optional-locks','rev-parse','HEAD'],cwd=tree,text=True).strip()==expected\nmanifest=json.loads((root/'real-cpu-v6/provenance.json').read_text())\nassert manifest['source']==expected\nassert manifest['binarySha256']==hashlib.sha256((tree/'target/release/nts').read_bytes()).hexdigest()\nassert manifest['publication_recovery']['script_sha256']==hashlib.sha256((root/'real-cpu-v6.ts').read_bytes()).hexdigest()\nrows=json.loads((root/'real-cpu-v6/rows.json').read_text())\nassert len(rows)==24 and rows==manifest['rows']\nfor backend in ['c','llvm','jvm']:\n    projections=[]\n    for arm in 'abcdefgh':\n        value=json.loads((root/'real-cpu-v6'/f'{backend}-{arm}-result.json').read_text())\n        assert value['population']==500 and value['attempted']==500 and len(value['outcomes'])==500\n        projections.append(json.dumps({key:value[key] for key in ['selected','population','attempted','tally','outcomes']},sort_keys=True))\n    assert len(set(projections))==1\n    assert manifest['product_projection_sha256'][backend]==hashlib.sha256(projections[0].encode()).hexdigest()\n    off=[row for row in rows if row['name'].startswith(backend+'-') and not row['enabled']]\n    on=[row for row in rows if row['name'].startswith(backend+'-') and row['enabled']]\n    assert len(off)==len(on)==4\n    print(backend, 'verified CPU ratio including collection',sum(row['cpu_s']+row['collection_cpu_s'] for row in on)/sum(row['cpu_s'] for row in off))\nprint('Completed cohort recovery verified without rerunning any target.')\n",
+    "sha256": "4a6b11230f99ed71a52383d0070db35adadb5e7e40fde9b021926b607b960819"
+  },
+  "executed_ordinary_script": {
+    "source": "import {spawn} from 'node:child_process';\nimport {mkdirSync,readFileSync,writeFileSync} from 'node:fs';\nimport {join} from 'node:path';\nimport {pathToFileURL} from 'node:url';\nimport {createHash} from 'node:crypto';\nconst tree='/home/akisarou/.cache/nts-pool/5',base='/home/akisarou/.cache/nts-scratch/760/real-cpu-v6';\nconst USE_PERF=false;\nconst load=(file:string)=>import(pathToFileURL(join(tree,file)).href);\nasync function main(){\n  mkdirSync(base,{recursive:true});\n  const {gateEnvironment,sealOracleRun}=await load('tooling/gate/canonical-environment.ts');\n  const {MemoryRun}=await load('tooling/census/worker-memory.ts');\n  const {hostObservations}=await load('tooling/gate/host-observations.ts');\n  const {prepareChildObserver}=await load('tooling/gate/child-rusage.ts');\n  const {PERF_ARGS,parseMeasurement,counterProblem}=await load('tooling/gate/cputime.mjs');\n  const {typeScriptOracleDirectory}=await load('tooling/census/typescript-oracle-capture.ts');\n  const {typeScriptOracleHandoff}=await load('tooling/census/typescript-oracle-results.ts');\n  const {summarizeCosts}=await load('tooling/gate/case-costs.ts');\n  const bin=join(tree,'target/release/nts');\n  const env=(await sealOracleRun(gateEnvironment(process.env,{run:join(base,'context'),oracleRoot:tree,owned:{NTS_BIN:bin,NTS_CHECKERS:'1',NTS_MEMORY_RESERVATION:process.env.NTS_MEMORY_RESERVATION,NTS_JVM_CDS_DIR:join(base,'cds')}}))).env;\n  const memory=new MemoryRun({id:'real-phase-overhead',budgetBytes:6_144_000_000}),rows:any[]=[];let index=0;\n  const run=async(name:string,args:string[],enabled:boolean,counted:boolean)=>{\n    const costs=join(base,name+'-costs');mkdirSync(costs,{recursive:true});\n    if(enabled){const prepared=prepareChildObserver(costs,env);if(prepared.error)throw Error(prepared.error);}\n    const worker=memory.worker(index++,6_144_000_000),counter=join(base,name+'.perf');\n    const supplied={...env,NTS_GATE_STEP:name==='oracles'?'typescript-oracles':'typescript-'+args[args.indexOf('--backend')+1]};\n    if(name!=='oracles')supplied.NTS_TYPESCRIPT_ORACLE=JSON.stringify(typeScriptOracleHandoff(join(typeScriptOracleDirectory(env),'results')));\n    if(enabled)supplied.NTS_GATE_CASE_COSTS_DIR=costs;else delete supplied.NTS_GATE_CASE_COSTS_DIR;\n    const target=counted&&USE_PERF?['-c','4','perf',...PERF_ARGS,'-o',counter,'--',process.execPath,...args]:['-c','4',process.execPath,...args];\n    const scope=worker.scope('taskset',target,supplied),host=hostObservations(env),meter=host.scopeMemoryPeak(worker.group),before=host.load(),start=host.now();\n    const child=spawn('systemd-run',scope.argv,{env:scope.env,cwd:tree,stdio:['ignore','pipe','pipe']});\n    let stdout='',stderr='';child.stdout.on('data',part=>{stdout+=part;});child.stderr.on('data',part=>{stderr+=part;});\n    try{\n      const status=await new Promise<number|null>((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});\n      writeFileSync(join(base,name+'.stdout'),stdout);writeFileSync(join(base,name+'.stderr'),stderr);\n      if(status!==0)throw Error(name+' failed: '+status+'\\n'+stderr);\n      if(counted){\n        const waited=USE_PERF?parseMeasurement(readFileSync(counter,'utf8')):null,problem=waited?counterProblem(waited):null;if(problem)throw Error(name+': '+problem);\n        const cpu=host.cgroupCpu(worker.group),wall_s=(host.now()-start)/1000,peak_bytes=meter.read(),after=host.load();\n        const phaseStart=host.ownCpu();\n        const phases=enabled?summarizeCosts(costs,[],[{name:supplied.NTS_GATE_STEP,cpu:cpu.usageUsec/1e6,cpu_measure:'cgroup-v2-scope-v1'}]):null;\n        const phaseEnd=host.ownCpu();\n        const row={name,enabled,instructions:waited?.instructions??null,waited,observer:USE_PERF?'perf-inherited':'none',cpu_s:cpu.usageUsec/1e6,cpu_measure:'cgroup-v2-scope-v1',wall_s,peak_bytes,load_before:before,load_after:after,\n          collection_cpu_s:((phaseEnd.userUsec-phaseStart.userUsec)+(phaseEnd.systemUsec-phaseStart.systemUsec))/1e6};\n        rows.push(row);writeFileSync(join(base,name+'-phases.json'),JSON.stringify(phases,null,2)+'\\n');\n        writeFileSync(join(base,'rows.json'),JSON.stringify(rows,null,2)+'\\n');process.stdout.write(JSON.stringify(row)+'\\n');\n      }\n    }finally{meter.close();worker.close();await worker.closed;}\n  };\n  try{\n    await run('oracles',[join(tree,'tooling/census/typescript-oracles.ts'),'--sample','500','--jobs','1'],false,false);\n    for(const backend of ['c','llvm','jvm']){\n      const command=(name:string)=>[join(tree,'tooling/census/conformance262.ts'),'--suite','typescript','--backend',backend,'--under','tests/typescript','--recorded',join(tree,'results/typescript',backend,'cases.tsv'),'--sample','500','--jobs','1','--json',join(base,name+'-result.json')];\n      await run(backend+'-prime',command(backend+'-prime'),false,false);\n      await run(backend+'-prime2',command(backend+'-prime2'),true,false);\n      for(const [arm,enabled] of [['a',false],['b',true],['c',true],['d',false],['e',true],['f',false],['g',false],['h',true]] as const){\n        const name=backend+'-'+arm;await run(name,command(name),enabled,true);\n      }\n      const products=['a','b','c','d','e','f','g','h'].map(arm=>{const result=JSON.parse(readFileSync(join(base,backend+'-'+arm+'-result.json'),'utf8'));return JSON.stringify({selected:result.selected,population:result.population,attempted:result.attempted,tally:result.tally,outcomes:result.outcomes});});\n      if(new Set(products).size!==1)throw Error(backend+' performed different work between arms');\n    }\n    writeFileSync(join(base,'provenance.json'),JSON.stringify({source:spawnSync('git',['--no-optional-locks','rev-parse','HEAD'],{cwd:tree,encoding:'utf8'}).stdout.trim(),binary:bin,binarySha256:createHash('sha256').update(readFileSync(bin)).digest('hex'),sample:500,source:'production conformance262 TypeScript selector',rows},null,2)+'\\n');\n  }finally{memory.close();await memory.closed;}\n}\nmain().catch(error=>{console.error(error);process.exitCode=1;});\n",
+    "sha256": "c302374352abd07a5304bed313266be242980cb87edb3046252b99a68d8db7b3"
+  },
+  "identity": {
+    "pairs": 36567,
+    "byte_identical": 36472,
+    "stderr_only_preexisting": 95,
+    "sources": [
+      "tests/typescript/enum-routes-controls/string-heterogeneous-record-coercion-control.ts",
+      "tests/typescript/enum-routes-controls/string-record-alias-order-control.ts",
+      "tests/typescript/enum-routes/string-heterogeneous-record-coercion.ts",
+      "tests/typescript/enum-routes/string-record-alias-order.ts",
+      "tests/typescript/number-parsing-routes-controls/radix-bivariant-nonprimitive-control.ts",
+      "tests/typescript/number-parsing-routes-controls/radix-bivariant-radix-abrupt-control.ts",
+      "tests/typescript/number-parsing-routes-controls/radix-bivariant-string-before-radix-control.ts",
+      "tests/typescript/number-parsing-routes-controls/radix-bivariant-text-abrupt-control.ts",
+      "tests/typescript/number-parsing-routes/radix-bivariant-nonprimitive.ts",
+      "tests/typescript/number-parsing-routes/radix-bivariant-radix-abrupt.ts",
+      "tests/typescript/number-parsing-routes/radix-bivariant-string-before-radix.ts",
+      "tests/typescript/number-parsing-routes/radix-bivariant-text-abrupt.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-delete.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-depth.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-empty.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-order.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-shared.ts",
+      "tests/typescript/recursive-type-routes/collections-bag-values.ts",
+      "tests/typescript/recursive-type-routes/collections-graph-self-cycle.ts",
+      "tests/typescript/recursive-type-routes/collections-graph-shared-child.ts",
+      "tests/typescript/recursive-type-routes/collections-graph-shared-write.ts",
+      "tests/typescript/recursive-type-routes/collections-graph-two-cycle.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-delete.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-empty.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-get.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-order.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-size.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-update.ts",
+      "tests/typescript/recursive-type-routes/collections-weighted-values.ts",
+      "tests/typescript/structuredclone-routes-controls/collections-map-cycle-field-control.ts",
+      "tests/typescript/structuredclone-routes-controls/collections-set-cycle-variable-control.ts",
+      "tests/typescript/structuredclone-routes/collections-map-cycle-field.ts",
+      "tests/typescript/structuredclone-routes/collections-set-cycle-variable.ts"
+    ],
+    "issue": 766,
+    "binary_sha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635"
+  },
+  "identity_raw": {
+    "path": "/home/akisarou/.cache/nts-scratch/760/recheck-v2/identity-summary.json",
+    "sha256": "2729d961e2221f2f34e1dc3a726932e2ac6b0fd37fe30d76368eed28f5f5e6f0"
+  },
+  "wiring": {
+    "typescript-c": {
+      "scope": {
+        "name": "typescript-c",
+        "cpu": 6.381024,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 6.364188215999999,
+        "started_at": "2026-11-13T00:36:35.954Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 6.381024,
+        "attributed_cpu_s": 4.2657050000000005,
+        "unattributed_cpu_s": 2.1153189999999995,
+        "quantization_tolerance_s": 0.002657,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 25,
+            "cpu_s": 0.058282000000000014,
+            "known_cpu_s": 0.058282000000000014,
+            "wall_s": 0.19813581900000063,
+            "self_cpu_s": 0.058282000000000014,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 25,
+            "cpu_s": 0.7565729999999999,
+            "known_cpu_s": 0.7565729999999999,
+            "wall_s": 0.760300333,
+            "self_cpu_s": 0.7565729999999999,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 24,
+            "cpu_s": 0.339713,
+            "known_cpu_s": 0.339713,
+            "wall_s": 0.3416755580000001,
+            "self_cpu_s": 0.339713,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 24,
+            "cpu_s": 0.05264699999999999,
+            "known_cpu_s": 0.05264699999999999,
+            "wall_s": 0.10226269499999999,
+            "self_cpu_s": 0.05264699999999999,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 12,
+            "cpu_s": 2.9499480000000005,
+            "known_cpu_s": 2.9499480000000005,
+            "wall_s": 3.0727129990000006,
+            "self_cpu_s": 0.14955500000000027,
+            "child_cpu_s": 2.8003929999999997,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 12,
+            "cpu_s": 0.04639299999999997,
+            "known_cpu_s": 0.04639299999999997,
+            "wall_s": 0.05741316800000118,
+            "self_cpu_s": 0.018247999999999973,
+            "child_cpu_s": 0.028145,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 25,
+            "cpu_s": 0.06214899999999988,
+            "known_cpu_s": 0.06214899999999988,
+            "wall_s": 0.043621614999996755,
+            "self_cpu_s": 0.06214899999999988,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 2.1153189999999995,
+            "known_cpu_s": 2.1153189999999995,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "typescript-llvm": {
+      "scope": {
+        "name": "typescript-llvm",
+        "cpu": 5.432612,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 4.215693580999999,
+        "started_at": "2026-11-13T00:36:42.387Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 5.432612,
+        "attributed_cpu_s": 3.2668509999999995,
+        "unattributed_cpu_s": 2.1657610000000003,
+        "quantization_tolerance_s": 0.002657,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 25,
+            "cpu_s": 0.03366400000000004,
+            "known_cpu_s": 0.03366400000000004,
+            "wall_s": 0.04320244900000035,
+            "self_cpu_s": 0.03366400000000004,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 25,
+            "cpu_s": 0.671085,
+            "known_cpu_s": 0.671085,
+            "wall_s": 0.6748259970000001,
+            "self_cpu_s": 0.671085,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 24,
+            "cpu_s": 0.28452099999999986,
+            "known_cpu_s": 0.28452099999999986,
+            "wall_s": 0.2860070530000001,
+            "self_cpu_s": 0.28452099999999986,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 24,
+            "cpu_s": 0.061644000000000004,
+            "known_cpu_s": 0.061644000000000004,
+            "wall_s": 0.14624417100000003,
+            "self_cpu_s": 0.061644000000000004,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 12,
+            "cpu_s": 2.1125629999999997,
+            "known_cpu_s": 2.1125629999999997,
+            "wall_s": 2.100150418000001,
+            "self_cpu_s": 0.1761689999999999,
+            "child_cpu_s": 1.9363939999999997,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 12,
+            "cpu_s": 0.04706000000000008,
+            "known_cpu_s": 0.04706000000000008,
+            "wall_s": 0.05834850899999955,
+            "self_cpu_s": 0.01812300000000009,
+            "child_cpu_s": 0.028937,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 25,
+            "cpu_s": 0.05631400000000014,
+            "known_cpu_s": 0.05631400000000014,
+            "wall_s": 0.0426494730000002,
+            "self_cpu_s": 0.05631400000000014,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 2.1657610000000003,
+            "known_cpu_s": 2.1657610000000003,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "typescript-jvm": {
+      "scope": {
+        "name": "typescript-jvm",
+        "cpu": 4.935463,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 3.7465162899999997,
+        "started_at": "2026-11-13T00:36:46.673Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 4.935463,
+        "attributed_cpu_s": 2.791964,
+        "unattributed_cpu_s": 2.1434990000000003,
+        "quantization_tolerance_s": 0.002529,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 25,
+            "cpu_s": 0.033362999999999976,
+            "known_cpu_s": 0.033362999999999976,
+            "wall_s": 0.05345661999999968,
+            "self_cpu_s": 0.033362999999999976,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 25,
+            "cpu_s": 0.654153,
+            "known_cpu_s": 0.654153,
+            "wall_s": 0.6577028090000001,
+            "self_cpu_s": 0.654153,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 24,
+            "cpu_s": 0.302165,
+            "known_cpu_s": 0.302165,
+            "wall_s": 0.304337292,
+            "self_cpu_s": 0.302165,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 24,
+            "cpu_s": 0.03468199999999999,
+            "known_cpu_s": 0.03468199999999999,
+            "wall_s": 0.06663532200000001,
+            "self_cpu_s": 0.03468199999999999,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 12,
+            "cpu_s": 1.0339069999999997,
+            "known_cpu_s": 1.0339069999999997,
+            "wall_s": 0.5750967389999999,
+            "self_cpu_s": 0.01060499999999985,
+            "child_cpu_s": 1.023302,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 12,
+            "cpu_s": 0.6727090000000001,
+            "known_cpu_s": 0.6727090000000001,
+            "wall_s": 0.5666732610000007,
+            "self_cpu_s": 0.02232400000000008,
+            "child_cpu_s": 0.650385,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 25,
+            "cpu_s": 0.060985,
+            "known_cpu_s": 0.060985,
+            "wall_s": 0.04416033399999765,
+            "self_cpu_s": 0.060985,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 2.1434990000000003,
+            "known_cpu_s": 2.1434990000000003,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "test262-cases": {
+      "scope": {
+        "name": "test262-cases",
+        "cpu": 7.95956,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 9.041675869000002,
+        "started_at": "2026-11-13T00:36:50.499Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 7.95956,
+        "attributed_cpu_s": 3.648537,
+        "unattributed_cpu_s": 4.311023,
+        "quantization_tolerance_s": 0.002705,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 25,
+            "cpu_s": 0.04341000000000011,
+            "known_cpu_s": 0.04341000000000011,
+            "wall_s": 0.042209375999999604,
+            "self_cpu_s": 0.04341000000000011,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 25,
+            "cpu_s": 0.6216880000000001,
+            "known_cpu_s": 0.6216880000000001,
+            "wall_s": 0.6284998099999999,
+            "self_cpu_s": 0.6216880000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 18,
+            "cpu_s": 0.063177,
+            "known_cpu_s": 0.063177,
+            "wall_s": 0.06360764799999999,
+            "self_cpu_s": 0.063177,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 18,
+            "cpu_s": 0.030598999999999998,
+            "known_cpu_s": 0.030598999999999998,
+            "wall_s": 0.030949243999999997,
+            "self_cpu_s": 0.030598999999999998,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 18,
+            "cpu_s": 2.8276680000000005,
+            "known_cpu_s": 2.8276680000000005,
+            "wall_s": 2.9885906100000015,
+            "self_cpu_s": 0.18337699999999998,
+            "child_cpu_s": 2.6442910000000004,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 18,
+            "cpu_s": 0.053300999999999994,
+            "known_cpu_s": 0.053300999999999994,
+            "wall_s": 0.06906198000000002,
+            "self_cpu_s": 0.02122999999999999,
+            "child_cpu_s": 0.032071,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 25,
+            "cpu_s": 0.008693999999999978,
+            "known_cpu_s": 0.008693999999999978,
+            "wall_s": 0.007054593000000664,
+            "self_cpu_s": 0.008693999999999978,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 4.311023,
+            "known_cpu_s": 4.311023,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "test262-builtins-cases": {
+      "scope": {
+        "name": "test262-builtins-cases",
+        "cpu": 6.705753,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 6.158799099000004,
+        "started_at": "2026-11-13T00:36:59.605Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 6.705753,
+        "attributed_cpu_s": 3.5375420000000006,
+        "unattributed_cpu_s": 3.168210999999999,
+        "quantization_tolerance_s": 0.002953,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 25,
+            "cpu_s": 0.041069999999999954,
+            "known_cpu_s": 0.041069999999999954,
+            "wall_s": 0.06421951200000053,
+            "self_cpu_s": 0.041069999999999954,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 25,
+            "cpu_s": 0.59748,
+            "known_cpu_s": 0.59748,
+            "wall_s": 0.6009100300000001,
+            "self_cpu_s": 0.59748,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 23,
+            "cpu_s": 0.08278600000000001,
+            "known_cpu_s": 0.08278600000000001,
+            "wall_s": 0.083271752,
+            "self_cpu_s": 0.08278600000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 23,
+            "cpu_s": 0.04288700000000001,
+            "known_cpu_s": 0.04288700000000001,
+            "wall_s": 0.045179063000000005,
+            "self_cpu_s": 0.04288700000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 20,
+            "cpu_s": 2.7042070000000007,
+            "known_cpu_s": 2.7042070000000007,
+            "wall_s": 2.771147758000001,
+            "self_cpu_s": 0.19107700000000016,
+            "child_cpu_s": 2.5131300000000003,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 20,
+            "cpu_s": 0.059973999999999875,
+            "known_cpu_s": 0.059973999999999875,
+            "wall_s": 0.07499542999999881,
+            "self_cpu_s": 0.023672999999999875,
+            "child_cpu_s": 0.036301,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 25,
+            "cpu_s": 0.00913800000000001,
+            "known_cpu_s": 0.00913800000000001,
+            "wall_s": 0.007763646000001206,
+            "self_cpu_s": 0.00913800000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 3.168210999999999,
+            "known_cpu_s": 3.168210999999999,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "test262-rest-cases": {
+      "scope": {
+        "name": "test262-rest-cases",
+        "cpu": 17.54659,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 16.365902671999997,
+        "started_at": "2026-11-13T00:37:05.821Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 17.54659,
+        "attributed_cpu_s": 9.072424999999999,
+        "unattributed_cpu_s": 8.474165,
+        "quantization_tolerance_s": 0.006913,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 56,
+            "cpu_s": 0.10977900000000006,
+            "known_cpu_s": 0.10977900000000006,
+            "wall_s": 0.5183431580000027,
+            "self_cpu_s": 0.10977900000000006,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 56,
+            "cpu_s": 1.4487910000000002,
+            "known_cpu_s": 1.4487910000000002,
+            "wall_s": 1.4865019459999995,
+            "self_cpu_s": 1.4487910000000002,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 47,
+            "cpu_s": 0.20179,
+            "known_cpu_s": 0.20179,
+            "wall_s": 0.2548275920000001,
+            "self_cpu_s": 0.20179,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 47,
+            "cpu_s": 0.09259999999999997,
+            "known_cpu_s": 0.09259999999999997,
+            "wall_s": 0.20007608300000007,
+            "self_cpu_s": 0.09259999999999997,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 45,
+            "cpu_s": 7.054599999999999,
+            "known_cpu_s": 7.054599999999999,
+            "wall_s": 7.600612092999999,
+            "self_cpu_s": 0.49447299999999983,
+            "child_cpu_s": 6.560126999999999,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 45,
+            "cpu_s": 0.14004000000000005,
+            "known_cpu_s": 0.14004000000000005,
+            "wall_s": 0.1722231110000011,
+            "self_cpu_s": 0.057970000000000035,
+            "child_cpu_s": 0.08206999999999999,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 56,
+            "cpu_s": 0.024825000000000038,
+            "known_cpu_s": 0.024825000000000038,
+            "wall_s": 0.019421399999996744,
+            "self_cpu_s": 0.024825000000000038,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 8.474165,
+            "known_cpu_s": 8.474165,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "test262-jvm": {
+      "scope": {
+        "name": "test262-jvm",
+        "cpu": 23.287237,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 21.56881660599999,
+        "started_at": "2026-11-13T00:37:22.264Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 23.287237,
+        "attributed_cpu_s": 7.742116999999999,
+        "unattributed_cpu_s": 15.545120000000002,
+        "quantization_tolerance_s": 0.012617,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 99,
+            "cpu_s": 0.17875199999999966,
+            "known_cpu_s": 0.17875199999999966,
+            "wall_s": 0.17256759199999963,
+            "self_cpu_s": 0.17875199999999966,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 99,
+            "cpu_s": 2.549404999999999,
+            "known_cpu_s": 2.549404999999999,
+            "wall_s": 2.5651539179999987,
+            "self_cpu_s": 2.549404999999999,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 99,
+            "cpu_s": 0.37717100000000015,
+            "known_cpu_s": 0.37717100000000015,
+            "wall_s": 0.38038221899999985,
+            "self_cpu_s": 0.37717100000000015,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 99,
+            "cpu_s": 0.09021000000000001,
+            "known_cpu_s": 0.09021000000000001,
+            "wall_s": 0.09246808700000002,
+            "self_cpu_s": 0.09021000000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 99,
+            "cpu_s": 0.037587000000000294,
+            "known_cpu_s": 0.037587000000000294,
+            "wall_s": 0.03254661399999839,
+            "self_cpu_s": 0.037587000000000294,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 99,
+            "cpu_s": 4.473638,
+            "known_cpu_s": 4.473638,
+            "wall_s": 4.055751792,
+            "self_cpu_s": 0.1278689999999999,
+            "child_cpu_s": 4.345768999999997,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 99,
+            "cpu_s": 0.03535399999999979,
+            "known_cpu_s": 0.03535399999999979,
+            "wall_s": 0.028208213000002855,
+            "self_cpu_s": 0.03535399999999979,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 15.545120000000002,
+            "known_cpu_s": 15.545120000000002,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    },
+    "test262-llvm": {
+      "scope": {
+        "name": "test262-llvm",
+        "cpu": 30.72326,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 26.540986179999994,
+        "started_at": "2026-11-13T00:37:43.893Z",
+        "status": 0
+      },
+      "phases": {
+        "version": 1,
+        "status": "complete",
+        "cpu_measure": "getrusage-self-and-wait4-children-v1",
+        "step_cpu_measure": "cgroup-v2-scope-v1",
+        "step_cpu_s": 30.72326,
+        "attributed_cpu_s": 15.490672000000002,
+        "unattributed_cpu_s": 15.232587999999998,
+        "quantization_tolerance_s": 0.013689,
+        "rows": [
+          {
+            "phase": "materialization",
+            "cases": 99,
+            "cpu_s": 0.17313700000000035,
+            "known_cpu_s": 0.17313700000000035,
+            "wall_s": 0.14599015500000173,
+            "self_cpu_s": 0.17313700000000035,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "native_capture_check",
+            "cases": 99,
+            "cpu_s": 2.5012350000000003,
+            "known_cpu_s": 2.5012350000000003,
+            "wall_s": 2.517532101999999,
+            "self_cpu_s": 2.5012350000000003,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "lowering",
+            "cases": 99,
+            "cpu_s": 0.37823200000000007,
+            "known_cpu_s": 0.37823200000000007,
+            "wall_s": 0.3811203240000002,
+            "self_cpu_s": 0.37823200000000007,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "emission",
+            "cases": 99,
+            "cpu_s": 0.2120160000000001,
+            "known_cpu_s": 0.2120160000000001,
+            "wall_s": 0.21428302900000004,
+            "self_cpu_s": 0.2120160000000001,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "host_compile_link",
+            "cases": 99,
+            "cpu_s": 11.909221,
+            "known_cpu_s": 11.909221,
+            "wall_s": 12.537040393999995,
+            "self_cpu_s": 1.0082039999999999,
+            "child_cpu_s": 10.901016999999998,
+            "missing_observations": 0
+          },
+          {
+            "phase": "execution",
+            "cases": 99,
+            "cpu_s": 0.28010800000000025,
+            "known_cpu_s": 0.28010800000000025,
+            "wall_s": 0.34383722599999866,
+            "self_cpu_s": 0.1182870000000002,
+            "child_cpu_s": 0.161821,
+            "missing_observations": 0
+          },
+          {
+            "phase": "comparison",
+            "cases": 99,
+            "cpu_s": 0.03672299999999956,
+            "known_cpu_s": 0.03672299999999956,
+            "wall_s": 0.028301910000006092,
+            "self_cpu_s": 0.03672299999999956,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          },
+          {
+            "phase": "unattributed",
+            "cases": null,
+            "cpu_s": 15.232587999999998,
+            "known_cpu_s": 15.232587999999998,
+            "wall_s": null,
+            "self_cpu_s": 0,
+            "child_cpu_s": 0,
+            "missing_observations": 0
+          }
+        ],
+        "unmeasured": [],
+        "notes": [
+          "Phase wall is summed worker time; concurrent workers overlap, so it is not step wall.",
+          "Capture/check, lower/prepare and emission use the compiler phase owner; other phases use worker self CPU and each waited child.",
+          "Cases count observed contributors; missing records leave totals unknown, while known partial CPU remains explicit.",
+          "Unattributed is signed scope CPU minus known phase CPU, including startup, dispatch, cleanup and missing observations; it is never clamped to zero."
+        ]
+      }
+    }
+  },
+  "cohorts": {
+    "real-overhead-v3": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-overhead-v3/provenance.json",
+      "sha256": "48e4cb5dda1d0bf59e7ae425cf45de06fd8aaf8db85dd97f0f00e1b33b892ee4",
+      "observer": "perf-inherited",
+      "provenance": {
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "c152c0884025b82c32137da00e7d4d92d4be328727b8f0fc5593fafa79f2759d",
+        "sample": 100,
+        "source": "production conformance262 TypeScript selector",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": 83585990417,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83585990417,
+              "user_s": 8.045068,
+              "sys_s": 2.073888,
+              "cpu_s": 10.118956
+            },
+            "cpu_s": 10.137186,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.484613818000005,
+            "peak_bytes": 374001664,
+            "load_before": [
+              124.6,
+              53.19,
+              33.89
+            ],
+            "load_after": [
+              120.06,
+              54.57,
+              34.54
+            ],
+            "collection_cpu_s": 1.8e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": 83469707867,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83469707867,
+              "user_s": 8.53177,
+              "sys_s": 2.323183,
+              "cpu_s": 10.854953
+            },
+            "cpu_s": 10.871961,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 11.462194478000004,
+            "peak_bytes": 362119168,
+            "load_before": [
+              120.06,
+              54.57,
+              34.54
+            ],
+            "load_after": [
+              114.41,
+              56.54,
+              35.51
+            ],
+            "collection_cpu_s": 0.025887
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": 83665748831,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83665748831,
+              "user_s": 8.442997,
+              "sys_s": 2.266111,
+              "cpu_s": 10.709108
+            },
+            "cpu_s": 10.726224,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 11.479813421999992,
+            "peak_bytes": 381681664,
+            "load_before": [
+              114.41,
+              56.54,
+              35.51
+            ],
+            "load_after": [
+              108.29,
+              57.15,
+              35.94
+            ],
+            "collection_cpu_s": 0.014072
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": 83365981482,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83365981482,
+              "user_s": 8.117691,
+              "sys_s": 2.081077,
+              "cpu_s": 10.198768000000001
+            },
+            "cpu_s": 10.212712,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.56537963699999,
+            "peak_bytes": 367611904,
+            "load_before": [
+              108.29,
+              57.15,
+              35.94
+            ],
+            "load_after": [
+              101.3,
+              57.34,
+              36.23
+            ],
+            "collection_cpu_s": 9e-06
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": 83463085247,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83463085247,
+              "user_s": 8.202674,
+              "sys_s": 2.05689,
+              "cpu_s": 10.259564000000001
+            },
+            "cpu_s": 10.276181,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.817028296999997,
+            "peak_bytes": 372076544,
+            "load_before": [
+              101.3,
+              57.34,
+              36.23
+            ],
+            "load_after": [
+              92.45,
+              56.9,
+              36.31
+            ],
+            "collection_cpu_s": 0.012616
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": 83397524960,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83397524960,
+              "user_s": 8.20412,
+              "sys_s": 1.999426,
+              "cpu_s": 10.203546
+            },
+            "cpu_s": 10.219886,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.657517573999998,
+            "peak_bytes": 372920320,
+            "load_before": [
+              92.45,
+              56.9,
+              36.31
+            ],
+            "load_after": [
+              83.73,
+              56.21,
+              36.31
+            ],
+            "collection_cpu_s": 1.1e-05
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": 83386586255,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83386586255,
+              "user_s": 8.383743,
+              "sys_s": 2.022051,
+              "cpu_s": 10.405794
+            },
+            "cpu_s": 10.423301,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.851069141999993,
+            "peak_bytes": 369950720,
+            "load_before": [
+              79.67,
+              55.82,
+              36.29
+            ],
+            "load_after": [
+              75.16,
+              55.67,
+              36.45
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": 83362555746,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83362555746,
+              "user_s": 7.890456,
+              "sys_s": 2.020381,
+              "cpu_s": 9.910837
+            },
+            "cpu_s": 9.927268,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 10.358807719000003,
+            "peak_bytes": 364306432,
+            "load_before": [
+              75.16,
+              55.67,
+              36.45
+            ],
+            "load_after": [
+              68.06,
+              54.81,
+              36.38
+            ],
+            "collection_cpu_s": 0.013899
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": 59152761536,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59152761536,
+              "user_s": 5.721377,
+              "sys_s": 1.910429,
+              "cpu_s": 7.631806
+            },
+            "cpu_s": 7.647003,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.086886021000012,
+            "peak_bytes": 366866432,
+            "load_before": [
+              56.67,
+              52.94,
+              36.06
+            ],
+            "load_after": [
+              50.87,
+              51.82,
+              35.88
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": 59231215293,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59231215293,
+              "user_s": 5.621589,
+              "sys_s": 1.953663,
+              "cpu_s": 7.575252
+            },
+            "cpu_s": 7.589291,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.05045060000001,
+            "peak_bytes": 368508928,
+            "load_before": [
+              50.87,
+              51.82,
+              35.88
+            ],
+            "load_after": [
+              45.26,
+              50.59,
+              35.65
+            ],
+            "collection_cpu_s": 0.013248
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": 59189401451,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59189401451,
+              "user_s": 5.571731,
+              "sys_s": 1.982403,
+              "cpu_s": 7.5541339999999995
+            },
+            "cpu_s": 7.56879,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.118515833999991,
+            "peak_bytes": 367312896,
+            "load_before": [
+              45.26,
+              50.59,
+              35.65
+            ],
+            "load_after": [
+              42.76,
+              49.98,
+              35.53
+            ],
+            "collection_cpu_s": 0.018225
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": 59238236622,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59238236622,
+              "user_s": 5.559099,
+              "sys_s": 1.989267,
+              "cpu_s": 7.548366
+            },
+            "cpu_s": 7.562519,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.309962598999991,
+            "peak_bytes": 366006272,
+            "load_before": [
+              42.76,
+              49.98,
+              35.53
+            ],
+            "load_after": [
+              38.73,
+              48.88,
+              35.33
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": 59295258405,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59295258405,
+              "user_s": 5.646042,
+              "sys_s": 1.934772,
+              "cpu_s": 7.580813999999999
+            },
+            "cpu_s": 7.594727,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.217048951999983,
+            "peak_bytes": 365080576,
+            "load_before": [
+              38.73,
+              48.88,
+              35.33
+            ],
+            "load_after": [
+              34.8,
+              47.7,
+              35.09
+            ],
+            "collection_cpu_s": 0.012769
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": 59207140731,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59207140731,
+              "user_s": 5.613214,
+              "sys_s": 1.926267,
+              "cpu_s": 7.539481
+            },
+            "cpu_s": 7.553758,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.007400167000014,
+            "peak_bytes": 365965312,
+            "load_before": [
+              34.8,
+              47.7,
+              35.09
+            ],
+            "load_after": [
+              33.13,
+              47.14,
+              34.97
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": 59199266536,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59199266536,
+              "user_s": 5.511661,
+              "sys_s": 1.970114,
+              "cpu_s": 7.481775
+            },
+            "cpu_s": 7.496081,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.903010156000004,
+            "peak_bytes": 364441600,
+            "load_before": [
+              33.13,
+              47.14,
+              34.97
+            ],
+            "load_after": [
+              30.54,
+              46.12,
+              34.77
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": 59240561566,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59240561566,
+              "user_s": 5.576157,
+              "sys_s": 1.97576,
+              "cpu_s": 7.551917
+            },
+            "cpu_s": 7.566459,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.019610484000005,
+            "peak_bytes": 366374912,
+            "load_before": [
+              30.54,
+              46.12,
+              34.77
+            ],
+            "load_after": [
+              28.4,
+              45.14,
+              34.57
+            ],
+            "collection_cpu_s": 0.010791
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": 44050048226,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44050048226,
+              "user_s": 4.054174,
+              "sys_s": 1.327896,
+              "cpu_s": 5.38207
+            },
+            "cpu_s": 5.396494,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.614635338000022,
+            "peak_bytes": 326807552,
+            "load_before": [
+              27.11,
+              44.31,
+              34.42
+            ],
+            "load_after": [
+              25.42,
+              43.68,
+              34.26
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": 44203805721,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44203805721,
+              "user_s": 4.076193,
+              "sys_s": 1.383809,
+              "cpu_s": 5.460002
+            },
+            "cpu_s": 5.475564,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.6209850319999966,
+            "peak_bytes": 321478656,
+            "load_before": [
+              25.42,
+              43.68,
+              34.26
+            ],
+            "load_after": [
+              24.65,
+              42.91,
+              34.12
+            ],
+            "collection_cpu_s": 0.016316
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": 43925328810,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 43925328810,
+              "user_s": 4.087928,
+              "sys_s": 1.336688,
+              "cpu_s": 5.424616
+            },
+            "cpu_s": 5.439638,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.579616527000006,
+            "peak_bytes": 316461056,
+            "load_before": [
+              24.65,
+              42.91,
+              34.12
+            ],
+            "load_after": [
+              23.4,
+              42.35,
+              33.98
+            ],
+            "collection_cpu_s": 0.013744
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": 44055545810,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44055545810,
+              "user_s": 4.002987,
+              "sys_s": 1.32635,
+              "cpu_s": 5.329337
+            },
+            "cpu_s": 5.342573,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.49237067199999,
+            "peak_bytes": 317317120,
+            "load_before": [
+              23.4,
+              42.35,
+              33.98
+            ],
+            "load_after": [
+              22,
+              41.75,
+              33.83
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": 44152588319,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44152588319,
+              "user_s": 4.131743,
+              "sys_s": 1.33129,
+              "cpu_s": 5.463033
+            },
+            "cpu_s": 5.477639,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.686807834999985,
+            "peak_bytes": 314486784,
+            "load_before": [
+              22,
+              41.75,
+              33.83
+            ],
+            "load_after": [
+              21.6,
+              41.33,
+              33.74
+            ],
+            "collection_cpu_s": 0.015454
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": 43912365129,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 43912365129,
+              "user_s": 4.104047,
+              "sys_s": 1.340661,
+              "cpu_s": 5.444707999999999
+            },
+            "cpu_s": 5.460448,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.656930299,
+            "peak_bytes": 320786432,
+            "load_before": [
+              21.6,
+              41.33,
+              33.74
+            ],
+            "load_after": [
+              20.99,
+              40.88,
+              33.63
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": 44149545610,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44149545610,
+              "user_s": 4.014805,
+              "sys_s": 1.347395,
+              "cpu_s": 5.3622
+            },
+            "cpu_s": 5.377066,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.534444301999989,
+            "peak_bytes": 321781760,
+            "load_before": [
+              20.99,
+              40.88,
+              33.63
+            ],
+            "load_after": [
+              20.59,
+              40.47,
+              33.54
+            ],
+            "collection_cpu_s": 1e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": 44247536315,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44247536315,
+              "user_s": 4.166589,
+              "sys_s": 1.307623,
+              "cpu_s": 5.474212
+            },
+            "cpu_s": 5.489625,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.67523550000001,
+            "peak_bytes": 324169728,
+            "load_before": [
+              20.59,
+              40.47,
+              33.54
+            ],
+            "load_after": [
+              19.42,
+              39.89,
+              33.39
+            ],
+            "collection_cpu_s": 0.010765
+          }
+        ]
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0213456245120365,
+          "user_instructions_ratio": 1.0006742290941406,
+          "off_cpu_s": [
+            10.137186,
+            10.212712,
+            10.219886,
+            10.423301
+          ],
+          "on_cpu_s": [
+            10.871961,
+            10.726224,
+            10.276181,
+            9.927268
+          ],
+          "on_collection_cpu_s": [
+            0.025887,
+            0.014072,
+            0.012616,
+            0.013899
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0037984609126411,
+          "user_instructions_ratio": 1.000671592198042,
+          "off_cpu_s": [
+            7.647003,
+            7.562519,
+            7.553758,
+            7.496081
+          ],
+          "on_cpu_s": [
+            7.589291,
+            7.56879,
+            7.594727,
+            7.566459
+          ],
+          "on_collection_cpu_s": [
+            0.013248,
+            0.018225,
+            0.012769,
+            0.010791
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0167850504211025,
+          "user_instructions_ratio": 1.0020534683196087,
+          "off_cpu_s": [
+            5.396494,
+            5.342573,
+            5.460448,
+            5.377066
+          ],
+          "on_cpu_s": [
+            5.475564,
+            5.439638,
+            5.477639,
+            5.489625
+          ],
+          "on_collection_cpu_s": [
+            0.016316,
+            0.013744,
+            0.015454,
+            0.010765
+          ]
+        }
+      }
+    },
+    "real-overhead-v4": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-overhead-v4/provenance.json",
+      "sha256": "9e7a30a0fda688c6c4e3948c13f994d3494a7b3973c0beaf65b02c1cfd4538c3",
+      "observer": "perf-inherited",
+      "provenance": {
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+        "sample": 100,
+        "source": "production conformance262 TypeScript selector",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": 83379153476,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83379153476,
+              "user_s": 7.128062,
+              "sys_s": 1.86124,
+              "cpu_s": 8.989302
+            },
+            "cpu_s": 9.005495,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.268916927000003,
+            "peak_bytes": 373714944,
+            "load_before": [
+              10.45,
+              10.7,
+              16.72
+            ],
+            "load_after": [
+              10.69,
+              10.75,
+              16.67
+            ],
+            "collection_cpu_s": 1.9e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": 83418159383,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83418159383,
+              "user_s": 7.276078,
+              "sys_s": 1.803506,
+              "cpu_s": 9.079584
+            },
+            "cpu_s": 9.093847,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.359269702999999,
+            "peak_bytes": 371392512,
+            "load_before": [
+              10.69,
+              10.75,
+              16.67
+            ],
+            "load_after": [
+              11.1,
+              10.84,
+              16.63
+            ],
+            "collection_cpu_s": 0.013553
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": 83450989139,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83450989139,
+              "user_s": 7.267077,
+              "sys_s": 1.776832,
+              "cpu_s": 9.043909
+            },
+            "cpu_s": 9.058797,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.301208030999994,
+            "peak_bytes": 367407104,
+            "load_before": [
+              11.1,
+              10.84,
+              16.63
+            ],
+            "load_after": [
+              10.77,
+              10.77,
+              16.55
+            ],
+            "collection_cpu_s": 0.007824
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": 83518841254,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83518841254,
+              "user_s": 7.164435,
+              "sys_s": 1.820763,
+              "cpu_s": 8.985198
+            },
+            "cpu_s": 8.999767,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.149283896999993,
+            "peak_bytes": 372875264,
+            "load_before": [
+              10.77,
+              10.77,
+              16.55
+            ],
+            "load_after": [
+              10.59,
+              10.73,
+              16.47
+            ],
+            "collection_cpu_s": 7e-06
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": 83479190941,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83479190941,
+              "user_s": 7.241972,
+              "sys_s": 1.769715,
+              "cpu_s": 9.011687
+            },
+            "cpu_s": 9.026473,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.258134223,
+            "peak_bytes": 365318144,
+            "load_before": [
+              10.59,
+              10.73,
+              16.47
+            ],
+            "load_after": [
+              10.72,
+              10.76,
+              16.42
+            ],
+            "collection_cpu_s": 0.006892
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": 83334916629,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83334916629,
+              "user_s": 7.203317,
+              "sys_s": 1.795451,
+              "cpu_s": 8.998768
+            },
+            "cpu_s": 9.012148,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.254778705999998,
+            "peak_bytes": 372858880,
+            "load_before": [
+              10.72,
+              10.76,
+              16.42
+            ],
+            "load_after": [
+              10.43,
+              10.7,
+              16.37
+            ],
+            "collection_cpu_s": 8e-06
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": 83318095601,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83318095601,
+              "user_s": 7.183145,
+              "sys_s": 1.829377,
+              "cpu_s": 9.012522
+            },
+            "cpu_s": 9.026151,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.214717560000004,
+            "peak_bytes": 371744768,
+            "load_before": [
+              10.43,
+              10.7,
+              16.37
+            ],
+            "load_after": [
+              10.66,
+              10.74,
+              16.32
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": 83432692373,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 83432692373,
+              "user_s": 7.207044,
+              "sys_s": 1.80032,
+              "cpu_s": 9.007363999999999
+            },
+            "cpu_s": 9.022743,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.275660914000007,
+            "peak_bytes": 372793344,
+            "load_before": [
+              10.66,
+              10.74,
+              16.32
+            ],
+            "load_after": [
+              10.46,
+              10.7,
+              16.25
+            ],
+            "collection_cpu_s": 0.009618
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": 59138470822,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59138470822,
+              "user_s": 5.295029,
+              "sys_s": 1.943597,
+              "cpu_s": 7.238626
+            },
+            "cpu_s": 7.252731,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.451242123999997,
+            "peak_bytes": 368422912,
+            "load_before": [
+              10.63,
+              10.73,
+              16.17
+            ],
+            "load_after": [
+              10.56,
+              10.7,
+              16.1
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": 59229821542,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59229821542,
+              "user_s": 5.481852,
+              "sys_s": 1.865742,
+              "cpu_s": 7.347594
+            },
+            "cpu_s": 7.362392,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.674231620999999,
+            "peak_bytes": 364949504,
+            "load_before": [
+              10.56,
+              10.7,
+              16.1
+            ],
+            "load_after": [
+              11.08,
+              10.81,
+              16.11
+            ],
+            "collection_cpu_s": 0.014179
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": 59176511781,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59176511781,
+              "user_s": 5.380707,
+              "sys_s": 1.941005,
+              "cpu_s": 7.321712
+            },
+            "cpu_s": 7.337756,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.650978387999989,
+            "peak_bytes": 367517696,
+            "load_before": [
+              11.08,
+              10.81,
+              16.11
+            ],
+            "load_after": [
+              11.45,
+              10.9,
+              16.08
+            ],
+            "collection_cpu_s": 0.010524
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": 59170294422,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59170294422,
+              "user_s": 5.347036,
+              "sys_s": 1.875128,
+              "cpu_s": 7.222164
+            },
+            "cpu_s": 7.235402,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.4462758579999795,
+            "peak_bytes": 367505408,
+            "load_before": [
+              11.45,
+              10.9,
+              16.08
+            ],
+            "load_after": [
+              11.42,
+              10.9,
+              16.05
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": 59177252737,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59177252737,
+              "user_s": 5.466087,
+              "sys_s": 1.848519,
+              "cpu_s": 7.3146059999999995
+            },
+            "cpu_s": 7.329216,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.517987938000005,
+            "peak_bytes": 361676800,
+            "load_before": [
+              11.42,
+              10.9,
+              16.05
+            ],
+            "load_after": [
+              11.53,
+              10.94,
+              16.01
+            ],
+            "collection_cpu_s": 0.015973
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": 59090279272,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59090279272,
+              "user_s": 5.313115,
+              "sys_s": 1.866468,
+              "cpu_s": 7.179583
+            },
+            "cpu_s": 7.194272,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.3863839910000095,
+            "peak_bytes": 378314752,
+            "load_before": [
+              11.53,
+              10.94,
+              16.01
+            ],
+            "load_after": [
+              11.08,
+              10.86,
+              15.95
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": 59152955555,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59152955555,
+              "user_s": 5.215619,
+              "sys_s": 1.926809,
+              "cpu_s": 7.142428000000001
+            },
+            "cpu_s": 7.156533,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.420586903999996,
+            "peak_bytes": 359460864,
+            "load_before": [
+              11.08,
+              10.86,
+              15.95
+            ],
+            "load_after": [
+              10.75,
+              10.79,
+              15.88
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": 59256627656,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 59256627656,
+              "user_s": 5.200905,
+              "sys_s": 1.877421,
+              "cpu_s": 7.078326
+            },
+            "cpu_s": 7.092977,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.274518876000016,
+            "peak_bytes": 365592576,
+            "load_before": [
+              10.75,
+              10.79,
+              15.88
+            ],
+            "load_after": [
+              10.45,
+              10.73,
+              15.83
+            ],
+            "collection_cpu_s": 0.006694
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": 44093319333,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44093319333,
+              "user_s": 3.887105,
+              "sys_s": 1.278279,
+              "cpu_s": 5.1653839999999995
+            },
+            "cpu_s": 5.180058,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.312619524999987,
+            "peak_bytes": 322297856,
+            "load_before": [
+              9.52,
+              10.51,
+              15.68
+            ],
+            "load_after": [
+              9.32,
+              10.45,
+              15.63
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": 44063610593,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44063610593,
+              "user_s": 3.906967,
+              "sys_s": 1.306728,
+              "cpu_s": 5.2136949999999995
+            },
+            "cpu_s": 5.228491,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.372161897999991,
+            "peak_bytes": 320974848,
+            "load_before": [
+              9.32,
+              10.45,
+              15.63
+            ],
+            "load_after": [
+              9.21,
+              10.41,
+              15.59
+            ],
+            "collection_cpu_s": 0.007752
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": 44190727861,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44190727861,
+              "user_s": 3.944541,
+              "sys_s": 1.254749,
+              "cpu_s": 5.1992899999999995
+            },
+            "cpu_s": 5.215734,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.3485706160000115,
+            "peak_bytes": 321597440,
+            "load_before": [
+              9.21,
+              10.41,
+              15.59
+            ],
+            "load_after": [
+              9.43,
+              10.44,
+              15.57
+            ],
+            "collection_cpu_s": 0.006944
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": 43852326983,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 43852326983,
+              "user_s": 3.83556,
+              "sys_s": 1.295935,
+              "cpu_s": 5.131495
+            },
+            "cpu_s": 5.144938,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.258583019000012,
+            "peak_bytes": 318799872,
+            "load_before": [
+              9.43,
+              10.44,
+              15.57
+            ],
+            "load_after": [
+              9.32,
+              10.4,
+              15.53
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": 44163801385,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44163801385,
+              "user_s": 3.95629,
+              "sys_s": 1.235494,
+              "cpu_s": 5.191784
+            },
+            "cpu_s": 5.208155,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.345172703999997,
+            "peak_bytes": 322080768,
+            "load_before": [
+              9.32,
+              10.4,
+              15.53
+            ],
+            "load_after": [
+              8.97,
+              10.31,
+              15.47
+            ],
+            "collection_cpu_s": 0.018353
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": 43857311663,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 43857311663,
+              "user_s": 3.868271,
+              "sys_s": 1.261261,
+              "cpu_s": 5.129532
+            },
+            "cpu_s": 5.145328,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.289269513000007,
+            "peak_bytes": 316604416,
+            "load_before": [
+              8.97,
+              10.31,
+              15.47
+            ],
+            "load_after": [
+              8.89,
+              10.27,
+              15.43
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": 43898289946,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 43898289946,
+              "user_s": 3.860521,
+              "sys_s": 1.277945,
+              "cpu_s": 5.138466
+            },
+            "cpu_s": 5.153348,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.282377735000017,
+            "peak_bytes": 318689280,
+            "load_before": [
+              8.89,
+              10.27,
+              15.43
+            ],
+            "load_after": [
+              8.9,
+              10.25,
+              15.4
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": 44050812220,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 44050812220,
+              "user_s": 3.96693,
+              "sys_s": 1.220588,
+              "cpu_s": 5.187518
+            },
+            "cpu_s": 5.203634,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.340682300999993,
+            "peak_bytes": 321667072,
+            "load_before": [
+              8.9,
+              10.25,
+              15.4
+            ],
+            "load_after": [
+              8.51,
+              10.15,
+              15.34
+            ],
+            "collection_cpu_s": 0.006
+          }
+        ]
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0054430248997874,
+          "user_instructions_ratio": 1.00068962428894,
+          "off_cpu_s": [
+            9.005495,
+            8.999767,
+            9.012148,
+            9.026151
+          ],
+          "on_cpu_s": [
+            9.093847,
+            9.058797,
+            9.026473,
+            9.022743
+          ],
+          "on_collection_cpu_s": [
+            0.013553,
+            0.007824,
+            0.006892,
+            0.009618
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0114696664627525,
+          "user_instructions_ratio": 1.0012183944541306,
+          "off_cpu_s": [
+            7.252731,
+            7.235402,
+            7.194272,
+            7.156533
+          ],
+          "on_cpu_s": [
+            7.362392,
+            7.337756,
+            7.329216,
+            7.092977
+          ],
+          "on_collection_cpu_s": [
+            0.014179,
+            0.010524,
+            0.015973,
+            0.006694
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0131591988080493,
+          "user_instructions_ratio": 1.0043693721192448,
+          "off_cpu_s": [
+            5.180058,
+            5.144938,
+            5.145328,
+            5.153348
+          ],
+          "on_cpu_s": [
+            5.228491,
+            5.215734,
+            5.208155,
+            5.203634
+          ],
+          "on_collection_cpu_s": [
+            0.007752,
+            0.006944,
+            0.018353,
+            0.006
+          ]
+        }
+      }
+    },
+    "real-cpu-v3": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-cpu-v3/provenance.json",
+      "sha256": "172ed93b242385b2ee52fb14e32367833ee8c9dea01d17a38eba19729f6b1dd9",
+      "observer": "none",
+      "provenance": {
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+        "sample": 100,
+        "source": "production conformance262 TypeScript selector",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 9.242396,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.401961327999997,
+            "peak_bytes": 364048384,
+            "load_before": [
+              10.58,
+              15.28,
+              22.56
+            ],
+            "load_after": [
+              10.75,
+              15.16,
+              22.44
+            ],
+            "collection_cpu_s": 2.2e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 9.210054,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.414781653999999,
+            "peak_bytes": 366977024,
+            "load_before": [
+              10.75,
+              15.16,
+              22.44
+            ],
+            "load_after": [
+              10.7,
+              15,
+              22.31
+            ],
+            "collection_cpu_s": 0.015452
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 9.078441,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.291105881999997,
+            "peak_bytes": 365453312,
+            "load_before": [
+              10.7,
+              15,
+              22.31
+            ],
+            "load_after": [
+              10.4,
+              14.87,
+              22.23
+            ],
+            "collection_cpu_s": 0.009973
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.887491,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.087101723,
+            "peak_bytes": 365961216,
+            "load_before": [
+              10.4,
+              14.87,
+              22.23
+            ],
+            "load_after": [
+              10.79,
+              14.81,
+              22.13
+            ],
+            "collection_cpu_s": 7e-06
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.929183,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.116423561000003,
+            "peak_bytes": 368013312,
+            "load_before": [
+              10.79,
+              14.81,
+              22.13
+            ],
+            "load_after": [
+              11.4,
+              14.81,
+              22.06
+            ],
+            "collection_cpu_s": 0.009908
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.868699,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.005606459000003,
+            "peak_bytes": 365559808,
+            "load_before": [
+              11.4,
+              14.81,
+              22.06
+            ],
+            "load_after": [
+              10.97,
+              14.6,
+              21.91
+            ],
+            "collection_cpu_s": 6e-06
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.865862,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.029908609999998,
+            "peak_bytes": 365142016,
+            "load_before": [
+              10.97,
+              14.6,
+              21.91
+            ],
+            "load_after": [
+              10.74,
+              14.44,
+              21.78
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.919915,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.148609560000011,
+            "peak_bytes": 361431040,
+            "load_before": [
+              10.74,
+              14.44,
+              21.78
+            ],
+            "load_after": [
+              10.01,
+              14.16,
+              21.61
+            ],
+            "collection_cpu_s": 0.010714
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.168032,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.364703185999999,
+            "peak_bytes": 359878656,
+            "load_before": [
+              9.81,
+              13.91,
+              21.4
+            ],
+            "load_after": [
+              9.66,
+              13.81,
+              21.33
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.196207,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.353822268999997,
+            "peak_bytes": 354934784,
+            "load_before": [
+              9.66,
+              13.81,
+              21.33
+            ],
+            "load_after": [
+              9.1,
+              13.55,
+              21.17
+            ],
+            "collection_cpu_s": 0.013286
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.252109,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.462300933999999,
+            "peak_bytes": 362098688,
+            "load_before": [
+              9.1,
+              13.55,
+              21.17
+            ],
+            "load_after": [
+              9.17,
+              13.49,
+              21.11
+            ],
+            "collection_cpu_s": 0.009644
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.21007,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.35329525700002,
+            "peak_bytes": 360665088,
+            "load_before": [
+              9.17,
+              13.49,
+              21.11
+            ],
+            "load_after": [
+              9.08,
+              13.33,
+              20.97
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.21149,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.421301555000013,
+            "peak_bytes": 364523520,
+            "load_before": [
+              9.08,
+              13.33,
+              20.97
+            ],
+            "load_after": [
+              9.23,
+              13.29,
+              20.92
+            ],
+            "collection_cpu_s": 0.010015
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.155726,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.317229022999992,
+            "peak_bytes": 360714240,
+            "load_before": [
+              9.23,
+              13.29,
+              20.92
+            ],
+            "load_after": [
+              9.04,
+              13.11,
+              20.78
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.177585,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.361898350000003,
+            "peak_bytes": 355467264,
+            "load_before": [
+              9.04,
+              13.11,
+              20.78
+            ],
+            "load_after": [
+              9.19,
+              13.08,
+              20.73
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.223898,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.439987555999978,
+            "peak_bytes": 356896768,
+            "load_before": [
+              9.19,
+              13.08,
+              20.73
+            ],
+            "load_after": [
+              9.1,
+              12.99,
+              20.66
+            ],
+            "collection_cpu_s": 0.009192
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.263652,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.402297667999985,
+            "peak_bytes": 311824384,
+            "load_before": [
+              8.71,
+              12.71,
+              20.44
+            ],
+            "load_after": [
+              8.5,
+              12.6,
+              20.37
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.266029,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.398825545999978,
+            "peak_bytes": 315990016,
+            "load_before": [
+              8.5,
+              12.6,
+              20.37
+            ],
+            "load_after": [
+              8.45,
+              12.53,
+              20.3
+            ],
+            "collection_cpu_s": 0.011552
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.300181,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.443263861999992,
+            "peak_bytes": 317956096,
+            "load_before": [
+              8.45,
+              12.53,
+              20.3
+            ],
+            "load_after": [
+              8.5,
+              12.47,
+              20.24
+            ],
+            "collection_cpu_s": 0.006476
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.260896,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.39820924300002,
+            "peak_bytes": 312516608,
+            "load_before": [
+              8.5,
+              12.47,
+              20.24
+            ],
+            "load_after": [
+              8.62,
+              12.43,
+              20.18
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.317826,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.537310324999998,
+            "peak_bytes": 315146240,
+            "load_before": [
+              8.62,
+              12.43,
+              20.18
+            ],
+            "load_after": [
+              8.89,
+              12.42,
+              20.14
+            ],
+            "collection_cpu_s": 0.024933
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.262742,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.443039890999993,
+            "peak_bytes": 315949056,
+            "load_before": [
+              8.89,
+              12.42,
+              20.14
+            ],
+            "load_after": [
+              8.9,
+              12.36,
+              20.08
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.423049,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.552649434999999,
+            "peak_bytes": 318365696,
+            "load_before": [
+              8.9,
+              12.36,
+              20.08
+            ],
+            "load_after": [
+              9.98,
+              12.48,
+              20.03
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.481774,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.798235317999992,
+            "peak_bytes": 317509632,
+            "load_before": [
+              9.98,
+              12.48,
+              20.03
+            ],
+            "load_after": [
+              9.66,
+              12.37,
+              19.96
+            ],
+            "collection_cpu_s": 0.009135
+          }
+        ]
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0088999557444744,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            9.242396,
+            8.887491,
+            8.868699,
+            8.865862
+          ],
+          "on_cpu_s": [
+            9.210054,
+            9.078441,
+            8.929183,
+            8.919915
+          ],
+          "on_collection_cpu_s": [
+            0.015452,
+            0.009973,
+            0.009908,
+            0.010714
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0074683889643465,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            7.168032,
+            7.21007,
+            7.155726,
+            7.177585
+          ],
+          "on_cpu_s": [
+            7.196207,
+            7.252109,
+            7.21149,
+            7.223898
+          ],
+          "on_collection_cpu_s": [
+            0.013286,
+            0.009644,
+            0.010015,
+            0.009192
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0097861236446997,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            5.263652,
+            5.260896,
+            5.262742,
+            5.423049
+          ],
+          "on_cpu_s": [
+            5.266029,
+            5.300181,
+            5.317826,
+            5.481774
+          ],
+          "on_collection_cpu_s": [
+            0.011552,
+            0.006476,
+            0.024933,
+            0.009135
+          ]
+        }
+      }
+    },
+    "real-cpu-v4": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-cpu-v4/provenance.json",
+      "sha256": "a6f5705f61da16e0911c3c378896aaba4301ab4bbe4c8ba3245af6dd7866dba6",
+      "observer": "none",
+      "provenance": {
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+        "sample": 100,
+        "source": "production conformance262 TypeScript selector",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 8.264901,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 8.386084853,
+            "peak_bytes": 366206976,
+            "load_before": [
+              24.21,
+              41.27,
+              26.48
+            ],
+            "load_after": [
+              22.83,
+              40.7,
+              26.38
+            ],
+            "collection_cpu_s": 1.4e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.82839,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.971246647000007,
+            "peak_bytes": 368033792,
+            "load_before": [
+              22.83,
+              40.7,
+              26.38
+            ],
+            "load_after": [
+              19.62,
+              39.42,
+              26.12
+            ],
+            "collection_cpu_s": 0.011902
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.707329,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.847003815000003,
+            "peak_bytes": 368967680,
+            "load_before": [
+              19.62,
+              39.42,
+              26.12
+            ],
+            "load_after": [
+              18.29,
+              38.82,
+              25.99
+            ],
+            "collection_cpu_s": 0.007136
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.792115,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.898648311000004,
+            "peak_bytes": 363114496,
+            "load_before": [
+              18.29,
+              38.82,
+              25.99
+            ],
+            "load_after": [
+              15.78,
+              37.6,
+              25.73
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.713953,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.855761602000006,
+            "peak_bytes": 370991104,
+            "load_before": [
+              15.78,
+              37.6,
+              25.73
+            ],
+            "load_after": [
+              13.67,
+              36.43,
+              25.48
+            ],
+            "collection_cpu_s": 0.00545
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.750451,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.860328604000009,
+            "peak_bytes": 364343296,
+            "load_before": [
+              13.67,
+              36.43,
+              25.48
+            ],
+            "load_after": [
+              12.66,
+              35.84,
+              25.35
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.645629,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.761514274000001,
+            "peak_bytes": 368979968,
+            "load_before": [
+              12.66,
+              35.84,
+              25.35
+            ],
+            "load_after": [
+              11.01,
+              34.73,
+              25.1
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.810972,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.964718798999995,
+            "peak_bytes": 369643520,
+            "load_before": [
+              11.01,
+              34.73,
+              25.1
+            ],
+            "load_after": [
+              10.53,
+              34.23,
+              24.99
+            ],
+            "collection_cpu_s": 0.008759
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.348714,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.528604725000012,
+            "peak_bytes": 360722432,
+            "load_before": [
+              9.02,
+              32.74,
+              24.65
+            ],
+            "load_after": [
+              8.53,
+              32.24,
+              24.53
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.622228,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.77033714399999,
+            "peak_bytes": 362094592,
+            "load_before": [
+              8.53,
+              32.24,
+              24.53
+            ],
+            "load_after": [
+              7.84,
+              31.31,
+              24.31
+            ],
+            "collection_cpu_s": 0.011807
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.59205,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.752163708000007,
+            "peak_bytes": 358113280,
+            "load_before": [
+              7.84,
+              31.31,
+              24.31
+            ],
+            "load_after": [
+              7.53,
+              30.86,
+              24.2
+            ],
+            "collection_cpu_s": 0.008788
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.410111,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.532209702000007,
+            "peak_bytes": 350486528,
+            "load_before": [
+              7.53,
+              30.86,
+              24.2
+            ],
+            "load_after": [
+              7.09,
+              30.38,
+              24.08
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.319612,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.445057330000011,
+            "peak_bytes": 360255488,
+            "load_before": [
+              7.09,
+              30.38,
+              24.08
+            ],
+            "load_after": [
+              6.47,
+              29.48,
+              23.85
+            ],
+            "collection_cpu_s": 0.009311
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.201524,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.296949762000004,
+            "peak_bytes": 363950080,
+            "load_before": [
+              6.47,
+              29.48,
+              23.85
+            ],
+            "load_after": [
+              6.11,
+              29.02,
+              23.74
+            ],
+            "collection_cpu_s": 1e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.316297,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.43181983600001,
+            "peak_bytes": 362422272,
+            "load_before": [
+              6.11,
+              29.02,
+              23.74
+            ],
+            "load_after": [
+              5.94,
+              28.61,
+              23.63
+            ],
+            "collection_cpu_s": 1e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.523649,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.681614347000024,
+            "peak_bytes": 364933120,
+            "load_before": [
+              5.94,
+              28.61,
+              23.63
+            ],
+            "load_after": [
+              5.64,
+              27.79,
+              23.42
+            ],
+            "collection_cpu_s": 0.005654
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 4.712942,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.357238585999992,
+            "peak_bytes": 316612608,
+            "load_before": [
+              5.55,
+              27.04,
+              23.22
+            ],
+            "load_after": [
+              5.34,
+              26.64,
+              23.11
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 5.111193,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 5.214158553999995,
+            "peak_bytes": 318754816,
+            "load_before": [
+              5.34,
+              26.64,
+              23.11
+            ],
+            "load_after": [
+              5.88,
+              26.4,
+              23.05
+            ],
+            "collection_cpu_s": 0.010972
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.347164,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.608330680000014,
+            "peak_bytes": 319406080,
+            "load_before": [
+              5.88,
+              26.4,
+              23.05
+            ],
+            "load_after": [
+              19.5,
+              28.89,
+              23.88
+            ],
+            "collection_cpu_s": 0.011213
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.870164,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.266026637000003,
+            "peak_bytes": 307535872,
+            "load_before": [
+              19.5,
+              28.89,
+              23.88
+            ],
+            "load_after": [
+              32.73,
+              31.41,
+              24.75
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.47048,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 6.808471323000005,
+            "peak_bytes": 335642624,
+            "load_before": [
+              32.73,
+              31.41,
+              24.75
+            ],
+            "load_after": [
+              43.08,
+              33.58,
+              25.49
+            ],
+            "collection_cpu_s": 0.013174
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.352486,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.356264900000009,
+            "peak_bytes": 316121088,
+            "load_before": [
+              43.08,
+              33.58,
+              25.49
+            ],
+            "load_after": [
+              50.84,
+              35.34,
+              26.1
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 6.82359,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 7.73299437,
+            "peak_bytes": 324333568,
+            "load_before": [
+              60.22,
+              37.55,
+              26.87
+            ],
+            "load_after": [
+              69.17,
+              39.78,
+              27.64
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 7.103282,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 9.084383786999998,
+            "peak_bytes": 313151488,
+            "load_before": [
+              69.17,
+              39.78,
+              27.64
+            ],
+            "load_after": [
+              81.08,
+              43.31,
+              28.92
+            ],
+            "collection_cpu_s": 0.032026
+          }
+        ]
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 0.9885796616015161,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            8.264901,
+            7.792115,
+            7.750451,
+            7.645629
+          ],
+          "on_cpu_s": [
+            7.82839,
+            7.707329,
+            7.713953,
+            7.810972
+          ],
+          "on_collection_cpu_s": [
+            0.011902,
+            0.007136,
+            0.00545,
+            0.008759
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0323006857792765,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            6.348714,
+            6.410111,
+            6.201524,
+            6.316297
+          ],
+          "on_cpu_s": [
+            6.622228,
+            6.59205,
+            6.319612,
+            6.523649
+          ],
+          "on_collection_cpu_s": [
+            0.011807,
+            0.008788,
+            0.009311,
+            0.005654
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0137452844766843,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            4.712942,
+            6.870164,
+            6.352486,
+            6.82359
+          ],
+          "on_cpu_s": [
+            5.111193,
+            6.347164,
+            6.47048,
+            7.103282
+          ],
+          "on_collection_cpu_s": [
+            0.010972,
+            0.011213,
+            0.013174,
+            0.032026
+          ]
+        }
+      }
+    },
+    "real-cpu-v5": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-cpu-v5/provenance.partial.json",
+      "sha256": "0b63cf24b71aabaaf08ad35c086063f593c7a3f1df368ca5788e3a4aecac2c8e",
+      "observer": "none",
+      "provenance": {
+        "status": "stopped after the complete C cohort failed the CPU criterion",
+        "source_from_launch_checkpoint": "04e65c367b8bb05c7561e753acbfe822c74d5f49",
+        "sample": 500,
+        "observer": "none",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 37.113726,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 37.801616980000006,
+            "peak_bytes": 401649664,
+            "load_before": [
+              27.46,
+              24.94,
+              24.32
+            ],
+            "load_after": [
+              32.68,
+              26.57,
+              24.89
+            ],
+            "collection_cpu_s": 2.4e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 37.62753,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 38.57470090100001,
+            "peak_bytes": 374808576,
+            "load_before": [
+              32.68,
+              26.57,
+              24.89
+            ],
+            "load_after": [
+              32.8,
+              27.15,
+              25.14
+            ],
+            "collection_cpu_s": 0.084547
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 38.020061,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 39.182675449,
+            "peak_bytes": 361172992,
+            "load_before": [
+              32.8,
+              27.15,
+              25.14
+            ],
+            "load_after": [
+              29.54,
+              27.11,
+              25.22
+            ],
+            "collection_cpu_s": 0.075016
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 38.483191,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 41.154914206000015,
+            "peak_bytes": 375508992,
+            "load_before": [
+              29.54,
+              27.11,
+              25.22
+            ],
+            "load_after": [
+              116.64,
+              49.46,
+              32.79
+            ],
+            "collection_cpu_s": 9e-06
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 38.790814,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 42.24683454400004,
+            "peak_bytes": 492171264,
+            "load_before": [
+              122.35,
+              51.76,
+              33.63
+            ],
+            "load_after": [
+              138.64,
+              64.98,
+              38.85
+            ],
+            "collection_cpu_s": 0.079395
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 37.530221,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 39.18852257600002,
+            "peak_bytes": 420896768,
+            "load_before": [
+              138.64,
+              64.98,
+              38.85
+            ],
+            "load_after": [
+              126.21,
+              71.28,
+              42.08
+            ],
+            "collection_cpu_s": 2.4e-05
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 37.958942,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 39.67363685299998,
+            "peak_bytes": 414228480,
+            "load_before": [
+              126.21,
+              71.28,
+              42.08
+            ],
+            "load_after": [
+              97.78,
+              71.1,
+              43.27
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 38.948098,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 40.75877393899998,
+            "peak_bytes": 394870784,
+            "load_before": [
+              97.78,
+              71.1,
+              43.27
+            ],
+            "load_after": [
+              89.15,
+              71.71,
+              44.63
+            ],
+            "collection_cpu_s": 0.071244
+          }
+        ],
+        "stop_log": "/home/akisarou/.cache/nts-scratch/760/final-measure-v2.log"
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0172790570779255,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            37.113726,
+            38.483191,
+            37.530221,
+            37.958942
+          ],
+          "on_cpu_s": [
+            37.62753,
+            38.020061,
+            38.790814,
+            38.948098
+          ],
+          "on_collection_cpu_s": [
+            0.084547,
+            0.075016,
+            0.079395,
+            0.071244
+          ]
+        }
+      }
+    },
+    "real-cpu-v6": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-cpu-v6/provenance.json",
+      "sha256": "28c2d00edf298e8fb9e86853f0d563d69d16a9bfc180e0f304bc0f4e4c4ee4b4",
+      "observer": "none",
+      "provenance": {
+        "source": "96efb519b77454da298716e54b0acb24d9094632",
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+        "sample": 500,
+        "source_description": "production conformance262 TypeScript selector",
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 30.952257,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 31.473234421,
+            "peak_bytes": 402554880,
+            "load_before": [
+              6.29,
+              12.28,
+              27.2
+            ],
+            "load_after": [
+              6.51,
+              11.65,
+              26.43
+            ],
+            "collection_cpu_s": 1.1e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.133467,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 31.839107676,
+            "peak_bytes": 392167424,
+            "load_before": [
+              6.51,
+              11.65,
+              26.43
+            ],
+            "load_after": [
+              5.84,
+              10.98,
+              25.74
+            ],
+            "collection_cpu_s": 0.04388
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.268207,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 31.972772736999993,
+            "peak_bytes": 390815744,
+            "load_before": [
+              5.84,
+              10.98,
+              25.74
+            ],
+            "load_after": [
+              6.23,
+              10.56,
+              25.13
+            ],
+            "collection_cpu_s": 0.039061
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.53384,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.144455524000016,
+            "peak_bytes": 401666048,
+            "load_before": [
+              6.05,
+              10.45,
+              25.01
+            ],
+            "load_after": [
+              6.27,
+              10.09,
+              24.43
+            ],
+            "collection_cpu_s": 2.1e-05
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.260002,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.01791632799999,
+            "peak_bytes": 376225792,
+            "load_before": [
+              6.27,
+              10.09,
+              24.43
+            ],
+            "load_after": [
+              5.75,
+              9.6,
+              23.81
+            ],
+            "collection_cpu_s": 0.041291
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 30.970174,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 31.470591557000038,
+            "peak_bytes": 402046976,
+            "load_before": [
+              5.75,
+              9.6,
+              23.81
+            ],
+            "load_after": [
+              5.88,
+              9.21,
+              23.16
+            ],
+            "collection_cpu_s": 1.1e-05
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.195839,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.55104715699999,
+            "peak_bytes": 396296192,
+            "load_before": [
+              5.88,
+              9.21,
+              23.16
+            ],
+            "load_after": [
+              7.49,
+              9.29,
+              22.74
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 31.837217,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.58063241000002,
+            "peak_bytes": 428265472,
+            "load_before": [
+              7.49,
+              9.29,
+              22.74
+            ],
+            "load_after": [
+              7.45,
+              9.06,
+              22.16
+            ],
+            "collection_cpu_s": 0.044823
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.238939,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 25.730135014,
+            "peak_bytes": 378040320,
+            "load_before": [
+              6.12,
+              8.47,
+              21.27
+            ],
+            "load_after": [
+              6.68,
+              8.4,
+              20.91
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.473006,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.182255793999996,
+            "peak_bytes": 385961984,
+            "load_before": [
+              6.68,
+              8.4,
+              20.91
+            ],
+            "load_after": [
+              5.78,
+              8.01,
+              20.38
+            ],
+            "collection_cpu_s": 0.034416
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.638332,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.435284340000013,
+            "peak_bytes": 385556480,
+            "load_before": [
+              5.78,
+              8.01,
+              20.38
+            ],
+            "load_after": [
+              6.33,
+              7.96,
+              20.03
+            ],
+            "collection_cpu_s": 0.039403
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 26.099348,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.660784525999976,
+            "peak_bytes": 386027520,
+            "load_before": [
+              6.33,
+              7.96,
+              20.03
+            ],
+            "load_after": [
+              7.06,
+              8,
+              19.72
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.570778,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.27836610500002,
+            "peak_bytes": 378912768,
+            "load_before": [
+              7.06,
+              8,
+              19.72
+            ],
+            "load_after": [
+              6.91,
+              7.89,
+              19.37
+            ],
+            "collection_cpu_s": 0.049637
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.450633,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 25.943962539000086,
+            "peak_bytes": 384049152,
+            "load_before": [
+              6.91,
+              7.89,
+              19.37
+            ],
+            "load_after": [
+              5.95,
+              7.57,
+              18.9
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 25.781316,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.79191073500004,
+            "peak_bytes": 384503808,
+            "load_before": [
+              5.95,
+              7.57,
+              18.9
+            ],
+            "load_after": [
+              6.04,
+              7.46,
+              18.57
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 26.292642,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 27.02525535900006,
+            "peak_bytes": 371011584,
+            "load_before": [
+              6.04,
+              7.46,
+              18.57
+            ],
+            "load_after": [
+              6.34,
+              7.41,
+              18.25
+            ],
+            "collection_cpu_s": 0.027345
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.587515,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 18.952405991000006,
+            "peak_bytes": 326668288,
+            "load_before": [
+              6.71,
+              7.38,
+              17.78
+            ],
+            "load_after": [
+              6.32,
+              7.24,
+              17.51
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.785737,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.170407934000018,
+            "peak_bytes": 333180928,
+            "load_before": [
+              6.32,
+              7.24,
+              17.51
+            ],
+            "load_after": [
+              6.44,
+              7.21,
+              17.28
+            ],
+            "collection_cpu_s": 0.0441
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.89602,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.285791494000005,
+            "peak_bytes": 371322880,
+            "load_before": [
+              6.44,
+              7.21,
+              17.28
+            ],
+            "load_after": [
+              6.22,
+              7.11,
+              17.04
+            ],
+            "collection_cpu_s": 0.024457
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.789597,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.160619069000006,
+            "peak_bytes": 328175616,
+            "load_before": [
+              6.22,
+              7.11,
+              17.04
+            ],
+            "load_after": [
+              6.6,
+              7.12,
+              16.83
+            ],
+            "collection_cpu_s": 2e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.860681,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.249137613,
+            "peak_bytes": 330477568,
+            "load_before": [
+              6.6,
+              7.12,
+              16.83
+            ],
+            "load_after": [
+              5.64,
+              6.87,
+              16.54
+            ],
+            "collection_cpu_s": 0.028926
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.675054,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.04202069600008,
+            "peak_bytes": 327434240,
+            "load_before": [
+              5.64,
+              6.87,
+              16.54
+            ],
+            "load_after": [
+              6.75,
+              7.04,
+              16.44
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.634163,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 18.996618854,
+            "peak_bytes": 330493952,
+            "load_before": [
+              6.75,
+              7.04,
+              16.44
+            ],
+            "load_after": [
+              6.49,
+              6.97,
+              16.21
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": null,
+            "waited": null,
+            "observer": "none",
+            "cpu_s": 18.716716,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 19.083715181000066,
+            "peak_bytes": 332464128,
+            "load_before": [
+              6.49,
+              6.97,
+              16.21
+            ],
+            "load_after": [
+              5.87,
+              6.8,
+              15.96
+            ],
+            "collection_cpu_s": 0.021317
+          }
+        ],
+        "product_projection_sha256": {
+          "c": "7eae2bfa93804c83d1a63137e04b2a5e601e867628bc9106ff16c1302ec6e269",
+          "llvm": "7eae2bfa93804c83d1a63137e04b2a5e601e867628bc9106ff16c1302ec6e269",
+          "jvm": "a76f1617dec666a69f0225a445c7f000ddfc94f70d3daa7b7ea1102cdde86d56"
+        },
+        "publication_recovery": {
+          "reason": "private measurement script omitted spawnSync import at final provenance write; all arms and product checks had completed",
+          "executed_script": "/home/akisarou/.cache/nts-scratch/760/real-cpu-v6.ts",
+          "script_sha256": "c302374352abd07a5304bed313266be242980cb87edb3046252b99a68d8db7b3",
+          "method": "saved rows and all eight per-backend outcome projections verified; tree remained frozen at the launch commit",
+          "at": "2026-11-13T00:11:33.264827+00:00"
+        }
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0081493847155896,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            30.952257,
+            31.53384,
+            30.970174,
+            31.195839
+          ],
+          "on_cpu_s": [
+            31.133467,
+            31.268207,
+            31.260002,
+            31.837217
+          ],
+          "on_collection_cpu_s": [
+            0.04388,
+            0.039061,
+            0.041291,
+            0.044823
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0054140754828722,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            25.238939,
+            26.099348,
+            25.450633,
+            25.781316
+          ],
+          "on_cpu_s": [
+            25.473006,
+            25.638332,
+            25.570778,
+            26.292642
+          ],
+          "on_collection_cpu_s": [
+            0.034416,
+            0.039403,
+            0.049637,
+            0.027345
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 1.0092603962366393,
+          "user_instructions_ratio": null,
+          "off_cpu_s": [
+            18.587515,
+            18.789597,
+            18.675054,
+            18.634163
+          ],
+          "on_cpu_s": [
+            18.785737,
+            18.89602,
+            18.860681,
+            18.716716
+          ],
+          "on_collection_cpu_s": [
+            0.0441,
+            0.024457,
+            0.028926,
+            0.021317
+          ]
+        }
+      }
+    },
+    "real-overhead-v7": {
+      "raw": "/home/akisarou/.cache/nts-scratch/760/real-overhead-v7/provenance.json",
+      "sha256": "fc25eede8caa3f0a27ee930568874582f0baed3dad8e77d0678410a5126e1d20",
+      "observer": "perf-inherited",
+      "provenance": {
+        "source": "production conformance262 TypeScript selector",
+        "binary": "/home/akisarou/.cache/nts-pool/5/target/release/nts",
+        "binarySha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+        "sample": 500,
+        "rows": [
+          {
+            "name": "c-a",
+            "enabled": false,
+            "instructions": 285616208557,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285616208557,
+              "user_s": 26.192731,
+              "sys_s": 6.896217,
+              "cpu_s": 33.088948
+            },
+            "cpu_s": 33.115621,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 35.149298587,
+            "peak_bytes": 403214336,
+            "load_before": [
+              68.95,
+              45.89,
+              28.69
+            ],
+            "load_after": [
+              43.97,
+              42.23,
+              28.11
+            ],
+            "collection_cpu_s": 1.2e-05
+          },
+          {
+            "name": "c-b",
+            "enabled": true,
+            "instructions": 285778731899,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285778731899,
+              "user_s": 25.5411,
+              "sys_s": 6.332013,
+              "cpu_s": 31.873113
+            },
+            "cpu_s": 31.896855,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.76560744600001,
+            "peak_bytes": 376508416,
+            "load_before": [
+              43.97,
+              42.23,
+              28.11
+            ],
+            "load_after": [
+              28.56,
+              38.55,
+              27.39
+            ],
+            "collection_cpu_s": 0.047839
+          },
+          {
+            "name": "c-c",
+            "enabled": true,
+            "instructions": 285837016930,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285837016930,
+              "user_s": 24.311005,
+              "sys_s": 6.100702,
+              "cpu_s": 30.411707
+            },
+            "cpu_s": 30.434431,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 31.101003100000003,
+            "peak_bytes": 386535424,
+            "load_before": [
+              28.56,
+              38.55,
+              27.39
+            ],
+            "load_after": [
+              19.05,
+              35.3,
+              26.67
+            ],
+            "collection_cpu_s": 0.025401
+          },
+          {
+            "name": "c-d",
+            "enabled": false,
+            "instructions": 285571796429,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285571796429,
+              "user_s": 23.671699,
+              "sys_s": 6.18204,
+              "cpu_s": 29.853739
+            },
+            "cpu_s": 29.881255,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.32998237599997,
+            "peak_bytes": 384241664,
+            "load_before": [
+              19.05,
+              35.3,
+              26.67
+            ],
+            "load_after": [
+              12.66,
+              32.2,
+              25.91
+            ],
+            "collection_cpu_s": 2.1e-05
+          },
+          {
+            "name": "c-e",
+            "enabled": true,
+            "instructions": 286060514151,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 286060514151,
+              "user_s": 33.79227,
+              "sys_s": 9.32789,
+              "cpu_s": 43.12016
+            },
+            "cpu_s": 43.15459,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 66.02569482999999,
+            "peak_bytes": 370425856,
+            "load_before": [
+              12.66,
+              32.2,
+              25.91
+            ],
+            "load_after": [
+              35.92,
+              35.41,
+              27.5
+            ],
+            "collection_cpu_s": 0.071376
+          },
+          {
+            "name": "c-f",
+            "enabled": false,
+            "instructions": 285494114921,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285494114921,
+              "user_s": 27.587644,
+              "sys_s": 8.013985,
+              "cpu_s": 35.601629
+            },
+            "cpu_s": 35.631017,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 75.68496567400004,
+            "peak_bytes": 378724352,
+            "load_before": [
+              35.92,
+              35.41,
+              27.5
+            ],
+            "load_after": [
+              25.76,
+              32.91,
+              27.27
+            ],
+            "collection_cpu_s": 1.4e-05
+          },
+          {
+            "name": "c-g",
+            "enabled": false,
+            "instructions": 285423239422,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285423239422,
+              "user_s": 24.475523,
+              "sys_s": 6.386309,
+              "cpu_s": 30.861832
+            },
+            "cpu_s": 30.887625,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 40.32307690100005,
+            "peak_bytes": 463417344,
+            "load_before": [
+              25.76,
+              32.91,
+              27.27
+            ],
+            "load_after": [
+              16.23,
+              29.58,
+              26.39
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "c-h",
+            "enabled": true,
+            "instructions": 285534679537,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 285534679537,
+              "user_s": 24.016819,
+              "sys_s": 5.978739,
+              "cpu_s": 29.995558000000003
+            },
+            "cpu_s": 30.021719,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 32.921639804999984,
+            "peak_bytes": 370671616,
+            "load_before": [
+              16.23,
+              29.58,
+              26.39
+            ],
+            "load_after": [
+              11.72,
+              27.22,
+              25.71
+            ],
+            "collection_cpu_s": 0.034338
+          },
+          {
+            "name": "llvm-a",
+            "enabled": false,
+            "instructions": 201533100610,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201533100610,
+              "user_s": 18.723014,
+              "sys_s": 7.091166,
+              "cpu_s": 25.81418
+            },
+            "cpu_s": 25.837591,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 28.178071762999984,
+            "peak_bytes": 381751296,
+            "load_before": [
+              7.08,
+              23.59,
+              24.55
+            ],
+            "load_after": [
+              7.95,
+              22.2,
+              24.06
+            ],
+            "collection_cpu_s": 3e-06
+          },
+          {
+            "name": "llvm-b",
+            "enabled": true,
+            "instructions": 201660007192,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201660007192,
+              "user_s": 22.258045,
+              "sys_s": 7.963015,
+              "cpu_s": 30.22106
+            },
+            "cpu_s": 30.249464,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 33.429319127999946,
+            "peak_bytes": 385376256,
+            "load_before": [
+              7.95,
+              22.2,
+              24.06
+            ],
+            "load_after": [
+              13.11,
+              21.81,
+              23.85
+            ],
+            "collection_cpu_s": 0.070542
+          },
+          {
+            "name": "llvm-c",
+            "enabled": true,
+            "instructions": 201700818022,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201700818022,
+              "user_s": 21.884965,
+              "sys_s": 7.866304,
+              "cpu_s": 29.751269
+            },
+            "cpu_s": 29.781609,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 30.72113334400009,
+            "peak_bytes": 396959744,
+            "load_before": [
+              13.11,
+              21.81,
+              23.85
+            ],
+            "load_after": [
+              18.8,
+              22.37,
+              23.97
+            ],
+            "collection_cpu_s": 0.044176
+          },
+          {
+            "name": "llvm-d",
+            "enabled": false,
+            "instructions": 201496916512,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201496916512,
+              "user_s": 24.197856,
+              "sys_s": 8.376361,
+              "cpu_s": 32.574217000000004
+            },
+            "cpu_s": 32.605901,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 33.572191004000025,
+            "peak_bytes": 379518976,
+            "load_before": [
+              18.8,
+              22.37,
+              23.97
+            ],
+            "load_after": [
+              22.21,
+              22.82,
+              24.06
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "llvm-e",
+            "enabled": true,
+            "instructions": 201764847889,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201764847889,
+              "user_s": 23.831928,
+              "sys_s": 8.27524,
+              "cpu_s": 32.107168
+            },
+            "cpu_s": 32.144799,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 34.446625134999984,
+            "peak_bytes": 386039808,
+            "load_before": [
+              22.21,
+              22.82,
+              24.06
+            ],
+            "load_after": [
+              23.63,
+              23.12,
+              24.12
+            ],
+            "collection_cpu_s": 0.076583
+          },
+          {
+            "name": "llvm-f",
+            "enabled": false,
+            "instructions": 201489608907,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201489608907,
+              "user_s": 23.902252,
+              "sys_s": 8.405989,
+              "cpu_s": 32.308241
+            },
+            "cpu_s": 32.340718,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 33.534219937000074,
+            "peak_bytes": 367353856,
+            "load_before": [
+              23.63,
+              23.12,
+              24.12
+            ],
+            "load_after": [
+              24.27,
+              23.35,
+              24.16
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "llvm-g",
+            "enabled": false,
+            "instructions": 201353733547,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201353733547,
+              "user_s": 23.430496,
+              "sys_s": 8.393933,
+              "cpu_s": 31.824429000000002
+            },
+            "cpu_s": 31.856251,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 34.74912858199992,
+            "peak_bytes": 382468096,
+            "load_before": [
+              24.27,
+              23.35,
+              24.16
+            ],
+            "load_after": [
+              26.32,
+              23.95,
+              24.33
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "llvm-h",
+            "enabled": true,
+            "instructions": 201787413265,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 201787413265,
+              "user_s": 21.24665,
+              "sys_s": 8.216864,
+              "cpu_s": 29.463513999999996
+            },
+            "cpu_s": 29.49381,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 30.78381320700003,
+            "peak_bytes": 365522944,
+            "load_before": [
+              26.32,
+              23.95,
+              24.33
+            ],
+            "load_after": [
+              24,
+              23.67,
+              24.23
+            ],
+            "collection_cpu_s": 0.041145
+          },
+          {
+            "name": "jvm-a",
+            "enabled": false,
+            "instructions": 160122874577,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160122874577,
+              "user_s": 17.790424,
+              "sys_s": 5.987709,
+              "cpu_s": 23.778133
+            },
+            "cpu_s": 23.811508,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 26.195919333999978,
+            "peak_bytes": 329601024,
+            "load_before": [
+              126.97,
+              52.45,
+              34.03
+            ],
+            "load_after": [
+              131.85,
+              59.64,
+              36.9
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "jvm-b",
+            "enabled": true,
+            "instructions": 160241680975,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160241680975,
+              "user_s": 16.983474,
+              "sys_s": 5.821932,
+              "cpu_s": 22.805406
+            },
+            "cpu_s": 22.837396,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 24.52595038699999,
+            "peak_bytes": 414298112,
+            "load_before": [
+              131.85,
+              59.64,
+              36.9
+            ],
+            "load_after": [
+              121.93,
+              63.14,
+              38.67
+            ],
+            "collection_cpu_s": 0.089513
+          },
+          {
+            "name": "jvm-c",
+            "enabled": true,
+            "instructions": 160255211393,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160255211393,
+              "user_s": 17.087168,
+              "sys_s": 5.868643,
+              "cpu_s": 22.955810999999997
+            },
+            "cpu_s": 22.985635,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 23.945953168999985,
+            "peak_bytes": 319291392,
+            "load_before": [
+              121.93,
+              63.14,
+              38.67
+            ],
+            "load_after": [
+              107.1,
+              64.45,
+              39.76
+            ],
+            "collection_cpu_s": 0.050134
+          },
+          {
+            "name": "jvm-d",
+            "enabled": false,
+            "instructions": 160109420629,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160109420629,
+              "user_s": 17.924267,
+              "sys_s": 6.084939,
+              "cpu_s": 24.009206
+            },
+            "cpu_s": 24.041945,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 24.836077775999904,
+            "peak_bytes": 329199616,
+            "load_before": [
+              107.1,
+              64.45,
+              39.76
+            ],
+            "load_after": [
+              87.07,
+              63.22,
+              40.01
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-e",
+            "enabled": true,
+            "instructions": 160284786422,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160284786422,
+              "user_s": 18.015368,
+              "sys_s": 6.009166,
+              "cpu_s": 24.024534
+            },
+            "cpu_s": 24.057224,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 24.737146521000074,
+            "peak_bytes": 328593408,
+            "load_before": [
+              87.07,
+              63.22,
+              40.01
+            ],
+            "load_after": [
+              78.73,
+              62.94,
+              40.52
+            ],
+            "collection_cpu_s": 0.045996
+          },
+          {
+            "name": "jvm-f",
+            "enabled": false,
+            "instructions": 159919117025,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 159919117025,
+              "user_s": 16.162971,
+              "sys_s": 5.616657,
+              "cpu_s": 21.779628
+            },
+            "cpu_s": 21.808083,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 22.38221726599999,
+            "peak_bytes": 333393920,
+            "load_before": [
+              78.73,
+              62.94,
+              40.52
+            ],
+            "load_after": [
+              63.12,
+              60.41,
+              40.17
+            ],
+            "collection_cpu_s": 5e-06
+          },
+          {
+            "name": "jvm-g",
+            "enabled": false,
+            "instructions": 159955878091,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 159955878091,
+              "user_s": 15.685391,
+              "sys_s": 5.415156,
+              "cpu_s": 21.100547
+            },
+            "cpu_s": 21.127331,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 22.045557983999956,
+            "peak_bytes": 339558400,
+            "load_before": [
+              63.12,
+              60.41,
+              40.17
+            ],
+            "load_after": [
+              47.63,
+              56.99,
+              39.57
+            ],
+            "collection_cpu_s": 4e-06
+          },
+          {
+            "name": "jvm-h",
+            "enabled": true,
+            "instructions": 160254630905,
+            "waited": {
+              "counter_scope": "exec-inherited-user-instructions-v1",
+              "instructions": 160254630905,
+              "user_s": 15.374646,
+              "sys_s": 5.245982,
+              "cpu_s": 20.620628
+            },
+            "cpu_s": 20.647606,
+            "cpu_measure": "cgroup-v2-scope-v1",
+            "wall_s": 21.648865714999964,
+            "peak_bytes": 336916480,
+            "load_before": [
+              47.63,
+              56.99,
+              39.57
+            ],
+            "load_after": [
+              38.61,
+              54.33,
+              39.07
+            ],
+            "collection_cpu_s": 0.022822
+          }
+        ],
+        "source_commit": "96efb519b77454da298716e54b0acb24d9094632",
+        "source_commit_verification": {
+          "method": "read unchanged launch HEAD after all arms; executed script wrote its source description over the Git source field",
+          "original_manifest_sha256": "01788b8464e55e7f30954504071ceb0d9d8c30ff3e6c5418f26205016595fbec",
+          "executed_script_sha256": "f10add1a64a197ca1d431f92bd7ac5cf908f757762fac7acb12e9293c91aaf67"
+        },
+        "product_projection_sha256": {
+          "c": "7eae2bfa93804c83d1a63137e04b2a5e601e867628bc9106ff16c1302ec6e269",
+          "llvm": "7eae2bfa93804c83d1a63137e04b2a5e601e867628bc9106ff16c1302ec6e269",
+          "jvm": "a76f1617dec666a69f0225a445c7f000ddfc94f70d3daa7b7ea1102cdde86d56"
+        }
+      },
+      "summary": {
+        "c": {
+          "ordinary_or_perf_cpu_ratio": 1.0476470394844888,
+          "user_instructions_ratio": 1.0009680220646626,
+          "off_cpu_s": [
+            33.115621,
+            29.881255,
+            35.631017,
+            30.887625
+          ],
+          "on_cpu_s": [
+            31.896855,
+            30.434431,
+            43.15459,
+            30.021719
+          ],
+          "on_collection_cpu_s": [
+            0.047839,
+            0.025401,
+            0.071376,
+            0.034338
+          ]
+        },
+        "llvm": {
+          "ordinary_or_perf_cpu_ratio": 0.9939796948414928,
+          "user_instructions_ratio": 1.001290186329707,
+          "off_cpu_s": [
+            25.837591,
+            32.605901,
+            32.340718,
+            31.856251
+          ],
+          "on_cpu_s": [
+            30.249464,
+            29.781609,
+            32.144799,
+            29.49381
+          ],
+          "on_collection_cpu_s": [
+            0.070542,
+            0.044176,
+            0.076583,
+            0.041145
+          ]
+        },
+        "jvm": {
+          "ordinary_or_perf_cpu_ratio": 0.9994212836690648,
+          "user_instructions_ratio": 1.001451349464451,
+          "off_cpu_s": [
+            23.811508,
+            24.041945,
+            21.808083,
+            21.127331
+          ],
+          "on_cpu_s": [
+            22.837396,
+            22.985635,
+            24.057224,
+            20.647606
+          ],
+          "on_collection_cpu_s": [
+            0.089513,
+            0.050134,
+            0.045996,
+            0.022822
+          ]
+        }
+      }
+    }
+  },
+  "component_profiles": {
+    "profile-components": {
+      "source": "04e65c367b8bb05c7561e753acbfe822c74d5f49",
+      "binary_sha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+      "project": "/home/akisarou/.cache/nts/case-roots/d55bfd976d43692c7664901fb498f431ec924cde646667c48d7ecf485509a36d/tsconfig.json",
+      "root": "/home/akisarou/.cache/nts-scratch/760/profile-components",
+      "rows": [
+        {
+          "name": "direct-a",
+          "iterations": 1000,
+          "cpu_s": 1.941389,
+          "user_s": 0.160851,
+          "sys_s": 1.780537,
+          "self_cpu_s": 1.003415,
+          "wall_s": 1.979165250000001
+        },
+        {
+          "name": "launch-a",
+          "iterations": 1000,
+          "cpu_s": 2.614141,
+          "user_s": 0.229182,
+          "sys_s": 2.384958,
+          "self_cpu_s": 1.222637,
+          "wall_s": 2.665056410000001
+        },
+        {
+          "name": "report-a",
+          "iterations": 1000,
+          "cpu_s": 2.774415,
+          "user_s": 0.286414,
+          "sys_s": 2.488001,
+          "self_cpu_s": 1.328991,
+          "wall_s": 2.830150288000001
+        },
+        {
+          "name": "report-b",
+          "iterations": 1000,
+          "cpu_s": 2.423447,
+          "user_s": 0.237312,
+          "sys_s": 2.186136,
+          "self_cpu_s": 1.139519,
+          "wall_s": 2.7934879149999996
+        },
+        {
+          "name": "launch-b",
+          "iterations": 1000,
+          "cpu_s": 2.320046,
+          "user_s": 0.217971,
+          "sys_s": 2.102076,
+          "self_cpu_s": 1.075067,
+          "wall_s": 2.3628662460000016
+        },
+        {
+          "name": "direct-b",
+          "iterations": 1000,
+          "cpu_s": 1.739236,
+          "user_s": 0.17059,
+          "sys_s": 1.568647,
+          "self_cpu_s": 0.877085,
+          "wall_s": 1.7725912599999973
+        },
+        {
+          "name": "collector",
+          "iterations": 20,
+          "cpu_s": 0.494845,
+          "user_s": 0.458435,
+          "sys_s": 0.03641,
+          "self_cpu_s": 0.494787,
+          "wall_s": 0.496979457999998
+        },
+        {
+          "name": "native-off-a",
+          "iterations": 100,
+          "cpu_s": 2.415826,
+          "user_s": 1.542525,
+          "sys_s": 0.8733,
+          "self_cpu_s": 0.168447,
+          "wall_s": 2.4338350539999993
+        },
+        {
+          "name": "native-on-a",
+          "iterations": 100,
+          "cpu_s": 2.471216,
+          "user_s": 1.574056,
+          "sys_s": 0.897159,
+          "self_cpu_s": 0.175028,
+          "wall_s": 2.9416447679999984
+        },
+        {
+          "name": "native-on-b",
+          "iterations": 100,
+          "cpu_s": 2.378423,
+          "user_s": 1.491678,
+          "sys_s": 0.886744,
+          "self_cpu_s": 0.165156,
+          "wall_s": 2.454478994999998
+        },
+        {
+          "name": "native-off-b",
+          "iterations": 100,
+          "cpu_s": 2.429031,
+          "user_s": 1.51263,
+          "sys_s": 0.916401,
+          "self_cpu_s": 0.169311,
+          "wall_s": 2.5797950259999998
+        }
+      ]
+    },
+    "profile-components-v2": {
+      "source": "96efb519b77454da298716e54b0acb24d9094632",
+      "binary_sha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+      "project": "/home/akisarou/.cache/nts/case-roots/d55bfd976d43692c7664901fb498f431ec924cde646667c48d7ecf485509a36d/tsconfig.json",
+      "root": "/home/akisarou/.cache/nts-scratch/760/profile-components-v2",
+      "rows": [
+        {
+          "name": "direct-a",
+          "iterations": 1000,
+          "cpu_s": 1.245995,
+          "user_s": 0.093652,
+          "sys_s": 1.152343,
+          "self_cpu_s": 0.605252,
+          "wall_s": 1.2736454209999992
+        },
+        {
+          "name": "launch-a",
+          "iterations": 1000,
+          "cpu_s": 1.3815,
+          "user_s": 0.14939,
+          "sys_s": 1.23211,
+          "self_cpu_s": 0.59365,
+          "wall_s": 1.4147041289999989
+        },
+        {
+          "name": "report-a",
+          "iterations": 1000,
+          "cpu_s": 1.492961,
+          "user_s": 0.161344,
+          "sys_s": 1.331618,
+          "self_cpu_s": 0.661224,
+          "wall_s": 1.5269782180000002
+        },
+        {
+          "name": "report-b",
+          "iterations": 1000,
+          "cpu_s": 1.505248,
+          "user_s": 0.186161,
+          "sys_s": 1.319087,
+          "self_cpu_s": 0.665561,
+          "wall_s": 1.5394515910000008
+        },
+        {
+          "name": "launch-b",
+          "iterations": 1000,
+          "cpu_s": 1.395962,
+          "user_s": 0.156331,
+          "sys_s": 1.239632,
+          "self_cpu_s": 0.599982,
+          "wall_s": 1.4301413549999997
+        },
+        {
+          "name": "direct-b",
+          "iterations": 1000,
+          "cpu_s": 1.198015,
+          "user_s": 0.124424,
+          "sys_s": 1.073591,
+          "self_cpu_s": 0.566949,
+          "wall_s": 1.225384435
+        },
+        {
+          "name": "collector",
+          "iterations": 20,
+          "cpu_s": 0.43977,
+          "user_s": 0.401349,
+          "sys_s": 0.03842,
+          "self_cpu_s": 0.439669,
+          "wall_s": 0.4412316959999989
+        },
+        {
+          "name": "native-off-a",
+          "iterations": 100,
+          "cpu_s": 2.15129,
+          "user_s": 1.36936,
+          "sys_s": 0.78193,
+          "self_cpu_s": 0.1474,
+          "wall_s": 2.1688342600000015
+        },
+        {
+          "name": "native-on-a",
+          "iterations": 100,
+          "cpu_s": 2.156431,
+          "user_s": 1.349634,
+          "sys_s": 0.806797,
+          "self_cpu_s": 0.147386,
+          "wall_s": 2.178159101000001
+        },
+        {
+          "name": "native-on-b",
+          "iterations": 100,
+          "cpu_s": 2.142179,
+          "user_s": 1.351608,
+          "sys_s": 0.790571,
+          "self_cpu_s": 0.146666,
+          "wall_s": 2.1860729100000027
+        },
+        {
+          "name": "native-off-b",
+          "iterations": 100,
+          "cpu_s": 2.14718,
+          "user_s": 1.363022,
+          "sys_s": 0.784158,
+          "self_cpu_s": 0.147514,
+          "wall_s": 2.1625937630000007
+        }
+      ]
+    },
+    "profile-components-perf": {
+      "source": "96efb519b77454da298716e54b0acb24d9094632",
+      "binary_sha256": "ca659974b2a0f3ae5fbc21e1bc62c53ffca8d77a3a29f46979b0c128f8c69635",
+      "project": "/home/akisarou/.cache/nts/case-roots/d55bfd976d43692c7664901fb498f431ec924cde646667c48d7ecf485509a36d/tsconfig.json",
+      "root": "/home/akisarou/.cache/nts-scratch/760/profile-components-perf",
+      "rows": [
+        {
+          "name": "direct-a",
+          "iterations": 1000,
+          "cpu_s": 1.176136,
+          "user_s": 0.118116,
+          "sys_s": 1.05802,
+          "self_cpu_s": 0.57446,
+          "wall_s": 1.2040265660000005
+        },
+        {
+          "name": "launch-a",
+          "iterations": 1000,
+          "cpu_s": 1.402024,
+          "user_s": 0.130334,
+          "sys_s": 1.27169,
+          "self_cpu_s": 0.609664,
+          "wall_s": 1.4366833459999988
+        },
+        {
+          "name": "report-a",
+          "iterations": 1000,
+          "cpu_s": 1.558644,
+          "user_s": 0.176219,
+          "sys_s": 1.382424,
+          "self_cpu_s": 0.706897,
+          "wall_s": 1.5957023830000017
+        },
+        {
+          "name": "report-b",
+          "iterations": 1000,
+          "cpu_s": 1.508617,
+          "user_s": 0.191308,
+          "sys_s": 1.31731,
+          "self_cpu_s": 0.673694,
+          "wall_s": 1.5444034070000017
+        },
+        {
+          "name": "launch-b",
+          "iterations": 1000,
+          "cpu_s": 1.465251,
+          "user_s": 0.160858,
+          "sys_s": 1.304393,
+          "self_cpu_s": 0.646899,
+          "wall_s": 1.5011328680000007
+        },
+        {
+          "name": "direct-b",
+          "iterations": 1000,
+          "cpu_s": 1.129481,
+          "user_s": 0.093911,
+          "sys_s": 1.03557,
+          "self_cpu_s": 0.535026,
+          "wall_s": 1.1571545019999994
+        },
+        {
+          "name": "collector",
+          "iterations": 20,
+          "cpu_s": 0.447858,
+          "user_s": 0.419434,
+          "sys_s": 0.028423,
+          "self_cpu_s": 0.447835,
+          "wall_s": 0.449544183
+        },
+        {
+          "name": "native-off-a",
+          "iterations": 100,
+          "cpu_s": 2.227141,
+          "user_s": 1.403843,
+          "sys_s": 0.823299,
+          "self_cpu_s": 0.142185,
+          "wall_s": 2.2539749869999994
+        },
+        {
+          "name": "native-on-a",
+          "iterations": 100,
+          "cpu_s": 2.210936,
+          "user_s": 1.410075,
+          "sys_s": 0.800862,
+          "self_cpu_s": 0.139716,
+          "wall_s": 2.2347960329999985
+        },
+        {
+          "name": "native-on-b",
+          "iterations": 100,
+          "cpu_s": 2.2257,
+          "user_s": 1.413204,
+          "sys_s": 0.812497,
+          "self_cpu_s": 0.140191,
+          "wall_s": 2.258000329999999
+        },
+        {
+          "name": "native-off-b",
+          "iterations": 100,
+          "cpu_s": 2.218191,
+          "user_s": 1.414295,
+          "sys_s": 0.803896,
+          "self_cpu_s": 0.140943,
+          "wall_s": 2.2458543559999997
+        }
+      ]
+    }
+  },
+  "measurement_source": "96efb519b77454da298716e54b0acb24d9094632",
+  "production_configuration": {
+    "step_wrapper": "tooling/gate/run.mjs wraps with /usr/bin/time, never perf; the eight all.sh routes call the census directly",
+    "step_cpu_measure": "cgroup-v2-scope-v1",
+    "collection_cpu_measure": "getrusage-self-v1, synchronous collector with no children",
+    "acceptance": "ordinary step cgroup CPU plus separately charged ON collection CPU; counted instructions shown alongside, never mixed with ordinary CPU"
+  },
+  "canonical": {
+    "source": "96efb519b77454da298716e54b0acb24d9094632",
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-96efb519b774-1794530312618",
+    "verdict": "red",
+    "failed_steps": [
+      "clippy",
+      "licenses"
+    ],
+    "wall_s": 610.349,
+    "ledger_wait_s": 400.21999999999997,
+    "wait_note": "Ledger waits may overlap active work; not subtracted as an exclusive execution interval.",
+    "tooling": {
+      "tests": 2176,
+      "pass": 2174,
+      "fail": 0,
+      "todo": 2
+    },
+    "rust": {
+      "binaries": 55,
+      "doctest_crates": 18,
+      "pass": 3044,
+      "fail": 0,
+      "ignored": 8
+    },
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "FAIL",
+        "cpu": 92.028764,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 20.352,
+        "memory_peak_bytes": 2266206208,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 20.3,
+          "cpu": 92,
+          "user": 83.99,
+          "sys": 8.01,
+          "maxrss_kb": 1044236
+        }
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "cpu": 1.887498,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 1.874,
+        "memory_peak_bytes": 141500416,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 1.82,
+          "cpu": 1.8699999999999999,
+          "user": 1.38,
+          "sys": 0.49,
+          "maxrss_kb": 162408
+        }
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "cpu": 3.308288,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 3.354,
+        "memory_peak_bytes": 159272960,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 3.31,
+          "cpu": 3.3000000000000003,
+          "user": 3.22,
+          "sys": 0.08,
+          "maxrss_kb": 182588
+        }
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "cpu": 0.059935,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 0.054,
+        "memory_peak_bytes": 19034112,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 0.01,
+          "cpu": 0.05,
+          "user": 0.02,
+          "sys": 0.03,
+          "maxrss_kb": 49332
+        }
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "cpu": 1.557683,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 1.407,
+        "memory_peak_bytes": 409219072,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 1.35,
+          "cpu": 1.55,
+          "user": 1.21,
+          "sys": 0.34,
+          "maxrss_kb": 358084
+        }
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "cpu": 2.059822,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 2.186,
+        "memory_peak_bytes": 478547968,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 2.13,
+          "cpu": 2.0500000000000003,
+          "user": 1.59,
+          "sys": 0.46,
+          "maxrss_kb": 406740
+        }
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "cpu": 0.071372,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 0.214,
+        "memory_peak_bytes": 30228480,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 0.04,
+          "cpu": 0.060000000000000005,
+          "user": 0.05,
+          "sys": 0.01,
+          "maxrss_kb": 69008
+        }
+      },
+      {
+        "name": "doctests",
+        "verdict": "PASS",
+        "cpu": 2.343435,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 2.341,
+        "memory_peak_bytes": 407072768,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 2.3,
+          "cpu": 2.33,
+          "user": 1.66,
+          "sys": 0.67,
+          "maxrss_kb": 397680
+        }
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "cpu": 1.552573,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 2.881,
+        "memory_peak_bytes": 381775872,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 2.83,
+          "cpu": 1.54,
+          "user": 0.76,
+          "sys": 0.78,
+          "maxrss_kb": 255644
+        }
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "cpu": 3.420503,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 1.749,
+        "memory_peak_bytes": 580984832,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 1.67,
+          "cpu": 0.18,
+          "user": 0.15,
+          "sys": 0.03,
+          "maxrss_kb": 106680
+        }
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "cpu": 4.966757,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 4.255,
+        "memory_peak_bytes": 312483840,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 4.21,
+          "cpu": 4.95,
+          "user": 4.37,
+          "sys": 0.58,
+          "maxrss_kb": 261356
+        }
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "cpu": 5.077154,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 3.687,
+        "memory_peak_bytes": 308580352,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 3.63,
+          "cpu": 5.06,
+          "user": 4.59,
+          "sys": 0.47,
+          "maxrss_kb": 294440
+        }
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "cpu": 2159.175962,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 200.819,
+        "memory_peak_bytes": 11803365376,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 200.77,
+          "cpu": 1897,
+          "user": 1442.52,
+          "sys": 454.48,
+          "maxrss_kb": 1105100
+        }
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "cpu": 0.052127,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 0.07,
+        "memory_peak_bytes": 13090816,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 0.02,
+          "cpu": 0.04,
+          "user": 0.03,
+          "sys": 0.01,
+          "maxrss_kb": 49652
+        }
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "cpu": 4873.953142,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 375.347,
+        "memory_peak_bytes": 12028682240,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 375.24,
+          "cpu": 4858.45,
+          "user": 4576.75,
+          "sys": 281.7,
+          "maxrss_kb": 2472648
+        }
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "cpu": 3.225871,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 0.91,
+        "memory_peak_bytes": 321822720,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 0.86,
+          "cpu": 3.21,
+          "user": 2.96,
+          "sys": 0.25,
+          "maxrss_kb": 267240
+        }
+      },
+      {
+        "name": "licenses",
+        "verdict": "FAIL",
+        "cpu": 0.76517,
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "wall": 0.991,
+        "memory_peak_bytes": 373911552,
+        "gnu_time": {
+          "version": 1,
+          "cpu_measure": "wait4-rusage-v1",
+          "wall": 0.95,
+          "cpu": 0.75,
+          "user": 0.48,
+          "sys": 0.27,
+          "maxrss_kb": 353524
+        }
+      }
+    ],
+    "followup": {
+      "source": "3e752b875ba5843a6c09e31f6238c71b8282ba8e",
+      "change": "one must_use diagnostic attribute on Session; generated locked dependency notices",
+      "runtime_logic_changed": false,
+      "release_binary_rebuilt_or_compared": false,
+      "commands": [
+        "sh tooling/gate/all.sh --call rustfmt",
+        "node tooling/gate/clippy.ts",
+        "node tooling/licenses/licenses.ts --check"
+      ],
+      "status": "green",
+      "log": "/home/akisarou/.cache/nts-scratch/760/failed-owners-v3.log",
+      "log_sha256": "11360fe4c129ee188365d7c284773eb54492d56714600f5308b1a165275da5d1"
+    }
+  },
+  "measurement_notes": [
+    "CPU ratios include separately observed collection CPU.",
+    "Perf inherited-event runs include fork/PMU observer cost and are separate from ordinary execution.",
+    "Earlier short/cohort, cold, stopped and unmeasured attempts remain under the protected scratch root; their status is recorded in the notebook."
+  ]
+}
