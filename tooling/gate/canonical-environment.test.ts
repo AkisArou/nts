@@ -580,8 +580,8 @@ for (const [where,availableKiB,state,waiting] of [['in the memory ledger',0,'wai
   assert.equal(readLedger(memory.NTS_MEMORY_LEDGER)[state].length,1,`the run's reservation is ${state} in the test's own ledger`);
   const signaled=spawnTest('systemctl',['--user','kill','--signal=SIGTERM',unit],{encoding:'utf8'});
   assert.equal(signaled.status,0,signaled.stderr);
-  await waitFor('the run to end on SIGTERM',()=>!!terminal(),{timeoutMs:5000});
-  assert.equal(terminal()!.code,130,output());
+  await waitFor('the run to end on SIGTERM',()=>!!terminal());
+  assert.equal(terminal()!.code,143,output());
   assert.equal(terminal()!.signal,null,output());
   const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8'));
   assert.equal(summary.interrupted,'signal SIGTERM');

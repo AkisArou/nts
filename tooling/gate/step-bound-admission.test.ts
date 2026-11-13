@@ -29,8 +29,8 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   const own=newTestScratch("bound-admission"),root=join(own,"repo"),gate=join(root,"tooling/gate");
   const inherited=toolingSlice(),slice=inherited??newToolingSlice(true),unit=`nts-test-bound-admission-${randomUUID()}`;
   let cancel:AbortController|undefined,holder:Reservation|undefined;
-  t.after(()=>{
-    cancel?.abort();holder?.release();spawnSync("systemctl",["--user","stop",unit],{env:fixtureEnvironment(t),stdio:"ignore"});
+  t.after(async()=>{
+    cancel?.abort();holder?.release();await holder?.closed;spawnSync("systemctl",["--user","stop",unit],{env:fixtureEnvironment(t),stdio:"ignore"});
     if(!inherited)stopToolingSlice(slice);
     removable(own);rmSync(own,{recursive:true,force:true});
   });
@@ -70,7 +70,6 @@ StepBoundClock.prototype.observe=function(now,waiting){
   durableRecord(${JSON.stringify(observed)},{now,waiting:waiting??null,...result});
   return result;
 };
-await import("./run.mjs");
 `);
   writeFileSync(join(gate,"payload.mjs"),`
 import {existsSync,watch,writeFileSync} from "node:fs";
@@ -106,7 +105,7 @@ ${mode==="active"?'await new Promise(()=>{});':'release();console.log("case comp
   const child=spawn("systemd-run",["--user",`--unit=${unit}`,`--slice=${slice}`,"--collect","--quiet","--wait","--pipe",
     "-p","LimitCORE=0","-p","Nice=19","-p","CPUAffinity=0-3 6-31","-p","RuntimeMaxSec=180s","-p","TimeoutStopSec=5s",
     `--working-directory=${root}`,...Object.entries(planned.env).filter((pair):pair is [string,string]=>pair[1]!==undefined).map(([key,value])=>`--setenv=${key}=${value}`),
-    process.execPath,join(gate,"entry.mjs")],{env:fixtureEnvironment(t),stdio:["ignore","pipe","pipe"]});
+    process.execPath,'--import',join(gate,"entry.mjs"),join(gate,'run.mjs')],{env:fixtureEnvironment(t),stdio:["ignore","pipe","pipe"]});
   let output="";child.stdout.on("data",b=>{output+=b;});child.stderr.on("data",b=>{output+=b;});
   const done=once(child,"close"),stopped=()=>child.exitCode!==null||child.signalCode!==null?`runner exited ${child.exitCode??child.signalCode}: ${output}`:undefined;
   const observation=():Observation|undefined=>existsSync(observed)?JSON.parse(readFileSync(observed,"utf8")):undefined;
