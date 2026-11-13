@@ -567,10 +567,15 @@ drain share one terminal cleanup and one wedged-drain guard. A signal keeps its
 conventional status; cleanup failures are named and cannot turn a failed command
 green. An unsettled main drains its resources and retains exit 13 only if it is
 still unsettled at actual exit. Explicit output completion drains resources
-before flushing their final reports. A gate runner holds its tree lock and
+before flushing their final reports. A resource-owning command uses
+`exitCommand(code)` for an explicit terminal transfer; it unwinds before the
+same drain and flush. Its catches first rethrow `isCommandExit(error)`, so they
+cannot classify that transfer as an ordinary failure. Resource-free immediate
+exits retain their immediate behavior. A gate runner holds its tree lock and
 publishes its terminal summary after broker, worker and reservation completion;
 a cleanup failure is a non-green `scope_cleanup` result. The source audit checks
-listener aliases and dynamic event names against the single entry owner.
+listener aliases and dynamic event names against the single entry owner, and
+rejects resource owners that bypass the drain or swallow a terminal transfer.
 Asynchronous fixture setup belongs in a test hook. Pure command entry scripts
 outside Worker closures may use top-level await.
 A leaf that an oracle preload reaches lives in its own directory with a one-file

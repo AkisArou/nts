@@ -10,6 +10,9 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "758": { "kind": "kept", "why": "#758's command lifetime migration and terminal-cleanup proofs, retained until the coordinator reviews the away log" },
+    "765": { "kind": "kept", "why": "#765's controller adoption and historical task-answer receipts, retained until the coordinator reviews the away log" },
+    "772": { "kind": "kept", "why": "#772's sampler and ledger terminal-drain proof, retained until the coordinator reviews the away log" },
     "760": { "kind": "kept", "why": "#760's full TypeScript instrumentation identity and counted overhead evidence, kept until #760 closes" },
     "728": { "kind": "kept", "why": "#728's reproducible reader-input edge index and census evidence, kept until #728 closes" },
     "mainclaude": { "kind": "kept", "why": "the coordinator's" },
