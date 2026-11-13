@@ -206,6 +206,9 @@ export class SourceFacts {
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
         if(!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')
           &&!(owner&&owned![2]==='directoryMembership'))continue;
+        if(owner&&['optionalFile','directoryMembership'].includes(owned![2]!)
+          &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
+          throw Error(owned![2]+' needs exactly one URL input: '+this.file);
         if(owner&&owned![2]==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});

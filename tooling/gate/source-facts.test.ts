@@ -124,6 +124,16 @@ function other(candidate:Function){candidate(new URL('./ordinary.json',import.me
   }finally{lease.dispose();api.close();}
 });
 
+test('invalid metadata factory arguments cannot turn a root anchor into a module population',()=>{
+  const api=new API();
+  try{for(const [factory,path]of [['directoryMembership','./'],['optionalFile','./candidate.json']]){
+    const source=`import {${factory}} from './reader-inputs/main.ts';${factory}(new URL('${path}',import.meta.url),{});`;
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations(),/needs exactly one URL input/);}
+    finally{lease.dispose();}
+  }}finally{api.close();}
+});
+
 test('compiled project entries keep lexical factory ownership',()=>{
   const api=new API(),source=`import {projectInput as project} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';

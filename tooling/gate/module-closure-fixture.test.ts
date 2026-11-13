@@ -839,3 +839,22 @@ test('membership and optional reach never suppress a later actual module edge in
     }finally{graph.close();}
   }
 });
+
+test('root membership keeps unknown source children and the copier explicitly owns its data manifest',t=>{
+  const f=fixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const directoryMembership=url=>url;export const dataDirectory=url=>url;');
+  f.write('entry.ts',"import {dataDirectory,directoryMembership} from './tooling/gate/reader-inputs/main.ts';dataDirectory(new URL('./data/',import.meta.url));directoryMembership(new URL('./',import.meta.url));");
+  f.write('data/case.txt','production');
+  for(const args of [['init','--quiet','--initial-branch=main'],['add','.']]){
+    const ran=spawnTest('git',gitArguments(args),{cwd:f.source,encoding:'utf8'});assert.equal(ran.status,0,ran.stderr);
+  }
+  mkdirSync(join(f.destination,'data'),{recursive:true});
+  const init=spawnTest('git',gitArguments(['init','--quiet','--initial-branch=main']),{cwd:f.destination,encoding:'utf8'});assert.equal(init.status,0,init.stderr);
+  writeFileSync(join(f.destination,'data/private.txt'),'private');
+  const options={sourceRoot:f.source,dataNamespaces:{data:'private root data'}};
+  copyModuleClosure(['entry.ts'],f.destination,options);
+  copyModuleClosure(['entry.ts'],f.destination,options);
+  assert.equal(lstatSync(join(f.destination,FIXTURE_INPUT_MANIFEST)).isFile(),true);
+  f.write('untracked-child.txt','not in Git');
+  assert.throws(()=>copyModuleClosure(['entry.ts'],f.destination,options),/membership is missing a child: untracked-child.txt/);
+});
