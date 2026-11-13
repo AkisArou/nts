@@ -1833,7 +1833,7 @@ export function inputMetadataDeclarations(){
   const graph=stepInputGraph();
   const context=(/** @type {import('./reader-inputs/main.ts').ReaderContext} */ value)=>({entry:value.entry,dataNamespaces:{...value.dataNamespaces}});
   return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,context:context(row.context),steps:[...row.steps].sort()})),
-    memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map(entry=>({...entry})),steps:[...row.steps].sort()}))};
+    memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
