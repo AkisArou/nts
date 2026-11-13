@@ -166,6 +166,19 @@ imports or launches. Only entered modules take part in host-reference traversal;
 data members and exact file inputs keep their input obligations without making
 their strings or imports into readers. A later real import enters a file even
 if an earlier reader reached it as data or exact bytes.
+`inspectionDirectory(new URL("population/", import.meta.url))` declares immutable
+bytes that a guard inspects. It retains byte-reader obligations for current,
+added and deleted members, but inspection alone never places a member or
+removes its full fallback. The canonical snapshot keeps placement separate
+from byte ownership and module traversal; independent module, file, data and
+project declarations retain their placement in either discovery order.
+Inspection-owned bytes cannot be substituted by a fixture data grant. The
+census reports each directory's role. Declared byte readers survive both prose
+precision and explicit execution-reader overrides.
+The `jvm-members` step owns generated JVM catalogue freshness and reserved-name
+exclusivity. Its strict tooling operation scans its declared compiler, JVM
+runtime and tooling populations; synthetic controls exercise that same operation.
+Rust tests retain member semantics without launching this repository-wide audit.
 `projectInput(new URL("entry.ts", import.meta.url))` declares an entry compiled
 under its owning TypeScript project. Its runtime descriptor is accepted by the
 shared closure copier too. `OracleFilesystem.projectFor` owns discovery and the
@@ -1001,6 +1014,12 @@ the first node task.
   are compared with the pinned oracle instead of treating a provenance string
   as execution reach
   ([log](records/notebooks/decisions-log.md#pinned-generator-inputs-are-offline-11-13)).
+- **Inspection does not establish placement:** `inspectionDirectory` keeps
+  immutable byte reads and their precision obligations while the shared graph
+  derives placing membership from independent module, file, data and project
+  declarations. Repository-wide JVM member checks belong to their declared
+  tooling step, with synthetic controls of the same operation
+  ([log](records/notebooks/decisions-log.md#inspection-does-not-place-inputs-11-13)).
 - **Byte ownership and module traversal are separate:** an exact `fileInput`
   keeps production bytes without entering their graph. Data-directory members
   and exact byte inputs enter that graph only when an independent module edge

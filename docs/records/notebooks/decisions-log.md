@@ -2779,3 +2779,17 @@ Completed Rust failures keep their product verdict when observation also fails.
 
 This slice adds observation and publication machinery only. Runtime reader
 declarations and removal of Rust checks from ALWAYS remain a separate review.
+
+
+## Inspection does not place inputs (11-13)
+
+Part of #761 moves generated JVM member freshness and repository exclusivity
+from two Rust wrappers into the strict `jvm-members` owner and its synthetic
+controls. Its actual three-root byte population is an `inspectionDirectory`,
+not a data namespace or execution declaration. The shared graph publishes
+placing membership independently of immutable ownership and module traversal,
+including project configs and inherited configs. Inspection cannot discharge
+fallback or authorize private substitution; byte consumers remain owed through
+prose precision and explicit execution-reader overrides. The public census
+retains each directory's role. Rust runtime declarations and ALWAYS retirement
+remain separate work.
