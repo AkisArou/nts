@@ -23,7 +23,8 @@ test('project discovery retains failed probes, inherited bytes and parser enumer
   assert.ok(result.observations.some(row=>row.kind==='runtimeKind'&&row.path===join(root,'reference')&&row.value==='directory'));
   validateHostObservations(result.observations);
   write('src/tsconfig.json','{"files":["main.ts"]}');
-  assert.throws(()=>validateHostObservations(result.observations),/fileExists changed: .*src\/tsconfig.json/);
+  assert.throws(()=>validateHostObservations(result.observations.filter(row=>row.kind==='fileExists'&&row.path===join(root,'src/tsconfig.json'))),/fileExists changed: .*src\/tsconfig.json/);
+  assert.throws(()=>validateHostObservations(result.observations.filter(row=>row.kind==='entries'&&row.path===join(root,'src'))),/entries changed: .*src/);
   const changed=projectInputs([{kind:'entry',path:'src/main.ts'}],root);
   assert.deepEqual(changed.configs,['src/tsconfig.json']);
 });
@@ -45,7 +46,8 @@ test('captured SDK stat preserves real fields and absence without granting file 
   assert.ok(rows.some(row=>row.path===missing&&row.value===null));
   validateHostObservations(rows);
   writeFileSync(path,'a different size');
-  assert.throws(()=>validateHostObservations(rows),/stat changed: .*value.txt/);
+  for(const candidate of [path,link])
+    assert.throws(()=>validateHostObservations(rows.filter(row=>row.path===candidate)),/stat changed:/);
   for(const change of [()=>chmodSync(path,statSync(path).mode^0o100),()=>{
     const current=statSync(path);utimesSync(path,current.atime,new Date(current.mtime.getTime()+1000));
   }]){
