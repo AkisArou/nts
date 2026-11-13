@@ -63,6 +63,29 @@ docs/           language, foundations, targets, reference, conformance, contribu
 third_party/    tsrs, typescript (corpus), test262, node, chromium and other pinned dependencies
 ```
 
+Lowering enters through [`hir/lower.rs`](../compiler/core/src/hir/lower.rs).
+Its `lower` and `lower_with` entry points assemble the shared program context and
+order the lowering pipeline. The parent module also owns `FuncBuilder`, its
+shared state, and the primitives for constructing operations and blocks.
+The modules under [`hir/lower/`](../compiler/core/src/hir/lower/) implement
+specific responsibilities, including inherent `FuncBuilder` methods. They use
+the parent's shared types and state within the same Rust module hierarchy.
+
+| Responsibility | Starting points |
+| --- | --- |
+| Snapshot facts and diagnostics | [`snapshot_queries.rs`](../compiler/core/src/hir/lower/snapshot_queries.rs), [`diagnostics.rs`](../compiler/core/src/hir/lower/diagnostics.rs) |
+| Representations and storage layouts | [`representations.rs`](../compiler/core/src/hir/lower/representations.rs), [`object_layouts.rs`](../compiler/core/src/hir/lower/object_layouts.rs), [`member_layouts.rs`](../compiler/core/src/hir/lower/member_layouts.rs) |
+| Module bindings and body planning | [`module_bindings.rs`](../compiler/core/src/hir/lower/module_bindings.rs), [`module_evaluation.rs`](../compiler/core/src/hir/lower/module_evaluation.rs), [`capture_discovery.rs`](../compiler/core/src/hir/lower/capture_discovery.rs) |
+| Body emission and calls | [`body_entries.rs`](../compiler/core/src/hir/lower/body_entries.rs), [`call_expression.rs`](../compiler/core/src/hir/lower/call_expression.rs), [`closure_bodies.rs`](../compiler/core/src/hir/lower/closure_bodies.rs) |
+| Control flow and suspension | [`loop_flow.rs`](../compiler/core/src/hir/lower/loop_flow.rs), [`exceptions.rs`](../compiler/core/src/hir/lower/exceptions.rs), [`suspended_bodies.rs`](../compiler/core/src/hir/lower/suspended_bodies.rs) |
+| Objects and collections | [`property_presence.rs`](../compiler/core/src/hir/lower/property_presence.rs), [`array_methods.rs`](../compiler/core/src/hir/lower/array_methods.rs), [`typed_arrays.rs`](../compiler/core/src/hir/lower/typed_arrays.rs) |
+| Builtins and promise jobs | [`string_builtins.rs`](../compiler/core/src/hir/lower/string_builtins.rs), [`promise_settlement.rs`](../compiler/core/src/hir/lower/promise_settlement.rs), [`promise_reactions.rs`](../compiler/core/src/hir/lower/promise_reactions.rs) |
+| Foreign ABI and platform registration | [`foreign_arguments.rs`](../compiler/core/src/hir/lower/foreign_arguments.rs), [`foreign_results.rs`](../compiler/core/src/hir/lower/foreign_results.rs), [`objc_class.rs`](../compiler/core/src/hir/lower/objc_class.rs), [`gobject_class.rs`](../compiler/core/src/hir/lower/gobject_class.rs), [`com_class.rs`](../compiler/core/src/hir/lower/com_class.rs) |
+
+The conditional [`lower/tests.rs`](../compiler/core/src/hir/lower/tests.rs)
+module retains the `hir::lower::tests` scope. Other focused test modules live
+beside the responsibilities they exercise.
+
 ## Decisions
 
 - The frontend is tsrs, called in process; tsgo and every transport to it are gone, with no intermediate steps ([log](records/notebooks/decisions-log.md#frontend-tsrs)).
