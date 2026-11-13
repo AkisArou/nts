@@ -1,0 +1,772 @@
+{
+  "version": 1,
+  "issue": 756,
+  "status": "partial; 756 and 773 remain open",
+  "sourcePin": "d064d7e8fbaffc40f77074cfdad22a633ec73458",
+  "writer": "/home/akisarou/.cache/nts-scratch/756/write-record.py",
+  "normal": {
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794549077172",
+    "verdict": "green",
+    "interrupted": null,
+    "wallSeconds": 515.713,
+    "admissionWaitSeconds": 303.152,
+    "scopeCleanup": {
+      "state": "complete"
+    },
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 5.476,
+        "cpu": 10.100921
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.191,
+        "cpu": 2.127895
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 4.584,
+        "cpu": 4.521295
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.067,
+        "cpu": 0.0599
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 1.414,
+        "cpu": 1.662066
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 3.873,
+        "cpu": 3.07784
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.121,
+        "cpu": 0.09089
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.134,
+        "cpu": 2.008887
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.092,
+        "cpu": 3.748992
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 5.057,
+        "cpu": 6.019499
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 4.74,
+        "cpu": 6.572785
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 206.42,
+        "cpu": 2361.152264
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.078,
+        "cpu": 0.057644
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 303.245,
+        "cpu": 4348.815694
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 1.155,
+        "cpu": 3.791363
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 1.431,
+        "cpu": 0.959253
+      }
+    ],
+    "tooling": {
+      "tests": 2244,
+      "pass": 2242,
+      "fail": 0,
+      "cancelled": 0,
+      "todo": 2
+    },
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "passed": 3045,
+      "failed": 0,
+      "ignored": 8
+    }
+  },
+  "loaded": {
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794550594890",
+    "verdict": "red",
+    "interrupted": null,
+    "wallSeconds": 1515.321,
+    "admissionWaitSeconds": 738.779,
+    "scopeCleanup": {
+      "state": "complete"
+    },
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.434,
+        "cpu": 0.819918
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 4.456,
+        "cpu": 3.796088
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 5.798,
+        "cpu": 5.077395
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.132,
+        "cpu": 0.092702
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.514,
+        "cpu": 2.306543
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 5.304,
+        "cpu": 3.313521
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.164,
+        "cpu": 0.082909
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.903,
+        "cpu": 2.719594
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 25.208,
+        "cpu": 5.776181
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 10.314,
+        "cpu": 10.382322
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 9.009,
+        "cpu": 8.991303
+      },
+      {
+        "name": "tooling",
+        "verdict": "NOT RUN",
+        "reason": "tooling file NOT RUN (hung): /home/akisarou/.cache/nts-pool/2/tooling/gate/owed-range.test.ts; no test activity for 300000 ms in \"concurrent range preflights collect the same stale pin and only their own trees\"; 0 prior assertion failure(s) retained in the transcript",
+        "wall": 759.79,
+        "cpu": 3223.38688
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 0.203,
+        "cpu": 0.08099
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 733.08,
+        "cpu": 5344.056261
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 2.652,
+        "cpu": 4.928006
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "reason": "",
+        "wall": 1.237,
+        "cpu": 0.992079
+      }
+    ],
+    "tooling": {
+      "tests": 2236,
+      "pass": 2233,
+      "fail": 0,
+      "cancelled": 1,
+      "todo": 2
+    },
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "passed": 3045,
+      "failed": 0,
+      "ignored": 8
+    }
+  },
+  "focused": [
+    {
+      "log": "/home/akisarou/.cache/nts-scratch/756/focused-v1.log",
+      "counts": {
+        "tests": 167,
+        "pass": 167,
+        "fail": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    },
+    {
+      "log": "/home/akisarou/.cache/nts-scratch/756/focused-v2.log",
+      "counts": {
+        "tests": 22,
+        "pass": 22,
+        "fail": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    }
+  ],
+  "inner": {
+    "log": "/home/akisarou/.cache/nts-scratch/756/inner-v1.log",
+    "verdict": "green",
+    "checks": [
+      "fmt",
+      "clippy",
+      "build",
+      "tests"
+    ]
+  },
+  "load": {
+    "pin": "d064d7e8fbaffc40f77074cfdad22a633ec73458",
+    "started": "2026-11-13T06:15:32.525Z",
+    "initialLoad": [
+      16.53,
+      33.37,
+      46.07
+    ],
+    "events": [
+      {
+        "kind": "selectors",
+        "code": 0,
+        "signal": null,
+        "load": [
+          25.67,
+          34.35,
+          46.12
+        ]
+      },
+      {
+        "kind": "gate",
+        "code": 3,
+        "signal": null,
+        "load": [
+          44.29,
+          52.54,
+          61.41
+        ]
+      }
+    ],
+    "ready": {
+      "workers": 32,
+      "bytes": 2147483648,
+      "pid": 3379889
+    },
+    "readyLoad": [
+      16.53,
+      33.37,
+      46.07
+    ],
+    "loadResult": {
+      "code": 0,
+      "signal": null
+    },
+    "ended": "2026-11-13T06:41:56.164Z",
+    "finalLoad": [
+      44.29,
+      52.54,
+      61.41
+    ]
+  },
+  "loadedPassingControls": [
+    "✔ program consumers read completed answers from an nts-dev planner after the SDK workers drain (46859.803905ms)",
+    "✔ a --here run at the agent priority yields its unused reservation to a service run on one ledger (10682.791121ms)",
+    "✔ pinned binary identities survive a step relinking the original target (27378.009256ms)",
+    "✔ a landing launches the candidate's pinned Node and forwards it to the build and child commands (30665.965323ms)",
+    "✔ integrity measures a CPU-active listing beyond its inactivity guard (263.202906ms)",
+    "✔ integrity records a project's own listing time, not when it finished (1588.431983ms)",
+    "✔ bounded active entry preserves the command or launcher's own result (1692.640115ms)",
+    "✔ an invalid native loop acquires no workers before its refusal (9.453089ms)",
+    "✔ a valid native loop keeps both worker completions and the full checksum (6.184056ms)"
+  ],
+  "selector": {
+    "issue": 773,
+    "cause": "unknown",
+    "isolatedLoaded": {
+      "attempts": 10,
+      "passed": 10
+    },
+    "canonicalFullFileLoaded": {
+      "counts": {
+        "tests": 18,
+        "pass": 18,
+        "fail": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "controller": {
+        "pin": "d064d7e8fbaffc40f77074cfdad22a633ec73458",
+        "started": "2026-11-13T07:02:30.769Z",
+        "initialLoad": [
+          89.8,
+          24.72,
+          26.15
+        ],
+        "events": [
+          {
+            "kind": "selectors",
+            "code": 0,
+            "signal": null,
+            "load": [
+              52.87,
+              61.44,
+              44.14
+            ]
+          }
+        ],
+        "ready": {
+          "workers": 32,
+          "bytes": 2147483648,
+          "pid": 670622
+        },
+        "readyLoad": [
+          113.16,
+          35.54,
+          29.7
+        ],
+        "loadResult": {
+          "code": 0,
+          "signal": null
+        },
+        "ended": "2026-11-13T07:07:38.809Z",
+        "finalLoad": [
+          52.87,
+          61.44,
+          44.14
+        ]
+      }
+    },
+    "fullGate": "held: concurrent selector preflight, no activity for 300000 ms; zero prior assertion failures"
+  },
+  "mapping": [
+    {
+      "test": "program consumers read completed answers from an nts-dev planner after the SDK workers drain",
+      "run": "d4c87d613a73-1794470486681",
+      "cause": "Sampler Worker inherited --input-type; not a wall-time failure",
+      "fixed": "e41c6b75894e19be8661aa5446f3f48fa828dddc",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "a --here run at the agent priority yields its unused reservation to a service run on one ledger",
+      "run": "d4c87d613a73-1794470486681",
+      "cause": "Same sampler Worker execution flags",
+      "fixed": "e41c6b75894e19be8661aa5446f3f48fa828dddc",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "landing/run-steps.test.ts whole file",
+      "run": "11106ca75256-1794468789150",
+      "cause": "Late sampler reporter appended build.log after fixture teardown",
+      "fixed": "899c68e7fb43de44e767aa529ce1b3b2faddaee4",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "pinned binary identities survive a step relinking the original target / candidate pinned Node",
+      "run": "72b9b2c862ee-1794463588159",
+      "cause": "Gate capability spawnSync ETIMEDOUT at former 10-second probe bound",
+      "fixed": "227ab51794c9da00429f210752cc4b3fb9789dc3",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "integrity measures a CPU-active listing beyond its inactivity guard",
+      "run": "1a0d6a3b3e7e-1794404549834",
+      "cause": "Real 300 ms inactivity samples under load",
+      "fixed": "e20b881be19eb87c8a30615d7ce52aeb3b17a66b",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "integrity records a project's own listing time, not when it finished",
+      "run": "bbe5e62817d0-1794349867055",
+      "cause": "Real heavy/light wall-time ordering",
+      "fixed": "c389d823db0cf055b9e83eae3c00bfeb60687c28",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "landing service tests",
+      "run": "cd862cd294e2-1794381409836",
+      "cause": "Pool fixture read actual free disk; not a timing failure",
+      "fixed": "4efa6376d63ef2f4610b01f98ba1dd66a110fbfc",
+      "state": "Named existing cause fix; current loaded transcript passes its control"
+    },
+    {
+      "test": "concurrent range preflights collect the same stale pin and only their own trees",
+      "run": "72b9b2c862ee-1794463588159",
+      "cause": "Five-minute file guard expired with this case in flight; no root cause established",
+      "state": "OPEN: reproduced in full loaded tooling; root cause unestablished",
+      "followup": 773,
+      "loaded": "10/10 isolated current traced repetitions pass; canonical loaded full file 18/18 passes; broad loaded tooling still holds"
+    },
+    {
+      "test": "private_uv_symbols_and_host_loops_work_across_addons_and_workers",
+      "run": "1bd4047f4227-1794336916172",
+      "cause": "Mutant returned a signal; historical signal itself is not recorded. Old driver started Workers before native ownership validation.",
+      "state": "Acquisition boundary proved old/new; historical signal attribution remains unknown"
+    },
+    {
+      "test": "bounded active/compile entry preserves result",
+      "run": "here-872d67f8b069-1794523371843",
+      "cause": "Real 50 ms execution inactivity control also classified a completed exit as hung",
+      "state": "Supplied liveness decisions plus real readiness/result wiring pass normal and loaded"
+    },
+    {
+      "test": "JVM TLS successful/private-root and certificate failures",
+      "cause": "Real 2000 ms connection/handshake deadlines and 5-second future guards",
+      "state": "Supplied scheduler decisions and real TLS wiring pass normal and loaded native suites",
+      "run": "here-90bba534cf07-1794513942253",
+      "commit": "90bba534cf078bd41c0fe1e9fd2ec0ad0fed0fb1",
+      "before": "positive TLS connection at NetworkPrimitivesTest.java:137 failed SocketTimeoutException: Socket closed under its2000ms policy",
+      "after": "normal and loaded native suites pass; captured scheduler owns timeout decisions"
+    }
+  ],
+  "excluded": [
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/selector-smoke.log",
+      "why": "Private instrumentation anchor expected six spaces but source has eight; no measured arm completed"
+    }
+  ],
+  "limits": [
+    "The original UV child signal was not recorded; its cause remains unknown. The staged control proves only validation before worker acquisition.",
+    "A green isolated or canonical full-file selector replay does not explain the reproducible broad-tooling hold.",
+    "Admission wait and execution overlap; do not subtract summed waits to manufacture execution time.",
+    "No performance claim; normal work and deliberate-load configurations are separate cohorts.",
+    "The loaded tooling run is incomplete; later tests in its held file are unmeasured.",
+    "No source changes during either proof. Private traced modules were staged through copyModuleClosure and removed afterward."
+  ],
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/focused-v1.log",
+      "bytes": 15124,
+      "sha256": "0a95944def4e138b3c0f34e622da807feb1b022d3227267aa725d23ab5ac443e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/focused-v2.log",
+      "bytes": 2111,
+      "sha256": "bfc30bc67e39b86681a6b2edf05f69067ab6dd1dbb54d5217427d27a840d7a67"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/focused-v1.sh",
+      "bytes": 836,
+      "sha256": "d11bf8161647b0fcdc43e86ae837c94f79b1792e1006d7e3c494db882d079589"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/focused-v2.sh",
+      "bytes": 863,
+      "sha256": "30d65a49f12a48ad5f79f93931960303aa760fd945d9f82f12b2e3a6b60ce2a9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/host-v1.log",
+      "bytes": 73,
+      "sha256": "376603941b96f492492ee9114943c1cf82df0577dee3e83ad57e2abcf8383f7f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/host-v2.log",
+      "bytes": 73,
+      "sha256": "0856f80fc971d13f42682c2a6d0d06deea4930a790eccccb97ac7628efabf3f9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/strict-v1.log",
+      "bytes": 81,
+      "sha256": "58f879097b9ed196dcb561ead20569634a49ee1980c0f0f1d56e03eaf1909a1a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/strict-v2.log",
+      "bytes": 81,
+      "sha256": "019283c894cc459d8b1c80a0d86ec523e77dbe4397e2fb4fce702ba4bf7ae140"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/native-before-control.mjs",
+      "bytes": 1767,
+      "sha256": "60e19730eb33c6933ce35dabdcb6fc0bf439de7d1c7ef72cab4775fca53f7b56"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/native-before-control.json",
+      "bytes": 1513,
+      "sha256": "ec5b871b22c345750e07a8683ce6c92b9306d3674a3a479f38ddae16eb8c9b01"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/controlled-load.mjs",
+      "bytes": 2092,
+      "sha256": "d3228a88af5e20d6f285abcd561a8e5f9ccf0f025655b78e82c1477d18797846"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-controller.mjs",
+      "bytes": 4923,
+      "sha256": "d3f84a3cc426c9efdc382bcf674707003e6d4df809bf128dd1ca61096eb6c223"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/repeat-selector.mjs",
+      "bytes": 3527,
+      "sha256": "16396970f169b0f55abc20cd771391f39e8999641b4d3f923dcd13855d16f86b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/full-selector-trace.mjs",
+      "bytes": 3688,
+      "sha256": "e26a1a93469e3c85be1fdb3b950be517e8b81a80e67d53030260e2342637b9d9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/canonical-trace-controller.mjs",
+      "bytes": 5041,
+      "sha256": "db7c590e34c0111339cd0e17f558034d39a9a66cbfadb4bab91a1757760a3501"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/historical-first-pass.json",
+      "bytes": 32691,
+      "sha256": "c741e082f9a1f51ca70bbd0a7dd129fafc4cc37c529215e521d5ea37bb1bdc39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/run-steps-reporter-excerpt.json",
+      "bytes": 632,
+      "sha256": "5bbe604890f5d23c3ff461195fef495e9aec17537bbc5046fc1943dac785faa8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/tls-historical-excerpts.json",
+      "bytes": 9312,
+      "sha256": "3159e61187ef6599b1f7066df2109fe2c6a1a5351755509a3cc4630b771515a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/selector-smoke.log",
+      "bytes": 458,
+      "sha256": "93e6097f6abeda6b525bc712156ff881e2a7cd6e6200d4a32371ee0ce5b4c731"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/selector-smoke-v2.log",
+      "bytes": 30,
+      "sha256": "aa23d80ac9b3acf2097518519e5c00dad93c742a04782423a80b6950a680b349"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/inner-v1.log",
+      "bytes": 86034,
+      "sha256": "66b76bb36d83b13abb7a47e71ca2930d96b79ab7587202eaa42e657d35dd1375"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794549077172/summary.json",
+      "bytes": 634916,
+      "sha256": "81b1e0f692bc0df0972ec0f3fbd35e4d31014dc38dbf806373a7d950e19fc1b8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794549077172/tests.log",
+      "bytes": 1202,
+      "sha256": "3250f149b0af0c5520763929730944f0669251983b7ffa8849ff90a55c3c1862"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794549077172/tooling.log",
+      "bytes": 24216,
+      "sha256": "02637ca81b98de56aabe7381b855898e8b02d18792f949b72dc757ca3bf21941"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794549077172/tooling-tests.raw.log",
+      "bytes": 1444137,
+      "sha256": "ad728a11b8c9e0169e66d1d712e60bb48457de41fe6437e47260e36d02458646"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794550594890/summary.json",
+      "bytes": 746632,
+      "sha256": "831e3db540e30631f04699e79aa38e3b344b25a173dae76a76ba7fb935ab9719"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794550594890/tests.log",
+      "bytes": 1200,
+      "sha256": "1671684a2aebac7732da26c9d87c032673a940af0a5e4f9da51a37812d443785"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794550594890/tooling.log",
+      "bytes": 25006,
+      "sha256": "3a8397142e1cdb42b0355240a89cdd687b84f1bb4e0005f2ad43122eff06ac5b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-d064d7e8fbaf-1794550594890/tooling-tests.raw.log",
+      "bytes": 1299516,
+      "sha256": "d6db9286834aadbf31c5b7c0488d4c048054f2f32c3ccdfff4b2f3137afb7b48"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/controller.json",
+      "bytes": 745,
+      "sha256": "d80eacaf79a9c9ebec880957b5835ee8d7b3003c84d387fdfb0151ec378c3a4e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-results.json",
+      "bytes": 1385,
+      "sha256": "25fb7f8c8f1b7143c49715324ce99597203ed4e0748b305405fb9fd492491d42"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/here.log",
+      "bytes": 1796,
+      "sha256": "192317c1264506c228951107e1c326a19f4a7353613026e427bd2d9341548cd2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selectors.log",
+      "bytes": 32,
+      "sha256": "59f393dfb35ef306823a09da5b7de63cc1d7e7bbb9c3a81c0b0a5068faf4d747"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/load.log",
+      "bytes": 296,
+      "sha256": "9f92ec04d66214720731d09eed8888a0c5090204d94e0046b280d65dbae4916f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/canonical-full-trace/controller.json",
+      "bytes": 601,
+      "sha256": "fa13a7ae73d27d4c8f51b1c69e172280fb9358c094a1f5af4bd23d40f0e03162"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/canonical-full-trace/selector-1.log",
+      "bytes": 4152,
+      "sha256": "5881f591bab24a9a2e79d7ef28aae0bf4232e9231e44de920e6edb491ddcbf59"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/canonical-full-trace/selector-results.json",
+      "bytes": 152,
+      "sha256": "4f78681ec11d2e655b429d969bc0c92ce6cad6db1fd7a18276cdc2b4784a9214"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-1.log",
+      "bytes": 1750,
+      "sha256": "3d7cc7123cd44f10102366b73fae3ce97c84978559b55b0c56318f48cf1bbd35"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-2.log",
+      "bytes": 1750,
+      "sha256": "ef4fc3a9a3f63ca02fb84a28056750ea0ed9dbd48e4762502d9f0e52f13bd432"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-3.log",
+      "bytes": 1750,
+      "sha256": "07779323b4bf67f62742e00241e3c250ce8fd0bc5229cde4dd03966f42be16ec"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-4.log",
+      "bytes": 1749,
+      "sha256": "72c565681e2971d442afe560d1c00494dd17270dcaba1b385708b9ccee759666"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-5.log",
+      "bytes": 1750,
+      "sha256": "870bb7a83e165f5a4db8cdd2cc30ae8eacaa77540939d8655b9827055228f40b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-6.log",
+      "bytes": 1750,
+      "sha256": "ac9ca966d15b336edaa4146db313ccf09557b9c7607b60215e49e894a0b7661c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-7.log",
+      "bytes": 1750,
+      "sha256": "3f0afd262638c068f8e564838df2984ba586b74ad49eb0331f051495b7428566"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-8.log",
+      "bytes": 1750,
+      "sha256": "eb010e11eab2c71b9b20598e4a2ba457c4b84abde3ae85f798285652c2038b2f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-9.log",
+      "bytes": 1750,
+      "sha256": "1b2ff0f9b02e981fcb7041b5f1e08f8118602c69ad9a2941b29eb779e781ad0b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/loaded-v1/selector-10.log",
+      "bytes": 1750,
+      "sha256": "3c405df0061a0a022758ed65cb18d303da61cba064e59653eabbea947dac6362"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/756/write-record.py",
+      "bytes": 12010,
+      "sha256": "ab1baf21c8fa48480800a9d5904284a3d7629c7841ccdd9aa3b7c776a296d471"
+    }
+  ]
+}
