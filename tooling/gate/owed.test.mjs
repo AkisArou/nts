@@ -256,8 +256,8 @@ step "tooling" node tooling/empty.test.ts
   put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
   symlinkSync('target.md',join(root,'docs/data/relay'));
   symlinkSync('../relay',join(root,'docs/data/src/alias'));
-  put('docs/data/configs/base.json','{}');symlinkSync('configs/base.json',join(root,'docs/data/base.json'));
-  put('docs/data/tsconfig.json','{"extends":"./base.json","include":["src/**/*.ts"]}');
+  put('docs/data/real-configs/base.json','{}');symlinkSync('real-configs',join(root,'docs/data/configs'));
+  put('docs/data/tsconfig.json','{"extends":"./configs/base.json","include":["src/**/*.ts"]}');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
@@ -268,7 +268,7 @@ targetEdit:select([{path:'docs/data/target.md',before:'target prose',after:'new 
 retarget:select([{path:'docs/data/src/alias',before:'../relay',after:'../directory',sameMode:true}]),
 relay:select([{path:'docs/data/relay',before:'target.md',after:'directory',sameMode:true}]),
 targetRemoved:select([{path:'docs/data/target.md',deleted:true}]),
-physicalConfig:select([{path:'docs/data/configs/base.json',before:'// old\\n{}\\n',after:'// new\\n{}\\n',sameMode:true}]),
+physicalConfig:select([{path:'docs/data/real-configs/base.json',before:'// old\\n{}\\n',after:'// new\\n{}\\n',sameMode:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
