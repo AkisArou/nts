@@ -23,6 +23,10 @@ const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
         "command-entry/main.ts",
         include_str!("../command-entry/main.ts"),
     ),
+    (
+        "oracle-seal/main.ts",
+        include_str!("../oracle-seal/main.ts"),
+    ),
     ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
     (
@@ -1658,6 +1662,20 @@ mod tests {
             error
                 .to_string()
                 .contains("command-entry/main.ts identity mismatch"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn a_changed_materialized_seal_is_not_an_authentic_oracle() {
+        let (_scratch, manifest, source, project) = manifest_fixture();
+        let prepared = read_prepared(&manifest, &source, &project).unwrap();
+        std::fs::write(prepared.assets.join("oracle-seal/main.ts"), "changed").unwrap();
+        let error = read_prepared(&manifest, &source, &project).err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("oracle-seal/main.ts identity mismatch"),
             "{error:#}"
         );
     }

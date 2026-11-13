@@ -67,6 +67,10 @@ pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
         "command-entry/main.ts",
         include_bytes!("../command-entry/main.ts"),
     ),
+    (
+        "oracle-seal/main.ts",
+        include_bytes!("../oracle-seal/main.ts"),
+    ),
 ];
 
 pub(super) fn execution_identity() -> Result<String> {
@@ -166,24 +170,13 @@ fn execute_owned(command: &Command, source: &Utf8Path, root: &Utf8Path) -> Resul
 fn request_owned(mode: &str, request: &Value, root: &Utf8Path) -> Result<Value> {
     let helper = root.join("tooling/differential/oracle-execution.ts");
     ensure!(
-        root.is_absolute() && std::fs::read(&helper)? == include_bytes!("../oracle-execution.ts"),
-        "oracle execution helper identity changed"
+        root.is_absolute(),
+        "oracle execution source root is not absolute"
     );
-    ensure!(
-        std::fs::read(root.join("tooling/differential/command-entry/main.ts"))?
-            == include_bytes!("../command-entry/main.ts"),
-        "oracle command entry identity changed"
-    );
-    ensure!(
-        std::fs::read(root.join("tooling/differential/oracle-execution-policy.ts"))?
-            == include_bytes!("../oracle-execution-policy.ts"),
-        "oracle execution policy identity changed"
-    );
-    if mode == "--prepare" {
+    for &(name, expected) in EXECUTION_FILES {
         ensure!(
-            std::fs::read(root.join("tooling/differential/oracle-batch.ts"))?
-                == include_bytes!("../oracle-batch.ts"),
-            "oracle preparation helper identity changed"
+            std::fs::read(root.join("tooling/differential").join(name))? == expected,
+            "oracle execution input {name} identity changed"
         );
     }
     if mode == "--prepare" {
