@@ -251,7 +251,7 @@
     "tooling/gate/step-scheduling.test.ts": 1,
     "tooling/gate/step-table.mjs": 8,
     "tooling/gate/step-table.test.ts": 8,
-    "tooling/gate/tests.mjs": 7,
+    "tooling/gate/tests.mjs": 6,
     "tooling/gate/tokens.mjs": 12,
     "tooling/gate/tokens.test.mjs": 44,
     "tooling/gate/tooling-runner.test.ts": 2,

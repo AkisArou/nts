@@ -215,3 +215,13 @@ cover runtime reads with those declarations, validate undeclared candidates,
 and prove the selector/census delta before changing `ALWAYS`. Unknown syscall
 outcomes, probes and setup/runtime attribution remain explicit inputs to that
 review. This machinery slice makes none of those policy decisions.
+
+## Final machinery checks
+
+At evidence tip `9a8a2561e578eb591e87a494c91727c451b20043`, the final focused
+owner/profile/layout/owed/selection/consumer/timing batch passed 177/177. Host
+audit checked 1,897 sources, 266 entry closures and 413 reads. The rooted records
+check passed. Strict checked 837 modules with 5,694 diagnostics; its owner
+recorded the one decrease in tests.mjs, then strict passed with no remaining
+improvements or new diagnostics. These cheap receipts supplement the unchanged
+accepted native source and complete supported proofs above.

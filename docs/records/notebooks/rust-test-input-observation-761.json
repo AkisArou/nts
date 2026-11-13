@@ -7859,6 +7859,54 @@
       "path": "/home/akisarou/.cache/nts-scratch/761/write-machinery-record-v1.py",
       "bytes": 7971,
       "sha256": "2c2c35fe260aaefffda5646df4da10e275fc0ba21c389b1792653b8336e10119"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-v1.sh",
+      "bytes": 1071,
+      "sha256": "fe114b52251347c7ab8765d2eeb17be891b80ef15a2b19b82b80896d0654bf31"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-focused-v1.log",
+      "bytes": 16575,
+      "sha256": "95732a71784745d5d0fc108d6d5a0dc00586a2ec1057c5718d39714bc94a0145"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-host-v1.log",
+      "bytes": 73,
+      "sha256": "1b316ac96deacab4248a87dcaae9c91af21b6ef0341d3070b15bfa16d245dec7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-records-v1.log",
+      "bytes": 409,
+      "sha256": "ae241c19f78eabca332eae5dd3a6fb708f21bb14ae81203f66a013fd5175ba39"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-strict-record-v1.log",
+      "bytes": 81,
+      "sha256": "968e47110c0d1c086338cb15b9ecca7414fcd54be1823abf479dd7e8190e8f5e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/761/machinery-final-strict-v1.log",
+      "bytes": 81,
+      "sha256": "c2ea9b9f608f1a53a3f6f607f03fbc8db0cdd2db14be0f4011a1bc1cc9c53487"
     }
-  ]
+  ],
+  "finalFocused": {
+    "source": "9a8a2561e578eb591e87a494c91727c451b20043",
+    "productionEquals": "a3eb0cc82af1b7944654d31d56dc8a7baacc36da",
+    "tests": 177,
+    "failed": 0,
+    "host": {
+      "sources": 1897,
+      "closures": 266,
+      "reads": 413
+    },
+    "records": "pass",
+    "strict": {
+      "modules": 837,
+      "diagnostics": 5694,
+      "improvementsRecorded": 1,
+      "remainingImprovements": 0
+    }
+  }
 }
