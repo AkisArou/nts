@@ -373,7 +373,7 @@ fi
 }
 
 for(const lateCleanup of ['broker','ledger'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
-  const fixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
+  const fixture:MemoryFixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1,bound:2}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};
   const before=memoryRun(t,{...fixture,reportOrder:'before'});
   assert.equal(before.result.status,2,before.output);
   assert.equal(before.summary.verdict,'green','publishing before cleanup hides its failure');
