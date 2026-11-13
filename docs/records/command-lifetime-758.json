@@ -1,0 +1,1245 @@
+{
+  "version": 1,
+  "issue": 758,
+  "base": "4320cc9c2b4125934257a8d55ed560996745ae76",
+  "source": "0cf9e89537fcd224f98350c95cc443b57e0751b8",
+  "writer": {
+    "file": "/home/akisarou/.cache/nts-scratch/758/collect-proof.mjs",
+    "bytes": 10037,
+    "sha256": "4e51419c0ebefcf79fd8c499cb99668cb01269a79ea42c2f20686254310f16e7"
+  },
+  "commandLifetime": {
+    "owner": "tooling/differential/command-entry/main.ts",
+    "policy": "one cancellation broadcast, reverse resource destruction, joined completion, one named wedge guard, authoritative signal statuses",
+    "signals": {
+      "SIGINT": 130,
+      "SIGTERM": 143,
+      "SIGHUP": 129
+    },
+    "explicitExit": "exitCommand unwinds guarded catches and finally before the same drain/flush; resource-free immediate exits retain their behavior"
+  },
+  "migrations": [
+    {
+      "file": "tooling/census/census-scratch.ts",
+      "previous": [
+        {
+          "line": 11,
+          "source": "  process.once('exit',cleanup);"
+        },
+        {
+          "line": 12,
+          "source": "  process.once('SIGTERM',()=>process.exit(143));"
+        }
+      ],
+      "current": [
+        {
+          "line": 19,
+          "source": "  const unregister=registerCommandCloser('census scratch '+path,{close:cleanup});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/census/erased-calls.ts",
+      "previous": [
+        {
+          "line": 368,
+          "source": "  process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        }
+      ],
+      "current": [
+        {
+          "line": 369,
+          "source": "  registerCommandCloser('scratch census/erased-calls.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/census/messages.ts",
+      "previous": [
+        {
+          "line": 174,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 175,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 174,
+          "source": "registerCommandCloser('scratch census/messages.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/census/rerun.ts",
+      "previous": [
+        {
+          "line": 163,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        }
+      ],
+      "current": [
+        {
+          "line": 163,
+          "source": "registerCommandCloser('scratch census/rerun.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/census/semantic-codes.ts",
+      "previous": [
+        {
+          "line": 184,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        }
+      ],
+      "current": [
+        {
+          "line": 185,
+          "source": "registerCommandCloser('scratch census/semantic-codes.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/census/worker-memory.ts",
+      "previous": [
+        {
+          "line": 232,
+          "source": "  process.on('beforeExit',finish);"
+        }
+      ],
+      "current": [
+        {
+          "line": 223,
+          "source": "  const unregister=registerCommandCloser(`memory run ${run.prefix}`,{close:()=>run.close(),closed:()=>run.closed});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/chromium/browser.ts",
+      "previous": [
+        {
+          "line": 80,
+          "source": "process.once(\"exit\", () => { for (const stop of activeLaunches) stop(); });"
+        },
+        {
+          "line": 82,
+          "source": "  process.once(signal, () => { for (const stop of activeLaunches) stop(); process.exit(code); });"
+        }
+      ],
+      "current": [
+        {
+          "line": 109,
+          "source": "  const unregister=registerCommandCloser(`Chromium launch ${unit}`,{cancel:stop,close:async()=>{await drain();}});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/agreement.mjs",
+      "previous": [
+        {
+          "line": 67,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 68,
+          "source": "registerCommandCloser('scratch conformance/agreement.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/assembles.ts",
+      "previous": [
+        {
+          "line": 70,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 71,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 70,
+          "source": "registerCommandCloser('scratch conformance/assembles.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/blockers-check.mjs",
+      "previous": [
+        {
+          "line": 60,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 61,
+          "source": "registerCommandCloser('scratch conformance/blockers-check.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/blockers.mjs",
+      "previous": [
+        {
+          "line": 44,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 45,
+          "source": "registerCommandCloser('scratch conformance/blockers.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/c-compiles.mjs",
+      "previous": [
+        {
+          "line": 105,
+          "source": "  process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 106,
+          "source": "  for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 105,
+          "source": "  registerCommandCloser('scratch conformance/c-compiles.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/cascade-reach.mjs",
+      "previous": [
+        {
+          "line": 39,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 40,
+          "source": "registerCommandCloser('scratch conformance/cascade-reach.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/differential-ts.mjs",
+      "previous": [
+        {
+          "line": 42,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 43,
+          "source": "registerCommandCloser('scratch conformance/differential-ts.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/ecmascript/test262.ts",
+      "previous": [
+        {
+          "line": 55,
+          "source": "if (intlProvider) process.on(\"exit\", () => intlProvider.close());"
+        }
+      ],
+      "current": [
+        {
+          "line": 56,
+          "source": "if(intlProvider)registerCommandCloser('ICU provider',{close:()=>intlProvider.close()});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/emitted-diff.ts",
+      "previous": [
+        {
+          "line": 320,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 321,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 321,
+          "source": "registerCommandCloser('scratch conformance/emitted-diff.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/expect-ir.ts",
+      "previous": [
+        {
+          "line": 46,
+          "source": "process.on(\"exit\", () => rmSync(SCRATCH, { recursive: true, force: true }));"
+        }
+      ],
+      "current": [
+        {
+          "line": 46,
+          "source": "registerCommandCloser('scratch conformance/expect-ir.ts',{close:()=>rmSync(SCRATCH,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/fuzz-runtime.mjs",
+      "previous": [
+        {
+          "line": 112,
+          "source": "process.once('beforeExit',()=>oracleWorker?.close());"
+        },
+        {
+          "line": 113,
+          "source": "process.once('exit',()=>oracleWorker?.close());"
+        }
+      ],
+      "current": [
+        {
+          "line": 123,
+          "source": "    registerCommandCloser('fuzz oracle worker',{close:()=>oracleWorker.close(),closed:async()=>{await Promise.allSettled([...oraclePreparations]);}});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/integrity.ts",
+      "previous": [
+        {
+          "line": 1237,
+          "source": "    process.on(\"exit\", () => rmSync(scratchDir, { recursive: true, force: true }));"
+        }
+      ],
+      "current": [
+        {
+          "line": 1237,
+          "source": "    registerCommandCloser('scratch conformance/integrity.ts',{close:()=>rmSync(scratchDir,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/jvm-verifies.ts",
+      "previous": [
+        {
+          "line": 190,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 191,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 190,
+          "source": "registerCommandCloser('scratch conformance/jvm-verifies.ts',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/last-mile.mjs",
+      "previous": [
+        {
+          "line": 72,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 73,
+          "source": "registerCommandCloser('scratch conformance/last-mile.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/native-half.mjs",
+      "previous": [
+        {
+          "line": 52,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 53,
+          "source": "registerCommandCloser('scratch conformance/native-half.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/node-environment.ts",
+      "previous": [
+        {
+          "line": 37,
+          "source": "  if(!keep)process.once(\"exit\",()=>rmSync(dir,{recursive:true,force:true}));"
+        }
+      ],
+      "current": [
+        {
+          "line": 38,
+          "source": "  if(!keep)registerCommandCloser('scratch conformance/node-environment.ts',{close:()=>rmSync(dir,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/run.mjs",
+      "previous": [
+        {
+          "line": 78,
+          "source": "process.once('exit',code=>{"
+        }
+      ],
+      "current": [
+        {
+          "line": 79,
+          "source": "registerCommandCloser('Node job temporary',{close:({code})=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/types-check.mjs",
+      "previous": [
+        {
+          "line": 362,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 363,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 362,
+          "source": "registerCommandCloser('scratch conformance/types-check.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/conformance/unconditional-expectations.mjs",
+      "previous": [
+        {
+          "line": 69,
+          "source": "process.on(\"exit\", () => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 70,
+          "source": "registerCommandCloser('scratch conformance/unconditional-expectations.mjs',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/differential/agree.mjs",
+      "previous": [
+        {
+          "line": 421,
+          "source": "process.on(\"exit\", () => oracleRoot.dispose());"
+        },
+        {
+          "line": 423,
+          "source": "process.on(\"exit\", () => rmSync(scratch, { recursive: true, force: true }));"
+        },
+        {
+          "line": 424,
+          "source": "for (const signal of [\"SIGINT\", \"SIGTERM\"]) process.on(signal, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 422,
+          "source": "registerCommandCloser('agreement oracle root',{close:()=>oracleRoot.dispose()});"
+        },
+        {
+          "line": 424,
+          "source": "registerCommandCloser('scratch differential/agree.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/differential/command-entry/main.ts",
+      "previous": [
+        {
+          "line": 19,
+          "source": "  const arm=()=>process.once('exit',unsettled);"
+        },
+        {
+          "line": 22,
+          "source": "  process.once('beforeExit',arm);"
+        }
+      ],
+      "current": [
+        {
+          "line": 125,
+          "source": "export function registerCommandCloser(name:string,closer:CommandCloser):()=>void{return processOwner().lifetime.register(name,closer);}"
+        }
+      ]
+    },
+    {
+      "file": "tooling/differential/oracle-dependencies.ts",
+      "previous": [
+        {
+          "line": 266,
+          "source": "  process.once('SIGTERM',()=>controller.abort());process.once('SIGINT',()=>controller.abort());"
+        }
+      ],
+      "current": [
+        {
+          "line": 267,
+          "source": "  const unregister=registerCommandCloser('oracle dependency operation',{cancel:()=>controller.abort(),close:()=>controller.abort(),closed:async()=>{await operation;}});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/full-check/service.ts",
+      "previous": [
+        {
+          "line": 1359,
+          "source": "      process.on(\"exit\", () => { try { if (readFileSync(join(lock, \"pid\"), \"utf8\") === String(process.pid)) rmSync(lock, { recursive: true, force: true }); } catch {} });"
+        }
+      ],
+      "current": [
+        {
+          "line": 1360,
+          "source": "      registerCommandCloser(`full-check controller lock ${lock}`,{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/admit.ts",
+      "previous": [
+        {
+          "line": 199,
+          "source": "  for (const signal of [\"SIGPIPE\", \"SIGXFSZ\"] as const) process.on(signal, () => {});"
+        },
+        {
+          "line": 203,
+          "source": "    process.on(signal, () => { stoppedBy ??= signal; waiting.abort(); });"
+        },
+        {
+          "line": 208,
+          "source": "  process.once(\"exit\", cleanup);"
+        }
+      ],
+      "current": [
+        {
+          "line": 208,
+          "source": "  const unregister=registerCommandCloser('admission '+options.what,{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/memory-ledger.ts",
+      "previous": [
+        {
+          "line": 1430,
+          "source": "    process.off(\"exit\", release);"
+        },
+        {
+          "line": 1431,
+          "source": "    process.off(\"beforeExit\",finish);"
+        },
+        {
+          "line": 1460,
+          "source": "  process.once(\"beforeExit\",finish);"
+        },
+        {
+          "line": 1461,
+          "source": "  process.once(\"exit\", release);"
+        }
+      ],
+      "current": [
+        {
+          "line": 1458,
+          "source": "  const unregister=registerCommandCloser(`memory reservation ${request.key}`,{close:release,closed:()=>closed});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/memory-watch.ts",
+      "previous": [
+        {
+          "line": 82,
+          "source": "  for(const signal of ['SIGINT','SIGTERM','SIGHUP'] as const)process.on(signal,()=>ending.abort());"
+        }
+      ],
+      "current": [
+        {
+          "line": 82,
+          "source": "  const unregister=registerCommandCloser('memory watcher '+key,{cancel:()=>ending.abort(),close:()=>ending.abort(),closed:async()=>{await watch;}});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/run.mjs",
+      "previous": [
+        {
+          "line": 1648,
+          "source": "      process.on(\"exit\", () => {"
+        },
+        {
+          "line": 1668,
+          "source": "  process.on(sig, () => stop(`signal ${sig}`));"
+        },
+        {
+          "line": 1684,
+          "source": "process.on(\"uncaughtException\", (e) => {"
+        }
+      ],
+      "current": [
+        {
+          "line": 1692,
+          "source": "registerCommandCloser('gate run report '+RUN_DIR,{"
+        },
+        {
+          "line": 1698,
+          "source": "registerCommandCloser('gate run resources '+RUN_DIR,{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/test-environment.ts",
+      "previous": [
+        {
+          "line": 23,
+          "source": "process.once('exit',()=>{"
+        }
+      ],
+      "current": [
+        {
+          "line": 24,
+          "source": "registerCommandCloser('test environment roots',{close:()=>{"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/tests.mjs",
+      "previous": [
+        {
+          "line": 51,
+          "source": "process.on(\"exit\", () => rmSync(work, { recursive: true, force: true }));"
+        },
+        {
+          "line": 52,
+          "source": "for (const sig of [\"SIGINT\", \"SIGTERM\"]) process.on(sig, () => process.exit(130));"
+        }
+      ],
+      "current": [
+        {
+          "line": 52,
+          "source": "registerCommandCloser('scratch gate/tests.mjs',{close:()=>rmSync(work,{recursive:true,force:true})});"
+        }
+      ]
+    },
+    {
+      "file": "tooling/gate/tooling-runner.ts",
+      "previous": [
+        {
+          "line": 207,
+          "source": "  process.once(\"SIGTERM\",terminate);process.once(\"SIGINT\",terminate);"
+        },
+        {
+          "line": 226,
+          "source": "    process.off(\"SIGTERM\",terminate);process.off(\"SIGINT\",terminate);stop();"
+        }
+      ],
+      "current": [
+        {
+          "line": 213,
+          "source": "  const unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});"
+        }
+      ]
+    }
+  ],
+  "explicitExits": {
+    "file": "/home/akisarou/.cache/nts-scratch/758/explicit-exit-inventory.json",
+    "bytes": 3479,
+    "sha256": "fcb4babb29e92caf608842c5a09b7ed9f542d419a992965c85b3bbd7c3629e22",
+    "rows": [
+      {
+        "file": "tooling/census/erased-calls.ts",
+        "exits": 3,
+        "guards": 0,
+        "lines": [
+          353,
+          357,
+          363
+        ]
+      },
+      {
+        "file": "tooling/census/messages.ts",
+        "exits": 5,
+        "guards": 0,
+        "lines": [
+          131,
+          135,
+          142,
+          147,
+          154
+        ]
+      },
+      {
+        "file": "tooling/census/rerun.ts",
+        "exits": 6,
+        "guards": 0,
+        "lines": [
+          120,
+          124,
+          130,
+          135,
+          155,
+          181
+        ]
+      },
+      {
+        "file": "tooling/census/semantic-codes.ts",
+        "exits": 2,
+        "guards": 4,
+        "lines": [
+          172,
+          176
+        ]
+      },
+      {
+        "file": "tooling/census/worker-memory.ts",
+        "exits": 1,
+        "guards": 6,
+        "lines": [
+          496
+        ]
+      },
+      {
+        "file": "tooling/conformance/agreement.mjs",
+        "exits": 2,
+        "guards": 2,
+        "lines": [
+          63,
+          253
+        ]
+      },
+      {
+        "file": "tooling/conformance/assembles.ts",
+        "exits": 1,
+        "guards": 0,
+        "lines": [
+          63
+        ]
+      },
+      {
+        "file": "tooling/conformance/blockers-check.mjs",
+        "exits": 2,
+        "guards": 2,
+        "lines": [
+          109,
+          117
+        ]
+      },
+      {
+        "file": "tooling/conformance/blockers.mjs",
+        "exits": 3,
+        "guards": 1,
+        "lines": [
+          100,
+          106,
+          116
+        ]
+      },
+      {
+        "file": "tooling/conformance/cascade-reach.mjs",
+        "exits": 5,
+        "guards": 1,
+        "lines": [
+          56,
+          62,
+          100,
+          115,
+          121
+        ]
+      },
+      {
+        "file": "tooling/conformance/differential-ts.mjs",
+        "exits": 5,
+        "guards": 5,
+        "lines": [
+          64,
+          90,
+          99,
+          120,
+          124
+        ]
+      },
+      {
+        "file": "tooling/conformance/ecmascript/test262.ts",
+        "exits": 1,
+        "guards": 5,
+        "lines": [
+          26
+        ]
+      },
+      {
+        "file": "tooling/conformance/expect-ir.ts",
+        "exits": 3,
+        "guards": 0,
+        "lines": [
+          42,
+          123,
+          133
+        ]
+      },
+      {
+        "file": "tooling/conformance/integrity.ts",
+        "exits": 4,
+        "guards": 2,
+        "lines": [
+          1208,
+          1212,
+          1216,
+          1296
+        ]
+      },
+      {
+        "file": "tooling/conformance/jvm-verifies.ts",
+        "exits": 6,
+        "guards": 8,
+        "lines": [
+          137,
+          139,
+          145,
+          173,
+          179,
+          225
+        ]
+      },
+      {
+        "file": "tooling/conformance/last-mile.mjs",
+        "exits": 1,
+        "guards": 1,
+        "lines": [
+          95
+        ]
+      },
+      {
+        "file": "tooling/conformance/native-half.mjs",
+        "exits": 1,
+        "guards": 1,
+        "lines": [
+          114
+        ]
+      },
+      {
+        "file": "tooling/conformance/run.mjs",
+        "exits": 6,
+        "guards": 8,
+        "lines": [
+          147,
+          151,
+          207,
+          246,
+          291,
+          298
+        ]
+      },
+      {
+        "file": "tooling/conformance/types-check.mjs",
+        "exits": 3,
+        "guards": 0,
+        "lines": [
+          345,
+          349,
+          355
+        ]
+      },
+      {
+        "file": "tooling/conformance/unconditional-expectations.mjs",
+        "exits": 2,
+        "guards": 1,
+        "lines": [
+          84,
+          110
+        ]
+      },
+      {
+        "file": "tooling/differential/agree.mjs",
+        "exits": 12,
+        "guards": 4,
+        "lines": [
+          278,
+          282,
+          291,
+          297,
+          319,
+          338,
+          378,
+          385,
+          397,
+          401,
+          421,
+          525
+        ]
+      },
+      {
+        "file": "tooling/gate/run.mjs",
+        "exits": 7,
+        "guards": 36,
+        "lines": [
+          180,
+          183,
+          186,
+          189,
+          192,
+          205,
+          262
+        ]
+      },
+      {
+        "file": "tooling/gate/tests.mjs",
+        "exits": 5,
+        "guards": 1,
+        "lines": [
+          46,
+          56,
+          61,
+          95,
+          100
+        ]
+      }
+    ],
+    "writer": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/migrate-explicit-exits.mjs",
+      "bytes": 3459,
+      "sha256": "20f63851a201bc34ad135667e5244226694e775ae1824dc99c638be1678199da"
+    }
+  },
+  "canonical": {
+    "source": "ef6098041308387dd823389f9bdec15a0e1eb805",
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-ef6098041308-1794545918035",
+    "summary": {
+      "file": "/home/akisarou/.cache/nts-landing/runs/here-ef6098041308-1794545918035/summary.json",
+      "bytes": 750618,
+      "sha256": "6beab0f738fc588f6c92f794258c3922d80f35f4b68d275124ee5f7ba27c8200"
+    },
+    "verdict": "red",
+    "scope_cleanup": {
+      "state": "complete"
+    },
+    "wall_s": 505.833,
+    "admission_wait_s": 310.9739999999999,
+    "waitNote": "Admission overlaps execution; these quantities are not added.",
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 118.240418,
+        "wall": 29.494
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 2.017509,
+        "wall": 2.024
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 3.509584,
+        "wall": 3.555
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 0.061287,
+        "wall": 0.093
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 1.499926,
+        "wall": 1.335
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 2.343012,
+        "wall": 2.727
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 0.086282,
+        "wall": 0.099
+      },
+      {
+        "name": "doctests",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 2.179383,
+        "wall": 2.315
+      },
+      {
+        "name": "test262",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 1.422438,
+        "wall": 1.625
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 3.466814,
+        "wall": 1.898
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 4.994798,
+        "wall": 3.717
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 5.385687,
+        "wall": 3.846
+      },
+      {
+        "name": "tooling",
+        "verdict": "FAIL",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 2296.478344,
+        "wall": 189.659
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 0.049251,
+        "wall": 0.069
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 4144.224484,
+        "wall": 275.932
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 3.339015,
+        "wall": 0.933
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 0.761269,
+        "wall": 1.361
+      }
+    ],
+    "tooling": {
+      "file": "/home/akisarou/.cache/nts-landing/runs/here-ef6098041308-1794545918035/tooling.log",
+      "bytes": 44025,
+      "sha256": "62ed257bdc8533300f204021cf1ebc0f264af0094cb9cec05cef8e9f348c6d2d",
+      "counts": {
+        "tests": 2232,
+        "pass": 2224,
+        "fail": 6,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      }
+    },
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "pass": 3044,
+      "fail": 0,
+      "ignored": 8
+    },
+    "interpretation": "Retained RED: tooling had six stale consumer contracts, with every other step PASS. The two TODO findings were pre-existing. This is not claimed as a green combined run."
+  },
+  "corrections": {
+    "source": "0cf9e89537fcd224f98350c95cc443b57e0751b8",
+    "sourceDelta": [
+      "tooling/gate/canonical-environment.test.ts",
+      "tooling/gate/step-bound-admission.test.ts"
+    ],
+    "productionBytesEqualToCanonical": true,
+    "consumers": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/corrected-consumers.log",
+      "bytes": 630,
+      "sha256": "4d2b897d2f70055083b19bd942bb2cdec3ba58554d4b0c6ecec25c4f21326c57",
+      "counts": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "ownerAndTiming": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/corrected-owner.log",
+      "bytes": 2915,
+      "sha256": "a1f617be73ea0901eada5bc966693c693ccb903d21f7f6e5f2abbf271d7c5a81",
+      "counts": {
+        "tests": 29,
+        "pass": 29,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "host": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/corrected-host.log",
+      "bytes": 73,
+      "sha256": "e1caddb113255659c2d4702b52578e8075dfe29d1489f62204a585c884204b16"
+    },
+    "strict": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/corrected-strict.log",
+      "bytes": 82,
+      "sha256": "395d9c2321b49052cf626823bb98efcce7b32dd614084974d36db7e40fe3dabf"
+    },
+    "explanation": "SIGTERM asserts143 and keeps empty-ledger checks; bound instrumentation is a Node --import preload and run.mjs is argv[1]. No production hook or weakened clock/verdict expectation."
+  },
+  "earlierProof": {
+    "focused": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/final-focused.log",
+      "bytes": 17205,
+      "sha256": "17bba6b9a148976dfe014edc546bc281150097620ae91332c01eceeb6612d0f1",
+      "counts": {
+        "tests": 186,
+        "pass": 186,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "explicitTransfer": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/explicit-focused.log",
+      "bytes": 13708,
+      "sha256": "802e277046e7aec92af86db17f71baeb49c4d0ab17d5ab6176edb1bd1902cf32",
+      "counts": {
+        "tests": 151,
+        "pass": 151,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "lateCleanup": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/terminal-focused.log",
+      "bytes": 958,
+      "sha256": "825772336be002e149197bc2a57dfd30f01d89be5820b7187397edeaf50ebc87",
+      "counts": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "remainingLibraries": {
+      "file": "/home/akisarou/.cache/nts-scratch/758/remaining-focused.log",
+      "bytes": 15357,
+      "sha256": "e92a89f5cb3fca158d36aa2d0ad4d29e8619c24ccc336422e6ed2750cbc35acc",
+      "counts": {
+        "tests": 127,
+        "pass": 127,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    }
+  },
+  "oracle": {
+    "before": {
+      "pin": "4320cc9c2b4125934257a8d55ed560996745ae76",
+      "producer": "14cf179cdcad28eafcfb9d2460cf66ce31155a835792f2fa7c1675d8f7e651fe",
+      "rows": 1231,
+      "pending": [],
+      "budgets": [
+        {
+          "source": "benchmarks/cases/jetstream-lazy-collections/case.ts",
+          "signature": "d463a7db26e84921e8ec05192824e39c79f71f9985731f38dd9981da8853db75",
+          "recordedProducer": "4fcbce137ae8d4da4fa0caecb57fadafe3906f1f93400b641d5a71e1ba77a7db",
+          "fresh": false
+        }
+      ],
+      "artifact": {
+        "file": "/home/akisarou/.cache/nts-scratch/758/oracle-before.json",
+        "bytes": 2356,
+        "sha256": "72c9eddf0b9590075d3b07072ddc2100b3aa41cdb63b70943de081441aeb61cd"
+      }
+    },
+    "after": {
+      "pin": "ef6098041308387dd823389f9bdec15a0e1eb805",
+      "producer": "0ff152138020c53d0663c26544392bb11f8192dcfa4e9085817405db5f3f277e",
+      "rows": 1231,
+      "pending": [],
+      "budgets": [
+        {
+          "source": "benchmarks/cases/jetstream-lazy-collections/case.ts",
+          "signature": "d463a7db26e84921e8ec05192824e39c79f71f9985731f38dd9981da8853db75",
+          "recordedProducer": "4fcbce137ae8d4da4fa0caecb57fadafe3906f1f93400b641d5a71e1ba77a7db",
+          "fresh": false
+        }
+      ],
+      "artifact": {
+        "file": "/home/akisarou/.cache/nts-scratch/758/oracle-final.json",
+        "bytes": 2356,
+        "sha256": "3404885284ad7ec75089f45e5b7c4e861dac683545e1d74a4bdb81e77af02ea4"
+      }
+    },
+    "interpretation": "No population or budget refresh is newly pending; the same lazy-collections budget is already stale in both arms."
+  },
+  "observersKept": [
+    {
+      "file": "tooling/conformance/run-one.mjs",
+      "why": "Node program outcome/loop-completion observer, not shutdown ownership"
+    },
+    {
+      "file": "tooling/differential/oracle-loader.ts",
+      "why": "final diagnostic counters, not a signal or resource closer"
+    }
+  ],
+  "excluded": [
+    "The first owner proof refused unsupported TypeScript parameter-property syntax before the admitted tests; the owner uses explicit fields.",
+    "The first browser control used an absolute copier entry; corrected to the repository-relative contract before accepted wiring proof.",
+    "audit-proof-v2 was stopped by its named unit after a fixture awaited graceful completion before simulating lost broker connections; corrected ordering passed the token consumers.",
+    "The first canonical launch was held before execution because the parent omitted JAVA_HOME and ANDROID_HOME; the corrected launch uses systemdEnvironment.",
+    "The next canonical run was stopped only by its own parent and recorded private slice after inventory found raw process.exit bypasses; it is excluded, not a completed verdict.",
+    "The retained final canonical run is red on six migrated entry/signal test contracts. Those exact six are green in the final focused correction; native/other step proof carries across the test-only diff."
+  ]
+}
