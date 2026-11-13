@@ -824,9 +824,9 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   the scheduler runs them. Own-process and per-process CPU timeouts, group
   runaway and inactivity retain their distinct outcomes and precedence.
   Tooling-file guards own their clock and idle scheduler together. The shared
-  test entry yields before each case so completed reports can reach the parent
-  before a following synchronous body blocks the worker. Its scheduler is
-  captured before fixture clocks are installed; the turn changes no deadline.
+  test entry yields before each case to give queued reports a serialization
+  opportunity before a following synchronous body blocks the worker. Its
+  scheduler is captured before fixture clocks are installed; the turn changes no deadline.
   Benchmark session controls supply a budget event after child readiness, then observe
   the real named-unit stop and retained record.
   A real sampling control declares a live monotonic clock: a fixed or file
@@ -873,10 +873,11 @@ the first node task.
 
 ## Decisions
 
-- **Test event transport gets a turn before each case.** Completed child
-  reports must reach the supervisor before later synchronous work can delay
-  serialization. The shared test entry owns that scheduling boundary, keeping
-  fixture clocks separate from transport and preserving the existing idle guard.
+- **Test event transport gets a turn before each case.** Queued child reports
+  get a serialization opportunity before later synchronous work. Completion
+  still requires the parent's actual test events. The shared test entry owns
+  that boundary, keeping fixture clocks separate from transport and preserving
+  the existing idle guard.
   ([log](records/notebooks/decisions-log.md#test-reports-precede-synchronous-work-11-13)).
 
 - **Tests supply scheduling decisions:** firing and cancellation are events

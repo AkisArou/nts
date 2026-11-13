@@ -2753,4 +2753,5 @@ release control reproduces the stale report without a short scheduling window.
 
 The existing shared test bootstrap now yields before every case through a
 captured scheduler. Fixture timer mocks do not own that transport turn. The
-parent still decides completion from test events, and the idle guard is unchanged.
+turn offers queued reports a serialization opportunity; the parent still
+decides completion from actual test events, and the idle guard is unchanged.

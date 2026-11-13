@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "issue": 773,
+  "status": "partial; historical selector cause remains unproved",
+  "source": "24e49aa832bca9b3873f4876a067e9972d3fa043",
+  "base": "13f536b72f5678c044be012e3cafd19155b5db7d",
+  "guardMs": 300000,
+  "matched": [
+    {
+      "arm": "before",
+      "status": 2,
+      "completedFailures": 0,
+      "wallMs": 300160.166813,
+      "completionEvent": null,
+      "tcpEntryEvent": 40,
+      "process": {
+        "code": 0,
+        "signal": null
+      },
+      "completed": false
+    },
+    {
+      "arm": "after",
+      "status": 0,
+      "completedFailures": 0,
+      "wallMs": 143.064636,
+      "completionEvent": 40,
+      "tcpEntryEvent": 44,
+      "process": {
+        "code": 0,
+        "signal": null
+      },
+      "completed": true
+    }
+  ],
+  "bootstrapIdentity": {
+    "beforePins": [
+      "42117bb4dc36046e12a6dd10fd9a0d2e62ad657b^",
+      "13f536b72f5678c044be012e3cafd19155b5db7d"
+    ],
+    "beforeSha256": "042a0b43f2269bc66c404e263845169a61fddde97c49eab76ca30d12994c7795",
+    "afterPin": "24e49aa832bca9b3873f4876a067e9972d3fa043",
+    "afterSha256": "bde4022199613835f1ad407068e9eba82dc26ccf93691d4b6acdf5679b28c867"
+  },
+  "nodeReporter": {
+    "node": "v26.13.0",
+    "key": "internal/test_runner/reporter/v8-serializer",
+    "sha256": "4ba29df088da8ad5ed1c62aed8da5f3a6130e279e60ed337bb139cd01ab4b071",
+    "asynchronous": true,
+    "excerpt": "async function* v8Reporter(source) {\n  const headerSerializer = new DefaultSerializer();\n  headerSerializer.writeHeader();\n  const headerLength = TypedArrayPrototypeGetLength(headerSerializer.releaseBuffer());\n\n  for await (const item of source) {\n    const serializer = new DefaultSerializer();\n    const originalError = item.data.details?.error;\n    if (originalError) {\n      // Error is overridden with a serialized version, so that it can be\n      // deserialized in the parent process.\n      // Error is restored after serialization.\n      item.data.details.error = serializeError(originalError);\n    }\n    serializer.writeHeader();\n    // Add "
+  },
+  "focused": {
+    "runner": {
+      "tests": 23,
+      "pass": 23,
+      "fail": 0,
+      "todo": 0
+    },
+    "consumersSelectionTiming": {
+      "tests": 36,
+      "pass": 36,
+      "fail": 0,
+      "todo": 0
+    }
+  },
+  "loadedSupported": {
+    "run": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636",
+    "controller": {
+      "pin": "24e49aa832bca9b3873f4876a067e9972d3fa043",
+      "started": "2026-11-13T09:11:06.587Z",
+      "initialLoad": [
+        7.63,
+        9.89,
+        17.05
+      ],
+      "events": [
+        {
+          "kind": "gate",
+          "code": 0,
+          "signal": null,
+          "load": [
+            43.56,
+            61.72,
+            56.11
+          ]
+        }
+      ],
+      "ready": {
+        "workers": 32,
+        "bytes": 2147483648,
+        "pid": 1319810
+      },
+      "readyLoad": [
+        7.63,
+        9.89,
+        17.05
+      ],
+      "loadResult": {
+        "code": 0,
+        "signal": null
+      },
+      "observerResult": {
+        "code": 0,
+        "signal": null
+      },
+      "ended": "2026-11-13T09:29:10.132Z",
+      "finalLoad": [
+        43.56,
+        61.72,
+        56.11
+      ]
+    },
+    "verdict": "green",
+    "tooling": {
+      "tests": 2260,
+      "pass": 2258,
+      "fail": 0,
+      "todo": 2
+    },
+    "native": {
+      "binaries": 55,
+      "doctestCrates": 18,
+      "passed": 3047,
+      "failed": 0,
+      "ignored": 8
+    },
+    "wall_s": 1031.397,
+    "admission_wait_s": 609.1610000000001,
+    "steps": [
+      {
+        "name": "clippy",
+        "verdict": "PASS",
+        "wall": 6.172,
+        "cpu": 11.631126
+      },
+      {
+        "name": "format",
+        "verdict": "PASS",
+        "wall": 6.539,
+        "cpu": 4.902558
+      },
+      {
+        "name": "rustfmt",
+        "verdict": "PASS",
+        "wall": 7.97,
+        "cpu": 5.962122
+      },
+      {
+        "name": "reformat",
+        "verdict": "PASS",
+        "wall": 0.235,
+        "cpu": 0.10313
+      },
+      {
+        "name": "records",
+        "verdict": "PASS",
+        "wall": 3.953,
+        "cpu": 2.96248
+      },
+      {
+        "name": "old-paths",
+        "verdict": "PASS",
+        "wall": 7.523,
+        "cpu": 4.390424
+      },
+      {
+        "name": "audit",
+        "verdict": "PASS",
+        "wall": 0.24,
+        "cpu": 0.120384
+      },
+      {
+        "name": "tooling-types",
+        "verdict": "PASS",
+        "wall": 5.404,
+        "cpu": 5.914183
+      },
+      {
+        "name": "gate-inputs",
+        "verdict": "PASS",
+        "wall": 11.348,
+        "cpu": 10.1875
+      },
+      {
+        "name": "test-host",
+        "verdict": "PASS",
+        "wall": 12.077,
+        "cpu": 10.93551
+      },
+      {
+        "name": "tooling",
+        "verdict": "PASS",
+        "wall": 410.119,
+        "cpu": 3329.336916
+      },
+      {
+        "name": "primitives",
+        "verdict": "PASS",
+        "wall": 0.223,
+        "cpu": 0.084764
+      },
+      {
+        "name": "tests",
+        "verdict": "PASS",
+        "wall": 609.298,
+        "cpu": 5298.139831
+      },
+      {
+        "name": "config",
+        "verdict": "PASS",
+        "wall": 3.614,
+        "cpu": 5.542451
+      },
+      {
+        "name": "licenses",
+        "verdict": "PASS",
+        "wall": 1.773,
+        "cpu": 1.1538
+      }
+    ],
+    "scope_cleanup": {
+      "state": "complete"
+    }
+  },
+  "limitations": [
+    "The original historical selector failure has no physical pending-operation trace.",
+    "Both pre-fix broad loaded attempts passed; these are not a fix attribution.",
+    "The original matched probe reported held after five minutes but drained only later; the whole paired unit took ten minutes.",
+    "The first paired attempt was stopped by its own named unit after reporting the before result and is excluded.",
+    "The transport reduction proves a false attribution seam, not an independently established historical Git/TCP failure.",
+    "No timing improvement, performance ratio or completion deadline is claimed. #756 and #773 stay open."
+  ],
+  "artifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/write-record.py",
+      "bytes": 10140,
+      "sha256": "3131068b87b8da92ca3159a85b1f5ba0614ed2fe0351cbd9b23e5a74f6a598b9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/bootstrap-identity.json",
+      "bytes": 351,
+      "sha256": "4ed443b11fae2164ba5e68d70d013fa41863a070ea8c50dda34b81bbf58073a3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/node-reporter.json",
+      "bytes": 867,
+      "sha256": "294965168d7c28375a6655f053e2cdc87dde64ddaa0d92952e5abeca21e2c4f7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/controlled-load.mjs",
+      "bytes": 2092,
+      "sha256": "af4e19c175833c6172bf1a4a9cc0ec74361bc68412c4c0fb1db5a0ea169b04c0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/loaded-controller-v2.mjs",
+      "bytes": 4755,
+      "sha256": "e5a43413ac5221e3cdf0b51449bfd8db47adce6008dfe40cf7fbbb3ec3913dfd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/scope-observer.py",
+      "bytes": 2812,
+      "sha256": "e4c2718e9701c36a87d4adb3e294d0773366eab563ea525e99aa1ff1e7d648a0"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/matched-transport-v2.mjs",
+      "bytes": 2316,
+      "sha256": "4f39ce2119509b4d37dd2501d06082bc68bd96633e4f9c99595f6a5cef38556a"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/matched-transport-v2.sh",
+      "bytes": 420,
+      "sha256": "92e5eb0c2cd0f9c555bfe177bd53485135337faea0ea7d6f0415e1acf1e1caff"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-reduction.mjs",
+      "bytes": 2566,
+      "sha256": "a5a8655a009756bedc3b2fcfeaba765c8794a4df50eb08dea782559f32d44d03"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-reduction-v2.mjs",
+      "bytes": 2623,
+      "sha256": "6da46c47e12b35ac35d7e71d8ec2b079856d1f0edc12ec6e09898a80fe777e6e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-reduction-v3.mjs",
+      "bytes": 2952,
+      "sha256": "eb734573836381d0715e441e738369654ca01f7e0ef0c82dca60d0cebd135299"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/focused-final.sh",
+      "bytes": 595,
+      "sha256": "2e9d21d31fb165247002bf208e35954562847aec66485e52758758aeb0beabd2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v1.sh",
+      "bytes": 505,
+      "sha256": "732ab1e3c6eb1f5f75773dacb711ac795d6bb6da6c00dffae05bbcac4b083807"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2.sh",
+      "bytes": 558,
+      "sha256": "edfca36b9a9243019ac434b267d42b4a60f6b56c02a241b70fe8cf810eec2e41"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3.sh",
+      "bytes": 360,
+      "sha256": "19823832bad2b81589469afc2d02cd2ec3ef59765d5bed4ecc42af1b36b65c81"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-controls-v1.log",
+      "bytes": 294,
+      "sha256": "d7f58b941629645372560e10d9a03e324935766e694cb91ddc4c864ef4dbabd8"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-controls-v2.log",
+      "bytes": 2802,
+      "sha256": "0752d0d1206b43c503f3f8e83748e6b6569e03474458872b7f8a8c699c35d000"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-timing-v2.log",
+      "bytes": 3665,
+      "sha256": "336749b9134d689c11bb5a6d3be731dddd0be22981af713be98a2b5031390ce4"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-host-v2.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-strict-v1.log",
+      "bytes": 444,
+      "sha256": "a922c6a67155e3208bfdd8b58cc4880553a3cbbd388b6ac203fa3a315191c261"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-strict-v2.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-matched-v2.log",
+      "bytes": 257,
+      "sha256": "cc2f86259399e2fa8a19be56113c88e98beb2bd42b4778646a7a3f7659adb1fd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-matched-v2/results.json",
+      "bytes": 11244,
+      "sha256": "e792b9f8c108b4676931a2457285f02a1c067d42905e2abafdfb66b02a32928e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-v1/result.json",
+      "bytes": 5035,
+      "sha256": "995a46c6038d295e0a286aaf3c64a3778774b3b88410ab833b669b5befcf3a62"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-after-v1/result.json",
+      "bytes": 4443,
+      "sha256": "52bf885d66b38cc2b5926a931c722b6be56e2a8635721a2589e1da95560d99f9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/transport-matched/before/result.json",
+      "bytes": 5153,
+      "sha256": "3de8f846b65cc4aa3d8d6a53390f9298d7c08e458b056b3dc2c5a421892292a1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v1/controller.json",
+      "bytes": 594,
+      "sha256": "36ec4e407cdad54de7feb43db3285de768976167cb1fbdeff4a47ecb54c58e49"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v1/here.log",
+      "bytes": 770,
+      "sha256": "f9ed55f8d30b589bcfcb63de1d72a1dbaf171f1d436e630583893f60e2b59ddb"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v1/load.log",
+      "bytes": 406,
+      "sha256": "a4e1724bfc4452cd89b37b6ded3994f69aae5179fe98a9aa3a7c826dd7c6200f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v1/load-ready.json",
+      "bytes": 61,
+      "sha256": "9b655722b61d8d3dd0887e36c3ad3ad1324f163160e6c3ed12ca18195f200959"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2/controller.json",
+      "bytes": 657,
+      "sha256": "0aadf29c229f86b42100dfed47601d92ad4d20103145f30bb379894608fa87b3"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2/here.log",
+      "bytes": 765,
+      "sha256": "5d601f6ea228a9e4168297da3532e0daaafd33e411e36b51f6f0e51ee2eb87f2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2/load.log",
+      "bytes": 345,
+      "sha256": "3e2754afb50e24dc3b2cb9dac8df516afd2f989e79396fe925aca7fcba07f35b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2/load-ready.json",
+      "bytes": 61,
+      "sha256": "112e885dd67ca1557b43e8912cacfea127bdccd0aa4e3e1fca8b52c3382d9bcc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3/controller.json",
+      "bytes": 655,
+      "sha256": "39be0eed7aa5b20fdbaadb484255081c6869ba52daf509677b3e53a646ce82ab"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3/here.log",
+      "bytes": 1193,
+      "sha256": "df80f7ca2db1d9641d3e7dca0030ae4767b602ecfe3e42ea20044df1d9b7cc84"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3/load.log",
+      "bytes": 294,
+      "sha256": "df04766596d3788d1a9a7db50d07b10043f02141f881842824b46348e41add15"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3/load-ready.json",
+      "bytes": 61,
+      "sha256": "8703fccbadc4fa351c28513289e9e141b8b407c4851fb2e0682afa9eb54b0f44"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v2/scope-observations.jsonl",
+      "bytes": 707543,
+      "sha256": "b68851d65283b757849d85a3aacc92cde26738c0ad795784f00d344f6ada7f2d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-scratch/773/broad-v3/scope-observations.jsonl",
+      "bytes": 757534,
+      "sha256": "ac8c46ea7b43992df19c0d0fc2897236f871ff50776290444e8511b3c8a2ea90"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/summary.json",
+      "bytes": 632517,
+      "sha256": "f5b608eee849ed70c48dd90bc3d780828323f03d84a60301bcb35bb4af2ee91e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/tests.log",
+      "bytes": 1201,
+      "sha256": "db8d5824815a7bf9245ce36f63dab71422b21e94ca23ff3f7d9118137c2b0279"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/tooling.log",
+      "bytes": 24398,
+      "sha256": "15572c018775f01caec4b6643c86704e5098ddbc48d6a230b7788d35f8131114"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/tooling-tests.raw.log",
+      "bytes": 1360428,
+      "sha256": "f071a2c3f3c41a97ff63c22ca9cef3f9404a03a12835f1d826d527a3bb3e7987"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/test-host.log",
+      "bytes": 73,
+      "sha256": "60e8665f47f99a68390a1f1f28845e80b9933dfdd155869a566232cc236a5624"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-landing/runs/here-24e49aa832bc-1794561101636/tooling-types.log",
+      "bytes": 81,
+      "sha256": "1f99f78b2970bbb9c58227c92072d7dbd073b5d1e439462e38754d3ea884aa34"
+    }
+  ]
+}
