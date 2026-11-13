@@ -4,6 +4,7 @@
 // aggregate slice, then one persistent counter-holding slice per worker.
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncOptionsWithBufferEncoding, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -218,18 +219,9 @@ class MemoryClose {
   }
 }
 
-const openRuns=new Set<MemoryRun>();
-let drainHooks=false;
 function ownRun(run:MemoryRun):void{
-  openRuns.add(run);
-  if(drainHooks)return;drainHooks=true;
-  const finish=async()=>{
-    const runs=[...openRuns];
-    for(const run of runs)try{run.close();}catch{/* closed carries the same failure */}
-    const results=await Promise.allSettled(runs.map(run=>run.closed));
-    for(const result of results)if(result.status==='rejected'){console.error(String(result.reason));process.exitCode=2;}
-  };
-  process.on('beforeExit',finish);
+  const unregister=registerCommandCloser(`memory run ${run.prefix}`,{close:()=>run.close(),closed:()=>run.closed});
+  void run.closed.then(unregister,unregister);
 }
 
 export class MemoryRun {
@@ -360,7 +352,7 @@ export class MemoryRun {
       try{
         if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
         stopSlice(this.slice, this.group, "run");
-      }finally{rmSync(this.directory, { recursive: true, force: true });openRuns.delete(this);}
+      }finally{rmSync(this.directory, { recursive: true, force: true });}
     },failure);
     if(this.#workers.every(worker=>worker.drained)){
       const error=finish();if(error)throw error;

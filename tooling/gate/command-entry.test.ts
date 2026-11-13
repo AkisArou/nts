@@ -115,6 +115,18 @@ test('a wedged closer spends one total bound and names the resources left',async
  assert.equal(f.lifetime.close(0),closed);f.fire();assert.deepEqual(f.exits,[2]);assert.equal(f.arms,1);
 });
 
+test('a synchronous close error still awaits the resource completion and retains both failures',async()=>{
+ const f=lifetimeFixture();let complete!:(value:void)=>void,settled=false,started=false;
+ const completed=new Promise<void>(resolve=>{complete=resolve;});
+ f.lifetime.register('sampler',{close(){started=true;throw Error('final read failed');},closed:async()=>{
+  assert.equal(started,true);await completed;throw Error('sampler exit failed');
+ }});
+ const closed=f.lifetime.close(0);void closed.then(()=>{settled=true;});
+ await Promise.resolve();assert.equal(settled,false);complete();assert.equal(await closed,2);
+ assert.equal(f.reports.length,2);assert.match(f.reports[0]!,/sampler: Error: final read failed/);
+ assert.match(f.reports[1]!,/sampler completion: Error: sampler exit failed/);
+});
+
 test('normal and rejected command bodies await their named closers',t=>{
  const root=testScratch(t,'command-close-return');
  for(const failed of [false,true]){

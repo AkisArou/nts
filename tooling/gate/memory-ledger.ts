@@ -1,4 +1,5 @@
 import {assertStateVersion,assertWritableState} from './state-version.ts';
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // The machine's memory ledger: one admission for every heavy job, whoever runs
 // it -- the landing check, an agent's build, the full check -- so that no two
 // jobs count on the same free memory. `reserve` waits until a job may start;
@@ -1427,8 +1428,6 @@ export async function reserveJob(request: JobRequest,
     // A second call does nothing: the peak goes to the history once.
     if (released) return;
     released = true;
-    process.off("exit", release);
-    process.off("beforeExit",finish);
     let peak:number;
     try{peak=sampler.stop();}
     finally {
@@ -1456,9 +1455,8 @@ export async function reserveJob(request: JobRequest,
   // Process-lifetime owners report sampler failure through its lifecycle.
   // Scoped owners still receive the rejection when they await this boundary.
   void closed.catch(()=>{});
-  const finish=async()=>{release();try{await closed;}catch{/* the lifecycle already reported its named failure */}};
-  process.once("beforeExit",finish);
-  process.once("exit", release);
+  const unregister=registerCommandCloser(`memory reservation ${request.key}`,{close:release,closed:()=>closed});
+  void closed.then(unregister,unregister);
   return {
     closed,
     id: held.id, ledger: held.ledger, inherited: false, env: held.env,
