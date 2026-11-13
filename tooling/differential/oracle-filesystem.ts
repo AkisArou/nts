@@ -86,7 +86,7 @@ export class OracleFilesystem{
   runtimeKind=(path:string):string|null=>{path=resolve(path);return this.record('runtimeKind',path,runtimeKind(path));};
   /** Preserve the SDK's actual mode/size/mtime answer, rather than its optional
    * fakeStat policy. Captured values remain primitive and JSON-portable. */
-  stat=(path:string):ReturnType<typeof statSync>|undefined=>{
+  stat=(path:string):NonNullable<ReturnType<typeof metadata>>|undefined=>{
     path=resolve(path);const value=metadata(path);this.record('stat',path,statFact(value));return value??undefined;
   };
   projectFor(entry:string):string|null{
