@@ -144,10 +144,13 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   // The repository starts with a committed private linker; stage before restoring it.
   const linker=join(repo.root,'tooling/inputs/link.sh'),privateLinker=readFileSync(linker);
   rmSync(linker);
-  copyModuleClosure(['tooling/inputs/linker.ts'],repo.root);
+  copyModuleClosure(['tooling/inputs/linker.ts','tooling/gate/admit.ts'],repo.root);
   writeFileSync(linker,privateLinker);
   assert.deepEqual(readFileSync(linker),privateLinker,"the pinned-wrapper fixture owns its no-op linker");
-  writeFileSync(join(repo.root,'tooling/gate/affinity.ts'),'// affinity is checked independently\n');
+  const affinity=join(repo.root,'tooling/gate/affinity.ts'),originalAffinity=readFileSync(affinity,'utf8');
+  const affinityEntry='if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)';
+  assert.equal(originalAffinity.split(affinityEntry).length,2);
+  writeFileSync(affinity,originalAffinity.replace(affinityEntry,'if (false)'));
   const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session'),bin=join(repo.dir,'bin');mkdirSync(bin);
   const cargo=join(bin,'cargo');writeFileSync(cargo,'#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release"\nprintf "#!/bin/sh\\n" > "$CARGO_TARGET_DIR/release/nts"\n');chmodSync(cargo,0o755);
   nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));

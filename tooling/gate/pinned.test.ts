@@ -1,5 +1,5 @@
 import {gitArguments} from "./git-arguments/main.ts";
-import {fixtureEnvironment} from './test-environment.ts';
+import {assignTestValues,fixtureEnvironment} from './test-environment.ts';
 import { gateEnvironment, launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest, waitFor } from "./test-wait.ts";
 import { copyModuleClosure } from "./module-closure-fixture.ts";
@@ -9,7 +9,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {pathToFileURL} from "node:url";
-import {ownMemory} from "./test-memory.ts";
+import {ownMemory,withoutHanded} from "./test-memory.ts";
 import {admittedEntry,readLedger} from "./memory-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
 import { testScratch } from "./test-scratch.ts";
@@ -74,7 +74,11 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   writeFileSync(affinity,originalAffinity.replace(entry,'if (false)'));
   writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
   const owned = ownMemory(join(directory, "machine"));
-  const env = fixtureEnvironment(t);
+  // Model the actual tooling parent even in a standalone focused invocation.
+  const parent=gateEnvironment(fixtureEnvironment(t),{run:join(directory,"parent"),owned:{NTS_GATE_STEP:"tooling"}});
+  const env=withoutHanded(parent.env);
+  assignTestValues(env,{NTS_GATE_STEP:undefined,NTS_GATE_STEP_ATTEMPT:undefined,NTS_GATE_STEP_RESULT:undefined,
+    NTS_GATE_STEP_MEMORY_BYTES:undefined,NTS_GATE_CASE_COSTS_DIR:undefined,NTS_MEMORY_HANDOVER:undefined});
   const git = (...args:string[]) => execFileSync("git", gitArguments(args), {cwd:root,env,encoding:"utf8"}).trim();
   const memory = pathToFileURL(join(tree, "tooling/gate/memory-ledger.ts")).href;
   const cargo = join(bin, "cargo");
