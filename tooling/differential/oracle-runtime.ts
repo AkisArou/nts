@@ -320,8 +320,8 @@ function valid(observation:HostObservation):void{
     case 'runtimeEntries':if(Array.isArray(value)&&value.every(name=>typeof name==='string'&&!name.includes(sep)&&name!=='.'&&name!=='..'))return;break;
     case 'runtimeKind':if(value===null||['file','directory','symlink','other'].includes(value as string))return;break;
     case 'stat':if(value===null||value&&typeof value==='object'&&!Array.isArray(value)&&'mode' in value&&'size' in value&&'mtimeMs' in value&&
-      Object.keys(value).sort().join(',')==='mode,mtimeMs,size'&&Number.isInteger(value.mode)&&value.mode>=0&&
-      Number.isFinite(value.size)&&value.size>=0&&Number.isSafeInteger(value.mtimeMs))return;break;
+      Object.keys(value).sort().join(',')==='mode,mtimeMs,size'&&Number.isInteger(value.mode)&&value.mode>=0&&value.mode<=0xffffffff&&
+      Number.isSafeInteger(value.size)&&value.size>=0&&Number.isInteger(value.mtimeMs)&&Math.abs(value.mtimeMs)<=8_640_000_000_000_000)return;break;
     case 'entries':if(value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')==='directories,files'&&
       (['files','directories'] as const).every(key=>Array.isArray(value[key])&&value[key].every(name=>typeof name==='string'&&!name.includes(sep)&&name!=='.'&&name!=='..')))return;break;
   }

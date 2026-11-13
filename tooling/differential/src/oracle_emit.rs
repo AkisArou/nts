@@ -1055,12 +1055,18 @@ fn host_stat(observation: &HostObservation) -> Result<Value> {
     if !observation.value.is_null()
         && !observation.value.as_object().is_some_and(|fields| {
             fields.len() == 3
-                && fields.get("mode").and_then(Value::as_u64).is_some()
+                && fields
+                    .get("mode")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|mode| mode <= u64::from(u32::MAX))
                 && fields
                     .get("size")
-                    .and_then(Value::as_f64)
-                    .is_some_and(|size| size >= 0.0)
-                && fields.get("mtimeMs").and_then(Value::as_i64).is_some()
+                    .and_then(Value::as_u64)
+                    .is_some_and(|size| size <= 9_007_199_254_740_991)
+                && fields
+                    .get("mtimeMs")
+                    .and_then(Value::as_i64)
+                    .is_some_and(|time| time.unsigned_abs() <= 8_640_000_000_000_000)
         })
     {
         bail!("invalid oracle stat observation: {path}");

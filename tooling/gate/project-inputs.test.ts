@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {chmodSync,mkdirSync,writeFileSync,statSync,symlinkSync,utimesSync} from 'node:fs';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
 import {test} from 'node:test';
 import {OracleFilesystem,validateHostObservations} from '../differential/oracle-filesystem.ts';
 import {projectInputs} from './project-inputs.ts';
@@ -53,4 +54,25 @@ test('captured SDK stat preserves real fields and absence without granting file 
   }
   const cycle=join(root,'cycle');symlinkSync(cycle,cycle);
   assert.throws(()=>fs.stat(cycle),(error:unknown)=>(error as NodeJS.ErrnoException).code==='ELOOP');
+  for(const value of [{mode:2**32,size:0,mtimeMs:0},{mode:1,size:0.5,mtimeMs:0},{mode:1,size:2**53,mtimeMs:0},{mode:1,size:0,mtimeMs:8_640_000_000_000_001}])
+    assert.throws(()=>validateHostObservations([{kind:'stat',path,value}]),/invalid oracle filesystem stat observation/);
+});
+
+test('captured project callbacks match the prior OS parser for symlink includes and cycles',t=>{
+  const root=testScratch(t,'project-link-parity');
+  mkdirSync(join(root,'src'));mkdirSync(join(root,'shared'));
+  writeFileSync(join(root,'tsconfig.json'),'{"include":["src/**/*.ts"]}');
+  writeFileSync(join(root,'src/main.ts'),'export {};');writeFileSync(join(root,'shared/helper.ts'),'export {};');
+  symlinkSync(join(root,'src/main.ts'),join(root,'src/alias.ts'));
+  symlinkSync(join(root,'shared'),join(root,'src/shared'));
+  symlinkSync(join(root,'src'),join(root,'src/cycle'));
+  const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync');
+  const {serverFS}=require('typescript/fs') as typeof import('typescript/fs');
+  const api=new API({cwd:root,fs:{readFile:serverFS.useOS,fileExists:serverFS.useOS,directoryExists:serverFS.useOS,
+    getAccessibleEntries:serverFS.useOS,realpath:serverFS.useOS,stat:serverFS.useOS,writeFile:serverFS.error,removeFile:serverFS.error}});
+  let expected:string[];
+  try{const parsed=api.parseConfigFile(join(root,'tsconfig.json'));assert.deepEqual(parsed.errors,[]);expected=parsed.fileNames.slice().sort();}
+  finally{api.close();}
+  const actual=projectInputs([{kind:'config',path:'tsconfig.json'}],root);
+  assert.deepEqual(actual.roots.map(path=>join(root,path)).sort(),expected);
 });
