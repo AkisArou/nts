@@ -4,7 +4,7 @@
 // aggregate slice, then one persistent counter-holding slice per worker.
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncOptionsWithBufferEncoding, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -50,7 +50,7 @@ function stopSlice(unit: string, group: string, kind: "run" | "worker"): void {
   if (!group) return;
   let text: string;
   try { text = readFileSync(join(CGROUP, group, "cgroup.events"), "utf8"); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  catch (error) {if(isCommandExit(error))throw error; if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
   const populated = /^populated ([01])$/m.exec(text)?.[1];
   if (populated === undefined) throw new Error(`resident ${kind} cgroup has no populated evidence after its stop job: ${group}`);
   throw new Error(`resident ${kind} cgroup was not removed after its stop job finished (populated ${populated}): ${group}`);
@@ -72,7 +72,7 @@ const groupOf = (unit: string, parent?: string) => {
 };
 const failedSetup = (error: unknown, cleanup: () => void): never => {
   try { cleanup(); }
-  catch (cleanupError) {
+  catch (cleanupError) {if(isCommandExit(cleanupError))throw cleanupError;
     throw new AggregateError([error, cleanupError], `resident cap: setup failed: ${String(error)}; cleanup also failed: ${String(cleanupError)}`, { cause: error });
   }
   throw error;
@@ -208,7 +208,7 @@ class MemoryClose {
   constructor(){void this.closed.catch(()=>{});}
   finish(cleanup:()=>void,previous?:unknown):ToolingInstrumentError|undefined{
     let failure=previous;
-    try{cleanup();}catch(error){failure??=error;}
+    try{cleanup();}catch(error){if(isCommandExit(error))throw error;failure??=error;}
     this.done=true;
     if(failure){
       const error=failure instanceof ToolingInstrumentError?failure:new ToolingInstrumentError('tooling-cleanup',String(failure),{cause:failure});
@@ -268,7 +268,7 @@ export class MemoryRun {
       // finds what such a run leaves.
       this.group = this.#slice(this.slice, this.#outer ? null : this.budgetBytes, ownUnit());
       ownRun(this);
-    } catch (error) {
+    } catch (error) {if(isCommandExit(error))throw error;
       failedSetup(error, () => this.close());
     }
   }
@@ -283,7 +283,7 @@ export class MemoryRun {
       const group = groupOf(unit, parent);
       this.#verify(group, bytes);
       return group;
-    } catch (error) {
+    } catch (error) {if(isCommandExit(error))throw error;
       return failedSetup(error, () => manager("StopUnit", "ss", unit, "replace"));
     }
   }
@@ -345,7 +345,7 @@ export class MemoryRun {
     this.#closed = true;
     let failure: unknown;
     for (const worker of this.#workers) {
-      try { worker.close(); } catch (error) { failure ??= error; }
+      try { worker.close(); } catch (error) {if(isCommandExit(error))throw error; failure ??= error; }
       failure??=worker.cleanupFailure;
     }
     const finish=()=>this.#drain.finish(()=>{
@@ -494,7 +494,7 @@ export async function serialRun(tools: CompilerTools): Promise<void> {
     await run.closed;
   }
   if (result.error) throw result.error;
-  process.exit(result.status ?? 1);
+  exitCommand(result.status ?? 1);
 }
 
 /** The owned worker subtree available to a supervisor outside its cap. */

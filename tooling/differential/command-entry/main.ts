@@ -76,6 +76,15 @@ export class CommandLifetime{
   }
 }
 
+class CommandExit{readonly code:number;constructor(code:number){this.code=code;}}
+/** An explicit terminal transfer unwinds the caller before drain and flush.
+ * A containing catch must rethrow this transfer rather than classify it. */
+export function isCommandExit(error:unknown):boolean{return error instanceof CommandExit;}
+export function exitCommand(code:number):never{
+  processOwner().explicitCode??=code;
+  throw new CommandExit(code);
+}
+
 type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;signal?:CommandSignal;explicitCode?:number;finish:(code:number,reason?:CloseReason)=>Promise<void>};
 let owner:ProcessOwner|undefined;
 function processOwner():ProcessOwner{
@@ -89,7 +98,10 @@ function processOwner():ProcessOwner{
     void state.finish(signalCode[signal],{kind:'signal',signal}).then(()=>process.exit(signalCode[state.signal!]));
   };
   const signals={SIGINT:()=>onSignal('SIGINT'),SIGTERM:()=>onSignal('SIGTERM'),SIGHUP:()=>onSignal('SIGHUP')};
-  const failed=(error:unknown)=>{state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure',error}).then(()=>process.exit(Number(process.exitCode)||1));};
+  const failed=(error:unknown)=>{
+    if(error instanceof CommandExit){exitAfterOutput(error.code);return;}
+    state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure',error}).then(()=>process.exit(Number(process.exitCode)||1));
+  };
   // An unsettled body can own unref'd resources. Drain those too, but only
   // the actual exit decides its exit13; another beforeExit listener may
   // still settle main, whose eventual nonzero status remains authoritative.
@@ -152,6 +164,7 @@ export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?
   };
   const failed=(error:unknown)=>{
     finished();state.pendingMain=false;
+    if(error instanceof CommandExit){exitAfterOutput(error.code);return;}
     console.error(error);return state.finish(1,{kind:'failure',error});
   };
   process.once('beforeExit',arm);

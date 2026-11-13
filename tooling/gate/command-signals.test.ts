@@ -53,3 +53,12 @@ const observe=process.on.bind(process,'message');observe(handler);
 process.on.apply(process,['warning',handler]);
 `),[]);
 });
+
+test('resource owners transfer explicit exits and preserve them through every catch',()=>{
+ const imports=`import {registerCommandCloser,exitCommand,isCommandExit} from '../differential/command-entry/main.ts';`;
+ assert.match(inspect(imports+`registerCommandCloser('resource',{close(){}});process.exit(7);`)[0]!,/process.exit bypasses command resources/);
+ assert.deepEqual(inspect('process.exit(7);'),[],'a resource-free immediate exit retains its contract');
+ assert.match(inspect(imports+`registerCommandCloser('resource',{close(){}});try{exitCommand(7);}catch(error){console.error(error);}`)[0]!,/must rethrow isCommandExit/);
+ assert.deepEqual(inspect(imports+`registerCommandCloser('resource',{close(){}});try{exitCommand(7);}catch(error){if(isCommandExit(error))throw error;console.error(error);}`),[]);
+ assert.match(inspect(imports+`registerCommandCloser('resource',{close(){}});try{exitCommand(7);}catch(error){isCommandExit(error);console.error(error);}`)[0]!,/must rethrow isCommandExit/);
+});

@@ -181,6 +181,20 @@ runAsCommand(import.meta.url,async()=>{
  }
 });
 
+test('explicit exits unwind nested guards and finally before the common drain and flush',t=>{
+ const root=testScratch(t,'command-explicit-exit');
+ for(const standalone of [false,true])for(const status of [0,7]){
+  const file=join(root,String(standalone)+'-'+status+'.mjs');
+  const body=`registerCommandCloser('owned',{close:async()=>{await Promise.resolve();process.stdout.write('closed;');}});
+try{try{await Promise.resolve();exitCommand(${status});}catch(error){if(isCommandExit(error))throw error;process.stderr.write('ordinary error');return 99;}}
+finally{process.stdout.write('unwound;');}`;
+  const source=`import {runAsCommand,registerCommandCloser,exitCommand,isCommandExit} from ${JSON.stringify(helper)};
+${standalone?body.replace('return 99;','process.exitCode=99;'):'runAsCommand(import.meta.url,async()=>{'+body+'});'}`;
+  writeFileSync(file,source);const result=run(file);
+  assert.equal(result.status,status,result.stderr);assert.equal(result.stdout,'unwound;closed;');assert.equal(result.stderr,'');
+ }
+});
+
 test('a real SIGTERM keeps the broker alive for its worker retirement and exits 143',async t=>{
  const root=testScratch(t,'command-signal-retirement'),file=join(root,'subject.mjs'),ready=join(root,'ready.json'),done=join(root,'done.json');
  writeFileSync(file,`import assert from 'node:assert/strict';import {createServer,connect} from 'node:net';import {once} from 'node:events';

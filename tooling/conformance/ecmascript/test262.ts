@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../../differential/command-entry/main.ts';
 import {gitArguments} from "../../gate/git-arguments/main.ts";
 // Host validation of shared ECMAScript builtins using the pinned Test262
 // corpus. This does not claim compiled builtin conformance: the compiler lane's
@@ -24,7 +24,7 @@ if (typeof vm.SourceTextModule !== "function") {
     ["--experimental-vm-modules", process.argv[1]!, ...process.argv.slice(2)],
     { stdio: "inherit" },
   );
-  process.exit(child.status ?? 2);
+  exitCommand(child.status ?? 2);
 }
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -604,7 +604,7 @@ for (const selected of selection) {
     if (typeof text !== "string") return text;
     try {
       return new vm.Script(adapt(text).text).runInContext(context, { timeout });
-    } catch (error) {
+    } catch (error) {if(isCommandExit(error))throw error;
       // Tokenizer and Script-construction errors originate in the driver.
       // Deliver the equivalent error in the caller's realm, as eval does.
       if (error instanceof SyntaxError) {
@@ -627,7 +627,7 @@ for (const selected of selection) {
       }
       try {
         new vm.Script((selected.strict_prefix ?? "") + adapted.text);
-      } catch {
+      } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
         row.reason = "adapter:javascript-lexical-or-parse-negative";
         continue;
       }
@@ -641,7 +641,7 @@ for (const selected of selection) {
               JSON.stringify(literal.flags) +
               ")",
           ).runInContext(context, { timeout });
-        } catch (error) {
+        } catch (error) {if(isCommandExit(error))throw error;
           if (
             (error as Error).name === "SyntaxError" &&
             selected.negative.error_type === "SyntaxError"
@@ -664,7 +664,7 @@ for (const selected of selection) {
         new vm.Script((selected.strict_prefix ?? "") + adapted.text, {
           filename: selected.path,
         }).runInContext(context, { timeout });
-      } catch (error) {
+      } catch (error) {if(isCommandExit(error))throw error;
         thrown = error;
       }
       if (selected.negative) {
@@ -676,7 +676,7 @@ for (const selected of selection) {
       if (row.verdict === "fail")
         row.reason = thrown === undefined ? "expected an exception" : String(thrown);
     }
-  } catch (error) {
+  } catch (error) {if(isCommandExit(error))throw error;
     row.verdict = selected.negative?.phase === "parse" ? "unsupported" : "fail";
     row.reason =
       (selected.negative?.phase === "parse" ? "adapter:literal-lexing: " : "") + String(error);

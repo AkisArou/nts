@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // The representation facts the corpora state, checked against the compiler.
 //
@@ -40,7 +40,7 @@ const FACT = "// expect-ir:";
 
 if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
-  process.exit(2);
+  exitCommand(2);
 }
 mkdirSync(SCRATCH, { recursive: true });
 registerCommandCloser('scratch conformance/expect-ir.ts',{close:()=>rmSync(SCRATCH,{recursive:true,force:true})});
@@ -121,7 +121,7 @@ function check(tsconfig: string): { ok: boolean; out: string } {
   if (planted.ok || !planted.out.includes("PASS") || !planted.out.includes("FAIL")) {
     console.log("  SELF-CHECK FAILED: a case with one true and one planted false fact did not report both");
     console.log(planted.out.replace(/^/gm, "    "));
-    process.exit(1);
+    exitCommand(1);
   }
 }
 
@@ -131,7 +131,7 @@ const named = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const selected = cases().filter((c) => named.length === 0 || named.some((n) => c.name.endsWith(n)));
 if (selected.length === 0) {
   console.log(named.length ? `  no case states a fact among: ${named.join(", ")}` : "  no case states a fact");
-  process.exit(named.length ? 1 : 0);
+  exitCommand(named.length ? 1 : 0);
 }
 
 let failed = 0;

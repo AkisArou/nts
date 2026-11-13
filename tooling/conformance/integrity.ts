@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { FIXED_AMBIENT } from "../gate/canonical-environment.ts";
 // Is what the backend receives whole? Nine facts about a program, checked from
@@ -322,7 +322,7 @@ const sourceLines = new Map();
 /** One line of a source file on disk, 1-based; undefined when it cannot be read. */
 function readSourceLine(file, n) {
   if (!sourceLines.has(file)) {
-    try { sourceLines.set(file, readFileSync(file, "utf8").split("\n")); } catch { sourceLines.set(file, null); }
+    try { sourceLines.set(file, readFileSync(file, "utf8").split("\n")); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; sourceLines.set(file, null); }
   }
   return sourceLines.get(file)?.[n - 1];
 }
@@ -511,7 +511,7 @@ function readFieldContracts(prepared) {
           || ((p.argument === null) !== ["stored-prefix", "dominating-direct"].includes(p.mode))
           || result.has(key)) return new Map();
       result.set(key, p);
-    } catch { return new Map(); }
+    } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; return new Map(); }
   }
   return result;
 }
@@ -1206,15 +1206,15 @@ function selfTest() {
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (process.argv.includes("--self-test")) {
   console.log("  self-test: each night's defect caught by its rule, its control clean, a short listing not measured");
-  process.exit(0);
+  exitCommand(0);
 }
 if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
-  process.exit(2);
+  exitCommand(2);
 }
 const under = (base) =>
   readdirSync(join(ROOT, base), { withFileTypes: true })
@@ -1294,7 +1294,7 @@ if (disorder) {
   console.log(`    ${disorder.line.slice(0, 140)}`);
   console.log(`    above: ${disorder.before.slice(0, 140)}`);
   console.log("  insert entries where they sort (LC_ALL=C); the order keeps a reorder out of every later diff");
-  process.exit(1);
+  exitCommand(1);
 }
 
 // **One pool of `WORKERS` nts processes, shared by every project's four

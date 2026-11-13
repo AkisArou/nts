@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which single refusal, if fixed, unblocks the most functions.
 //
 //   node tooling/conformance/cascade-reach.mjs <module>
@@ -39,7 +39,7 @@ const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-cascadereach-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 registerCommandCloser('scratch conformance/cascade-reach.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -54,13 +54,13 @@ const compiler = process.env.NTS_COMPILER ?? process.env.NTS_BIN ??
   join(ROOT, "target/release/nts");
 if (!existsSync(compiler)) {
   console.error(`no compiler at ${compiler}; the compiler session builds it`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 const tsconfig = join(ROOT, "runtime/node", module_, "tsconfig.json");
 if (!existsSync(tsconfig)) {
   console.error(`no such module: ${module_}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 const run = spawnSync(compiler, [
@@ -98,7 +98,7 @@ if (run.error !== undefined || run.signal !== null) {
   } else {
     console.log(`  ${run.error.message}`);
   }
-  process.exit(2);
+  exitCommand(2);
 }
 if (primary.length === 0 && cascadeLines.length === 0) {
   // "Either it compiles cleanly -- which would be news -- or the frontend never
@@ -113,13 +113,13 @@ if (primary.length === 0 && cascadeLines.length === 0) {
   if (/wrote .* to \S+/.test(text)) {
     console.log(`  ${module_}: no refusals at all -- it lowers completely.`);
     console.log("  Nothing to rank. This is the answer, not a failed measurement.");
-    process.exit(0);
+    exitCommand(0);
   }
   console.log(`INSTRUMENT FAILURE: ${module_} produced no diagnostics and no`);
   console.log(`  output, and the compiler exited ${run.status} rather than being`);
   console.log("  killed. Check the frontend stderr and selected compiler before");
   console.log("  believing a zero.");
-  process.exit(2);
+  exitCommand(2);
 }
 
 const edge = /`([^`]+)` cannot be compiled because it calls `([^`]+)`/;

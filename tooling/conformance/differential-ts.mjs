@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // The TypeScript module against node's own, on inputs no pinned test uses.
 //
 //   node tooling/conformance/differential-ts.mjs querystring
@@ -42,7 +42,7 @@ const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-differentialts-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 registerCommandCloser('scratch conformance/differential-ts.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -62,7 +62,7 @@ const modules = argv.includes("--all") ? Object.keys(CORPORA) : named;
 if (modules.length === 0) {
   console.error("usage: differential-ts.mjs <module>... [--iterations N]   |   --all");
   console.error(`known corpora: ${Object.keys(CORPORA).join(", ")}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 const show = (r) => render(r);
@@ -88,7 +88,7 @@ function settled(value, label) {
       `${label}: an unawaited promise was stringified into the result. Await it inside the ` +
       "spec; `[object Promise]` is identical on both sides and the comparison cannot fail.",
     );
-    process.exit(2);
+    exitCommand(2);
   }
   if (Array.isArray(value)) {
     for (let at = 0; at < value.length; at++) {
@@ -97,7 +97,7 @@ function settled(value, label) {
           `${label}: element ${at} is a promise. Await it inside the spec; unresolved it renders`,
         );
         console.error("  as {} on both sides and the comparison cannot fail.");
-        process.exit(2);
+        exitCommand(2);
       }
     }
   }
@@ -118,11 +118,11 @@ for (const name of modules) {
   }
   if (corpus === undefined) {
     console.error(`no corpus for ${name}; add one to differential-corpora.mjs`);
-    process.exit(2);
+    exitCommand(2);
   }
   if (!existsSync(join(ROOT, "runtime/node", name, "tsconfig.json"))) {
     console.error(`no such module: ${name}`);
-    process.exit(2);
+    exitCommand(2);
   }
 
   const rnd = makeRandom();
@@ -164,7 +164,7 @@ for (const name of modules) {
 // `differential-addon.mjs` carries the same guard, for the same reason.
 try {
   process.noDeprecation = true;
-} catch {
+} catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
   // already suppressed by the flag, which is the outcome this wanted
 }
   const upstream = require_(`node:${name}`);
@@ -179,7 +179,7 @@ try {
     let held;
     try {
       held = corpus.precondition(upstream);
-    } catch (error) {
+    } catch (error) {if(isCommandExit(error))throw error;
       held = `threw ${error.message}`;
     }
     if (held !== true) {
@@ -220,7 +220,7 @@ try {
         const fn = upstream[spec.name];
         if (typeof fn !== "function") return { missing: true };
         return { value: fn(...spec.args(input)) };
-      } catch (error) {
+      } catch (error) {if(isCommandExit(error))throw error;
         return { threw: true, code: error?.code };
       }
     };
@@ -268,7 +268,7 @@ try {
           if (typeof fn !== "function") continue;
           theirs = { value: settled(await fn(...spec.args(inputs[i])), fnName) };
         }
-      } catch (error) {
+      } catch (error) {if(isCommandExit(error))throw error;
         // `code` as well as name and message. Node's errors carry one --
         // `ERR_INVALID_ARG_TYPE` and its kin -- and `assert.throws(fn, { code })`
         // is how node's own suite states nearly every error expectation, so a

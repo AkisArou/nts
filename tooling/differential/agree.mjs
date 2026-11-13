@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // Does this change alter any answer? The examples differential, without the gate.
 //
@@ -264,7 +264,7 @@ function selfTest() {
   for (const mutation of ["agreed on every case\n", JSON.stringify({...value("agrees", 3, 3), version: 2}),
     JSON.stringify(value("agrees", 3, 0, 3))]) {
     let refused = false;
-    try { classify(0, mutation); } catch { refused = true; }
+    try { classify(0, mutation); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; refused = true; }
     if (!refused) return "a legacy-text or contradictory JSON mutation was accepted";
   }
   return null;
@@ -276,11 +276,11 @@ const args = process.argv.slice(2);
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (args.includes("--self-test")) {
   console.log("  self-test: every outcome classified from structured fields, with malformed-output controls; declines under an agreement attributed as a regression");
-  process.exit(0);
+  exitCommand(0);
 }
 
 const verdictsFile = args.find((a) => a.startsWith("--verdicts="))?.slice("--verdicts=".length);
@@ -289,13 +289,13 @@ const comparisonBase = args.find((a) => a.startsWith("--base="))?.slice("--base=
 const binaries = args.filter((a) => !a.startsWith("--"));
 if (binaries.length < 1 || binaries.length > 2) {
   console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>] [--one-change] [--base=<before-commit>]");
-  process.exit(2);
+  exitCommand(2);
 }
 if (args.includes("--one-change")) {
   const why = binaries.length === 2 ? oneChange(binaries[0], binaries[1]) : "it compares two binaries and was given one";
   if (why) {
     console.log(`  NOT MEASURED: --one-change, and ${why}`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 
@@ -317,7 +317,7 @@ function pin(path) {
   const source = resolve(path);
   if (!existsSync(source)) {
     console.log(`  NOT MEASURED: no compiler at ${path}`);
-    process.exit(2);
+    exitCommand(2);
   }
   const { mtimeMs } = statSync(source);
   const hash = sha256(source);
@@ -336,7 +336,7 @@ function pin(path) {
   // rebuilt between the hash and the copy would otherwise run unnamed.
   if (sha256(pinned) !== hash) {
     console.log(`  NOT MEASURED: ${path} changed while it was being pinned; run again`);
-    process.exit(2);
+    exitCommand(2);
   }
   // Marked used, for `prune`.
   const now = new Date();
@@ -374,16 +374,16 @@ if (comparisonBase !== undefined) {
   try {
     if (pins.length !== 2 || !comparisonBase) throw new Error("--base requires two binaries and a before commit");
     newProjects = candidateAddedProjects(ROOT, binaries[0], comparisonBase);
-  } catch (error) {
+  } catch (error) {if(isCommandExit(error))throw error;
     console.log(`  NOT MEASURED: ${error.message}`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 prune(6);
 if (pins.length === 2 && pins[0].hash === pins[1].hash) {
   console.log(`  NOT MEASURED: both arguments are the same binary (sha256 ${pins[0].hash.slice(0, 16)}) --`);
   console.log("  that comparison can only answer \"nothing changed\"");
-  process.exit(2);
+  exitCommand(2);
 }
 
 const examples = readdirSync(join(ROOT, "tests/programs"), { withFileTypes: true })
@@ -395,11 +395,11 @@ const examples = readdirSync(join(ROOT, "tests/programs"), { withFileTypes: true
 const unknown = (only ?? []).filter((name) => !examples.includes(name));
 if (unknown.length > 0) {
   console.log(`  NOT MEASURED: no such example(s): ${unknown.join(", ")}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (examples.length === 0) {
   console.log("  NOT MEASURED: no example to run");
-  process.exit(2);
+  exitCommand(2);
 }
 
 // Each worker is a lowering, a clang build and a node process. Cores are
@@ -418,7 +418,7 @@ mkdirSync(join(CACHE, "tmp"), { recursive: true });
 const { env, dir: scratch } = childTemporary({ ...process.env, NTS_CHECKERS: "1" }, join(CACHE, "tmp"), "run-");
 let oracleRoot;
 try { oracleRoot = comparisonOracleRoot(ROOT, binaries, join(CACHE, "tmp")); }
-catch (error) { console.log(`  NOT MEASURED: oracle compatibility: ${error.message}`); process.exit(2); }
+catch (error) {if(isCommandExit(error))throw error; console.log(`  NOT MEASURED: oracle compatibility: ${error.message}`); exitCommand(2); }
 registerCommandCloser('agreement oracle root',{close:()=>oracleRoot.dispose()});
 if (oracleRoot.legacy) console.log("  legacy oracle view: comparison-private checkout; removed after this run");
 registerCommandCloser('scratch differential/agree.mjs',{close:()=>rmSync(scratch,{recursive:true,force:true})});
@@ -436,7 +436,7 @@ const check = async (pinned, example) => {
     const contradiction = record.outcome === Outcome.PENDING ? pendingContradiction(root, `tests/programs/${example}`) : null;
     if (contradiction) return unmeasuredRecord(null, new Error(contradiction));
     return {...record, incomplete};
-  } catch (error) { return unmeasuredRecord(null, error); }
+  } catch (error) {if(isCommandExit(error))throw error; return unmeasuredRecord(null, error); }
 };
 
 function incompleteExit(records, completedFailures) {
@@ -523,7 +523,7 @@ if (pins.length === 1) {
   const wrong = all.filter(([, r]) => WRONG.has(r.outcome)).length;
   const unmeasured = all.filter(([, r]) => r.outcome === Outcome.NOT_MEASURED).length;
   console.log(`  ${wrong === 0 && unmeasured === 0 ? "every example that compared anything agrees with node" : `${wrong} wrong, ${unmeasured} not measured`}, in ${seconds()} s`);
-  process.exit(unmeasured > 0 ? incompleteExit(all.map(([, record]) => record), wrong) : wrong > 0 ? 1 : 0);
+  exitCommand(unmeasured > 0 ? incompleteExit(all.map(([, record]) => record), wrong) : wrong > 0 ? 1 : 0);
 }
 
 // Two binaries: confirm each difference, then attribute it.

@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Every call of a function value reached through an erased slot, and the
 // signatures they call it at.
 //
@@ -351,17 +351,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const broken = selfTest();
   if (broken) {
     console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-    process.exit(2);
+    exitCommand(2);
   }
   if (argv.includes("--self-test")) {
     console.log("  self-test: sites through an unerase counted, one through a param not; every closure call read with its callee's origin and place; a made closure's body reached and an orphan's not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
-    process.exit(0);
+    exitCommand(0);
   }
 
   const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
   if (!existsSync(SOURCE)) {
     console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
-    process.exit(2);
+    exitCommand(2);
   }
   const base = join(homedir(), ".cache/nts-erased-calls");
   mkdirSync(base, { recursive: true });

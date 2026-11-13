@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which declared bindings have no C anywhere.
 //
 //   node tooling/conformance/native-half.mjs
@@ -52,7 +52,7 @@ const NODE_DIR = join(ROOT, "runtime/node");
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-native-"));
 registerCommandCloser('scratch conformance/native-half.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -112,7 +112,7 @@ const { defined, unbuilt } = definedSymbols();
 if (defined.size === 0) {
   console.log("  INSTRUMENT FAILURE: no object compiled, so no symbol is defined.");
   console.log("  An empty set is not an answer -- every binding would read as missing.");
-  process.exit(2);
+  exitCommand(2);
 }
 
 // **`internal` has no `tsconfig.json`, and it is where the whole gap lives.**

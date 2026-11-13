@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which root constructs stand between a module and its exports.
 //
 //   node tooling/conformance/last-mile.mjs string_decoder
@@ -72,7 +72,7 @@ const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-lastmile-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 registerCommandCloser('scratch conformance/last-mile.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -93,7 +93,7 @@ const modules = all
 
 if (modules.length === 0) {
   console.error("usage: last-mile.mjs <module> | --all");
-  process.exit(2);
+  exitCommand(2);
 }
 
 /** Every NTS1001 root and NTS1003 cascade the module's cone reports. */

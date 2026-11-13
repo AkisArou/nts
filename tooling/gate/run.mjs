@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {gitArguments} from "./git-arguments/main.ts";
-import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.
@@ -178,19 +178,19 @@ const argSteps = [];
 for (const a of process.argv.slice(2)) {
   if (a === "--help" || a === "-h") {
     process.stdout.write(USAGE);
-    process.exit(0);
+    exitCommand(0);
   } else if (a === "--steps") {
     for (const s of STEPS) process.stdout.write(`${s.name.padEnd(24)} ${s.doc ?? ""}\n`);
-    process.exit(0);
+    exitCommand(0);
   } else if (a === "--capabilities") {
     process.stdout.write(JSON.stringify(Object.fromEntries(STEPS.map(s => [s.name, s.capabilities ?? []]))) + "\n");
-    process.exit(0);
+    exitCommand(0);
   } else if (a === "--tree-only") {
     for (const s of STEPS.filter((s) => s.treeOnly)) process.stdout.write(`${s.name}\n`);
-    process.exit(0);
+    exitCommand(0);
   } else if (a.startsWith("-")) {
     process.stderr.write(`run.mjs: unknown option ${a}; nothing ran\n\n${USAGE}`);
-    process.exit(2);
+    exitCommand(2);
   } else {
     argSteps.push(a);
   }
@@ -203,13 +203,13 @@ if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
           "  update the checkout that pinned.sh runs from (`git pull`), or drop the argument\n"
         : ""),
   );
-  process.exit(2);
+  exitCommand(2);
 }
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
 try {outsideSource(ROOT,RUN_DIR,"NTS_GATE_RUN_DIR");}
-catch(error){usage(error instanceof Error?error.message:String(error));}
+catch(error){if(isCommandExit(error))throw error;usage(error instanceof Error?error.message:String(error));}
 let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate", oracleRoot: ROOT });
 env = normalized.env;
 // In-process provisioning resolves tools through the run's canonical PATH too.
@@ -241,14 +241,14 @@ const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", defaultSlot
 // here (canonical-environment.ts).
 const PRIORITY = (() => {
   try { return reservationPriority(priorityOf(env), env, LAUNCHER_RESERVATION); }
-  catch (error) { usage(error.message); }
+  catch (error) {if(isCommandExit(error))throw error; usage(error.message); }
 })();
 // Its steps inherit its OOM score: a machine that runs out kills the lowest
 // priority's work first (memory-ledger.ts's OOM_SCORE).
 rankForOom(PRIORITY, (line) => process.stderr.write(`run.mjs: ${line}\n`));
 const FRONTENDS = (() => {
   try { return frontendBudget(env, SLOTS); }
-  catch (error) { usage(error.message); }
+  catch (error) {if(isCommandExit(error))throw error; usage(error.message); }
 })();
 const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
@@ -260,7 +260,7 @@ const TIMES_FILE = join(HERE, "times.tsv");
 
 function usage(message) {
   process.stderr.write(`${color(31, "FAILED")}: ${message}\n`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +333,7 @@ const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => currentStepCpu(B
 function sha256(path) {
   try {
     return createHash("sha256").update(readFileSync(path)).digest("hex");
-  } catch {
+  } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
     return null;
   }
 }
@@ -506,7 +506,7 @@ function ownerCalls(step = undefined, drained = false) {
   try {
     const capability = env.NTS_ORACLE_DEPENDENCIES && JSON.parse(env.NTS_ORACLE_DEPENDENCIES);
     return ownerEmissionCalls(capability, { step, drained });
-  } catch (error) { return { status: "unreadable", reason: error.message }; }
+  } catch (error) {if(isCommandExit(error))throw error; return { status: "unreadable", reason: error.message }; }
 }
 
 function captureCost(name, log) {
@@ -977,7 +977,7 @@ function chargeOf(scope) {
 }
 function sampleStep(r) {
   try { r.charge = chargeOf(r.scope); r.peakCharge = Math.max(r.peakCharge ?? 0, r.charge); }
-  catch(error) { if(error instanceof HostObservationError)throw error; /* the slice went as it was read */ }
+  catch(error) {if(isCommandExit(error))throw error; if(error instanceof HostObservationError)throw error; /* the slice went as it was read */ }
 }
 // Every SAMPLE_MS: each running step's charge; a step whose charge nears its
 // grant, or passed it, wants more -- a quarter of its grant, at least 64 MiB,
@@ -1047,7 +1047,7 @@ function outranked() {
   outrankedRead = now;
   let answer = false;
   try { answer = reservation.outranked(); }
-  catch (error) { process.stderr.write(`run.mjs: cannot read the memory ledger's queue: ${error.message}\n`); }
+  catch (error) {if(isCommandExit(error))throw error; process.stderr.write(`run.mjs: cannot read the memory ledger's queue: ${error.message}\n`); }
   if (answer && !outrankedNow) {
     outrankedSince = now;
     memoryRecord.outranked++;
@@ -1224,7 +1224,7 @@ function start(step, slots, rider = false) {
   // Its slice bounds a runaway from the start (see "Memory").
   const elastic = Boolean(step.elastic && tokenAddr), grant = elastic ? tokenBytes(step) : stepBytes(step, slots);
   try { scope = scopes.step({ max: runawayBound(grant) }); }
-  catch (error) {
+  catch (error) {if(isCommandExit(error))throw error;
     finish(step.name, "INSTRUMENT", `step scope setup failed: ${error.message}`, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT" } });
     report(step.name); stop(`step scope setup failed: ${error.message}`); return;
   }
@@ -1265,7 +1265,7 @@ function start(step, slots, rider = false) {
   const stopAtBound = () => {
     if (!stopping) owned.overBound = true;
     try { scope.kill(); }
-    catch (error) { stop(`cannot stop ${step.name} at its bound: ${error.message}`); return; }
+    catch (error) {if(isCommandExit(error))throw error; stop(`cannot stop ${step.name} at its bound: ${error.message}`); return; }
     boundTimer = setTimeout(stopAtBound, 5000);
     boundTimer.unref();
   };
@@ -1298,9 +1298,9 @@ function start(step, slots, rider = false) {
     sampleStep(owned);
     owned.draining = true;
     let drained, cleanupError, entered, entryError;
-    try { entered = scope.entry(); } catch (error) { entryError = `step scope entry was not proved: ${error.message}`; }
+    try { entered = scope.entry(); } catch (error) {if(isCommandExit(error))throw error; entryError = `step scope entry was not proved: ${error.message}`; }
     try { drained = await scope.drain(); }
-    catch (error) {
+    catch (error) {if(isCommandExit(error))throw error;
       cleanupError = `step scope cleanup failed: ${error.message}`;
       scopeCleanup = { state: "error", reason: cleanupError };
       stop(cleanupError);
@@ -1308,12 +1308,12 @@ function start(step, slots, rider = false) {
     running.delete(step.name);
     const wall = (Date.now() - started) / 1000;
     let gnuTime,measurement;
-    try { gnuTime=parseGnuTime(readFileSync(timeFile,'utf8')); } catch {}
+    try { gnuTime=parseGnuTime(readFileSync(timeFile,'utf8')); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;}
     if(drained){
       try{
         measurement=measuredStepTime(drained.cpu,wall,gnuTime);
         writeFileSync(join(RUN_DIR,`${step.name}.time`),JSON.stringify(measurement)+'\n');
-      }catch(error){
+      }catch(error){if(isCommandExit(error))throw error;
         cleanupError=`step CPU record failed: ${String(error)}`;
         scopeCleanup={state:'error',reason:cleanupError};stop(cleanupError);
       }
@@ -1323,7 +1323,7 @@ function start(step, slots, rider = false) {
     if (elastic) writeFileSync(log, `\nstep budget: ${boundState.used_s.toFixed(3)} s execution; admission waits ${JSON.stringify(boundState.waited_s)}\n`, { flag: "a" });
     if (owned.overBound) writeFileSync(log, `\n${boundFailure}: stopped through its scope\n`, { flag: "a" });
     let oracleCapture, captureProblem;
-    try { oracleCapture = captureCost(step.name, log); } catch (error) { captureProblem = error.message; }
+    try { oracleCapture = captureCost(step.name, log); } catch (error) {if(isCommandExit(error))throw error; captureProblem = error.message; }
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
     account();
     // What the step held at most, sampled on the ledger's basis, against the
@@ -1337,7 +1337,7 @@ function start(step, slots, rider = false) {
     // bound, and the processes the kernel killed there (`memory.events`, read
     // as its slice emptied).
     let events = null;
-    try { events = scope.memoryEvents(); } catch { /* the slice was never read */ }
+    try { events = scope.memoryEvents(); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* the slice was never read */ }
     const memory = { peak_bytes: peak, reserved_bytes: reservedBytes, over: peak !== null && peak > reservedBytes, basis: sized.basis,
       grant_bytes: limitOf(step.name, owned), grown_bytes: owned.grown, bound_bytes: scope.workerLimit,supervisor_bound_bytes:scope.limits.max,
       killed: events === null ? null : events.own_oom > 0 ? events.oom_kill : 0 };
@@ -1351,17 +1351,17 @@ function start(step, slots, rider = false) {
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;
     try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
-    catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
+    catch (error) {if(isCommandExit(error))throw error; instrument = { kind: "invalid-instrument", reason: error.message }; }
     if (!instrument && captureProblem) instrument = { kind: "tooling-setup", reason: captureProblem };
     if(!instrument&&step.name==='typescript-oracles'&&code===0&&!signal){
       try{
         typeScriptOracleReference=typeScriptOracleHandoff(join(typeScriptOracleDirectory(env),'results'));
         extra.oracle_reference=typeScriptOracleReference;
-      }catch(error){instrument={kind:'tooling-setup',reason:'TypeScript oracle reference publication failed: '+error.message};}
+      }catch(error){if(isCommandExit(error))throw error;instrument={kind:'tooling-setup',reason:'TypeScript oracle reference publication failed: '+error.message};}
     }
     if(!instrument&&step.name==='program-oracles'&&code===0&&!signal){
       try{programOracleReference=programOracleHandoff(join(programOracleDirectory(env),'results'));extra.oracle_reference=programOracleReference;}
-      catch(error){instrument={kind:'tooling-setup',reason:'program oracle reference publication failed: '+error.message};}
+      catch(error){if(isCommandExit(error))throw error;instrument={kind:'tooling-setup',reason:'program oracle reference publication failed: '+error.message};}
     }
     if (cleanupError || spawnError) {
       const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
@@ -1418,7 +1418,7 @@ function stop(why) {
   pending = [];
   for (const [, r] of running) {
     try { r.scope.kill(); }
-    catch (error) { scopeCleanup = { state: "error", reason: `cannot cancel ${r.scope.slice}: ${error.message}` }; }
+    catch (error) {if(isCommandExit(error))throw error; scopeCleanup = { state: "error", reason: `cannot cancel ${r.scope.slice}: ${error.message}` }; }
   }
   if (running.size === 0 && !preparing) done();
 }
@@ -1456,7 +1456,7 @@ function pinBinaries() {
     const all = readdirSync(PIN_ROOT).map((n) => ({ n, t: statSync(join(PIN_ROOT, n)).mtimeMs })).sort((a, b) => b.t - a.t);
     utimesSync(dir, new Date(), new Date());
     for (const old of all.slice(10)) if (old.n !== hash) rmSync(join(PIN_ROOT, old.n), { recursive: true, force: true });
-  } catch (e) {
+  } catch (e) {if(isCommandExit(e))throw e;
     // Unpinned is how every run before this one worked; say so and go on.
     process.stderr.write(`run.mjs: could not pin the binaries (${e.message}); steps run ${ntsBin} in place\n`);
     for (const k of Object.keys(pinned)) delete pinned[k];
@@ -1519,7 +1519,7 @@ function writeSummary() {
   let oracleSetup;
   const setupLog=join(RUN_DIR,"oracle-setup.log");
   try { if(!existsSync(setupLog))writeFileSync(setupLog,"");oracleSetup=captureCost(null,setupLog); }
-  catch(error){oracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
+  catch(error){if(isCommandExit(error))throw error;oracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
   const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted,{host})
     : {path:env.TMPDIR,state:"kept: rows still running"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
@@ -1603,7 +1603,7 @@ function writeSummary() {
     const latest = join(dirname(RUN_DIR), "latest");
     rmSync(latest, { force: true });
     symlinkSync(RUN_DIR, latest);
-  } catch (e) {
+  } catch (e) {if(isCommandExit(e))throw e;
     process.stderr.write(`could not write the summary files: ${e.message}\n`);
   }
   if (RECORD_TIMES) recordTimes();
@@ -1651,14 +1651,14 @@ function takeTreeLock() {
     try {
       writeFileSync(LOCK, `${process.pid} ${RUN_DIR}\n`, { flag: "wx" });
       releaseTreeLock=()=>{
-        try { if (readFileSync(LOCK, "utf8").startsWith(`${process.pid} `)) rmSync(LOCK, { force: true }); } catch {}
+        try { if (readFileSync(LOCK, "utf8").startsWith(`${process.pid} `)) rmSync(LOCK, { force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;}
       };
       return;
-    } catch (e) {
+    } catch (e) {if(isCommandExit(e))throw e;
       if (e.code !== "EEXIST") throw e;
       const [pid, dir] = readFileSync(LOCK, "utf8").trim().split(" ");
       let alive = false;
-      try { process.kill(Number(pid), 0); alive = true; } catch (k) { alive = k.code === "EPERM"; }
+      try { process.kill(Number(pid), 0); alive = true; } catch (k) {if(isCommandExit(k))throw k; alive = k.code === "EPERM"; }
       if (alive) usage(`another gate (pid ${pid}, logs ${dir}) is running in this tree; its steps write the same target/ paths`);
       rmSync(LOCK, { force: true });
     }
@@ -1706,11 +1706,11 @@ registerCommandCloser('gate run resources '+RUN_DIR,{
     growth?.controller.abort();clearTimeout(outrankedLook);clearInterval(costClock);clearInterval(memoryClock);
     /** @type {unknown[]} */
     const failures=[];
-    try{tok.close();}catch(error){failures.push(error);}
-    try{await tok.closed;}catch(error){failures.push(error);}
-    try{scopes?.close();}catch(error){failures.push(error);}
-    try{reservation?.release();}catch(error){failures.push(error);}
-    try{await reservation?.closed;}catch(error){failures.push(error);}
+    try{tok.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{await tok.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{scopes?.close();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{reservation?.release();}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
+    try{await reservation?.closed;}catch(error){if(isCommandExit(error))throw error;failures.push(error);}
     if(failures.length===1)throw failures[0];
     if(failures.length)throw new AggregateError(failures,'gate run resources failed to close');
   },
@@ -1734,12 +1734,12 @@ function settings() {
   let cgroup = "";
   try {
     const path = readFileSync("/proc/self/cgroup", "utf8").trim().split("\n").pop().split("::").pop();
-    const read = (f) => { try { return readFileSync(join("/sys/fs/cgroup", path, f), "utf8").trim(); } catch { return "?"; } };
+    const read = (f) => { try { return readFileSync(join("/sys/fs/cgroup", path, f), "utf8").trim(); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; return "?"; } };
     cgroup = `  cgroup ${path}: memory.max ${read("memory.max")}, memory.high ${read("memory.high")}, cpu.max ${read("cpu.max")}\n`;
-  } catch {}
+  } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;}
   // The reading the memory ledger decides by.
   let memory = "memory unread";
-  try { const m = machineMemory(env); memory = `${(m.totalBytes / GiB).toFixed(1)}G total, ${(m.availableBytes / GiB).toFixed(1)}G available`; } catch {}
+  try { const m = machineMemory(env); memory = `${(m.totalBytes / GiB).toFixed(1)}G total, ${(m.availableBytes / GiB).toFixed(1)}G available`; } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;}
   return `  machine: ${cores} cores, ${memory}, load ${readFileSync("/proc/loadavg", "utf8").split(" ").slice(0, 3).join(" ")}\n` +
     cgroup + `  environment:\n${lines.join("\n")}\n`;
 }
@@ -1749,14 +1749,14 @@ function settings() {
 // reservation. Without either, no step can run.
 let setupFailure, dependencySealFailure;
 try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); }
-catch (error) { setupFailure = `step scope setup failed: ${error.message}`; }
+catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
 if (!setupFailure) {
   try { await reserveMemory(); }
-  catch (error) { if (!stopping) setupFailure = error.message; }
+  catch (error) {if(isCommandExit(error))throw error; if (!stopping) setupFailure = error.message; }
 }
 if (!setupFailure && !stopping) {
   try { normalized = await sealOracleRun(normalized,startupAbort.signal); env = normalized.env; }
-  catch (error) { dependencySealFailure = error; }
+  catch (error) {if(isCommandExit(error))throw error; dependencySealFailure = error; }
 }
 if (!stopping && !setupFailure && !dependencySealFailure) {
   tokenAddr = await tok.start();

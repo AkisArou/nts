@@ -1,5 +1,6 @@
 // Process signals have one policy owner. Libraries register named resources.
 import type {Node} from 'typescript/ast';
+import {posix} from 'node:path';
 import {SourceFacts} from './source-facts.ts';
 
 export const COMMAND_SIGNAL_OWNER='tooling/differential/command-entry/main.ts';
@@ -10,6 +11,25 @@ const methods=new Set(['on','once','addListener','prependListener','prependOnceL
 export function inspectCommandSignals(facts:SourceFacts):string[]{
   if(facts.file===COMMAND_SIGNAL_OWNER)return [];
   const ast=facts.ast,problems:string[]=[];
+  const entryMethod=(node:Node,method:string):boolean=>{
+    const called=facts.name(node),suffix='.'+method;
+    return called.endsWith(suffix)&&posix.normalize(posix.join(posix.dirname(facts.file),called.slice(0,-suffix.length)))===COMMAND_SIGNAL_OWNER;
+  };
+  const ownsResources=facts.calls.some(call=>entryMethod(call.expression,'registerCommandCloser'));
+  if(ownsResources&&facts.calls.some(call=>entryMethod(call.expression,'exitCommand'))){
+    for(const node of facts.ofKind(ast.SyntaxKind.CatchClause)){
+      if(!ast.isCatchClause(node))continue;
+      const variable=node.variableDeclaration?.name,first=node.block.statements[0];
+      let safe=false;
+      if(variable&&ast.isIdentifier(variable)&&first&&ast.isIfStatement(first)&&ast.isCallExpression(first.expression)){
+        const call=first.expression,arg=call.arguments[0],body=first.thenStatement;
+        const thrown=ast.isBlock(body)?body.statements[0]:body;
+        safe=entryMethod(call.expression,'isCommandExit')&&arg!==undefined&&ast.isIdentifier(arg)&&arg.text===variable.text
+          &&thrown!==undefined&&ast.isThrowStatement(thrown)&&thrown.expression!==undefined&&ast.isIdentifier(thrown.expression)&&thrown.expression.text===variable.text;
+      }
+      if(!safe)problems.push(`${facts.file}:${facts.line(node.pos)}: a resource-owning exitCommand entry must rethrow isCommandExit before classifying a caught error`);
+    }
+  }
   const name=(input:Node,seen=new Set<Node>()):string|undefined=>{
     const node=facts.unwrap(input);if(seen.has(node))return;seen.add(node);
     if(ast.isIdentifier(node)){
@@ -61,6 +81,9 @@ export function inspectCommandSignals(facts:SourceFacts):string[]{
       args=list&&ast.isArrayLiteralExpression(list)?list.elements:[];
     }
     args=[...bound(target),...args];
+    if(ownsResources&&called==='process.exit'){
+      problems.push(`${facts.file}:${facts.line(call.pos)}: process.exit bypasses command resources; use the command entry's exitCommand transfer`);continue;
+    }
     let event:Node|undefined,relevant=false;
     if(called?.startsWith('process.')){
       const method=called.slice('process.'.length);

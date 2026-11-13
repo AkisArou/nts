@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 // Does what `emit-llvm` emits assemble?
 //
@@ -61,7 +61,7 @@ const WORKERS = Number(process.env.NTS_ASSEMBLES_JOBS ?? 4);
 
 if (!existsSync(SOURCE)) {
   console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
-  process.exit(2);
+  exitCommand(2);
 }
 // IR for a runtime module is megabytes: under ~/.cache, never the /tmp tmpfs.
 const base = join(homedir(), ".cache/nts-assembles");

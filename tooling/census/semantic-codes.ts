@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which checker codes does valid test262 JavaScript draw once the checker
 // type-checks it (`checkJs: true`)? The measurement that decides which of
 // TypeScript's semantic codes nts may treat as an ECMAScript early error.
@@ -103,7 +103,7 @@ function measure(dir, record) {
     let body;
     try {
       body = readFileSync(file, "utf8");
-    } catch {
+    } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
       return resolve({ path: record.path, unread: true });
     }
     workspace(dir);
@@ -127,7 +127,7 @@ function measure(dir, record) {
       try {
         result = responseOf(stdout, status, expectedChecker);
         if (!result.files.includes(join(dir, "src/main.js"))) throw new Error("the test file was absent from the diagnostic scope");
-      } catch (error) {
+      } catch (error) {if(isCommandExit(error))throw error;
         return resolve({ path: record.path, failed: String(error), output: (stdout + stderr).slice(-2000) });
       }
       resolve({ path: record.path, negative: record.negative ? record.negative.phase : null, module: flagsOf(body).includes("module"), codes: codesOf(result.diagnostics) });
@@ -156,12 +156,12 @@ function selfTest() {
   const wrong = { ...expected, typescript_commit: "c".repeat(40) };
   const patched = { ...expected, patches: [{id: "yield-recovery", sha256: "d".repeat(64)}] };
   let patchRejected = false;
-  try { responseOf(JSON.stringify(clean), 0, patched); } catch { patchRejected = true; }
+  try { responseOf(JSON.stringify(clean), 0, patched); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; patchRejected = true; }
   if (!patchRejected) return "an unpatched diagnostic instrument answered a patched audit";
   responseOf(JSON.stringify({...clean, checker: patched}), 0, patched);
   for (const [result, status] of [[{ ...clean, checker: wrong }, 0], [{ ...clean, checker: null }, 0], [{ ...clean, checker_count: 4 }, 0], [{ ...clean, files: [] }, 0], [{ ...clean, status: "failed" }, 0], [{ ...clean, diagnostics: [{}] }, 0], [clean, 2]]) {
     let rejected = false;
-    try { responseOf(JSON.stringify(result), status, expected); } catch { rejected = true; }
+    try { responseOf(JSON.stringify(result), status, expected); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; rejected = true; }
     if (!rejected) return "an untrusted diagnostic response was counted";
   }
   return null;
@@ -170,11 +170,11 @@ function selfTest() {
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (argv.includes("--self-test")) {
   console.log("  self-test: raw checker codes read, the stand-in's left out, one code per file");
-  process.exit(0);
+  exitCommand(0);
 }
 
 let records = unders.flatMap(population);

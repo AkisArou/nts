@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 // Which refusal *messages* moved between two compilers, over both corpora.
 //
 //   node tooling/census/messages.ts <before-nts> <after-nts> [project ...]
@@ -129,30 +129,30 @@ const argv = process.argv.slice(2);
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (argv.includes("--self-test")) {
   console.log("  self-test: occurrences count a repeat, sites are distinct, type ids normalise together, and two different messages stay two");
-  process.exit(0);
+  exitCommand(0);
 }
 
 const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
   console.log("  usage: messages.ts <before-nts> <after-nts> [project ...] [--one-change]");
-  process.exit(2);
+  exitCommand(2);
 }
 for (const bin of [beforeBin, afterBin]) {
   if (!existsSync(bin)) {
     console.log(`  NOT MEASURED: no compiler at ${bin}`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 if (argv.includes("--one-change")) {
   const why = oneChange(beforeBin, afterBin);
   if (why) {
     console.log(`  NOT MEASURED: --one-change, and ${why}`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // `cargo test --workspace --no-fail-fast`, with the test binaries run at once.
 //
 //   node tooling/gate/tests.mjs          (the gate's `tests` step)
@@ -42,9 +42,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 try {
   const layout=assertTestLayout(ROOT);
   console.log(`  Rust integration layout: ${layout.harnesses.length} checked harnesses`);
-} catch(error) {
+} catch(error) {if(isCommandExit(error))throw error;
   console.log(`  NOT MEASURED: Rust integration layout: ${String(error)}`);
-  process.exit(2);
+  exitCommand(2);
 }
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
 const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
@@ -54,12 +54,12 @@ registerCommandCloser('scratch gate/tests.mjs',{close:()=>rmSync(work,{recursive
 const host = /^host: (.+)$/m.exec(spawnSync("rustc", ["-vV"], { encoding: "utf8" }).stdout ?? "")?.[1];
 if (!host) {
   console.log("  NOT MEASURED: `rustc -vV` names no host triple, so no runner can be set");
-  process.exit(2);
+  exitCommand(2);
 }
 const runnerVar = `CARGO_TARGET_${host.toUpperCase().replace(/[-.]/g, "_")}_RUNNER`;
 if (process.env[runnerVar]) {
   console.log(`  NOT MEASURED: ${runnerVar} is already set (${process.env[runnerVar]}); this step would replace it`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 // The recorder: one JSON file per call, numbered in the order cargo made them.
@@ -93,12 +93,12 @@ if (first.status !== 0) {
   // A compile error, or a doctest that failed: cargo's own output says which.
   console.log(firstOut.split("\n").filter((l) => /^(error|warning: unused|test .* FAILED|failures:|---- )/.test(l)).slice(0, 60).join("\n"));
   console.log(`  test-profile workspace (building, doctests, recording) exited ${first.status ?? first.signal}`);
-  process.exit(1);
+  exitCommand(1);
 }
 const doctests = (firstOut.match(/^\s+Doc-tests /gm) ?? []).length;
 if (recorded.length === 0) {
   console.log(`  NOT MEASURED: cargo ran no test binary through ${runnerVar}, so nothing was tested`);
-  process.exit(1);
+  exitCommand(1);
 }
 
 // The replay.

@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 // Did a change *gain* test262 cases? Re-run only the cases whose recorded
 // reason it could have moved, under the binary before and the binary after.
 //
@@ -118,22 +118,22 @@ const argv = process.argv.slice(2);
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
+  exitCommand(2);
 }
 if (argv.includes("--self-test")) {
   console.log("  self-test: fixed, worse, moved, same and not measured each classified, negatives by their judged outcome");
-  process.exit(0);
+  exitCommand(0);
 }
 
 const { opts, rows: rowFiles } = parse(argv);
 if (rowFiles.length === 0 || !opts.before || !opts.after) {
   console.log("  usage: rerun.ts --rows <rows> ... <filters> --before <nts> --after <nts> [--jobs N] [--list N]");
-  process.exit(2);
+  exitCommand(2);
 }
 for (const bin of [opts.before, opts.after]) {
   if (!existsSync(bin)) {
     console.log(`  NOT MEASURED: no compiler at ${bin}`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 
@@ -152,7 +152,7 @@ for (const r of selected) {
 }
 console.log(`  ${selected.length} recorded case(s) match, in ${[...byDir].map(([d, p]) => `${d} ${p.length}`).join(", ") || "nothing"}`);
 for (const line of armLines(opts.before, opts.after)) console.log(`  ${line}`);
-if (selected.length === 0) process.exit(0);
+if (selected.length === 0) exitCommand(0);
 
 // --- two arms ------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ function arm(name, bin, dir, paths) {
   });
   if (!existsSync(out) || !existsSync(json)) {
     console.log(`  NOT MEASURED: the ${name} arm over ${dir} wrote no ${existsSync(out) ? "outcomes" : "rows"} -- ${`${run.stdout}${run.stderr}`.trim().split("\n").slice(-2).join(" / ")}`);
-    process.exit(2);
+    exitCommand(2);
   }
   const rows = readRows(readFileSync(out, "utf8"));
   const outcomes = JSON.parse(readFileSync(json, "utf8")).outcomes ?? {};

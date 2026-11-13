@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {fileURLToPath} from "node:url";
 // Node's own test suite, run against our implementation of a node module.
 //
@@ -145,11 +145,11 @@ if (!moduleName) {
     "usage: run.mjs --module <name> [--addon <path.node>] [--only <file>] " +
       "[--verbose] [--json] [--sabotage]",
   );
-  process.exit(2);
+  exitCommand(2);
 }
 if (!existsSync(PARALLEL_SUITE)) {
   console.error(`no node checkout at ${PARALLEL_SUITE}; see the clone command in .gitignore`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 // Some of node's tests spawn `process.execPath` and assert on what the child
@@ -205,7 +205,7 @@ if (!existsSync(moduleDir)) {
     `no module at runtime/node/${moduleName}. ` +
       `An empty run would report 0 passed and 0 failed, which is not the same answer.`,
   );
-  process.exit(2);
+  exitCommand(2);
 }
 
 // A module's tests are `test-<module>.js` and `test-<module>-*.js`. Node also
@@ -244,7 +244,7 @@ if (existsSync(additionalSuitesPath)) {
     const suite = join(ROOT, "third_party/node/test", suiteName);
     if (!existsSync(suite)) {
       console.error(`no configured Node test suite at ${suite}`);
-      process.exit(2);
+      exitCommand(2);
     }
     if (suiteName.endsWith(".js") || suiteName.endsWith(".mjs")) {
       upstream.push({ name: suiteName, path: suite });
@@ -289,14 +289,14 @@ if (only !== null) {
       console.error(
         `ambiguous --only ${only}; use one of: ${byBasename.map((test) => test.name).join(", ")}`,
       );
-      process.exit(2);
+      exitCommand(2);
     }
     tests = byBasename;
   }
 }
 if (only !== null && tests.length === 0) {
   console.error(`no test named ${only} for module ${moduleName}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 /**
@@ -370,7 +370,7 @@ const nodePackageJson = join(ROOT, "third_party/node/package.json");
 if (!existsSync(nodePackageJson)) {
   try {
     writeFileSync(nodePackageJson, '{ "type": "commonjs" }\n');
-  } catch (error) {
+  } catch (error) {if(isCommandExit(error))throw error;
     // A read-only or absent checkout is not this runner's problem to solve, but it
     // says so rather than passing silently. The first version of this block
     // swallowed a `ReferenceError` -- `writeFileSync` was never imported -- and the
@@ -455,7 +455,7 @@ function processesAfterFile() {
       remaining.push({ pid, ...processActivity(readFileSync(`/proc/${pid}/stat`, "utf8")),
         state: /^State:\s+(\S+)/m.exec(status)?.[1],
         command: readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean) });
-    } catch (error) {
+    } catch (error) {if(isCommandExit(error))throw error;
       if (error.code !== "ENOENT" && error.code !== "ESRCH") throw error;
     }
   }
@@ -485,7 +485,7 @@ const haveScript = () => {
     try {
       execFileSync("script", ["--version"], { stdio: "ignore", env: environment });
       ptyAvailable = true;
-    } catch {
+    } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
       ptyAvailable = false;
     }
   }
@@ -526,7 +526,7 @@ if (addon !== null && !sabotage && !emptyExports
       [fileURLToPath(new URL("./shaped-surface.mjs",import.meta.url)), dirname(resolvePath(addon)), moduleName],
       { encoding: "utf8", env: environment },
     );
-  } catch (error) {
+  } catch (error) {if(isCommandExit(error))throw error;
     // A non-zero exit is this check's way of saying "something publishes nothing",
     // so the output is what matters and the status is not an error here.
     published = `${error.stdout ?? ""}${error.stderr ?? ""}`;
@@ -565,10 +565,10 @@ if(!publishesNothing){
   try{members=await prepareOracles([{key:moduleName,options:{...plan,project:null,directory:own}}],{
     directory:own,toolchain:oracleToolchainLocation(),workers:1,env:environment,
     report:message=>process.stderr.write(message+'\n'),
-  });}catch(error){process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
+  });}catch(error){if(isCommandExit(error))throw error;process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
   const member=members[moduleName];
   try{preparedModule=preparedOracle(member,'Node preparation');}
-  catch(error){process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
+  catch(error){if(isCommandExit(error))throw error;process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
 }
 for (const test of publishesNothing ? [] : tests) {
   const { name } = test;
@@ -641,7 +641,7 @@ for (const test of publishesNothing ? [] : tests) {
           ? { kind: "fail", why: "no result from the child" }
           : { kind: "skip", why: skipReason };
     }
-  } catch (e) {
+  } catch (e) {if(isCommandExit(e))throw e;
     // A non-zero exit *after* a result was reported means an exit handler
     // threw. Many of node's tests do their real assertion in
     // `process.on('exit')`, so this is a failure the child could not know
@@ -722,7 +722,7 @@ for (const test of publishesNothing ? [] : tests) {
     }
     if (!keepTemp) removeTestTmpDir(testTmpDir(tmpRoot, tmpId));
     try { processObservations.push({ after: name, remaining: processesAfterFile() }); }
-    catch (error) { processObservations.push({ after: name, error: error.message }); }
+    catch (error) {if(isCommandExit(error))throw error; processObservations.push({ after: name, error: error.message }); }
   }
   rows.push({ name, ...result });
 }

@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {bundledDependencies} from './node-deps.mjs';
@@ -61,7 +61,7 @@ let childSequence = 0;
 registerCommandCloser('scratch conformance/blockers-check.mjs',{close:()=>{
   if (worker) return; // The parent owns cleanup, including failed workers' artifacts.
   if (process.env.NTS_KEEP_TEMP === undefined && !retainRun) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -107,7 +107,7 @@ const napiInclude = () => {
       candidates.map((p) => `    ${p}`).join("\n") +
       "\n  run tooling/bootstrap/bootstrap.sh, or set NTS_NAPI_INCLUDE.",
   );
-  process.exit(2);
+  exitCommand(2);
 };
 const NAPI = napiInclude();
 
@@ -115,7 +115,7 @@ const compiler = process.env.NTS_COMPILER ?? process.env.NTS_BIN ??
   join(ROOT, "target/release/nts");
 if (!existsSync(compiler)) {
   console.error(`no compiler at ${compiler}; the compiler session builds it`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 /** The `// expect:` lines at the top of a fixture, joined. */
@@ -858,7 +858,7 @@ if (worker) {
       unexpected += result.unexpected;
       retainRun ||= result.retainRun;
     });
-  } catch (error) {
+  } catch (error) {if(isCommandExit(error))throw error;
     retainRun = true;
     throw error;
   }

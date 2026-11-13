@@ -1,4 +1,4 @@
-import {registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser, exitAfterOutput} from '../differential/command-entry/main.ts';
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 import memberCatalogue from "../../compiler/codegen/jvm/member-names.json" with {type: "json"};
@@ -134,16 +134,16 @@ const WORKERS = Number(process.env.NTS_JVM_VERIFIES_JOBS ?? 4);
 {
   const printing = process.argv.includes("--self-test");
   const bad = selfTest(printing);
-  if (printing) process.exit(bad === 0 ? 0 : 1);
+  if (printing) exitCommand(bad === 0 ? 0 : 1);
   if (bad !== 0) {
     console.log(`  NOT MEASURED: the pin's self-test failed (${bad} arm(s)); run with --self-test`);
-    process.exit(2);
+    exitCommand(2);
   }
 }
 
 if (!existsSync(SOURCE)) {
   console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
-  process.exit(2);
+  exitCommand(2);
 }
 const base = join(homedir(), ".cache/nts-jvm-verifies");
 mkdirSync(base, { recursive: true });
@@ -171,18 +171,18 @@ if (process.argv.includes("--stale")) {
   if (missing.length > 0 || incomplete.length > 0) {
     for (const r of missing) console.log(`  NOT MEASURED: no ${r.corpus} record for this compiler (${FINGERPRINT}); run jvm-verifies${r.corpus === "outcomes" ? " --outcomes" : ""} first`);
     for (const r of incomplete) console.log(`  NOT MEASURED: the ${r.corpus} run could not measure every project, so it cannot say what is absent`);
-    process.exit(1);
+    exitCommand(1);
   }
   const rows = readDeclines();
   const stale = staleRows([...rows.keys()], records.map((r) => r.record.shapes));
   for (const shape of stale) console.log(`  ^ no longer declined in either corpus: ${shape} (${rows.get(shape).verdict}) -- remove it from tooling/conformance/jvm-declines.known, or re-verdict it`);
   console.log(`  jvm-declines.known: ${rows.size - stale.length} of ${rows.size} row(s) still declined, ${stale.length} stale`);
-  process.exit(0);
+  exitCommand(0);
 }
 try {
   const retention = retainRecentFailures(base, Date.now());
   console.log(`  failure retention: removed ${retention.removed} entries (${(retention.bytes / 2 ** 20).toFixed(1)} MiB), kept ${retention.kept}, ${retention.marked} of them marked KEEP`);
-} catch (error) {
+} catch (error) {if(isCommandExit(error))throw error;
   // Evidence housekeeping cannot turn a completed verifier into a wrong answer.
   console.warn(`  failure retention: cleanup incomplete: ${error.message}`);
 }
@@ -221,9 +221,9 @@ const projects = (named.length > 0
 let known;
 try {
   known = parseKnown(existsSync(KNOWN) ? readFileSync(KNOWN, "utf8") : "");
-} catch (error) {
+} catch (error) {if(isCommandExit(error))throw error;
   console.log(`  ${error.message}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 const run = (cmd:string, args:string[], timeout = 900_000, childEnvironment:NodeJS.ProcessEnv = env) =>
@@ -302,7 +302,7 @@ function readVerify(text) {
   const unpaired = lines("UNPAIRED");
   for (const line of invalid) {
     try { siteOf(line); }
-    catch (error) { unpaired.push(error.message); }
+    catch (error) {if(isCommandExit(error))throw error; unpaired.push(error.message); }
   }
   return { invalid, unpaired, missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: [...lines("SHADOWED"), ...lines("UNFILLED").map((l) => `unfilled ${l}`)], verified: Number(summary[1]), total: Number(summary[2]) };
 }
@@ -335,7 +335,7 @@ function parseKnown(text) {
           }
         }
         pin = new Set(sites.map((site) => JSON.stringify(site)));
-      } catch {
+      } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit;
         throw new Error(`cannot read the pin on ${project}: \`${[field, ...rest].join("\t")}\``);
       }
     }
@@ -348,7 +348,7 @@ function parseKnown(text) {
 function siteOf(line) {
   let value;
   try { value = JSON.parse(line); }
-  catch { throw new Error("unreadable structured INVALID finding"); }
+  catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; throw new Error("unreadable structured INVALID finding"); }
   if (!value || typeof value.class !== "string" || value.class.length === 0
       || !(value.method === null || typeof value.method === "string" && value.method.length > 0)
       || !(value.descriptor === null || typeof value.descriptor === "string" && value.descriptor.length > 0)
@@ -454,7 +454,7 @@ function selfTest(printing) {
     ["an incomplete opaque identity", 'm/x\twhy\tpin: invalid=[["Program"]]'],
   ]) {
     let refused = false;
-    try { parseKnown(text); } catch (error) { refused = error.message.startsWith("cannot read the pin on m/x"); }
+    try { parseKnown(text); } catch (error) {if(isCommandExit(error))throw error; refused = error.message.startsWith("cannot read the pin on m/x"); }
     if (!refused) bad++;
     if (printing) console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
   }
@@ -473,7 +473,7 @@ function selfTest(printing) {
   const reasonScanned = withoutRecordedMethods(memberCatalogue, record.replace("why", opaque)).includes(memberCatalogue.prefix);
   let badEscapeRejected = false;
   try { withoutRecordedMethods(memberCatalogue, record.replace("$23$", "$023$")); }
-  catch { badEscapeRejected = true; }
+  catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; badEscapeRejected = true; }
   const recordSchema = recordMasked && reasonScanned && badEscapeRejected
     && sourceName(memberCatalogue, opaque)?.key === "東京#parse.";
   if (!recordSchema) bad++;
@@ -602,7 +602,7 @@ async function check(project, slot) {
   const flags = [...vmToolFlags(JAVA), "-Xverify:all"];
   let verifierEnv;
   try { verifierEnv = verifierEnvironment(JAVA); }
-  catch (error) { unmeasured.push(`${project}: ${error.message}`); return; }
+  catch (error) {if(isCommandExit(error))throw error; unmeasured.push(`${project}: ${error.message}`); return; }
   const inputs = () => {
     return { files: [
       ...artifactFiles(out), ...artifactFiles(compiledDriver.directory,"verifier-driver"), { name: "verifier-driver-source", path: DRIVER },

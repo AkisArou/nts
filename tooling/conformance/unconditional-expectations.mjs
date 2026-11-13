@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Fixture expectations that name text the emitter writes unconditionally.
 //
 //   node tooling/conformance/unconditional-expectations.mjs
@@ -69,7 +69,7 @@ const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-unconditionalexpectations-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 registerCommandCloser('scratch conformance/unconditional-expectations.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -82,7 +82,7 @@ const compiler = process.env.NTS_BIN ?? process.env.NTS_COMPILER ?? join(ROOT, "
 
 if (!existsSync(compiler)) {
   console.error(`no compiler at ${compiler}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 // A program sharing nothing with any fixture: no class, no closure, no rest
@@ -108,7 +108,7 @@ const run = spawnSync(
 );
 if (run.status !== 0 && !existsSync(join(work, "out/addon.c"))) {
   console.error(`the control program did not emit: ${(run.stdout ?? "") + (run.stderr ?? "")}`.slice(0, 400));
-  process.exit(3);
+  exitCommand(3);
 }
 
 let blob = "";

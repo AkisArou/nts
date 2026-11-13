@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {bundledDependencies} from './node-deps.mjs';
 // A compiled program that answers differently from node.
 //
@@ -61,13 +61,13 @@ const compiler = process.env.NTS_BIN ?? process.env.NTS_COMPILER ?? join(ROOT, "
 
 if (!existsSync(compiler)) {
   console.error(`no compiler at ${compiler}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-agreement-"));
 registerCommandCloser('scratch conformance/agreement.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -204,7 +204,7 @@ for (const name of names) {
     if (compiledSide.notLoaded.some((n) => n.call === c.call)) continue;
     let theirs;
     try { theirs = typeof onNode[c.call] === "function" ? onNode[c.call]() : "(not exported)"; }
-    catch (e) { theirs = `threw: ${String(e && e.message).slice(0, 60)}`; }
+    catch (e) {if(isCommandExit(e))throw e; theirs = `threw: ${String(e && e.message).slice(0, 60)}`; }
     const ours = compiledSide.answers[c.call];
     compared += 1;
     if (!Object.is(ours, theirs)) {
@@ -251,7 +251,7 @@ for (const name of names) {
 if (names.length === 0) {
   console.log("  INSTRUMENT FAILURE: no case directory found under agreements/.");
   console.log("  An empty run is not a clean run.");
-  process.exit(2);
+  exitCommand(2);
 }
 console.log(`\n  ${compared} case(s) compared, ${disagreeing} disagreeing, ${refusedTotal} refused, ` +
   `${notLoadedTotal} that did not load, ${unbuilt} case(s) that did not build.`);

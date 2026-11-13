@@ -1,4 +1,4 @@
-import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which compiler blocker gates a module's public API, and how much it costs.
 //
 //   node tooling/conformance/blockers.mjs path
@@ -44,7 +44,7 @@ const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-blockers-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 registerCommandCloser('scratch conformance/blockers.mjs',{close:()=>{
   if (process.env.NTS_KEEP_TEMP === undefined) {
-    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch(__ntsCommandExit) {if(isCommandExit(__ntsCommandExit))throw __ntsCommandExit; /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
   }
@@ -98,13 +98,13 @@ if (argv.includes("--all")) {
   if (unreadable.length > 0) {
     console.log(`\n${unreadable.length} module(s) could not be read: ${unreadable.join(", ")}`);
   }
-  process.exit(0);
+  exitCommand(0);
 }
 
 const module = argv.find((a) => !a.startsWith("--"));
 if (module === undefined) {
   console.error("usage: blockers.mjs <module> [--log <emit-c output>]   |   blockers.mjs --all");
-  process.exit(2);
+  exitCommand(2);
 }
 const logFlag = argv.indexOf("--log");
 const savedLog = logFlag < 0 ? undefined : argv[logFlag + 1];
@@ -114,7 +114,7 @@ const compiler = process.env.NTS_COMPILER ?? process.env.NTS_BIN ??
 const tsconfig = join(ROOT, "runtime/node", module, "tsconfig.json");
 if (!existsSync(tsconfig)) {
   console.error(`no such module: ${module}`);
-  process.exit(2);
+  exitCommand(2);
 }
 
 function nts(args) {
