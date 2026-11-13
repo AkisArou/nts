@@ -818,6 +818,11 @@ A leaf that an oracle preload reaches lives in its own directory with a one-file
   A real sampling control declares a live monotonic clock: a fixed or file
   clock does not advance while its child sleeps. A manually driven bridge
   control advances its supplied clock explicitly after readiness.
+  Timer and connection-deadline tests deliver captured scheduler events rather
+  than sleeping until a short timeout should have fired. A supplied scheduler
+  is borrowed and stays open when its consumer closes; a default scheduler is
+  owned by that consumer. Real socket and TLS controls wait on connection and
+  completion events, with only a wedged-fixture hang guard.
   Compiled-call supervision supplies its Rust `Probe` with the clock and
   process observations together. After killing an owned group, cleanup waits
   for observed exit under a generous wedged-instrument backstop. Expiry names
@@ -853,6 +858,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Tests supply scheduling decisions:** firing and cancellation are events
+  supplied to the existing scheduling owner; real-process controls prove wiring
+  behind readiness. This keeps a loaded machine from changing an assertion's
+  meaning and makes borrowed scheduler lifetime explicit
+  ([log](records/notebooks/decisions-log.md#test-scheduling-is-supplied-11-13)).
 
 - **Oracle-preload leaves own one-file projects:** shared pure helpers reached by
   an oracle preload live in their own directory with a one-file `tsconfig.json`.

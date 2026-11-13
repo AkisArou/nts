@@ -2708,3 +2708,14 @@ scope_cleanup result and an empty ledger. A private startup barrier also proves
 Chromium cancellation after profile acquisition removes the profile without
 launching a child. The source audit borrows the shared lexical facts and rejects
 signal listeners, aliases and unknown event names outside the entry owner.
+
+## Test scheduling is supplied (11-13)
+
+#756 moves timer expiry and cancellation in the Java networking controls to
+captured tasks supplied through the existing scheduler interface. The default
+scheduler remains owned; an injected scheduler is borrowed. The real TLS cases
+wait for connections and completion under a wedged-fixture guard, rather than
+requiring a handshake to beat a short deadline. Bounded-entry wiring likewise
+keeps readiness and observed exit separate from its supplied inactivity policy.
+The native addon control validates ownership before it acquires workers, and
+distinguishes a guard/KILL result from a native crash.
