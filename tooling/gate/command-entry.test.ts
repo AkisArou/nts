@@ -127,6 +127,20 @@ runAsCommand(import.meta.url,()=>{registerCommandCloser('owned',{close:async()=>
  }
 });
 
+test('an unsettled main drains its unref resource and decides exit13 only at actual exit',t=>{
+ const root=testScratch(t,'command-pending-resource');
+ for(const settled of [false,true]){
+  const file=join(root,String(settled)+'.mjs');
+  writeFileSync(file,`import {runAsCommand,registerCommandCloser} from ${JSON.stringify(helper)};
+runAsCommand(import.meta.url,async()=>{
+ registerCommandCloser('unref resource',{close:async()=>{await Promise.resolve();process.stdout.write('closed');}});
+ ${settled?"await new Promise(resolve=>process.once('beforeExit',resolve));return 7;":"await new Promise(()=>{});"}
+});`);
+  const result=run(file);assert.equal(result.stdout,'closed');assert.equal(result.status,settled?7:13,result.stderr);
+  if(settled)assert.equal(result.stderr,'');else assert.match(result.stderr,/main did not settle before the event loop drained/);
+ }
+});
+
 test('a real SIGTERM keeps the broker alive for its worker retirement and exits 143',async t=>{
  const root=testScratch(t,'command-signal-retirement'),file=join(root,'subject.mjs'),ready=join(root,'ready.json'),done=join(root,'done.json');
  writeFileSync(file,`import assert from 'node:assert/strict';import {createServer,connect} from 'node:net';import {once} from 'node:events';

@@ -77,7 +77,7 @@ class CommandExit{readonly code:number;constructor(code:number){this.code=code;}
 /** Early command completion passes through the same drain as a return. */
 export function exitCommand(code:number):never{throw new CommandExit(code);}
 
-type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;trackedMain:boolean;finish:(code:number,reason?:CloseReason)=>Promise<void>};
+type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;signal?:CommandSignal;finish:(code:number,reason?:CloseReason)=>Promise<void>};
 let owner:ProcessOwner|undefined;
 function processOwner():ProcessOwner{
   if(owner)return owner;
@@ -85,16 +85,23 @@ function processOwner():ProcessOwner{
   const lifetime=new CommandLifetime({report,exit:code=>process.exit(code),arm:(callback,milliseconds)=>{
     const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);
   }});
-  const onSignal=(signal:CommandSignal)=>{void state.finish(signalCode[signal],{kind:'signal',signal}).then(()=>process.exit(signalCode[signal]));};
+  const onSignal=(signal:CommandSignal)=>{
+    state.signal??=signal;
+    void state.finish(signalCode[signal],{kind:'signal',signal}).then(()=>process.exit(signalCode[state.signal!]));
+  };
   const signals={SIGINT:()=>onSignal('SIGINT'),SIGTERM:()=>onSignal('SIGTERM'),SIGHUP:()=>onSignal('SIGHUP')};
-  const failed=(error:unknown)=>{console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure'}).then(()=>process.exit(Number(process.exitCode)||1));};
-  const beforeExit=()=>{if(!state.pendingMain)void state.finish(Number(process.exitCode??0));};
+  const failed=(error:unknown)=>{state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure'}).then(()=>process.exit(Number(process.exitCode)||1));};
+  // An unsettled body can own unref'd resources. Drain those too, but only
+  // the actual exit decides its exit13; another beforeExit listener may
+  // still settle main, whose eventual nonzero status remains authoritative.
+  const beforeExit=()=>{void state.finish(Number(process.exitCode??0));};
   const detach=()=>{
     process.off('beforeExit',beforeExit);process.off('uncaughtException',failed);process.off('unhandledRejection',failed);
     for(const signal of Object.keys(signals) as CommandSignal[])process.off(signal,signals[signal]);
   };
-  const state:ProcessOwner={lifetime,pendingMain:false,trackedMain:false,finish:async(code,reason)=>{
-    process.exitCode=await lifetime.close(code,reason);detach();
+  const state:ProcessOwner={lifetime,pendingMain:false,finish:async(code,reason)=>{
+    const drained=await lifetime.close(code,reason);
+    process.exitCode=state.signal?signalCode[state.signal]:code||drained;detach();
   }};
   owner=state;
   process.on('beforeExit',beforeExit);process.on('uncaughtException',failed);process.on('unhandledRejection',failed);
@@ -119,8 +126,9 @@ export function prepareCommandExec():void{
 export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?:boolean}={}):void{
   const entry=process.argv[1];
   if(!entry||pathToFileURL(realpath?realpathSync(entry):resolve(entry)).href!==url)return;
-  const state=processOwner();state.trackedMain=true;state.pendingMain=true;
+  const state=processOwner();state.pendingMain=true;
   const unsettled=()=>{
+    if(!state.pendingMain)return;
     writeSync(2,`INSTRUMENT: command entry ${url}: main did not settle before the event loop drained\n`);
     process.exitCode=13;
   };
