@@ -253,12 +253,22 @@ step "tooling" node tooling/empty.test.ts
     put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
   }
+  put('docs/data/target.md','target prose');put('docs/data/directory/child.md','child');
+  symlinkSync('target.md',join(root,'docs/data/relay'));
+  symlinkSync('../relay',join(root,'docs/data/src/alias'));
+  put('docs/data/configs/base.json','{}');symlinkSync('configs/base.json',join(root,'docs/data/base.json'));
+  put('docs/data/tsconfig.json','{"extends":"./base.json","include":["src/**/*.ts"]}');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
   const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
 const select=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),fallback:rules.some(row=>row.fallback),facts:rules.filter(row=>row.name.includes(' read by ')).map(row=>row.name)};};
 const first=inputMetadataDeclarations();for(const row of first.observations){row.steps.length=0;row.context.entry='mutated';if(row.observation.value&&typeof row.observation.value==='object'&&'files' in row.observation.value)row.observation.value.files.length=0;}
 console.log(JSON.stringify({edit:select([{path:'docs/data/src/notes.md',before:'old prose',after:'new prose',sameMode:true}]),
+targetEdit:select([{path:'docs/data/target.md',before:'target prose',after:'new prose',sameMode:true}]),
+retarget:select([{path:'docs/data/src/alias',before:'../relay',after:'../directory',sameMode:true}]),
+relay:select([{path:'docs/data/relay',before:'target.md',after:'directory',sameMode:true}]),
+targetRemoved:select([{path:'docs/data/target.md',deleted:true}]),
+physicalConfig:select([{path:'docs/data/configs/base.json',before:'// old\\n{}\\n',after:'// new\\n{}\\n',sameMode:true}]),
 add:select([{path:'docs/data/src/new.md',added:true}]),removed:select([{path:'docs/data/src/notes.md',deleted:true}]),
 renamed:select([{path:'docs/data/src/notes.md',deleted:true},{path:'docs/data/src/new.md',added:true}]),
 nearer:select([{path:'docs/data/src/tsconfig.json',added:true}]),
@@ -268,11 +278,13 @@ unknown:select([{path:'tooling/census/data/src/unexecuted.mjs',sameMode:true}]),
   assert.equal(result.status,0,result.stdout+result.stderr);const value=JSON.parse(result.stdout);
   for(const step of ['profile','addons']){
     assert.ok(!value.edit.steps.includes(step),'prose bytes do not change a directory answer');
-    for(const key of ['add','removed','renamed','nearer','config'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+    assert.ok(!value.targetEdit.steps.includes(step),'followed target prose does not change an entries answer');
+    for(const key of ['add','removed','renamed','nearer','config','retarget','relay','targetRemoved','physicalConfig'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
     assert.ok(value.metadata.observations.every((/** @type {{steps:string[]}} */ row)=>row.steps.includes(step)),step+' survives in typed provenance');
   }
   assert.ok(value.unknown.fallback,'enumeration never supplies placement for an unexecuted utility');
   assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='fileExists'&&row.observation.value===false));
+  assert.ok(value.metadata.observations.some((/** @type {import('./module-closure.ts').ReaderObservation} */ row)=>row.observation.kind==='readlink'&&row.observation.path===join(root,'docs/data/relay')&&row.causes.some(cause=>cause.kind==='entries'&&cause.path===join(root,'docs/data/src'))));
 });
 
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{

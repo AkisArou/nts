@@ -96,26 +96,27 @@ export class OracleFilesystem{
    * dangling targets. lstat/readlink facts retain each in-root component; a
    * final lstat/readlink query deliberately does not follow its final link. */
   inputIdentity(path:string,boundary:string,followFinal=true):string{
-    boundary=resolve(boundary);let pending=resolve(path),links=0;
-    const seen=new Set<string>();
+    boundary=resolve(boundary);path=resolve(path);let links=0;
     const inside=(path:string)=>{const part=relative(boundary,path);return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
-    for(;;){
-      if(seen.has(pending))throw Error('reader input alias cycle: '+path);seen.add(pending);
-      const base=inside(pending)?boundary:parse(pending).root,parts=relative(base,pending).split(sep).filter(Boolean);
-      let current=base,restart=false;
-      if(inside(current))this.runtimeKind(current);
-      for(const [index,part]of parts.entries()){
-        current=join(current,part);
-        const kind=inside(current)?this.runtimeKind(current):runtimeKind(current),final=index===parts.length-1;
-        if(kind==='symlink'&&(!final||followFinal)){
-          const text=this.readlink(current);if(text===null)throw Error('reader input alias changed during capture: '+current);
-          if(++links>64)throw Error('reader input alias chain exceeds its bound: '+path);
-          pending=resolve(dirname(current),text,...parts.slice(index+1));restart=true;break;
-        }
-        if(kind===null||!final&&kind!=='directory')return resolve(current,...parts.slice(index+1));
+    let current=inside(path)?boundary:parse(path).root,parts=relative(current,path).split(sep).filter(Boolean);
+    const seen=new Set<string>();if(inside(current))this.runtimeKind(current);
+    while(parts.length){
+      const state=JSON.stringify([current,parts]);if(seen.has(state))throw Error('reader input alias cycle: '+path);seen.add(state);
+      const part=parts.shift()!;if(part==='.')continue;if(part==='..'){current=dirname(current);continue;}
+      current=join(current,part);
+      const kind=inside(current)?this.runtimeKind(current):runtimeKind(current),final=parts.length===0;
+      if(kind==='symlink'&&(!final||followFinal)){
+        const text=this.readlink(current);if(text===null)throw Error('reader input alias changed during capture: '+current);
+        if(++links>64)throw Error('reader input alias chain exceeds its bound: '+path);
+        current=isAbsolute(text)?parse(text).root:dirname(current);
+        parts=[...text.split(sep).filter(Boolean),...parts];
+      }else if(kind===null||!final&&kind!=='directory'){
+        // Do not normalize a failed component followed by '..' into a path
+        // the kernel never reached. The recorded component retains the cause.
+        return final?current:path;
       }
-      if(!restart)return current;
     }
+    return current;
   }
   projectFor(entry:string):string|null{
     for(let dir=resolve(entry,'..');;dir=resolve(dir,'..')){

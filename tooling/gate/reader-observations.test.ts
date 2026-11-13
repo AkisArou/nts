@@ -7,7 +7,7 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {moduleGraph,type InputSnapshot,type ModuleDeclarations} from './module-closure.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {projectInput,projectConfig} from './reader-inputs/main.ts';
-import {validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {captureReaderObservations,validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
 import type {ReaderObservation} from './module-closure.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest} from './test-wait.ts';
@@ -157,4 +157,69 @@ test('typed selection distinguishes bytes, shallow names, existence and real dir
   assert.equal(index.affected(rename).has(entries),true);
   const after=readerObservationIndex('/source',[directory],['data/plain.md']);
   assert.equal(after.affected(removed).has(directory),true,'both endpoint inventories reconstruct the same disappearance');
+});
+
+function captured(root:string,filesystem:OracleFilesystem):ReaderObservation[]{
+  return captureReaderObservations(root,filesystem.captured()).map(row=>({...row,reader:'reader.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}}}));
+}
+
+test('followed entries retain link type and target presence without child content sensitivity',t=>{
+  const f=fixture(t);f.write('data/plain.md','ordinary');f.write('target.md','target');f.write('directory/child.md','child');
+  const link=join(f.source,'data/link');symlinkSync('../target.md',link);
+  const filesystem=new OracleFilesystem(),runtime=new OracleFilesystem();
+  filesystem.getAccessibleEntries(join(f.source,'data'));runtime.runtimeEntries(join(f.source,'data'));
+  const rows=captured(f.source,filesystem),paths=['data/plain.md','data/link','target.md','directory/child.md'];
+  const index=readerObservationIndex(f.source,rows,paths);
+  for(const path of ['data/plain.md','target.md'])assert.equal(index.affected([{path,sameMode:true}]).size,0,path+' bytes do not change followed entries');
+  assert.ok(index.affected([{path:'data/link',sameMode:true}]).size>0,'changed link text may change the followed type');
+  assert.ok(index.affected([{path:'target.md',deleted:true}]).size>0,'a dangling child disappears from followed entries');
+  const physical=readerObservationIndex(f.source,captured(f.source,runtime),paths);
+  assert.equal(physical.affected([{path:'data/link',sameMode:true}]).size,0,'raw runtime names do not follow a child link');
+  rmSync(link);symlinkSync('../directory',link);
+  assert.deepEqual(new OracleFilesystem().getAccessibleEntries(join(f.source,'data')),{files:['plain.md'],directories:['link']});
+  assert.throws(()=>validateReaderSourceObservations({...snapshot(f.source,['src/main.ts']),observations:rows},f.source),/filesystem (entries|readlink) changed/);
+});
+
+test('followed identities retain every alias and target while file/stat retain physical byte sensitivity',t=>{
+  const f=fixture(t);f.write('target.md','target');
+  symlinkSync('../relay',join(f.source,'data-alias')); // An unused dangling sibling is not an observation.
+  symlinkSync('target.md',join(f.source,'relay'));symlinkSync('../relay',join(f.source,'src/alias'));
+  const alias=join(f.source,'src/alias'),filesystem=new OracleFilesystem();filesystem.realpath(alias);filesystem.fileExists(alias);
+  const rows=captured(f.source,filesystem),index=readerObservationIndex(f.source,rows,['src/alias','relay','target.md']);
+  assert.equal(index.affected([{path:'target.md',sameMode:true}]).size,0,'identity/presence ignore target prose');
+  for(const path of ['src/alias','relay'])assert.ok(index.affected([{path,sameMode:true}]).size>0,path+' link text remains an identity input');
+  const deleted=[...index.affected([{path:'target.md',deleted:true}]).keys()];
+  for(const kind of ['realpath','fileExists'])assert.ok(deleted.some(row=>row.causes.some(cause=>cause.kind===kind&&cause.path===alias)),kind+' retains target deletion provenance');
+  const bytes=new OracleFilesystem();bytes.readFile(alias);bytes.stat(alias);
+  const byteRows=captured(f.source,bytes);
+  for(const kind of ['file','stat'])assert.ok(byteRows.some(row=>row.observation.kind===kind&&row.observation.path===join(f.source,'target.md')&&readerObservationDependency(f.source,row)?.bytes),kind+' retains physical byte sensitivity');
+  rmSync(join(f.source,'target.md'));
+  for(const observation of filesystem.captured())assert.throws(()=>validateReaderSourceObservations({...snapshot(f.source,['src/main.ts']),observations:rows.filter(row=>row.observation.kind===observation.kind&&row.observation.path===observation.path)},f.source),/filesystem .* changed/);
+});
+
+test('missing and non-directory alias components retain negative facts and preserve loop errors',t=>{
+  const f=fixture(t);mkdirSync(join(f.source,'data'));symlinkSync('../relay',join(f.source,'data/alias'));symlinkSync('missing/child.md',join(f.source,'relay'));
+  const filesystem=new OracleFilesystem();filesystem.fileExists(join(f.source,'data/alias'));
+  const rows=captured(f.source,filesystem),index=readerObservationIndex(f.source,rows,['data/alias','relay']);
+  assert.ok(rows.some(row=>row.observation.kind==='runtimeKind'&&row.observation.path===join(f.source,'missing')&&row.observation.value===null));
+  assert.ok(index.affected([{path:'missing/child.md',added:true}]).size>0,'creating a missing intermediate subtree changes presence');
+  f.write('missing','not a directory');
+  const blocked=new OracleFilesystem();blocked.fileExists(join(f.source,'data/alias'));
+  const blockedRows=captured(f.source,blocked),blockedIndex=readerObservationIndex(f.source,blockedRows,['data/alias','relay','missing']);
+  assert.equal(blockedIndex.affected([{path:'missing',sameMode:true}]).size,0,'ENOTDIR remains false after a content edit');
+  assert.ok(blockedIndex.affected([{path:'missing',deleted:true},{path:'missing/child.md',added:true}]).size>0);
+  symlinkSync('cycle-b',join(f.source,'cycle-a'));symlinkSync('cycle-a',join(f.source,'cycle-b'));
+  assert.throws(()=>new OracleFilesystem().fileExists(join(f.source,'cycle-a')),{code:'ELOOP'});
+  assert.throws(()=>new OracleFilesystem().inputIdentity(join(f.source,'cycle-a'),f.source),/alias cycle/);
+});
+
+test('identity walks resolve parent components after following the preceding link',t=>{
+  const f=fixture(t);f.write('physical/inner/member.md','member');f.write('physical/target.md','target');
+  mkdirSync(join(f.source,'logical'));symlinkSync('../physical/inner',join(f.source,'logical/jump'));
+  symlinkSync('logical/jump/../target.md',join(f.source,'alias'));
+  const filesystem=new OracleFilesystem();assert.equal(filesystem.readFile(join(f.source,'alias')),'target');
+  const rows=captured(f.source,filesystem);
+  assert.ok(rows.some(row=>row.observation.kind==='readlink'&&row.observation.path===join(f.source,'logical/jump')));
+  assert.ok(rows.some(row=>row.observation.kind==='file'&&row.observation.path===join(f.source,'physical/target.md')));
+  assert.ok(!rows.some(row=>row.observation.kind==='file'&&row.observation.path===join(f.source,'logical/target.md')));
 });
