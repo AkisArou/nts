@@ -7,7 +7,7 @@ export type {DependencySealIdentity,DependencyRunSeal,CheckerImportRelation,Orac
 
 import {mkdirSync,writeFileSync,readFileSync,readdirSync,readlinkSync,realpathSync,statSync,lstatSync} from 'node:fs';
 import {join,resolve,sep} from 'node:path';
-import {validateRuntimeObservations,sameOracleObservation,type ObservationKind,type DirectoryEntries,type HostObservation} from './oracle-runtime.ts';
+import {validateRuntimeObservations,sameOracleObservation,type ObservationKind,type DirectoryEntries,type HostObservation,type FileStat} from './oracle-runtime.ts';
 export {OraclePathPrefixes,capturedModuleIdentity,OracleResolutionDomain,ORACLE_NODE_RESOLUTION_RECIPE,oracleLegacyMainQueries} from './oracle-runtime.ts';
 export type {ObservationKind,DirectoryEntries,HostObservation,CapturedModulePath,CapturedAlias,ResolutionPackageFact,ResolutionDomainRecord,SparseResolutionDomainRecord,ResolutionQuery,ResolutionProof} from './oracle-runtime.ts';
 
@@ -21,6 +21,7 @@ export function capturedPackageMetadata(directory:string):{valid:boolean;main:st
 const absent=(error:unknown)=>['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'');
 const compare=(a:string,b:string)=>Buffer.compare(Buffer.from(a),Buffer.from(b));
 function metadata(path:string){try{return statSync(path);}catch(error){if(absent(error))return null;throw error;}}
+const statFact=(value:ReturnType<typeof metadata>):FileStat|null=>value===null?null:{mode:value.mode,size:value.size,mtimeMs:value.mtimeMs};
 function bytes(path:string){try{return readFileSync(path);}catch(error){if(absent(error))return null;throw error;}}
 function directoryEntries(path:string):DirectoryEntries{
   let names:Buffer[];
@@ -58,6 +59,7 @@ function answer(kind:ObservationKind,path:string):HostObservation['value']{
     case 'readlink':return linkText(path);
     case 'runtimeEntries':return runtimeEntries(path);
     case 'runtimeKind':return runtimeKind(path);
+    case 'stat':return statFact(metadata(path));
   }
 }
 export function validateHostObservations(observations:HostObservation[],read:(kind:ObservationKind,path:string)=>HostObservation['value']=answer):{count:number;wallMs:number}{return validateRuntimeObservations(observations,read);}
@@ -82,6 +84,11 @@ export class OracleFilesystem{
   readlink=(path:string):string|null=>{path=resolve(path);return this.record('readlink',path,linkText(path));};
   runtimeEntries=(path:string):string[]=>{path=resolve(path);return this.record('runtimeEntries',path,runtimeEntries(path));};
   runtimeKind=(path:string):string|null=>{path=resolve(path);return this.record('runtimeKind',path,runtimeKind(path));};
+  /** Preserve the SDK's actual mode/size/mtime answer, rather than its optional
+   * fakeStat policy. Captured values remain primitive and JSON-portable. */
+  stat=(path:string):ReturnType<typeof statSync>|undefined=>{
+    path=resolve(path);const value=metadata(path);this.record('stat',path,statFact(value));return value??undefined;
+  };
   projectFor(entry:string):string|null{
     for(let dir=resolve(entry,'..');;dir=resolve(dir,'..')){
       const config=dir+sep+'tsconfig.json';if(this.fileExists(config))return config;
