@@ -9,7 +9,7 @@ import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
-import type {DirectoryDeclaration,ModuleDeclarations,InputSnapshot,InputKind,InputEntry} from './reader-inputs/main.ts';
+import {fixtureNamespaces,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry} from './reader-inputs/main.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -51,58 +51,78 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     } finally {lease.dispose();}
   }
   function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory):InputSnapshot {
-    const visited=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[],projectEntries=new Set<string>();
-    function asset(reader:string,path:string,kind:InputKind):void {
+    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
+    const contexts=new Map<string,Context>();
+    const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
+    function asset(context:Context,reader:string,path:string,input:ReaderInput):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
+      const kind=input.kind;
+      if(kind==='fixture'){
+        const namespaces=fixtureNamespaces(input.dataNamespaces??{}),entry=nameOf(path);
+        const key=JSON.stringify([entry,Object.entries(namespaces).sort(([a],[b])=>a.localeCompare(b))]);
+        if(contexts.has(key))return;
+        const child:Context={entry,namespaces,entered:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
+        contexts.set(key,child);
+        visit(child,path);
+        for(const directory of Object.keys(namespaces))if(!child.data.has(directory))
+          throw Error('fixture data namespace is not a declared data input: '+directory+' ('+entry+')');
+        return;
+      }
       if(kind==='project'){
-        const entry=relative(root,path).split(sep).join('/');
-        if(projectEntries.has(entry))return;
-        projectEntries.add(entry);
-        visit(path);
+        const entry=nameOf(path);
+        if(context.projects.has(entry))return;
+        context.projects.add(entry);
+        visit(context,path);
         const project=projectInputs([entry],root);
-        for(const config of project.configs)visit(resolve(root,config),false);
-        for(const entry of project.roots)visit(resolve(root,entry));
+        for(const config of project.configs)visit(context,resolve(root,config),false);
+        for(const entry of project.roots)visit(context,resolve(root,entry));
         return;
       }
       if (!lstatSync(path).isDirectory()) {
-        if(kind==='data')throw Error('declared data input is not a directory: '+relative(root,path));
-        visit(path,kind!=='file');return;
+        if(kind==='data')throw Error('declared data input is not a directory: '+nameOf(path));
+        visit(context,path,kind!=='file');return;
       }
-      if(kind==='file')throw Error('declared file input is not a file: '+relative(root,path));
+      if(kind==='file')throw Error('declared file input is not a file: '+nameOf(path));
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
-      tracked ??= execFileSync("git",gitArguments( ["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
-      const directory = relative(root, path).split(sep).join("/");
-      const files = tracked.filter(file => directory === "" || file.startsWith(directory + "/"));
-      const row={reader,directory,files,kind};directories.push(row);reportDirectory?.(row);
-      for(const file of files){if(kind==='data')visited.add(file);else visit(resolve(root,file));}
+      tracked ??= execFileSync("git",gitArguments(["ls-files", "-z", "--cached"]), {cwd: root, encoding: "utf8", maxBuffer: 64 << 20}).split("\0").filter(Boolean);
+      const directory=nameOf(path),members=tracked.filter(file=>directory===''||file.startsWith(directory+'/'));
+      if(kind==='data')context.data.add(directory);
+      const grant=kind==='data'?Object.keys(context.namespaces).find(name=>directory===name||directory.startsWith(name+'/')):undefined;
+      const row:DirectoryDeclaration={reader,directory,files:grant?[]:members,kind,
+        ...(grant?{fixture:{entry:context.entry,owner:context.namespaces[grant]!}}:{})};
+      directories.push(row);reportDirectory?.(row);
+      if(grant)return;
+      for(const file of members){if(kind==='data')files.add(file);else visit(context,resolve(root,file));}
     }
-    function visit(path: string,enter=true): void {
+    function visit(context:Context,path:string,enter=true):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
-      const name = relative(root, path).split(sep).join("/");
-      if(enter?moduleFiles.has(name):owned.has(name))return;
+      const name=nameOf(path);
+      if(enter?context.entered.has(name):context.owned.has(name))return;
       if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
-      owned.add(name);visited.add(name);
+      context.owned.add(name);owned.add(name);files.add(name);
       if(!enter)return;
-      moduleFiles.add(name);
-      // A non-JS reader (for example a harness manifest) can supply the same
-      // detached declarations. Its adapter owns parsing that source format.
+      context.entered.add(name);moduleFiles.add(name);
+      // Aggregate ownership never suppresses another namespace context. A
+      // later production import must still restore its real data membership.
       if(!/\.[cm]?[jt]sx?$/.test(path)&&!options.declarations?.has(name))return;
-      const {imports, assets} = parsed(path);
-      for (const specifier of imports) visit(fileURLToPath(new URL(specifier, pathToFileURL(path))));
-      for(const input of assets)asset(name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input.kind);
+      const {imports,assets}=parsed(path);
+      for(const specifier of imports)visit(context,fileURLToPath(new URL(specifier,pathToFileURL(path))));
+      for(const input of assets)asset(context,name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input);
     }
-
-    for (const entry of entries) {
+    const production:Context={entry:'<entry>',namespaces:{},entered:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
+    for(const entry of entries){
       if(typeof entry!=='string'){
-        asset('<entry>',fileURLToPath(entry.url),entry.kind);
+        asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
+          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:{})});
         continue;
       }
-      if (isAbsolute(entry)) throw new Error("module entry must be repository-relative: " + entry);
-      const path = resolve(root, entry);
-      if (lstatSync(path).isDirectory()) asset("<entry>", path,'module');
-      else visit(path);
+      if(isAbsolute(entry))throw Error('module entry must be repository-relative: '+entry);
+      const path=resolve(root,entry);
+      if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
+      else visit(production,path);
     }
-    return {files:[...visited].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),directories};
+    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),directories};
   }
   return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
 }

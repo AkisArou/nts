@@ -1,4 +1,4 @@
-import {projectInput} from './reader-inputs/main.ts';
+import {fixtureInput,projectInput} from './reader-inputs/main.ts';
 import {pathToFileURL} from 'node:url';
 import {gitArguments} from "./git-arguments/main.ts";
 import assert from "node:assert/strict";
@@ -491,4 +491,85 @@ for (const link of [false, true]) test(`a ${link ? "linked" : "copied"} fixture 
   t.diagnostic(JSON.stringify({control: "copied normally", link, destination, refused: problem instanceof Error, sourceFixtureCreated: existsSync(join(f.source, "fixture"))}));
   assert.match(problem instanceof Error ? problem.message : "did not refuse", /fixture destination resolves inside source tree/);
   assert.equal(existsSync(join(f.source, "fixture")), false, "refuse before any mkdir or source write");
+});
+
+
+function contextualFixture(t:TestContext){
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts',"export const dataDirectory=url=>url;export const fixtureInput=(url,options)=>({kind:'fixture',url,...options});");
+  f.write('fixture.ts',"import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./entry.ts',import.meta.url),{dataNamespaces:{data:'context cases'}});");
+  return f;
+}
+
+test('fixture descriptors keep AST, runtime staging and its data manifest equal',t=>{
+  const f=contextualFixture(t);f.privateData();
+  const entry=fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{data:'context cases'}});
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const runtime=graph.describe([entry]),parsed=graph.describe(['fixture.ts']);
+    assert.deepEqual(parsed.files.filter(file=>file!=='fixture.ts'),runtime.files);
+    assert.ok(!runtime.files.includes('data/case.ts'),'production corpus bytes have no private-fixture reach');
+    assert.deepEqual(runtime.directories,[{reader:'entry.ts',directory:'data',files:[],kind:'data',fixture:{entry:'entry.ts',owner:'context cases'}}]);
+    const copied=copyModuleClosure([entry],f.destination,{sourceRoot:f.source});
+    assert.deepEqual(copied,runtime.files);
+    assert.equal(readFileSync(join(f.destination,'data/case.ts'),'utf8'),'fixture data');
+    assert.deepEqual(JSON.parse(readFileSync(join(f.destination,FIXTURE_INPUT_MANIFEST),'utf8')),
+      {version:1,data:[{directory:'data',fixtureOwner:'context cases',readers:['entry.ts']}]});
+  }finally{graph.close();}
+});
+
+test('a production import retains real data regardless of fixture entry order',t=>{
+  const f=contextualFixture(t);
+  f.write('production.ts',"import './entry.ts';");
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const privateOnly=graph.describe(['fixture.ts']);
+    assert.ok(!privateOnly.files.includes('data/case.ts'));
+    for(const entries of [['fixture.ts','production.ts'],['production.ts','fixture.ts']]){
+      const snapshot=graph.describe(entries);
+      assert.ok(snapshot.files.includes('data/case.ts'));
+      assert.ok(snapshot.files.includes('data/nested/second.txt'));
+      assert.equal(snapshot.directories.filter(row=>row.directory==='data').length,2);
+    }
+  }finally{graph.close();}
+});
+
+test('fixture grants cannot hide immutable files or module imports',t=>{
+  const f=contextualFixture(t);
+  f.write('data/case.ts','export const answer=42;');
+  f.write('entry.ts',readFileSync(join(f.source,'entry.ts'),'utf8')+"\nimport './data/case.ts';\n");
+  f.privateData();
+  const entry=fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{data:'context cases'}});
+  const snapshot=moduleClosure([entry],{sourceRoot:f.source});
+  assert.ok(snapshot.includes('data/case.ts'),'module ownership overrides a private data namespace');
+  assert.throws(()=>copyModuleClosure([entry],f.destination,{sourceRoot:f.source}),/cannot replace module-owned input: data\/case.ts/);
+});
+
+test('a fixture grant must be declared by that child, not by a neighbouring reader',t=>{
+  const f=contextualFixture(t);
+  f.write('other.ts','export const value=1;');
+  f.write('unrelated.ts',"import './entry.ts';import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./other.ts',import.meta.url),{dataNamespaces:{data:'wrong reader'}});");
+  assert.throws(()=>moduleClosure(['unrelated.ts'],{sourceRoot:f.source}),/not a declared data input: data.*other.ts/);
+  f.write('module-grant.ts',"import {fixtureInput} from './tooling/gate/reader-inputs/main.ts';fixtureInput(new URL('./entry.ts',import.meta.url),{dataNamespaces:{'tooling/gate':'not data'}});");
+  assert.throws(()=>moduleClosure(['module-grant.ts'],{sourceRoot:f.source}),/not a declared data input: tooling\/gate/);
+  assert.throws(()=>fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{'../data':'escape'}}),/not canonical/);
+  assert.throws(()=>fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{data:''}}),/no fixture owner/);
+  assert.throws(()=>fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{data:'one','data/nested':'two'}}),/overlapping/);
+});
+
+test('a nested fixture does not grant data ownership in its parent destination',t=>{
+  const f=contextualFixture(t);
+  const copied=copyModuleClosure(['fixture.ts'],f.destination,{sourceRoot:f.source});
+  assert.ok(copied.includes('entry.ts'));
+  assert.ok(!copied.includes('data/case.ts'));
+  assert.equal(existsSync(join(f.destination,'data')),false);
+  assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false);
+});
+
+test('no fixture grant still copies the complete declared production data',t=>{
+  const f=contextualFixture(t);
+  const entry=fixtureInput(pathToFileURL(join(f.source,'entry.ts')),{dataNamespaces:{}});
+  const copied=copyModuleClosure([entry],f.destination,{sourceRoot:f.source});
+  assert.ok(copied.includes('data/case.ts'));
+  assert.equal(readFileSync(join(f.destination,'data/case.ts'),'utf8'),readFileSync(join(f.source,'data/case.ts'),'utf8'));
 });

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import type {ModuleDeclarations,ReaderInput} from './reader-inputs/main.ts';
+import {fixtureNamespaces,type ModuleDeclarations,type ReaderInput,type DataNamespaces} from './reader-inputs/main.ts';
 
 type Syntax=typeof import('typescript/ast');
 let syntax:Syntax|undefined;
@@ -174,6 +174,21 @@ export class SourceFacts {
   }
   moduleDeclarations():ModuleDeclarations{
     const ast=this.ast,imports:string[]=[],assets:ReaderInput[]=[];
+    const fixtureGrants=(node:Node|undefined):DataNamespaces=>{
+      const fail=():never=>{throw Error('fixtureInput needs literal dataNamespaces owners: '+this.file);};
+      if(!node||!ast.isObjectLiteralExpression(node)||node.properties.length!==1)return fail();
+      const property=node.properties[0];
+      if(!property||!ast.isPropertyAssignment(property)
+        ||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))||property.name.text!=='dataNamespaces'
+        ||!ast.isObjectLiteralExpression(property.initializer))return fail();
+      const owners:Record<string,string>={};
+      for(const entry of property.initializer.properties){
+        if(!ast.isPropertyAssignment(entry)||!(ast.isIdentifier(entry.name)||ast.isStringLiteral(entry.name))
+          ||!ast.isStringLiteral(entry.initializer)||Object.hasOwn(owners,entry.name.text))return fail();
+        Object.defineProperty(owners,entry.name.text,{value:entry.initializer.text,enumerable:true});
+      }
+      return fixtureNamespaces(owners);
+    };
     for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
       const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
         :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
@@ -186,10 +201,14 @@ export class SourceFacts {
         &&ast.isMetaProperty(base.expression)&&base.expression.keywordToken===ast.SyntaxKind.ImportKeyword&&base.expression.name.text==='meta'
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)&&literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')){
         const parent=this.parents.get(node);
-        const called=parent&&ast.isCallExpression(parent)&&parent.arguments.length===1&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput)$/.exec(called);
+        const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|fileInput|projectInput|fixtureInput)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
-        assets.push({path:literal.text,kind:owner?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':'project'):'module'});
+        if(owner&&owned![2]==='fixtureInput'){
+          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
+          assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
+        }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
+          ?(owned![2]==='dataDirectory'?'data':owned![2]==='fileInput'?'file':'project'):'module'});
       }
     }
     return {imports,assets};

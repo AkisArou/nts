@@ -112,3 +112,33 @@ test('source leases are batched by both module count and bytes, with an oversize
     assert.deepEqual(result,{modules:inputs.length,batches:5,largestBatchModules:SOURCE_BATCH_MODULES,largestBatchBytes:Buffer.byteLength(large)});
   }finally{api.close();}
 });
+
+
+test('fixture contexts use lexical factory bindings and literal namespace owners',()=>{
+  const api=new API(),source=`import {fixtureInput as fixture} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
+const alias=fixture;const {fixtureInput:destructured}=inputs;
+fixture(new URL('./direct.ts',import.meta.url),{dataNamespaces:{'tests/programs':'direct cases'}});
+alias(new URL('./alias.ts',import.meta.url),{dataNamespaces:{'tests/programs':'alias cases'}});
+inputs.fixtureInput(new URL('./namespace.ts',import.meta.url),{dataNamespaces:{'tests/programs':'namespace cases'}});
+destructured(new URL('./destructured.ts',import.meta.url),{dataNamespaces:{'tests/programs':'destructured cases'}});
+function shadow(fixture:Function){fixture(new URL('./shadow.ts',import.meta.url),{dataNamespaces:{'tests/programs':'shadow'}});}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.ts',kind:'fixture',dataNamespaces:{'tests/programs':name+' cases'}})),{path:'./shadow.ts',kind:'module'}]);
+  }finally{lease.dispose();api.close();}
+});
+
+test('computed, spread, duplicate or noncanonical fixture grants are refused',()=>{
+  const api=new API();
+  try{
+    for(const options of ["options","{dataNamespaces:names}","{dataNamespaces:{[name]:'cases'}}","{dataNamespaces:{...names}}",
+      "{dataNamespaces:{'data':'one','data':'two'}}","{dataNamespaces:{'../data':'cases'}}","{dataNamespaces:{data:''}}"]){
+      const source="import {fixtureInput} from './reader-inputs/main.ts';fixtureInput(new URL('./entry.ts',import.meta.url),"+options+");";
+      const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations(),/fixture/);}
+      finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});

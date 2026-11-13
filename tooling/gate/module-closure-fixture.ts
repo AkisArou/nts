@@ -5,7 +5,7 @@ import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {moduleGraph, type ModuleClosureOptions} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
-import type {InputSnapshot,InputEntry} from './reader-inputs/main.ts';
+import {canonicalNamespace as canonical,fixtureNamespaces,type InputSnapshot,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 export {moduleClosure} from "./module-closure.ts";
@@ -29,7 +29,6 @@ export const FIXTURE_INPUT_MANIFEST='.nts-fixture-inputs.json';
 type FixtureDataInput={directory:string;fixtureOwner:string;readers:string[]};
 type FixtureInputManifest={version:1;data:FixtureDataInput[]};
 const under=(directory:string,file:string)=>file===directory||file.startsWith(directory+'/');
-const canonical=(name:string)=>name.length>0&&!name.startsWith('/')&&!/[\\\x00-\x1f]/.test(name)&&name.split('/').every(part=>part!==''&&part!=='.'&&part!=='..');
 
 /** A fixture has one synchronous staging owner. Each complete publication is
  * atomic; subsequent calls preserve earlier data ownership in that manifest. */
@@ -51,9 +50,12 @@ function readFixtureInputs(destination:string):FixtureInputManifest{
   return {version:1,data};
 }
 
-function fixtureData(snapshot:InputSnapshot,destination:string,source:string,options:Pick<FixtureClosureOptions,'dataNamespaces'|'link'|'reuseSourceLinks'>){
+function fixtureData(snapshot:InputSnapshot,destination:string,source:string,options:Pick<FixtureClosureOptions,'dataNamespaces'|'link'|'reuseSourceLinks'>,fixtureEntries:Set<string>){
   const declared=new Map<string,Set<string>>();
   for(const row of snapshot.directories)if(row.kind==='data'){
+    // An AST declaration can describe a child fixture's own destination. Only
+    // this copier's entry grants may authorize private data in this destination.
+    if(row.fixture&&!fixtureEntries.has(row.fixture.entry))continue;
     const readers=declared.get(row.directory)??new Set<string>();readers.add(row.reader);declared.set(row.directory,readers);
   }
   const owned=new Set(snapshot.ownedFiles),selected=new Map<string,string>();
@@ -120,11 +122,20 @@ function fixtureData(snapshot:InputSnapshot,destination:string,source:string,opt
 export function copyModuleClosure(entries: readonly InputEntry[], root: string, options: FixtureClosureOptions = {}): string[] {
   const source = realpathSync(options.sourceRoot ?? SOURCE);
   const destination = outsideSource(source, root, "fixture destination");
+  const grants:Record<string,string>={...options.dataNamespaces},fixtureEntries=new Set<string>();
+  for(const entry of entries)if(typeof entry!=='string'&&entry.kind==='fixture'){
+    fixtureEntries.add(relative(source,fileURLToPath(entry.url)).split(sep).join('/'));
+    for(const [name,owner]of Object.entries(entry.dataNamespaces)){
+      if(Object.hasOwn(grants,name)&&grants[name]!==owner)throw Error('fixture data namespace already has another owner: '+name);
+      grants[name]=owner;
+    }
+  }
+  const dataNamespaces=fixtureNamespaces(grants);
   const graph = moduleGraph({...options, sourceRoot: source});
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe(entries);}
   finally {graph.close();}
-  const data=fixtureData(snapshot,destination,source,options),files=data.files;
+  const data=fixtureData(snapshot,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
   const inputs=files.map(name=>{
     const from=resolve(source,name),to=resolve(destination,name);
     if (to === from) throw new Error("fixture destination is the source: " + name);
