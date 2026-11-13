@@ -1367,8 +1367,8 @@ function toolingInstrument(/** @type {string} */ path){
     const source=join(TREE,path);
     if(!existsSync(source))return undefined;
     const stat=statSync(source);if(!stat.isFile())return undefined;
-    const fd=openSync(source,'r'),prefix=Buffer.alloc(2);
-    try{const length=readSync(fd,prefix,0,prefix.length,0);return {executable:(stat.mode&0o111)!==0,prefix:prefix.subarray(0,length).toString('ascii')};}
+    const fd=openSync(source,'r'),prefix=Buffer.alloc(128);
+    try{const length=readSync(fd,prefix,0,prefix.length,0);return {executable:(stat.mode&0o111)!==0,prefix:prefix.subarray(0,length).toString('latin1')};}
     finally{closeSync(fd);}
   }));
   return role==='program'||role==='unknown';
@@ -2029,12 +2029,16 @@ export function owed(changes) {
     let settled = false;
     let unplaced = null; // why the path owes the full gate, when it does
     let unrun = false; // an instrument no step's scripts were found to run
-    for (const rule of rulesFor(path, added)) {
+    const matchedRules=rulesFor(path,added);
+    // Existing reviewed validation rules retain their own authority. Neither
+    // byte/inferred readers nor ALWAYS can manufacture such an owner.
+    const validationOwned=matchedRules.some(rule=>!rule.placedBy&&(rule.steps.length>0||rule.settled||rule.full));
+    for (const rule of matchedRules) {
       add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full, wide: rule.wide }, rule.interop?.());
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && !declaredInput(path,true)) unrun = true;
+      if (rule.placedBy === "stepInputs" && !declaredInput(path,true) && !validationOwned) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.

@@ -7,5 +7,5 @@ export function toolingInputRole(path:string,facts:()=>ToolingFileFacts):Tooling
   if(/\.(?:[cm]?[jt]sx?|sh|py|java)$/.test(path))return 'program';
   const observed=facts();
   if(!observed)return 'unknown';
-  return observed.executable||observed.prefix==='#!'?'program':'data';
+  return observed.executable||observed.prefix.startsWith('#!')&&!/^#!\s*\[/.test(observed.prefix)?'program':'data';
 }

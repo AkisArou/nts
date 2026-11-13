@@ -125,12 +125,13 @@ step "private" node tooling/private/fixture.ts
   put('tooling/gate/reader-inputs/main.ts','export const dataDirectory=url=>url;export const fileInput=url=>url;export const fixtureInput=(url,options)=>({url,...options});');
   put('tooling/private/reader.ts',`import {dataDirectory,fileInput} from '../gate/reader-inputs/main.ts';
 import './code.ts';import '../utility-samples/owned.cjs';
-const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=dataDirectory(new URL('../census/',import.meta.url));const utilities=dataDirectory(new URL('../utility-samples/',import.meta.url));
+const data=dataDirectory(new URL('./data/',import.meta.url));const bytes=fileInput(new URL('./bytes.ts',import.meta.url));const inspected=dataDirectory(new URL('../census/',import.meta.url));const utilities=dataDirectory(new URL('../utility-samples/',import.meta.url));const platform=dataDirectory(new URL('../apple/',import.meta.url));
 `);
   put('tooling/private/fixture.ts',`import {fixtureInput} from '../gate/reader-inputs/main.ts';
 const child=fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:{'tooling/private/data':'private-fixture'}});
 `);
   for(const path of ['tooling/private/code.ts','tooling/private/bytes.ts','tooling/private/data/case.ts','tooling/census/unexecuted.ts'])put(path,'export const value=1;\n');
+  put('tooling/apple/owned.sh','#!/bin/sh\nexit 0\n');
   const programs=['host.cjs','host.mjs','host.js','host.mts','host.cts','host.ts','host.tsx','host.jsx','host.sh','host.py','Host.java'];
   for(const name of [...programs,'owned.cjs'])put('tooling/utility-samples/'+name,'// implementation body\n');
   for(const name of ['types.d.ts','types.d.mts','types.d.cts'])put('tooling/utility-samples/'+name,'export type Value=string;\n');
@@ -148,15 +149,17 @@ const rows=paths.map(path=>{const change={path,before:'// plain prose\\nexport c
 const future=['tooling/private/data/new.bin','tooling/private/data/deleted.bin'].map(path=>({path,steps:[...covering(stepInputs(),path)]}));
 const inspected=owed([{path:'tooling/census/unexecuted.ts',added:false}]);
 const utilities=${JSON.stringify([...['host.cjs','host.mjs','host.js','host.mts','host.cts','host.ts','host.tsx','host.jsx','host.sh','host.py','Host.java'],'command','executable','owned.cjs','types.d.ts','types.d.mts','types.d.cts','named-list','metadata.json'])}.map(name=>{const path='tooling/utility-samples/'+name;return {name,full:owed([{path,added:false}]).some(row=>row.fallback),reach:[...covering(stepInputs(),path)]};});
-console.log(JSON.stringify({rows,future,utilities,inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
+const explicit=owed([{path:'tooling/apple/owned.sh',added:false}]);
+console.log(JSON.stringify({rows,future,utilities,explicit:{steps:gateSteps(explicit),full:explicit.some(row=>row.fallback),reach:[...covering(stepInputs(),'tooling/apple/owned.sh')]},inspected:{reach:[...covering(stepInputs(),'tooling/census/unexecuted.ts')],full:inspected.some(row=>row.fallback)}}));`;
   const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
-  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,utilities,inspected}=JSON.parse(result.stdout);
+  assert.equal(result.status,0,result.stdout+result.stderr);const {rows,future,utilities,explicit,inspected}=JSON.parse(result.stdout);
   for(const row of rows)assert.equal(row.precise,'comments',row.path);
   assert.ok(rows[0].steps.includes('proof'));assert.ok(!rows[0].steps.includes('private'));
   for(const step of ['proof','private']){assert.ok(rows[1].steps.includes(step));assert.ok(!rows[2].steps.includes(step));}
   for(const row of future){assert.ok(row.steps.includes('proof'),row.path);assert.ok(!row.steps.includes('private'),row.path);}
   assert.ok(inspected.reach.includes('proof'));assert.ok(inspected.full,'a tracked instrument inspected only as bytes keeps its execution fallback');
   for(const row of utilities){assert.ok(row.reach.includes('proof'));assert.equal(row.full,[...programs,'command','executable'].includes(row.name),row.name);}
+  assert.ok(explicit.reach.includes('proof'));assert.ok(explicit.steps.includes('interop'));assert.ok(!explicit.full,'an existing explicit validation rule retains its ownership');
 });
 
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
