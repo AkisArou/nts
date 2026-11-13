@@ -60,7 +60,10 @@ export class RustInputPhases{
   private root:number|undefined;
   private readonly calls=new Map<string,DoctestCall>();
   private readonly entered=new Set<string>();
-  constructor(private readonly tree:string,private readonly target?:RustTarget,calls:readonly DoctestCall[]=[]){
+  private readonly tree:string;
+  private readonly target:RustTarget|undefined;
+  constructor(tree:string,target?:RustTarget,calls:readonly DoctestCall[]=[]){
+    this.tree=tree;this.target=target;
     for(const call of calls){
       const identity=key(call.pid,call.birth);if(this.calls.has(identity))fail('duplicate doctest call identity '+identity);
       this.calls.set(identity,call);
