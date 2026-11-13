@@ -18,7 +18,8 @@ export type InheritedDescriptor={kind:'inherited';fd:number;flags:number;target:
 export type RootExit={kind:'root-exit';root:number;exit:number;signal:number};
 export type RootStart={kind:'root-start';root:number};
 export type ObservationError={kind:'error';message:string;errno:number};
-export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError;
+export type SignalObservation={kind:'signal';signal:number;rootAlive:boolean};
+export type ObservationRow=ObservationStart|ObservationEnd|InputAttempt|InheritedDescriptor|RootExit|RootStart|ObservationError|SignalObservation;
 
 export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):string{
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
@@ -53,6 +54,7 @@ export function readObservationRow(value:unknown):ObservationRow{
   else if(row.kind==='root-start')valid=integer(row.root)&&row.root>0;
   else if(row.kind==='root-exit')valid=['root','exit','signal'].every(key=>integer(row[key]));
   else if(row.kind==='error')valid=typeof row.message==='string'&&integer(row.errno);
+  else if(row.kind==='signal')valid=integer(row.signal)&&row.signal>0&&typeof row.rootAlive==='boolean';
   else if(row.kind==='inherited')valid=integer(row.fd)&&integer(row.flags)&&byteFact(row.target);
   else if(row.kind==='attempt')valid=typeof row.id==='string'&&/^\d+$/.test(row.id)&&['tid','tgid','ppid'].every(key=>integer(row[key]))
     &&typeof row.birth==='string'&&/^\d+$/.test(row.birth)&&typeof row.parentBirth==='string'&&/^\d+$/.test(row.parentBirth)

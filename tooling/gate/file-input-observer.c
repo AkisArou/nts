@@ -487,6 +487,8 @@ static void inherited_descriptors(void) {
     char path[96];
     snprintf(path, sizeof(path), "/proc/self/fd/%ld", fd);
     Bytes target = read_link(path);
+    if (!good(&target))
+      errors++;
     fprintf(output,
             "{\"kind\":\"inherited\",\"fd\":%ld,\"flags\":%d,\"target\":", fd,
             flags);
@@ -502,6 +504,18 @@ static void wake_signal(int signal) {
     signal_to_forward = signal;
     terminal_signal = signal;
   }
+}
+static void forward_pending(pid_t root, bool reaped) {
+  int signal = signal_to_forward;
+  if (!signal)
+    return;
+  signal_to_forward = 0;
+  fprintf(output, "{\"kind\":\"signal\",\"signal\":%d,\"rootAlive\":%s}\n",
+          signal, reaped ? "false" : "true");
+  if (fflush(output))
+    output_failed = true;
+  if (!reaped)
+    kill(root, signal);
 }
 static void child_error(int fd, int stage) {
   ChildError value = {.stage = stage, .error = errno};
@@ -586,10 +600,7 @@ int main(int argc, char **argv) {
                                 .tv_nsec = (timeout % 1000) * 1000000L};
     int ready = ppoll(&handoff, 1, &duration, &waiting);
     if (ready < 0 && errno == EINTR) {
-      if (signal_to_forward) {
-        kill(root, signal_to_forward);
-        signal_to_forward = 0;
-      }
+      forward_pending(root, false);
       continue;
     }
     if (ready < 0)
@@ -633,11 +644,7 @@ int main(int argc, char **argv) {
   uint64_t ended = 0;
   int root_status = 0;
   while (!drained) {
-    if (signal_to_forward) {
-      if (!reaped)
-        kill(root, signal_to_forward);
-      signal_to_forward = 0;
-    }
+    forward_pending(root, reaped);
     if (!error_closed) {
       ssize_t n = read(exec_error[0], &launch_error, sizeof(launch_error));
       if (!n) {
@@ -709,6 +716,10 @@ int main(int argc, char **argv) {
     while (waitpid(root, &root_status, 0) < 0)
       if (errno != EINTR)
         fatal("reap observed root");
+    fprintf(output,
+            "{\"kind\":\"root-exit\",\"root\":%d,\"exit\":%d,\"signal\":%d}\n",
+            root, WIFEXITED(root_status) ? WEXITSTATUS(root_status) : -1,
+            WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0);
   }
   if (!error_closed) {
     ssize_t n = read(exec_error[0], &launch_error, sizeof(launch_error));
