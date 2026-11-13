@@ -204,7 +204,7 @@ test('malformed and incomplete raw observations cannot publish a complete census
   const compressed=gzipSync(valid);
   const truncated=join(root,'truncated.gz');writeFileSync(truncated,compressed.subarray(0,compressed.length-1));
   await assert.rejects(readFileObservation(truncated,()=>{}),/unexpected end|buffer error/i);
-  const corrupt=join(root,'corrupt.gz'),corrupted=Buffer.from(compressed);corrupted[corrupted.length-8]^=1;writeFileSync(corrupt,corrupted);
+  const corrupt=join(root,'corrupt.gz'),corrupted=Buffer.from(compressed);corrupted[corrupted.length-8]=corrupted[corrupted.length-8]!^1;writeFileSync(corrupt,corrupted);
   await assert.rejects(readFileObservation(corrupt,()=>{}),/incorrect data check/i);
   const oversized=join(root,'oversized.gz');writeFileSync(oversized,gzipSync('x'.repeat(256*1024+1)+'\n'));
   await assert.rejects(readFileObservation(oversized,()=>{}),/exceeds bounded row size/);

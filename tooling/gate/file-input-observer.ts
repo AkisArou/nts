@@ -4,7 +4,8 @@ import {createReadStream,mkdirSync} from 'node:fs';
 import {join,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createGunzip} from 'node:zlib';
-import {compose} from 'node:stream';
+import {Writable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
@@ -110,15 +111,19 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     visit(row);
   };
-  for await(const chunk of compose(createReadStream(file),createGunzip())){
-    pending=Buffer.concat([pending,chunk as Buffer]);
+  const consumeChunk=(chunk:Buffer)=>{
+    pending=Buffer.concat([pending,chunk]);
     for(;;){
       const at=pending.indexOf(10);if(at<0)break;
       if(at>256*1024)throw Error('file input observer: record exceeds bounded row size');
       consume(pending.subarray(0,at));pending=pending.subarray(at+1);
     }
     if(pending.length>256*1024)throw Error('file input observer: record exceeds bounded row size');
-  }
+  };
+  await pipeline(createReadStream(file),createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
+    try{consumeChunk(chunk);callback();}
+    catch(error){callback(error instanceof Error?error:new Error(String(error)));}
+  }}));
   if(pending.length)throw Error('file input observer: unterminated raw record');
   if(!end||!end.complete||!end.drainComplete||end.errors||end.attempts!==attempts)
     throw Error('file input observer: incomplete census'+(end?' (attempts '+attempts+'/'+end.attempts+', errors '+end.errors+')':''));
