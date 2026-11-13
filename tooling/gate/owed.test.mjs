@@ -97,6 +97,8 @@ test('the JVM member audit owns its actual source roots and stays outside docume
     assert.ok([...covering(stepInputs(),path)].includes('jvm-members'),path);
   assert.ok(![...covering(stepInputs(),'docs/architecture.md')].includes('jvm-members'));
   assert.ok(!stepsFor('docs/architecture.md').includes('jvm-members'));
+  const directories=policy.inputDirectoryDeclarations().filter(row=>row.reader==='tooling/jvm/members.ts');
+  assert.deepEqual(directories.map(row=>[row.directory,row.kind]),[['compiler','inspection'],['runtime/jvm','inspection'],['tooling','inspection']]);
   for(const change of [{path:'tooling/jvm/new-input.data',added:true},{path:'runtime/jvm/removed-input.java',deleted:true}])
     assert.ok(changeOwes([change]).includes('jvm-members'),change.path);
   for(const path of ['tooling/jvm/members.ts','tooling/jvm/member-catalogue.ts','tooling/jvm/member-grammar.ts'])
@@ -409,7 +411,7 @@ test("the offline Node migration inventory owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node migration work-list inventory"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "jvm-members", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
     for (const step of ["addons", "profile", "integrity", "bench-agree", "interop"])
       assert.ok(!gateSteps(rules).includes(step), `${path} does not execute ${step}`);
   }
@@ -421,7 +423,7 @@ test("the offline Node transcription proof owes its discovered tooling tests", (
     const rules = owed([{path, added}]);
     assert.ok(rules.some(rule => rule.name === "the node transcription proof"));
     assert.ok(!rules.some(rule => rule.full), path);
-    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "gate-inputs", "jvm-members", "old-paths", "rustfmt", "test-host", "tests", "tooling", "tooling-types"], path);
   }
   assert.ok(owed([{path:"tooling/conformance/unplaced-transcription.mjs",added:true}]).some(rule => rule.full));
 });
@@ -809,7 +811,7 @@ test("a private timing fixture does not make committed step estimates a verdict 
   }
 });
 
-test("the Chromium runtime's own files owe only what every change owes", () => {
+test("Chromium runtime files keep their ordinary obligations and tooling bytes owe the audit", () => {
   // As the gate's step times do: placed, and owing nothing of its own.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
   assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);
@@ -818,7 +820,8 @@ test("the Chromium runtime's own files owe only what every change owes", () => {
     "runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts",
     "runtime/chromium/embedder/program/check.ts", "runtime/chromium/docs/lib-dom.md", "runtime/chromium/dom/types/dom-testing.d.ts",
   ]) {
-    assert.deepEqual([...stepsFor(p)].sort(), always, p);
+    const expected=p.startsWith('tooling/')?always:always.filter(step=>step!=='jvm-members');
+    assert.deepEqual([...stepsFor(p)].sort(), expected, p);
   }
 });
 
@@ -847,7 +850,7 @@ test("the declared host project reader places its own configuration",()=>{
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
-  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','gate-inputs','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
+  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','gate-inputs','jvm-members','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {
@@ -993,9 +996,12 @@ test("the N-API backend owes the addon steps", () => {
 
 test("runtime/c is compiled into the C backend, so it owes at least what the C backend owes", () => {
   const backend = stepsFor("compiler/codegen/c/src/lib.rs");
-  superset(reach("runtime/c/nts_runtime.c"), backend, "runtime/c/nts_runtime.c");
+  assert.ok(backend.includes('jvm-members'),'the audit reads compiler source bytes');
+  assert.ok(!reach('runtime/c/nts_runtime.c').includes('jvm-members'),'the audit does not read runtime/c');
+  const semantic=backend.filter(step=>step!=='jvm-members');
+  superset(reach("runtime/c/nts_runtime.c"), semantic, "runtime/c/nts_runtime.c");
   // A new file there, which nothing includes yet, owes the same.
-  superset(reach("runtime/c/a-file-nobody-includes-yet.c"), backend, "a new runtime/c file");
+  superset(reach("runtime/c/a-file-nobody-includes-yet.c"), semantic, "a new runtime/c file");
 });
 
 test("a crate owes its own rule and its production consumers' rules", () => {
@@ -1078,7 +1084,7 @@ test("an example's nts.config.ts owes config, new or changed, interop's too", ()
   for(const path of ['tests/programs/never-added/nts.config.ts','tests/interop/never-added/nts.config.ts'])
     assert.ok(covering(inputs,path).has('config'),path+' is selected by its declared member name before it exists and after deletion');
   for(const path of ['tests/programs/never-added/not.config.ts','tests/programs/.hidden/nts.config.ts','tests/programs/node_modules/pkg/nts.config.ts'])
-    assert.ok(!covering(inputs,path).has('config'),path+' is outside that actual discovery rule');
+    assert.ok(!inputs.declaresMember(path),path+' is outside executable member discovery, though its population retains data-byte reach');
 });
 
 test("an unavailable Cargo toolchain grants no scope for compiled inputs or documentation", () => {

@@ -6,7 +6,7 @@ import {collectFullGateCensus,FULL_GATE_RECORD,fullGateProblems,parseFullGateRec
 import {testScratch} from './test-scratch.ts';
 
 test('the full-gate inventory counts tracked subjects once and retains directory breadth',()=>{
-  const directories=[{reader:'tooling/reader.ts',directory:'tests/data',files:3,steps:['tooling']}];
+  const directories=[{reader:'tooling/reader.ts',directory:'tests/data',kind:'data' as const,files:3,steps:['tooling']}];
   const census=collectFullGateCensus(['z','a','z'],path=>({full:path==='z',reasons:['no declared reader']}),directories);
   const full=[{path:'z',reasons:['no declared reader']}];
   assert.deepEqual(census,{version:2,tracked:2,full,unplaced:full,policy:[],directories});

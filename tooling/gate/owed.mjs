@@ -1141,8 +1141,8 @@ export const RULES = [
     when: (p) => p === "tooling/gate/times.tsv",
     settled: true,
     steps: [],
-    // Complete canonical readers: the runner uses these estimates for
-    // scheduling and warnings; tooling tests read only their private copies.
+    // The runner uses estimates only for scheduling and warnings; tooling
+    // tests read private copies. Independently declared byte audits still run.
     stepReaders: () => [],
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
@@ -1804,7 +1804,7 @@ function declaredInput(/** @type {string} */ path) {
 
 export function inputDirectoryDeclarations() {
   return [...stepInputGraph().directories.values()].map(row => ({
-    reader: row.reader, directory: row.directory, files: row.files.length, steps: [...row.steps].sort(),
+    reader: row.reader, directory: row.directory, kind:row.kind, files: row.files.length, steps: [...row.steps].sort(),
     ...(row.fixture?{fixture:row.fixture}:{}),...(row.member?{member:row.member}:{}),
   })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
 }
@@ -2059,7 +2059,7 @@ export function owed(changes) {
     // What the steps run.
     const declaredReaders = rulesFor(path, added).map(rule => rule.stepReaders?.(path)).filter(readers => readers !== undefined);
     const steps = declaredReaders.length
-      ? [...new Set(declaredReaders.flat())]
+      ? [...new Set([...declaredReaders.flat(),...covering(stepInputGraph().byteReaders,path)])]
       : [...covering(stepInputs(), path)];
     if (steps.length) {
       // A step's own scripts owe that step, wide or not; the corpora it reads
