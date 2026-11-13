@@ -1190,6 +1190,14 @@ the first node task.
   a step's census runs under twice its reservation, never below one
   worker's own cap, so a verdict never depends on the history
   ([log](records/notebooks/decisions-log.md#reservations-are-measured-peaks-11-09)).
+- **Pinned preparation owns only its build.** `pinned.sh` runs its initial
+  release Cargo command through `admit.ts` with the whole-job `pinned-build`
+  key and the selected target's scheduling history. That command's process
+  ends before gate entry; the runner's normal admission retires the exited
+  owner and reserves for itself. No reservation spans both phases, and the
+  shell never passes the build handle to the gate. Preparation rusage starts
+  after admission, so its duration excludes time waiting for memory
+  ([log](records/notebooks/decisions-log.md#pinned-preparation-owns-only-its-build-11-13)).
 - **Proof jobs have stable history keys**: `hir-compare`, `perf-count` and
   `test262-records` name the prepared-HIR corpus comparison, instruction
   counts and five test262 records. Issue numbers belong in labels and logs,

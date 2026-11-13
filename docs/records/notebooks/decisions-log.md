@@ -2755,3 +2755,13 @@ The existing shared test bootstrap now yields before every case through a
 captured scheduler. Fixture timer mocks do not own that transport turn. The
 turn offers queued reports a serialization opportunity; the parent still
 decides completion from actual test events, and the idle guard is unchanged.
+
+## Pinned preparation owns only its build (11-13)
+
+#774 puts `admit.ts` around pinned.sh's initial Cargo command, rather than around
+its whole build-and-gate chain. Canonical entry does not carry an outer job's
+reservation into the gate. The build command keeps the selected target's own
+whole-job sizing history, ends before the runner starts, and is retired by the
+next admission decision. GNU preparation accounting runs inside admission.
+The staged route proves a live build owner and its absence at gate entry,
+including a Cargo failure that never enters the gate.
