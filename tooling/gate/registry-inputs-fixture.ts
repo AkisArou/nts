@@ -83,13 +83,14 @@ export async function registryInputsFixture(t: TestContext,
     writable(root);rmSync(root, { recursive: true, force: true });
   } });
   const toolingRoot=fileURLToPath(new URL("../../",import.meta.url));
+  // Stage production before the fixture creates its private recipe bytes.
+  const nodeFiles=copyModuleClosure(["tooling/inputs/node-inputs.ts"],main);
   const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),linkerDir=join(consumer,"tooling/inputs");
   const nodeInputs=join(root,"node-inputs");acquireNodeInputs(main,nodeInputs,table);
   copyModuleClosure(["tooling/inputs/dependency-inputs.ts"],consumer);
   copyFileSync(join(toolingRoot,"tooling/inputs/link.sh"),join(linkerDir,"link.sh"));
   // A frozen destination executes its own Node provisioner and catalog.
   // Commit that real import closure so both clones retain the same authority.
-  const nodeFiles=copyModuleClosure(["tooling/inputs/node-inputs.ts"],main);
   writeFileSync(join(main,"tooling/inputs/node-inputs.json"),JSON.stringify(table));
   writeFileSync(join(consumer,"package.json"),'{"type":"module"}\n');
   const inputs=join(linkerDir,"link.sh");

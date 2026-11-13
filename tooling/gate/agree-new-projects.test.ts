@@ -43,8 +43,12 @@ function fixture(t:{after(fn:()=>void):void}) {
   rmSync(join(root,"results/oracle-counts.json"));
   writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded","previously-no-config"].map(row)});
   git("add",".");git("commit","-qm","candidate");
+  // Preserve the committed stand-in, then mutate the staged production closure.
+  const privateLinker=readFileSync(join(root,"tooling/inputs/link.sh"));
+  rmSync(join(root,"tooling/inputs/link.sh"));
   copyModuleClosure(["tooling/differential/agree.mjs",...ORACLE_EXECUTION_FILES.map(name=>"tooling/differential/"+name)],root,{dataNamespaces:{
     'tests/programs':'new-project agreement fixture','benchmarks/cases':'new-project agreement fixture'}});
+  writeFileSync(join(root,"tooling/inputs/link.sh"),privateLinker);
   assert.deepEqual(readdirSync(join(root,'tests/programs')).sort(),['existing','new-fixture','previously-no-config','previously-unrecorded']);
   assert.deepEqual(readdirSync(join(root,'benchmarks/cases')),['.keep']);
   symlinkSync(join(fileURLToPath(new URL("../..",import.meta.url)),"node_modules"),join(root,"node_modules"));
