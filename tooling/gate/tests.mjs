@@ -73,7 +73,7 @@ if (process.env[runnerVar]) {
 const recorder = join(work, "record.sh");
 const calls = join(work, "calls");
 mkdirSync(calls);
-const shellQuote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+const shellQuote=(/** @type {string} */ value)=>"'"+value.replaceAll("'","'\\''")+"'";
 writeFileSync(recorder, `#!/bin/sh
 profile=${shellQuote(profileDirectory)}
 calls=${shellQuote(calls)}
