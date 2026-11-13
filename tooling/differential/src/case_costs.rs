@@ -194,6 +194,7 @@ pub(crate) fn child_result(name: &'static str, output: &std::process::Output) {
 }
 
 #[derive(Debug)]
+#[must_use = "keep the session guard until the observed command finishes"]
 pub struct Session {
     total: Option<Span>,
     previous: Option<Context>,
