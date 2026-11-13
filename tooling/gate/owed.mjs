@@ -1653,6 +1653,10 @@ function stepInputGraph() {
     const declared = new Set();
     const membership = new Set();
     const directories = new Map();
+    /** @type {Map<string,import('./reader-inputs/main.ts').OptionalFileDeclaration&{steps:Set<string>}>} */
+    const optionalFiles=new Map();
+    /** @type {Map<string,import('./reader-inputs/main.ts').MembershipDeclaration&{steps:Set<string>}>} */
+    const memberships=new Map();
     const modules = moduleGraph({sourceRoot:TREE});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
@@ -1664,7 +1668,18 @@ function stepInputGraph() {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[]}>} */
+    const metadata=(/** @type {Pick<import('./reader-inputs/main.ts').InputSnapshot,'optionalFiles'|'memberships'>} */ snapshot,/** @type {string} */ step)=>{
+      for(const row of snapshot.optionalFiles){
+        const key=JSON.stringify([row.reader,row.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
+        const fact=optionalFiles.get(key)??{...row,steps:new Set()};fact.steps.add(step);optionalFiles.set(key,fact);
+        map.add(row.path,step);byteReaders.add(row.path,step);
+      }
+      for(const row of snapshot.memberships){
+        const key=JSON.stringify([row.reader,row.directory,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
+        const fact=memberships.get(key)??{...row,steps:new Set()};fact.steps.add(step);memberships.set(key,fact);
+      }
+    };
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./reader-inputs/main.ts').InputSnapshot,'optionalFiles'|'memberships'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1710,6 +1725,7 @@ function stepInputGraph() {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
         const snapshot=modules.describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
+        metadata(snapshot,step);
         for(const input of snapshot.placingFiles)declared.add(input);
         for (const input of snapshot.files) {
           if (placed.has(input)) continue;
@@ -1746,7 +1762,7 @@ function stepInputGraph() {
           /** @type {import('./module-closure.ts').ByteInputDeclaration[]} */
           const bytes=[];
           const snapshot=modules.describe([input],undefined,row=>bytes.push(row));
-          references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories,bytes};
+          references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories,bytes,metadata:snapshot};
         } else {
           const body = readFileSync(abs, "utf8");
           const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
@@ -1763,9 +1779,11 @@ function stepInputGraph() {
           references.other.push(...launchedInputs.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)));
           references.data=launchedInputs.files;
           references.directories=launchedInputs.directories;
+          references.metadata=launchedInputs;
         }
         inferred.set(input,references);
         }
+        if(references.metadata)metadata(references.metadata,step);
         for(const row of references.directories??[])directory(row,step);
         for(const row of references.bytes??[])byteReaders.add(row.path,step);
         for(const data of references.data??[])add(data,step);
@@ -1783,7 +1801,8 @@ function stepInputGraph() {
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, tracked:new Set(trackedFiles()) };
+    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,
+      membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
     } finally {modules.close();}
   });
 }
@@ -1807,6 +1826,13 @@ export function inputDirectoryDeclarations() {
     reader: row.reader, directory: row.directory, kind:row.kind, files: row.files.length, steps: [...row.steps].sort(),
     ...(row.fixture?{fixture:row.fixture}:{}),...(row.member?{member:row.member}:{}),
   })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
+}
+
+/** Canonical metadata keeps its context; it is never an ownership prefix. */
+export function inputMetadataDeclarations(){
+  const graph=stepInputGraph();
+  return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,steps:[...row.steps].sort()})),
+    memberships:[...graph.memberships.values()].map(row=>({...row,steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
@@ -1969,6 +1995,14 @@ export function owed(changes) {
   const full = [];
   const all = crates();
 
+  // Structural reads precede prose and record precision: a new Markdown child
+  // can change an enumeration even though editing its prose cannot.
+  const metadataGraph=stepInputGraph();
+  if(metadataGraph.membershipIndex)for(const row of metadataGraph.memberships.values()){
+    if(!metadataGraph.membershipIndex.affected(row,changes))continue;
+    for(const change of changes)if(row.directory===''||change.path===row.directory||change.path.startsWith(row.directory+'/'))
+      add('directory membership read by '+row.reader,change.path,[...row.steps],{precise:false});
+  }
   let ordinary = false;
   for (const change of changes) {
     const { path, added = false } = change;

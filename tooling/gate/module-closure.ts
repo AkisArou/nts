@@ -10,7 +10,7 @@ import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
 import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration} from './reader-inputs/main.ts';
-import {directoryEntries,metadataParents} from './reader-metadata.ts';
+import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -45,10 +45,11 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   // A graph owns one tracked inventory. Contexts select from that inventory;
   // they never need to rescan every tracked path for the same directory.
   const directoryFiles=new Map<string,string[]>(),memberFiles=new Map<string,Map<string,string[]>>();
+  const sourceFiles=()=>tracked??=execFileSync("git",gitArguments(["ls-files","-z","--cached"]),{cwd:root,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean);
   function membersOf(directory:string,member?:string):string[]{
     let files=directoryFiles.get(directory);
     if(!files){
-      tracked??=execFileSync("git",gitArguments(["ls-files","-z","--cached"]),{cwd:root,encoding:"utf8",maxBuffer:64<<20}).split("\0").filter(Boolean);
+      tracked=sourceFiles();
       const prefix=directory?directory+'/':'';
       files=prefix?tracked.filter(file=>file.startsWith(prefix)):tracked;
       directoryFiles.set(directory,files);
@@ -183,7 +184,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
     return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships};
   }
-  return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,close:()=>api?.close()};
+  return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
+    membershipIndex:()=>membershipIndex(sourceFiles()),close:()=>api?.close()};
 }
 
 /** A public walk always gets a fresh graph, including fresh source bytes. */

@@ -166,6 +166,47 @@ console.log(JSON.stringify({rows,future,utilities,inspectionChanges,explicit:{st
   assert.ok(explicit.reach.includes('proof'));assert.ok(explicit.steps.includes('interop'));assert.ok(!explicit.full,'an existing explicit validation rule retains its ownership');
 });
 
+test('structural readers survive prose and records shortcuts without becoming byte or placement claims',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-metadata-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('Cargo.toml','[package]\nname="metadata-fixture"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' names private; exit; fi
+step "names" node tooling/private/reader.ts
+step "private" node tooling/private/fixture.ts
+`);
+  put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');
+  put('tooling/gate/reader-inputs/main.ts','export const directoryMembership=url=>url;export const optionalFile=url=>url;export const dataDirectory=url=>url;export const fixtureInput=(url,options)=>({url,...options});');
+  put('tooling/private/reader.ts',`import {directoryMembership,optionalFile,dataDirectory} from '../gate/reader-inputs/main.ts';
+directoryMembership(new URL('../..',import.meta.url));
+directoryMembership(new URL('../../docs/catalogue/',import.meta.url));
+directoryMembership(new URL('../../results/benchmarks/runs/',import.meta.url));
+optionalFile(new URL('../../docs/optional.md',import.meta.url));
+dataDirectory(new URL('../../docs/private/',import.meta.url));directoryMembership(new URL('../../docs/private/',import.meta.url));`);
+  put('tooling/private/fixture.ts',`import {fixtureInput} from '../gate/reader-inputs/main.ts';fixtureInput(new URL('./reader.ts',import.meta.url),{dataNamespaces:{'docs/private':'private data'}});`);
+  put('docs/catalogue/existing.md','old prose');put('docs/private/only.md','production');put('results/benchmarks/runs/existing.json','{}');
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+const choose=changes=>{const rules=owed(changes);return {steps:gateSteps(rules),structural:rules.filter(row=>row.name.startsWith('directory membership')).map(row=>row.name)};};
+const prose={path:'docs/catalogue/existing.md',sameMode:true,before:'old prose',after:'new prose'};
+console.log(JSON.stringify({edit:choose([prose]),add:choose([{path:'docs/catalogue/new.md',added:true}]),
+deleted:choose([{path:'docs/catalogue/existing.md',deleted:true}]),
+rename:choose([{path:'docs/catalogue/existing.md',deleted:true},{path:'docs/catalogue/new.md',added:true}]),
+optional:choose([{path:'docs/optional.md',added:true}]),root:choose([{path:'README.md',added:true}]),
+privateData:choose([{path:'docs/private/only.md',deleted:true}]),
+recordEdit:choose([{path:'results/benchmarks/runs/existing.json',sameMode:true}]),
+recordAdd:choose([{path:'results/benchmarks/runs/new.json',added:true}]),metadata:inputMetadataDeclarations()}));`;
+  const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);const value=JSON.parse(result.stdout);
+  for(const key of ['edit','recordEdit'])for(const step of ['names','private'])assert.ok(!value[key].steps.includes(step),key+' content does not change names');
+  for(const key of ['add','deleted','rename','optional','root','recordAdd'])for(const step of ['names','private'])assert.ok(value[key].steps.includes(step),key+' retains '+step);
+  assert.ok(value.privateData.steps.includes('names'));assert.ok(!value.privateData.steps.includes('private'));
+  assert.ok(value.metadata.memberships.some(row=>row.directory===''&&row.reader==='tooling/private/reader.ts'));
+  assert.ok(value.metadata.memberships.some(row=>row.context.entry==='tooling/private/reader.ts'&&row.context.dataNamespaces['docs/private']==='private data'));
+  assert.ok(value.metadata.optionalFiles.every(row=>row.path==='docs/optional.md'&&row.present===false));
+});
+
 test('the data declaration leaf and its project have an explicit tooling owner',()=>{
   for(const path of ['tooling/gate/reader-inputs/main.ts','tooling/gate/reader-inputs/tsconfig.json']){
     const rule=RULES.find(rule=>rule.name==='reader input declaration ownership');

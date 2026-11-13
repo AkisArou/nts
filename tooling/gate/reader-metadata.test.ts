@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {membershipIndex,type MetadataChange} from './reader-metadata.ts';
+import {membershipIndex} from './reader-metadata.ts';
 
 const row=(directory:string,dataNamespaces:Record<string,string>={})=>({directory,context:{entry:'<entry>',dataNamespaces}});
 
 test('shallow membership ignores bytes and compares complete endpoint child sets',()=>{
   const before=['root/a/one.ts','root/a/two.ts','root/plain.txt'],index=membershipIndex(before);
   assert.equal(index.affected(row('root'),[{path:'root/a/one.ts',sameMode:true}]),false);
-  assert.equal(index.affected(row('root'),[{path:'root/plain.txt',sameMode:true,before:'old'} as MetadataChange]),false);
+  assert.equal(index.affected(row('root'),[{path:'root/plain.txt',sameMode:true}]),false);
   assert.equal(index.affected(row('root'),[{path:'root/a/new.md',added:true}]),false);
   assert.equal(index.affected(row('root'),[{path:'root/a/one.ts',deleted:true}]),false);
   assert.equal(index.affected(row('root'),[{path:'root/a/one.ts',deleted:true},{path:'root/a/two.ts',deleted:true}]),true);
