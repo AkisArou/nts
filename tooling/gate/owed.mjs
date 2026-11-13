@@ -1650,7 +1650,7 @@ function stepInputGraph() {
     };
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new InputMap(), byteReaders = new InputMap();
-    const declared = new Set();
+    const declared = new Set(), moduleDeclared = new Set();
     const membership = new Set();
     const directories = new Map();
     const modules = moduleGraph({sourceRoot:TREE});
@@ -1710,6 +1710,7 @@ function stepInputGraph() {
         const batch = [...new Set(entries.splice(0))].filter(input => !placed.has(input));
         if (!batch.length) break;
         const snapshot=modules.describe(batch, row => directory(row,step),row=>byteReaders.add(row.path,step));
+        for(const input of snapshot.moduleFiles)moduleDeclared.add(input);
         for (const input of snapshot.files) {
           if (placed.has(input)) continue;
           placed.add(input); declared.add(input); add(input, step);
@@ -1782,16 +1783,18 @@ function stepInputGraph() {
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, tracked:new Set(trackedFiles()) };
+    return { reach: map, byteReaders, declared, moduleDeclared, directories, membership, tracked:new Set(trackedFiles()) };
     } finally {modules.close();}
   });
 }
 
 export function stepInputs() { return stepInputGraph().reach; }
 
-function declaredInput(/** @type {string} */ path) {
+function declaredInput(/** @type {string} */ path, module=false) {
   const graph=stepInputGraph();
   if(graph.reach.declaresMember(path))return true;
+  // Byte inspection is a reader obligation, not proof that an instrument runs.
+  if(module)return graph.moduleDeclared.has(path);
   if(graph.declared.has(path))return true;
   if(!graph.tracked.has(path))return false;
   for(let input=path;;){
@@ -2015,7 +2018,7 @@ export function owed(changes) {
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && !declaredInput(path)) unrun = true;
+      if (rule.placedBy === "stepInputs" && !declaredInput(path,true)) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.
