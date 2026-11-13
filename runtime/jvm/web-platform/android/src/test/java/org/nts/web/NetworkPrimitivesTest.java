@@ -184,17 +184,21 @@ public final class NetworkPrimitivesTest {
         KeyManagerFactory keys=KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());keys.init(store,"test-only".toCharArray());
         TrustManagerFactory trust=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());trust.init(store);
         SSLContext context=SSLContext.getInstance("TLS");context.init(keys.getKeyManagers(),trust.getTrustManagers(),null);
-        try(SSLServerSocket server=(SSLServerSocket)context.getServerSocketFactory().createServerSocket(0);
-            NetworkPrimitives trusted=new NetworkPrimitives(lane,h->true,(n,m)->errors.add(m),4,context.getSocketFactory());NetworkPrimitives untrusted=primitives(2)) {
+        SSLServerSocket server=(SSLServerSocket)context.getServerSocketFactory().createServerSocket(0);
+        try(NetworkPrimitives trusted=new NetworkPrimitives(lane,h->true,(n,m)->errors.add(m),4,context.getSocketFactory());NetworkPrimitives untrusted=primitives(2)) {
             AtomicInteger remaining=new AtomicInteger(3);
             Thread peer=new Thread(()->{while(remaining.getAndDecrement()>0){try(Socket socket=server.accept()){socket.getOutputStream().write(42);}catch(IOException expected){/* Negative TLS tests abort the server handshake. */}}});peer.start();
-            int id=await(connect(trusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS));check(await(read(trusted,id))[0]==42,"TLS payload");trusted.closeSocket(id);passed("TLS with private root and hostname verification");
-            fails(connect(untrusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Untrusted TLS certificate rejected");
-            fails(connect(trusted,"localhost",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Trusted certificate with wrong hostname rejected");peer.join(HANG_MS);check(!peer.isAlive(),"INSTRUMENT: TLS peer did not close within its hang guard");
-        }
+            try {
+                int id=await(connect(trusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS));check(await(read(trusted,id))[0]==42,"TLS payload");trusted.closeSocket(id);passed("TLS with private root and hostname verification");
+                fails(connect(untrusted,"127.0.0.1",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Untrusted TLS certificate rejected");
+                fails(connect(trusted,"localhost",server.getLocalPort(),true,HANG_MS),"SSLHandshakeException");passed("Trusted certificate with wrong hostname rejected");
+            } finally {
+                server.close();peer.join(HANG_MS);check(!peer.isAlive(),"INSTRUMENT: TLS peer did not close within its hang guard");
+            }
+        } finally { server.close(); }
         SuppliedClock clock=new SuppliedClock();
-        try(ServerSocket stalled=new ServerSocket(0);
-            NetworkPrimitives api=new NetworkPrimitives(lane,h->true,(n,m)->errors.add(m),1,context.getSocketFactory(),clock)) {
+        ServerSocket stalled=new ServerSocket(0);
+        try(NetworkPrimitives api=new NetworkPrimitives(lane,h->true,(n,m)->errors.add(m),1,context.getSocketFactory(),clock)) {
             CompletableFuture<Socket> accepted=new CompletableFuture<>();
             Thread peer=new Thread(()->{try{accepted.complete(stalled.accept());}catch(IOException error){accepted.completeExceptionally(error);}});
             peer.start();
@@ -208,6 +212,7 @@ public final class NetworkPrimitivesTest {
             }
             passed("Supplied TLS deadline closes a stalled handshake and releases capacity");
         } finally {
+            stalled.close();
             check(!clock.isShutdown(),"A borrowed deadline scheduler was shut down");clock.shutdownNow();
         }
     }

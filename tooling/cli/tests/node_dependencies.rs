@@ -182,10 +182,21 @@ fn private_uv_symbols_and_host_loops_work_across_addons_and_workers() {
     }
     let driver = repo.join("tooling/cli/tests/fixtures/node-loop-driver.cjs");
     let output = loop_control(&driver, &addons);
-    assert!(output.status.success(), "{}: {}", output.status, String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, b"host-loop-ok 32 1344\n");
     let mutant = loop_control(&driver, &[dir.join("interposed.node")]);
-    assert_eq!(mutant.status.code(), Some(1), "{}: {}", mutant.status, String::from_utf8_lossy(&mutant.stderr));
+    assert_eq!(
+        mutant.status.code(),
+        Some(1),
+        "{}: {}",
+        mutant.status,
+        String::from_utf8_lossy(&mutant.stderr)
+    );
     assert!(
         String::from_utf8_lossy(&mutant.stderr).contains("bundled uv must not bind Node symbols")
     );
