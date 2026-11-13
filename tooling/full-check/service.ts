@@ -64,10 +64,11 @@
 // controller restarted on newer code may start it once more or read what it
 // wrote.
 import { spawnSync } from "node:child_process";
+import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 import { appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import {candidateCommand} from '../landing/candidate-environment.ts';
 import {launcherEnvironment} from '../landing/run.ts';
 import {nodePin} from '../bootstrap/node.ts';
@@ -1356,7 +1357,10 @@ function takeLock(lock: string): void {
     try {
       mkdirSync(lock);
       writeFileSync(join(lock, "pid"), String(process.pid));
-      process.on("exit", () => { try { if (readFileSync(join(lock, "pid"), "utf8") === String(process.pid)) rmSync(lock, { recursive: true, force: true }); } catch {} });
+      registerCommandCloser(`full-check controller lock ${lock}`,{close:()=>{
+        try{if(readFileSync(join(lock,"pid"),"utf8")===String(process.pid))rmSync(lock,{recursive:true,force:true});}
+        catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+      }});
       return;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -1658,9 +1662,9 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => {
+runAsCommand(import.meta.url,async()=>{
+  try{return await main(process.argv.slice(2));}catch(error){
     stamp(`full check stopped: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
-    process.exitCode = 1;
-  });
-}
+    return 1;
+  }
+});

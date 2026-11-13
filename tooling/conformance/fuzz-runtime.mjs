@@ -2,6 +2,7 @@ import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
 import {bundledDependencies} from './node-deps.mjs';
 import {OracleWorker,oracleLoaderReady,oracleExecution,closeOracleExecution,finishOracleSnapshot,removeOracleSnapshot} from '../differential/oracle-emit.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // The machinery a generative differential needs, minus the grammar.
 //
 // `fuzz-expressions.mjs` was the first of these and carried all of it inline.
@@ -109,8 +110,7 @@ export function assertion(code, want, label) {
  * Use the same pinned TypeScript program emit as every other Node oracle.
  */
 let oracleWorker;
-process.once('beforeExit',()=>oracleWorker?.close());
-process.once('exit',()=>oracleWorker?.close());
+const oraclePreparations=new Set();
 export async function runOracle(dir, source) {
   const file = join(dir, "oracle.ts");
   mkdirSync(dir, { recursive: true });
@@ -118,8 +118,14 @@ export async function runOracle(dir, source) {
   writeFileSync(file, source+'\nexport {};\n');
   const project=join(dir,'oracle.tsconfig.json');
   writeFileSync(project,JSON.stringify({...JSON.parse(TSCONFIG),files:['oracle.ts'],include:[]})+'\n');
-  oracleWorker??=new OracleWorker(join(dir,"oracle-worker"),oracleToolchainLocation());
-  const snapshotOwner=await oracleWorker.prepare({entry:file,project,directory:join(dir,"oracle-emit")});
+  if(!oracleWorker){
+    oracleWorker=new OracleWorker(join(dir,"oracle-worker"),oracleToolchainLocation());
+    registerCommandCloser('fuzz oracle worker',{close:()=>oracleWorker.close(),closed:async()=>{await Promise.allSettled([...oraclePreparations]);}});
+  }
+  const preparation=oracleWorker.prepare({entry:file,project,directory:join(dir,"oracle-emit")});
+  oraclePreparations.add(preparation);
+  let snapshotOwner;
+  try{snapshotOwner=await preparation;}finally{oraclePreparations.delete(preparation);}
   let prepared;
   const finish=()=>{const result=finishOracleSnapshot(snapshotOwner);if(!result.ready)throw new ToolingInstrumentError('tooling-setup',result.why);};
   try{

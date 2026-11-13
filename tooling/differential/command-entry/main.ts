@@ -76,10 +76,6 @@ export class CommandLifetime{
   }
 }
 
-class CommandExit{readonly code:number;constructor(code:number){this.code=code;}}
-/** Early command completion passes through the same drain as a return. */
-export function exitCommand(code:number):never{throw new CommandExit(code);}
-
 type ProcessOwner={lifetime:CommandLifetime;pendingMain:boolean;signal?:CommandSignal;explicitCode?:number;finish:(code:number,reason?:CloseReason)=>Promise<void>};
 let owner:ProcessOwner|undefined;
 function processOwner():ProcessOwner{
@@ -156,7 +152,6 @@ export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?
   };
   const failed=(error:unknown)=>{
     finished();state.pendingMain=false;
-    if(error instanceof CommandExit)return state.finish(error.code);
     console.error(error);return state.finish(1,{kind:'failure',error});
   };
   process.once('beforeExit',arm);

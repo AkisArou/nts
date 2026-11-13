@@ -12,7 +12,7 @@ test('a lost case controller retains its token until its worker drain completes'
   let completions=0;
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
     completed:async request=>{if(++completions===1){assert.equal(request.answered,undefined);draining();await drained;}}});
-  const address=await pool.start();assert.ok(address);t.after(async()=>{finishDrain();pool.close();await pool.closed;});
+  const address=await pool.start();assert.ok(address);t.after(async()=>{finishDrain();first.destroy();pool.close();await pool.closed;});
   const first=connect({host:'127.0.0.1',port:Number(address.split(':')[1])});t.after(()=>first.destroy());
   await new Promise<void>((resolve,reject)=>{first.once('error',reject);first.once('data',data=>{assert.equal(String(data),'go\n');resolve();});first.once('connect',()=>first.write(`want integrity ${process.pid} lease:lost-case json64:eyJzY29wZSI6InN0ZXAifQ\n`));});
   let granted=false;const next=tokenClient(address,'integrity').acquire({project:'tests/fixture/next'}).then(release=>{granted=true;return release;});
@@ -29,7 +29,7 @@ test('normal case completion replies only after the final observation is saved',
   const saved=new Promise<void>(resolve=>{finish=resolve;});
   const pool=createTokenPool({free:()=>1-pool.total,claim:()=>0,
     completed:async request=>{assert.equal(request.answered,true);entered();await saved;}});
-  const address=await pool.start();assert.ok(address);t.after(async()=>{finish();pool.close();await pool.closed;});
+  const address=await pool.start();assert.ok(address);t.after(async()=>{finish();release?.();pool.close();await pool.closed;});
   const release=await tokenClient(address,'integrity').acquire({project:'tests/fixture/final-reply'});assert.ok(release);
   let closed=false;void release.closed?.then(()=>{closed=true;});
   release();await started;

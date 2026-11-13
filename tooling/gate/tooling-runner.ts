@@ -1,4 +1,4 @@
-import {runAsCommand} from "../differential/command-entry/main.ts";
+import {runAsCommand,registerCommandCloser} from "../differential/command-entry/main.ts";
 // Test events decide results. Silence can only fail to measure a file.
 import {run} from "node:test";
 import {spec} from "node:test/reporters";
@@ -203,14 +203,15 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   child.stdout.pipe(output,{end:false});child.stderr.pipe(output,{end:false});
   process.stderr.write(`tooling scope: ${unit}.scope in ${slice}\n`);
   const stop=()=>stopToolingSlice(slice);
-  const terminate=()=>{try{stop();}finally{process.exitCode=2;}};
-  process.once("SIGTERM",terminate);process.once("SIGINT",terminate);
   let ended:string|undefined;
+  const closed=new Promise<number>((resolve,reject)=>{
+    child.once("error",error=>{ended=String(error);reject(error);});
+    child.once("close",code=>{ended=`tooling file scope closed with status ${code}`;resolve(code??2);});
+  });
+  // Cancellation stops the owned hierarchy. Its report namespace stays owned
+  // until the launcher and all output streams have actually closed.
+  const unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});
   try {
-    const closed=new Promise<number>((resolve,reject)=>{
-      child.once("error",error=>{ended=String(error);reject(error);});
-      child.once("close",code=>{ended=`tooling file scope closed with status ${code}`;resolve(code??2);});
-    });
     const [status]=await Promise.all([closed,options.onScope?.(slice,`${unit}.scope`,()=>ended)]);
     let report;
     try { report=JSON.parse(readFileSync(complete,"utf8")); }
@@ -223,7 +224,7 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     if(status===0)rmSync(directory,{recursive:true,force:true});
     return {...result,slice};
   } finally {
-    process.off("SIGTERM",terminate);process.off("SIGINT",terminate);stop();
+    try{stop();}finally{await closed;unregister();}
   }
 }
 /** The run's file times, after its tests' own report: a command line's run, never a fixture's. */

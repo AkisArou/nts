@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pinLaunchProcesses, scopeProcesses, type LaunchProcess } from "./processes.ts";
+import {registerCommandCloser} from '../differential/command-entry/main.ts';
 
 export interface Target { type: string; url: string; webSocketDebuggerUrl: string }
 
@@ -76,19 +77,44 @@ export interface Page {
 }
 
 const DEFAULT_FAILURE = /FATAL:|Check failed|nts host: check failed/;
-const activeLaunches = new Set<() => void>();
-process.once("exit", () => { for (const stop of activeLaunches) stop(); });
-for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
-  process.once(signal, () => { for (const stop of activeLaunches) stop(); process.exit(code); });
-}
 
 export async function openPage(executable: string, url: string, options: LaunchOptions): Promise<Page> {
   const profile = options.profile ?? await mkdtemp(`${options.temporary}/profile-`);
+  let busDirectory:string|undefined,child:ReturnType<typeof spawn>|undefined,socket:WebSocket|undefined;
+  let stopped=false,cancelled=false,exited=false,started!:()=>void;
+  const startup=new Promise<void>(resolve=>{started=resolve;});
+  let childClosed:Promise<void>=Promise.resolve(),draining:Promise<void>|undefined;
+  const stop=()=>{
+    cancelled=true;
+    if(!child||stopped)return;
+    try{execFileSync('systemctl',['--user','stop',unit],{stdio:'pipe'});}
+    catch(error){
+      const message=error instanceof Error&&'stderr' in error?String(error.stderr):String(error);
+      if(!exited&&!/not (?:loaded|found)/.test(message))throw error;
+    }
+    stopped=true;
+  };
+  const drain=()=>draining??=(async()=>{
+    await startup;
+    const problems:unknown[]=[];
+    try{stop();}catch(error){problems.push(error);}
+    try{await childClosed;}catch(error){problems.push(error);}
+    socket?.close();
+    try{if(busDirectory)rmSync(busDirectory,{recursive:true,force:true,maxRetries:5,retryDelay:100});}catch(error){problems.push(error);}
+    try{if(options.profile===undefined)rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}catch(error){problems.push(error);}
+    if(problems.length)throw new AggregateError(problems,'Chromium launch cleanup failed');
+    unregister();
+  })();
+  const unit = `chromium-launch-${randomUUID()}.scope`;
+  const unregister=registerCommandCloser(`Chromium launch ${unit}`,{cancel:stop,close:async()=>{await drain();}});
+  // A synchronous kill starts the same retained drain that close() awaits.
+  const kill=()=>{try{stop();}finally{void drain().catch(()=>{});}};
+  try{
   // Unix socket paths are short. Keep the private bus in a short, owned
   // cache directory even when the caller's evidence path is deeply nested.
   const busRoot = join(homedir(), ".cache", "nts-chromium-bus");
   await mkdir(busRoot, { recursive: true });
-  const busDirectory = await mkdtemp(join(busRoot, "b-"));
+  busDirectory = await mkdtemp(join(busRoot, "b-"));
   const busConfig = join(busDirectory, "session.conf");
   await writeFile(busConfig, `<busconfig>
   <type>session</type>
@@ -107,12 +133,13 @@ export async function openPage(executable: string, url: string, options: LaunchO
   const args = ["--ozone-platform=x11", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`,
     ...(options.args ?? []), url];
   const command = options.cpu === undefined ? [executable, ...args] : ["taskset", "-c", String(options.cpu), executable, ...args];
-  const unit = `chromium-launch-${randomUUID()}.scope`;
-  const child = spawn("systemd-run", ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`,
+  if(cancelled)throw Error('Chromium launch cancelled before entry');
+  const launched = child = spawn("systemd-run", ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`,
     "dbus-run-session", `--config-file=${busConfig}`, "--", "xvfb-run", "-a", "-s", "-screen 0 1280x900x24", ...command], { stdio: ["ignore", "pipe", "pipe"] });
+  childClosed=new Promise<void>(resolve=>{launched.once('close',()=>resolve());});
+  started();
   let log = "";
   let launchError: Error | undefined;
-  let exited = false;
   let failed = false;
   let failedLine = "";
   const pending = new Map<number, { accept: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>();
@@ -120,9 +147,9 @@ export async function openPage(executable: string, url: string, options: LaunchO
     for (const entry of pending.values()) { clearTimeout(entry.timeout); entry.reject(new Error(message)); }
     pending.clear();
   };
-  child.on("error", error => { launchError = error; });
-  child.on("exit", () => { exited = true; });
-  for (const stream of [child.stdout, child.stderr]) {
+  launched.on("error", error => { launchError = error; });
+  launched.on("exit", () => { exited = true; });
+  for (const stream of [launched.stdout!, launched.stderr!]) {
     stream.on("data", chunk => {
       log += String(chunk);
       options.logTo?.write(chunk);
@@ -135,22 +162,6 @@ export async function openPage(executable: string, url: string, options: LaunchO
       }
     });
   }
-  // Stop by the launch's own unit, including any reparented descendants.
-  let stopped = false;
-  const kill = () => {
-    if (stopped) return;
-    try { execFileSync("systemctl", ["--user", "stop", unit], { stdio: "pipe" }); }
-    catch (error) {
-      const message = error instanceof Error && "stderr" in error ? String(error.stderr) : String(error);
-      if (!exited && !/not (?:loaded|found)/.test(message)) throw error;
-    }
-    stopped = true;
-    activeLaunches.delete(kill);
-    rmSync(busDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    if (options.profile === undefined) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  };
-  activeLaunches.add(kill);
-
   async function until<T>(predicate: () => T | Promise<T>, label: string, timeout = waitTimeout): Promise<NonNullable<T>> {
     const deadline = performance.now() + timeout;
     do {
@@ -164,7 +175,6 @@ export async function openPage(executable: string, url: string, options: LaunchO
     throw new Error(`Timed out waiting for ${label}`);
   }
 
-  try {
     const endpoint = await until(() => log.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1], "DevTools");
     const group = execFileSync("systemctl", ["--user", "show", unit, "--property=ControlGroup", "--value"], { encoding: "utf8" }).trim();
     assert(group.startsWith("/") && !group.split("/").includes("..") && group.endsWith(`/${unit}`), `Invalid launch cgroup: ${group}`);
@@ -179,15 +189,15 @@ export async function openPage(executable: string, url: string, options: LaunchO
       const targets = await (await fetch(`${origin}/json/list`)).json() as Target[];
       return targets.find(choose);
     }, "the page");
-    const socket = new WebSocket(target.webSocketDebuggerUrl);
+    const connection = socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise<void>((accept, reject) => {
       const timeout = setTimeout(() => reject(new Error("DevTools connection timed out")), 10_000);
-      socket.addEventListener("open", () => { clearTimeout(timeout); accept(); }, { once: true });
-      socket.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("DevTools connection failed")); }, { once: true });
+      connection.addEventListener("open", () => { clearTimeout(timeout); accept(); }, { once: true });
+      connection.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("DevTools connection failed")); }, { once: true });
     });
     let id = 0;
     const handlers = new Map<string, Array<(params: Record<string, unknown>) => void>>();
-    socket.addEventListener("message", event => {
+    connection.addEventListener("message", event => {
       const message = JSON.parse(String(event.data)) as { id?: number; method?: string; params?: Record<string, unknown>; error?: unknown; result?: unknown };
       if (message.method !== undefined) for (const handler of handlers.get(message.method) ?? []) handler(message.params ?? {});
       const entry = message.id === undefined ? undefined : pending.get(message.id);
@@ -197,13 +207,13 @@ export async function openPage(executable: string, url: string, options: LaunchO
       if (message.error) entry.reject(new Error(JSON.stringify(message.error)));
       else entry.accept(message.result);
     });
-    socket.addEventListener("close", () => rejectAll("The page's DevTools connection closed"));
+    connection.addEventListener("close", () => rejectAll("The page's DevTools connection closed"));
     const cdp = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => new Promise((accept, reject) => {
       if (failed) { reject(new Error(`The renderer failed a check: ${failedLine}`)); return; }
       const next = ++id;
       const timeout = setTimeout(() => { pending.delete(next); reject(new Error(`DevTools call timed out: ${method}`)); }, callTimeout);
       pending.set(next, { accept: value => accept(value as T), reject, timeout });
-      socket.send(JSON.stringify({ id: next, method, params }));
+      connection.send(JSON.stringify({ id: next, method, params }));
     });
     const evaluate = async <T>(expression: string): Promise<T> => {
       const result = await cdp<{ exceptionDetails?: unknown; result: { value: T } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
@@ -211,7 +221,7 @@ export async function openPage(executable: string, url: string, options: LaunchO
       return result.result.value;
     };
     return {
-      pid: child.pid!, unit, cgroup: group, busAddress, processes, origin,
+      pid: launched.pid!, unit, cgroup: group, busAddress, processes, origin,
       pinForMeasurement: async () => {
         assert(options.cpu !== undefined, "openPage needs a CPU birth mask before pinning a measured launch");
         return pinLaunchProcesses(await processes(), options.cpu);
@@ -224,12 +234,12 @@ export async function openPage(executable: string, url: string, options: LaunchO
         await cdp("Page.close").catch(() => undefined);
         const deadline = performance.now() + 20_000;
         while (!exited && performance.now() < deadline) await delay(100);
-        socket.close();
-        kill();
+        await drain();
       },
     };
   } catch (error) {
-    kill();
+    started();
+    try{await drain();}catch(cleanup){throw new AggregateError([error,cleanup],'Chromium launch and cleanup failed');}
     throw error;
   }
 }
