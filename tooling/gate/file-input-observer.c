@@ -141,7 +141,7 @@ static const Call CALLS[] = {
 #undef AT
 
 typedef struct {
-  unsigned char data[ARGV_BYTES];
+  unsigned char *data;
   size_t size;
   int error;
   bool truncated, null;
@@ -221,8 +221,8 @@ static void bytes_json(const Bytes *b) {
   fprintf(output, "\",\"error\":%d,\"truncated\":%s,\"null\":%s}", b->error,
           b->truncated ? "true" : "false", b->null ? "true" : "false");
 }
-static Bytes read_link(const char *path) {
-  Bytes b = {0};
+static Bytes read_link(const char *path, unsigned char data[PATH_BYTES]) {
+  Bytes b = {.data = data};
   ssize_t n = readlink(path, (char *)b.data, PATH_BYTES);
   if (n < 0)
     b.error = errno;
@@ -232,13 +232,14 @@ static Bytes read_link(const char *path) {
   }
   return b;
 }
-static Bytes proc_link(pid_t tid, const char *member) {
+static Bytes proc_link(pid_t tid, const char *member,
+                       unsigned char data[PATH_BYTES]) {
   char path[96];
   snprintf(path, sizeof(path), "/proc/%d/%s", tid, member);
-  return read_link(path);
+  return read_link(path, data);
 }
-static Bytes read_file(const char *path, size_t limit) {
-  Bytes b = {0};
+static Bytes read_file(const char *path, unsigned char *data, size_t limit) {
+  Bytes b = {.data = data};
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
     b.error = errno;
@@ -267,8 +268,9 @@ static Bytes read_file(const char *path, size_t limit) {
   close(fd);
   return b;
 }
-static Bytes remote_path(pid_t tid, uint64_t address) {
-  Bytes b = {0};
+static Bytes remote_path(pid_t tid, uint64_t address,
+                         unsigned char data[PATH_BYTES]) {
+  Bytes b = {.data = data};
   if (!address) {
     b.null = true;
     return b;
@@ -373,10 +375,10 @@ static int install_filter(void) {
 }
 
 static void task_identity(pid_t tid, unsigned long *tgid, unsigned long *ppid,
-                          Bytes *status) {
+                          Bytes *status, unsigned char data[16384]) {
   char path[96];
   snprintf(path, sizeof(path), "/proc/%d/status", tid);
-  *status = read_file(path, 16384);
+  *status = read_file(path, data, 16384);
   *tgid = *ppid = 0;
   if (!good(status))
     return;
@@ -393,10 +395,9 @@ static void task_identity(pid_t tid, unsigned long *tgid, unsigned long *ppid,
 static unsigned long long process_birth(unsigned long pid) {
   char path[96], text[16385];
   snprintf(path, sizeof(path), "/proc/%lu/stat", pid);
-  Bytes value = read_file(path, 16384);
+  Bytes value = read_file(path, (unsigned char *)text, sizeof(text) - 1);
   if (!good(&value))
     return 0;
-  memcpy(text, value.data, value.size);
   text[value.size] = 0;
   char *after = strrchr(text, ')');
   if (!after || after[1] != ' ')
@@ -406,15 +407,16 @@ static unsigned long long process_birth(unsigned long pid) {
     token = strtok_r(NULL, " ", &saved);
   return token ? strtoull(token, NULL, 10) : 0;
 }
-static Bytes descriptor_target(pid_t tid, uint64_t raw) {
+static Bytes descriptor_target(pid_t tid, uint64_t raw,
+                               unsigned char data[PATH_BYTES]) {
   int fd = (int)raw;
   Bytes value;
   if (fd == AT_FDCWD)
-    value = proc_link(tid, "cwd");
+    value = proc_link(tid, "cwd", data);
   else {
     char member[48];
     snprintf(member, sizeof(member), "fd/%d", fd);
-    value = proc_link(tid, member);
+    value = proc_link(tid, member, data);
   }
   return value;
 }
@@ -431,9 +433,14 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     return;
   }
   unsigned long tgid, ppid;
-  Bytes status, cwd = proc_link(request->pid, "cwd"),
-                image = proc_link(request->pid, "exe");
-  task_identity(request->pid, &tgid, &ppid, &status);
+  // All facts remain live until this notification is serialized. Their bounded
+  // backing storage is independent; only metadata travels through Bytes views.
+  unsigned char cwd_data[PATH_BYTES], image_data[PATH_BYTES],
+      status_data[16384], argv_data[ARGV_BYTES], path_data[2][PATH_BYTES],
+      descriptor_data[2][PATH_BYTES];
+  Bytes status, cwd = proc_link(request->pid, "cwd", cwd_data),
+                image = proc_link(request->pid, "exe", image_data);
+  task_identity(request->pid, &tgid, &ppid, &status, status_data);
   unsigned long long birth = process_birth(tgid),
                      parent_birth = ppid ? process_birth(ppid) : 0;
   bool complete = good(&cwd) && good(&image) && good(&status) && tgid && birth;
@@ -443,13 +450,14 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
       memcmp(image.data + image.size - 8, "/rustdoc", 8) == 0) {
     char path[96];
     snprintf(path, sizeof(path), "/proc/%lu/cmdline", tgid);
-    argv = read_file(path, ARGV_BYTES);
+    argv = read_file(path, argv_data, sizeof(argv_data));
     argv_read = true;
     complete = complete && good(&argv);
   }
   Bytes paths[2];
   for (unsigned i = 0; i < call->count; i++) {
-    paths[i] = remote_path(request->pid, request->data.args[call->paths[i]]);
+    paths[i] = remote_path(request->pid, request->data.args[call->paths[i]],
+                           path_data[i]);
     complete = complete && good(&paths[i]);
   }
   Bytes descriptors[2];
@@ -457,8 +465,8 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     if (call->dirfds[i] < 0)
       continue;
     int fd = (int)request->data.args[call->dirfds[i]];
-    descriptors[i] =
-        descriptor_target(request->pid, request->data.args[call->dirfds[i]]);
+    descriptors[i] = descriptor_target(
+        request->pid, request->data.args[call->dirfds[i]], descriptor_data[i]);
     if (fd >= 0 || fd == AT_FDCWD)
       complete = complete && good(&descriptors[i]);
   }
@@ -540,7 +548,8 @@ static void inherited_descriptors(void) {
     }
     char path[96];
     snprintf(path, sizeof(path), "/proc/self/fd/%ld", fd);
-    Bytes target = read_link(path);
+    unsigned char data[PATH_BYTES];
+    Bytes target = read_link(path, data);
     if (!good(&target))
       errors++;
     fprintf(output,

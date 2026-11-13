@@ -43,6 +43,11 @@ int main(int argc,char **argv){
     int socket_fd=socket(AF_UNIX,SOCK_STREAM,0);if(socket_fd<0)return 114;
     if(openat(socket_fd,"socket-relative",O_RDONLY)!=-1||errno!=ENOTDIR)return 115;
     close(socket_fd);
+    if(mkdirat(dir,"other",0700))return 119;
+    int other=openat(dir,"other",O_RDONLY|O_DIRECTORY);if(other<0)return 120;
+    if(syscall(SYS_renameat2,dir,"value",other,"renamed",0))return 121;
+    if(syscall(SYS_renameat2,other,"renamed",dir,"value",0))return 122;
+    close(other);
     char entries[4096];if(syscall(SYS_getdents64,dir,entries,sizeof(entries))<0)return 98;
     close(value);close(dir);if(write(2,"err",3)!=3)return 104;return 7;
   }
@@ -93,6 +98,9 @@ test('the native observer retains actual images, attempted inputs and original p
   assert.ok(attempts.some(row=>row.dirfds.some(fd=>fd.fd===-2&&fd.target.error!==0)&&row.factsComplete));
   assert.ok(attempts.some(row=>row.syscall==='statx'&&row.paths.some(path=>path.value.null)&&row.dirfds.some(fd=>byteFactText(fd.target,'AT_EMPTY_PATH target')===join(root,'value'))));
   assert.ok(attempts.some(row=>row.paths.some(path=>!path.value.null&&byteFactText(path.value,'relative socket path')==='socket-relative')&&row.dirfds.some(fd=>byteFactText(fd.target,'socket dirfd').startsWith('socket:['))));
+  const renamed=attempts.find(row=>row.syscall==='renameat2'&&row.paths.length===2&&byteFactText(row.paths[0]!.value,'first path')==='value');
+  assert.ok(renamed);assert.equal(byteFactText(renamed.paths[1]!.value,'second path'),'renamed');
+  assert.deepEqual(renamed.dirfds.map(fd=>byteFactText(fd.target,'independent directory')),[root,join(root,'other')]);
   const exec=attempts.find(row=>row.operation==='execute');assert.ok(exec);
   assert.notEqual(byteFactText(exec.image,'pre-exec image'),program,'an exec attempt does not claim the requested program entered');
   const published=join(root,'facts.index.jsonl.gz');
@@ -227,6 +235,35 @@ test('the native observer retains actual images, attempted inputs and original p
     if(!clean){assert.match(off.stderr,/91 byte\(s\) leaked/);assert.match(on.stderr,/91 byte\(s\) leaked/);}
     await readFileObservation(join(root,'sanitizer-'+clean+'.jsonl'),()=>{});
   }
+});
+
+test('native fact views retain independent bytes and initialize only metadata, including exact bounds and errors',t=>{
+  const root=newTestScratch('file-input-view-storage');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),input=join(root,'view.c'),program=join(root,'view');
+  writeFileSync(join(root,'small'),'abc');writeFileSync(join(root,'exact'),'1234');writeFileSync(join(root,'over'),'12345');
+  writeFileSync(join(root,'argv'),Buffer.alloc(65536,0x7f));
+  writeFileSync(input,`#define main observer_main\n#include ${JSON.stringify(source)}\n#undef main\n#include <assert.h>
+int main(int argc,char **argv){
+  assert(argc==2);assert(chdir(argv[1])==0);
+  unsigned char first[4],exact[4],over[4],missing[4],large[ARGV_BYTES],remote[PATH_BYTES],null_data[PATH_BYTES];
+  memset(first,0xa5,sizeof(first));memset(exact,0xa5,sizeof(exact));memset(over,0xa5,sizeof(over));
+  memset(missing,0xa5,sizeof(missing));memset(large,0xa5,sizeof(large));
+  memset(remote,0xa5,sizeof(remote));memset(null_data,0xa5,sizeof(null_data));
+  Bytes a=read_file("small",first,sizeof(first)),b=read_file("exact",exact,sizeof(exact)),
+    c=read_file("over",over,sizeof(over)),d=read_file("missing",missing,sizeof(missing)),
+    e=read_file("argv",large,sizeof(large)),f=remote_path(getpid(),(uintptr_t)"path",remote),
+    g=remote_path(getpid(),0,null_data);
+  assert(first[3]==0xa5&&missing[0]==0xa5&&remote[4]==0xa5&&null_data[0]==0xa5);
+  output=stdout;Bytes *facts[]={&a,&b,&c,&d,&e,&f,&g};fputc('[',output);
+  for(unsigned i=0;i<sizeof(facts)/sizeof(facts[0]);i++){if(i)fputc(',',output);bytes_json(facts[i]);}
+  fputs("]\\n",output);return 0;
+}\n`);
+  const built=spawnTest('cc',['-O2','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',program],{env,encoding:'utf8'});
+  assert.equal(built.status,0,built.stderr);
+  const result=spawnTest(program,[root],{env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  const fact=(value:string|Buffer,error=0,truncated=false,nullValue=false)=>({hex:Buffer.from(value).toString('hex'),error,truncated,null:nullValue});
+  assert.deepEqual(JSON.parse(result.stdout),[fact('abc'),fact('1234'),fact('1234',0,true),fact('',2),
+    fact(Buffer.alloc(65536,0x7f)),fact('path'),fact('',0,false,true)]);
 });
 
 test('the native wedged-phase decision uses supplied elapsed observations',t=>{
