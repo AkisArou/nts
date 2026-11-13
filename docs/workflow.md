@@ -543,6 +543,28 @@ The shared source audit rejects direct Cargo test calls in other tooling,
 including shell calls; isolated cache-pruning controls are classified separately
 because they manufacture obsolete artifacts intentionally.
 
+The local Rust input census uses
+`node tooling/landing/check.ts <commit> --here --trace-rust-inputs`.
+Cargo's artifact report binds each executable to its target source. Temporary
+doctest executables run during the original Cargo/rustdoc lifetime; only
+profile-owned binaries are recorded for the workspace replay.
+
+The observer records attempted filesystem operations with fresh task image,
+cwd and process birth facts. Continuing a notification establishes neither its
+result nor a successful exec. Raw and attributed records keep outcomes unknown.
+Doctest runtime ownership requires an actual image observation bound to the
+recorded process identity. An input-free canceled exit may remain an explicitly
+unattributed terminal fact; it grants no image or input. Simultaneously live
+byte facts have independent bounded storage through serialization.
+
+Raw artifacts and attributed line records are compressed and published after
+their output owners finish. Consumers stream bounded records and accept an
+index only after checking its version, attribution, completion counts, native
+drain and compressed-stream completion. Partial artifacts describe an
+incomplete census. An observation failure is INSTRUMENT and cannot erase a
+completed failed Rust assertion or Cargo's failed compile or doctest outcome.
+The census keeps the existing product and step bounds.
+
 ## The machine
 
 Every `.ts` and `.mjs` module under `tooling/` belongs to the single strict
@@ -872,6 +894,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Rust input observations separate attempts from outcomes.** Cargo supplies
+  source identity; the observer reads fresh task facts and joins native drain
+  and stream publication before accepting coverage. Notification continuation
+  proves neither a successful read nor exec
+  ([log](records/notebooks/decisions-log.md#rust-input-observations-keep-unknown-outcomes-11-13)).
 
 - **Test event transport gets a turn before each case.** Queued child reports
   get a serialization opportunity before later synchronous work. Completion

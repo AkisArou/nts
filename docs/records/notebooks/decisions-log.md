@@ -2765,3 +2765,17 @@ whole-job sizing history, ends before the runner starts, and is retired by the
 next admission decision. GNU preparation accounting runs inside admission.
 The staged route proves a live build owner and its absence at gate entry,
 including a Cargo failure that never enters the gate.
+
+## Rust input observations keep unknown outcomes (11-13)
+
+Part of #761 adds an opt-in census through the supported local landing route.
+Cargo artifacts bind binaries to target sources, and rustdoc's temporary
+executables stay in the original traced Cargo lifetime. A non-ptrace seccomp
+observer preserves sanitizer operation and records fresh task facts without
+claiming syscall results from notification continuation. Raw bytes and bounded
+attributed line records retain unknown outcomes, and their owners join drain,
+checked compression and publication before accepting a complete census.
+Completed Rust failures keep their product verdict when observation also fails.
+
+This slice adds observation and publication machinery only. Runtime reader
+declarations and removal of Rust checks from ALWAYS remain a separate review.
