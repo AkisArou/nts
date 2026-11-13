@@ -8,7 +8,12 @@ import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve,sep} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex} from './oracle-filesystem.ts';
-import {MAX_SNAPSHOT_BUCKET_BYTES,snapshotSlot} from './oracle-runtime.ts';
+import {MAX_SNAPSHOT_BUCKET_BYTES,snapshotSlot,oracleNodePackageScopes} from './oracle-runtime.ts';
+test('the Node scope protocol retains query order and its node_modules boundary',()=>{
+  assert.deepEqual([...oracleNodePackageScopes('/app/src/main.ts')],['/app/src/package.json','/app/package.json','/package.json']);
+  assert.deepEqual([...oracleNodePackageScopes('/app/node_modules/pkg/src/main.ts')],['/app/node_modules/pkg/src/package.json','/app/node_modules/pkg/package.json']);
+  assert.deepEqual([...oracleNodePackageScopes('/app/node_modules/file.js')],[]);
+});
 test('invalid local file URL syntax has a complete empty ESM lookup domain',async t=>{
   const domain=new OracleResolutionDomain({recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:[],excluded:[],aliases:[],files:[],directories:[],absent:[],scopeAbsent:[],moduleAbsent:[],packages:[]});
   for(const nodeMajor of [26]){

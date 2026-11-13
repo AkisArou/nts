@@ -351,6 +351,15 @@ export type ResolutionPackageFact={directory:string;valid:boolean;main:string|nu
 export const ORACLE_NODE_RESOLUTION_RECIPE=Object.freeze({version:1,nodeMajors:Object.freeze([26]),extensions:Object.freeze(['.js','.json','.node']),
   mainSuffixes:Object.freeze(['','.js','.json','.node','/index.js','/index.json','/index.node']),
   packageIndexSuffixes:Object.freeze(['/index.js','/index.json','/index.node'])});
+/** Query order only, from the versioned Node recipe. Consumers retain the
+ * first package answer and stop there; Bun does not inherit this protocol. */
+export function* oracleNodePackageScopes(file:string):Generator<string>{
+  for(let directory=dirname(file);;directory=dirname(directory)){
+    if(directory.split(sep).at(-1)==='node_modules')return;
+    yield join(directory,'package.json');
+    if(directory===dirname(directory))return;
+  }
+}
 export function oracleLegacyMainQueries(directory:string,main:string|null):string[]{
   return [...(main?ORACLE_NODE_RESOLUTION_RECIPE.mainSuffixes.map(suffix=>resolve(directory,main+suffix)):[]),
     ...ORACLE_NODE_RESOLUTION_RECIPE.packageIndexSuffixes.map(suffix=>resolve(directory,'.'+suffix))];
@@ -423,16 +432,13 @@ export class OracleResolutionDomain{
     const complete=(path:string)=>{const key=own(path);return key!==null&&(this.files.has(key)||this.roots.has(key))&&!this.excluded.has(key);};
     const query=(kind:ResolutionQuery['kind'],path:string)=>{const key=kind+'\0'+path;if(!seen.has(key)){seen.add(key);queries.push({kind,path});}};
     const scopes=(file:string):{complete:boolean;fact?:ResolutionPackageFact}=>{
-      for(let directory=dirname(file);;directory=dirname(directory)){
-        // Node stops package scope at a node_modules boundary.
-        if(directory.split(sep).at(-1)==='node_modules')return {complete:true};
-        const path=join(directory,'package.json'),key=own(path);query('package',path);
+      for(const path of oracleNodePackageScopes(file)){
+        const directory=dirname(path),key=own(path);query('package',path);
         if(key===null)return {complete:fail('cyclic package scope')};
         const fact=this.packages.get(own(directory)!);
         if(fact)return {complete:true,fact};
         if(this.files.has(key))return {complete:fail('missing package facts for captured metadata: '+path)};
         if(!this.scopeAbsent.has(key)&&!complete(path))return {complete:fail('unobserved package scope: '+path)};
-        if(directory===dirname(directory))break;
       }
       return {complete:true};
     };
