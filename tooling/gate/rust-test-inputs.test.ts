@@ -5,6 +5,7 @@ import type {InputAttempt,ByteFact} from './file-input-observer.ts';
 import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {newTestScratch} from './test-scratch.ts';
+import {gzipSync} from 'node:zlib';
 
 const artifact={package_id:'pkg-id',executable:'/source/target/nts-dev/deps/arbitrary-hash',profile:{test:true},target:{name:'integration',kind:['test'],src_path:'/source/crate/tests/integration.rs'}};
 const evidence=(artifacts:unknown[]= [artifact])=>({version:1,status:0,buildFinished:true,artifacts});
@@ -79,8 +80,8 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   const socket=image(1,0,'/fixture');socket.syscall='openat';socket.operation='open';
   socket.paths=[{arg:1,dirfdArg:0,value:bytes('relative')}];socket.dirfds=[{arg:0,fd:4,target:bytes('socket:[123]')}];
   const raw=join(root,'raw.jsonl'),output=join(root,'decoded.json');
-  writeFileSync(raw,[{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},nullPath,socket,
-    {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  writeFileSync(raw,gzipSync([{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},nullPath,socket,
+    {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}].map(row=>JSON.stringify(row)).join('\n')+'\n'));
   await publishInputTrace({raw,output,cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
   const decoded=JSON.parse(readFileSync(output,'utf8')) as {observations:{path:string;operation:string;outcome:string}[];descriptorProbes:{kind:string;raw:string}[]};
   assert.deepEqual(decoded.observations.map(row=>[row.path,row.operation,row.outcome]),[['/source/crate/value','descriptor','unknown']]);

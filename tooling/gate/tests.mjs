@@ -94,7 +94,7 @@ chmodSync(recorder, 0o755);
 const started = Date.now();
 const artifactFile=traceDirectory?join(traceDirectory,'artifacts.json'):undefined;
 const ownerArgs=[...(artifactFile?['--artifacts',artifactFile]:[]),"workspace"];
-const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw'):undefined;
+const cargoTrace=traceDirectory?join(traceDirectory,'cargo.raw.gz'):undefined;
 const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverArguments(cargoTrace,process.execPath,[TEST_OWNER,...ownerArgs]):[TEST_OWNER,...ownerArgs], {
   cwd: ROOT,
   env: {
@@ -143,7 +143,7 @@ const runOne = (key) =>
     if(artifactTargets&&!target)throw Error('Rust test inputs: Cargo named no target for '+r.argv[0]);
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
-    const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw'):undefined;
+    const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
     const child = spawn(fileObserver??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
@@ -151,7 +151,7 @@ const runOne = (key) =>
     child.on("error", (e) => { out += `error: ${e.message}\n`; });
     child.on("close", async (status, signal) => {
       if(trace){
-        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw$/,'.json'),cwd:r.cwd,root:ROOT,target});}
+        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.json'),cwd:r.cwd,root:ROOT,target});}
         catch(error){if(isCommandExit(error))throw error;traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;

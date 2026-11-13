@@ -3,6 +3,8 @@
 import {createReadStream,mkdirSync} from 'node:fs';
 import {join,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createGunzip} from 'node:zlib';
+import {compose} from 'node:stream';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
@@ -24,7 +26,7 @@ export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):stri
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
   mkdirSync(directory,{recursive:true});const binary=join(directory,'file-input-observer');
   const built=infrastructureProbe({purpose:'build the filesystem input observer',command:'cc',
-    args:['-O2','-std=c11','-Wall','-Wextra','-Werror',fileURLToPath(new URL('./file-input-observer.c',import.meta.url)),'-o',binary],env});
+    args:['-O2','-std=c11','-Wall','-Wextra','-Werror',fileURLToPath(new URL('./file-input-observer.c',import.meta.url)),'-lz','-o',binary],env});
   if(built.status!==0)throw Error('file input observer: build failed: '+built.stderr);
   return binary;
 }
@@ -108,7 +110,7 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     visit(row);
   };
-  for await(const chunk of createReadStream(file)){
+  for await(const chunk of compose(createReadStream(file),createGunzip())){
     pending=Buffer.concat([pending,chunk as Buffer]);
     for(;;){
       const at=pending.indexOf(10);if(at<0)break;

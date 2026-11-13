@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
+#include <linux/fs.h>
 #include <linux/seccomp.h>
 #include <poll.h>
 #include <signal.h>
@@ -26,6 +27,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <zlib.h>
 
 #if defined(__x86_64__)
 #define OBSERVER_ARCH AUDIT_ARCH_X86_64
@@ -148,8 +150,53 @@ typedef struct {
   int stage, error;
 } ChildError;
 static FILE *output;
+static gzFile compressed;
+static int observation_fd;
+static char *pending_path;
 static unsigned long errors, attempts;
 static bool output_failed;
+
+static ssize_t compressed_write(void *cookie, const char *bytes, size_t size) {
+  if (size > INT32_MAX) {
+    errno = EOVERFLOW;
+    return -1;
+  }
+  int written = gzwrite((gzFile)cookie, bytes, (unsigned)size);
+  if (!written && size) {
+    errno = EIO;
+    return -1;
+  }
+  return written;
+}
+static int compressed_close(void *cookie) {
+  if (gzclose((gzFile)cookie) == Z_OK)
+    return 0;
+  errno = EIO;
+  return -1;
+}
+static void flush_output(void) {
+  // Only lifecycle barriers need visibility before final publication.
+  if (fflush(output) || gzflush(compressed, Z_SYNC_FLUSH) != Z_OK)
+    output_failed = true;
+}
+static bool publish_observation(const char *path) {
+  if (fclose(output)) {
+    fprintf(stderr,
+            "file input observer: compressed artifact close failed: %s\n",
+            strerror(errno));
+    return false;
+  }
+  // The final name stays absent until compression has closed successfully.
+  // NOREPLACE also refuses two writers rather than replacing either artifact.
+  if (syscall(SYS_renameat2, AT_FDCWD, pending_path, AT_FDCWD, path,
+              RENAME_NOREPLACE)) {
+    fprintf(stderr, "file input observer: publish compressed artifact: %s\n",
+            strerror(errno));
+    return false;
+  }
+  free(pending_path);
+  return true;
+}
 
 static void fatal(const char *what) {
   fprintf(stderr, "file input observer: %s: %s\n", what, strerror(errno));
@@ -474,7 +521,7 @@ static void inherited_descriptors(void) {
   while ((entry = readdir(directory))) {
     char *end;
     long fd = strtol(entry->d_name, &end, 10);
-    if (*end || fd < 0 || fd == dirfd(directory) || fd == fileno(output))
+    if (*end || fd < 0 || fd == dirfd(directory) || fd == observation_fd)
       continue;
     int descriptor_flags = fcntl((int)fd, F_GETFD),
         flags = fcntl((int)fd, F_GETFL);
@@ -514,8 +561,7 @@ static void forward_pending(pid_t root, bool reaped) {
   signal_to_forward = 0;
   fprintf(output, "{\"kind\":\"signal\",\"signal\":%d,\"rootAlive\":%s}\n",
           signal, reaped ? "false" : "true");
-  if (fflush(output))
-    output_failed = true;
+  flush_output();
   if (!reaped)
     kill(root, signal);
 }
@@ -552,10 +598,18 @@ int main(int argc, char **argv) {
           stderr);
     return 2;
   }
-  int logfd = open(argv[1], O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+  if (asprintf(&pending_path, "%s.pending.%d", argv[1], getpid()) < 0)
+    fatal("observation pending path");
+  int logfd = open(pending_path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
   if (logfd < 0)
     fatal("create observation");
-  output = fdopen(logfd, "w");
+  observation_fd = logfd;
+  compressed = gzdopen(logfd, "wb1");
+  if (!compressed || gzbuffer(compressed, 65536))
+    fatal("compressed observation buffer");
+  cookie_io_functions_t functions = {.write = compressed_write,
+                                     .close = compressed_close};
+  output = fopencookie(compressed, "w", functions);
   if (!output)
     fatal("observation stream");
   static char buffer[65536];
@@ -662,9 +716,11 @@ int main(int argc, char **argv) {
             root, WIFEXITED(status) ? WEXITSTATUS(status) : -1,
             WIFSIGNALED(status) ? WTERMSIG(status) : 0, terminal_signal,
             launch_error.stage, launch_error.error);
-    fclose(output);
+    bool published = publish_observation(argv[1]);
     if (terminal_signal)
       return terminal_status(terminal_signal, &original);
+    if (!published)
+      return 2;
     fprintf(stderr,
             "file input observer: listener setup failed at stage %d: %s\n",
             launch_error.stage, strerror(launch_error.error));
@@ -712,8 +768,7 @@ int main(int argc, char **argv) {
             "{\"kind\":\"root-exit\",\"root\":%d,\"exit\":%d,\"signal\":%d}\n",
             root, WIFEXITED(root_status) ? WEXITSTATUS(root_status) : -1,
             WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0);
-        if (fflush(output))
-          output_failed = true;
+        flush_output();
       } else if (child < 0 && errno != EINTR && errno != ECHILD)
         fatal("wait observed root");
       if (child <= 0)
@@ -787,7 +842,7 @@ int main(int argc, char **argv) {
           WIFEXITED(root_status) ? WEXITSTATUS(root_status) : -1,
           WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0, attempts,
           errors, drained ? "true" : "false", terminal_signal);
-  if (fclose(output))
+  if (!publish_observation(argv[1]))
     complete = false;
   if ((!complete || launch_error.error) && !terminal_signal) {
     fprintf(stderr,

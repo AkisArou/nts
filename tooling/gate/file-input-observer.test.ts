@@ -4,6 +4,7 @@ import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
+import {gzipSync,gunzipSync,constants} from 'node:zlib';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
 import {publishInputTrace} from './rust-test-inputs.ts';
 import {fixtureEnvironment} from './test-environment.ts';
@@ -126,9 +127,10 @@ test('the native observer retains actual images, attempted inputs and original p
     const done=new Promise<{status:number|null;signal:NodeJS.Signals|null}>(resolve=>child.on('close',(status,signal)=>{closed=true;resolve({status,signal});}));
     try{
       await waitFor('descendant readiness after root work',()=>ready==='ready',{stopped:()=>closed?stderr||'observer exited':undefined});
-      await waitFor('root exit before descendant release',()=>readFileSync(record,'utf8').includes('"kind":"root-exit"'),{stopped:()=>closed?'observer exited before drain':undefined});
+      await waitFor('root exit before descendant release',()=>gunzipSync(readFileSync(record+'.pending.'+child.pid),{finishFlush:constants.Z_SYNC_FLUSH}).toString('utf8').includes('"kind":"root-exit"'),{stopped:()=>closed?'observer exited before drain':undefined});
       assert.equal(closed,false,'root exit is not terminal completion while a filter descendant lives');
-      if(signal){child.kill(signal);await waitFor('observer signal during drain',()=>readFileSync(record,'utf8').includes('\"kind\":\"signal\"'));}
+      assert.equal((await import('node:fs')).existsSync(record),false,'the final artifact waits for compression close');
+      if(signal){child.kill(signal);await waitFor('observer signal during drain',()=>gunzipSync(readFileSync(record+'.pending.'+child.pid),{finishFlush:constants.Z_SYNC_FLUSH}).toString('utf8').includes('\"kind\":\"signal\"'));}
       releasePipe.end('x');
       const result=await done;assert.deepEqual(result,signal?{status:null,signal}:{status:0,signal:null},stderr);
       const terminal=await readFileObservation(record,()=>{});assert.equal(terminal.drainComplete,true);assert.equal(terminal.exit,0);
@@ -142,7 +144,7 @@ test('the native observer retains actual images, attempted inputs and original p
   const original=readFileSync(source,'utf8'),paused=original.replace('int listener = install_filter();',
     'if(write(3,"ready",5)!=5){_exit(111);}\n    char release;\n    if(read(4,&release,1)!=1){_exit(112);}\n    int listener = install_filter();');
   assert.notEqual(paused,original);writeFileSync(startupSource,paused);
-  const startupBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-o',startupBinary],{env,encoding:'utf8'});
+  const startupBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',startupSource,'-lz','-o',startupBinary],{env,encoding:'utf8'});
   assert.equal(startupBuild.status,0,startupBuild.stderr);
   const startupRecord=join(root,'startup.jsonl'),starting=spawn(startupBinary,fileObserverArguments(startupRecord,program,['streams']),{env,stdio:['ignore','pipe','pipe','pipe','pipe']});
   let startupReady='',startupClosed=false;starting.stdout!.resume();starting.stderr!.resume();
@@ -152,9 +154,20 @@ test('the native observer retains actual images, attempted inputs and original p
   try{
     await waitFor('listener startup barrier',()=>startupReady==='ready',{stopped:()=>startupClosed?'observer closed before its barrier':undefined});
     starting.kill('SIGTERM');assert.equal(await startupDone,'SIGTERM');
-    const final=readFileSync(startupRecord,'utf8').trim().split('\n').map(line=>JSON.parse(line)).at(-1);
+    const final=gunzipSync(readFileSync(startupRecord)).toString('utf8').trim().split('\n').map(line=>JSON.parse(line)).at(-1);
     assert.equal(final.observerSignal,15);assert.equal(final.drainComplete,true);assert.equal(final.complete,false);
   }finally{startRelease.end();if(!startupClosed)await startupDone;}
+
+  const failedCloseSource=join(root,'failed-close.c'),failedCloseBinary=join(root,'failed-close');
+  const failedClose=original.replace('if (gzclose((gzFile)cookie) == Z_OK)',
+    'if (gzclose((gzFile)cookie) == Z_OK && 0)');
+  assert.notEqual(failedClose,original);writeFileSync(failedCloseSource,failedClose);
+  const closeBuild=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',failedCloseSource,'-lz','-o',failedCloseBinary],{env,encoding:'utf8'});
+  assert.equal(closeBuild.status,0,closeBuild.stderr);
+  const failedRecord=join(root,'failed-close.gz');
+  const closeResult=spawnTest(failedCloseBinary,fileObserverArguments(failedRecord,'sh',['-c','exit 0']),{env,encoding:'utf8'});
+  assert.equal(closeResult.status,2,closeResult.stderr);assert.match(closeResult.stderr,/compressed artifact close failed/);
+  await assert.rejects(readFileObservation(failedRecord,()=>{}),/ENOENT/,'a failed compression close cannot publish completion');
 
   const sanitized=join(root,'sanitized');
   const sanitizer=spawnTest('clang',['-O0','-fsanitize=address',input,'-o',sanitized],{env,encoding:'utf8'});assert.equal(sanitizer.status,0,sanitizer.stderr);
@@ -172,7 +185,7 @@ test('the native wedged-phase decision uses supplied elapsed observations',t=>{
   const root=newTestScratch('file-observer-bound');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const input=join(root,'bound.c'),binary=join(root,'bound');
   writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\nint main(void){assert(phase_timeout_ms(false,UINT64_MAX)==-1);assert(phase_timeout_ms(true,0)==300000);assert(phase_timeout_ms(true,WEDGED_NS-1)==1);assert(phase_timeout_ms(true,WEDGED_NS)==0);assert(phase_timeout_ms(true,UINT64_MAX)==0);return 0;}\n');
-  const env=fixtureEnvironment(t),compiled=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-o',binary],{env,encoding:'utf8'});
+  const env=fixtureEnvironment(t),compiled=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
   assert.equal(compiled.status,0,compiled.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
@@ -181,10 +194,22 @@ test('malformed and incomplete raw observations cannot publish a complete census
   const start={kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true};
   const end={kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:0,errors:0,drainComplete:true,observerSignal:0};
   for(const [index,rows] of [[start],[start,{...end,complete:false}],[start,{...end,errors:1}],[start,{...end,drainComplete:false}],[start,{...end,attempts:1}],[start,end,end],[{},end]].entries()){
-    const file=join(root,index+'.jsonl');writeFileSync(file,rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+    const file=join(root,index+'.jsonl');writeFileSync(file,gzipSync(rows.map(row=>JSON.stringify(row)).join('\n')+'\n'));
     await assert.rejects(readFileObservation(file,()=>{}),/file input observer/);
   }
   assert.throws(()=>readObservationRow({...end,attempts:'0'}),/malformed/);
   assert.throws(()=>byteFactText({hex:'ff',error:0,truncated:false,null:false},'raw path'),/not UTF-8/);
   for(const fact of [{hex:'',error:14,truncated:false,null:false},{hex:'61',error:0,truncated:true,null:false},{hex:'',error:0,truncated:false,null:true}])assert.throws(()=>byteFactText(fact,'raw path'),/unreadable, null or truncated/);
+  const valid=Buffer.from([start,{kind:'root-start',root:1},{kind:'root-exit',root:1,exit:0,signal:0},end].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  const compressed=gzipSync(valid);
+  const truncated=join(root,'truncated.gz');writeFileSync(truncated,compressed.subarray(0,compressed.length-1));
+  await assert.rejects(readFileObservation(truncated,()=>{}),/unexpected end|buffer error/i);
+  const corrupt=join(root,'corrupt.gz'),corrupted=Buffer.from(compressed);corrupted[corrupted.length-8]^=1;writeFileSync(corrupt,corrupted);
+  await assert.rejects(readFileObservation(corrupt,()=>{}),/incorrect data check/i);
+  const oversized=join(root,'oversized.gz');writeFileSync(oversized,gzipSync('x'.repeat(256*1024+1)+'\n'));
+  await assert.rejects(readFileObservation(oversized,()=>{}),/exceeds bounded row size/);
+  const large=join(root,'many-rows.gz'),descriptor={kind:'inherited',fd:1,flags:1,target:{hex:'706970653a5b315d',error:0,truncated:false,null:false}};
+  const many=[start,...Array.from({length:5000},()=>descriptor),{kind:'root-start',root:1},{kind:'root-exit',root:1,exit:0,signal:0},end].map(row=>JSON.stringify(row)).join('\n')+'\n';
+  assert.ok(Buffer.byteLength(many)>256*1024);writeFileSync(large,gzipSync(many));
+  assert.equal((await readFileObservation(large,()=>{})).complete,true,'the limit is per decoded row, not total stream size');
 });
