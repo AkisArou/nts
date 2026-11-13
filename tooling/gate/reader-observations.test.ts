@@ -106,3 +106,27 @@ test('Node facts retain logical and physical scopes while strict staging refuses
   assert.throws(()=>copyModuleClosure(['alias/main.ts'],f.destination,{sourceRoot:f.source,nodeMajor:26}),/reader observation ancestor is not an owned directory: .*alias/);
   assert.throws(()=>moduleGraph({sourceRoot:f.source,nodeMajor:99 as 26}),/unsupported host module Node recipe: 99/);
 });
+
+test('nested fixture contexts inherit compiled/type-only roles and promote on a later host visit',t=>{
+  const f=fixture(t);f.write('compiled.ts','export type Value=number;');f.write('child.ts','export {};');f.write('grandchild.ts','export {};');
+  f.write('entry.ts',"import type {Value} from './compiled.ts';export type Other=Value;");
+  f.write('tsconfig.json','{"files":["compiled.ts"]}');
+  const declarations=new Map<string,ModuleDeclarations>([
+    ['compiled.ts',{imports:[],assets:[{kind:'fixture',path:'./child.ts',dataNamespaces:{}}]}],
+    ['child.ts',{imports:[],assets:[{kind:'fixture',path:'./grandchild.ts',dataNamespaces:{}}]}],
+  ]);
+  const project=projectInput(pathToFileURL(join(f.source,'compiled.ts'))),graph=moduleGraph({sourceRoot:f.source,nodeMajor:26,declarations});
+  try{
+    const compiled=graph.describe([project]);assert.deepEqual(compiled.hostFiles,[]);
+    assert.ok(compiled.observations.every(row=>row.protocol!=='node26'));
+    const typeOnly=graph.describe(['entry.ts']);assert.deepEqual(typeOnly.hostFiles,['entry.ts']);
+    assert.ok(typeOnly.observations.filter(row=>row.protocol==='node26').every(row=>row.reader==='entry.ts'));
+    for(const entries of [[project,'compiled.ts'],['compiled.ts',project],['entry.ts','compiled.ts'],['compiled.ts','entry.ts']]){
+      const value=graph.describe(entries);
+      for(const name of ['compiled.ts','child.ts','grandchild.ts']){
+        assert.ok(value.hostFiles.includes(name));
+        assert.ok(value.observations.some(row=>row.protocol==='node26'&&row.reader===name));
+      }
+    }
+  }finally{graph.close();}
+});

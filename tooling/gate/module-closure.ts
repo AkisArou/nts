@@ -126,10 +126,12 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(kind==='fixture'){
         const namespaces=fixtureNamespaces(input.dataNamespaces??{}),entry=nameOf(path);
         const key=JSON.stringify([entry,Object.entries(namespaces).sort(([a],[b])=>a.localeCompare(b))]);
-        if(contexts.has(key))return;
-        const child:Context={entry,namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
-        contexts.set(key,child);
-        visit(child,path);
+        let child=contexts.get(key);
+        if(!child){
+          child={entry,namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
+          contexts.set(key,child);
+        }
+        visit(child,path,true,true,host);
         for(const directory of Object.keys(namespaces))if(!child.data.has(directory))
           throw Error('fixture data namespace is not a declared data input: '+directory+' ('+entry+')');
         return;
