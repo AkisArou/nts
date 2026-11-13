@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 export const FULL_GATE_RECORD=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../results/gate/full-gate.json',import.meta.url))).replaceAll('\\','/');
 type FullPath={path:string;reasons:string[]};
 export type FullGateRecord={version:1;files:string[]}|{version:2;files:string[];policy:FullPath[]};
-export type InputDirectory={reader:string;directory:string;files:number;steps:string[]};
+export type InputDirectory={reader:string;directory:string;files:number;steps:string[];fixture?:{entry:string;owner:string}};
 export type FullGateCensus={version:2;tracked:number;full:FullPath[];unplaced:FullPath[];policy:FullPath[];directories:InputDirectory[]};
 
 export function collectFullGateCensus(paths:readonly string[],inspect:(path:string)=>{full:boolean;reasons:string[];policyReasons?:string[]},directories:InputDirectory[]):FullGateCensus {

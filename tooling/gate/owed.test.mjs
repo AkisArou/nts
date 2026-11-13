@@ -113,7 +113,7 @@ test('an unplaced path owes the full gate whether or not the host audit reaches 
   }
 });
 
-test('fixture globs, ancestors and data strings add reach without placing unknown paths', t => {
+test('module data strings add no reach and cannot place unknown paths', t => {
   const root = mkdtempSync(join(tmpdir(), 'owed-inferred-inputs-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const put = (/** @type {string} */ path, /** @type {string} */ text) => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); };
@@ -152,7 +152,7 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
   put('tooling/census/basename.test.ts', "const fixtureProject='tsconfig.json';\n");
   const basename = snapshot().find(row => row.path === 'tooling/census/tsconfig.json');
   assert.ok(basename, 'the private basename has a measured selection');
-  assert.ok(basename.reach.includes('tooling'), 'a quoted basename adds inferred reach');
+  assert.ok(!basename.reach.includes('tooling'), 'a quoted basename is data, not a reader declaration');
   assert.ok(basename.full, 'a quoted basename cannot place private fixture data');
   // The exact literal that broke #722 is data owned by this private fixture.
   put('tooling/entry.test.ts', 'const config={exclude:["${configDir}/tooling/**/*"]};\nconst ancestor="tooling/census/fixtures";\nconst body="import \'./census/data-only.ts\'";\n');
@@ -161,7 +161,7 @@ test('fixture globs, ancestors and data strings add reach without placing unknow
     assert.ok(before.find(row => row.path === path)?.full, path);
     const row = after.find(row => row.path === path);
     assert.ok(row);
-    assert.ok(row.reach.includes('tooling'), path + ' gained inferred reach');
+    assert.ok(!row.reach.includes('tooling'), path + ' is not read by fixture text');
     assert.ok(row.full, path + ' retained its full fallback');
   }
   for (const path of ['tooling/census/exact.ts', 'tooling/census/dependency.ts', 'tooling/data/program.ts']) {
@@ -308,9 +308,9 @@ test("the real Chromium runtime readers are complete", () => {
   for(const path of paths) {
     const declared = declaration(path);
     assert.ok(Array.isArray(declared), `no direct-reader declaration for ${path}`);
-    // The quoted runtime/* alias in fixture data contributes this one known
-    // inferred edge. No other step may hide behind the complete declaration.
-    const allowed = new Set([...declared, "tooling"]);
+    // Data strings cannot add a host reader. Every remaining edge must come
+    // from the complete production reader declaration.
+    const allowed = new Set(declared);
     const unexpected = [...covering(inputs, path)].filter(step => !allowed.has(step));
     assert.deepEqual(unexpected, [], `a new reader of runtime/chromium: update the Chromium runtime's stepReaders (${path}: ${unexpected.join(" ")})`);
   }

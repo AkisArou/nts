@@ -36,13 +36,15 @@ export async function collectReaderCensus(sourceRoot:string,output:string){
     source+=`\nexport function collectInvestigationCensus(){return collectFullGateCensus(trackedFiles(),path=>{const rules=owed([{path,added:false}]);return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};},inputDirectoryDeclarations());}\n`;
     const separatesData=source.includes('const launchedInputs=modules.describe(launched);');
     const moduleFiles=source.includes('queue.push(...snapshot.moduleFiles);')?'moduleFiles':'ownedFiles';
-    source=replace(source,'const body = readFileSync(abs, "utf8");',`const body = readFileSync(abs, "utf8");
+    const declaredModules=source.includes('references={named:[],other:snapshot.moduleFiles.filter(');
+    if(!declaredModules)source=replace(source,'const body = readFileSync(abs, "utf8");',`const body = readFileSync(abs, "utf8");
         if (NO_MODULE_TEXT && /\\.[cm]?[jt]sx?$/.test(input)) {
           ${separatesData?`const snapshot=modules.describe([input]);references={named:[],other:snapshot.${moduleFiles},data:snapshot.files};`:'references={named:[],other:modules.closure([input])};'}
           inferred.set(input,references);${separatesData?'for(const data of references.data??[])add(data,step);':''}queue.push(...references.other);continue;
         }`);
-    source=replace(source,'references={named:named(body),other:[...imports(input,body),...beside]};\n        inferred.set(input,references);',`references={named:named(body),other:[...imports(input,body),...beside]};
-        inferred.set(input,references);
+    const textReferences='references={named:named(body),other:[...imports(input,body),...beside]};';
+    const captureAt=textReferences+(declaredModules?'':'\n        inferred.set(input,references);');
+    source=replace(source,captureAt,`${captureAt}
         legacyReferences.set(input, {
           named:[...code(body).matchAll(PATH)].map(match=>({literal:match[1],targets:expand(match[1].replace(/\\/$/,""))})).concat([...code(body).matchAll(/["'](benchmarks)["']/g)].map(match=>({literal:match[1],targets:[match[1]]}))).filter(row=>row.targets.some(target=>references.named.includes(target))),
           imports:[...body.matchAll(/(?:from\\s+|import\\s*\\(\\s*|require\\(\\s*)["'](\\.{1,2}\\/[^"']+)["']/g)].map(match=>({literal:match[1],targets:[rel(resolve(TREE,dirname(input),match[1]))]})),

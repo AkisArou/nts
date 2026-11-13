@@ -127,7 +127,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
     fixtureEntries.add(relative(source,fileURLToPath(entry.url)).split(sep).join('/'));
     for(const [name,owner]of Object.entries(entry.dataNamespaces)){
       if(Object.hasOwn(grants,name)&&grants[name]!==owner)throw Error('fixture data namespace already has another owner: '+name);
-      grants[name]=owner;
+      Object.defineProperty(grants,name,{value:owner,enumerable:true,configurable:true,writable:true});
     }
   }
   const dataNamespaces=fixtureNamespaces(grants);

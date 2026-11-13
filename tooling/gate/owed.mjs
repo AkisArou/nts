@@ -1646,11 +1646,11 @@ function stepInputGraph() {
     const modules = moduleGraph({sourceRoot:TREE});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
-      const key=reader+"\0"+row.directory;
+      const key=[reader,row.directory,row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[]}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[]}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1689,9 +1689,6 @@ function stepInputGraph() {
           const files=trackedFiles().filter(path=>path.startsWith(input+"/"));
           directory({reader:"<entry>",directory:input,files,kind:"data"},step);
           membership.add(input);add(input,step);
-          // Retain legacy additive text reach until its reader classification
-          // is complete. Data members still never enter the host AST graph.
-          queue.push(...files);
         }else moduleEntries.push(input);
       }
       entries.splice(0,entries.length,...moduleEntries);
@@ -1705,7 +1702,7 @@ function stepInputGraph() {
         }
         // Corpus bytes are inputs, not host modules: their quoted paths and
         // imports must never turn into readers of unrelated repository data.
-        queue.push(...snapshot.moduleFiles);
+        queue.push(...snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)));
       }
       const seen = new Set();
       while (queue.length) {
@@ -1727,37 +1724,31 @@ function stepInputGraph() {
           || !st.isFile() || !/\.(sh|mjs|js|ts|py)$/.test(input) || st.size > 1 << 20) {
           inferred.set(input,{named:[],other:[]});continue;
         }
-        const body = readFileSync(abs, "utf8");
-        // A file the script reads or runs beside itself, `join(HERE, "x.tsv")`,
-        // `join(HERE, "attempt262-worker.ts")`: a bare name in quotes that
-        // exists in the script's directory.
-        const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
-          .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
-        references={named:named(body),other:[...imports(input,body),...beside]};
-        inferred.set(input,references);
-        // A shell/Python launcher can name a JavaScript entry. From that
-        // boundary onward its imports and URL assets are parsed declarations,
-        // even after module-text inference goes away. This is additive reach:
-        // an inferred launcher edge never discharges an unknown path's fallback.
-        if (/\.(?:sh|py)$/.test(input)) {
+        // Module declarations already preserve private fixture contexts. Never
+        // flatten their module members back into production-context walks, or
+        // infer readers from diagnostics, query strings and generated data.
+        if (/\.[cm]?[jt]sx?$/.test(input)) {
+          const snapshot=modules.describe([input]);
+          references={named:[],other:snapshot.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)),data:snapshot.files,directories:snapshot.directories};
+        } else {
+          const body = readFileSync(abs, "utf8");
+          const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
+            .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
+          references={named:named(body),other:[...imports(input,body),...beside]};
+          // Shell/Python remain source-format adapters. A named JS launch
+          // continues through the same parsed graph without authorizing new
+          // fallback placement from conservative shell text.
           const launched=[...references.named,...references.other].filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&existsSync(join(TREE,path))&&statSync(join(TREE,path)).isFile());
           const launchedInputs=modules.describe(launched);
-          const ownedLaunchInputs=new Set(launchedInputs.moduleFiles);
-          references.other.push(...launchedInputs.moduleFiles);
-          references.data=launchedInputs.files.filter(path=>!ownedLaunchInputs.has(path));
+          references.other.push(...launchedInputs.moduleFiles.filter(path=>/\.(?:sh|py)$/.test(path)));
+          references.data=launchedInputs.files;
+          references.directories=launchedInputs.directories;
         }
+        inferred.set(input,references);
         }
-        // These tooling controls supply private fixture roots to the record
-        // validator and the session bridge. They read fixture evidence,
-        // not this tree's benchmark data. Production readers keep their reach
-        // in their own steps. Imports/beside-file dependencies stay additive.
-        // The full check names a results-only commit's paths to check that
-        // commit, and its fixture writes stand-in records; neither reads these.
-        const fixtureBenchmarks = step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
-            || /^tooling\/full-check\/(?:bench|repository-fixture)\.ts$/.test(input));
-        const referenced = references.named.filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
+        for(const row of references.directories??[])directory(row,step);
         for(const data of references.data??[])add(data,step);
-        queue.push(...referenced, ...references.other);
+        queue.push(...references.named, ...references.other);
       }
     }
     // **Hand-overs through the runner.** run.mjs gives one step another's
@@ -1792,6 +1783,7 @@ function declaredInput(/** @type {string} */ path) {
 export function inputDirectoryDeclarations() {
   return [...stepInputGraph().directories.values()].map(row => ({
     reader: row.reader, directory: row.directory, files: row.files.length, steps: [...row.steps].sort(),
+    ...(row.fixture?{fixture:row.fixture}:{}),
   })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
 }
 
