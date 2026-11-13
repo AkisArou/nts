@@ -12,6 +12,8 @@ type Module={source:string;name:string;text:string;sourceSha256:string};
 export type RuntimeModules={entry:string;modules:Module[]};
 const failure=(reason:string):never=>{throw Error('oracle runtime module: '+reason);};
 const hash=(bytes:string)=>createHash('sha256').update(bytes).digest('hex');
+/** The bootstrap uses the same strip-only producer without entering its dynamic loader. */
+export const stripRuntimeSource=(source:string):string=>stripTypeScriptTypes(source,{mode:'strip'});
 const outputName=(name:string)=>name.replace(/\.(?:m?ts|m?js)$/,'.mjs');
 /** Every publication reads fresh source bytes and owns its traversal state. */
 export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeModules{
@@ -31,7 +33,7 @@ export function compileRuntimeModules(sourceRoot:string,entry:string):RuntimeMod
     if(!/\.(?:m?ts|m?js)$/.test(name))failure('unsupported source: '+name);
     const emitted=outputName(name),alias=outputs.get(emitted);
     if(alias&&alias!==name)failure('two sources select '+emitted+': '+alias+' and '+name);
-    const source=readFileSync(file,'utf8'),text=stripTypeScriptTypes(source,{mode:'strip'});
+    const source=readFileSync(file,'utf8'),text=stripRuntimeSource(source);
     const module={source:name,name:emitted,text,sourceSha256:hash(source)};
     modules.set(name,module);outputs.set(emitted,name);
     const lease=api.createSourceFile(file+'.runtime.mjs',text);

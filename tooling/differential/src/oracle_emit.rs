@@ -40,8 +40,8 @@ const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
         include_str!("../oracle-runtime-modules.ts"),
     ),
     (
-        "oracle-child-bootstrap.mjs",
-        include_str!("../oracle-child-bootstrap.mjs"),
+        "oracle-child-bootstrap.ts",
+        include_str!("../oracle-child-bootstrap.ts"),
     ),
     ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
@@ -1331,9 +1331,9 @@ fn verify_implementation(identity: &Value, assets: &Utf8Path) -> Result<Executio
             include_str!("../oracle-runtime-modules.ts"),
         ),
         (
-            "oracle-child-bootstrap.mjs",
+            "oracle-child-bootstrap.ts",
             "childBootstrapSha256",
-            include_str!("../oracle-child-bootstrap.mjs"),
+            include_str!("../oracle-child-bootstrap.ts"),
         ),
         (
             "oracle-toolchain.json",
@@ -1644,7 +1644,7 @@ mod tests {
             .map(|(path, value)| serde_json::json!({"kind":"file","path":path,"value":value}))
             .collect::<Vec<_>>();
         let mut stored = json!({"version":3,"observations":observations,"status":"complete","entry":source,"project":project,"roots":null,
-            "identity":{"version":1,"typescript":typescript,"publisherSha256":digest(include_bytes!("../oracle-result-publisher.ts")),"runtimeModulesSha256":digest(include_bytes!("../oracle-runtime-modules.ts")),"childBootstrapSha256":digest(include_bytes!("../oracle-child-bootstrap.mjs")),"executionSha256":super::super::oracle_run::execution_identity().unwrap(),"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
+            "identity":{"version":1,"typescript":typescript,"publisherSha256":digest(include_bytes!("../oracle-result-publisher.ts")),"runtimeModulesSha256":digest(include_bytes!("../oracle-runtime-modules.ts")),"childBootstrapSha256":digest(include_bytes!("../oracle-child-bootstrap.ts")),"executionSha256":super::super::oracle_run::execution_identity().unwrap(),"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
                 "assetsSha256":digest(include_bytes!("../oracle-assets.ts")),"loaderSha256":digest(include_bytes!("../oracle-loader.ts")),"filesystemSha256":digest(include_bytes!("../oracle-filesystem.ts")),"runtimeSha256":digest(include_bytes!("../oracle-runtime.ts")),"resolutionSha256":digest(include_bytes!("../oracle-resolution.ts")),"toolchainRecordSha256":digest(include_bytes!("../oracle-toolchain.json")),"options":record["execution"]["options"]},
             "inputs":inputs,"outputs":{"program/main.js":digest(&std::fs::read(&emitted).unwrap()),"source-index.json":digest(&std::fs::read(&index).unwrap())},
             "groups":[{"entry":source,"project":project,"output":"program","compilerStatus":0}]

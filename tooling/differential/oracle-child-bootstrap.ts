@@ -1,4 +1,4 @@
-// Valid JavaScript, embedded verbatim in the pinned --import data URL. Keeping
+// Erased by the producer into the pinned --import data URL. Keeping
 // this owner synchronous to import also keeps Worker module graphs synchronous.
 import {isMainThread,workerData} from 'node:worker_threads';
 import {registerHooks} from 'node:module';
@@ -14,15 +14,14 @@ export async function startOracleChild(){
   const directory=new URL('./assets/',root),assets=snapshot.assets;
   if(!lstatSync(directory).isDirectory()||realpathSync(directory)!==fileURLToPath(directory).replace(/\/$/,'')||!assets||Array.isArray(assets)||Object.keys(assets).length>128||
     !['loader','runtime','assets'].every(name=>Object.hasOwn(assets,'assets/oracle-'+name+'.mjs')))throw Error('oracle generated bootstrap directory changed');
-  /** @type {Map<string,string>} */
-  const files=new Map();
+  const files=new Map<string,string>();
   for(const [name,expected] of Object.entries(assets)){
     const parts=name.split('/');
     if(parts.shift()!=='assets'||!name.endsWith('.mjs')||!parts.length||parts.some(part=>!part||part==='.'||part==='..'||!/^[A-Za-z0-9_.-]+$/.test(part))||typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected))throw Error('oracle generated bootstrap record is invalid');
     files.set(new URL('./'+name,root).href,expected);
   }
   const io={open:openSync,close:closeSync,stat:fstatSync,read:readFileSync,real:realpathSync},digest=hash;
-  const checked=/** @param {string} url */(url)=>{
+  const checked=(url:string)=>{
     const expected=files.get(url);
     if(!expected||io.real(new URL(url))!==fileURLToPath(url))throw Error('oracle generated bootstrap asset changed: '+url);
     const fd=io.open(new URL(url),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);

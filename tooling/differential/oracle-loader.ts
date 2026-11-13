@@ -71,7 +71,7 @@ if(!identity||identity.version!==1||identity.options!==records.execution.options
    identity.emitterSha256!==hash(readFileSync(join(assets,'oracle-emit.ts')))||identity.loaderSha256!==hash(readFileSync(join(assets,'oracle-loader.ts')))||
    identity.publisherSha256!==hash(readFileSync(join(assets,'oracle-result-publisher.ts')))||
    identity.runtimeModulesSha256!==hash(readFileSync(join(assets,'oracle-runtime-modules.ts')))||
-   identity.childBootstrapSha256!==hash(readFileSync(join(assets,'oracle-child-bootstrap.mjs')))||
+   identity.childBootstrapSha256!==hash(readFileSync(join(assets,'oracle-child-bootstrap.ts')))||
    identity.toolchainRecordSha256!==hash(readFileSync(join(assets,'oracle-toolchain.json'))))throw Error('oracle TypeScript emit identity mismatch or incomplete preparation');
 if(hash(Buffer.from(JSON.stringify(ORACLE_EXECUTION_FILES.map(name=>hash(readFileSync(join(assets,name)))))))!==identity.executionSha256)throw Error('oracle execution source identity changed');
 const bootstrapFiles=new Map([[join(assets,'oracle-loader.ts'),identity.loaderSha256],[join(assets,'oracle-filesystem.ts'),identity.filesystemSha256],[join(assets,'oracle-runtime.ts'),identity.runtimeSha256],[join(assets,'oracle-assets.ts'),identity.assetsSha256]]);

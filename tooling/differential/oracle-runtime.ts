@@ -24,7 +24,7 @@ const RECIPE_INPUTS={
   assets:new URL('./oracle-assets.ts',import.meta.url),
   publisher:new URL('./oracle-result-publisher.ts',import.meta.url),
   runtimeModules:new URL('./oracle-runtime-modules.ts',import.meta.url),
-  childBootstrap:new URL('./oracle-child-bootstrap.mjs',import.meta.url),
+  childBootstrap:new URL('./oracle-child-bootstrap.ts',import.meta.url),
   toolchain:new URL('./oracle-toolchain.json',import.meta.url),
 } as const;
 const assetName=(input:URL)=>relative(fileURLToPath(new URL('./',import.meta.url)),fileURLToPath(input)).split(sep).join('/');

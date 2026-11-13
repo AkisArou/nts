@@ -165,12 +165,12 @@ test('generated child bootstrap bytes are checked before their module body evalu
   assert.ok(assets?.['assets/runtime-paths/main.mjs'],'the nested manifest dependency is emitted');
   // Stripping is a recorded Node execution option. The private control binds
   // that option into its own descriptor instead of bypassing the identity check.
-  const noStripPrepared=await prepare(root,'src/main.ts',{directory:join(root,'no-strip')});
+  const noStripRoot=workspace(t,{'src/main.ts':'console.log(19);\n'}),noStripPrepared=await prepare(noStripRoot);
   const noStripExecution=oracleExecution(changedSnapshot(noStripPrepared,records=>{
     const descriptor=records.get('descriptor') as {resolution:{options:{flags:string[]}}};
     descriptor.resolution.options.flags.push('--no-experimental-strip-types');
   }));
-  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...noStripExecution.args,join(root,'src/main.ts')],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...noStripExecution.env}});
+  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...noStripExecution.args,join(noStripRoot,'src/main.ts')],{cwd:noStripRoot,encoding:'utf8',env:{...fixtureEnvironment(t),...noStripExecution.env}});
   assert.equal(noStrip.status,0,noStrip.stderr);assert.equal(noStrip.stdout,'19\n');
   assert.deepEqual(oracleOwner.finishOracleSnapshot(noStripExecution),{ready:true});
   for(const name of Object.keys(assets??{}))await t.test(name,()=>{

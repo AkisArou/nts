@@ -5,7 +5,7 @@ import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from '../gate/test-environment.ts';
-import {compileRuntimeModules} from './oracle-runtime-modules.ts';
+import {compileRuntimeModules,stripRuntimeSource} from './oracle-runtime-modules.ts';
 import {runtimeAssets,runtimeModuleName} from './runtime-paths/main.ts';
 
 function fixture(t:{after(callback:()=>void):void},files:Record<string,string>){
@@ -51,5 +51,5 @@ test('canonical module manifests cannot change their entry or escape the publish
 test('the pinned child bootstrap is exactly its reviewed JavaScript source',()=>{
   const record=JSON.parse(readFileSync(new URL('./oracle-toolchain.json',import.meta.url),'utf8'));
   const argument=record.execution.args[record.execution.args.indexOf('--import')+1];
-  assert.equal(decodeURIComponent(argument.slice('data:text/javascript,'.length)),readFileSync(new URL('./oracle-child-bootstrap.mjs',import.meta.url),'utf8')+'\nawait startOracleChild();\n');
+  assert.equal(decodeURIComponent(argument.slice('data:text/javascript,'.length)),stripRuntimeSource(readFileSync(new URL('./oracle-child-bootstrap.ts',import.meta.url),'utf8'))+'\nawait startOracleChild();\n');
 });
