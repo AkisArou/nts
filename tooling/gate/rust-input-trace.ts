@@ -16,7 +16,7 @@ export type TraceResult={observations:FileObservation[];descriptorProbes:Descrip
 export function inputTraceArguments(output:string,command:string,args:readonly string[]):string[]{
   if(!isAbsolute(output))throw Error('Rust input trace needs an absolute output path');
   return ['-f','-qq','--always-show-pid','--decode-fds=path','--string-limit=65536',
-    '--abbrev=none','--verbose=none',
+    '--abbrev=all','--verbose=all',
     '--signal=none','--trace=open,openat,openat2,access,faccessat,faccessat2,stat,lstat,newfstatat,statx,readlink,readlinkat,getdents64,getcwd,chdir,fchdir,clone,clone3,fork,vfork,execve,execveat',
     '--output='+output,'--',command,...args];
 }
