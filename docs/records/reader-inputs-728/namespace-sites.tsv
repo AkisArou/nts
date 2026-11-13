@@ -156,7 +156,7 @@ id	reader	kind	literal	role	steps	reason
 6221	tooling/gate/test-layout.ts	named	compiler/test-support/scratch.rs	data	interop,tests,tooling	Validation, selection kind, ownership/exclusion table, migration map, output path or diagnostic text; no read of this named repository input.
 6222	tooling/gate/test-layout.ts	named	compiler/test-support/self_test.rs	data	interop,tests,tooling	Validation, selection kind, ownership/exclusion table, migration map, output path or diagnostic text; no read of this named repository input.
 58	tooling/licenses/licenses.ts	named	compiler/unicode/data/LICENSE	reader	licenses	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
-83	tooling/bench/run-record.ts	named	docs/README.md	reader	records,tooling	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
+83	tooling/bench/run-record.ts	named	docs/README.md	data	records,tooling	POLICY.authority is a record provenance label with a page fragment, not a filesystem read. The record checker validates that label as data.
 836	tooling/bench/run-record.test.ts	named	docs/README.md	data	tooling	Private fixture paths, expected text, aliases or synthetic source; these literals do not read the corresponding repository input.
 3763	tooling/records/summary.test.ts	named	docs/README.md	data	tooling	Private fixture paths, expected text, aliases or synthetic source; these literals do not read the corresponding repository input.
 2839	tooling/gate/precise-changes.test.ts	named	docs/architecture.md	data	tooling	Private fixture paths, expected text, aliases or synthetic source; these literals do not read the corresponding repository input.
@@ -495,7 +495,7 @@ id	reader	kind	literal	role	steps	reason
 6687	tooling/config/audit.mjs	named	tests/workspace	reader	config	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
 6692	tooling/config/audit.mjs	named	tests/workspace	reader	config	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
 6688	tooling/config/audit.mjs	named	tests/workspace/tsconfig.configs.json	reader	config	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
-3361	tooling/jvm/member-name.test.ts	named	tooling/android/module-initializer.sh	reader	tooling	The control reads the real Android initializer script.
+3361	tooling/jvm/member-name.test.ts	named	tooling/android/module-initializer.sh	data	tooling	The test passes this path to owed() as a selector query; it neither opens nor launches the initializer. Its real on-device and JVM/Rust execution owners remain independent.
 1741	tooling/full-check/measure.test.ts	named	tooling/apple/vm.md	data	tooling	Private fixture paths, expected text, aliases or synthetic source; these literals do not read the corresponding repository input.
 765	tooling/bench/layouts-heap.test.ts	named	tooling/bench/layouts-heap.c	reader	tooling	The control reads, compiles, copies or executes this real repository input.
 5571	tooling/bench/run-session.ts	named	tooling/bench/src/main.rs	reader	tooling	The production reader enumerates, reads, compiles, executes or checks freshness of this repository input.
