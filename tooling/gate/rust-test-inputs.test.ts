@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {testArtifactTargets,RustInputPhases,publishInputTrace} from './rust-test-inputs.ts';
-import type {InputAttempt,ByteFact} from './file-input-observer.ts';
-import {readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {testArtifactTargets,RustInputPhases,publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {readCompressedRecords,type InputAttempt,type ByteFact} from './file-input-observer.ts';
+import {rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {newTestScratch} from './test-scratch.ts';
 import {gzipSync} from 'node:zlib';
@@ -42,8 +42,8 @@ test('actual task images and identity-bound commands separate rustdoc setup from
   phases.finish();
   const target=testArtifactTargets(evidence(),'/source').get(artifact.executable)!;
   const binary=new RustInputPhases('/source',target);binary.start(1);
-  binary.observe(image(1,0,'/observer'));binary.observe(image(2,1,'/bin/rustc'));
-  assert.ok(binary.images.every(row=>row.phase.phase==='test-runtime'&&row.phase.source===target.source));
+  const entered=[binary.observe(image(1,0,'/observer')),binary.observe(image(2,1,'/bin/rustc'))];
+  assert.ok(entered.every(row=>row.phase.phase==='test-runtime'&&row.phase.source===target.source));
 });
 
 test('exec intentions, reused paths and reused PIDs cannot invent a doctest entry',()=>{
@@ -79,12 +79,37 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   nullPath.dirfds=[{arg:0,fd:3,target:bytes('/source/crate/value')}];
   const socket=image(1,0,'/fixture');socket.syscall='openat';socket.operation='open';
   socket.paths=[{arg:1,dirfdArg:0,value:bytes('relative')}];socket.dirfds=[{arg:0,fd:4,target:bytes('socket:[123]')}];
-  const raw=join(root,'raw.jsonl'),output=join(root,'decoded.json');
+  const raw=join(root,'raw.jsonl'),output=join(root,'decoded.index.jsonl.gz');
   writeFileSync(raw,gzipSync([{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},nullPath,socket,
     {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}].map(row=>JSON.stringify(row)).join('\n')+'\n'));
   await publishInputTrace({raw,output,cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
-  const decoded=JSON.parse(readFileSync(output,'utf8')) as {observations:{path:string;operation:string;outcome:string}[];descriptorProbes:{kind:string;raw:string}[]};
+  const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
+  await readInputTraceIndex(output,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='probe')decoded.descriptorProbes.push(row);});
   assert.deepEqual(decoded.observations.map(row=>[row.path,row.operation,row.outcome]),[['/source/crate/value','descriptor','unknown']]);
-  assert.ok(decoded.descriptorProbes.some(row=>row.kind==='null-path'));
-  assert.ok(decoded.descriptorProbes.some(row=>row.kind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
+  assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='null-path'));
+  assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
+  const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);});
+  const changed=(name:string,values:unknown[])=>{const path=join(root,name+'.gz');writeFileSync(path,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return path;};
+  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:4},...rows.slice(1)]),()=>{}),/unsupported input index version 4/);
+  const footer=rows.at(-1) as {counts:{observations:number}};
+  await assert.rejects(readInputTraceIndex(changed('counts',[...rows.slice(0,-1),{...footer,counts:{...footer.counts,observations:footer.counts.observations+1}}]),()=>{}),/count mismatch/);
+  await assert.rejects(readInputTraceIndex(changed('missing',rows.slice(0,-1)),()=>{}),/incomplete input index/);
+  await assert.rejects(readInputTraceIndex(changed('trailing',[...rows,rows[0]]),()=>{}),/after input index completion/);
+});
+
+test('only canceled input-free lifetime facts can remain unattributed',async t=>{
+  const root=newTestScratch('rust-input-canceled');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const canceled=image(1,0,'/vanished');canceled.canceled=true;canceled.factsComplete=false;canceled.tgid=0;canceled.birth='0';
+  canceled.cwd={hex:'',error:2,truncated:false,null:false};canceled.image={...canceled.cwd};
+  const produce=(name:string,row:InputAttempt)=>{
+    const raw=join(root,name+'.raw.gz');
+    writeFileSync(raw,gzipSync([{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},row,
+      {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:1,errors:0,drainComplete:true,observerSignal:0}].map(value=>JSON.stringify(value)).join('\n')+'\n'));
+    return {raw,output:join(root,name+'.index.gz'),cwd:'/source',root:'/source',target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}};
+  };
+  const valid=produce('canceled',canceled);await publishInputTrace(valid);
+  const indexed:unknown[]=[];const complete=await readInputTraceIndex(valid.output,row=>{indexed.push(row);});
+  assert.equal(complete.complete.counts.terminalFacts,1);assert.equal(complete.complete.counts.images,0);assert.equal(complete.complete.counts.observations,0);
+  await assert.rejects(publishInputTrace(produce('live',{...canceled,canceled:false})),/unreadable or truncated/);
+  await assert.rejects(publishInputTrace(produce('file',{...canceled,syscall:'openat',operation:'open',paths:[{arg:1,dirfdArg:0,value:bytes('file')}]})),/unreadable or truncated/);
 });

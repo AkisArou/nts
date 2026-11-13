@@ -89,11 +89,10 @@ export function readObservationRow(value:unknown):ObservationRow{
 /** A raw record is complete only after the native writer has drained every
  * filter peer and closed. Rows stay bounded by the producer's pathname/argv
  * buffers; no entire raw trace is loaded as a string. */
-export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void):Promise<ObservationEnd>{
+export async function readFileObservation(file:string,visit:(row:ObservationRow)=>void|Promise<void>):Promise<ObservationEnd>{
   let start=false,end:ObservationEnd|undefined,attempts=0,root:number|undefined,exited:RootExit|undefined;
-  let pending=Buffer.alloc(0);
-  const consume=(line:Buffer)=>{
-    const row=readObservationRow(JSON.parse(line.toString('utf8')) as unknown);
+  const consume=async(value:unknown)=>{
+    const row=readObservationRow(value);
     if(end)throw Error('file input observer: data follows completion');
     if(!start){if(row.kind!=='start')throw Error('file input observer: missing header');start=true;}
     else if(row.kind==='start')throw Error('file input observer: duplicate header');
@@ -112,23 +111,30 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
         throw Error('file input observer: inconsistent terminal root status');
       end=row;
     }
-    visit(row);
+    await visit(row);
   };
-  const consumeChunk=(chunk:Buffer)=>{
-    pending=Buffer.concat([pending,chunk]);
-    for(;;){
-      const at=pending.indexOf(10);if(at<0)break;
-      if(at>256*1024)throw Error('file input observer: record exceeds bounded row size');
-      consume(pending.subarray(0,at));pending=pending.subarray(at+1);
-    }
-    if(pending.length>256*1024)throw Error('file input observer: record exceeds bounded row size');
-  };
-  await pipeline(createReadStream(file),createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
-    try{consumeChunk(chunk);callback();}
-    catch(error){callback(error instanceof Error?error:new Error(String(error)));}
-  }}));
-  if(pending.length)throw Error('file input observer: unterminated raw record');
+  await readCompressedRecords(file,consume);
   if(!end||!end.complete||!end.drainComplete||end.errors||end.attempts!==attempts)
     throw Error('file input observer: incomplete census'+(end?' (attempts '+attempts+'/'+end.attempts+', errors '+end.errors+')':''));
   return end;
+}
+
+export const MAX_OBSERVATION_ROW_BYTES=256*1024;
+/** Shared bounded codec for native records and attributed census indices. */
+export async function readCompressedRecords(file:string,visit:(value:unknown)=>void|Promise<void>):Promise<void>{
+  let pending=Buffer.alloc(0);
+  const consumeChunk=async(chunk:Buffer)=>{
+    pending=Buffer.concat([pending,chunk]);
+    for(;;){
+      const at=pending.indexOf(10);if(at<0)break;
+      if(at>MAX_OBSERVATION_ROW_BYTES)throw Error('file input observer: record exceeds bounded row size');
+      const line=pending.subarray(0,at);pending=pending.subarray(at+1);
+      await visit(JSON.parse(line.toString('utf8')) as unknown);
+    }
+    if(pending.length>MAX_OBSERVATION_ROW_BYTES)throw Error('file input observer: record exceeds bounded row size');
+  };
+  await pipeline(createReadStream(file),createGunzip(),new Writable({write(chunk:Buffer,_encoding,callback){
+    consumeChunk(chunk).then(()=>callback(),error=>callback(error instanceof Error?error:new Error(String(error))));
+  }}));
+  if(pending.length)throw Error('file input observer: unterminated raw record');
 }

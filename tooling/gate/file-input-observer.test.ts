@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {gzipSync,gunzipSync,constants} from 'node:zlib';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
-import {publishInputTrace} from './rust-test-inputs.ts';
+import {publishInputTrace,readInputTraceIndex,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -82,7 +82,7 @@ test('the native observer retains actual images, attempted inputs and original p
   writeFileSync(join(root,'value'),'product');
   const record=join(root,'facts.jsonl'),result=spawnTest(binary,fileObserverArguments(record,program,['facts',root]),{env,encoding:'utf8'});
   assert.equal(result.status,7,result.stderr);assert.equal(result.stdout,'product');
-  const rows:ObservationRow[]=[],end=await readFileObservation(record,row=>rows.push(row));
+  const rows:ObservationRow[]=[],end=await readFileObservation(record,row=>{rows.push(row);});
   assert.equal(end.exit,7);assert.equal(end.entered,true);assert.equal(end.execErrno,0);
   const attempts=rows.filter((row):row is InputAttempt=>row.kind==='attempt');
   const missing=attempts.find(row=>row.paths.some(path=>byteFactText(path.value,'path')==='missing'));
@@ -95,11 +95,12 @@ test('the native observer retains actual images, attempted inputs and original p
   assert.ok(attempts.some(row=>row.paths.some(path=>!path.value.null&&byteFactText(path.value,'relative socket path')==='socket-relative')&&row.dirfds.some(fd=>byteFactText(fd.target,'socket dirfd').startsWith('socket:['))));
   const exec=attempts.find(row=>row.operation==='execute');assert.ok(exec);
   assert.notEqual(byteFactText(exec.image,'pre-exec image'),program,'an exec attempt does not claim the requested program entered');
-  const published=join(root,'facts.json');
+  const published=join(root,'facts.index.jsonl.gz');
   await publishInputTrace({raw:record,output:published,cwd:root,root,target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
-  const decoded=JSON.parse(readFileSync(published,'utf8')) as {observations:{operation:string;syscall:string;path:string;outcome:string}[];descriptorProbes:{kind:string}[]};
+  const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
+  await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='probe')decoded.descriptorProbes.push(row);});
   assert.ok(decoded.observations.some(row=>row.syscall==='statx'&&row.operation==='descriptor'&&row.path===join(root,'value')&&row.outcome==='unknown'));
-  assert.ok(decoded.descriptorProbes.some(row=>row.kind==='non-file-dirfd'));
+  assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'));
   assert.ok(decoded.observations.every(row=>!row.path.includes('socket:[')&&!row.path.endsWith('/socket-relative')));
 
   const descriptor=join(root,'descriptor');writeFileSync(descriptor,'def');

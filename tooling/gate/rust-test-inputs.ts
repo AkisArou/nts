@@ -4,8 +4,8 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
-import {durableRecord} from './durable-record.ts';
-import {byteFactText,canceledLifetime,fileObserverBirth,readFileObservation,type ByteFact,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
+import {durableRecord,durableRecordStream} from './durable-record.ts';
+import {byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd} from './file-input-observer.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -57,7 +57,8 @@ const key=(pid:number,birth:string)=>pid+':'+birth;
 export class RustInputPhases{
   private readonly tasks=new Map<string,Image>();
   private readonly argvFacts=new Map<string,string>();
-  readonly images:Image[]=[];
+  private nextImage=0;
+  get imageCount():number{return this.nextImage;}
   private root:number|undefined;
   private readonly calls=new Map<string,DoctestCall>();
   private readonly entered=new Set<string>();
@@ -91,9 +92,9 @@ export class RustInputPhases{
       if(phase.phase!=='rustdoc-setup'||!phase.source)fail('doctest entry has no rustdoc source: '+identity);
       phase={phase:'doctest-runtime',source:phase.source};this.entered.add(identity);
     }
-    const image:Image={id:this.images.length+1,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
+    const image:Image={id:++this.nextImage,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
       reason:!previous?'first-observation':previous.path===path?'actual-argv':'actual-image'};
-    this.images.push(image);this.tasks.set(identity,image);this.argvFacts.set(identity,actualArgv);return image;
+    this.tasks.set(identity,image);this.argvFacts.set(identity,actualArgv);return image;
   }
   finish():void{for(const identity of this.calls.keys())if(!this.entered.has(identity))fail('recorded doctest has no matching entered image: '+identity);}
 }
@@ -102,66 +103,140 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
+export type InputIndexStart={kind:'index-start';version:3;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null};
+export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'>&{argvRaw:string};
+export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
+export type InputIndexProbe={kind:'probe';probeKind:string;image:number;fd?:number;raw:string;rawPath?:string;error:number;count:1}&TracePhase;
+export type InputIndexCounts={images:number;observations:number;probes:number;terminalFacts:number;inherited:number};
+export type InputIndexEnd={kind:'index-complete';terminal:ObservationEnd;counts:InputIndexCounts};
+export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexObservation|InputIndexProbe|InheritedDescriptor|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
+const emptyCounts=():InputIndexCounts=>({images:0,observations:0,probes:0,terminalFacts:0,inherited:0});
+
+/** Versioned line records keep both publication and consumption independent of
+ * the document's total size. Only current task contexts and a 64 KiB output
+ * batch remain in memory; the lossless native record stays separately retained. */
 export async function publishInputTrace(options:{raw:string;output:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[]}):Promise<void>{
-  const phases=new RustInputPhases(options.root,options.target,options.doctestCalls);
-  const observations=new Map<string,RuntimeObservation>();
-  const probes=new Map<string,TracePhase&{image:number;kind:string;fd?:number;raw:string;rawPath?:string;error:number;count:number}>();
-  const descriptors:ObservationRow[]=[];
-  const terminalFacts:InputAttempt[]=[];
-  const retain=(row:InputAttempt,image:Image,path:string,rawPath:string,operation:string)=>{
-    const identity=JSON.stringify([image.id,operation,row.syscall,path,row.canceled]);
-    const previous=observations.get(identity);
-    if(previous){previous.count++;return;}
-    observations.set(identity,{...image.phase,path,rawPath,operation,syscall:row.syscall,outcome:'unknown',image:image.id,count:1,canceled:row.canceled});
-  };
-  const probe=(image:Image,kind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{
-    const identity=JSON.stringify([image.id,kind,raw,error,fd,rawPath]),previous=probes.get(identity);
-    if(previous)previous.count++;else probes.set(identity,{...image.phase,image:image.id,kind,raw,error,fd,rawPath,count:1});
-  };
-  const terminal=await readFileObservation(options.raw,row=>{
-    if(row.kind==='root-start'){phases.start(row.root);return;}
-    if(row.kind==='inherited'){descriptors.push(row);return;}
-    if(row.kind!=='attempt')return;
-    if(canceledLifetime(row)){terminalFacts.push(row);return;}
-    const image=phases.observe(row);
-    for(const path of row.paths){
-      if(path.value.null){
-        probe(image,'null-path','',0);
-        // NULL is accepted with AT_EMPTY_PATH by current statx kernels. Keep
-        // its actual descriptor candidate without claiming syscall success.
-        const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);
-        if(descriptor&&!descriptor.target.error&&!descriptor.target.null){
-          const target=byteFactText(descriptor.target,'null-path descriptor');
-          if(isAbsolute(target))retain(row,image,target,descriptor.target.hex,'descriptor');
-          else probe(image,'non-file-descriptor',descriptor.target.hex,0,descriptor.fd);
+  const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
+  await durableRecordStream(options.output,async append=>{
+    let batch:string[]=[],batchBytes=0;
+    const flush=async()=>{if(batchBytes){const bytes=batch.join('');batch=[];batchBytes=0;await append(bytes);}};
+    const emit=async(row:InputIndexRow)=>{
+      const line=JSON.stringify(row)+'\n',size=Buffer.byteLength(line);
+      if(size>MAX_OBSERVATION_ROW_BYTES)fail('index row exceeds bounded row size');
+      batch.push(line);batchBytes+=size;if(batchBytes>=64*1024)await flush();
+    };
+    await emit({kind:'index-start',version:3,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null});
+    const retain=async(row:InputAttempt,image:Image,path:string,rawPath:string,operation:string)=>{
+      counts.observations++;
+      await emit({kind:'observation',...image.phase,path,rawPath,operation,syscall:row.syscall,outcome:'unknown',image:image.id,count:1,canceled:row.canceled});
+    };
+    const probe=async(image:Image,probeKind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{
+      counts.probes++;await emit({kind:'probe',...image.phase,image:image.id,probeKind,raw,error,fd,rawPath,count:1});
+    };
+    const terminal=await readFileObservation(options.raw,async row=>{
+      if(row.kind==='root-start'){phases.start(row.root);return;}
+      if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
+      if(row.kind!=='attempt')return;
+      if(canceledLifetime(row)){counts.terminalFacts++;await emit({kind:'terminal-fact',fact:row});return;}
+      const image=phases.observe(row);
+      if(image.id>counts.images){
+        counts.images++;
+        const {args,...context}=image;
+        void args;
+        await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:''});
+      }
+      for(const path of row.paths){
+        if(path.value.null){
+          await probe(image,'null-path','',0);
+          const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);
+          if(descriptor&&!descriptor.target.error&&!descriptor.target.null){
+            const target=byteFactText(descriptor.target,'null-path descriptor');
+            if(isAbsolute(target))await retain(row,image,target,descriptor.target.hex,'descriptor');
+            else await probe(image,'non-file-descriptor',descriptor.target.hex,0,descriptor.fd);
+          }
+          continue;
         }
-        continue;
+        const named=factPath(path.value,'attempted path')!;
+        let resolved:string;
+        if(isAbsolute(named))resolved=resolve(named);
+        else if(path.dirfdArg<0)resolved=resolve(byteFactText(row.cwd,'cwd'),named);
+        else{
+          const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!descriptor)fail('missing path directory descriptor');
+          if(descriptor.fd<0&&descriptor.fd!==-100){await probe(image,'invalid-dirfd',path.value.hex,descriptor.target.error,descriptor.fd);continue;}
+          const target=byteFactText(descriptor.target,'path directory descriptor');
+          if(!isAbsolute(target)){await probe(image,'non-file-dirfd',descriptor.target.hex,0,descriptor.fd,path.value.hex);continue;}
+          resolved=resolve(target,named);
+        }
+        await retain(row,image,resolved,path.value.hex,row.operation);
       }
-      const named=factPath(path.value,'attempted path')!;
-      let resolved:string;
-      if(isAbsolute(named))resolved=resolve(named);
-      else if(path.dirfdArg<0)resolved=resolve(byteFactText(row.cwd,'cwd'),named);
-      else{
-        const descriptor=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!descriptor)fail('missing path directory descriptor');
-        if(descriptor.fd<0&&descriptor.fd!==-100){probe(image,'invalid-dirfd',path.value.hex,descriptor.target.error,descriptor.fd);continue;}
-        const target=byteFactText(descriptor.target,'path directory descriptor');
-        if(!isAbsolute(target)){probe(image,'non-file-dirfd',descriptor.target.hex,0,descriptor.fd,path.value.hex);continue;}
-        resolved=resolve(target,named);
+      if(!row.paths.length&&row.dirfds.length){
+        for(const fd of row.dirfds){
+          if(fd.target.error||fd.target.null){await probe(image,'descriptor-probe',fd.target.hex,fd.target.error,fd.fd);continue;}
+          const target=byteFactText(fd.target,'descriptor target');
+          if(isAbsolute(target))await retain(row,image,target,fd.target.hex,row.operation);
+          else await probe(image,'non-file-descriptor',fd.target.hex,0,fd.fd);
+        }
       }
-      retain(row,image,resolved,path.value.hex,row.operation);
-    }
-    if(!row.paths.length&&row.dirfds.length){
-      for(const fd of row.dirfds){
-        if(fd.target.error||fd.target.null){probe(image,'descriptor-probe',fd.target.hex,fd.target.error,fd.fd);continue;}
-        const target=byteFactText(fd.target,'descriptor target');
-        if(isAbsolute(target))retain(row,image,target,fd.target.hex,row.operation);
-        else probe(image,'non-file-descriptor',fd.target.hex,0,fd.fd);
+    });
+    phases.finish();await emit({kind:'index-complete',terminal,counts});await flush();
+  },{gzip:true});
+}
+
+function indexObject(value:unknown):Record<string,unknown>{
+  if(!value||typeof value!=='object'||Array.isArray(value))fail('malformed input index record');
+  return value as Record<string,unknown>;
+}
+const integer=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value);
+const hex=(value:unknown):value is string=>typeof value==='string'&&/^(?:[0-9a-f]{2})*$/.test(value);
+const phaseValid=(row:Record<string,unknown>)=>['cargo-setup','rustdoc-setup','doctest-runtime','test-runtime'].includes(String(row.phase))
+  &&(row.source===undefined||typeof row.source==='string')&&(!['doctest-runtime','test-runtime'].includes(String(row.phase))||typeof row.source==='string');
+/** Visits bounded records and returns only after the footer, counts, gzip CRC
+ * and final close are checked. Callers must not accept a partial visit. */
+export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=>void|Promise<void>):Promise<{header:InputIndexStart;complete:InputIndexEnd}>{
+  const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined;
+  await readCompressedRecords(file,async value=>{
+    const row=indexObject(value);
+    if(complete)fail('data after input index completion');
+    if(!header){
+      if(row.kind!=='index-start')fail('missing input index header');
+      if(row.version!==3)fail('unsupported input index version '+String(row.version));
+      const target=row.target;
+      if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
+      if(target!==null){
+        const entry=indexObject(target);
+        if(typeof entry.package!=='string'||typeof entry.name!=='string'||typeof entry.source!=='string'||!Array.isArray(entry.kind)||entry.kind.some(part=>typeof part!=='string'))fail('malformed input index target');
       }
-    }
+      header=row as InputIndexStart;
+    }else if(row.kind==='execution'){
+      if(!integer(row.id)||row.id!==counts.images+1||!integer(row.parent)||row.parent<0||row.parent>=row.id
+        ||!integer(row.pid)||row.pid<1||typeof row.birth!=='string'||!/^\d+$/.test(row.birth)||typeof row.path!=='string'||!isAbsolute(row.path)
+        ||typeof row.cwd!=='string'||!isAbsolute(row.cwd)||!hex(row.argvRaw)||!phaseValid(indexObject(row.phase))
+        ||!['first-observation','actual-image','actual-argv'].includes(String(row.reason)))fail('malformed input index execution');
+      counts.images++;
+    }else if(row.kind==='observation'||row.kind==='probe'){
+      if(!integer(row.image)||row.image<1||row.image>counts.images||row.count!==1||!phaseValid(row))fail('malformed attributed input index record');
+      if(row.kind==='observation'){
+        if(typeof row.path!=='string'||!isAbsolute(row.path)||!hex(row.rawPath)||typeof row.operation!=='string'||typeof row.syscall!=='string'||row.outcome!=='unknown'||typeof row.canceled!=='boolean')fail('malformed input observation');
+        counts.observations++;
+      }else{
+        if(typeof row.probeKind!=='string'||!hex(row.raw)||row.rawPath!==undefined&&!hex(row.rawPath)||!integer(row.error)||row.error<0||row.fd!==undefined&&!integer(row.fd))fail('malformed input probe');
+        counts.probes++;
+      }
+    }else if(row.kind==='inherited'){
+      if(readObservationRow(row).kind!=='inherited')fail('malformed inherited input index record');counts.inherited++;
+    }else if(row.kind==='terminal-fact'){
+      const fact=readObservationRow(row.fact);
+      if(fact.kind!=='attempt'||!canceledLifetime(fact))fail('terminal fact contains a filesystem candidate');counts.terminalFacts++;
+    }else if(row.kind==='index-complete'){
+      const terminal=readObservationRow(row.terminal),reported=indexObject(row.counts);
+      if(terminal.kind!=='complete'||!terminal.complete||!terminal.drainComplete||terminal.errors)fail('incomplete native input index');
+      for(const field of Object.keys(counts) as (keyof InputIndexCounts)[])if(reported[field]!==counts[field])fail('input index count mismatch: '+field);
+      complete=row as InputIndexEnd;
+    }else fail('unexpected input index record '+String(row.kind));
+    await visit(row as InputIndexRow);
   });
-  phases.finish();
-  durableRecord(options.output,{version:2,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,
-    terminal,terminalFacts,executions:phases.images,inheritedDescriptors:descriptors,descriptorProbes:[...probes.values()],observations:[...observations.values()]});
+  if(!header||!complete)fail('incomplete input index');
+  return {header,complete};
 }
 export const readTestArtifactTargets=(path:string,root:string)=>testArtifactTargets(JSON.parse(readFileSync(path,'utf8')) as unknown,root);
 

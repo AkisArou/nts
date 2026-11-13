@@ -106,7 +106,7 @@ const first = spawnSync(fileObserver??process.execPath, cargoTrace?fileObserverA
 });
 const firstOut = `${first.stdout ?? ""}${first.stderr ?? ""}`;
 if(cargoTrace){
-  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.json'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
+  try{await publishInputTrace({raw:cargoTrace,output:join(dirname(cargoTrace),'cargo.index.jsonl.gz'),cwd:ROOT,root:ROOT,doctestCalls:doctestCalls?readDoctestCalls(doctestCalls):[]});}
   catch(error){if(isCommandExit(error))throw error;console.error('NOT MEASURED: '+String(error));exitCommand(2);}
 }
 const recorded = readdirSync(calls)
@@ -151,7 +151,7 @@ const runOne = (key) =>
     child.on("error", (e) => { out += `error: ${e.message}\n`; });
     child.on("close", async (status, signal) => {
       if(trace){
-        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.json'),cwd:r.cwd,root:ROOT,target});}
+        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target});}
         catch(error){if(isCommandExit(error))throw error;traceFailures++;out+='NOT MEASURED: '+String(error)+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;

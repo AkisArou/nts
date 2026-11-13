@@ -2,6 +2,7 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
+import {readInputTraceIndex,type InputIndexObservation} from "./rust-test-inputs.ts";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,7 +29,7 @@ function testsFixture(root: string): void {
   assert.equal(initialized.status, 0, initialized.stderr);
 }
 
-test("the gate tests helper replays Cargo's environment from incremental nts-dev artifacts", () => {
+test("the gate tests helper replays Cargo's environment from incremental nts-dev artifacts", async () => {
   const root = mkdtempSync(join(tmpdir(), "nts-test-build-env-"));
   try {
     testsFixture(root);
@@ -52,9 +53,10 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 2 passed, 0 failed/);
-    const cargo=JSON.parse(readFileSync(join(trace,'cargo.json'),'utf8'));
-    const binary=JSON.parse(readFileSync(join(trace,'binary-0.json'),'utf8'));
-    assert.equal(binary.target.source,'src/lib.rs');
+    const cargo:{observations:InputIndexObservation[]}={observations:[]},binary:{observations:InputIndexObservation[]}={observations:[]};
+    await readInputTraceIndex(join(trace,'cargo.index.jsonl.gz'),row=>{if(row.kind==='observation')cargo.observations.push(row);});
+    const index=await readInputTraceIndex(join(trace,'binary-0.index.jsonl.gz'),row=>{if(row.kind==='observation')binary.observations.push(row);});
+    assert.equal(index.header.target?.source,'src/lib.rs');
     assert.ok(cargo.observations.some((row:{phase:string;source?:string;path:string})=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.path===join(root,'runtime-data/value')));
     assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));
     assert.ok(binary.observations.some((row:{path:string;outcome:string})=>row.path===join(root,'runtime-data/missing')&&row.outcome==='unknown'));
