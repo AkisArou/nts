@@ -83,7 +83,7 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   assert.ok(id,'Cargo preparation has no memory reservation');
   const entry=admittedEntry(ledger,id);assert.ok(entry,'Cargo preparation reservation is not live');
   assert.equal(process.env.CARGO_TARGET_DIR,${JSON.stringify(target)});
-  process.stdout.write('BUILD '+JSON.stringify({id,pid:process.pid})+'\\n');
+  fs.writeSync(1,'BUILD '+JSON.stringify({id,owner:entry.owner.pid,cargo:process.pid})+'\\n');
   const release=Buffer.alloc(1);assert.equal(fs.readSync(0,release,0,1,null),1);
   process.exitCode=${status};
 })().catch(error=>{console.error(error);process.exitCode=97;});
