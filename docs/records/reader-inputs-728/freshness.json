@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "base": "4320cc9c2b4125934257a8d55ed560996745ae76",
+  "source": "9d0f2fee79912284f73dbf87cd20ca159b51402e",
+  "censusSource": "aa3cca74013053127d6ddfd4f1ba6d71e1dd6b05",
+  "identitySource": "6fecd58c850e4b96d644af764cac8e0ca186c63a",
+  "identity": {
+    "byteEqual": true,
+    "files": 27,
+    "rows": 6391,
+    "treeSha256": "90426e98fae651e18953729adce1e4c0300897ccec28ab8104dd8468bc135b87",
+    "source": {
+      "name": "unicode-idna-17",
+      "url": "https://www.unicode.org/Public/17.0.0/idna/IdnaTestV2.txt",
+      "sha256": "beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf",
+      "version": "17.0.0",
+      "bytes": 775973
+    },
+    "evidence": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/freshness-identity-v1/result.json",
+      "bytes": 12208,
+      "sha256": "c84c5a2371880a6dc2d70bd4c00704ee23cf46bc5bf28c52170d14ab0ce37ac6"
+    }
+  },
+  "placement": {
+    "lost": [],
+    "actualRouteLost": [],
+    "gainedCount": 1073,
+    "gainedByStep": {
+      "unicode-freshness": 1058,
+      "test262": 8,
+      "addons": 6,
+      "tooling": 1
+    },
+    "fallback": {
+      "base": {
+        "unplaced": 142,
+        "policy": 33
+      },
+      "current": {
+        "unplaced": 142,
+        "policy": 36
+      }
+    },
+    "newPolicyPaths": [
+      "tooling/inputs/pinned-inputs.json",
+      "tooling/inputs/pinned-inputs.test.ts",
+      "tooling/inputs/pinned-inputs.ts"
+    ],
+    "policyReason": "existing full gate input-provisioning rule; no new fallback path",
+    "switchOff": {
+      "base": 0,
+      "current": 0
+    },
+    "generator": {
+      "before": [],
+      "after": [
+        "tooling",
+        "unicode-freshness"
+      ]
+    },
+    "evidence": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/freshness-census-v1/comparison.json",
+      "bytes": 123639,
+      "sha256": "cb45a008166337bb438f900039b18da18244629bb75e4d4feabe1686ede7db1e"
+    },
+    "additiveShellContinuation": {
+      "test262": [
+        "tooling/gate/all.sh",
+        "tooling/gate/cache-capabilities.ts",
+        "tooling/gate/cache-environment.ts",
+        "tooling/gate/durable-record.ts",
+        "tooling/gate/gate-resource.ts",
+        "tooling/gate/pinned.sh",
+        "tooling/gate/state-version.ts",
+        "tooling/gate/step-result.ts"
+      ],
+      "addons": [
+        "tooling/gate/cache-environment.ts",
+        "tooling/gate/durable-record.ts",
+        "tooling/gate/gate-resource.ts",
+        "tooling/gate/pinned.sh",
+        "tooling/gate/state-version.ts",
+        "tooling/gate/step-result.ts"
+      ]
+    }
+  },
+  "proof": {
+    "focused": {
+      "counts": {
+        "tests": 177,
+        "pass": 177,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "/home/akisarou/.cache/nts-scratch/728/freshness-focused-v2.log"
+    },
+    "host": {
+      "sources": 1883,
+      "closures": 260,
+      "reads": 413
+    },
+    "strict": {
+      "modules": 824,
+      "diagnostics": 5707,
+      "improved": 15
+    },
+    "canonical": {
+      "command": "node tooling/landing/check.ts 9d0f2fee79912284f73dbf87cd20ca159b51402e --here",
+      "run": "/home/akisarou/.cache/nts-landing/runs/here-9d0f2fee7991-1794545949143",
+      "verdict": "green",
+      "wall_s": 1000.512,
+      "admissionWait_s": 971.7879999999999,
+      "tooling": {
+        "tests": 2223,
+        "pass": 2221,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 2
+      },
+      "rust": {
+        "binaries": 55,
+        "doctestCrates": 18,
+        "pass": 3044,
+        "fail": 0,
+        "ignored": 8
+      },
+      "freshnessStep": {
+        "name": "unicode-freshness",
+        "verdict": "PASS",
+        "cpu_measure": "cgroup-v2-scope-v1",
+        "cpu": 0.214428,
+        "wall": 0.254,
+        "memory_peak_bytes": 76558336
+      }
+    }
+  },
+  "excluded": [
+    "The first pinned-owner batch passed its tests but strict found an unused import; the corrected integrated batch is separate.",
+    "The first integrated batch had seven runner controls fail before startup because the new shell step lacked its scheduling row. The table row and complete-catalogue control fix that cause; the repeated 177-control batch is green."
+  ],
+  "reproduction": {
+    "identityScript": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/freshness-identity-v1.py",
+      "bytes": 3382,
+      "sha256": "a8c55e7ed1227afd8e8a8a0885bfdc6b374fb465af02449cdbd50ab095fbdb4b"
+    },
+    "censusScript": {
+      "file": "/home/akisarou/.cache/nts-scratch/728/freshness-census-v1.py",
+      "bytes": 3760,
+      "sha256": "535532c0cbc8c5788ad707e15d461d96f5676bbc43af533d360dc125a893cc47"
+    },
+    "identityCommand": "sh /home/akisarou/.cache/nts-scratch/728/freshness-identity-v1.sh",
+    "censusCommand": "sh /home/akisarou/.cache/nts-scratch/728/freshness-census-v1.sh",
+    "acquisitionCommand": "node tooling/inputs/pinned-inputs.ts --acquire unicode-idna-17",
+    "offlineCommand": "sh tooling/gate/all.sh --call unicode-freshness"
+  }
+}
