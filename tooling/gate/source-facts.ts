@@ -39,6 +39,7 @@ export class SourceFacts {
   private readonly callOrders:number[]=[];
   private readonly lines=[0];
   private ambientAliases:Map<string,string>|undefined;
+  private moduleEdges:{all:string[];host:string[]}|undefined;
 
   constructor(file:string,source:string,root:Node){
     this.file=file;this.source=source;this.root=root;
@@ -172,8 +173,25 @@ export class SourceFacts {
     }
     return name(node);
   }
+  private moduleImports():{all:string[];host:string[]}{
+    if(this.moduleEdges)return this.moduleEdges;
+    const ast=this.ast,all:string[]=[],host:string[]=[];
+    for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
+      const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
+        :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
+        :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
+      if(!specifier||!ast.isStringLiteralLikeNode(specifier)||!/^\.\.?\//.test(specifier.text))continue;
+      all.push(specifier.text);
+      const typeOnly=ast.isImportDeclaration(node)?node.importClause?.isTypeOnly
+        :(ast.isExportDeclaration(node)||ast.isImportEqualsDeclaration(node))&&node.isTypeOnly;
+      if(!typeOnly)host.push(specifier.text);
+    }
+    return this.moduleEdges={all,host};
+  }
+  /** Type imports stay source inputs without pretending the host enters them. */
+  hostModuleImports():string[]{return [...this.moduleImports().host];}
   moduleDeclarations():ModuleDeclarations{
-    const ast=this.ast,imports:string[]=[],assets:ReaderInput[]=[];
+    const ast=this.ast,imports=[...this.moduleImports().all],assets:ReaderInput[]=[];
     const fixtureGrants=(node:Node|undefined):DataNamespaces=>{
       const fail=():never=>{throw Error('fixtureInput needs literal dataNamespaces owners: '+this.file);};
       if(!node||!ast.isObjectLiteralExpression(node)||node.properties.length!==1)return fail();
@@ -189,12 +207,6 @@ export class SourceFacts {
       }
       return fixtureNamespaces(owners);
     };
-    for(const node of [...this.imports,...this.ofKind(ast.SyntaxKind.ExportDeclaration),...this.ofKind(ast.SyntaxKind.ImportEqualsDeclaration),...this.calls]){
-      const specifier=ast.isImportDeclaration(node)||ast.isExportDeclaration(node)?node.moduleSpecifier
-        :ast.isImportEqualsDeclaration(node)&&ast.isExternalModuleReference(node.moduleReference)?node.moduleReference.expression
-        :ast.isCallExpression(node)&&node.expression.kind===ast.SyntaxKind.ImportKeyword?node.arguments[0]:undefined;
-      if(specifier&&ast.isStringLiteralLikeNode(specifier)&&/^\.\.?\//.test(specifier.text))imports.push(specifier.text);
-    }
     for(const node of this.constructions)if(ast.isIdentifier(node.expression)&&node.expression.text==='URL'&&node.arguments?.length===2){
       const [literal,base]=node.arguments;
       if(literal&&ast.isStringLiteralLikeNode(literal)&&literal.kind===ast.SyntaxKind.StringLiteral&&base&&ast.isPropertyAccessExpression(base)&&base.name.text==='url'

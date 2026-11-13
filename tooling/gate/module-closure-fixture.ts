@@ -3,9 +3,9 @@
 import {copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync} from "node:fs";
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
-import {moduleGraph, type ModuleClosureOptions} from "./module-closure.ts";
+import {moduleGraph, type ModuleClosureOptions,type InputSnapshot} from "./module-closure.ts";
 import {outsideSource} from "./source-containment.ts";
-import {canonicalNamespace as canonical,fixtureNamespaces,type InputSnapshot,type InputEntry} from './reader-inputs/main.ts';
+import {canonicalNamespace as canonical,fixtureNamespaces,type InputEntry} from './reader-inputs/main.ts';
 import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';

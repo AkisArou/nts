@@ -9,14 +9,23 @@ import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
 import {SourceFacts} from './source-facts.ts';
 import {projectInputs} from './project-inputs.ts';
-import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type InputSnapshot,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext} from './reader-inputs/main.ts';
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
+import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
+import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
+export type ReaderObservation={reader:string;context:ReaderContext;protocol:'project'|'node26';observation:HostObservation};
+/** The canonical graph owns derived facts; the declaration leaf has no parser
+ * or oracle dependency in either import direction. */
+export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
+  optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 export type ByteInputDeclaration={reader:string;path:string};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
   byteInput?:(declaration:ByteInputDeclaration)=>void;
+  /** Only an actual Node invocation owner selects this versioned protocol. */
+  nodeMajor?:26;
   /** A caller which already owns parsed source facts supplies detached edges. */
   declarations?:ReadonlyMap<string,ModuleDeclarations>};
 const inside = (root: string, path: string) => {
@@ -40,7 +49,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   const require = createRequire(import.meta.url);
   const {API} = require("typescript/sync") as typeof import("typescript/sync");
   const root = realpathSync(options.sourceRoot ?? SOURCE);
+  if(options.nodeMajor!==undefined&&!ORACLE_NODE_RESOLUTION_RECIPE.nodeMajors.includes(options.nodeMajor))
+    throw Error('unsupported host module Node recipe: '+String(options.nodeMajor));
   const references = new Map<string,ModuleDeclarations>();
+  const hostImports=new Map<string,Set<string>>();
   let tracked: string[] | undefined;
   // A graph owns one tracked inventory. Contexts select from that inventory;
   // they never need to rescan every tracked path for the same directory.
@@ -69,21 +81,26 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const known = references.get(path);
     if (known) return known;
     const supplied=options.declarations?.get(relative(root,path).split(sep).join('/'));
-    if(supplied){references.set(path,supplied);return supplied;}
+    if(supplied){references.set(path,supplied);hostImports.set(path,new Set(supplied.imports));return supplied;}
     api??=new API({cwd:root});
     const source=readFileSync(path,'utf8'),lease=api.createSourceFile(path,source);
     try {
-      const result=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile).moduleDeclarations();
+      const facts=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile),result=facts.moduleDeclarations();
+      hostImports.set(path,new Set(facts.hostModuleImports()));
       references.set(path,result);return result;
     } finally {lease.dispose();}
   }
   function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput):InputSnapshot {
-    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
-    type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
+    const observations:ReaderObservation[]=[];
+    type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
-    function asset(context:Context,reader:string,path:string,input:ReaderInput):void {
+    const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
+      for(const observation of rows)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,observation:structuredClone(observation)});
+    };
+    function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
       if(kind==='optional-file'){
@@ -110,7 +127,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const namespaces=fixtureNamespaces(input.dataNamespaces??{}),entry=nameOf(path);
         const key=JSON.stringify([entry,Object.entries(namespaces).sort(([a],[b])=>a.localeCompare(b))]);
         if(contexts.has(key))return;
-        const child:Context={entry,namespaces,entered:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
+        const child:Context={entry,namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
         contexts.set(key,child);
         visit(child,path);
         for(const directory of Object.keys(namespaces))if(!child.data.has(directory))
@@ -122,17 +139,18 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const key=kind+'\0'+entry;
         if(context.projects.has(key))return;
         context.projects.add(key);
-        visit(context,path,kind==='project');
+        visit(context,path,kind==='project',true,false);
         const project=projectInputs([{kind:kind==='project'?'entry':'config',path:entry}],root);
+        observe(context,reader,'project',project.observations);
         for(const config of project.configs)visit(context,resolve(root,config),false);
-        for(const entry of project.roots)visit(context,resolve(root,entry));
+        for(const entry of project.roots)visit(context,resolve(root,entry),true,true,false);
         return;
       }
       if (!lstatSync(path).isDirectory()) {
         if(kind==='data'||kind==='inspection')throw Error('declared '+kind+' input is not a directory: '+nameOf(path));
         if(kind==='members')throw Error('declared module members input is not a directory: '+nameOf(path));
         if(kind==='file')reportByteInput?.({reader,path:nameOf(path)});
-        visit(context,path,kind!=='file');return;
+        visit(context,path,kind!=='file',true,host);return;
       }
       if(kind==='file')throw Error('declared file input is not a file: '+nameOf(path));
       if (!inside(root, realpathSync(path))) throw new Error("asset is not an owned directory: " + path);
@@ -141,7 +159,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       // One descriptor may retain a reader's existing metadata/data population
       // while entering only its named executable members. Private data grants
       // never remove the immutable member modules visited below.
-      if(kind==='members'&&input.data)asset(context,reader,path,{path:input.path,kind:'data'});
+      if(kind==='members'&&input.data)asset(context,reader,path,{path:input.path,kind:'data'},host);
       if(kind==='data')context.data.add(directory);
       const grant=kind==='data'?Object.keys(context.namespaces).find(name=>directory===name||directory.startsWith(name+'/')):undefined;
       const members=grant?[]:membersOf(directory,member);
@@ -152,25 +170,39 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(grant)return;
       for(const file of members){
         if(kind==='data'){files.add(file);placing.add(file);}
-        else visit(context,resolve(root,file),kind!=='inspection',kind!=='inspection');
+        else visit(context,resolve(root,file),kind!=='inspection',kind!=='inspection',host);
       }
     }
-    function visit(context:Context,path:string,enter=true,place=true):void {
+    function visit(context:Context,path:string,enter=true,place=true,host=enter):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
       const name=nameOf(path);
-      if(enter?context.entered.has(name):context.owned.has(name)){if(place)placing.add(name);return;}
+      if(enter?context.entered.has(name)&&(!host||context.host.has(name)):context.owned.has(name)){if(place)placing.add(name);return;}
       if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
       context.owned.add(name);owned.add(name);files.add(name);if(place)placing.add(name);
       if(!enter)return;
       context.entered.add(name);moduleFiles.add(name);
+      if(host){
+        context.host.add(name);hostFiles.add(name);
+        if(options.nodeMajor!==undefined&&/\.[cm]?[jt]sx?$/.test(path)&&! /\.d\.[cm]?ts$/.test(path)){
+          const filesystem=new OracleFilesystem(),physical=filesystem.realpath(path);
+          for(const route of new Set([path,physical]))for(const candidate of oracleNodePackageScopes(route)){
+            const bytes=filesystem.readBytes(candidate);
+            if(bytes!==null){
+              if(inside(root,candidate))visit(context,candidate,false,false,false);
+              break;
+            }
+          }
+          observe(context,name,'node26',filesystem.captured());
+        }
+      }
       // Aggregate ownership never suppresses another namespace context. A
       // later production import must still restore its real data membership.
       if(!/\.[cm]?[jt]sx?$/.test(path)&&!options.declarations?.has(name))return;
       const {imports,assets}=parsed(path);
-      for(const specifier of imports)visit(context,fileURLToPath(new URL(specifier,pathToFileURL(path))));
-      for(const input of assets)asset(context,name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input);
+      for(const specifier of imports)visit(context,fileURLToPath(new URL(specifier,pathToFileURL(path))),true,true,host&&hostImports.get(path)!.has(specifier));
+      for(const input of assets)asset(context,name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input,host);
     }
-    const production:Context={entry:'<entry>',namespaces:{},entered:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
+    const production:Context={entry:'<entry>',namespaces:{},entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
     for(const entry of entries){
       if(typeof entry!=='string'){
         asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
@@ -182,7 +214,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path);
     }
-    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships};
+    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations};
   }
   return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
     membershipIndex:()=>membershipIndex(sourceFiles()),close:()=>api?.close()};

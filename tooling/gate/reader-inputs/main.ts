@@ -13,8 +13,6 @@ export type OptionalFileDeclaration={reader:string;path:string;present:boolean;c
 export type MemberType='file'|'directory'|'symlink';
 export type DirectoryEntry={name:string;type:MemberType};
 export type MembershipDeclaration={reader:string;directory:string;entries:DirectoryEntry[];context:ReaderContext};
-export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
-  optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[]};
 
 declare const DATA_DIRECTORY:unique symbol;
 export type DataDirectory=URL&{readonly [DATA_DIRECTORY]:true};

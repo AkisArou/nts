@@ -1668,7 +1668,7 @@ function stepInputGraph() {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    const metadata=(/** @type {Pick<import('./reader-inputs/main.ts').InputSnapshot,'optionalFiles'|'memberships'>} */ snapshot,/** @type {string} */ step)=>{
+    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'>} */ snapshot,/** @type {string} */ step)=>{
       for(const row of snapshot.optionalFiles){
         const key=JSON.stringify([row.reader,row.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=optionalFiles.get(key)??{...row,steps:new Set()};fact.steps.add(step);optionalFiles.set(key,fact);
@@ -1679,7 +1679,7 @@ function stepInputGraph() {
         const fact=memberships.get(key)??{...row,steps:new Set()};fact.steps.add(step);memberships.set(key,fact);
       }
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./reader-inputs/main.ts').InputSnapshot,'optionalFiles'|'memberships'>}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
