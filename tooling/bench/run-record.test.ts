@@ -353,6 +353,41 @@ test("record check catches corruption, edited rendering and a missing committed 
   }
 });
 
+test("a caller's run store owns both its observations and immutable history", () => {
+  const root = temp();
+  try {
+    git(root, ["init", "-q"]);
+    git(root, ["config", "user.email", "test@example.invalid"]);
+    git(root, ["config", "user.name", "record control"]);
+    writeFileSync(join(root, "README"), "fixture\n");
+    git(root, ["add", "README"]);
+    git(root, ["commit", "-qm", "fixture"]);
+    const unrelated = publishRun(root, fixture("default-store"));
+    const directory = "observations [private]/café runs";
+    const inputs = {runs: join(root, directory), table: join(root, "private-table.md")};
+    mkdirSync(inputs.runs, {recursive: true});
+    const original = fixture("selected-store"), path = join(inputs.runs, original.id + ".json");
+    const bytes = JSON.stringify(original, null, 2) + "\n";
+    writeFileSync(path, bytes);
+    writeFileSync(inputs.table, renderFull([original]));
+    git(root, ["add", "--", directory, "private-table.md"]);
+    git(root, ["commit", "-qm", "selected store"]);
+    rmSync(unrelated);
+    assert.equal(checkRecords(root, inputs).runs, 1, "unrelated default history does not decide this store");
+    const changed = structuredClone(original);
+    changed.rows[0]!.cells["nts C"]!.nanoseconds = 70;
+    const rewritten = sealRun(changed);
+    writeFileSync(path, JSON.stringify(rewritten, null, 2) + "\n");
+    writeFileSync(inputs.table, renderFull([rewritten]));
+    assert.throws(() => checkRecords(root, inputs), /immutable benchmark run was rewritten/);
+    writeFileSync(path, bytes);
+    writeFileSync(inputs.table, renderFull([original]));
+    assert.equal(checkRecords(root, inputs).runs, 1);
+    rmSync(path);
+    assert.throws(() => checkRecords(root, inputs), /missing immutable benchmark run/);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
 test("the real check CLI detects a one-change renderer drift", () => {
   const root = temp();
   try {
