@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "inputs": {
+    "unicode-idna-17": {
+      "url": "https://www.unicode.org/Public/17.0.0/idna/IdnaTestV2.txt",
+      "sha256": "beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf",
+      "version": "17.0.0"
+    }
+  }
+}

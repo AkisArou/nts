@@ -20,6 +20,7 @@
   "nts-tsrs-yield-replay-20261030": { "kind": "kept", "why": "the drafted reports of tsrs's yield gaps, until they are filed upstream" },
 
   "nts-node-inputs": { "kind": "kept", "writer": "tooling/inputs/node-inputs.ts", "why": "the node inputs every gate tree links" },
+  "nts-pinned-inputs": { "kind": "kept", "writer": "tooling/inputs/pinned-inputs.ts", "why": "hash-pinned offline source inputs for freshness checks" },
   "nts-dependencies": { "kind": "kept", "writer": "tooling/inputs/dependency-inputs.ts", "why": "each tree's dependency inputs" },
   "nts-toolchains": { "kind": "kept", "writer": "tooling/inputs/package-manager.ts", "why": "the pinned package-manager toolchains" },
   "nts-comparators": { "kind": "kept", "writer": "tooling/bench/comparator-pins.ts", "why": "the pinned comparator engines the benchmarks run" },
