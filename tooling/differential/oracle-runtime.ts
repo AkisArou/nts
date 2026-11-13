@@ -13,6 +13,7 @@ const EXECUTION_INPUTS=[
   new URL('./oracle-batch.ts',import.meta.url),
   new URL('./command-entry/main.ts',import.meta.url),
   new URL('./oracle-seal/main.ts',import.meta.url),
+  new URL('./runtime-paths/main.ts',import.meta.url),
 ] as const;
 const RECIPE_INPUTS={
   emitter:new URL('./oracle-emit.ts',import.meta.url),
@@ -21,6 +22,9 @@ const RECIPE_INPUTS={
   runtime:new URL('./oracle-runtime.ts',import.meta.url),
   resolution:new URL('./oracle-resolution.ts',import.meta.url),
   assets:new URL('./oracle-assets.ts',import.meta.url),
+  publisher:new URL('./oracle-result-publisher.ts',import.meta.url),
+  runtimeModules:new URL('./oracle-runtime-modules.ts',import.meta.url),
+  childBootstrap:new URL('./oracle-child-bootstrap.mjs',import.meta.url),
   toolchain:new URL('./oracle-toolchain.json',import.meta.url),
 } as const;
 const assetName=(input:URL)=>relative(fileURLToPath(new URL('./',import.meta.url)),fileURLToPath(input)).split(sep).join('/');
@@ -42,6 +46,9 @@ export function oracleIdentityFor(typescript:OracleIdentity['typescript']):Oracl
     runtimeSha256:hash(readFileSync(RECIPE_INPUTS.runtime)),
     resolutionSha256:hash(readFileSync(RECIPE_INPUTS.resolution)),
     assetsSha256:hash(readFileSync(RECIPE_INPUTS.assets)),
+    publisherSha256:hash(readFileSync(RECIPE_INPUTS.publisher)),
+    runtimeModulesSha256:hash(readFileSync(RECIPE_INPUTS.runtimeModules)),
+    childBootstrapSha256:hash(readFileSync(RECIPE_INPUTS.childBootstrap)),
     toolchainRecordSha256:hash(readFileSync(RECIPE_INPUTS.toolchain)),
     options:JSON.parse(readFileSync(RECIPE_INPUTS.toolchain,'utf8')).execution.options};
 }

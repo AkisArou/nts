@@ -27,6 +27,10 @@ const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
         "oracle-seal/main.ts",
         include_str!("../oracle-seal/main.ts"),
     ),
+    ("runtime-paths/main.ts", include_str!("../runtime-paths/main.ts")),
+    ("oracle-result-publisher.ts", include_str!("../oracle-result-publisher.ts")),
+    ("oracle-runtime-modules.ts", include_str!("../oracle-runtime-modules.ts")),
+    ("oracle-child-bootstrap.mjs", include_str!("../oracle-child-bootstrap.mjs")),
     ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
     (
@@ -293,6 +297,18 @@ fn uri_bytes(bytes: &[u8]) -> String {
     text
 }
 
+fn validate_runtime_assets(assets: &serde_json::Map<String, Value>, required: &[&str]) -> Result<()> {
+    anyhow::ensure!(!assets.is_empty() && assets.len() <= 128 && required.iter().all(|name| assets.contains_key(*name)), "oracle runtime asset set changed");
+    for (name, hash) in assets {
+        let canonical = name.ends_with(".mjs") && name.split('/').all(|part| {
+            !part.is_empty() && part != "." && part != ".." && part.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
+        });
+        let hash = hash.as_str().context("oracle runtime asset hash is missing")?;
+        anyhow::ensure!(canonical && hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)), "oracle runtime asset identity changed: {name}");
+    }
+    Ok(())
+}
+
 fn program_reader_arguments(root: &Value) -> Result<Vec<String>> {
     const BOOTSTRAP: &str = include_str!("../oracle-result-bootstrap.ts");
     let directory = Utf8Path::new(
@@ -303,7 +319,8 @@ fn program_reader_arguments(root: &Value) -> Result<Vec<String>> {
     let reader = directory.join("reader");
     let runtime = &root["runtime"];
     anyhow::ensure!(
-        runtime["version"] == 1
+        runtime["version"] == 2
+            && runtime["entry"] == "oracle-results.mjs"
             && runtime["directory"] == reader.as_str()
             && runtime["bootstrapSha256"] == digest(BOOTSTRAP.as_bytes()),
         "program oracle reader runtime identity changed"
@@ -321,29 +338,12 @@ fn program_reader_arguments(root: &Value) -> Result<Vec<String>> {
     let assets = runtime["assets"]
         .as_object()
         .context("program oracle reader has no assets")?;
-    let names = [
-        "oracle-results.mjs",
-        "oracle-filesystem.mjs",
-        "oracle-runtime.mjs",
-    ];
-    anyhow::ensure!(
-        assets.len() == names.len(),
-        "program oracle reader asset set changed"
-    );
+    validate_runtime_assets(assets, &["oracle-results.mjs"])?;
     let mut files = std::collections::BTreeMap::new();
-    for name in names {
-        let sha = assets
-            .get(name)
-            .and_then(Value::as_str)
-            .context("program oracle reader asset is missing")?;
-        anyhow::ensure!(
-            sha.len() == 64
-                && sha
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "program oracle reader asset identity changed"
-        );
-        files.insert(reader.join(name).into_string(), sha);
+    for (name, sha) in assets {
+        let path = reader.join(name);
+        anyhow::ensure!(path.canonicalize_utf8()? == path, "program oracle reader path changed");
+        files.insert(path.into_string(), sha.as_str().context("program oracle reader hash is missing")?);
     }
     let bootstrap = format!(
         "data:text/javascript,{}#{}",
@@ -689,18 +689,16 @@ fn bind_snapshot(manifest: &Utf8Path, bytes: &[u8], index: &Value) -> Result<Val
     let assets = stored["runtimeAssets"]
         .as_object()
         .context("oracle generated bootstrap assets are missing")?;
-    if assets.len() != 3 || !std::fs::symlink_metadata(session.join("assets"))?.is_dir() {
-        bail!("oracle generated bootstrap asset set changed");
-    }
-    for name in ["loader", "runtime", "assets"] {
-        let route = format!("assets/oracle-{name}.mjs");
-        let path = session_route(session, Utf8Path::new(&route))?;
-        let expected = assets
-            .get(&route)
-            .and_then(Value::as_str)
-            .context("oracle generated bootstrap hash is missing")?;
-        if !std::fs::symlink_metadata(&path)?.is_file()
-            || digest(&std::fs::read(&path)?) != expected
+    let relative: serde_json::Map<String, Value> = assets.iter().map(|(name, value)| {
+        let name = name.strip_prefix("assets/").context("oracle generated bootstrap route is invalid")?;
+        Ok((name.to_owned(), value.clone()))
+    }).collect::<Result<_>>()?;
+    validate_runtime_assets(&relative, &["oracle-loader.mjs", "oracle-runtime.mjs", "oracle-assets.mjs"])?;
+    anyhow::ensure!(std::fs::symlink_metadata(session.join("assets"))?.is_dir(), "oracle generated bootstrap directory changed");
+    for (route, expected) in assets {
+        let path = session_route(session, Utf8Path::new(route))?;
+        if path.canonicalize_utf8()? != path || !std::fs::symlink_metadata(&path)?.is_file()
+            || expected.as_str() != Some(digest(&std::fs::read(&path)?).as_str())
         {
             bail!("oracle generated bootstrap asset changed: {route}");
         }
@@ -1264,6 +1262,9 @@ fn verify_implementation(identity: &Value, assets: &Utf8Path) -> Result<Executio
             "resolutionSha256",
             include_str!("../oracle-resolution.ts"),
         ),
+        ("oracle-result-publisher.ts", "publisherSha256", include_str!("../oracle-result-publisher.ts")),
+        ("oracle-runtime-modules.ts", "runtimeModulesSha256", include_str!("../oracle-runtime-modules.ts")),
+        ("oracle-child-bootstrap.mjs", "childBootstrapSha256", include_str!("../oracle-child-bootstrap.mjs")),
         (
             "oracle-toolchain.json",
             "toolchainRecordSha256",
@@ -1573,7 +1574,7 @@ mod tests {
             .map(|(path, value)| serde_json::json!({"kind":"file","path":path,"value":value}))
             .collect::<Vec<_>>();
         let mut stored = json!({"version":3,"observations":observations,"status":"complete","entry":source,"project":project,"roots":null,
-            "identity":{"version":1,"typescript":typescript,"executionSha256":super::super::oracle_run::execution_identity().unwrap(),"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
+            "identity":{"version":1,"typescript":typescript,"publisherSha256":digest(include_bytes!("../oracle-result-publisher.ts")),"runtimeModulesSha256":digest(include_bytes!("../oracle-runtime-modules.ts")),"childBootstrapSha256":digest(include_bytes!("../oracle-child-bootstrap.mjs")),"executionSha256":super::super::oracle_run::execution_identity().unwrap(),"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
                 "assetsSha256":digest(include_bytes!("../oracle-assets.ts")),"loaderSha256":digest(include_bytes!("../oracle-loader.ts")),"filesystemSha256":digest(include_bytes!("../oracle-filesystem.ts")),"runtimeSha256":digest(include_bytes!("../oracle-runtime.ts")),"resolutionSha256":digest(include_bytes!("../oracle-resolution.ts")),"toolchainRecordSha256":digest(include_bytes!("../oracle-toolchain.json")),"options":record["execution"]["options"]},
             "inputs":inputs,"outputs":{"program/main.js":digest(&std::fs::read(&emitted).unwrap()),"source-index.json":digest(&std::fs::read(&index).unwrap())},
             "groups":[{"entry":source,"project":project,"output":"program","compilerStatus":0}]

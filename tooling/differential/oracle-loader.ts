@@ -6,6 +6,8 @@ import {createHash} from 'node:crypto';
 import {appendFileSync,openSync,closeSync,readSync,fstatSync,constants,existsSync,readFileSync,realpathSync,readlinkSync,lstatSync,linkSync,mkdirSync,mkdtempSync,writeFileSync} from 'node:fs';
 import {basename,dirname,join,resolve,relative,isAbsolute,sep,parse} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+import {runtimeAssets} from './runtime-paths/main.ts';
+import {ORACLE_EXECUTION_FILES} from './oracle-runtime.ts';
 import {observeOracleAssets} from './oracle-assets.ts';
 import {dependencySealReady,dependencySealError,checkerImportIdentity,validateRuntimeObservations as validateHostObservations,parseOracleLoaderEvents,checkNodeResolutionSession,nodeResolutionOptions,OracleResolutionDomain,OraclePathPrefixes,ORACLE_NODE_RESOLUTION_RECIPE,oracleFileUrlErrorProof,capturedModuleIdentity,readOracleSnapshotIndex,V8_HEAP_FLAG,type CheckerImportRelation,type HostObservation} from './oracle-runtime.ts';
 import type {OracleSnapshotIdentity,OracleRuntimeNode,OracleRuntimeDescriptor,OracleRuntimeRoute,OwnerImportRoute} from './oracle-emit.ts';
@@ -67,14 +69,20 @@ if(!identity||identity.version!==1||identity.options!==records.execution.options
    identity.runtimeSha256!==hash(readFileSync(join(assets,'oracle-runtime.ts')))||
    identity.assetsSha256!==hash(readFileSync(join(assets,'oracle-assets.ts')))||identity.filesystemSha256!==hash(readFileSync(join(assets,'oracle-filesystem.ts')))||
    identity.emitterSha256!==hash(readFileSync(join(assets,'oracle-emit.ts')))||identity.loaderSha256!==hash(readFileSync(join(assets,'oracle-loader.ts')))||
+   identity.publisherSha256!==hash(readFileSync(join(assets,'oracle-result-publisher.ts')))||
+   identity.runtimeModulesSha256!==hash(readFileSync(join(assets,'oracle-runtime-modules.ts')))||
+   identity.childBootstrapSha256!==hash(readFileSync(join(assets,'oracle-child-bootstrap.mjs')))||
    identity.toolchainRecordSha256!==hash(readFileSync(join(assets,'oracle-toolchain.json'))))throw Error('oracle TypeScript emit identity mismatch or incomplete preparation');
+if(hash(Buffer.from(JSON.stringify(ORACLE_EXECUTION_FILES.map(name=>hash(readFileSync(join(assets,name)))))))!==identity.executionSha256)throw Error('oracle execution source identity changed');
 const bootstrapFiles=new Map([[join(assets,'oracle-loader.ts'),identity.loaderSha256],[join(assets,'oracle-filesystem.ts'),identity.filesystemSha256],[join(assets,'oracle-runtime.ts'),identity.runtimeSha256],[join(assets,'oracle-assets.ts'),identity.assetsSha256]]);
+if(!runtimeAssets(snapshot.assets&&Object.fromEntries(Object.entries(snapshot.assets).map(([name,sha])=>[name.startsWith('assets/')?name.slice(7):'',sha])),['oracle-loader.mjs']))throw Error('oracle generated bootstrap record is invalid');
+for(const name of ORACLE_EXECUTION_FILES)bootstrapFiles.set(join(assets,name),hash(readFileSync(join(assets,name))));
 if(Object.keys(descriptor.runtimeAssets??{}).length!==Object.keys(snapshot.assets??{}).length||Object.entries(descriptor.runtimeAssets??{}).some(([file,sha256])=>snapshot.assets?.[file]!==sha256))throw Error('oracle generated bootstrap identity changed');
 for(const [file,sha256] of Object.entries(descriptor.runtimeAssets??{})){
-  if(!/^assets\/oracle-(?:loader|runtime|assets)\.mjs$/.test(file)||!/^[a-f0-9]{64}$/.test(sha256))throw Error('oracle generated bootstrap record is invalid');
+  if(!file.startsWith('assets/')||!/^[a-f0-9]{64}$/.test(sha256))throw Error('oracle generated bootstrap record is invalid');
   bootstrapFiles.set(route(file),sha256);
 }
-const bootstrap=(value:URL|string)=>{const url=typeof value==='string'?new URL(value):value;if(url.protocol!=='file:'||url.search||url.hash)return undefined;const file=fileURLToPath(url),expected=bootstrapFiles.get(file);if(!expected)return undefined;if(hash(readFileSync(file))!==expected)return instrument(Error('oracle bootstrap asset changed: '+file));const compiled=file.replace(/oracle-(loader|runtime|assets)\.ts$/, 'oracle-$1.mjs');return pathToFileURL(bootstrapFiles.has(compiled)?compiled:file).href;};
+const bootstrap=(value:URL|string)=>{const url=typeof value==='string'?new URL(value):value;if(url.protocol!=='file:'||url.search||url.hash)return undefined;const file=fileURLToPath(url),expected=bootstrapFiles.get(file);if(!expected)return undefined;if(hash(readFileSync(file))!==expected)return instrument(Error('oracle bootstrap asset changed: '+file));const compiled=file.replace(/\.(?:m?ts|m?js)$/, '.mjs');return pathToFileURL(bootstrapFiles.has(compiled)?compiled:file).href;};
 const bootstrapURLs=records.execution.args.filter((argument:string,index:number,args:string[])=>index>0&&args[index-1]==='--import'&&argument.startsWith('data:')) as string[];
 if(bootstrapURLs.length!==1)throw Error('oracle pinned bootstrap identity is ambiguous');
 const bootstrapURL=bootstrapURLs[0]!;

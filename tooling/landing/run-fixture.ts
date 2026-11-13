@@ -59,7 +59,7 @@ if [ "$1" = --call ]; then
   control=$(cat "$controls/$step" 2>/dev/null || echo pass)
   instrument() { printf '{"version":1,"verdict":"%s","kind":"%s","step":"%s","attempt":"%s","reason":"%s"}\\n' "$1" "$2" "$step" "$NTS_GATE_STEP_ATTEMPT" "$3" > "$NTS_GATE_STEP_RESULT"; exit 75; }
   if [ "$step" = program-oracles ]; then
-    node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-results.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();' || exit $?
+    node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-result-publisher.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();' || exit $?
   fi
   echo "$step $NTS_TEST_PROFILE $NTS_BIN $CARGO_INCREMENTAL" >> "$controls/calls"
   [ "$step" = doctests ] && echo "$NTS_DOCTEST_CRATES" > "$controls/doctest-crates"

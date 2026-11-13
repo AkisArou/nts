@@ -10,7 +10,8 @@ import {OracleFilesystem} from './oracle-filesystem.ts';
 import {oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import {nodeExecutableIdentity,nodeProcessBirth,type NodeResolutionSession} from './oracle-runtime.ts';
 import * as resultAPI from './oracle-results.ts';
-import {createProgramOracleResults,openProgramOracleResults,programOracleHandoff,type ProgramAnswer} from './oracle-results.ts';
+import {createProgramOracleResults} from './oracle-result-publisher.ts';
+import {openProgramOracleResults,programOracleHandoff,type ProgramAnswer} from './oracle-results.ts';
 
 function fixture(t:{after(callback:()=>void):void}){
   const root=mkdtempSync(join(tmpdir(),'program-reference-'));t.after(()=>removeOracleSnapshot(root));
@@ -94,7 +95,9 @@ test('published result runtime needs no TypeScript stripping and hashes the exac
   const f=fixture(t);f.publish();
   const argumentsFor=Reflect.get(resultAPI,'programOracleRuntimeArguments') as ((root:unknown)=>string[])|undefined;
   assert.equal(typeof argumentsFor,'function','the producer must publish executable reader assets');
-  const root:unknown=JSON.parse(readFileSync(join(f.directory,'ready.json'),'utf8'));
+  const root=JSON.parse(readFileSync(join(f.directory,'ready.json'),'utf8'));
+  assert.ok(root.runtime.assets['oracle-seal/main.mjs'],'the result publisher emits nested dependencies');
+  assert.ok(root.runtime.assets['runtime-paths/main.mjs']);
   const args=argumentsFor!(root),request={handoff:programOracleHandoff(f.directory),project:f.project,entry:f.entry,driverSha256:'d'.repeat(64)};
   const run=()=>spawnSync(process.execPath,['--no-experimental-strip-types',...args,'--read-program-reference',JSON.stringify(request)],{encoding:'utf8',env:{...fixtureEnvironment(t),NTS_ORACLE_TYPESCRIPT:join(f.root,'missing-sdk')}});
   const positive=run();assert.equal(positive.status,0,positive.stderr);assert.deepEqual(JSON.parse(positive.stdout),f.value);

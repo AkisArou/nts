@@ -3,14 +3,14 @@ import {runAsCommand} from "./command-entry/main.ts";
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
 import {createHash} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
-import {createRequire,isBuiltin,stripTypeScriptTypes} from 'node:module';
+import {createRequire,isBuiltin} from 'node:module';
 import {appendFileSync,chmodSync,openSync,closeSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {basename,dirname,extname,isAbsolute,join,parse,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {ORACLE_RUNTIME_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
@@ -20,7 +20,7 @@ const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest(
 export type TypeScriptIdentity={version:string;rootPackageSha256:string;packageSha256:string;nativeSha256:string;nativePackageSha256:string};
 type ToolchainRecord=TypeScriptIdentity&{nativePackage:string;executable:string};
 type ToolchainRecords={version:1;platforms:Record<string,ToolchainRecord>;execution:{manifestVersion:3;options:string;args:string[]}};
-export type OracleIdentity={executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
+export type OracleIdentity={publisherSha256:string;runtimeModulesSha256:string;childBootstrapSha256:string;executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
 export type EmitOptions=CompilerOptions;
 export type RuntimeCoverage={version:3;recipe:typeof ORACLE_NODE_RESOLUTION_RECIPE;aliases:CapturedAlias[];roots:CapturedModulePath[];excluded:CapturedModulePath[];directories:CapturedModulePath[];packages:({directory:CapturedModulePath;sha256:string}&ReturnType<typeof capturedPackageMetadata>)[]};
 // No compiler map does not prohibit an authored sourceMappingURL comment.
@@ -626,26 +626,31 @@ function dependencies():DependencyHandle{
 type RuntimeIndexInput={trees:{root:string;paths:string[];absent:string[];coverage:RuntimeCoverage}[];files:{source:string;output:string;group:string;execution:string;tree:string}[];links:{output:string;target:string;text?:string;present?:boolean}[];checkerImports:CheckerImportRelation[]};
 /** Type erasure and import rewriting happen once in this registered run.
  * Cached code is still read and hashed before each snapshot publishes it. */
-function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string):Record<string,string>{
-  const names=['oracle-loader','oracle-runtime','oracle-assets'] as const;
-  const source=names.map(name=>({name,bytes:readFileSync(join(directory,'assets',name+'.ts'),'utf8')}));
-  const key=hash(JSON.stringify([nodeIdentity,source.map(item=>[item.name,hash(item.bytes)]),'strip-only; owned sibling imports use .mjs']));
+async function compileChildAssets(directory:string,sessionDirectory:string,identity:OracleIdentity,nodeIdentity:string):Promise<Record<string,string>>{
+  // Finalization also executes this materialized module. Only preparation loads
+  // the producer compiler, whose parser is deliberately absent in children.
+  const {compileRuntimeModules}=await import('./oracle-runtime-modules.ts');
+  const root=join(directory,'assets');
+  for(const [name,expected] of [['oracle-loader.ts',identity.loaderSha256],['oracle-runtime.ts',identity.runtimeSha256],['oracle-assets.ts',identity.assetsSha256]] as const){
+    if(hash(readFileSync(join(root,name)))!==expected)throw Error('oracle child source changed before compilation: '+name);
+  }
+  if(hash(JSON.stringify(ORACLE_EXECUTION_FILES.map(name=>hash(readFileSync(join(root,name))))))!==identity.executionSha256)throw Error('oracle child execution source changed before compilation');
+  const graph=compileRuntimeModules(root,'oracle-loader.ts');
+  const key=hash(JSON.stringify([nodeIdentity,identity.runtimeModulesSha256,graph.modules.map(item=>[item.source,item.sourceSha256,hash(item.text)])]));
   const cache=join(sessionDirectory,'compiled',key);mkdirSync(cache,{recursive:true,mode:0o700});
-  return Object.fromEntries(source.map(({name,bytes})=>{
-    const field={ 'oracle-loader':identity.loaderSha256,'oracle-runtime':identity.runtimeSha256,'oracle-assets':identity.assetsSha256 }[name];
-    if(hash(bytes)!==field)throw Error('oracle child source changed before compilation: '+name);
-    const file=join(cache,name+'.mjs'),record=file+'.json';let compiled:string;
+  return Object.fromEntries(graph.modules.map(({name,text})=>{
+    const file=join(cache,name),record=file+'.json';mkdirSync(dirname(file),{recursive:true});
     if(existsSync(record)){
-      const previous=JSON.parse(readFileSync(record,'utf8'));compiled=readFileSync(file,'utf8');
-      if(previous.version!==1||previous.key!==key||previous.sha256!==hash(compiled))throw Error('oracle generated child cache changed: '+name);
+      const previous=JSON.parse(readFileSync(record,'utf8'));
+      if(previous.version!==1||previous.key!==key||previous.sha256!==hash(text)||readFileSync(file,'utf8')!==text)throw Error('oracle generated child cache changed: '+name);
     }else{
-      compiled=stripTypeScriptTypes(bytes);for(const sibling of names)compiled=compiled.replaceAll("'./"+sibling+".ts'","'./"+sibling+".mjs'").replaceAll('"./'+sibling+'.ts"','"./'+sibling+'.mjs"');
       // Content-addressed deterministic bytes make simultaneous producers
       // equivalent. Atomic rename never exposes a partially written module.
-      const next=file+'.'+process.pid;writeFileSync(next,compiled);renameSync(next,file);
-      const ready=record+'.'+process.pid;writeFileSync(ready,JSON.stringify({version:1,key,sha256:hash(compiled)})+'\n');renameSync(ready,record);
+      const next=file+'.'+process.pid;writeFileSync(next,text);renameSync(next,file);
+      const ready=record+'.'+process.pid;writeFileSync(ready,JSON.stringify({version:1,key,sha256:hash(text)})+'\n');renameSync(ready,record);
     }
-    const output='assets/'+name+'.mjs';writeFileSync(join(directory,output),compiled);return [output,hash(compiled)];
+    const output='assets/'+name;mkdirSync(dirname(join(directory,output)),{recursive:true});
+    writeFileSync(join(directory,output),text,{flag:'wx',mode:0o444});return [output,hash(text)];
   }));
 }
 /** Resolve only finite captured requests. Node chooses every result. A failed
@@ -655,7 +660,7 @@ async function publishNodeRoutes(directory:string,stored:OracleManifest,descript
   const execution=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args as string[];
   const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
   const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),ownerPid);
-  descriptor.runtimeAssets=compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node);
+  descriptor.runtimeAssets=await compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node);
   stored.runtimeAssets=descriptor.runtimeAssets;Object.assign(stored.outputs,descriptor.runtimeAssets);
   if(!session)return;
   descriptor.resolution=session;

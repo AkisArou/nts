@@ -7,7 +7,7 @@ import {existsSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from
 import {dirname,join,resolve} from 'node:path';
 import {DEPENDENCY_ROOT_INPUTS,dependencyCache} from '../inputs/dependency-inputs.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
-import {RECIPE_SOURCES} from './oracle-results.ts';
+import {RECIPE_SOURCES} from './oracle-result-publisher.ts';
 
 export function oracleWorkspaceFixture(t:{after(fn:()=>void):void},tree:string,source=resolve(import.meta.dirname,'../..')):void{
   const git=(root:string,...args:string[])=>execFileSync('git',gitArguments(['-C',root,...args]),{encoding:'utf8',env:{...fixtureEnvironment(t),

@@ -161,10 +161,13 @@ test('generated child bootstrap bytes are checked before their module body evalu
   const root=workspace(t,{'src/main.ts':'console.log(19);\n'}),prepared=await prepare(root);
   const control=execute(root,prepared);assert.equal(control.status,0,control.stderr);assert.equal(control.stdout,'19\n');assert.deepEqual(oracleLoaderReady(prepared),{ready:true});
   const assets=Reflect.get(prepared.snapshot!,'assets') as Record<string,string>|undefined;
-  assert.deepEqual(Object.keys(assets??{}).sort(),['assets/oracle-assets.mjs','assets/oracle-loader.mjs','assets/oracle-runtime.mjs'],'the parent publishes exactly three type-free runtime assets');
-  for(const name of ['loader','runtime','assets'])await t.test(name,()=>{
-    const file=join(dirname(prepared.manifest),'assets/oracle-'+name+'.mjs'),original=readFileSync(file),effect=join(root,'forbidden-'+name);
-    assert.equal(createHash('sha256').update(original).digest('hex'),assets!['assets/oracle-'+name+'.mjs']);
+  assert.ok(assets?.['assets/oracle-seal/main.mjs'],'the nested seal dependency is emitted');
+  assert.ok(assets?.['assets/runtime-paths/main.mjs'],'the nested manifest dependency is emitted');
+  const noStrip=spawnSync(process.execPath,['--no-experimental-strip-types',...prepared.args,oracleRuntimeFile(prepared,join(root,'src/main.ts'))],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...prepared.env}});
+  assert.equal(noStrip.status,0,noStrip.stderr);assert.equal(noStrip.stdout,'19\n');
+  for(const name of Object.keys(assets??{}))await t.test(name,()=>{
+    const file=join(dirname(prepared.manifest),name),original=readFileSync(file),effect=join(root,'forbidden-'+name.replaceAll('/','-'));
+    assert.equal(createHash('sha256').update(original).digest('hex'),assets![name]);
     chmodSync(file,0o644);writeFileSync(file,"import {writeFileSync as changedWrite} from 'node:fs';changedWrite("+JSON.stringify(effect)+",'ran');\n"+original.toString('utf8'));
     try{
       const execution=oracleExecution(prepared),actual=execute(root,execution);
