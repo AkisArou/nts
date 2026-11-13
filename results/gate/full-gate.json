@@ -345,6 +345,24 @@
       "reasons": [
         "the gate trees' inputs"
       ]
+    },
+    {
+      "path": "tooling/inputs/pinned-inputs.json",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/pinned-inputs.test.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
+    },
+    {
+      "path": "tooling/inputs/pinned-inputs.ts",
+      "reasons": [
+        "the gate trees' inputs"
+      ]
     }
   ]
 }
