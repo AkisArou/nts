@@ -192,11 +192,9 @@ fn an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order()
         .unwrap();
     let snapshot = super::LoweringSnapshot::new(&snapshot);
     let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
-    let readers =
-        super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
+    let readers = super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
     let closures = super::collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) =
-        super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+    let (hierarchy, naming) = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
     let schemas: Vec<_> = snapshot
         .types
         .iter()
@@ -253,11 +251,9 @@ fn anonymous_reservations_survive_layout_demand_order() {
         .unwrap();
     let snapshot = super::LoweringSnapshot::new(&snapshot);
     let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
-    let readers =
-        super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
+    let readers = super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
     let closures = super::collect_closures(&snapshot, &readers);
-    let (hierarchy, naming) =
-        super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+    let (hierarchy, naming) = super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
     let groups = [["item", "remove"], ["hostname", "port"]];
     let mut faces = Vec::new();
     let mut anonymous = Vec::new();
