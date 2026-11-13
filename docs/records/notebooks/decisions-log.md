@@ -2743,3 +2743,14 @@ Typed bootstrap source is erased before encoding the pinned startup argument.
 The source inventories authenticate the publisher and compiler in JavaScript
 and Rust. A publication owns fresh traversal state, a bounded module map and
 one parser lease at a time.
+
+## Test reports precede synchronous work (11-13)
+
+#773 reduced a file guard naming a completed async test while later synchronous
+work was running. Node's child reporter serializes test events asynchronously;
+that work can remain queued when the next body blocks the worker. A real TCP
+release control reproduces the stale report without a short scheduling window.
+
+The existing shared test bootstrap now yields before every case through a
+captured scheduler. Fixture timer mocks do not own that transport turn. The
+parent still decides completion from test events, and the idle guard is unchanged.

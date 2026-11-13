@@ -427,7 +427,8 @@ console.log('NTS_REPORT_TURN '+JSON.stringify({result,completed,entered}));
   const run=spawnTest(process.execPath,[probe],{env:fixtureEnvironment(t),encoding:'utf8'},'the completed child report to release its synchronous successor');
   assert.equal(run.status,0,run.stdout+run.stderr);
   const record=/^NTS_REPORT_TURN (.+)$/m.exec(run.stdout);assert.ok(record,run.stdout+run.stderr);
-  const observed=JSON.parse(record[1]);assert.equal(observed.result.status,0,run.stdout+run.stderr);assert.equal(observed.result.completedFailures,0);
+  const payload=record[1];assert.ok(payload,run.stdout+run.stderr);
+  const observed=JSON.parse(payload);assert.equal(observed.result.status,0,run.stdout+run.stderr);assert.equal(observed.result.completedFailures,0);
   assert.equal(observed.completed,true);assert.equal(observed.entered,true);
 });
 
