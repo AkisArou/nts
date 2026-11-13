@@ -65,7 +65,7 @@ test('source stat facts validate before copying and retain both non-portable des
   chmodSync(file,0o751);utimesSync(file,1234,1234);utimesSync(f.source,1234,1234);
   const base=snapshot(f.source,['src/main.ts']),filesystem=new OracleFilesystem();filesystem.stat(file);filesystem.stat(f.source);
   for(const observation of filesystem.captured()){
-    const facts:InputSnapshot={...base,observations:[{reader:'src/main.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{src:'a prefix is not data ownership'}},observation}]};
+    const facts:InputSnapshot={...base,observations:[{reader:'src/main.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{src:'a prefix is not data ownership'}},observation,causes:[]}]};
     validateReaderSourceObservations(facts,f.source);
     copyModuleClosure(['src/main.ts'],f.destination,{sourceRoot:f.source});
     assert.throws(()=>replayFixtureReaderObservations(facts,f.source,f.destination,new Set()),(error:unknown)=>{
@@ -133,10 +133,10 @@ test('nested fixture contexts inherit compiled/type-only roles and promote on a 
 });
 
 test('typed selection distinguishes bytes, shallow names, existence and real directory stats',()=>{
-  const fact=(kind:ReaderObservation['observation']['kind'],path:string,value:ReaderObservation['observation']['value']):ReaderObservation=>({reader:'reader.ts',protocol:'project',context:{entry:'child.ts',dataNamespaces:{data:'not authority for these facts'}},observation:{kind,path:'/source/'+path,value}});
+  const fact=(kind:ReaderObservation['observation']['kind'],path:string,value:ReaderObservation['observation']['value']):ReaderObservation=>({reader:'reader.ts',protocol:'project',context:{entry:'child.ts',dataNamespaces:{data:'not authority for these facts'}},observation:{kind,path:'/source/'+path,value},causes:[]});
   const entries=fact('entries','data',{files:['plain.md'],directories:['nested']}),directory=fact('directoryExists','data/nested',true);
   const optional=fact('fileExists','data/optional.json',false),stat=fact('stat','data',{mode:0o40755,size:4096,mtimeMs:0});
-  const bytes=fact('file','data/plain.md','0'.repeat(64)),identity=fact('realpath','data/alias','/source/data/target');
+  const bytes=fact('file','data/plain.md','0'.repeat(64)),identity=fact('readlink','data/alias','target');
   const paths=['data/plain.md','data/nested/one.ts','data/nested/two.ts'],index=readerObservationIndex('/source',[entries,directory,optional,stat,bytes,identity],paths);
   assert.equal(readerObservationDependency('/source',stat)?.bytes,false);
   assert.equal(readerObservationDependency('/source',bytes)?.bytes,true);

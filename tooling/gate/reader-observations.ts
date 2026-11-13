@@ -142,10 +142,12 @@ export function validateReaderSourceObservations(snapshot:InputSnapshot,source:s
 export class NonPortableReaderObservation extends Error{
   readonly reader:string;readonly protocol:ReaderObservation['protocol'];
   readonly source:HostObservation;readonly destination:HostObservation;
+  readonly causes:ReaderObservation['causes'];readonly context:ReaderObservation['context'];
   constructor(row:ReaderObservation,destination:HostObservation){
     super('fixture reader observation is not portable: '+row.reader+' ['+row.protocol+'] '+row.observation.kind+' '+row.observation.path+
       '\nsource='+JSON.stringify(row.observation)+'\ndestination='+JSON.stringify(destination));
     this.reader=row.reader;this.protocol=row.protocol;this.source=structuredClone(row.observation);this.destination=structuredClone(destination);
+    this.causes=structuredClone(row.causes);this.context=structuredClone(row.context);
   }
 }
 

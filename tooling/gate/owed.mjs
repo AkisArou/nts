@@ -1687,6 +1687,10 @@ function stepInputGraph() {
         const previous=observations.get(key);
         if(previous&&!sameOracleObservation(previous.observation.value,row.observation.value))throw Error('reader observation changed during selection: '+row.observation.path);
         const fact=previous??{...row,steps:new Set()};fact.steps.add(step);observations.set(key,fact);
+        if(previous){
+          const causes=new Map(fact.causes.map(value=>[JSON.stringify(value),value]));
+          for(const value of row.causes)causes.set(JSON.stringify(value),value);fact.causes=[...causes.values()];
+        }
         const dependency=readerObservationDependency(TREE,row);
         if(dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
       }
@@ -1848,7 +1852,7 @@ export function inputMetadataDeclarations(){
   const context=(/** @type {import('./reader-inputs/main.ts').ReaderContext} */ value)=>({entry:value.entry,dataNamespaces:{...value.dataNamespaces}});
   return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,context:context(row.context),steps:[...row.steps].sort()})),
     memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()})),
-    observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),steps:[...row.steps].sort()}))};
+    observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),causes:row.causes.map(value=>({...value})),steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
