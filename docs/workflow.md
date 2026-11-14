@@ -922,6 +922,12 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   status is a named tooling-setup instrument failure, never a case outcome
   or a reason to silently fall back. Each caller declares which ordinary
   exit codes it classifies. Fixtures replace the runner with supplied results.
+  Selector preflight uses this owner for Git, endpoint evaluation and historical
+  rule self-tests before a step clock exists. A wedged selector grants no scope
+  and holds the landing as a named instrument failure. Ordinary missing-content
+  answers retain conservative precision fallback; a failed observation escapes
+  that fallback. Compare-and-delete recovery independently confirms absence
+  without hiding a failed absence probe.
 - **Command supervision consumes observations.** `CommandLiveness` in
   `tooling/gate/command-liveness.ts` decides from output, CPU counters,
   busy/sleep state and monotonic time. `active-process.ts` owns the process
@@ -1319,6 +1325,11 @@ the first node task.
   instrument failures. They preserve synchronous selection and artifact-key
   APIs. Fixtures supply runner results; per-case product bounds stay separate
   ([log](records/notebooks/decisions-log.md#infrastructure-probes-have-one-owner-11-12)).
+- **Selector preflight cannot wait without a bound.** Its synchronous tool
+  questions use the existing infrastructure probe before any step clock runs.
+  Classified nonzero answers retain their meaning; unavailable observations
+  hold selection without granting a fallback scope
+  ([log](records/notebooks/decisions-log.md#selector-preflight-is-bounded-11-14)).
 
 - **Measurement admission takes memory and CPUs together**: a measurement
   ticket retains priority and arrival without promising memory. Only a ticket

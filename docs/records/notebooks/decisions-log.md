@@ -2887,3 +2887,13 @@ caller audit then checks the same syntactic argument position everywhere;
 it does not infer argument flow or interpret ordinary string data. Both the
 host audit and standalone Git audit enforce the convention, including selected
 generated launch sources. Benchmark and verification helpers use that form.
+
+## Selector preflight is bounded (11-14)
+
+Range selection runs before the landing's step clocks. Its synchronous Git,
+endpoint and historical self-test questions now use the existing infrastructure
+probe owner, including content precision queries. Classified ordinary exits
+retain conservative fallback or compare-and-delete meaning; a wedged or broken
+instrument propagates a named selection failure and grants no scope. This
+closes an unbounded production wait under #773 without attributing the earlier
+concurrent preflight hang to a particular operation.
