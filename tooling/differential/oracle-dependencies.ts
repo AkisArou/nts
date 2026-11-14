@@ -33,6 +33,15 @@ const CAPTURE_BYTES=2*2**30,CAPTURE_CPU_SECONDS=300;
 // Actual independent-copy capture allocated 518,709,248 bytes. Reserve the
 // next GiB before building; a larger image holds instead of publishing.
 const CAPTURE_DISK_BYTES=2**30;
+/** Cleanup must retain an earlier definite preparation classification and
+ * both diagnostics. A ready image alone does not prove successful cleanup. */
+export function dependencyCleanupFailure(primary:{error:unknown}|undefined,cleanup:unknown):Error{
+  const reason=(primary?String(primary.error)+'; ':'')+'oracle dependency cleanup failed: '+String(cleanup);
+  const cause=primary?new AggregateError([primary.error,cleanup],reason):cleanup;
+  if(primary?.error instanceof CaseBudgetError)return Object.assign(new CaseBudgetError(reason),{cause});
+  if(primary?.error instanceof ToolingInstrumentError)return new ToolingInstrumentError(primary.error.kind,reason,{cause});
+  return primary?new AggregateError([primary.error,cleanup],reason):new ToolingInstrumentError('tooling-cleanup',reason,{cause});
+}
 // The capability's tree owns its layout, including trees older or newer than
 // this launcher. Walk its declarations afresh before authenticating the bytes.
 function producerIdentity(source:string){return hash(JSON.stringify(moduleClosure(['tooling/differential/oracle-dependencies.ts'],{sourceRoot:source}).map(file=>[file,hash(readFileSync(join(source,file)))])));}
@@ -176,7 +185,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
     if(signal?.aborted)throw Error('oracle dependency capture canceled before start');
     if(existsSync(failed)){
       const previous=JSON.parse(readFileSync(failed,'utf8')),reason='oracle dependency capture failed: '+previous.reason;
-      throw previous.kind==='case-budget'?new CaseBudgetError(reason):new ToolingInstrumentError('tooling-setup',reason);
+      throw previous.kind==='case-budget'?new CaseBudgetError(reason):new ToolingInstrumentError(previous.kind==='tooling-cleanup'?'tooling-cleanup':'tooling-setup',reason);
     }
     if(existsSync(ready)){
       const image:DependencyImage=JSON.parse(readFileSync(ready,'utf8'));
@@ -190,7 +199,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
     if(existsSync(started))throw Error('oracle dependency capture was interrupted: '+started);
     const selectionStart=performance.now(),inputSet=await installInputs(capability,counts),selectionWallMs=performance.now()-selectionStart;
     publish(started,{capability,started:new Date().toISOString()});
-    let diskLease:TemporaryDiskLease|null=null;
+    let diskLease:TemporaryDiskLease|null=null,captureFailure:{error:unknown}|undefined;
     try{
       let attempt=admission.tryAcquire();
       while(!attempt.lease){
@@ -238,8 +247,22 @@ export async function captureDependencies(capability:DependencyCapability,signal
       process.stderr.write('oracle dependency capture: '+JSON.stringify({context:capability.admission.kind,nodeVersion:process.versions.node,...image.cost})+'\n');
       recordCall('cold');
       return ready;
-    }catch(error){publish(failed,{kind:error instanceof CaseBudgetError?'case-budget':'tooling-setup',reason:String(error),finished:new Date().toISOString()});throw error;}
-    finally{diskLease?.release();}
+    }catch(error){
+      captureFailure={error};
+      try{publish(failed,{kind:error instanceof CaseBudgetError?'case-budget':error instanceof ToolingInstrumentError?error.kind:'tooling-setup',reason:String(error),finished:new Date().toISOString()});}
+      catch(publicationError){const combined=dependencyCleanupFailure(captureFailure,publicationError);captureFailure={error:combined};throw combined;}
+      throw error;
+    }finally{
+      try{diskLease?.release();}
+      catch(cleanup){
+        const combined=dependencyCleanupFailure(captureFailure,cleanup);
+        // This marker precedes future ready-image reuse, including when the
+        // body published ready successfully before its release was refused.
+        try{publish(failed,{kind:combined instanceof CaseBudgetError?'case-budget':combined instanceof ToolingInstrumentError?combined.kind:'tooling-setup',reason:String(combined),finished:new Date().toISOString()});}
+        catch(publicationError){throw dependencyCleanupFailure({error:combined},publicationError);}
+        throw combined;
+      }
+    }
   }catch(error){recordCall('held');throw error;}finally{lock.close();}
 }
 

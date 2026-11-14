@@ -6,18 +6,29 @@ import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {spawnSync,execFileSync} from 'node:child_process';
-import {chmodSync,cpSync,copyFileSync,readdirSync,renameSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,utimesSync,writeFileSync} from 'node:fs';
+import {chmodSync,cpSync,copyFileSync,existsSync,readdirSync,renameSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,utimesSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {before,test} from 'node:test';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
-import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage} from './oracle-dependencies.ts';
+import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage,dependencyCleanupFailure,CaseBudgetError,ToolingInstrumentError} from './oracle-dependencies.ts';
 import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
 import {DiskCapacity} from '../gate/disk-capacity.ts';
 import {waitFor} from '../gate/test-wait.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 before(setupOracleTestEnvironment);
+test('dependency cleanup preserves the original budget or instrument classification and both causes',()=>{
+  const cleanup=Error('release refused'),budget=new CaseBudgetError('actual preparation budget'),instrument=new ToolingInstrumentError('tooling-setup','actual missing observation');
+  for(const primary of [budget,instrument]){
+    const combined=dependencyCleanupFailure({error:primary},cleanup);
+    assert.equal(combined.constructor,primary.constructor);
+    if(combined instanceof ToolingInstrumentError)assert.equal(combined.kind,instrument.kind);
+    assert.ok(combined.cause instanceof AggregateError);assert.deepEqual(combined.cause.errors,[primary,cleanup]);
+    assert.match(combined.message,/actual/);assert.match(combined.message,/release refused/);
+  }
+  const afterReady=dependencyCleanupFailure(undefined,cleanup);assert.ok(afterReady instanceof ToolingInstrumentError);assert.equal(afterReady.kind,'tooling-cleanup');
+});
 test('dependency protection rejects external inodes before any chmod and private copies leave the origin unchanged',t=>{
   const root=mkdtempSync(join(tmpdir(),'oracle-dependency-inodes-')),image=join(root,'image');mkdirSync(image);
   t.after(()=>{chmodSync(image,0o755);rmSync(root,{recursive:true,force:true});});
@@ -117,6 +128,32 @@ test('a real failed producer drains before its temporary claim is released',asyn
   const command=JSON.parse(readFileSync(join(directory,'command.json'),'utf8'));assert.ok(Number.isInteger(command.status)&&command.status!==0);
   assert.ok(readFileSync(join(directory,'failed.json'),'utf8').includes('tooling-setup'));
   assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);
+});
+for(const failedProducer of [false,true])test((failedProducer?'failed producer':'published ready')+' plus refused disk release retains both lifetime facts',async t=>{
+  const f=installFixture(t);
+  if(failedProducer){
+    f.write('packages/one/package.json','{"name":"owned-one","version":"1.0.0","dependencies":{"nts-missing-disk-control":"0.0.0"}}\n');
+    f.git('add','packages/one/package.json');f.git('commit','-qm','Make the real frozen install fail');
+  }
+  const cap=f.cap('refused-release'),env=canonicalFixture(cap),capacity=new DiskCapacity({env}),directory=join(cap.directory,'node-'+process.versions.node);
+  const original=DiskCapacity.prototype.tryTemporary;
+  t.mock.method(DiskCapacity.prototype,'tryTemporary',function(this:DiskCapacity,path:string,bytes:number){
+    const attempt=original.call(this,path,bytes),lease=attempt.lease;if(!lease)return attempt;
+    return {...attempt,lease:{...lease,release:()=>{
+      // Only this fixture's actual acquired claim state is made incompatible.
+      writeFileSync(this.temporaryStateFile,'{"version":2,"future":"keep"}\n');lease.release();
+    }}};
+  });
+  let observed:unknown;
+  try{await captureDependencies(cap,undefined,env);assert.fail('release refusal must not return a successful lifetime');}catch(error){observed=error;}
+  assert.match(String(observed),/oracle dependency cleanup failed/);assert.match(String(observed),/version/);
+  const failed=JSON.parse(readFileSync(join(directory,'failed.json'),'utf8'));
+  assert.equal(existsSync(join(directory,'ready.json')),!failedProducer);
+  assert.match(failed.reason,/oracle dependency cleanup failed/);assert.match(failed.reason,/version/);
+  if(failedProducer){assert.ok(observed instanceof AggregateError);assert.equal(observed.errors.length,2);assert.match(String(observed.errors[0]),/capture not measured|install|lockfile/);assert.equal(failed.kind,'tooling-setup');}
+  else{assert.ok(observed instanceof ToolingInstrumentError);assert.equal(observed.kind,'tooling-cleanup');assert.equal(failed.kind,'tooling-cleanup');}
+  assert.throws(()=>capacity.snapshot(f.parent),/version/,'release did not overwrite incompatible state');
+  await assert.rejects(captureDependencies(cap,undefined,env),error=>error instanceof ToolingInstrumentError&&error.kind===(failedProducer?'tooling-setup':'tooling-cleanup')&&/cleanup failed/.test(error.message));
 });
 test('canceling an admission wait never owns or leaks temporary bytes',async t=>{
   const f=installFixture(t),cap=f.cap('canceled-disk-wait');
