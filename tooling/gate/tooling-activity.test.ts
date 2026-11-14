@@ -36,6 +36,22 @@ test('closing the activity owner removes its exact channel subscription',()=>{
   assert.equal(starts,0,'the closed owner cannot acquire a later matching child');
 });
 
+test('a supplied clock keeps native acquisition and removes its subscription on completion',t=>{
+  const root=testScratch(t,'tooling-native-clock'),file=join(root,'pass.test.mjs'),probe=join(root,'probe.mjs');
+  writeFileSync(file,"import{test}from'node:test';test('native supplied clock',()=>{});\n");
+  writeFileSync(probe,`import{runTooling}from ${JSON.stringify(new URL('./tooling-runner.ts',import.meta.url).href)};
+import{tracingChannel}from'node:diagnostics_channel';import{PassThrough}from'node:stream';
+const channel=tracingChannel('child_process.spawn').start,before=channel.hasSubscribers,output=new PassThrough();output.resume();
+let sawNative=false,armed=0;const pending=new Set();
+const result=await runTooling([${JSON.stringify(file)}],{output,timing:{now:()=>0,scheduleIdle(callback){armed++;pending.add(callback);return()=>pending.delete(callback);}},
+ event(){sawNative ||= channel.hasSubscribers;}});
+console.log(JSON.stringify({result,before,after:channel.hasSubscribers,sawNative,armed,pending:pending.size}));`);
+  const actual=spawnTest(process.execPath,[probe],{env:fixtureEnvironment(t),encoding:'utf8'},'native activity with supplied timing');
+  assert.equal(actual.status,0,actual.stderr);const value=JSON.parse(actual.stdout.trim());
+  assert.equal(value.result.status,0);assert.equal(value.before,false);assert.equal(value.sawNative,true);assert.equal(value.after,false);
+  assert.ok(value.armed>0);assert.equal(value.pending,0);
+});
+
 test('actual spawn acquisition precedes a synchronous first body and any reporter output',async t=>{
   const root=testScratch(t,'tooling-first-body'),file=join(root,'first.test.mjs'),ready=join(root,'ready');
   writeFileSync(file,`import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(ready)},'body');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`);
@@ -88,9 +104,8 @@ test('silent busy and CPU progress survive virtual five-minute boundaries while 
 import{runTooling}from ${JSON.stringify(runner)};import{waitFor}from ${JSON.stringify(new URL('./test-wait.ts',import.meta.url).href)};
 import{existsSync,writeFileSync}from'node:fs';import{PassThrough}from'node:stream';
 let now=0,sample;const tasks=[],output=new PassThrough();output.resume();
-const running=runTooling([${JSON.stringify(file)}],{output,resultEnv:{},instrument:{now:()=>now,frequency:100,
- watchActivity(file,seen){sample=seen;return()=>{};},sampleActivity:()=>{},
- scheduleIdle(callback,milliseconds){const task={callback,cancelled:false};tasks.push(task);return()=>task.cancelled=true;}}});
+const running=runTooling([${JSON.stringify(file)}],{output,resultEnv:{},activity:{acquire:()=>({frequency:100,watch(file,seen){sample=seen;return()=>{};},sample:()=>{},verify:()=>{},close:()=>{}})},
+ timing:{now:()=>now,scheduleIdle(callback,milliseconds){const task={callback,cancelled:false};tasks.push(task);return()=>task.cancelled=true;}}});
 await waitFor('the silent body to start',()=>existsSync(${JSON.stringify(ready)})&&sample!==undefined);
 now=300001;sample({cpu:0,own:0,busy:${!idle},processOwn:{pid:1,cpu:0}});
 ${idle?'':`now=600002;sample({cpu:1,own:1,busy:false,processOwn:{pid:1,cpu:1}});
@@ -121,21 +136,19 @@ test('completed without identity',()=>new Promise((resolve,reject)=>{
 }));\n`:
       `import{test}from'node:test';import{createServer}from'node:net';import{writeFileSync}from'node:fs';
 test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1',()=>writeFileSync(${JSON.stringify(ready)},'ready'))));\n`);
-    // Supply only the actual collector's clock/timer effects. Its native
-    // activity owner and terminal identity verification remain exercised.
+    // Supply timing at the actual runTooling call. Native acquisition,
+    // activity verification and cleanup remain the production defaults.
     const collector=join(staged,'tooling/gate/tooling-runner.ts');
     let worker=readFileSync(collector,'utf8');
-    const clockAnchor='now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},';
-    const entryAnchor='export async function runTooling(';
     const runAnchor="const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});";
-    for(const actual of [clockAnchor,entryAnchor,runAnchor])assert.equal(worker.split(actual).length,2,'one collector fixture boundary: '+actual);
-    worker=worker.replace(entryAnchor,`let suppliedNow=0,armed=0,delivered=0;
-const suppliedTimers=new Set<{callback:()=>void;cancelled:boolean}>();
-${entryAnchor}`).replace(clockAnchor,`now:()=>suppliedNow,scheduleIdle:callback=>{
-      const task={callback,cancelled:false};suppliedTimers.add(task);armed++;
-      return()=>{task.cancelled=true;suppliedTimers.delete(task);};
-    },`).replace(runAnchor,`const {watch,existsSync}=await import('node:fs');
-      let readyObserved=false,watcherClosed=false;
+    assert.equal(worker.split(runAnchor).length,2,'one collector invocation boundary');
+    worker=worker.replace(runAnchor,`const {watch,existsSync}=await import('node:fs');
+      let suppliedNow=0,armed=0,delivered=0,readyObserved=false,watcherClosed=false;
+      const suppliedTimers=new Set<{callback:()=>void;cancelled:boolean}>();
+      const timing={now:()=>suppliedNow,scheduleIdle:(callback:()=>void)=>{
+        const task={callback,cancelled:false};suppliedTimers.add(task);armed++;
+        return()=>{task.cancelled=true;suppliedTimers.delete(task);};
+      }};
       const advance=()=>{
         if(readyObserved||!existsSync(${JSON.stringify(ready)}))return;
         readyObserved=true;suppliedNow=TOOLING_IDLE_GUARD_MS+1;
@@ -147,7 +160,7 @@ ${entryAnchor}`).replace(clockAnchor,`now:()=>suppliedNow,scheduleIdle:callback=
       const closeWatcher=()=>{if(!watcherClosed){watcher.close();watcherClosed=true;}};
       const unregisterFixture=registerCommandCloser('supplied missing-entry clock watcher',{close:closeWatcher});
       let result;
-      try{advance();${runAnchor.replace('const result=','result=')}}
+      try{advance();${runAnchor.replace('const result=','result=').replace('resultEnv});','resultEnv,timing});')}}
       finally{
         closeWatcher();unregisterFixture();
         writeFileSync(${JSON.stringify(clockReceipt)},JSON.stringify({readyObserved,now:suppliedNow,armed,delivered,pending:suppliedTimers.size,watcherClosed}));

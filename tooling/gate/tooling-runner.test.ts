@@ -15,11 +15,44 @@ import {completedTestFailure,readToolingCompletion,readToolingRequest,ToolingTes
 import {readStepInstrument,ToolingInstrumentError} from "./step-result.ts";
 import {checkedUnitName,childSlice,newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix,unitComponent} from "./tooling-slice.ts";
 
-test('an incomplete tooling observation capability fails before starting a test worker',async()=>{
-  const complete={now:()=>0,scheduleIdle:()=>()=>{},frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{}};
-  for(const name of ['now','scheduleIdle','frequency','watchActivity','sampleActivity'] as const){
-    const instrument={...complete,[name]:undefined} as unknown as NonNullable<Parameters<typeof runTooling>[1]>['instrument'];
-    await assert.rejects(runTooling(['/must-not-be-started.test.ts'],{instrument}),/tooling observation capability is incomplete/);
+test('incomplete timing and activity capabilities fail before starting a worker',async()=>{
+  const timing={now:()=>0,scheduleIdle:()=>()=>{}};
+  for(const name of ['now','scheduleIdle'] as const){
+    const broken={...timing,[name]:undefined} as unknown as NonNullable<Parameters<typeof runTooling>[1]>['timing'];
+    await assert.rejects(runTooling(['/must-not-be-started.test.ts'],{timing:broken}),/tooling timing capability is incomplete/);
+  }
+  for(const activity of [null,{}, {acquire:undefined}])
+    await assert.rejects(runTooling(['/must-not-be-started.test.ts'],{activity:activity as unknown as NonNullable<Parameters<typeof runTooling>[1]>['activity']}),/tooling activity acquisition capability is incomplete/);
+  const complete={frequency:100,watch:()=>()=>{},sample:()=>{},verify:()=>{},close:()=>{}};
+  for(const name of ['frequency','watch','sample','verify','close'] as const){
+    let acquired=0,closed=0;
+    const lifetime={...complete,close:()=>closed++,[name]:undefined};
+    await assert.rejects(runTooling(['/must-not-be-started.test.ts'],{activity:{acquire:()=>{acquired++;return lifetime as unknown as typeof complete;}}}),/tooling activity lifetime capability is incomplete/);
+    assert.equal(acquired,1);assert.equal(closed,name==='close'?0:1);
+  }
+});
+
+test('activity verification and cleanup retain definite failures and drain every acquired lifetime',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'tooling-activity-lifetime-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  for(const failed of [false,true])for(const fault of ['none','verify','close','both']){
+    const file=join(root,`${failed}-${fault}.test.mjs`);
+    writeFileSync(file,`import{test}from'node:test';test('lifetime result',()=>{${failed?"throw Error('definite lifetime assertion');":""}});`);
+    let acquired=0,verified=0,closed=0;const pending=new Set<()=>void>(),watches=new Set<string>(),output=new PassThrough();output.resume();
+    const running=runTooling([file],{output,resultEnv:{},timing:{now:()=>0,scheduleIdle(callback){pending.add(callback);return()=>{pending.delete(callback);};}},
+      activity:{acquire:(files)=>{acquired++;assert.deepEqual([...files],[file]);return {frequency:100,
+        watch:(name,sample)=>{watches.add(name);sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{watches.delete(name);};},sample:()=>{},
+        verify:()=>{verified++;if(fault==='verify'||fault==='both')throw Error('verification control');},
+        close:()=>{closed++;if(fault==='close'||fault==='both')throw Error('cleanup control');}};}}});
+    if(failed||fault==='none'){
+      const result=await running;assert.equal(result.status,failed?1:0);assert.equal(result.completedFailures,failed?1:0);
+      if(fault!=='none')assert.match(result.observationFailure!.reason,fault==='verify'?/verification control/:/cleanup control/);
+    }else await assert.rejects(running,error=>{
+      assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,fault==='verify'?'tooling-setup':'tooling-cleanup');
+      if(fault==='verify'||fault==='both')assert.match(error.message,/verification control/);
+      if(fault==='close'||fault==='both')assert.match(error.message,/cleanup control/);
+      return true;
+    });
+    assert.deepEqual([acquired,verified,closed],[1,1,1]);assert.equal(pending.size,0);assert.equal(watches.size,0);
   }
 });
 
@@ -156,10 +189,10 @@ function suppliedIdleRun(t,file:string,result:string){
   const env=fixtureEnvironment(t),runner=new URL('./tooling-runner.ts',import.meta.url).href;
   const source=`import {runTooling} from ${JSON.stringify(runner)};
 let now=0;const tasks=[];
-const result=await runTooling([${JSON.stringify(file)}],{idleMs:1000,resultEnv:${JSON.stringify({NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'controlled'})},instrument:{
- frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,scheduleIdle(callback,milliseconds,file){const task={callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true;};},
+const result=await runTooling([${JSON.stringify(file)}],{idleMs:1000,resultEnv:${JSON.stringify({NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'controlled'})},activity:{acquire:()=>({frequency:100,watch:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sample:()=>{},verify:()=>{},close:()=>{}})},
+ timing:{now:()=>now,scheduleIdle(callback,milliseconds,file){const task={callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true;};}},
  event(name,data){if(name==='test:dequeue'&&data.name==='unfinished'){now=9_000_000;const task=tasks.findLast(value=>!value.cancelled);if(!task)throw Error('no owned idle observation');task.callback();}}
-}});console.log('NTS_TOOLING_CONTROL '+JSON.stringify(result));`;
+});console.log('NTS_TOOLING_CONTROL '+JSON.stringify(result));`;
   const probe=file+'.control.ts';writeFileSync(probe,source);
   const actual=spawnTest(process.execPath,[probe],{env,encoding:'utf8'},'supplied tooling idle observation');
   assert.equal(actual.status,0,actual.stdout+actual.stderr);
@@ -312,10 +345,10 @@ const helper=${JSON.stringify(helper)},active=${JSON.stringify(active)},idle=${J
 const withIdle=process.argv[2]==='idle';
 {
   let now=0,progress=0;const scheduled=[];const output=new PassThrough();output.resume();
-  const result=await runTooling(withIdle?[active,idle]:[active],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,
-    scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};scheduled.push(task);return()=>{task.cancelled=true};},
+  const result=await runTooling(withIdle?[active,idle]:[active],{idleMs:10,output,resultEnv:{},activity:{acquire:()=>({frequency:100,watch:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sample:()=>{},verify:()=>{},close:()=>{}})},timing:{now:()=>now,
+    scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};scheduled.push(task);return()=>{task.cancelled=true};}},
     event(name,data){if(name==='test:complete'&&data.file===helper){progress++;now+=6;for(const task of [...scheduled])if(!task.cancelled&&task.at<=now){task.cancelled=true;task.callback();}}}
-  }});
+  });
   console.log(JSON.stringify({withIdle,now,progress,...result}));
 }
 `);
@@ -360,8 +393,8 @@ import{writeFileSync}from'node:fs';import{PassThrough}from'node:stream';
 const long=${JSON.stringify(long)},short=${JSON.stringify(short)};
 let now=0,progress=0,shortClosed=false,reportWasWaiting=false,transcript='';
 const tasks=[],output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
-const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,
- scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true};},
+const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},activity:{acquire:()=>({frequency:100,watch:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sample:()=>{},verify:()=>{},close:()=>{}})},timing:{now:()=>now,
+ scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true};}},
  event(name,data){
   if(name!=='test:complete')return;
   if(data.name===short){shortClosed=true;reportWasWaiting=!transcript.includes('short second');writeFileSync(${JSON.stringify(closed)},'closed');}
@@ -371,7 +404,7 @@ const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instru
    if(progress===6)writeFileSync(${JSON.stringify(release)},'release');
   }
  }
-}});
+});
 const {times:_times,...outcome}=result;
 console.log(JSON.stringify({...outcome,now,progress,shortClosed,reportWasWaiting,reportedShort:transcript.includes('short second')}));
 `);
@@ -422,10 +455,9 @@ writeFileSync(${JSON.stringify(file)},[
 ].join('\\n'));
 const output=new PassThrough();output.resume();let result;
 try{
- result=await runTooling([${JSON.stringify(file)}],{execArgv:['--import',${JSON.stringify(bootstrap)}],output,instrument:{
-  now:()=>0,scheduleIdle:()=>()=>{},frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},
+ result=await runTooling([${JSON.stringify(file)}],{execArgv:['--import',${JSON.stringify(bootstrap)}],output,timing:{now:()=>0,scheduleIdle:()=>()=>{}},activity:{acquire:()=>({frequency:100,watch:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sample:()=>{},verify:()=>{},close:()=>{}})},
   event(name,data){if(name==='test:complete'&&data.name==='async marker'){completed=true;for(const socket of sockets)socket.end('release');}}
- }});
+ });
 }finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
 console.log('NTS_REPORT_TURN '+JSON.stringify({result,completed,entered}));
 `));

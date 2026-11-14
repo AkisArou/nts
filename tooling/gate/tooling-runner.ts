@@ -16,7 +16,6 @@ import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 import {CommandLiveness} from './command-liveness.ts';
 import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
-import {commandCpuFrequency} from './active-process.ts';
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -121,28 +120,46 @@ export class ToolingTestOwners {
   }
 }
 
-type ToolingInstrument={
+export type ToolingTiming={
   scheduleIdle:(callback:()=>void,milliseconds:number,file:string)=>()=>void;
-  frequency:number;
-  watchActivity:(file:string,sample:(value:ToolingActivitySample)=>void,broken:(error:unknown)=>void)=>()=>void;
-  sampleActivity:()=>void;
-  event?:(name:string,data:TestActivity)=>void;
   now:()=>number;
 };
-export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;instrument?:ToolingInstrument}={}):Promise<ToolingResult> {
+export type ToolingActivityLifetime={
+  frequency:number;
+  watch:(file:string,sample:(value:ToolingActivitySample)=>void,broken:(error:unknown)=>void)=>()=>void;
+  sample:()=>void;
+  verify:()=>void;
+  close:()=>void;
+};
+export type ToolingActivitySource={
+  acquire:(files:ReadonlySet<string>,started:(file:string)=>void,broken:(error:unknown)=>void)=>ToolingActivityLifetime;
+};
+/** Timing effects and activity acquisition are independent capabilities. A
+ * supplied clock retains native acquisition, terminal verification and drain. */
+export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;
+  timing?:ToolingTiming;activity?:ToolingActivitySource;event?:(name:string,data:TestActivity)=>void}={}):Promise<ToolingResult> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
   type Active={live:CommandLiveness;reading?:ToolingActivitySample;cancelIdle?:()=>void;cancelWatch?:()=>void};
   const active=new Map<string,Active>(),owners=new ToolingTestOwners(names);
-  if(options.instrument!==undefined&&(!options.instrument||typeof options.instrument.now!=='function'||typeof options.instrument.scheduleIdle!=='function'
-      ||typeof options.instrument.watchActivity!=='function'||typeof options.instrument.sampleActivity!=='function'||!Number.isFinite(options.instrument.frequency)||options.instrument.frequency<=0))
-    throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
-  let activity:ToolingEntryActivity|undefined;
-  const instrument:ToolingInstrument=options.instrument===undefined?{
+  if(options.timing!==undefined&&(!options.timing||typeof options.timing.now!=='function'||typeof options.timing.scheduleIdle!=='function'))
+    throw new ToolingInstrumentError('tooling-setup','tooling timing capability is incomplete');
+  if(options.activity!==undefined&&(!options.activity||typeof options.activity.acquire!=='function'))
+    throw new ToolingInstrumentError('tooling-setup','tooling activity acquisition capability is incomplete');
+  const timing:ToolingTiming=options.timing??{
     now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
-    frequency:commandCpuFrequency(),watchActivity:(file,sample,broken)=>activity!.watch(file,sample,broken),sampleActivity:()=>activity!.sample(),
-  }:options.instrument;
+  };
+  const source:ToolingActivitySource=options.activity??{acquire:(files,started,broken)=>new ToolingEntryActivity(files,started,broken)};
+  let activity:ToolingActivityLifetime|undefined,drained=false,primaryFailure:unknown;
+  const drain=()=>{
+    if(drained)return;drained=true;
+    const errors:unknown[]=[];
+    for(const entry of active.values())for(const close of [entry.cancelIdle,entry.cancelWatch])try{close?.();}catch(error){errors.push(error);}
+    active.clear();
+    try{if(typeof activity?.close==='function')activity.close();}catch(error){errors.push(error);}
+    if(errors.length)throw new ToolingInstrumentError('tooling-cleanup','cannot close tooling activity lifetime: '+errors.map(String).join('; '),{cause:new AggregateError(errors)});
+  };
   try{
-  const schedule=instrument.scheduleIdle;
+  const schedule=timing.scheduleIdle;
   let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0,instrumentError:ToolingInstrumentError|undefined;
   // Each file's tests that have started and not completed: what a hang names,
   // since a hung test prints nothing of its own.
@@ -160,7 +177,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     if(hung||instrumentError||!active.has(file))return;
     try{
       entry.reading=reading;const previous=entry.live.cpu;
-      const decision=entry.live.sample({now:instrument.now(),...reading});
+      const decision=entry.live.sample({now:timing.now(),...reading});
       if(decision){
         if(decision.kind!=='hung')throw Error('tooling inactivity observer received an undelegated budget decision');
         hungFile=file;hung=decision.reason;
@@ -173,7 +190,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     entry.cancelIdle?.();
     entry.cancelIdle=schedule(()=>{
       try{
-        instrument.sampleActivity();
+        activity!.sample();
         if(entry.reading===undefined)throw Error(`missing tooling spawn/activity observation at its idle bound: ${file}`);
         sample(file,entry,entry.reading);if(!hung&&!instrumentError)arm(file,entry);
       }
@@ -183,17 +200,20 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   const touch=(file:string)=>{
     let entry=active.get(file);
     if(!entry){
-      entry={live:new CommandLiveness(file,{idleMs:options.idleMs??TOOLING_IDLE_GUARD_MS,budgetOwner:'enclosing-step'},instrument.now(),instrument.frequency)};
+      entry={live:new CommandLiveness(file,{idleMs:options.idleMs??TOOLING_IDLE_GUARD_MS,budgetOwner:'enclosing-step'},timing.now(),activity!.frequency)};
       active.set(file,entry);const owned=entry;
-      entry.cancelWatch=instrument.watchActivity(file,reading=>sample(file,owned,reading),broken);
+      entry.cancelWatch=activity!.watch(file,reading=>sample(file,owned,reading),broken);
     }
-    entry.live.output(instrument.now());arm(file,entry);
+    entry.live.output(timing.now());arm(file,entry);
   };
   const fileOf=(data:TestActivity)=>owners.file(data);
   // Each file's own wrapper test marks its process's start and end.
-  const clock=instrument.now,begun=clock();
+  const clock=timing.now,begun=clock();
   const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
-  if(options.instrument===undefined)activity=new ToolingEntryActivity(names,file=>touch(file),error=>broken(error));
+  activity=source.acquire(names,file=>touch(file),error=>broken(error));
+  if(!activity||typeof activity.watch!=='function'||typeof activity.sample!=='function'||typeof activity.verify!=='function'||typeof activity.close!=='function'
+      ||!Number.isFinite(activity.frequency)||activity.frequency<=0)
+    throw new ToolingInstrumentError('tooling-setup','tooling activity lifetime capability is incomplete');
   const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
     events.on("test:dequeue",data=>{
@@ -218,14 +238,20 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       else if(active.has(file))touch(file);
     });
     events.on("test:summary",data=>{if(!data.success)success=false;});
-    if(instrument.event)for(const event of ["test:enqueue","test:dequeue","test:start","test:complete","test:pass","test:fail"] as const)
-      events.on(event,data=>instrument.event!(event,data));
+    if(options.event)for(const event of ["test:enqueue","test:dequeue","test:start","test:complete","test:pass","test:fail"] as const)
+      events.on(event,data=>options.event!(event,data));
   }});
   const report=stream.compose(spec);
   report.pipe(options.output??process.stdout,{end:false});
   try{await finished(report);}catch(error){if(!hung&&!instrumentError)throw error;}
   if(!instrumentError&&!hung)try{activity?.verify();}
   catch(error){instrumentError=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error));}
+  // Drain before deciding the result so a completed assertion remains FAIL
+  // beside an observation cleanup error, just as it does beside verification.
+  try{drain();}catch(error){
+    const cleanup=error as ToolingInstrumentError;
+    instrumentError=instrumentError?new ToolingInstrumentError(cleanup.kind,instrumentError.message+'; '+cleanup.message,{cause:new AggregateError([instrumentError,cleanup])}):cleanup;
+  }
   // node:test runs this many files at once when concurrency is true.
   const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
   if(instrumentError){
@@ -244,7 +270,11 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     return {status:priorFailures>0?1:2,completedFailures:priorFailures,times:measured};
   }
   return {status:success?0:1,completedFailures:priorFailures,times:measured};
-  }finally{for(const entry of active.values()){entry.cancelIdle?.();entry.cancelWatch?.();}activity?.close();}
+  }catch(error){primaryFailure=error;throw error;}
+  finally{try{drain();}catch(cleanup){
+    if(primaryFailure!==undefined)throw new ToolingInstrumentError('tooling-cleanup',String(primaryFailure)+'; '+String(cleanup),{cause:new AggregateError([primaryFailure,cleanup])});
+    throw cleanup;
+  }}
 }
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
