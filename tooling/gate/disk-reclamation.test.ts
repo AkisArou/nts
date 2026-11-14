@@ -194,6 +194,7 @@ test('snapshot never collects; explicit admission reclamation uses the same prom
 test('process ownership includes cwd, executable and open files and refuses unreadability',t=>{
   const f=fixture(t),root=join(f.s.dir,'owned'),proc=join(f.s.dir,'proc');mkdirSync(root);mkdirSync(proc);
   const pid=join(proc,'42');mkdirSync(join(pid,'fd'),{recursive:true});
+  writeFileSync(join(pid,'comm'),'worker\n');
   writeFileSync(join(pid,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
   writeFileSync(join(pid,'stat'),'42 (worker) '+['S',...Array<string>(18).fill('0'),'99'].join(' '));
   symlinkSync(root,join(pid,'cwd'));symlinkSync('/outside/node',join(pid,'exe'));

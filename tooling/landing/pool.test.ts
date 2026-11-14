@@ -12,6 +12,7 @@ import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
+import {treeUsers} from "./tree-users.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {ownMemory} from '../gate/test-memory.ts';
 import {hostObservations} from '../gate/host-observations.ts';
@@ -37,10 +38,10 @@ function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptio
   const observationRoot=join(s.dir,'observations');
   const observations=ownMemory(observationRoot,{disk:{freeBytes:1000*GB,freeInodes:2**30}});
   const host=options.host??hostObservations({...s.env,...observations});
-  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {reclamation:{services:[],ownership:()=>{}},...options,host});
+  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {users:()=>[],reclamation:{services:[],ownership:()=>{}},...options,host});
   if (size) p.init(size);
   /** The same pool, `ago` ms before NOW. */
-  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {reclamation:{services:[],ownership:()=>{}},...options,host});
+  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {users:()=>[],reclamation:{services:[],ownership:()=>{}},...options,host});
   /** Free tree `name` was last given back `ago` ms before NOW: a task's branch on it, then main again. */
   const freedAt = (name: string, ago: number) => {
     const cwd = join(p.dir, name), env = clock(ago);
@@ -236,14 +237,15 @@ test("after its task lands, the tree is reset to the new main, unless it holds u
 });
 
 test("a tree a process still uses stays on its landed branch, says what uses it, and the upkeep resets it once nothing does", async t => {
-  const { s, p } = pool(t);
+  let ownedPid:number|undefined;
+  const { s, p } = pool(t,2,{users:tree=>treeUsers(tree,{pids:ownedPid===undefined?[]:[ownedPid]})});
   const a = p.take("fix/a");
   const tip = s.commit({ "src/a.txt": "the task's change\n" }, "the task's change", a.path);
   // An agent's test, or a person's shell, with its working directory in the tree.
   const shell = spawn("cat", [], {env:fixtureEnvironment(t), cwd: join(a.path, "src"), stdio: ["pipe", "ignore", "ignore"] });
   // Ended when its input closes, here or, if an assertion stops the test first, after it.
   t.after(() => { shell.stdin.end(); });
-  await once(shell, "spawn");
+  await once(shell, "spawn");ownedPid=shell.pid;
   s.commit({ "src/landed.txt": "landed\n" }, "landed");
   const kept = p.release("fix/a", tip);
   assert.equal(kept.state, "kept");

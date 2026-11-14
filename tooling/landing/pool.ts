@@ -85,6 +85,7 @@ export type PoolOptions = {
   /** A fixture owns the complete disk and allocated-byte observations. */
   host?:HostObservations;
   forecast?:BuildForecast;
+  users?:(tree:string)=>TreeUser[];
   reclamation?:NonNullable<ConstructorParameters<typeof DiskCapacity>[0]>['reclamation'];
   /** A tree's cargo target in bytes on disk, or null when it has none. */
   targetBytes?: (tree: string) => number | null;
@@ -132,11 +133,11 @@ export function duTarget(tree: string): number | null {
 
 export class Pool {
   readonly dir: string; readonly git: Git; readonly inputs: Inputs; readonly remote: string | null;
-  readonly capacity:DiskCapacity;private readonly target: (tree: string) => number | null;
+  readonly capacity:DiskCapacity;private readonly users:(tree:string)=>TreeUser[];private readonly target: (tree: string) => number | null;
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
     this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git},reclamation:options.reclamation});
-    this.target = options.targetBytes ?? duTarget;
+    this.target = options.targetBytes ?? duTarget;this.users=options.users??treeUsers;
   }
 
   private names(): string[] {
@@ -170,7 +171,7 @@ export class Pool {
       const done = tree.branch !== null && landed.get(tree.branch) === tree.head;
       const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length ? "dirty" : "free";
       return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
-        users: done ? treeUsers(path) : [] };
+        users: done ? this.users(path) : [] };
     });
   }
   /** Every tree, with its target measured. */
@@ -291,7 +292,7 @@ export class Pool {
       if (!tree) return { tree: null, state: "none" };
       // Committed on past what landed: its task goes on there.
       if (tree.head !== landed) return { tree, state: "kept", reason: `pool tree ${tree.name} has commits past the one that landed, so it stays its task's` };
-      const users = treeUsers(tree.path);
+      const users = this.users(tree.path);
       if (tree.changes.length || users.length) {
         this.mark(branch, landed);
         const held = this.trees().find(t => t.name === tree.name)!;
@@ -314,7 +315,7 @@ export class Pool {
   private settle(tree: PoolTree, landed: string): { outcome: BranchOutcome[] } | { why: string } | null {
     if (tree.head !== landed) { this.forget(tree.branch); return null; }
     if (tree.changes.length) return { why: `it has uncommitted changes: ${tree.changes.slice(0, 3).join("; ")}` };
-    const users = treeUsers(tree.path);
+    const users = this.users(tree.path);
     if (users.length) return { why: `${using(users)} (a shell or editor with its working directory there counts too)` };
     this.detach(tree.path, false);
     const outcome = deleteBranch(this.git, tree.branch!, landed, null);

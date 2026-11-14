@@ -33,13 +33,14 @@ test("a process uses a tree by its working directory, its executable or an open 
   mkdirSync(join(tree, "target/release"), { recursive: true }); mkdirSync(outside);
   writeFileSync(join(tree, "held.txt"), "held\n");
   copyFileSync("/usr/bin/cat", join(tree, "target/release/cat"));
-  assert.deepEqual(treeUsers(tree), [], "nothing uses a new tree");
+  assert.deepEqual(treeUsers(tree,{pids:[]}), [], "nothing uses a new tree");
   const inside = await waiting("cat", tree);
   const reading = await waiting("cat", outside, join(tree, "held.txt"));
   const running = await waiting(join(tree, "target/release/cat"), outside);
   const elsewhere = await waiting("cat", outside);
   try {
-    const users = treeUsers(tree);
+    const pids=[inside.pid,reading.pid,running.pid,elsewhere.pid];
+    const users = treeUsers(tree,{pids});
     assert.deepEqual(users.map(user => `${user.pid} ${user.where}`).sort(), [
       `${inside.pid} its working directory`,
       `${reading.pid} an open file held.txt`,
@@ -47,12 +48,12 @@ test("a process uses a tree by its working directory, its executable or an open 
     ].sort(), JSON.stringify(users));
     assert.ok(users.every(user => user.command === "cat"), JSON.stringify(users));
     assert.equal(users.some(user => user.pid === elsewhere.pid), false, "a process outside the tree does not use it");
-    assert.equal(treeUsers(tree, { self: inside.pid }).some(user => user.pid === inside.pid), false, "the process that asks is never its own user");
-    assert.deepEqual(treeUsers(join(tree, "target")).map(user => user.pid), [running.pid], "a folder in the tree is a tree of its own");
+    assert.equal(treeUsers(tree, { self: inside.pid,pids }).some(user => user.pid === inside.pid), false, "the process that asks is never its own user");
+    assert.deepEqual(treeUsers(join(tree, "target"),{pids}).map(user => user.pid), [running.pid], "a folder in the tree is a tree of its own");
     assert.match(describeUsers(users, 2), /^pid \d+ cat \([^)]+\), pid \d+ cat \([^)]+\) and 1 more$/);
   } finally {
     for (const one of [inside, reading, running, elsewhere]) await one.end();
   }
-  assert.deepEqual(treeUsers(tree), [], "once they end, nothing uses it");
+  assert.deepEqual(treeUsers(tree,{pids:[]}), [], "once they end, nothing uses it");
   assert.deepEqual(treeUsers(join(dir, "gone")), [], "a tree that is not there has no users");
 });

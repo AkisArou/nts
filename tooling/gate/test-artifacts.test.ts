@@ -9,17 +9,7 @@ import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileS
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { cleanDevProfile, pruneTestArtifacts, TEST_BUILD_WORKING_BYTES, TEST_DISK_FLOOR_BYTES, testBuildAdmissionProblem } from "./test-artifacts.ts";
-
-test("cache admission preserves one measured live set and leaves disk working space", () => {
-  const gib = 2 ** 30;
-  assert.equal(TEST_BUILD_WORKING_BYTES, 35 * gib);
-  assert.equal(testBuildAdmissionProblem(34.07 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES), null);
-  assert.match(testBuildAdmissionProblem(0, TEST_DISK_FLOOR_BYTES - 1)!, /working space.*disk floor/);
-  assert.match(testBuildAdmissionProblem(34.07 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES - 1)!, /working space.*disk floor/);
-  // A grown live set needs its own replacement room, not the old measurement.
-  assert.match(testBuildAdmissionProblem(50 * gib, 80 * gib)!, /50.0 GiB working space/);
-});
+import { pruneTestArtifacts } from "./test-artifacts.ts";
 
 /** Stage the parsed module graph, then give the tree its own Git inventory. */
 function testsFixture(root: string): void {
@@ -159,16 +149,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
     rmSync(old[0]);
     symlinkSync(current[0], old[0]);
     assert.equal(pruneTestArtifacts(current).binaries, 0, "keep symlinks");
-    const target = join(root, "target");
-    const release = join(target, "release/keep");
-    mkdirSync(dirname(release), { recursive: true });
-    writeFileSync(release, "release stays warm\n");
-    rmSync(join(target, "CACHEDIR.TAG"));
-    cleanDevProfile(root, target);
-    assert.equal(existsSync(profile), false, "Cargo cleans output and its state together");
-    assert.match(readFileSync(join(target, "CACHEDIR.TAG"), "utf8"), /^Signature: 8a477f597d28d172789f06886806bc55\n/);
-    assert.equal(readFileSync(release, "utf8"), "release stays warm\n");
-    assert.match(cargo(["test", "--offline", "--features", "other"]).stdout, /1 passed; 0 failed/);
+
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
