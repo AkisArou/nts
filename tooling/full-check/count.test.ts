@@ -5,7 +5,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // fixture worktrees and a fixture ~/.cache, and its keep list against this
 // tree: every tool it names still writes the folder it keeps.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
@@ -239,6 +239,34 @@ test("a machine within the rules is green; one the count could not read is not",
     "not counted: GitHub's open pull requests (gh: not logged in), so no branch is named by one",
     "not counted: GitHub's open issues (gh: not logged in), so no branch is named by one",
   ]);
+});
+
+test("a listed cache child that disappears before stat leaves the other count lines intact", t => {
+  const cache = mkdtempSync(join(tmpdir(), "full-check-vanished-"));
+  t.after(() => rmSync(cache, { recursive: true, force: true }));
+  const gone = join(cache, "nts-gone"), kept = join(cache, "nts-still-here");
+  mkdirSync(gone); mkdirSync(kept);
+  let removed = false;
+  const folderStat = (path: string) => {
+    if (path === gone) { rmSync(path, { recursive: true }); removed = true; }
+    return lstatSync(path);
+  };
+  const result = count(input(t, { cache, local: ["main"], remote: ["main"], pulls: [], issues: [], worktrees: [], folderStat }), {});
+  assert.equal(removed, true, "the supplied stat must run after the real listing");
+  assert.equal(result.verdict, "FAIL");
+  assert.deepEqual(result.red, ["~/.cache/nts-still-here: an nts folder no rule keeps"]);
+  assert.deepEqual(result.notes, []);
+});
+
+test("listed cache stat errors other than disappearance retain their named failure", t => {
+  const cache = mkdtempSync(join(tmpdir(), "full-check-unreadable-"));
+  t.after(() => rmSync(cache, { recursive: true, force: true }));
+  const path = join(cache, "nts-unreadable"); mkdirSync(path);
+  for (const code of ["EACCES", "EIO"]) {
+    const failure = Object.assign(new Error(code + ": lstat " + path), { code, path });
+    const folderStat = (candidate: string) => { if (candidate === path) throw failure; return lstatSync(candidate); };
+    assert.throws(() => count(input(t, { cache, folderStat }), {}), error => error === failure);
+  }
 });
 
 test("the count names an empty nts slice bound to no active unit, and only that", t => {

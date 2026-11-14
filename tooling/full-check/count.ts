@@ -42,6 +42,8 @@ import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
 
+type FolderStat = (path: string) => { isDirectory(): boolean; isSymbolicLink(): boolean; mtimeMs: number };
+
 export type Pull = { number: number; headRefName: string; baseRefName?: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
 /** One loaded slice of the user manager, as the count judges it. */
@@ -88,6 +90,8 @@ export type CountInput = {
   /** The names of the user manager's units whose ActiveState is active. */
   activeUnits: string[];
   now: number;
+  /** Supplied filesystem observation for deterministic directory-walk controls. */
+  folderStat?: FolderStat;
 };
 
 /** A leftover of a kind the full check removes itself, and why it is one. */
@@ -171,11 +175,19 @@ function worktreeLines(input: CountInput, red: string[]): void {
 
 type Entry = { name: string; path: string; mtimeMs: number };
 /** The folders (and links) of a directory; files are not folders. */
-function folders(dir: string): Entry[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).sort().flatMap(name => {
-    const path = join(dir, name), st = lstatSync(path);
-    return st.isDirectory() || st.isSymbolicLink() ? [{ name, path, mtimeMs: st.mtimeMs }] : [];
+function folders(dir: string, stat: FolderStat = lstatSync): Entry[] {
+  let names: string[];
+  try { names = readdirSync(dir); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+  return names.sort().flatMap(name => {
+    const path = join(dir, name);
+    try {
+      const st = stat(path);
+      return st.isDirectory() || st.isSymbolicLink() ? [{ name, path, mtimeMs: st.mtimeMs }] : [];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
   });
 }
 
@@ -211,7 +223,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   return value;
 }
 
-export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string };
+export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string; folderStat?: FolderStat };
 const days = (ms: number) => (ms / DAY).toFixed(1);
 const display = (path: string, context: Context) => `~/.cache/${relative(context.cache, path)}`;
 /** "3 folders, 1.5 to 9.0 days old (a, b, c)": a group of leftovers as one line, its first names shown. */
@@ -257,7 +269,7 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
   if ("writer" in keep && keep.writer && !writerNames(context.root, keep.writer, at)) {
     lines.push(`${display(entry.path, context)}: keep.json keeps it for ${keep.writer}, which no longer writes it; take the entry out`);
   }
-  const children = folders(entry.path);
+  const children = folders(entry.path, context.folderStat);
   switch (keep.kind) {
     case "kept": break;
     case "pool":
@@ -266,7 +278,7 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
     case "runs":
     case "logs": {
       const logs = keep.kind === "runs" ? join(entry.path, "runs") : entry.path;
-      const old = folders(logs).filter(run => run.name !== "latest" && context.now - run.mtimeMs > 3 * DAY);
+      const old = folders(logs, context.folderStat).filter(run => run.name !== "latest" && context.now - run.mtimeMs > 3 * DAY);
       if (old.length) lines.push(`${display(logs, context)}: ${aged(old, context)} of ${keep.who}; logs are kept three days`);
       // A service prunes its own runs. Logs no service prunes go once nothing
       // inside them changed for those three days: a run may still be writing.
@@ -321,15 +333,15 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
 function nodeTestRoots(input: CountInput, context: Context): string[] {
   const owner = (dir: string) => { try { return Number(readFileSync(join(dir, OWNER_MARK), "utf8").trim().split(" ")[0]); } catch { return null; } };
   const running = (pid: number | null) => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
-  const left = folders(input.cache).filter(entry => /^n[0-9a-z]{2,7}$/.test(entry.name)
+  const left = folders(input.cache, input.folderStat).filter(entry => /^n[0-9a-z]{2,7}$/.test(entry.name)
     && readdirSync(entry.path).every(name => name === OWNER_MARK || name.startsWith(".tmp."))
     && input.now - entry.mtimeMs > DAY && !running(owner(entry.path)));
   return left.length ? [`~/.cache/n<pid>: ${aged(left, context)}, NODE_TEST_DIR roots left by tooling/conformance/node-environment.ts; a runner removes its own`] : [];
 }
 
 function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[]): void {
-  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan };
-  for (const entry of folders(input.cache).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
+  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat };
+  for (const entry of folders(input.cache, input.folderStat).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
     const rule = keep[entry.name];
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
     else red.push(...judgeFolder(entry, rule, context, removable));
