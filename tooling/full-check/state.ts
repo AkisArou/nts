@@ -9,61 +9,13 @@ import {createHash} from 'node:crypto';
 // Both use one state flock, and progress writes merge persisted answers. The
 // hourly count keeps its own file.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Job } from "./background.ts";
 import type { ProbeVerdict } from "./culprit.ts";
 import type { LandingAnswer } from "./queue.ts";
 
-export type Layout = {
-  /** ~/.cache/nts-full-check: everything the full check owns. */
-  home: string;
-  /** The gate tree pinned.sh checks each measured commit out in. */
-  tree: string;
-  /** Its cargo target. */
-  target: string;
-  /** The worktree the service's own code runs from, at `verified`. */
-  controller: string;
-  /**
-   * Held shared by a process that reads the controller's tree while the
-   * service runs (the hourly count), and alone by the service to move that
-   * tree to `verified` (service.ts's followVerified).
-   */
-  controllerLock: string;
-  /**
-   * Each part's records tree: its records unit records there at the run's
-   * commit, and the controller applies their delta there on main. Each builds
-   * what it builds in its own `target/`.
-   */
-  records: Readonly<Record<Part, string>>;
-  /**
-   * The nightly benchmarks' tree: the benchmarks unit measures there at
-   * verified, and the controller publishes the run's record there on main.
-   */
-  bench: string;
-  runs: string;
-  state: string;
-  /** The hourly count's own result (service.ts --count). */
-  count: string;
-  lock: string;
-};
-
-export function layout(cache = join(homedir(), ".cache")): Layout {
-  const home = join(cache, "nts-full-check");
-  return {
-    home,
-    tree: join(home, "tree"),
-    target: join(home, "target"),
-    controller: join(home, "controller"),
-    controllerLock: join(home, "controller.lock"),
-    records: { core: join(home, "records", "core"), wide: join(home, "records", "wide") },
-    bench: join(home, "bench"),
-    runs: join(home, "runs"),
-    state: join(home, "state-v2.json"),
-    count: join(home, "count.json"),
-    lock: join(home, "service.lock"),
-  };
-}
+import {layout,type Layout} from './layout.ts';
+export {layout,type Layout} from './layout.ts';
 
 /** The core runs on the newest main; the wide steps on the newest verified. */
 export type Part = "core" | "wide";

@@ -18,7 +18,7 @@ import {assertStateVersion,assertWritableState} from './state-version.ts';
 import {durableRecord} from './durable-record.ts';
 import {reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
 import {landingLayout} from '../landing/layout.ts';
-import {layout as fullCheckLayout} from '../full-check/state.ts';
+import {layout as fullCheckLayout} from '../full-check/layout.ts';
 
 export const DISK_CAPACITY='NTS_DISK_CAPACITY';
 export const BUILD_FOOTPRINT_FILE=new URL('../../results/builds/cold-inner.json',import.meta.url);

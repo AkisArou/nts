@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {test,type TestContext} from 'node:test';
 import {existsSync,lstatSync,mkdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
 import {scratchRepo} from '../landing/scratch-repo.ts';
 import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
@@ -70,6 +72,39 @@ test('service targets offer obsolete whole profiles, never their current output'
   assert.deepEqual(new Set(report.removed.map(row=>row.root)),new Set([debug,old]));
   assert.ok(existsSync(current));assert.ok(existsSync(tree));
   assert.equal(report.removed.some(row=>row.kind!=='obsolete-profile'),false);
+});
+
+test('both current service profiles survive legacy debug removal',t=>{
+  const f=fixture(t),tree=join(f.s.dir,'service');mkdirSync(tree);
+  writeFileSync(join(tree,'Cargo.toml'),'[workspace]\n[profile.nts-dev]\ndebug=0\n');
+  const tests=f.output(tree),clippy=f.output(tree,'clippy'),debug=f.output(tree,'debug',16*GiB);
+  const report=reclaimDisk({...f.options,services:[{tree,target:join(tree,'target'),service:true}]});
+  assert.deepEqual(report.removed.map(row=>row.root),[debug]);
+  for(const path of [tests,clippy])assert.ok(existsSync(path));
+});
+
+test('corrupt and unknown profile markers keep the entire candidate inventory',t=>{
+  for(const body of ['{broken',JSON.stringify({version:2,generation:'future'}),JSON.stringify({version:1,generation:42})]){
+    const f=fixture(t),tree=f.tree('1'),current=f.output(tree),debug=f.output(tree,'debug');
+    writeFileSync(join(current,'.nts-complete.json'),body);
+    const report=reclaimDisk(f.options);
+    assert.deepEqual(report.removed,[]);assert.ok(report.kept.some(row=>row.root===tree));
+    assert.ok(existsSync(debug));assert.ok(existsSync(current));
+  }
+});
+
+test('a real cwd owner keeps a free scratch tree by name until it drains',async t=>{
+  const f=fixture(t),tree=f.tree('1');
+  const child=spawn('cat',[],{cwd:tree,env:f.s.env,stdio:['pipe','ignore','pipe']});
+  const exited=once(child,'exit');
+  try{
+    await once(child,'spawn');
+    const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
+    assert.deepEqual(report.removed,[]);
+    assert.ok(report.kept.some(row=>row.root===tree&&row.reason.includes('process '+child.pid)&&row.reason.includes('cwd')));
+  }finally{child.stdin.end();await exited;}
+  const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
+  assert.deepEqual(report.removed.map(row=>row.root),[tree]);
 });
 
 test('a live lease, dirty/unpublished/branched tree and unreadable owner remain named',t=>{

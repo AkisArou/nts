@@ -148,6 +148,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     candidates.push({tree:target.tree,root,kind,identity:physical(root),service:target.service,movedAt});
   };
   for(const target of [...poolTargets,...options.services]){
+    const start=candidates.length;
     try{
       physical(target.tree);
       if(!target.service)free(target.tree);
@@ -161,7 +162,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(isDirectory(join(target.target,'debug')))add(target,join(target.target,'debug'),'obsolete-profile',movedAt);
       for(const name of ['nts-dev','clippy'] as const)if(isDirectory(join(target.target,name))&&marker(join(target.target,name),name)==='obsolete')add(target,join(target.target,name),'obsolete-profile',movedAt);
       if(!target.service)add(target,target.target,'free-build-output',movedAt);
-    }catch(error){if(!missing(error))keep(target.tree,error);}
+    }catch(error){candidates.length=start;if(!missing(error))keep(target.tree,error);}
   }
   // Keep two useful free targets. Stale markers and mere empty folders cannot
   // displace a current completed generation; recent use breaks equal warmth.
