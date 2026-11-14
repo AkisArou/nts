@@ -3,7 +3,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {test} from 'node:test';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectHostSource,hostReadProblems,auditTestHost,recordHostDebt} from './test-host-audit.ts';
+import {inspectHostSource,hostReadProblems,auditTestHost,recordHostDebt,unitOwnershipScopeProblems} from './test-host-audit.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
@@ -17,6 +17,21 @@ test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));
   assert.deepEqual(result.problems,[],result.problems.join('\n'));
   assert.ok(result.closures.length>200);
+});
+
+test('the unit population filter belongs only to private controls',()=>{
+  const inspect=(file:string,source:string)=>{
+    const problems:string[]=[];
+    inspectHostSource(file,source,undefined,(_file,_source,facts)=>problems.push(...unitOwnershipScopeProblems(facts)));
+    return problems;
+  };
+  for(const imported of ['assertNoUnitUsers','assertNoUnitUsers as observe']){
+    const name=imported.endsWith('observe')?'observe':'assertNoUnitUsers';
+    const source='import {'+imported+'} from "./disk-reclamation.ts"; '+name+'(roots,owned);';
+    assert.match(inspect('tooling/gate/production.ts',source).join('\n'),/must inspect every non-inactive unit/);
+    assert.deepEqual(inspect('tooling/gate/production.test.ts',source),[]);
+    assert.deepEqual(inspect('tooling/gate/production.ts',source.replace('(roots,owned)','(roots)')),[]);
+  }
 });
 
 test('a dependency calling statfs directly fails, including aliases and generated children',()=>{

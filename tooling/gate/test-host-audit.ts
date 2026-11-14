@@ -30,6 +30,16 @@ const excluded=(file:string)=>Object.keys(HOST_AUDIT_EXCLUDED_ROOTS).some(root=>
 const fixture=(file:string)=>/\.test\.[cm]?[jt]s$|-fixture\.[cm]?[jt]s$/.test(file);
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 
+/** Production reclamation must inspect the full unit population. */
+export function unitOwnershipScopeProblems(facts:SourceFacts):string[]{
+  if(fixture(facts.file))return [];
+  return facts.calls.filter(call=>{
+    const name=facts.ambientName(call.expression);
+    return (name==='assertNoUnitUsers'&&facts.file==='tooling/gate/disk-reclamation.ts'
+      ||/(?:^|\/)disk-reclamation\.ts\.assertNoUnitUsers$/.test(name))&&call.arguments.length!==1;
+  }).map(call=>`${facts.file}:${facts.line(call.pos)}: production unit ownership must inspect every non-inactive unit`);
+}
+
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
@@ -125,6 +135,7 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     declarations.set(file,node.moduleDeclarations());
     signals.push(...inspectCommandSignals(node));
     signals.push(...inspectCommandForwarders(node));
+    signals.push(...unitOwnershipScopeProblems(node));
     gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));

@@ -82,18 +82,26 @@ export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnershi
   return {unit,workingDirectory:rows[0]!.data as string,rootDirectory:rows[1]!.data as string,commands};
 }
 export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwnership):void{
+  const physicalPath=(path:string,field:string):string=>{
+    let ancestor=path;const suffix:string[]=[];
+    for(;;){
+      try{return resolve(realpathSync.native(ancestor),...suffix);}
+      catch(error){
+        if(!['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??'')||dirname(ancestor)===ancestor)
+          throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
+        suffix.unshift(basename(ancestor));ancestor=dirname(ancestor);
+      }
+    }
+  };
+  const physicalRoots=roots.map(root=>physicalPath(root,'candidate root'));
   const check=(path:string,field:string)=>{
     if(roots.some(root=>under(resolve(root),path)||under(resolve(root),resolve(path))))throw Error('unit '+reading.unit+' owns '+field+' '+path);
     // Preserve component order for the kernel's symlink/.. resolution. A
-    // missing future path still has the literal check above; unreadability
-    // must not certify that an existing execution input is outside the tree.
-    let physical:string;
-    try{physical=realpathSync.native(path);}
-    catch(error){
-      if(['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??''))return;
-      throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
-    }
-    if(roots.some(root=>under(resolve(root),physical)))throw Error('unit '+reading.unit+' owns '+field+' '+path+' -> '+physical);
+    // future path retains its nearest existing physical ancestor. This is a
+    // conservative ownership guard, never a claim that the endpoint exists.
+    const physical=physicalPath(path,field);
+    if(physicalRoots.some(root=>under(root,physical)))throw Error('unit '+reading.unit+' owns '+field+' '+path+' -> '+physical);
+    return physical;
   };
   // D-Bus encodes missing-ok with ! (the unit-file spelling is -), and
   // the user's home as ~. Other relative/unknown forms refuse below.
@@ -103,8 +111,8 @@ export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwn
   for(const [field,path] of [['WorkingDirectory',cwd],['RootDirectory',reading.rootDirectory]] as const){
     if(!path)continue;
     if(!path.startsWith('/'))throw Error('unresolved unit '+field+': '+reading.unit);
-    check(path,field);
-    if(field==='RootDirectory'&&roots.some(root=>under(path,resolve(root))))throw Error('unit '+reading.unit+' owns RootDirectory '+path);
+    const physical=check(path,field);
+    if(field==='RootDirectory'&&physicalRoots.some(root=>under(physical,root)))throw Error('unit '+reading.unit+' owns RootDirectory '+path+' -> '+physical);
   }
   for(const command of reading.commands){
     check(command.path,command.property+' path');

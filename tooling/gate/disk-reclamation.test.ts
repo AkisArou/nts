@@ -275,4 +275,7 @@ test('unit paths follow outside aliases and symlink before parent components',t=
   for(const argument of [outside+'/jump/../entry','jump/../entry']){
     assert.throws(()=>assertUnitTreeUnused([tree],{...reading,commands:[{property:'ExecStart',path:process.execPath,args:[argument]}]}),/owns ExecStart argument.* -> /);
   }
+  assert.throws(()=>assertUnitTreeUnused([tree],{...reading,commands:[{property:'ExecStart',path:process.execPath,args:[outside+'/jump/not-yet-created']}]}),/owns ExecStart argument.* -> /);
+  symlinkSync(f.dir,join(outside,'pool-alias'));
+  assert.throws(()=>assertUnitTreeUnused([tree],{...reading,rootDirectory:join(outside,'pool-alias')}),/owns RootDirectory.* -> /);
 });
