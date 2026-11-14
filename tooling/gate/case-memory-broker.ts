@@ -5,14 +5,12 @@ import {basename} from 'node:path';
 import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,KEPT_PEAKS,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
-import {readLimits} from './scopes/memory-limits.ts';
-import {statSync} from 'node:fs';
+import {readLimits,readCgroupIdentity,type CgroupIdentity} from './scopes/memory-limits.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 
 export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
 type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};
-type KernelIdentity={dev:bigint;ino:bigint};
-type RegisteredWorker={group:string;scope:string;cap:number;groupIdentity:KernelIdentity;scopeIdentity:KernelIdentity};
+type RegisteredWorker={group:string;scope:string;cap:number;groupIdentity:CgroupIdentity;scopeIdentity:CgroupIdentity};
 type BrokerOptions={root:string;env:NodeJS.ProcessEnv;host:HostObservations;boundary(step:string):WorkerBoundary;report(message:string):void};
 function decoded(text:string|null):Record<string,unknown>{
   if(text?.startsWith('json64:'))return JSON.parse(Buffer.from(text.slice(7),'base64url').toString('utf8')) as Record<string,unknown>;
@@ -33,13 +31,10 @@ async function stopWorker(unit:string):Promise<void>{
   });
 }
 const under=(parent:string,child:string)=>child.startsWith(parent+'/')&&!child.split('/').includes('..');
-function kernelIdentity(group:string):KernelIdentity{
-  const value=statSync('/sys/fs/cgroup'+group,{bigint:true});return {dev:value.dev,ino:value.ino};
-}
 function registeredWorkerPresent(worker:RegisteredWorker):boolean{
   for(const [path,identity] of [[worker.group,worker.groupIdentity],[worker.scope,worker.scopeIdentity]] as const){
-    let actual:KernelIdentity;
-    try{actual=kernelIdentity(path);}
+    let actual:CgroupIdentity;
+    try{actual=readCgroupIdentity(path);}
     catch(error){
       if((error as NodeJS.ErrnoException).code==='ENOENT')return false;
       throw new ToolingInstrumentError('tooling-setup','case memory: registered worker observation failed: '+path,{cause:error});
@@ -104,7 +99,7 @@ export class CaseMemoryBroker {
     this.#workers.set(request.step,workers);
     const registered=workers.get(scope);
     if(registered&&registered.group!==group)throw Error('case memory: registered scope changed worker groups');
-    const worker=registered?{...registered,cap}:{group,scope,cap,groupIdentity:kernelIdentity(group),scopeIdentity:kernelIdentity(scope)};
+    const worker=registered?{...registered,cap}:{group,scope,cap,groupIdentity:readCgroupIdentity(group),scopeIdentity:readCgroupIdentity(scope)};
     lease.attach(group,cap);
     if(!registeredWorkerPresent(worker))throw new ToolingInstrumentError('tooling-setup','case memory: worker departed during registration: '+scope);
     workers.set(scope,worker);

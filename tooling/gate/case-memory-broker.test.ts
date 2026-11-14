@@ -12,7 +12,7 @@ test('persistent worker caps use fresh file observations while each lease resets
   const monitorURL='data:text/javascript,'+encodeURIComponent(`
     import {EventEmitter} from 'node:events';
     export const reads=[],writes=[],limits=new Map(),identities=new Map(),errors=new Map();
-    export function statSync(path){const group=path.slice('/sys/fs/cgroup'.length);if(errors.has(group))throw errors.get(group);if(!identities.has(group))throw Object.assign(Error('scope departed: '+group),{code:'ENOENT'});return {dev:28n,ino:BigInt(identities.get(group))};}
+    export function readCgroupIdentity(group){if(errors.has(group))throw errors.get(group);if(!identities.has(group))throw Object.assign(Error('scope departed: '+group),{code:'ENOENT'});return {dev:28n,ino:BigInt(identities.get(group))};}
     export function readLimits(group){reads.push(group);if(!limits.has(group))throw Error('unowned cgroup: '+group);return {max:limits.get(group),high:Infinity,swap:0};}
     export function spawn(command,args){
       if(command!=='systemctl'||args[1]!=='set-property')throw Error('unexpected process: '+command);
@@ -24,7 +24,7 @@ test('persistent worker caps use fresh file observations while each lease resets
   `);
   const query=new URL('./case-memory-broker.ts?persistent-cap-control',import.meta.url).href;
   const hooks=registerHooks({resolve(specifier,context,next){
-    if(context.parentURL===query&&['node:child_process','node:fs','./scopes/memory-limits.ts'].includes(specifier))return {url:monitorURL,shortCircuit:true};
+    if(context.parentURL===query&&['node:child_process','./scopes/memory-limits.ts'].includes(specifier))return {url:monitorURL,shortCircuit:true};
     return next(specifier,context);
   }});
   t.after(()=>hooks.deregister());

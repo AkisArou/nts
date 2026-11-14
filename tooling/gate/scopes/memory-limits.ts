@@ -1,5 +1,11 @@
 // Kernel memory limits shared by scope owners, without importing launchers.
-import {readFileSync} from 'node:fs';
+import {readFileSync,statSync} from 'node:fs';
+
+export type CgroupIdentity={dev:bigint;ino:bigint};
+/** Exact kernel identity, detached from the filesystem's mutable object. */
+export function readCgroupIdentity(group:string):CgroupIdentity{
+  const value=statSync('/sys/fs/cgroup'+group,{bigint:true});return {dev:value.dev,ino:value.ino};
+}
 
 /** The kernel's rounded limits; Infinity denotes an uncapped boundary. */
 export function readLimits(group:string):{max:number;high:number;swap:number}{
