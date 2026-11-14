@@ -228,7 +228,7 @@ test("after its task lands, the tree is reset to the new main, unless it holds u
   assert.match(status, / 1 {2}\S+ {2}free, idle 0m/);
   assert.match(status, / 2 {2}\S+ {2}landed fix\/b \(1 behind\), 1 uncommitted, idle 0m/);
   // Its work left: the upkeep keeps it, and resets it once the work is gone.
-  assert.match(pruneLines(p.prune({ now: NOW }), NOW).join("\n"), /^pool: kept tree 2 on its landed branch fix\/b: it has uncommitted changes: \?\? left.txt$/m);
+  assert.match(pruneLines(p.prune({ now: NOW })).join("\n"), /^pool: kept tree 2 on its landed branch fix\/b: it has uncommitted changes: \?\? left.txt$/m);
   rmSync(join(b.path, "left.txt"));
   const settled = p.prune({ now: NOW });
   assert.deepEqual(settled.released.map(r => `${r.tree.name} ${r.branch}: ${r.outcome.map(o => `${o.where} ${o.state}`).join(", ")}`), ["2 fix/b: local deleted"]);
@@ -257,14 +257,13 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
   assert.throws(() => s.git(["branch", "-D", "fix/a"]), /checked out|used by worktree/, "its branch stays with its tree");
   const waiting = p.prune({ now: NOW });
   assert.deepEqual(waiting.released, []);
-  assert.deepEqual(pruneLines(waiting, NOW), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`,
-    `disk: kept ${a.path}: branch remains owned: fix/a`]);
+  assert.deepEqual(pruneLines(waiting), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`]);
   assert.equal(p.take("fix/b").name, "2", "a landed tree is not free");
   shell.stdin.end(); await once(shell, "exit");
   assert.match(describePool(p.trees(), NOW), / 1 {2}\S+ {2}landed fix\/a \(1 ahead of main, 1 behind\), reset at the next upkeep, idle 0m/);
   const settled = p.prune({ now: NOW });
   assert.deepEqual(settled.released.map(r => `${r.tree.name} ${r.branch}: ${r.outcome.map(o => `${o.where} ${o.state}`).join(", ")}`), ["1 fix/a: local deleted"]);
-  assert.match(pruneLines(settled, NOW)[0]!, /^pool: reset tree 1, whose task fix\/a landed, now that nothing uses it; its branch here deleted$/);
+  assert.match(pruneLines(settled)[0]!, /^pool: reset tree 1, whose task fix\/a landed, now that nothing uses it; its branch here deleted$/);
   assert.deepEqual(names(p), ["1 free", "2 held fix/b"]);
   assert.equal(p.trees()[0]!.head, s.git(["rev-parse", "main"]), "at the newest main");
   assert.equal(p.landed().size, 0);
@@ -325,7 +324,7 @@ test("the upkeep removes free trees idle past the limit, cold ones first, keeps 
   for(const n of ['4','5'])assert.ok(existsSync(join(p.dir,n,'target/nts-dev')),'two useful targets stay warm');
   assert.equal(s.git(["rev-parse", "--abbrev-ref", "HEAD"], join(p.dir, "1")), "fix/held");
   assert.equal(readFileSync(join(p.dir, "6", "uncommitted.txt"), "utf8"), "nobody committed this\n");
-  assert.match(pruneLines(pruned, NOW).join("\n"), /disk: removed .*unbuilt-checkout/);
+  assert.match(pruneLines(pruned).join("\n"), /disk: removed .*unbuilt-checkout/);
   assert.deepEqual(p.prune({now:NOW}).removed.map(row=>row.tree.name),['2'],'a later idle upkeep can remove the now unbuilt checkout');
   assert.deepEqual(names(p), ["1 held fix/held", "4 free", "5 free", "6 dirty"]);
   assert.throws(()=>p.prune({keep:1,now:NOW}),/at least two warm/);
@@ -347,4 +346,20 @@ test("status shows each tree's state, task, idle time and target size, for a sch
   assert.equal(json.room.unbuilt, 1);
   assert.deepEqual(json.trees.map(tree => [tree.name, tree.state, tree.task, tree.target_bytes]), [["1", "held", "fix/a", 24 * GB], ["2", "free", null, null]]);
   assert.deepEqual(json.trees.map(tree => tree.idle_ms), [0, 0], "both trees moved at NOW");
+});
+
+
+test('ordinary upkeep retains task and warm-target facts without kept-line noise',t=>{
+  const {p,freedAt}=pool(t,3);
+  p.take('fix/working');
+  for(const name of ['2','3']){
+    const tree=join(p.dir,name),target=join(tree,'target');mkdirSync(target);
+    writeFileSync(join(target,'CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+    for(const profile of ['nts-dev','clippy'] as const){const output=join(target,profile);mkdirSync(output);completeBuild(tree,profile,output);}
+    freedAt(name,5*DAY);
+  }
+  const pruned=p.prune({now:NOW}),kept=pruned.reclamation!.kept;
+  assert.equal(kept.filter(row=>row.reason.startsWith('branch remains owned:')).length,1);
+  assert.equal(kept.filter(row=>row.reason==='two warm free targets retained').length,2);
+  assert.ok(kept.every(row=>row.routine));assert.deepEqual(pruneLines(pruned),[]);
 });

@@ -15,7 +15,7 @@ export type ReclaimTarget={tree:string;target:string;service:boolean};
 export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output';
 export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[]};
 export type ReclaimReport={triggered:boolean;before:number;after:number;triggerBytes:number;goalBytes:number;
-  removed:ReclaimRemoval[];kept:{root:string;reason:string}[]};
+  removed:ReclaimRemoval[];kept:{root:string;reason:string;routine:boolean}[]};
 export type ReclaimOwnership=(tree:string,target:string)=>readonly string[]|void;
 export type ReclaimOptions={
   pool:{dir:string;git:Git};host:HostObservations;coldBytes:number;
@@ -27,6 +27,7 @@ export type ReclaimOptions={
 };
 type Identity={path:string;dev:number;ino:number;uid:number};
 type Candidate={tree:string;root:string;kind:ReclaimKind;identity:Identity[];service:boolean;movedAt:number};
+class TaskBranch extends Error{}
 const under=(root:string,path:string)=>path===root||path.startsWith(root+sep);
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
 
@@ -89,7 +90,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const report:ReclaimReport={triggered:first.freeBytes<trigger,before:first.freeBytes,after:first.freeBytes,
     triggerBytes:trigger,goalBytes:trigger+coldBytes,removed:[],kept:[]};
   if(!report.triggered&&!options.maintenance)return report;
-  const keep=(root:string,error:unknown)=>report.kept.push({root,reason:errorText(error)});
+  const keep=(root:string,error:unknown,routine=error instanceof TaskBranch)=>report.kept.push({root,reason:errorText(error),routine});
   const revision=gitRead(pool.git,['rev-parse','refs/heads/main']);
   const policyFile=(path:string,required:boolean):string=>{
     const row=gitRead(pool.git,['ls-tree','-z',revision,'--',path]);
@@ -104,7 +105,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   const free=(tree:string):void=>{
     const current=registered().find(row=>resolve(row.path)===tree);
     if(!current)throw Error('worktree is no longer registered');
-    if(current.branch)throw Error('branch remains owned: '+current.branch);
+    if(current.branch)throw new TaskBranch('branch remains owned: '+current.branch);
     if(gitRead(pool.git,['status','--porcelain','--untracked-files=all'],tree))throw Error('uncommitted changes');
     if(Number(gitRead(pool.git,['rev-list','--count',revision+'..HEAD'],tree))!==0)throw Error('unpublished detached commits');
   };
@@ -153,7 +154,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     const goal=snapshot.floorBytes+snapshot.reservedBytes+2*coldBytes;
     if(report.triggered&&snapshot.freeBytes>=goal)break;
     if(!report.triggered&&options.maintenance&&candidate.movedAt>=options.maintenance.before)continue;
-    if(kind==='free-build-output'&&retained.has(root)){keep(root,'two warm free targets retained');continue;}
+    if(kind==='free-build-output'&&retained.has(root)){keep(root,'two warm free targets retained',true);continue;}
     // A previous obsolete-profile removal may have consumed this candidate.
     if(!existsSync(root))continue;
     let lock:GateResource|null=null,deleted=false;
