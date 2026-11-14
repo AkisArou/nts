@@ -62,8 +62,12 @@ export function recordSizeProblems(actual:Record<string,number>,previous:RecordS
 
 export function checkRecordSizes(root:string):void {
   const path=join(root,RECORD_SIZES),previous=parseRecordSizes(JSON.parse(readFileSync(path,'utf8')));
-  const problems=recordSizeProblems(recordSizes(root),previous);
+  const actual=recordSizes(root),problems=recordSizeProblems(actual,previous);
   if(problems.length)throw Error(problems.join('\n'));
+  for(const [file,size] of Object.entries(actual))if(previous.files[file]!==size){
+    const bound=previous.files[file]??DECISION_TABLE_BYTES;
+    throw Error(`${file}: ${size} bytes; bound ${bound} bytes; run records.ts <root> --record to retain this table or lower size; ${RECORD_RULE}`);
+  }
 }
 
 /** Only the --record route publishes this ratchet. It cannot accept growth. */

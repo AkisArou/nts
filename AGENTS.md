@@ -187,7 +187,8 @@ output stays in kept scratch, cited by path and SHA-256. A standalone decision
 table is `.tsv` or `.csv` and at most 16 KiB; legacy non-Markdown records may only
 shrink under the size ratchet. Update that ratchet only with
 `node tooling/gate/records.ts . --record`, never by hand. Deleting an existing
-record requires the user's approval.
+record requires the user's approval. A new standalone table or a smaller legacy
+file updates the ratchet in the same commit, so its size cannot later regrow.
 A decision is written into the page it governs, in its `## Decisions` section;
 its dated entry goes in `docs/records/notebooks/decisions-log.md`.
 

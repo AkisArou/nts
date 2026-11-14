@@ -93,14 +93,17 @@ test("the real records step validates benchmark evidence and its rendered table"
     const rejected=call();assert.equal(rejected.status,1);assert.match(rejected.stderr,/docs\/records\/raw.json: 16385 bytes; bound 0 bytes/);
     assert.match(rejected.stderr,/raw output stays in kept scratch, cited by path and SHA-256/);rmSync(raw);
     writeFileSync(join(root,'docs/records/written.md'),'written evidence\n'.repeat(2000));
+    assert.equal(call().status,0,'written Markdown needs no size row');
     writeFileSync(join(root,'docs/records/decision.tsv'),'arm\tverdict\ncurrent\tPASS\n');
+    const table=record();assert.equal(table.status,0,table.stderr);
     const written=call();assert.equal(written.status,0,written.stderr);
     const ratchetBefore=readFileSync(join(root,RECORD_SIZES));
     writeFileSync(legacy,'x'.repeat(legacyBytes+1));
     const grown=call();assert.equal(grown.status,1);assert.match(grown.stderr,/legacy.json: 16386 bytes; bound 16385 bytes/);
     const forbiddenRefresh=record();assert.equal(forbiddenRefresh.status,1);assert.match(forbiddenRefresh.stderr,/recorded size may only fall/);
     assert.deepEqual(readFileSync(join(root,RECORD_SIZES)),ratchetBefore,'--record never masks growth');
-    writeFileSync(legacy,'x');const lower=record();assert.equal(lower.status,0,lower.stderr);
+    writeFileSync(legacy,'x');assert.equal(call().status,1,'the lower size must be retained before it can land');
+    const lower=record();assert.equal(lower.status,0,lower.stderr);
     assert.equal(parseRecordSizes(JSON.parse(readFileSync(join(root,RECORD_SIZES),'utf8'))).files['docs/records/legacy.json'],1);
     writeFileSync(legacy,'xx');assert.equal(call().status,1,'a refreshed lower bound cannot regrow');writeFileSync(legacy,'x');
     const subject=join(root,"tests/programs/pending");mkdirSync(join(subject,"src"),{recursive:true});
