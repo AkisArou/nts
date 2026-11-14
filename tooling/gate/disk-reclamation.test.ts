@@ -101,7 +101,7 @@ test('a real cwd owner keeps a free scratch tree by name until it drains',async 
     await once(child,'spawn');
     const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
     assert.deepEqual(report.removed,[]);
-    assert.ok(report.kept.some(row=>row.root===tree&&row.reason.includes('process '+child.pid)&&row.reason.includes('cwd')));
+    assert.ok(report.kept.some(row=>row.root===tree&&row.reason.includes('process '+child.pid)&&row.reason.includes('cwd')),JSON.stringify(report));
   }finally{child.stdin.end();await exited;}
   const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
   assert.deepEqual(report.removed.map(row=>row.root),[tree]);

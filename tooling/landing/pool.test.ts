@@ -114,7 +114,7 @@ test("only active cold leases promise the measured build, and take reserves atom
   assert.equal(p.room().reservedBytes,14*GB);
   assert.equal(p.room().unbuilt,2);
   assert.throws(()=>p.take('fix/c'),(error:unknown)=>error instanceof PoolFull&&error.room.reservedBytes===14*GB&&error.room.floorBytes===47*GB);
-  assert.deepEqual(names(p),['1 held fix/a','2 held fix/b','3 free','4 free'],'refused take switches no branch');
+  assert.deepEqual(names(p),['1 held fix/a','2 held fix/b'],'refused take switches no branch; pressure may remove only the unbuilt free checkouts');
   p.give('fix/a');
   assert.equal(p.room().reservedBytes,7*GB,'giving a cold tree back returns its promise');
   assert.equal(p.take('fix/c').name,'1');
@@ -255,7 +255,8 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
   assert.throws(() => s.git(["branch", "-D", "fix/a"]), /checked out|used by worktree/, "its branch stays with its tree");
   const waiting = p.prune({ now: NOW });
   assert.deepEqual(waiting.released, []);
-  assert.deepEqual(pruneLines(waiting, NOW), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`]);
+  assert.deepEqual(pruneLines(waiting, NOW), [`pool: kept tree 1 on its landed branch fix/a: pid ${shell.pid} cat (its working directory) still uses it (a shell or editor with its working directory there counts too)`,
+    `disk: kept ${a.path}: branch remains owned: fix/a`]);
   assert.equal(p.take("fix/b").name, "2", "a landed tree is not free");
   shell.stdin.end(); await once(shell, "exit");
   assert.match(describePool(p.trees(), NOW), / 1 {2}\S+ {2}landed fix\/a \(1 ahead of main, 1 behind\), reset at the next upkeep, idle 0m/);

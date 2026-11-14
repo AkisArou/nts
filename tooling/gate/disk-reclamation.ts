@@ -152,8 +152,9 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
     try{
       physical(target.tree);
       if(!target.service)free(target.tree);
-      const movedText=target.service?'':gitRead(pool.git,['reflog','-1','--format=%ct','HEAD'],target.tree);
-      const movedAt=movedText?Number(movedText)*1000:lstatSync(target.tree).mtimeMs;
+      const movedText=target.service?'':gitRead(pool.git,['reflog','-1','--date=unix','--format=%gd','HEAD'],target.tree);
+      const moved=/@\{(\d+)\}/.exec(movedText)?.[1];
+      const movedAt=moved?Number(moved)*1000:lstatSync(target.tree).mtimeMs;
       if(!isDirectory(target.target)){
         if(!target.service&&!existsSync(target.target))add(target,target.tree,'unbuilt-checkout',movedAt);
         continue;
