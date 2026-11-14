@@ -9,6 +9,18 @@ is in [the records](..).
 
 Dates are 2026.
 
+## Pressure reclamation uses ownership provenance (11-14)
+
+Issue #709 retains the user's deletion grant: free pool build output keeping
+two warm targets, idle whole profile generations, and clean unbuilt checkouts.
+DiskCapacity owns explicit pressure reclamation under its pool lock, with
+hysteresis from the measured cold build. Service current output is protected;
+Git removes checkouts. Every deletion records its root, byte observations and
+fresh ownership checks. Non-dumpable user-manager/session processes outside
+nts or agent cgroups do not block reclamation; their readable PID/birth/cgroup
+provenance remains in the audit. Unreadable tool processes and unreadable
+cgroups refuse. Unknown roots, local work, evidence and shared corpora are kept.
+
 ## Owned root departure (11-14)
 
 Issue #775: a named cancellation can remove a run's bound worker root before

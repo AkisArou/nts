@@ -702,7 +702,8 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   the disk cannot hold its remaining measured build promise and the gate's floor;
   then `take` says why and exits 75, so a scheduler waits and retries. A tree
   goes back warm when its task lands or is discarded, and the full check's
-  hourly upkeep removes free trees idle over three days, keeping two warm.
+  hourly upkeep reclaims idle build output while keeping two warm targets;
+  an unbuilt idle checkout is removed through Git.
   Agents do not make worktrees of their own. The shared checkout
   `~/Projects/nts` stays on `main`.
 - **One disk capacity owner.** `tooling/gate/disk-capacity.ts` keeps the
@@ -723,6 +724,26 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   same remaining promise before admitting an allocation. Fixtures carry a
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
+- **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
+  under its pool lock before admission and during upkeep; status reads do not
+  delete. Below the floor plus live promises and one measured cold build, it
+  removes in cost order until another cold build of headroom is free: obsolete
+  whole profile generations, clean unbuilt pool checkouts, then free pool build
+  output while keeping two warm targets. The landing and full-check trees offer
+  only obsolete generations, never their current build output. Unknown or corrupt
+  generation markers keep the candidate. A checkout must be detached, clean,
+  registered and have no unpublished commits; ignored local data also keeps it.
+  Git removes checkouts, preserving its worktree registry.
+  Each removal rechecks physical root identity, the resource lock, leases, build
+  claims, unit ownership and process cwd/exe/open files. Readable process owners
+  always count. A non-dumpable process with a readable cgroup outside every nts
+  or agent unit is excluded with its PID, birth and cgroup in the audit facts;
+  unreadable nts processes and unreadable cgroups keep the root by name.
+  Old-boot claims and locks confer no ownership. One JSON line in the pool's
+  `.disk-reclaim.log` names each removal, its allocated footprint, observed free
+  space change and checked ownership facts. These byte measures have separate
+  meanings when other jobs or filesystem sharing affect free space. Scratch,
+  evidence, shared corpora and unknown cache roots have no deletion grant.
 - **Git observers preserve the owner's index.** Git arguments run through
   `tooling/gate/git-arguments/main.ts`, which prepends `--no-optional-locks` for
   observations and mutations alike. Required mutation locks remain enabled.
@@ -1007,6 +1028,13 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Pressure reclamation uses ownership provenance**: only approved rebuildable
+  outputs and clean unbuilt pool checkouts may be removed under the capacity
+  lock. Current service builds and two warm free targets remain. Non-dumpable
+  processes outside nts are recorded by cgroup provenance; unreadable tool
+  processes or cgroups refuse
+  ([log](records/notebooks/decisions-log.md#pressure-reclamation-uses-ownership-provenance-11-14)).
 
 - Local process forwarders keep their command parameter first. The source
   audit checks that one direct forwarding hop; Git arguments at callers use

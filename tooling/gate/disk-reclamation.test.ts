@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test,type TestContext} from 'node:test';
-import {existsSync,lstatSync,mkdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -11,6 +11,8 @@ import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
 import {reclaimDisk,assertNoProcessUsers,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
 import {GateResource} from './gate-resource.ts';
+import {processIdentity} from '../landing/lock.ts';
+import {spawnTest,waitFor} from './test-wait.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
 
@@ -105,6 +107,40 @@ test('a real cwd owner keeps a free scratch tree by name until it drains',async 
   }finally{child.stdin.end();await exited;}
   const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
   assert.deepEqual(report.removed.map(row=>row.root),[tree]);
+  const facts=report.removed[0]!.facts;
+  // The real user manager is present even when non-dumpable. Any ignored
+  // observation names its exact PID/birth/cgroup in the removal receipt.
+  assert.ok(facts.some(fact=>/ignored non-dumpable outside nts:.*systemd/.test(fact)),JSON.stringify(facts));
+  const logged=JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8')) as {facts:string[]};
+  assert.deepEqual(logged.facts,facts);
+});
+
+test('a real non-dumpable C child in the nts unit keeps its root by name',async t=>{
+  const f=fixture(t),tree=f.tree('1'),executable=join(f.s.dir,'non-dumpable');
+  const code='#include <sys/prctl.h>\n#include <unistd.h>\n#include <stdio.h>\nint main(int argc,char **argv){if(argc!=2||chdir(argv[1])||prctl(PR_SET_DUMPABLE,0))return 2;puts("ready");fflush(stdout);char byte;while(read(0,&byte,1)>0){}return 0;}\n';
+  const build=spawnTest('clang',['-x','c','-','-o',executable],{input:code,env:f.s.env,encoding:'utf8'});
+  assert.equal(build.status,0,build.stderr);
+  const child=spawn(executable,[tree],{env:f.s.env,stdio:['pipe','pipe','pipe']});
+  const exited=once(child,'exit');let out='',error='';
+  child.stdout.on('data',bytes=>{out+=String(bytes);});child.stderr.on('data',bytes=>{error+=String(bytes);});
+  try{
+    await waitFor('non-dumpable child readiness',()=>out.includes('ready\n'),{stopped:()=>child.exitCode===null?undefined:error||'child exited '+child.exitCode});
+    const cgroup=readFileSync('/proc/'+child.pid+'/cgroup','utf8');assert.match(cgroup,/(?:^|\/)nts[.-]/);
+    const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
+    assert.deepEqual(report.removed,[]);
+    assert.ok(report.kept.some(row=>row.root===tree&&row.reason.includes('unreadable tool process '+child.pid)),JSON.stringify(report));
+  }finally{child.stdin.end();await exited;}
+});
+
+test('a stale previous-boot lock and build claim confer no ownership after reboot',t=>{
+  const f=fixture(t),tree=f.tree('1'),debug=f.output(tree,'debug',16*GiB);
+  const capacity=new DiskCapacity({env:f.s.env,host:f.host,pool:f.options.pool,reclamation:{services:[],ownership:f.options.ownership}});
+  const identity=processIdentity(process.pid);assert.ok(identity);
+  const previousBoot=identity.replace(/^[^ ]+/,'00000000-0000-0000-0000-000000000000');assert.notEqual(previousBoot,identity);
+  writeFileSync(join(f.dir,'.lock'),previousBoot+'\n');
+  writeFileSync(capacity.stateFile,JSON.stringify({version:1,claims:[{id:'previous-boot',pid:process.pid,identity:previousBoot,root:tree,target:join(tree,'target')}]}));
+  const report=capacity.reclaim(f.dir);assert.deepEqual(report?.removed.map(row=>row.root),[debug]);
+  assert.equal(existsSync(join(f.dir,'.lock')),false);
 });
 
 test('a live lease, dirty/unpublished/branched tree and unreadable owner remain named',t=>{
@@ -157,6 +193,7 @@ test('snapshot never collects; explicit admission reclamation uses the same prom
 test('process ownership includes cwd, executable and open files and refuses unreadability',t=>{
   const f=fixture(t),root=join(f.s.dir,'owned'),proc=join(f.s.dir,'proc');mkdirSync(root);mkdirSync(proc);
   const pid=join(proc,'42');mkdirSync(join(pid,'fd'),{recursive:true});
+  writeFileSync(join(pid,'status'),'Uid:\t'+Array<number>(4).fill(process.getuid!()).join('\t')+'\n');
   writeFileSync(join(pid,'stat'),'42 (worker) '+['S',...Array<string>(18).fill('0'),'99'].join(' '));
   symlinkSync(root,join(pid,'cwd'));symlinkSync('/outside/node',join(pid,'exe'));
   assert.throws(()=>assertNoProcessUsers([root],proc),/42 owns cwd/);
@@ -165,5 +202,13 @@ test('process ownership includes cwd, executable and open files and refuses unre
   rmSync(join(pid,'exe'));symlinkSync('/outside/node',join(pid,'exe'));symlinkSync(join(root,'data')+' (deleted)',join(pid,'fd/7'));
   assert.throws(()=>assertNoProcessUsers([root],proc),/42 owns fd\/7/);
   rmSync(join(pid,'fd/7'));assert.doesNotThrow(()=>assertNoProcessUsers([root],proc));
-  rmSync(join(pid,'exe'));assert.throws(()=>assertNoProcessUsers([root],proc),/live or unreadable process root/);
+  rmSync(join(pid,'exe'));assert.throws(()=>assertNoProcessUsers([root],proc),/keeps unreadable process/);
+  symlinkSync('/outside/node',join(pid,'exe'));writeFileSync(join(pid,'comm'),'non-dumpable\n');
+  writeFileSync(join(pid,'cgroup'),'0::/user.slice/session-2.scope\n');chmodSync(join(pid,'fd'),0);
+  try{
+    assert.match(assertNoProcessUsers([root],proc).join('\n'),/ignored non-dumpable outside nts: pid 42 non-dumpable/);
+    writeFileSync(join(pid,'cgroup'),'0::/user.slice/nts-agent-private.service\n');
+    assert.throws(()=>assertNoProcessUsers([root],proc),/unreadable tool process 42/);
+    rmSync(join(pid,'cgroup'));assert.throws(()=>assertNoProcessUsers([root],proc),/keeps unreadable process/);
+  }finally{chmodSync(join(pid,'fd'),0o700);}
 });

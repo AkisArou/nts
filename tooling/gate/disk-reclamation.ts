@@ -1,6 +1,6 @@
 // Reclaim only rebuildable outputs and clean, unbuilt pool worktrees. The
 // caller holds DiskCapacity's pool lock for inventory, checks and removal.
-import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,readlinkSync,realpathSync,rmSync,statSync} from 'node:fs';
+import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,readlinkSync,realpathSync,rmSync} from 'node:fs';
 import {basename,dirname,join,resolve,sep} from 'node:path';
 import {worktrees,type Git} from '../landing/git.ts';
 import {GateResource} from './gate-resource.ts';
@@ -15,7 +15,7 @@ export type ReclaimKind='obsolete-profile'|'unbuilt-checkout'|'free-build-output
 export type ReclaimRemoval={root:string;kind:ReclaimKind;allocatedBytes:number;freeBytesChange:number;facts:string[]};
 export type ReclaimReport={triggered:boolean;before:number;after:number;triggerBytes:number;goalBytes:number;
   removed:ReclaimRemoval[];kept:{root:string;reason:string}[]};
-export type ReclaimOwnership=(tree:string,target:string)=>void;
+export type ReclaimOwnership=(tree:string,target:string)=>readonly string[]|void;
 export type ReclaimOptions={
   pool:{dir:string;git:Git};host:HostObservations;coldBytes:number;
   snapshot:()=>{freeBytes:number;floorBytes:number;reservedBytes:number};
@@ -60,35 +60,56 @@ function isDirectory(path:string):boolean{
   catch(error){if(missing(error))return false;throw error;}
 }
 
-/** Fail closed for unreadable live processes owned by this user. No signalling
- * authority: a disappearing descriptor/process is rechecked, never guessed idle. */
-export function assertNoProcessUsers(roots:readonly string[],proc='/proc'):void{
+class ProcessUse extends Error{}
+/** Readable owners always count. Non-dumpable processes outside nts cannot be
+ * tool owners; their readable cgroup provenance is retained in the audit.
+ * Unreadable nts processes or cgroups refuse. This grants no signal authority. */
+export function assertNoProcessUsers(roots:readonly string[],proc='/proc'):string[]{
   const uid=process.getuid?.();
+  const ignored:string[]=[],unreadable:Error[]=[];
   for(const pid of readdirSync(proc).filter(name=>/^[1-9][0-9]*$/.test(name))){
     const dir=join(proc,pid);
     let birth:string;
     try{
-      if(statSync(dir).uid!==uid)continue;
+      // A non-dumpable process may expose root-owned /proc inodes despite
+      // retaining this user's real UID. The readable status owns that answer.
+      const status=readFileSync(join(dir,'status'),'utf8'),owner=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status);
+      if(!owner)throw Error('process has no UID observation');
+      if(Number(owner[1])!==uid)continue;
       const fields=readFileSync(join(dir,'stat'),'utf8').split(') ').at(-1)!.split(' ');
       if(fields[0]==='Z'||fields[0]==='X')continue;
       birth=fields[19]!;
-    }catch(error){if(missing(error))continue;throw Error('unreadable process ownership '+dir,{cause:error});}
+    }catch(error){if(missing(error))continue;unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
     try{
       const links=['cwd','exe',...readdirSync(join(dir,'fd')).map(fd=>'fd/'+fd)];
       for(const link of links){
         let path:string;
         try{path=readlinkSync(join(dir,link)).replace(/ \(deleted\)$/,'');}
         catch(error){if(missing(error)&&link.startsWith('fd/'))continue;throw error;}
-        if(roots.some(root=>under(resolve(root),path)))throw Error('process '+pid+' owns '+link+' in '+path);
+        if(roots.some(root=>under(resolve(root),path)))throw new ProcessUse('process '+pid+' owns '+link+' in '+path);
       }
     }catch(error){
+      if(error instanceof ProcessUse)throw error;
       let current:string;
       try{const fields=readFileSync(join(dir,'stat'),'utf8').split(') ').at(-1)!.split(' ');if(fields[0]==='Z'||fields[0]==='X')continue;current=fields[19]!;}
-      catch(again){if(missing(again))continue;throw Error('unreadable process ownership '+dir,{cause:error});}
+      catch(again){if(missing(again))continue;unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
       if(current!==birth)continue;
-      throw Error('disk reclamation keeps live or unreadable process root: '+errorText(error),{cause:error});
+      try{
+        const cgroup=readFileSync(join(dir,'cgroup'),'utf8');
+        const lines=cgroup.trim().split('\n'),group=lines.length===1&&/^0::(\/.*)$/.exec(lines[0]!)?.[1];
+        if(!group||group.split('/').some(part=>part==='.'||part==='..'))throw Error('invalid unified cgroup identity');
+        const denied=['EACCES','EPERM'].includes((error as NodeJS.ErrnoException).code??'');
+        if(denied&&!group.split('/').some(part=>/^nts(?:[.-]|$)/.test(part))){
+          const command=readFileSync(join(dir,'comm'),'utf8').trim();
+          ignored.push('ignored non-dumpable outside nts: pid '+pid+' '+command+'; birth '+birth+'; cgroup '+group);
+          continue;
+        }
+        throw Error('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
+      }catch(reason){unreadable.push(Error('disk reclamation keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
     }
   }
+  if(unreadable.length)throw new AggregateError(unreadable,'disk reclamation keeps root: '+unreadable.map(error=>error.message).join('; '));
+  return ignored;
 }
 
 /** A queued/starting service may own a tree before /proc exposes its child. */
@@ -110,7 +131,7 @@ export function assertNoUnitUsers(roots:readonly string[]):void{
   }
 }
 export const liveReclaimOwnership:ReclaimOwnership=(tree,target)=>{
-  assertNoUnitUsers([tree,target]);assertNoProcessUsers([tree,target]);
+  assertNoUnitUsers([tree,target]);return assertNoProcessUsers([tree,target]);
 };
 
 export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
@@ -189,7 +210,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
       if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
       if(!candidate.service)free(tree);
-      options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root);
+      const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
       if(kind==='unbuilt-checkout'){
         // Ignored user files also belong to their author. Only the linker's
         // exact shared input links may disappear with an unbuilt checkout.
@@ -211,7 +232,7 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       else{writable(root);rmSync(root,{recursive:true});}
       deleted=true;
       report.after=options.snapshot().freeBytes;
-      const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.service?'service: obsolete generation only':'detached clean published worktree'];
+      const facts=['same dev/inode/uid and physical ancestors','no live lease/claim','resource lock held','no unit/cwd/exe/fd owner',candidate.service?'service: obsolete generation only':'detached clean published worktree',...ownerFacts];
       const removal:ReclaimRemoval={root,kind,allocatedBytes,freeBytesChange:report.after-before,facts};report.removed.push(removal);
       appendFileSync(join(pool.dir,'.disk-reclaim.log'),JSON.stringify({at:host.wallNow(),...removal})+'\n');
     }catch(error){if(deleted)throw Error('disk reclamation removed '+root+' but could not observe or audit completion',{cause:error});keep(root,error);}finally{lock?.close();}
