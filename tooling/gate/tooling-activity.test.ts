@@ -104,6 +104,7 @@ const result=await running;console.log(JSON.stringify({now,...result}));
 });
 
 test('a missing spawn identity is a named instrument through the actual collector',t=>{
+  for(const completed of [false,true]){
   const root=testScratch(t,'tooling-missing-entry'),staged=join(root,'staged');
   copyModuleClosure(['tooling/gate/tooling-runner.ts'],staged);
   const preload=join(staged,'tooling/gate/tooling-entry-activity.ts'),source=readFileSync(preload,'utf8');
@@ -111,7 +112,8 @@ test('a missing spawn identity is a named instrument through the actual collecto
   assert.equal(source.split(anchor).length,2,'one actual spawn identity boundary');
   writeFileSync(preload,source.replace(anchor,'if(false)this.identities.set(file,'));
   const file=join(root,'missing.test.mjs');
-  writeFileSync(file,"import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
+  writeFileSync(file,completed?"import{test}from'node:test';test('completed without identity',()=>{});\n":
+    "import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
   const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
 import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
 try{await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});throw Error('missing observation was accepted');}
@@ -120,6 +122,8 @@ catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,t
   assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
   assert.equal(observed.kind,'tooling-setup');assert.match(observed.message,/without a completed report/);
   assert.match(observed.transcript,/missing tooling spawn\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
+  assert.match(observed.transcript,completed?/at completion/:/at its idle bound/);
   // The collector's stderr is in the observed output stream, not an inferred
   // application assertion or a manufactured zero-CPU hung observation.
+  }
 });

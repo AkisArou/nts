@@ -44,9 +44,11 @@ export class ToolingEntryActivity {
   private readonly entries=new Map<string,{sample:(value:ToolingActivitySample)=>void;broken:(error:unknown)=>void;cancel?:()=>void}>();
   private readonly listeners=new Set<()=>void>();
   private readonly subscription:(value:unknown)=>void;
+  private readonly files:ReadonlySet<string>;
   constructor(files:ReadonlySet<string>,started:(file:string)=>void,broken:(error:unknown)=>void){
+    this.files=new Set(files);
     this.subscription=value=>{
-      const observed=ownedToolingSpawn(value,files);if(!observed)return;
+      const observed=ownedToolingSpawn(value,this.files);if(!observed)return;
       const {file,child}=observed;
       // The channel's start identifies the actual launch before PID assignment.
       // It arms a named setup backstop even if no spawn/report arrives.
@@ -78,6 +80,10 @@ export class ToolingEntryActivity {
       sample:(cpu,own,busy,processOwn)=>entry.sample({cpu,own,busy,processOwn}),broken:entry.broken});
   }
   sample=():void=>{this.sampler.sample();};
+  verify():void{
+    for(const file of this.files)if(!this.identities.has(file))
+      throw new ToolingInstrumentError('tooling-setup',`missing tooling spawn/activity observation at completion: ${file}`);
+  }
   close():void{
     spawnChannel.unsubscribe(this.subscription);
     for(const forget of this.listeners)forget();

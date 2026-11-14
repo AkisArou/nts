@@ -216,6 +216,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   report.pipe(options.output??process.stdout,{end:false});
   try{await finished(report);}catch(error){if(!hung&&!instrumentError)throw error;}
   if(instrumentError)throw instrumentError;
+  if(!hung)activity?.verify();
   // node:test runs this many files at once when concurrency is true.
   const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
   if(hung){
