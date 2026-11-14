@@ -14,6 +14,19 @@ export function ownedToolingSpawn(value:unknown,files:ReadonlySet<string>):{file
   if(!(row.process instanceof ChildProcess)||row.options?.file!==process.execPath||!Array.isArray(row.options.args)
       ||!row.options.args.every((value:unknown)=>typeof value==='string')||!Array.isArray(row.options.envPairs)
       ||!row.options.envPairs.includes('NODE_TEST_CONTEXT=child-v8'))return;
+  const args=row.options.args;
+  if(args[0]!==process.execPath)return;
+  // The pinned runner passes normalized single-token Node options, with only
+  // its explicit preload pairs separate. NODE_OPTIONS' allowed flag set rules
+  // out eval/print/run and other alternate entry modes without parsing JS.
+  for(let index=1;index<args.length-1;index++){
+    const flag=args[index] as string;
+    if(flag==='--'){if(index!==args.length-2)return;break;}
+    if(!process.allowedNodeEnvironmentFlags.has(flag))return;
+    if(['--import','--require','-r','--loader','--experimental-loader'].includes(flag)){
+      if(++index>=args.length-1)return;
+    }
+  }
   const entry=row.options.args.at(-1);if(typeof entry!=='string'||!files.has(resolve(entry)))return;
   return {file:resolve(entry),child:row.process};
 }

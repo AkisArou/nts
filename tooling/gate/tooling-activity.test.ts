@@ -20,12 +20,19 @@ test('spawn observations bind the actual Node entry and child test environment',
   for(const value of [null,{}, {process:{},options},{process:child,options:{...options,file:'/other-node'}},
     {process:child,options:{...options,args:[process.execPath,'/foreign.test.ts']}},{process:child,options:{...options,envPairs:[]}}])
     assert.equal(ownedToolingSpawn(value,files),undefined);
+  for(const argv of [['--eval','helper()'],['-ehelper()'],['--print','helper()'],['-phelper()'],['helper.mjs'],
+    ['--run','build'],['--import'],['--','helper.mjs']])
+    assert.equal(ownedToolingSpawn({process:child,options:{...options,args:[process.execPath,...argv,'/entry.test.ts']}},files),undefined,JSON.stringify(argv));
+  for(const argv of [[],['--'],['--import','file:///owned/preload.mjs'],['--expose-gc','--import=file:///owned/preload.mjs']])
+    assert.ok(ownedToolingSpawn({process:child,options:{...options,args:[process.execPath,...argv,'/entry.test.ts']}},files),JSON.stringify(argv));
 });
 
 test('closing the activity owner removes its exact channel subscription',()=>{
   const channel=tracingChannel('child_process.spawn').start,before=channel.hasSubscribers;
-  const owner=new ToolingEntryActivity(new Set(),()=>{},error=>{throw error;});
+  let starts=0;const owner=new ToolingEntryActivity(new Set(['/owned.test.ts']),()=>starts++,error=>{throw error;});
   assert.equal(channel.hasSubscribers,true);owner.close();owner.close();assert.equal(channel.hasSubscribers,before);
+  channel.publish({process:new ChildProcess(),options:{file:process.execPath,args:[process.execPath,'/owned.test.ts'],envPairs:['NODE_TEST_CONTEXT=child-v8']}});
+  assert.equal(starts,0,'the closed owner cannot acquire a later matching child');
 });
 
 test('actual spawn acquisition precedes a synchronous first body and any reporter output',async t=>{
