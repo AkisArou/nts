@@ -4,19 +4,40 @@ import {spawn} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {CommandActivitySampler,commandProcessIdentity} from './active-process.ts';
-import {readToolingEntry} from './tooling-entry-activity.ts';
+import {ownedToolingSpawn,ToolingEntryActivity} from './tooling-entry-activity.ts';
+import {ChildProcess} from 'node:child_process';
+import {tracingChannel} from 'node:diagnostics_channel';
 import {testScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
 
-test('entry receipts bind the collector, file, nonce and birth',()=>{
-  const receipt={version:1,nonce:'owned',file:'/entry.test.ts',pid:21,started:100,parent:11};
-  assert.deepEqual(readToolingEntry(receipt,'owned','/entry.test.ts',11),receipt);
-  for(const changed of [null,{}, {...receipt,version:2},{...receipt,nonce:'foreign'},{...receipt,file:'/other.test.ts'},
-    {...receipt,parent:99},{...receipt,pid:0},{...receipt,started:NaN}])
-    assert.throws(()=>readToolingEntry(changed,'owned','/entry.test.ts',11),/entry identity/);
+test('spawn observations bind the actual Node entry and child test environment',()=>{
+  const child=new ChildProcess(),files=new Set(['/entry.test.ts']);
+  const options={file:process.execPath,args:[process.execPath,'/entry.test.ts'],envPairs:['NODE_TEST_CONTEXT=child-v8']};
+  assert.deepEqual(ownedToolingSpawn({process:child,options},files),{file:'/entry.test.ts',child});
+  for(const value of [null,{}, {process:{},options},{process:child,options:{...options,file:'/other-node'}},
+    {process:child,options:{...options,args:[process.execPath,'/foreign.test.ts']}},{process:child,options:{...options,envPairs:[]}}])
+    assert.equal(ownedToolingSpawn(value,files),undefined);
+});
+
+test('closing the activity owner removes its exact channel subscription',()=>{
+  const channel=tracingChannel('child_process.spawn').start,before=channel.hasSubscribers;
+  const owner=new ToolingEntryActivity(new Set(),()=>{},error=>{throw error;});
+  assert.equal(channel.hasSubscribers,true);owner.close();owner.close();assert.equal(channel.hasSubscribers,before);
+});
+
+test('actual spawn acquisition precedes a synchronous first body and any reporter output',async t=>{
+  const root=testScratch(t,'tooling-first-body'),file=join(root,'first.test.mjs'),ready=join(root,'ready');
+  writeFileSync(file,`import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(ready)},'body');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`);
+  let started=0,observedPid=0,output='';const owner=new ToolingEntryActivity(new Set([file]),()=>started++,error=>{throw error;});
+  const cancel=owner.watch(file,sample=>{observedPid=sample.processOwn.pid;},error=>{throw error;});
+  const child=spawn(process.execPath,[file],{env:fixtureEnvironment(t,{NODE_TEST_CONTEXT:'child-v8'}),stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',bytes=>output+=bytes);const closed=new Promise<void>(done=>child.once('close',()=>done()));
+  try{await waitFor('the synchronous first body to enter',()=>existsSync(ready),{stopped:()=>child.exitCode!==null?'child exited':undefined});
+    assert.equal(started,2,'actual launch and actual spawn are observed');assert.equal(observedPid,child.pid);assert.equal(output,'');
+  }finally{child.kill();await closed;cancel();owner.close();}
 });
 
 test('rooted activity includes detached descendants without borrowing a sibling in the same session',()=>{
@@ -75,23 +96,23 @@ const result=await running;console.log(JSON.stringify({now,...result}));
   }
 });
 
-test('an absent bootstrap receipt is a named instrument through the actual collector',t=>{
+test('a missing spawn identity is a named instrument through the actual collector',t=>{
   const root=testScratch(t,'tooling-missing-entry'),staged=join(root,'staged');
   copyModuleClosure(['tooling/gate/tooling-runner.ts'],staged);
   const preload=join(staged,'tooling/gate/tooling-entry-activity.ts'),source=readFileSync(preload,'utf8');
-  const anchor='durableRecord(receiptPath(activity,file),';
-  assert.equal(source.split(anchor).length,2,'one actual receipt publication boundary');
-  writeFileSync(preload,source.replace(anchor,'if(false)durableRecord(receiptPath(activity,file),'));
+  const anchor='this.identities.set(file,';
+  assert.equal(source.split(anchor).length,2,'one actual spawn identity boundary');
+  writeFileSync(preload,source.replace(anchor,'if(false)this.identities.set(file,'));
   const file=join(root,'missing.test.mjs');
-  writeFileSync(file,"import{test}from'node:test';test('missing receipt',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));\n");
+  writeFileSync(file,"import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
   const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
 import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
 try{await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});throw Error('missing observation was accepted');}
 catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,transcript}));}`;
-  const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t),encoding:'utf8'},'missing collector receipt refusal');
+  const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t),encoding:'utf8'},'missing collector spawn refusal');
   assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
   assert.equal(observed.kind,'tooling-setup');assert.match(observed.message,/without a completed report/);
-  assert.match(observed.transcript,/missing tooling entry\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
+  assert.match(observed.transcript,/missing tooling spawn\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
   // The collector's stderr is in the observed output stream, not an inferred
   // application assertion or a manufactured zero-CPU hung observation.
 });

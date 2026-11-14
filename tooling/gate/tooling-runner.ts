@@ -126,7 +126,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   if(options.instrument!==undefined&&(!options.instrument||typeof options.instrument.now!=='function'||typeof options.instrument.scheduleIdle!=='function'
       ||typeof options.instrument.watchActivity!=='function'||typeof options.instrument.sampleActivity!=='function'||!Number.isFinite(options.instrument.frequency)||options.instrument.frequency<=0))
     throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
-  const activity=options.instrument===undefined?new ToolingEntryActivity(names):undefined;
+  const activity=options.instrument===undefined?new ToolingEntryActivity(names,file=>touch(file),error=>broken(error)):undefined;
   const instrument:ToolingInstrument=options.instrument===undefined?{
     now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
     frequency:activity!.frequency,watchActivity:activity!.watch,sampleActivity:activity!.sample,
@@ -164,7 +164,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     entry.cancelIdle=schedule(()=>{
       try{
         instrument.sampleActivity();
-        if(entry.reading===undefined)throw Error(`missing tooling entry/activity observation at its idle bound: ${file}`);
+        if(entry.reading===undefined)throw Error(`missing tooling spawn/activity observation at its idle bound: ${file}`);
         sample(file,entry,entry.reading);if(!hung&&!instrumentError)arm(file,entry);
       }
       catch(error){broken(error);}
@@ -183,7 +183,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   // Each file's own wrapper test marks its process's start and end.
   const clock=instrument.now,begun=clock();
   const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
-  const stream=run({files:[...names],execArgv:[...(options.execArgv??[]),...(activity?['--import',activity.preload]:[])],concurrency:true,signal:controller.signal,setup:events=>{
+  const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
     events.on("test:dequeue",data=>{
       const file=fileOf(data);if(!file)return;
