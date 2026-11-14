@@ -987,6 +987,17 @@ the first node task.
   close before the terminal record
   ([log](records/notebooks/decisions-log.md#runner-delay-and-pressure-11-14)).
 
+- **An owned root can end before its cleanup runs.** The run retains the
+  acquired cgroup device and inode independently of its ownership receipt.
+  Cleanup accepts the same empty root, or an absent path whose exact unit is
+  inactive or unloaded. A changed, populated or live-unreadable root still
+  refuses. Worker PSI retains its last actual counters and observation time,
+  plus the time departure was observed; it supplies no new terminal counters.
+  Worker exposure ends at that real sample, and a new step cannot start after
+  departure. Successful ownership cleanup leaves a canceled run interrupted
+  and non-green
+  ([log](records/notebooks/decisions-log.md#owned-root-departure-11-14)).
+
 - **Derived reader facts preserve the operation and context.** Project callbacks
   and explicitly selected Node scope discovery retain typed non-placing facts,
   alias provenance and immutable byte reads in the canonical graph. Selection
