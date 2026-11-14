@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawn} from 'node:child_process';
-import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {CommandActivitySampler,commandProcessIdentity} from './active-process.ts';
 import {readToolingEntry} from './tooling-entry-activity.ts';
@@ -10,7 +10,6 @@ import {fixtureEnvironment} from './test-environment.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {pathToFileURL} from 'node:url';
-import {readFileSync} from 'node:fs';
 
 test('entry receipts bind the collector, file, nonce and birth',()=>{
   const receipt={version:1,nonce:'owned',file:'/entry.test.ts',pid:21,started:100,parent:11};
@@ -84,14 +83,15 @@ test('an absent bootstrap receipt is a named instrument through the actual colle
   assert.equal(source.split(anchor).length,2,'one actual receipt publication boundary');
   writeFileSync(preload,source.replace(anchor,'if(false)durableRecord(receiptPath(activity,file),'));
   const file=join(root,'missing.test.mjs');
-  writeFileSync(file,"import{test}from'node:test';test('missing receipt',()=>new Promise(()=>{}));\n");
+  writeFileSync(file,"import{test}from'node:test';test('missing receipt',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));\n");
   const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
-import{PassThrough}from'node:stream';const output=new PassThrough();output.resume();
+import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
 try{await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});throw Error('missing observation was accepted');}
-catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message}));}`;
+catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,transcript}));}`;
   const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t),encoding:'utf8'},'missing collector receipt refusal');
   assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
   assert.equal(observed.kind,'tooling-setup');assert.match(observed.message,/without a completed report/);
+  assert.match(observed.transcript,/missing tooling entry\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
   // The collector's stderr is in the observed output stream, not an inferred
   // application assertion or a manufactured zero-CPU hung observation.
 });
