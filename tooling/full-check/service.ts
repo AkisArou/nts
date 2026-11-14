@@ -23,14 +23,14 @@
 //      refused or held, its delta applied again on the newest main and
 //      submitted (seconds; followRecords); then the same for the benchmarks
 //      unit and the run record it kept (followBenchmarks). A unit still
-//      running holds nothing: the cycle goes on;
+//      running holds measurement; records may still be followed;
 //   1. the wide steps on changed `verified`, after their minimum gap, when no
 //      landing is queued/running and no higher-priority memory request waits;
 //      the nightly run crosses the gap, before new benchmarks start;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
 //   3. due benchmarks on the newest `verified`: nts-bench built there, then
-//      measured in the benchmarks unit, beside the core, once the measurement
+//      measured in the benchmarks unit, excluding core/wide/probes, once the measurement
 //      lock admits it with CPU 4 and its sibling 5 quiet: an attempt the lock
 //      does not admit keeps them due, asked again ten minutes later, until
 //      they run or the next nightly slot replaces them. One night's run is in
@@ -64,6 +64,7 @@
 // controller restarted on newer code may start it once more or read what it
 // wrote.
 import { spawnSync } from "node:child_process";
+import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {registerCommandCloser,runAsCommand} from '../differential/command-entry/main.ts';
 import { appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -172,10 +173,27 @@ function beforeRun(fx: Effects):void {
   if (target) throw new ControllerRestart(target);
 }
 
+function benchmarkBusy(fx:Pick<Effects,'units'>,state:State):string|null{
+  let active:boolean;
+  try{active=fx.units.running(BENCH_UNIT);}
+  catch(error){throw new ToolingInstrumentError('tooling-setup','cannot observe nightly benchmark unit '+BENCH_UNIT+': '+message(error),{cause:error});}
+  const retained=state.benchmarks_due?.measuring;
+  return active||retained?'benchmark measurement: '+(retained?.job?.unit??BENCH_UNIT)+' blocks core, wide and probes':null;
+}
+
 async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records" | "benchmarks" | "idle"> {
   housekeeping(fx, state);
   if (await followRecords(fx, state)) return "records";
   if (await followBenchmarks(fx, state)) return "benchmarks";
+  // Benchmarks are a hard exclusion, independent of the nightly idle
+  // deadline. A restarted controller also observes an unrecorded live unit.
+  const benchmark=benchmarkBusy(fx,state);
+  if(benchmark){
+    if(state.wide.waiting!==benchmark)fx.log(benchmark);
+    state.core.waiting=benchmark;state.wide.waiting=benchmark;
+    writeState(fx.layout.state,state);return "idle";
+  }
+  if(state.core.waiting?.startsWith('benchmark measurement:'))delete state.core.waiting;
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
   // With no previous wide result, only nights after scheduling began are
@@ -892,7 +910,7 @@ function answerNightly(fx: Effects, state: State, night: Date, verified: string 
 /**
  * What holds the due benchmarks now, for the status (`benchmarks.due.waiting`);
  * the run that follows writes it down. Nothing holds a night's run that
- * measures: the core runs beside it.
+ * measures: core, wide and probe starts wait for that owned measurement.
  */
 function holds(state: State, what: string): void {
   if (state.benchmarks_due && !state.benchmarks_due.measuring) state.benchmarks_due.waiting = what;

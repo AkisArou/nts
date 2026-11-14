@@ -28,6 +28,7 @@ import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSes
 import {hostEnvironment} from '../gate/canonical-environment.ts';
 import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 import {removable as makeRemovable} from '../gate/run-temporary.ts';
+import {ToolingInstrumentError} from '../gate/step-result.ts';
 import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { recordLandingFixture } from "../landing/verdict-fixture.ts";
 import { measureWithLanding } from "./landing-verdict.ts";
@@ -162,6 +163,46 @@ test("housekeeping names a folder it cannot remove and continues to the other fo
     assert.ok(fx.lines.some(line=>line.startsWith(`kept run ${kept[0]}:`)&&line.includes("EACCES")),fx.lines.join("\n"));
     assert.equal(verified(repo),commit);
   } finally { chmodSync(repo.layout.runs,0o755); makeRemovable(repo.root); }
+});
+
+test('benchmark ownership blocks core, wide and retries independently of the nightly idle deadline',async t=>{
+  for(const route of ['core','wide','probe'] as const)for(const recorded of [false,true]){
+    const repo=repository(t),first=repo.commit({'a.txt':'first'},'first'),gate=fakeGate(repo);
+    const now=new Date('2026-11-06T12:00:00Z'),fx=harness(repo,gate,{now,idle:true});
+    await cycle(fx);
+    const latest=route==='core'||route==='probe'?repo.commit({'a.txt':'changed'},'new main'):first;
+    const state=readState(repo.layout.state);
+    if(route==='wide'){state.wide.since='2026-11-05T00:00:00Z';state.nightly='2026-11-05T00:00:00Z';}
+    if(route==='probe')state.core.last_run={commit:latest,run:'',verdict:'red',at:'2026-11-06T10:00:00Z',failed:['tests'],search:{result:'held control',at:'2026-11-06T10:00:00Z'}};
+    const unit=recorded?'fixture-retained-bench':BENCH_UNIT;
+    assert.equal(fx.units.start({name:unit,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
+    if(recorded)state.benchmarks_due={since:'2026-11-05T00:00:00Z',until:'2026-11-07T03:00:00Z',measuring:{commit:first,run:join(repo.root,'measuring'),at:now.toISOString(),job:{unit,outcome:join(repo.root,'bench.outcome.json'),at:now.toISOString(),starts:1}}};
+    writeState(repo.layout.state,state);
+    const before=gate.measured.length;
+    assert.equal(await cycle(fx),'idle');assert.equal(gate.measured.length,before);
+    const held=readState(repo.layout.state);assert.match(held.core.waiting??'',/benchmark measurement/);assert.ok(held.wide.waiting?.includes(unit));
+    fx.units.stop(unit);
+    // A finished state owner supplies the transition; no wall-time verdict.
+    const released=readState(repo.layout.state);delete released.benchmarks_due;writeState(repo.layout.state,released);
+    await cycle(fx);assert.ok(gate.measured.length>before,'settling the benchmark releases owed measurement');
+  }
+});
+
+test('an unreadable benchmark unit refuses measurement by name',async t=>{
+  const repo=repository(t),gate=fakeGate(repo);repo.commit({'a.txt':'first'},'first');
+  const fx=harness(repo,gate,{idle:true}),running=fx.units.running;
+  fx.units.running=name=>{if(name===BENCH_UNIT)throw Error('supplied manager failure');return running(name);};
+  await assert.rejects(cycle(fx),error=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&error.message.includes('cannot observe nightly benchmark unit')&&error.message.includes('supplied manager failure'));
+  assert.equal(gate.measured.length,0);
+});
+
+test('completed records are applied while a benchmark unit is active',async t=>{
+  const repo=repository(t),gate=fakeGate(repo),fx=harness(repo,gate,{recorder:newCase()});
+  repo.commit(NEW_CASE,'new case');await cycle(fx);
+  assert.equal(fx.units.start({name:BENCH_UNIT,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
+  const measured=gate.measured.length;recordIn(fx);
+  assert.equal(await cycle(fx),'records');assert.equal(gate.measured.length,measured);
+  assert.ok(readState(repo.layout.state).core.records?.submitted);
 });
 
 test("the core runs on the newest main, and verified moves and is pushed on green only", async t => {
@@ -999,7 +1040,7 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   assert.ok(next.lines.some(line => line.includes("already measured")), next.lines.join("\n"));
 });
 
-test("a controller that restarts while nts-bench measures adopts its unit by name, and the core runs beside it; a unit gone without an outcome is started once more, then the night is given up", async t => {
+test("a controller that restarts while nts-bench measures adopts its unit by name, and the core waits for it; a unit gone without an outcome is started once more, then the night is given up", async t => {
   const repo = repository(t), gate = fakeGate(repo), bench = stubBench(), at = machine(repo, gate, { bench });
   const first = repo.commit({ "a.txt": "1\n" }, "verified one");
   await cycle(at(BEFORE));
@@ -1007,12 +1048,13 @@ test("a controller that restarts while nts-bench measures adopts its unit by nam
   assert.equal(await cycle(at(NIGHT)), "benchmarks");
   const { job, run } = readState(repo.layout.state).benchmarks_due!.measuring!;
   assert.deepEqual(job, { unit: BENCH_UNIT, outcome: join(run, BENCH_OUTCOME), at: job!.at, starts: 1 }, "the state names the unit and its outcome");
-  // A controller that restarts finds it measuring, and runs the core on the newest main beside it.
+  // A restarted controller adopts the unit and defers new core work.
   const after = at(new Date(2026, 10, 7, 4, 0)), moved = repo.commit({ "b.txt": "2\n" }, "lands while it measures");
-  assert.equal(await cycle(after), "core");
-  assert.equal(gate.measured.at(-1)!.commit, moved);
+  const before=gate.measured.length;
+  assert.equal(await cycle(after), "idle");
+  assert.equal(gate.measured.length,before);
   assert.equal(after.units.specs.length, 1, "no second benchmarks unit");
-  assert.equal(await cycle(after), "idle", "nothing holds it, and nothing waits for it");
+  assert.equal(await cycle(after), "idle", "measurement remains excluded while benchmarks run");
   // Stopped by hand part way: gone, with no outcome. Started once more, in its tree set up afresh.
   writeFileSync(join(repo.layout.bench, "half-run.txt"), "x\n");
   after.units.stop(BENCH_UNIT);
@@ -1031,6 +1073,7 @@ test("a controller that restarts while nts-bench measures adopts its unit by nam
   assert.ok(given.tasks.some(one => one.line === `- The nightly benchmarks at ${first.slice(0, 12)} did not finish: ${BENCH_UNIT} is gone and wrote no outcome, `
     + `started 2 time(s); see ${join(run, BENCH_UNIT_LOG)}. The next nightly slot measures again.`), JSON.stringify(given.tasks));
   assert.equal(bench.calls.length, 0);
+  assert.equal(await cycle(after), "core");assert.equal(gate.measured.at(-1)!.commit,moved);
 });
 
 test("a refused results commit is published again on the newest main, a held one at once; past its attempts it is a task", async t => {

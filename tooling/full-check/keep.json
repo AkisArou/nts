@@ -10,6 +10,7 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "779": { "kind": "kept", "why": "#779 benchmark exclusion and responsive controller stop controls, retained until coordinator review" },
     "770": { "kind": "kept", "why": "#770 command-forwarder audit, protected Git controls and supported proof, until #770 closes" },
     "757": { "kind": "kept", "why": "#757 event-loop and PSI diagnostic controls, cost and supported proof, until the coordinator reviews the away log" },
     "775": { "kind": "kept", "why": "#775 exact owned-root departure barriers, pressure endpoint and cancellation proofs, until coordinator review" },
