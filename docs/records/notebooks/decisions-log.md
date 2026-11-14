@@ -9,6 +9,18 @@ is in [the records](..).
 
 Dates are 2026.
 
+## Tooling-file liveness begins at spawn (11-14)
+
+Issue #756: a silent tooling entry can remain CPU-active beyond the collector's
+inactivity window. The pinned Node spawn diagnostics bind the real entry's
+ChildProcess, parent and birth before any report. CommandActivitySampler
+attributes rooted descendants independently, and CommandLiveness combines
+that activity with actual test events. Its file policy explicitly delegates
+CPU limits to the enclosing step. Missing observations stay named instrument
+failures; the existing five-minute inactivity guard, completed-failure
+accounting and tooling-slice cancellation remain owned by the collector.
+The spawn subscription and sampler registrations close after its stream drains.
+
 ## Measurement admission takes memory and CPUs together (11-10)
 
 Issue #640: a measurement waiting behind the nightly benchmark held an unused

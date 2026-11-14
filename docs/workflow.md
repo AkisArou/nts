@@ -1242,6 +1242,17 @@ the first node task.
   The gate checks ownership across dependencies and generated launches, and
   runs tooling entries with strict fixture observations and ambient poison.
 
+- **Tooling-file liveness begins at actual spawn.** The collector uses the
+  pinned Node spawn channel to bind the executed entry, parent and PID birth
+  before reporter delivery. The shared command liveness owner observes that
+  entry's rooted descendants: CPU progress, runnable or I/O-blocked threads,
+  and test reports renew inactivity. A file with no progress reaches the
+  named five-minute hang guard. Missing identity or activity fails the
+  instrument. The enclosing step retains its execution budget; file activity
+  introduces no separate CPU cutoff. Observation subscriptions and samplers
+  close with the collector; its existing slice owns cancellation
+  ([log](records/notebooks/decisions-log.md#tooling-file-liveness-begins-at-spawn-11-14)).
+
 - **Fixture tooling comes from its declared closure.** A private test repository
   stages command entries through `copyModuleClosure`, including their imports
   and named assets. A fixture that compiles TypeScript supplies the same
