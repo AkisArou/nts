@@ -2,7 +2,7 @@
 // the same lexical bindings, parents and source positions; they never rebuild
 // those tables. Nothing here outlives the caller's source-file lease.
 import {createRequire} from 'node:module';
-import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration} from 'typescript/ast';
+import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration,BindingName} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
 import {fixtureNamespaces,moduleMemberName,type ModuleDeclarations,type ReaderInput,type DataNamespaces} from './reader-inputs/main.ts';
@@ -46,6 +46,10 @@ export class SourceFacts {
     const ast=this.ast,kind=ast.SyntaxKind;
     for(let at=source.indexOf('\n');at>=0;at=source.indexOf('\n',at+1))this.lines.push(at+1);
     const functions=new Set([kind.FunctionDeclaration,kind.FunctionExpression,kind.ArrowFunction,kind.MethodDeclaration,kind.Constructor,kind.GetAccessor,kind.SetAccessor]);
+    const parameter=(name:BindingName,values:Map<string,SourceBinding>):void=>{
+      if(ast.isIdentifier(name))values.set(name.text,{value:name,kind:'parameter'});
+      else for(const element of name.elements)if(ast.isBindingElement(element))parameter(element.name,values);
+    };
     const visit=(node:Node,scope:Node,functionDepth:number):void=>{
       const start=this.nodes.length;this.nodes.push(node);
       let rows=this.kinds.get(node.kind);if(!rows)this.kinds.set(node.kind,rows=[]);rows.push(node);
@@ -71,7 +75,7 @@ export class SourceFacts {
             else for(const entry of names.elements)this.importNames.set(entry.name.text,module+'.'+(entry.propertyName?.text??entry.name.text));}
         }
       }
-      if(ast.isParameterDeclaration(node)&&ast.isIdentifier(node.name))values.set(node.name.text,{value:node.name,kind:'parameter'});
+      if(ast.isParameterDeclaration(node))parameter(node.name,values);
       if(ast.isVariableDeclaration(node)){
         this.variables.push(node);
         if(node.initializer){

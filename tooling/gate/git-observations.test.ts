@@ -87,6 +87,20 @@ function fixed(root,args){return child.spawnSync('git',['--no-optional-locks',..
   assert.deepEqual(inspect(`const text="command(root,'git',['status'])";data(root,'git',['status']);`),[]);
 });
 
+test('destructured, rest and default command parameters cannot hide the executable from callers',()=>{
+  const rows=forwarders(`import {spawnSync} from 'node:child_process';
+function object(root,{program},args){return spawnSync(program,args);}
+function firstObject({program},args){return spawnSync(program,args);}
+function nestedObject(root,{nested:{program}},args){return spawnSync(program,args);}
+const array=(root,[,program],args)=>spawnSync(program,args);
+function defaultCommand(program='git',args){return spawnSync(program,args);}
+function rest(...program){return spawnSync(program,[]);}
+function correct(program,args=[]){return spawnSync(program,args);}`);
+  assert.equal(rows.length,6);
+  assert.deepEqual(forwarders(`import {spawnSync as launch} from 'node:child_process';
+function shadow(root,{launch},program,args){return launch(program,args);}`),[]);
+});
+
 test('shell facts distinguish arguments from prose, substitutions and redirects',()=>{
   const source=`printf '%s' 'git status'\ncat <<'DATA'\ngit status\nDATA\n"git" '--no-optional-locks' status > output\nresult=$(git status)\n`;
   const rows=inspectShellGit('tooling/control.sh',source,shellCommands(source));

@@ -53,6 +53,25 @@ const pending=import('./dynamic.ts');`;
   }finally{lease.dispose();api.close();}
 });
 
+test('nested parameter patterns shadow imported reader and process aliases lexically',()=>{
+  const api=new API(),source=`import {fileInput as bytes} from './reader-inputs/main.ts';
+import {spawnSync as launch} from 'node:child_process';
+function object({nested:{bytes},...rest},[,{launch}]){
+  bytes(new URL('./private.txt',import.meta.url));launch('git',['status']);consume(rest);
+}
+function defaulted({bytes=()=>null}={}){bytes(new URL('./default.txt',import.meta.url));}
+bytes(new URL('./production.txt',import.meta.url));`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{
+    const facts=new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile);
+    assert.deepEqual(facts.moduleDeclarations().assets,[{path:'./private.txt',kind:'module'},{path:'./default.txt',kind:'module'},{path:'./production.txt',kind:'file'}]);
+    const launch=facts.calls.find(call=>facts.code(call).startsWith("launch('git'"))!;
+    assert.equal(facts.name(launch.expression),'launch');assert.equal(facts.binding(launch.expression)?.kind,'parameter');
+    const rest=facts.calls.find(call=>facts.code(call)==='consume(rest)')!;
+    assert.equal(facts.binding(rest.arguments[0]!)?.kind,'parameter');
+  }finally{lease.dispose();api.close();}
+});
+
 test('generated source is parsed once per parent session and shares its structural rows',()=>{
   const api=new API(),generated=new GeneratedSourceFacts(api,'parent.test.ts');
   try{

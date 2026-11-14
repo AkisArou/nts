@@ -36,8 +36,10 @@ export function inspectCommandForwarders(facts:SourceFacts,offset=0):string[]{
     for(const node of facts.ancestors(call)){
       if(!(ast.isFunctionDeclaration(node)||ast.isFunctionExpression(node)||ast.isArrowFunction(node)
         ||ast.isMethodDeclaration(node)||ast.isConstructorDeclaration(node)||ast.isGetAccessorDeclaration(node)||ast.isSetAccessorDeclaration(node)))continue;
-      const at=node.parameters.findIndex(parameter=>parameter.name===binding.value);
-      if(at>0&&!seen.has(node)){
+      const parameter=[...facts.ancestors(binding.value)].find(node=>ast.isParameterDeclaration(node));
+      const first=node.parameters[0];
+      if(parameter&&node.parameters.includes(parameter)&&first
+        &&!(ast.isIdentifier(first.name)&&first.name===binding.value&&!first.dotDotDotToken&&!first.initializer)&&!seen.has(node)){
         seen.add(node);problems.push(`${facts.file}:${offset+facts.line(call.pos)}: command forwarder must take its command as the first parameter: ${facts.code(call).replace(/\s+/g,' ')}`);
       }
       break;
