@@ -7,11 +7,37 @@ import {testEnvironment} from "../gate/test-environment.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describeUsers, treeUsers } from "./tree-users.ts";
+import { assertNoProcessUsers, describeUsers, observeTreeProcesses, treeUsers } from "./tree-users.ts";
+import {treeProcessFixture} from './tree-users-fixture.ts';
+
+for(const link of ['cwd','exe'])test('an exiting task with absent '+link+' has no owner at that link',t=>{
+  const f=treeProcessFixture(t);rmSync(join(f.task,link));
+  assert.deepEqual(observeTreeProcesses([f.tree],f.options),{users:[],ignored:[],unreadable:[]});
+  assert.deepEqual(treeUsers(f.tree,f.options),[]);
+  assert.deepEqual(assertNoProcessUsers([f.tree],f.options),[]);
+  if(link==='cwd'){
+    rmSync(join(f.task,'exe'));symlinkSync(join(f.tree,'program'),join(f.task,'exe'));
+  }else symlinkSync(join(f.tree,'held'),join(f.task,'fd/3'));
+  assert.deepEqual(treeUsers(f.tree,f.options).map(user=>user.pid),[42],'an absent link cannot hide another live owner');
+});
+
+test('non-ENOENT process failures retain strict cgroup provenance',t=>{
+  const f=treeProcessFixture(t);
+  rmSync(join(f.task,'cwd'));writeFileSync(join(f.task,'cwd'),'not a proc link');
+  assert.throws(()=>treeUsers(f.tree,f.options),/live unreadable tool process 42.*EINVAL/);
+  rmSync(join(f.task,'cwd'));symlinkSync('/outside',join(f.task,'cwd'));
+  chmodSync(join(f.task,'fd'),0);
+  try{
+    assert.throws(()=>treeUsers(f.tree,f.options),/live unreadable tool process 42/);
+    assert.throws(()=>assertNoProcessUsers([f.tree],f.options),/live unreadable tool process 42/);
+    writeFileSync(join(f.task,'cgroup'),'0::/user.slice/session-2.scope\n');
+    assert.match(assertNoProcessUsers([f.tree],f.options).join('\n'),/ignored non-dumpable outside nts: pid 42/);
+  }finally{chmodSync(join(f.task,'fd'),0o700);}
+});
 
 /**
  * A `cat` that runs until its input closes, started from `binary` in `cwd`.

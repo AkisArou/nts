@@ -11,7 +11,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
+import { COLD_TARGET_BYTES, describePool, DISK_MARGIN_BYTES, IDLE_LIMIT_MS, Pool, PoolFull, pruneLines, reportPoolStatus, statusJson, WARM_MINIMUM, type PoolOptions } from "./pool.ts";
 import {treeUsers} from "./tree-users.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 import {ownMemory} from '../gate/test-memory.ts';
@@ -267,6 +267,24 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
   assert.deepEqual(names(p), ["1 free", "2 held fix/b"]);
   assert.equal(p.trees()[0]!.head, s.git(["rev-parse", "main"]), "at the newest main");
   assert.equal(p.landed().size, 0);
+});
+
+test('read-only pool status names a failed ownership observation while reset still refuses',t=>{
+  let unreadable=false;
+  const failure=Error('EACCES: supplied unreadable tool process');
+  const {s,p}=pool(t,2,{users:()=>{if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];}});
+  const a=p.take('fix/status'),tip=s.git(['rev-parse','HEAD'],a.path);
+  assert.equal(p.release('fix/status',tip).state,'kept');unreadable=true;
+  assert.throws(()=>p.trees(),error=>error===failure);
+  assert.throws(()=>p.prune({now:NOW}),error=>error===failure);
+  const trees=p.statusTrees();assert.equal(trees[0]!.ownershipError,failure.message);
+  assert.equal(trees[1]!.state,'free');
+  const output:string[]=[];t.mock.method(console,'log',(...values:unknown[])=>output.push(values.map(String).join(' ')));
+  assert.equal(reportPoolStatus(p),0);assert.match(output.pop()!,/ownership observation failed; kept: EACCES/);
+  assert.equal(reportPoolStatus(p,true),0);
+  const model=JSON.parse(output.pop()!) as {trees:{path:string;ownership_error?:string}[]};
+  assert.equal(model.trees[0]!.path,a.path);assert.equal(model.trees[0]!.ownership_error,failure.message);
+  assert.equal(s.git(['rev-parse','HEAD'],a.path),tip,'read-only reporting never resets the tree');
 });
 
 test("a landed branch that moves on is its task's again: its mark goes and its tree stays held", async t => {

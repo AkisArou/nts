@@ -12,7 +12,7 @@ import {TEST_PROFILE} from './test-profile.ts';
 import {hostObservations,type HostObservations} from './host-observations.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 import {durableRecord} from './durable-record.ts';
-import {treeUsers} from '../landing/tree-users.ts';
+import {treeUsers,type TreeProcessOptions} from '../landing/tree-users.ts';
 import {defaultSlots} from './budget.ts';
 
 export type FootprintSample={elapsedMs:number;allocatedBytes:number;outputs:Record<string,number>};
@@ -24,9 +24,14 @@ export function buildFootprintSample(outputs:readonly {name:string;path:string}[
   return {elapsedMs:host.now()-began,allocatedBytes:Object.values(measured).reduce((sum,bytes)=>sum+bytes,0),outputs:measured};
 }
 
+/** Shared ownership decision before any cold-build cleanup or Cargo launch. */
+export function assertColdBuildOutputsUnused(outputs:readonly {path:string}[],options:TreeProcessOptions={}):void{
+  for(const output of outputs){const users=treeUsers(output.path,options);if(users.length)throw Error('cold build output is in use: '+output.path+' ('+users.map(user=>user.pid).join(', ')+')');}
+}
+
 export async function measureColdBuild(root:string,target:string,env:NodeJS.ProcessEnv):Promise<ColdBuildFootprint> {
   const host=hostObservations(env),outputs=innerBuildOutputs(target);
-  for(const output of outputs){const users=treeUsers(output.path);if(users.length)throw Error('cold build output is in use: '+output.path+' ('+users.map(user=>user.pid).join(', ')+')');}
+  assertColdBuildOutputsUnused(outputs);
   const checked=(options:string[])=>{
     const ran=spawnSync('cargo',['clean',...options],{cwd:root,env,stdio:'inherit'});
     if(ran.error||ran.status!==0)throw Error('cold build cache preparation: '+(ran.error?.message??ran.signal??ran.status));

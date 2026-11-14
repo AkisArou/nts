@@ -65,6 +65,8 @@ export type PoolTree = {
   movedAt: number | null;
   /** What still uses a landed tree (tree-users.ts); read for landed trees only. */
   users: TreeUser[];
+  /** Read-only status could not establish ownership. Never an idle verdict. */
+  ownershipError?: string;
 };
 /** A tree with its cargo target measured; null when it has none yet. */
 export type MeasuredTree = PoolTree & { targetBytes: number | null };
@@ -159,7 +161,10 @@ export class Pool {
   private mark(branch: string, sha: string): void { checked(this.git, ["update-ref", `${LANDED_REFS}${branch}`, sha], this.git.root); }
   private forget(branch: string | null): void { if (branch) run(this.git, ["update-ref", "-d", `${LANDED_REFS}${branch}`], this.git.root); }
   /** Every tree of the pool, by number, with what holds it. */
-  trees(): PoolTree[] {
+  trees(): PoolTree[] { return this.readTrees(false); }
+  /** An observation failure is display data only; decision callers use trees. */
+  statusTrees(): PoolTree[] { return this.readTrees(true); }
+  private readTrees(reportOwnershipError:boolean): PoolTree[] {
     const registered = new Map(worktrees(this.git).map(t => [resolve(t.path), t]));
     const main = revParse(this.git, "refs/heads/main"), landed = this.landed();
     return this.names().map(name => {
@@ -170,12 +175,17 @@ export class Pool {
       // A branch marked landed at the commit its tree is still on: the task is done there.
       const done = tree.branch !== null && landed.get(tree.branch) === tree.head;
       const state: TreeState = done ? "landed" : tree.branch ? "held" : changes.length ? "dirty" : "free";
+      let users:TreeUser[]=[],ownershipError:string|undefined;
+      if(done)try{users=this.users(path);}catch(error){
+        if(!reportOwnershipError)throw error;
+        ownershipError=error instanceof Error?error.message:String(error);
+      }
       return { name, path, state, branch: tree.branch, head: tree.head, changes, ahead: ahead ?? 0, behind: behind ?? 0, movedAt: this.movedAt(path),
-        users: done ? this.users(path) : [] };
+        users,...(ownershipError?{ownershipError}:{}) };
     });
   }
   /** Every tree, with its target measured. */
-  measured(): MeasuredTree[] { return this.trees().map(t => ({ ...t, targetBytes: this.target(t.path) })); }
+  measured(trees:readonly PoolTree[]=this.trees()): MeasuredTree[] { return trees.map(t => ({ ...t, targetBytes: this.target(t.path) })); }
 
   /** Whether the disk can host one more tree (`Room`). */
   room(trees: readonly MeasuredTree[] = this.measured()): Room {
@@ -393,7 +403,8 @@ export function describePool(trees: readonly (PoolTree | MeasuredTree)[], now = 
     const task = t.state === "landed" ? `landed ${t.branch}` : t.branch ? `task ${t.branch}` : t.state;
     const where = t.state === "missing" ? "" : `${t.ahead ? `${t.ahead} ahead of main` : ""}${t.ahead && t.behind ? ", " : ""}${t.behind ? `${t.behind} behind` : ""}`;
     const changes = t.changes.length ? `, ${t.changes.length} uncommitted` : "";
-    const landed = t.state !== "landed" ? "" : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
+    const landed = t.ownershipError ? `, ownership observation failed; kept: ${t.ownershipError}`
+      : t.state !== "landed" ? "" : t.users.length ? `, kept while ${using(t.users)}` : t.changes.length ? "" : ", reset at the next upkeep";
     const idle = t.movedAt === null ? "" : `, idle ${idleFor(now - t.movedAt)}`;
     const target = "targetBytes" in t ? `, ${t.targetBytes === null ? "no target" : `target ${gb(t.targetBytes)}`}` : "";
     return `  ${t.name.padStart(2)}  ${t.path}  ${task}${where ? ` (${where})` : ""}${changes}${landed}${idle}${target}`;
@@ -414,8 +425,17 @@ export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Ro
       name: t.name, path: t.path, state: t.state, task: t.branch, head: t.head, ahead: t.ahead, behind: t.behind, uncommitted: t.changes.length,
       moved_at: t.movedAt === null ? null : new Date(t.movedAt).toISOString(), idle_ms: t.movedAt === null ? null : Math.max(0, now - t.movedAt), target_bytes: t.targetBytes,
       users: t.users.map(user => ({ pid: user.pid, command: user.command, where: user.where })),
+      ...(t.ownershipError?{ownership_error:t.ownershipError}:{}),
     })),
   };
+}
+
+/** Read-only reporting never turns an unknown owner into a reset decision. */
+export function reportPoolStatus(pool:Pool,json=false):number{
+  const trees=pool.measured(pool.statusTrees()),room=pool.room(trees);
+  if(json)console.log(JSON.stringify(statusJson(pool.dir,trees,room),null,2));
+  else console.log(`pool ${pool.dir}: ${trees.length} tree${trees.length===1?"":"s"}, ${describeRoom(room)}\n${describePool(trees)}`);
+  return 0;
 }
 
 /** The upkeep's lines, for the full check's log. */
@@ -442,9 +462,7 @@ function main(argv: string[]): number {
     const issue = value("--issue");
     const target = command === "take" && issue !== undefined ? issueBranch(Number(issue), value("--slug")) : args[1];
     if (command === "status" || command === undefined) {
-      const trees = pool.measured(), room = pool.room(trees);
-      if (args.includes("--json")) console.log(JSON.stringify(statusJson(pool.dir, trees, room), null, 2));
-      else console.log(`pool ${pool.dir}: ${trees.length} tree${trees.length === 1 ? "" : "s"}, ${describeRoom(room)}\n${describePool(trees)}`);
+      return reportPoolStatus(pool,args.includes("--json"));
     } else if (command === "take" && target) { const t = pool.take(target); console.log(`${t.path}\n  task ${t.branch}, at ${t.head.slice(0, 12)}`); }
     else if (command === "give" && target) {
       const given = pool.give(target, { discard: args.includes("--discard") });

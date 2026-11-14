@@ -207,7 +207,7 @@ test('process ownership includes cwd, executable and open files and refuses unre
   rmSync(join(pid,'exe'));symlinkSync('/outside/node',join(pid,'exe'));symlinkSync(join(root,'data')+' (deleted)',join(pid,'fd/7'));
   assert.throws(()=>assertNoProcessUsers([root],{proc}),/42 owns fd\/7/);
   rmSync(join(pid,'fd/7'));assert.doesNotThrow(()=>assertNoProcessUsers([root],{proc}));
-  rmSync(join(pid,'exe'));assert.throws(()=>assertNoProcessUsers([root],{proc}),/keeps unreadable process/);
+  rmSync(join(pid,'exe'));assert.doesNotThrow(()=>assertNoProcessUsers([root],{proc}));
   symlinkSync('/outside/node',join(pid,'exe'));writeFileSync(join(pid,'comm'),'non-dumpable\n');
   writeFileSync(join(pid,'cgroup'),'0::/user.slice/session-2.scope\n');chmodSync(join(pid,'fd'),0);
   try{

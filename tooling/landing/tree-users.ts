@@ -36,7 +36,7 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
       const inspect=(link:string):boolean=>{
         let path:string;
         try{path=readlinkSync(join(dir,link)).replace(/ \(deleted\)$/,'');}
-        catch(error){if(missing(error)&&link.startsWith('fd/'))return false;throw error;}
+        catch(error){if(missing(error))return false;throw error;}
         const root=normalized.find(root=>under(root,path));if(!root)return false;
         const command=readFileSync(join(dir,'comm'),'utf8').trim()||'?';
         const shown=relative(root,path)||'.';

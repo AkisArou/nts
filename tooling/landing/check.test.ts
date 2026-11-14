@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
+import {landingStatus,status} from './check.ts';
+import {Pool} from './pool.ts';
+import {hostObservations} from '../gate/host-observations.ts';
+import {ownMemory} from '../gate/test-memory.ts';
 
 const CHECK = fileURLToPath(new URL("./check.ts", import.meta.url));
 
@@ -108,4 +112,23 @@ test("status --json is the same state, versioned, with numbers as numbers and ea
   assert.equal(s.main.commit, sha);
   assert.deepEqual(s.pool.trees, []);
   assert.match(c.run(["status"]).out, /^last day: 1 landed \(median 2\.1 min, longest 2\.1 min\), 0 refused, 0 held, 0 withdrawn$/m, "the text is rendered from the same model");
+});
+
+test('landing status reports an ownership failure on its tree line and returns success',t=>{
+  const c=cli(t);c.s.commit({'Cargo.toml':'[workspace]\n[profile.nts-dev]\ndebug=0\n','.gitignore':'target/\n'},'fixture build policy');
+  const home=join(c.home,'.cache/nts-pool'),failure=Error('EACCES: supplied unreadable tool process');let unreadable=false;
+  const host=hostObservations(ownMemory(join(c.s.dir,'observations'),{disk:{freeBytes:1000*2**30,freeInodes:2**30}}));
+  const pool=new Pool(home,{root:c.s.root,env:c.s.env},undefined,{host,remote:null,reclamation:{services:[],ownership:()=>{}},users:()=>{
+    if(unreadable)throw failure;return [{pid:42,command:'worker',where:'its working directory'}];
+  }});
+  pool.init(1);const tree=pool.take('787-status'),tip=c.s.git(['rev-parse','HEAD'],tree.path);
+  assert.equal(pool.release('787-status',tip).state,'kept');unreadable=true;
+  const model=landingStatus(c.s.root,c.landing,home,0,pool);
+  assert.equal(model.pool.trees[0]!.ownershipError,failure.message);
+  const output:string[]=[];t.mock.method(console,'log',(...values:unknown[])=>output.push(values.map(String).join(' ')));
+  for(const json of [false,true]){
+    assert.equal(status(c.s.root,json,model),0);
+    const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
+  }
+  assert.throws(()=>pool.trees(),error=>error===failure,'status diagnostics cannot certify ownership for reset');
 });

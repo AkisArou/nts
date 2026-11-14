@@ -118,7 +118,7 @@ export type LandingStatus = {
 const RECENT = 50;
 const DAY_MS = 86_400_000;
 
-export function landingStatus(root: string, home = LANDING_HOME, pool = POOL_HOME, now = Date.now()): LandingStatus {
+export function landingStatus(root: string, home = LANDING_HOME, pool = POOL_HOME, now = Date.now(), poolOwner:Pick<Pool,'statusTrees'>=new Pool(pool,{root})): LandingStatus {
   const queue = new Queue(home), s = queue.status(), pid = holder(join(home, "serve.lock"));
   const issue = (branch: string | null) => branch === null ? null : issueOfBranch(branch);
   const change = (e: Entry): Change => ({ id: e.id, sha: e.sha, branch: e.branch, issue: issue(e.branch), by: e.by, first: e.first, submitted_at: e.submitted_at, note: e.note ?? null });
@@ -143,7 +143,7 @@ export function landingStatus(root: string, home = LANDING_HOME, pool = POOL_HOM
       landing: r.landing ?? [], deferred: r.deferred ?? [], pending: r.pending?.length ?? 0,
     })),
     main: { commit: main, pushed: main === null || remote === null ? null : main === remote },
-    pool: { home: pool, trees: new Pool(pool, { root }).trees().map(tree => ({ ...tree, issue: issue(tree.branch) })) },
+    pool: { home: pool, trees: poolOwner.statusTrees().map(tree => ({ ...tree, issue: issue(tree.branch) })) },
   };
 }
 
@@ -167,8 +167,7 @@ export function statusText(m: LandingStatus): string {
   return lines.join("\n");
 }
 
-function status(root: string, json: boolean): number {
-  const model = landingStatus(root);
+export function status(root: string, json: boolean, model:LandingStatus=landingStatus(root)): number {
   console.log(json ? JSON.stringify(model, null, 2) : statusText(model));
   return 0;
 }
