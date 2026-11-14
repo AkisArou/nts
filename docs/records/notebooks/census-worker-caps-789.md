@@ -90,6 +90,6 @@ A copied preflight launcher accidentally overwrote four historical #786 artifact
 
 ## Raw evidence
 
-Manifest: `/home/akisarou/.cache/nts-scratch/789/raw-evidence-v1.json`; SHA-256 `eead5af6f6dfbc9530bd8b6f6f9588079beca88e1380ab8ce69ae310491be7ca`. Authentication covers 271,412 artifacts / 3,031,509,702 bytes and 30 Git source receipts, with zero errors.
+Retained manifest: `/home/akisarou/.cache/nts-scratch/789/retained-v1/manifest.json`; SHA-256 `6613c6e842da5d8b0cdccab185a2b952988bd886e9548ab2f3f2d95ef692228c`. It binds 551 retained artifact files / 247,055,272 encoded bytes and 30 Git source receipts. The original independent authentication covered 271,412 artifacts / 3,031,509,702 bytes with zero errors; that full index is historical after pruning.
 
-Raw outputs remain in the kept `/home/akisarou/.cache/nts-scratch/789` folder; no raw JSON is committed. The manifest lists immutable artifacts and Git source receipts. Its full per-case references preserve the underlying observations rather than substituting the tables for them.
+Raw outputs remain in the kept `/home/akisarou/.cache/nts-scratch/789` folder; no raw JSON is committed. Complete per-arm summaries and large raw streams use lossless gzip. Six `tar+gzip` phase archives consolidate 264,304 exact native/worker/queue files; the manifest records their membership counts and bytes, and retained per-case rows keep the table directly readable. Expected outcome TSVs and actual comparison/pending logs remain distinct; no missing full observed-outcome map is invented. The small existing #492/#786/#761 citation anchors stay at their original paths. Regenerable run trees, package installations, compiled outputs and duplicate materializations are retired only after this citation lands.
