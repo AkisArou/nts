@@ -220,11 +220,12 @@ test('a named controller stop interrupts an active synchronous pinned measuremen
   nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
   const ready=join(repo.dir,'active.json'),outcome=join(repo.dir,'interrupted.json');
   const body=generatedJavaScript(`import {writeFileSync} from 'node:fs';
+import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 import {runAsCommand,registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
 runAsCommand(import.meta.url,async()=>{
   const timer=setInterval(()=>{},1000);
   registerCommandCloser('active measurement child',{close:()=>{clearInterval(timer);writeFileSync(${JSON.stringify(ready)}+'.closed','closed');}});
-  writeFileSync(${JSON.stringify(ready)},JSON.stringify({slice:process.env.NTS_TOOLING_SLICE}));
+  durableRecord(${JSON.stringify(ready)},{slice:process.env.NTS_TOOLING_SLICE});
   await new Promise(()=>{});
 });`);
   const script=`#!/bin/sh
@@ -239,13 +240,13 @@ exec node "$NTS_GATE_TREE/subject.ts"
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private active-stop environment']);
   const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':body},'active measurement');
   const file=join(repo.dir,'controller.mjs'),env={...hostEnvironment(process.env),...ownMemory(join(repo.dir,'machine')),HOME:repo.dir};
-  writeFileSync(file,generatedJavaScript(`import {writeFileSync} from 'node:fs';
+  writeFileSync(file,generatedJavaScript(`import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 import {pinnedGate} from ${JSON.stringify(new URL('./measure.ts',import.meta.url).href)};
 import {waitForControllerCycle} from ${JSON.stringify(new URL('./service.ts',import.meta.url).href)};
 import {runAsCommand} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
 runAsCommand(import.meta.url,async()=>{
   const result=pinnedGate(${JSON.stringify(paths)},${JSON.stringify(repo.root)},console.log,{nodeInstallations:${JSON.stringify(installations)},env:${JSON.stringify(env)}}).run(${JSON.stringify(commit)},['tooling'],'core');
-  writeFileSync(${JSON.stringify(outcome)},JSON.stringify(result));
+  durableRecord(${JSON.stringify(outcome)},result);
   await waitForControllerCycle(60_000);
 });`));
   const unit='nts-test-controller-active-'+randomUUID();let output='',ended=false;
