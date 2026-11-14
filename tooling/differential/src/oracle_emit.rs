@@ -18,19 +18,9 @@ pub(super) struct Prepared {
     pub(super) assets: Utf8PathBuf,
 }
 
-const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
-    (
-        "command-entry/main.ts",
-        include_str!("../command-entry/main.ts"),
-    ),
-    (
-        "oracle-seal/main.ts",
-        include_str!("../oracle-seal/main.ts"),
-    ),
-    (
-        "runtime-paths/main.ts",
-        include_str!("../runtime-paths/main.ts"),
-    ),
+// Execution files have one inventory in oracle_run. Preparation adds its own
+// assets; both source validation and materialization consume this union.
+const PREPARATION_FILES: &[(&str, &str)] = &[
     (
         "oracle-result-publisher.ts",
         include_str!("../oracle-result-publisher.ts"),
@@ -43,16 +33,7 @@ const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
         "oracle-child-bootstrap.ts",
         include_str!("../oracle-child-bootstrap.ts"),
     ),
-    ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
-    (
-        "oracle-execution.ts",
-        include_str!("../oracle-execution.ts"),
-    ),
-    (
-        "oracle-execution-policy.ts",
-        include_str!("../oracle-execution-policy.ts"),
-    ),
     ("oracle-loader.ts", include_str!("../oracle-loader.ts")),
     ("oracle-assets.ts", include_str!("../oracle-assets.ts")),
     (
@@ -72,13 +53,20 @@ const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
     ("package.json", "{\"type\":\"module\"}\n"),
 ];
 
+fn implementation_files() -> impl Iterator<Item = (&'static str, &'static [u8])> {
+    PREPARATION_FILES
+        .iter()
+        .map(|&(name, bytes)| (name, bytes.as_bytes()))
+        .chain(super::oracle_run::EXECUTION_FILES.iter().copied())
+}
+
 pub(super) fn verify_source(root: &Utf8Path) -> Result<()> {
-    for &(name, bytes) in IMPLEMENTATION_FILES {
+    for (name, bytes) in implementation_files() {
         if name == "package.json" {
             continue;
         }
         anyhow::ensure!(
-            std::fs::read(root.join(name))? == bytes.as_bytes(),
+            std::fs::read(root.join(name))? == bytes,
             "oracle source-owned producer {name} identity changed"
         );
     }
@@ -87,7 +75,7 @@ pub(super) fn verify_source(root: &Utf8Path) -> Result<()> {
 
 fn materialize(directory: &Utf8Path) -> Result<Utf8PathBuf> {
     std::fs::create_dir_all(directory)?;
-    for &(name, bytes) in IMPLEMENTATION_FILES {
+    for (name, bytes) in implementation_files() {
         let target = directory.join(name);
         std::fs::create_dir_all(target.parent().context("oracle asset has no parent")?)?;
         std::fs::write(target, bytes)?;
@@ -1688,8 +1676,21 @@ mod tests {
             std::fs::read_to_string(assets.join("package.json")).unwrap(),
             "{\"type\":\"module\"}\n"
         );
-        for &(file, bytes) in super::super::oracle_run::EXECUTION_FILES {
-            assert_eq!(std::fs::read(assets.join(file)).unwrap(), bytes);
+        let mut names = std::collections::HashSet::new();
+        for (file, bytes) in super::implementation_files() {
+            assert!(names.insert(file), "duplicate embedded oracle asset: {file}");
+            assert_eq!(
+                std::fs::read(assets.join(file))
+                    .unwrap_or_else(|error| panic!("embedded oracle asset {file}: {error}")),
+                bytes,
+                "embedded oracle asset {file} changed"
+            );
+        }
+        for &(file, _) in super::super::oracle_run::EXECUTION_FILES {
+            assert!(
+                names.contains(file),
+                "execution asset was not materialized: {file}"
+            );
         }
     }
 
