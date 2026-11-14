@@ -973,7 +973,7 @@ test("the declared host project reader places its own configuration",()=>{
 test("the sealed harness runtime reaches the same consumers as the execution inventory",()=>{
   const steps=stepsFor('tooling/differential/oracle-node-harness.ts');
   assert.deepEqual([...steps].sort(),[...stepsFor('tooling/differential/oracle-execution.ts')].sort());
-  for(const name of ['tooling','outcomes','program-oracles','typescript-oracles','tests'])assert.ok(steps.has(name),name);
+  for(const name of ['tooling','outcomes','program-oracles','typescript-oracles','tests'])assert.ok(steps.includes(name),name);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {
