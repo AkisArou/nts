@@ -12,9 +12,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { test } from "node:test";
+import {spawn} from "node:child_process";
 import { fullCheckCeiling, pinnedGate, readSummary, verdictOf } from "./measure.ts";
 import { newTestScratch } from "../gate/test-scratch.ts";
-import { spawnTest } from "../gate/test-wait.ts";
+import { spawnTest,waitFor } from "../gate/test-wait.ts";
 import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "../gate/tooling-slice.ts";
 import {layout} from "./state.ts";
 import {scratchRepo} from "../landing/scratch-repo.ts";
@@ -208,4 +209,62 @@ test("a platform's programs left unrun pass while the policy lets it stay unrun,
   const none = readSummary(run, COMMIT, both, { platforms: [], policy: "a policy" });
   assert.equal(none.reasons.interop, [macos, windows].map((line, i) => `${["apple", "windows"][i]} programs did not run, and a policy lets no platform stay unrun: ${line}`).join("; "));
   assert.equal(verdictOf(none.steps), "held");
+});
+
+
+test('a named controller stop interrupts an active synchronous pinned measurement',async t=>{
+  const repo=scratchRepo(t,'full-check-active-stop'),paths=layout(repo.dir),installations=join(repo.dir,'installed');
+  candidateEnvironmentFixture(repo.root);
+  nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
+  const ready=join(repo.dir,'active.json'),outcome=join(repo.dir,'interrupted.json');
+  const body=generatedJavaScript(`import {writeFileSync} from 'node:fs';
+import {runAsCommand,registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
+runAsCommand(import.meta.url,async()=>{
+  const timer=setInterval(()=>{},1000);
+  registerCommandCloser('active measurement child',{close:()=>{clearInterval(timer);writeFileSync(${JSON.stringify(ready)}+'.closed','closed');}});
+  writeFileSync(${JSON.stringify(ready)},JSON.stringify({slice:process.env.NTS_TOOLING_SLICE}));
+  await new Promise(()=>{});
+});`);
+  const script=`#!/bin/sh
+if [ -n "$NTS_GATE_SETUP_ONLY" ];then
+  mkdir -p "$NTS_GATE_TREE"
+  git archive "$1" | tar -x -C "$NTS_GATE_TREE"
+  exit 0
+fi
+[ "$1" = --environment-ready ] && shift
+exec node "$NTS_GATE_TREE/subject.ts"
+`;
+  repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private active-stop environment']);
+  const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':body},'active measurement');
+  const file=join(repo.dir,'controller.mjs'),env={...hostEnvironment(process.env),...ownMemory(join(repo.dir,'machine')),HOME:repo.dir};
+  writeFileSync(file,generatedJavaScript(`import {writeFileSync} from 'node:fs';
+import {pinnedGate} from ${JSON.stringify(new URL('./measure.ts',import.meta.url).href)};
+import {waitForControllerCycle} from ${JSON.stringify(new URL('./service.ts',import.meta.url).href)};
+import {runAsCommand} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
+runAsCommand(import.meta.url,async()=>{
+  const result=pinnedGate(${JSON.stringify(paths)},${JSON.stringify(repo.root)},console.log,{nodeInstallations:${JSON.stringify(installations)},env:${JSON.stringify(env)}}).run(${JSON.stringify(commit)},['tooling'],'core');
+  writeFileSync(${JSON.stringify(outcome)},JSON.stringify(result));
+  await waitForControllerCycle(60_000);
+});`));
+  const unit='nts-test-controller-active-'+randomUUID();let output='',ended=false;
+  const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--unit='+unit,
+    '-p','KillMode=control-group','-p','TimeoutStopSec=120s','-p','LimitCORE=0','-p','Nice=19',
+    '--','taskset','-c','0-3,6-31',process.execPath,file],{env:hostEnvironment(process.env),stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
+  const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',code=>{ended=true;resolve(code);});});
+  let slice:string|undefined;
+  try{
+    await waitFor('the actual pinned measurement to enter its body',()=>existsSync(ready),{stopped:()=>ended?output:undefined});
+    slice=(JSON.parse(readFileSync(ready,'utf8')) as {slice:string}).slice;
+    const stopped=spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});assert.equal(stopped.status,0,stopped.stderr);
+    assert.equal(await closed,143,output);
+    assert.equal(readFileSync(ready+'.closed','utf8'),'closed','the measured child drains on the unit stop');
+    assert.equal((JSON.parse(readFileSync(outcome,'utf8')) as {verdict:string}).verdict,'held','interruption never becomes a product verdict');
+    const scope=spawnTest('systemctl',['--user','show',slice,'-p','ActiveState','--value'],{encoding:'utf8'});
+    assert.equal(scope.stdout.trim(),'inactive',scope.stderr);
+    const lock=GateResource.tryAcquire(paths.tree+'.lock');assert.ok(lock,'synchronous launch releases its tree lock');lock.close();
+    assert.doesNotMatch(output,/wedged drain|timed out|Killing/);
+  }finally{
+    spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});if(slice)stopToolingSlice(slice);await closed;
+  }
 });

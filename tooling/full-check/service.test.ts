@@ -198,6 +198,20 @@ test('core and its probes continue while benchmarks hold wide work',async t=>{
   }
 });
 
+test('an existing wide culprit retry waits for benchmarks and resumes after they leave',async t=>{
+  const repo=repository(t),gate=fakeGate(repo),now=new Date('2026-11-06T12:00:00Z'),fx=harness(repo,gate,{now});
+  const first=repo.commit({'a.txt':'first'},'first');await cycle(fx);
+  const second=repo.commit({'a.txt':'second'},'second');await cycle(fx);
+  const state=readState(repo.layout.state);
+  state.wide.last_green={commit:first,run:'old-green',verdict:'green',at:now.toISOString(),failed:[]};
+  state.wide.last_run={commit:second,run:'old-red',verdict:'red',at:now.toISOString(),failed:['integrity'],search:{result:'held control',at:'2026-11-06T10:00:00Z'}};
+  writeState(repo.layout.state,state);
+  assert.equal(fx.units.start({name:BENCH_UNIT,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
+  const before=gate.measured.length;assert.equal(await cycle(fx),'idle');assert.equal(gate.measured.length,before);
+  fx.units.stop(BENCH_UNIT);assert.equal(await cycle(fx),'wide');
+  assert.ok(gate.measured.slice(before).some(row=>row.label==='wide-probe'));
+});
+
 test('an unreadable benchmark unit refuses measurement by name',async t=>{
   const repo=repository(t),gate=fakeGate(repo);repo.commit({'a.txt':'first'},'first');
   const fx=harness(repo,gate,{idle:true}),running=fx.units.running;
