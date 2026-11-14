@@ -1190,13 +1190,13 @@ test("a nightly slot that comes while a night's run measures does not replace it
   await cycle(night);
   const answered = readState(repo.layout.state).nightly;
   const next = at(NEXT_NIGHT);
-  assert.equal(await cycle(next), "wide", "the next nightly wide attempt can run beside the existing benchmark unit");
+  assert.equal(await cycle(next), "idle", "the next nightly wide attempt waits for the existing benchmark unit");
   const still = readState(repo.layout.state);
   assert.deepEqual([still.nightly, still.benchmarks_due?.measuring?.commit], [answered, first], "the run measures on, and the slot waits for it");
   assert.ok(!next.lines.some(line => line.includes("replaced the night")), next.lines.join("\n"));
   measureIn(next);
   assert.equal(await cycle(next), "benchmarks");
-  await cycle(next);
+  assert.equal(await cycle(next), "wide", "the deferred nightly wide attempt starts once measurement ends");
   assert.ok(next.lines.some(line => line.includes(`already measured verified ${first.slice(0, 12)}`)), next.lines.join("\n"));
   assert.notEqual(readState(repo.layout.state).nightly, answered, "answered once the run ended");
 });
