@@ -33,7 +33,8 @@ export function compileRuntimeModules(sourceRoot:string,entry:string,{api,ast}:R
     if(modules.size>=RUNTIME_MODULE_LIMIT)failure('module limit '+RUNTIME_MODULE_LIMIT+' exceeded at '+name);
     const emitted=outputName(name),alias=outputs.get(emitted);
     if(alias&&alias!==name)failure('two sources select '+emitted+': '+alias+' and '+name);
-    const source=readFileSync(file,'utf8'),text=stripRuntimeSource(source);
+    const source=readFileSync(file,'utf8');let text:string;
+    try{text=stripRuntimeSource(source);}catch(error){failure('cannot strip '+name+': '+String(error));}
     const module={source:name,name:emitted,text,sourceSha256:hash(source)};
     modules.set(name,module);outputs.set(emitted,name);
     const targets=new Set<string>();

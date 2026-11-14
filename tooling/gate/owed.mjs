@@ -1183,15 +1183,8 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does the inventory preserve exact sources, closure and ownership", run: "node --test tooling/conformance/node-work-list.test.ts" }],
   },
   {
-    name: "the node child preload declarations",
-    when: p => p === "tooling/conformance/node-preload-runtime.ts",
-    settled: true,
-    steps: ["tooling", "outcomes"],
-    arms: [],
-  },
-  {
-    name: "the node harness path authority",
-    when: p => p === "tooling/conformance/node-paths.ts",
+    name: "the sealed node harness runtime",
+    when: p => p === "tooling/differential/oracle-node-harness.ts" || p === "tooling/conformance/node-harness-runtime.mjs",
     settled: true,
     steps: ["tooling", "outcomes"],
     arms: [],

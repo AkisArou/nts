@@ -24,12 +24,12 @@ const oracleLoader=process.env.NTS_ORACLE_EMIT_MANIFEST
 // Consume before any infrastructure/provider/program import. This handle
 // remains in this module's closure and is never exported to a test.
 const oracleHarness=oracleLoader?.oracleHarnessCapability();
-const {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} = await import('./node-preload-runtime.ts');
+const {nodeHarnessRuntime} = await import('./node-harness-runtime.mjs');
+const {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules,nodeHarnessPaths}=nodeHarnessRuntime;
 const {makeCommon,checkPending,peekPending,Skip}=await import('./common.mjs');
 const {default:tmpdir,bind:bindTmpdir}=await import('./tmpdir.mjs');
 const {default:fixtures}=await import('./fixtures.mjs');
 const hijackstdio=await import('./hijackstdio.mjs');
-const {nodeHarnessPaths}=await import('./node-paths.ts');
 
 const [, , moduleName, fileArgument, addon, ...fixtureArgs] = process.argv;
 

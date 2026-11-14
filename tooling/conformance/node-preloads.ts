@@ -5,14 +5,14 @@ import {dirname,join,resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parse} from 'acorn';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
-import {nodeHarnessPaths} from './node-paths.ts';
-import {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from './node-preload-runtime.ts';
-export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from './node-preload-runtime.ts';
+import {nodeHarnessPaths,nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from '../differential/oracle-node-harness.ts';
+export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from '../differential/oracle-node-harness.ts';
 
 // Declare the launched entries even when a fixture routes them through its own
 // repository root. The same declarations supply parsed fixture closures.
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const DRIVER=new URL('./run-one.mjs',import.meta.url),WORKER=new URL('./run-cjs-worker.mjs',import.meta.url);
+const HARNESS_RUNTIME=new URL('./node-harness-runtime.mjs',import.meta.url);
 const inRoot=(root:string,asset:URL)=>join(root,relative(SOURCE_ROOT,fileURLToPath(asset)));
 
 export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:string){
@@ -65,8 +65,8 @@ export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:
     if(host.fileExists(sibling.shape))javascript(sibling.shape);else observe(sibling.shape);
   }
   // Preload project configs and their resolved options are captured by emit.
-  const paths=nodeHarnessPaths(root,name),usesHarnessPaths=preloads.some(item=>item.entry===join(root,'tooling/conformance/node-paths.ts'));
-  const runtimeRoots=[...(usesHarnessPaths?[paths.nodeTestRoot]:[]),subject.dir,...siblings.map(sibling=>sibling.dir),...visited,...(addon?[addon]:[])];
+  const paths=nodeHarnessPaths(root,name),usesHarnessRuntime=visited.has(inRoot(root,HARNESS_RUNTIME));
+  const runtimeRoots=[...(usesHarnessRuntime?[paths.nodeTestRoot]:[]),subject.dir,...siblings.map(sibling=>sibling.dir),...visited,...(addon?[addon]:[])];
   const descriptor={version:1,drivers,module:name,compiled,subject,siblings,globals,preloads,edges,paths,runtimeRoots};
   return {entry:inRoot(root,DRIVER),preloads,runtimeRoots,declarations:{descriptor,files,absent:[...new Set(absent)],observations:host.captured()}};
 }

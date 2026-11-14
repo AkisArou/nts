@@ -55,6 +55,10 @@ pub(super) fn execute(command: &Command, source: &Utf8Path) -> Result<Finished> 
 
 pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
     (
+        "oracle-node-harness.ts",
+        include_bytes!("../oracle-node-harness.ts"),
+    ),
+    (
         "oracle-execution.ts",
         include_bytes!("../oracle-execution.ts"),
     ),

@@ -1,4 +1,3 @@
-import {projectInput} from '../gate/reader-inputs/main.ts';
 import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {fixtureEnvironment} from "../gate/test-environment.ts";
@@ -44,7 +43,7 @@ function fixture(t:TestContext,{runner=false}:{runner?:boolean}={}){
   const root=mkdtempSync(join(tmpdir(),'nts-node-preloads-'));t.after(()=>removeOracleSnapshot(root));
   const write=(file:string,body:string)=>{file=join(root,file);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,body);};
   if(runner){
-    copyModuleClosure([relative(REPOSITORY,fileURLToPath(new URL('./run.mjs',import.meta.url))),projectInput(new URL('./node-preload-runtime.ts',import.meta.url))],root);
+    copyModuleClosure([relative(REPOSITORY,fileURLToPath(new URL('./run.mjs',import.meta.url)))],root);
     copyModuleClosure(ORACLE_EXECUTION_FILES.map(name=>'tooling/differential/'+name),root);
   }else write('tooling/conformance/run-one.mjs',"export {};\n");
   for(const name of ['subject','sibling']){write(`runtime/node/${name}/src/main.ts`,'export const value:number=1;\n');write(`runtime/node/${name}/tsconfig.json`,'{"files":["src/main.ts"]}');}
@@ -52,7 +51,7 @@ function fixture(t:TestContext,{runner=false}:{runner?:boolean}={}){
 }
 test('runtime preload declarations do not load the parent planner or filesystem',t=>{
   const {root,write}=fixture(t);write('runtime/node/subject/uses','sibling\n');write('runtime/node/subject/globals','abort\n');
-  const runtime=new URL('./node-preload-runtime.ts',import.meta.url).href,planner=new URL('./node-preloads.ts',import.meta.url).href;
+  const runtime=new URL('../differential/oracle-node-harness.ts',import.meta.url).href,planner=new URL('./node-preloads.ts',import.meta.url).href;
   const source=`import assert from 'node:assert/strict';import {registerHooks} from 'node:module';
 registerHooks({resolve(specifier,context,next){if(specifier==='acorn'||specifier.endsWith('/oracle-filesystem.ts'))throw Error('parent-only dependency: '+specifier);return next(specifier,context);}});
 await assert.rejects(import(${JSON.stringify(planner)}),/parent-only dependency/);

@@ -971,7 +971,7 @@ test("the declared host project reader places its own configuration",()=>{
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
-  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','gate-inputs','jvm-members','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
+  assert.deepEqual([...stepsFor('tooling/differential/oracle-node-harness.ts')].sort(),['build','clippy','gate-inputs','jvm-members','old-paths','outcomes','program-oracles','rustfmt','test-host','tests','tooling','tooling-types']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {

@@ -10,7 +10,8 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve as resolvePath, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import {nodeHarnessPaths} from './node-paths.ts';
+import {nodeHarnessRuntime} from './node-harness-runtime.mjs';
+const {nodeHarnessPaths}=nodeHarnessRuntime;
 
 const HERE = dirname(new URL(import.meta.url).pathname);
 // The real path, as `run-one.mjs` takes node's test tree: a lane's tree links

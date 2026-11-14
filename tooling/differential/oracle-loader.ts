@@ -8,6 +8,7 @@ import {basename,dirname,join,resolve,relative,isAbsolute,sep,parse} from 'node:
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {runtimeAssets} from './runtime-paths/main.ts';
 import {ORACLE_EXECUTION_FILES} from './oracle-runtime.ts';
+export * as oracleNodeHarness from './oracle-node-harness.ts';
 import {observeOracleAssets} from './oracle-assets.ts';
 import {dependencySealReady,dependencySealError,checkerImportIdentity,validateRuntimeObservations as validateHostObservations,parseOracleLoaderEvents,checkNodeResolutionSession,nodeResolutionOptions,OracleResolutionDomain,OraclePathPrefixes,ORACLE_NODE_RESOLUTION_RECIPE,oracleFileUrlErrorProof,capturedModuleIdentity,readOracleSnapshotIndex,V8_HEAP_FLAG,type CheckerImportRelation,type HostObservation} from './oracle-runtime.ts';
 import type {OracleSnapshotIdentity,OracleRuntimeNode,OracleRuntimeDescriptor,OracleRuntimeRoute,OwnerImportRoute} from './oracle-emit.ts';

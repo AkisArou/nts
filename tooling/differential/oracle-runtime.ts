@@ -8,6 +8,7 @@ import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
 // Recipe identity is shared with result-only consumers. It reads pinned source
 // bytes and records, never the preparation graph or a compiler API.
 const EXECUTION_INPUTS=[
+  new URL('./oracle-node-harness.ts',import.meta.url),
   new URL('./oracle-execution.ts',import.meta.url),
   new URL('./oracle-execution-policy.ts',import.meta.url),
   new URL('./oracle-batch.ts',import.meta.url),

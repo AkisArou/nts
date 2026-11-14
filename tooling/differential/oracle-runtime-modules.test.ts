@@ -8,6 +8,8 @@ import {spawnSync} from 'node:child_process';
 import {fixtureEnvironment} from '../gate/test-environment.ts';
 import {compileRuntimeModules as compile,stripRuntimeSource} from './oracle-runtime-modules.ts';
 import {runtimeAssets,runtimeModuleName,RUNTIME_MODULE_LIMIT} from './runtime-paths/main.ts';
+import {spawnTest} from '../gate/test-wait.ts';
+import {pathToFileURL} from 'node:url';
 
 const require=createRequire(import.meta.url),{API}=require('typescript/sync') as typeof import('typescript/sync'),ast=require('typescript/ast') as typeof import('typescript/ast');
 function compileRuntimeModules(root:string,entry:string){
@@ -70,4 +72,28 @@ test('canonical relative imports preserve dotted filenames',t=>{
   const root=fixture(t,{'entry.ts':"export {value} from './.hidden.ts';",'.hidden.ts':'export const value:number=19;'});
   const graph=compileRuntimeModules(root,'entry.ts');
   assert.match(graph.modules.find(module=>module.name==='entry.mjs')!.text,/from "\.\/\.hidden\.mjs"/);
+});
+
+test('direct Node stripping and the sealed producer retain identical harness behavior',t=>{
+  const source=readFileSync(new URL('./oracle-node-harness.ts',import.meta.url),'utf8');
+  const root=fixture(t,{'oracle-node-harness.ts':source}),graph=compileRuntimeModules(root,'oracle-node-harness.ts');
+  assert.deepEqual(graph.modules.map(row=>row.name),['oracle-node-harness.mjs']);
+  for(const module of graph.modules)writeFileSync(join(root,module.name),module.text);
+  const ask=(name:string,strip:boolean)=>{
+    const script=`import * as runtime from ${JSON.stringify(pathToFileURL(join(root,name)).href)};
+const root='/declared/source',directory=root+'/runtime/node/subject';
+const texts=new Map([[directory+'/globals','# comment\\nabort\\nencoding\\n'],[directory+'/uses','sibling/iter\\nsibling\\n']]);
+const host={fileExists:path=>texts.has(path),readFile:path=>texts.get(path)??null};
+console.log(JSON.stringify({module:runtime.nodeModuleFiles(root,'subject'),globals:runtime.nodeGlobalGroups(directory,host),
+global:runtime.nodeGlobalEntry(directory,'abort'),siblings:runtime.nodeSiblingModules(root,directory,host),paths:runtime.nodeHarnessPaths(root,'subject')}));`;
+    return spawnTest(process.execPath,[...(strip?[]:['--no-experimental-strip-types']),'--input-type=module','-e',script],{encoding:'utf8',env:fixtureEnvironment(t)});
+  };
+  const direct=ask('oracle-node-harness.ts',true),sealed=ask('oracle-node-harness.mjs',false);
+  for(const result of [direct,sealed])assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.deepEqual(JSON.parse(direct.stdout),JSON.parse(sealed.stdout));
+  const value=JSON.parse(sealed.stdout);assert.deepEqual(value.globals,['abort','encoding']);assert.equal(value.siblings.length,2);
+  writeFileSync(join(root,'oracle-node-harness.ts'),source+'\nexport enum NonErasable { Value=1 }\n');
+  assert.throws(()=>compileRuntimeModules(root,'oracle-node-harness.ts'),/oracle runtime module: cannot strip oracle-node-harness\.ts:.*TypeScript enum is not supported/s);
+  const refused=ask('oracle-node-harness.ts',true);assert.notEqual(refused.status,0);
+  assert.match(refused.stderr,/oracle-node-harness\.ts/);assert.match(refused.stderr,/TypeScript enum is not supported/);
 });

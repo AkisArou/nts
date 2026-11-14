@@ -1,5 +1,5 @@
-// Runtime declarations share one authority with preparation; planning stays in
-// node-preloads.ts and never enters a child process through this module.
+// Pure harness declarations are sealed execution source. Preparation imports
+// these same decisions; they never enter a program-under-test's TS project.
 import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 type DeclarationHost={fileExists:(file:string)=>boolean;readFile:(file:string)=>string|null};
@@ -25,4 +25,9 @@ export function nodeSiblingModules(root:string,moduleDir:string,host?:Declaratio
     const slash=requestedName.indexOf('/'),name=slash===-1?requestedName:requestedName.slice(0,slash);
     return {...nodeModuleFiles(root,name),requestedName,requestedSubpath:slash===-1?null:requestedName};
   });
+}
+
+export function nodeHarnessPaths(root:string,moduleName=''){
+  const nodeTestRoot=join(root,'third_party/node/test');
+  return {nodeTestRoot,fixtures:join(nodeTestRoot,'fixtures'),localTestRoot:join(root,'runtime/node',moduleName,'test')};
 }

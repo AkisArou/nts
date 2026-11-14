@@ -694,6 +694,13 @@ Each publication reads fresh source bytes, bounds its module map and releases
 one parser lease before visiting another module. Canonical relative module
 names and their hashes belong to the authenticated snapshot or result root;
 the pinned bootstrap checks the bytes it supplies before a module body runs.
+The Node harness's declaration and path helpers are sealed runtime source in
+`oracle-node-harness.ts`, included in the shared execution inventory and native
+identity. They use Node's strip-only transform and never enter a user Program
+or discover a project config. Prepared consumers use the loader's authenticated
+runtime export. Direct conformance probes use the same source through the
+pinned Node's strip-only loader. Non-erasable syntax refuses by source name;
+the tooling strict checker owns the source's type checking.
 
 
 - **An elastic pool of worktrees.** A task takes a free tree at the newest
@@ -1037,6 +1044,10 @@ the first node task.
   processes outside nts are recorded by cgroup provenance; unreadable tool
   processes or cgroups refuse
   ([log](records/notebooks/decisions-log.md#pressure-reclamation-uses-ownership-provenance-11-14)).
+- **Node harness helpers belong to sealed execution.** Pure declaration and
+  path helpers share the runtime inventory, byte identity and strip-only
+  transform. User oracle projects retain their own config and source closure
+  ([log](records/notebooks/decisions-log.md#node-harness-helpers-are-sealed-runtime-11-14)).
 
 - Local process forwarders keep their command parameter first. The source
   audit checks that one direct forwarding hop; Git arguments at callers use

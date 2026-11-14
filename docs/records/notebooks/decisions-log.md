@@ -2929,3 +2929,14 @@ retained ownership and the actual benchmark unit, refusing an unreadable
 observation. Between-cycle waits use command-owned awaited timers so shutdown
 can clear them without starting another cycle. The real active synchronous
 measurement stop control did not justify an asynchronous gate/search refactor.
+
+## Node harness helpers are sealed runtime (11-14)
+
+2026-11-14: #783 moves preload declarations and harness paths into the oracle's
+sealed runtime inventory. The #761 full-Program observation comparison exposed
+their accidental compilation as ordinary conformance-project roots, including
+Node type packages and failed ancestor searches. The helper operations need
+only type stripping; strict tooling checks already own their types. Prepared
+consumers use the authenticated loader export, while the three existing direct
+probe callers retain the same pinned Node strip-only source semantics. Output
+identity and cold-capture cost remain explicit proof obligations.
