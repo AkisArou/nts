@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {censusPhaseSummary} from './census-phase-summary.ts';
-import {CensusPhaseCosts,censusPhaseCosts,readCensusPhaseFrame,type PhaseSample} from '../census/phase-costs.ts';
+import {CENSUS_PHASE_STEPS,CensusPhaseCosts,censusPhaseCosts,readCensusPhaseFrame,type PhaseSample} from '../census/phase-costs.ts';
 
 test('unrelated steps do not open census observations or enable child wrappers',()=>{
-  for(const step of ['tooling','test262-census-c','benches'])assert.equal(censusPhaseCosts('fixture','c',{
+  for(const step of ['tooling','benches'])assert.equal(censusPhaseCosts('fixture','c',{
     NTS_GATE_STEP:step,NTS_GATE_CASE_COSTS_DIR:'/not-used',NTS_HOST_OBSERVATIONS:'/not-opened',
   }),undefined);
+});
+
+test('whole test262 censuses use the same phase owner as recorded backend checks',()=>{
+  for(const backend of ['c','llvm','jvm'])assert.ok(CENSUS_PHASE_STEPS.has('test262-census-'+backend));
 });
 
 test('an unavailable worker observation preserves the work and stays unknown in its phase',()=>{
