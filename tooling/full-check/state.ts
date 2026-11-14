@@ -14,7 +14,6 @@ import type { Job } from "./background.ts";
 import type { ProbeVerdict } from "./culprit.ts";
 import type { LandingAnswer } from "./queue.ts";
 
-import {layout,type Layout} from './layout.ts';
 export {layout,type Layout} from './layout.ts';
 
 /** The core runs on the newest main; the wide steps on the newest verified. */

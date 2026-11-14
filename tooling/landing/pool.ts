@@ -419,14 +419,14 @@ export function statusJson(dir: string, trees: readonly MeasuredTree[], room: Ro
 }
 
 /** The upkeep's lines, for the full check's log. */
-export function pruneLines(pruned: Pruned, now = Date.now()): string[] {
+export function pruneLines(pruned: Pruned, _now?:number): string[] {
   const lines = pruned.released.map(({ tree, branch, outcome }) =>
     `pool: reset tree ${tree.name}, whose task ${branch} landed, now that nothing uses it${outcome.map(b => `; its branch here ${b.state}${b.reason ? ` (${b.reason})` : ""}`).join("")}`);
   for (const { tree, why } of pruned.waiting) lines.push(`pool: kept tree ${tree.name} on its landed branch ${tree.branch}: ${why}`);
   for(const row of pruned.reclamation?.removed??[])lines.push(`disk: removed ${row.root}, ${row.kind}, ${row.allocatedBytes} allocated bytes; free-space change ${row.freeBytesChange} bytes; ${row.facts.join('; ')}`);
   for(const row of pruned.reclamation?.kept??[])lines.push(`disk: kept ${row.root}: ${row.reason}`);
   for (const { tree, why } of pruned.kept) lines.push(`pool: kept tree ${tree.name}, which could not be removed: ${why}`);
-  if (pruned.removed.length) lines.push(`pool: ${pruned.free} free tree${pruned.free === 1 ? "" : "s"} kept warm`);
+  if (pruned.removed.length) lines.push(`pool: ${pruned.free} free checkout${pruned.free === 1 ? "" : "s"} remain`);
   return lines;
 }
 

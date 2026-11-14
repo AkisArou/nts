@@ -2,7 +2,7 @@
 // The caller owns the target for the whole build/replay/cleanup interval.
 // Fingerprints identify *test* targets; an executable bit alone also finds
 // build scripts, normal binaries and proc macros, which must stay untouched.
-import { existsSync, lstatSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
+import { lstatSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 function stat(path: string) {
