@@ -15,15 +15,18 @@ const HERE = dirname(new URL(import.meta.url).pathname);
 // The real path, as `run-one.mjs` takes node's test tree: a lane's tree links
 // `third_party/node`, and a test comparing `fixtures.path()` with what
 // `fs.realpath` answers (test-fs-realpath) failed on the link's spelling.
+/** @type {string|undefined} */
 export let fixturesDir;
+/** @type {string|undefined} */
 export let utf8TestText;
+/** @type {string|undefined} */
 export let utf8TestTextPath;
 
 /** @param {typeof import('../differential/oracle-node-harness.ts').nodeHarnessPaths} nodeHarnessPaths */
 export function bind(nodeHarnessPaths) {
   if (fixturesDir !== undefined) throw Error('Node fixtures are already bound');
   fixturesDir = realpathSync(nodeHarnessPaths(resolvePath(HERE,'../..')).fixtures);
-  utf8TestText = readSync('utf8_test_text.txt', 'utf8');
+  utf8TestText = readFileSync(path('utf8_test_text.txt'), 'utf8');
   utf8TestTextPath = path('utf8_test_text.txt');
 }
 
@@ -42,7 +45,7 @@ export function readSync(args, enc) {
 }
 
 export function readKey(arg, enc) {
-  return readFileSync(join(fixturesDir, "keys", arg), enc);
+  return readFileSync(path("keys", arg), enc);
 }
 
 export function readKeys(enc, ...names) {

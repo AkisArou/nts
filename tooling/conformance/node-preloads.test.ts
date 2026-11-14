@@ -14,6 +14,7 @@ import {test,afterEach,type TestContext} from 'node:test';
 import {readStepInstrument} from '../gate/step-result.ts';
 import {instrumentPolicy} from '../gate/step-result.ts';
 import {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules,nodePreloadPlan} from './node-preloads.ts';
+import {changedSnapshot} from '../differential/oracle-emit-fixture.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
@@ -229,15 +230,20 @@ test('a no-execArgv child validates copied infrastructure before its top-level c
   write('runtime/node/subject/test/unprepared.js',"import('../unprepared.ts');\n");
   write('runtime/node/subject/unprepared.ts','export const value:number=23;\n');
   const plan=nodePreloadPlan(root,'subject',false),prepared=(await prepareOracle({...plan,project:null,directory:join(root,'preparation'),toolchain:oracleToolchainLocation()}));
-  const driver=oracleRuntimeFile(prepared,plan.entry),file=oracleRuntimeFile(prepared,join(root,'runtime/node/subject/test/control.js'));
-  const run=(stripDisabled=false,subject='control.js')=>{
-    const source=join(root,'runtime/node/subject/test',subject),entry=subject==='control.js'?file:oracleRuntimeFile(prepared,source);
-    const own=oracleExecution(prepared,driver,[source]);
+  const run=(input=prepared,stripDisabled=false,subject='control.js')=>{
+    const source=join(root,'runtime/node/subject/test',subject),entry=oracleRuntimeFile(input,source),driver=oracleRuntimeFile(input,plan.entry);
+    const own=oracleExecution(input,driver,[source]);
     return {own,result:runNodeCase(t,process.execPath,[...(stripDisabled?['--no-experimental-strip-types',...own.args]:[]),driver,'subject',entry,'-'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...own.env}})};
   };
   const healthy=run();assert.equal(healthy.result.status,0,healthy.result.stderr);assert.match(healthy.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(healthy.own),{ready:true});
-  const generated=run(true);assert.equal(generated.result.status,0,generated.result.stderr);assert.match(generated.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(generated.own),{ready:true});
-  const unrelated=run(true,'unprepared.js');assert.notEqual(unrelated.result.status,0);
+  // This private execution declares its real additional Node option, as the
+  // generated-child control does; the production identity check stays exact.
+  const noStrip=changedSnapshot(await prepareOracle({...plan,project:null,directory:join(root,'no-strip'),toolchain:oracleToolchainLocation()}),records=>{
+    const descriptor=records.get('descriptor') as {resolution:{options:{flags:string[]}}};
+    descriptor.resolution.options.flags.push('--no-experimental-strip-types');
+  });
+  const generated=run(noStrip,true);assert.equal(generated.result.status,0,generated.result.stderr);assert.match(generated.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(generated.own),{ready:true});
+  const unrelated=run(noStrip,true,'unprepared.js');assert.notEqual(unrelated.result.status,0);
   const unpreparedHealth=oracleLoaderReady(unrelated.own);assert.equal(unpreparedHealth.ready,false);
   if(!unpreparedHealth.ready)assert.match(unpreparedHealth.why,/oracle TypeScript import was not prepared: .*unprepared\.ts/);
   const common=oracleRuntimeFile(prepared,join(root,'tooling/conformance/common.mjs')),effect=join(root,'forbidden-side-effect');
@@ -275,7 +281,9 @@ test('all Node harness plans enroll each declared TS entry in its nearest ordina
   assert.equal(modules.length,28);
   const entries=new Map<string,{entry:string;project:string|null}>();
   for(const name of modules)for(const preload of nodePreloadPlan(REPOSITORY,name,false).preloads)entries.set(preload.entry,preload);
-  assert.ok(entries.size>=33,'the actual harness closure must remain nonempty');
+  for(const name of modules)assert.ok(entries.has(nodeModuleFiles(REPOSITORY,name).entry),'subject entry is retained: '+name);
+  assert.equal(entries.has(fileURLToPath(new URL('../differential/oracle-node-harness.ts',import.meta.url))),false,'runtime infrastructure is not a user Program');
+  t.diagnostic(JSON.stringify({subjects:modules.length,programEntries:entries.size}));
   const root=mkdtempSync(join(tmpdir(),'nts-node-project-closure-'));t.after(()=>removeOracleSnapshot(root));
   const worker=new OracleWorker(join(root,'worker'),oracleToolchainLocation()),sentinel=Error('complete ordinary-root closure reached compiler');let commands=0;
   try{
