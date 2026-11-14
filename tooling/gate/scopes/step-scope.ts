@@ -203,6 +203,8 @@ export class StepScope {
       const want = this.wanted;
       const workerMax=Math.max(want.max,this.caseFloor);
       for (const [slice,max] of [[this.supervisorSlice,want.max],[this.workerSlice,workerMax]] as const) {
+        const previous=slice===this.supervisorSlice?this.held.max:this.workerMax;
+        if(max===previous)continue;
         await new Promise<void>((resolve, reject) => {
           const child = spawn("systemctl", ["--user", "set-property", "--runtime", slice, `MemoryMax=${max}`], { stdio: ["ignore", "ignore", "pipe"] });
           let err = "";

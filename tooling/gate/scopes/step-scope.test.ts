@@ -3,6 +3,35 @@ import { test } from "node:test";
 import { registerHooks } from "node:module";
 import { gateCpus, inheritedCpus } from "../affinity.ts";
 import { waitForEmptyCgroup,observeOwnedRoot } from "./step-scope.ts";
+import {readLimits} from './memory-limits.ts';
+
+test('a changed sibling bound produces one manager write and equal requests produce none',async()=>{
+  const monitorURL='data:text/javascript,'+encodeURIComponent(`
+    import {spawn as realSpawn} from 'node:child_process';
+    export {spawnSync} from 'node:child_process';
+    export const writes=[];
+    export function spawn(command,args,options){writes.push([command,[...args]]);return realSpawn(command,args,options);}
+  `);
+  const query=new URL('./step-scope.ts?bound-write-control',import.meta.url).href;
+  const hooks=registerHooks({resolve(specifier,context,next){
+    if(context.parentURL===query&&specifier==='node:child_process')return {url:monitorURL,shortCircuit:true};
+    return next(specifier,context);
+  }});
+  try{
+    const monitor=await import(monitorURL),{GateScopes}=await import(query);
+    const owner=new GateScopes(process.env),step=owner.step({max:128*2**20});
+    try{
+      await step.caseLimit(256*2**20);
+      assert.deepEqual(monitor.writes,[['systemctl',['--user','set-property','--runtime',step.workerSlice,'MemoryMax='+256*2**20]]]);
+      assert.equal(readLimits(step.supervisorGroup).max,128*2**20);assert.equal(readLimits(step.workerGroup).max,256*2**20);
+      await step.caseLimit(256*2**20);assert.equal(monitor.writes.length,1,'equal caps start no process');
+      await step.limit({max:256*2**20});
+      assert.deepEqual(monitor.writes[1],['systemctl',['--user','set-property','--runtime',step.supervisorSlice,'MemoryMax='+256*2**20]]);
+      assert.equal(monitor.writes.length,2,'the unchanged worker sibling is not rewritten');
+      assert.equal(readLimits(step.supervisorGroup).max,256*2**20);assert.equal(readLimits(step.workerGroup).max,256*2**20);
+    }finally{await step.drain();owner.close();}
+  }finally{hooks.deregister();}
+});
 
 test("a cgroup drain requires an observed populated zero", async () => {
   const states = [1, 1, 0] as const;

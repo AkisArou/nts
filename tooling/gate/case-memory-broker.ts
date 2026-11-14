@@ -69,11 +69,13 @@ export class CaseMemoryBroker {
     lease.attach(group,cap);
     const active=this.#active.get(request.step)??new Set<CaseMemoryLease>();active.add(lease);this.#active.set(request.step,active);
     await boundary.raise(this.caps(request.step));
-    await property(basename(group),cap);
-    await property(basename(scope),cap);
     for(const at of [group,scope]){
+      // A resident worker retains its kernel cap across leases. Read it
+      // afresh; only bootstrap or a changed request needs a manager write.
+      const before=readLimits(at).max;
+      if(!Number.isSafeInteger(before)||before>cap||before<cap-4096)await property(basename(at),cap);
       const actual=readLimits(at).max;
-      if(actual>cap||actual<cap-4096)throw Error('case memory: kernel did not enforce registered case cap');
+      if(!Number.isSafeInteger(actual)||actual>cap||actual<cap-4096)throw Error('case memory: kernel did not enforce registered case cap');
     }
   }
   retire(request:CaseTokenRequest,group:string):void{request.memory?.retire(group);}
