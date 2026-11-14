@@ -418,7 +418,7 @@ writeFileSync(${JSON.stringify(file)},[
 const output=new PassThrough();output.resume();let result;
 try{
  result=await runTooling([${JSON.stringify(file)}],{execArgv:['--import',${JSON.stringify(bootstrap)}],output,instrument:{
-  now:()=>0,scheduleIdle:()=>()=>{},
+  now:()=>0,scheduleIdle:()=>()=>{},frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{},
   event(name,data){if(name==='test:complete'&&data.name==='async marker'){completed=true;for(const socket of sockets)socket.end('release');}}
  }});
 }finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
