@@ -165,26 +165,33 @@ test("housekeeping names a folder it cannot remove and continues to the other fo
   } finally { chmodSync(repo.layout.runs,0o755); makeRemovable(repo.root); }
 });
 
-test('benchmark ownership blocks core, wide and retries independently of the nightly idle deadline',async t=>{
-  for(const route of ['core','wide','probe'] as const)for(const recorded of [false,true]){
+test('benchmark ownership blocks wide work beyond the nightly idle deadline and releases it on completion',async t=>{
+  for(const recorded of [false,true]){
     const repo=repository(t),first=repo.commit({'a.txt':'first'},'first'),gate=fakeGate(repo);
-    const now=new Date('2026-11-06T12:00:00Z'),fx=harness(repo,gate,{now,idle:true});
-    await cycle(fx);
-    const latest=route==='core'||route==='probe'?repo.commit({'a.txt':'changed'},'new main'):first;
-    const state=readState(repo.layout.state);
-    if(route==='wide'){state.wide.since='2026-11-05T00:00:00Z';state.nightly='2026-11-05T00:00:00Z';}
-    if(route==='probe')state.core.last_run={commit:latest,run:'',verdict:'red',at:'2026-11-06T10:00:00Z',failed:['tests'],search:{result:'held control',at:'2026-11-06T10:00:00Z'}};
+    const now=new Date('2026-11-06T12:00:00Z'),fx=harness(repo,gate,{now,idle:true});await cycle(fx);
+    const state=readState(repo.layout.state);state.wide.since='2026-11-05T00:00:00Z';state.nightly='2026-11-05T00:00:00Z';
     const unit=recorded?'fixture-retained-bench':BENCH_UNIT;
     assert.equal(fx.units.start({name:unit,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
     if(recorded)state.benchmarks_due={since:'2026-11-05T00:00:00Z',until:'2026-11-07T03:00:00Z',measuring:{commit:first,run:join(repo.root,'measuring'),at:now.toISOString(),job:{unit,outcome:join(repo.root,'bench.outcome.json'),at:now.toISOString(),starts:1}}};
-    writeState(repo.layout.state,state);
-    const before=gate.measured.length;
+    writeState(repo.layout.state,state);const before=gate.measured.length;
     assert.equal(await cycle(fx),'idle');assert.equal(gate.measured.length,before);
-    const held=readState(repo.layout.state);assert.match(held.core.waiting??'',/benchmark measurement/);assert.ok(held.wide.waiting?.includes(unit));
-    fx.units.stop(unit);
-    // A finished state owner supplies the transition; no wall-time verdict.
-    const released=readState(repo.layout.state);delete released.benchmarks_due;writeState(repo.layout.state,released);
-    await cycle(fx);assert.ok(gate.measured.length>before,'settling the benchmark releases owed measurement');
+    assert.ok(readState(repo.layout.state).wide.waiting?.includes(unit));assert.equal(readState(repo.layout.state).core.waiting,undefined);
+    fx.units.stop(unit);const released=readState(repo.layout.state);delete released.benchmarks_due;writeState(repo.layout.state,released);
+    assert.equal(await cycle(fx),'wide');assert.ok(gate.measured.length>before);
+  }
+});
+
+test('core and its probes continue while benchmarks hold wide work',async t=>{
+  for(const route of ['core','probe'] as const){
+    const repo=repository(t),gate=fakeGate(repo),fx=harness(repo,gate,{now:new Date('2026-11-06T12:00:00Z'),idle:true});
+    repo.commit({'a.txt':'first'},'first');await cycle(fx);const latest=repo.commit({'a.txt':'new'},'new main');
+    const state=readState(repo.layout.state);state.wide.since='2026-11-05T00:00:00Z';state.nightly='2026-11-05T00:00:00Z';
+    if(route==='probe')state.core.last_run={commit:latest,run:'',verdict:'red',at:'2026-11-06T10:00:00Z',failed:['tests'],search:{result:'held control',at:'2026-11-06T10:00:00Z'}};
+    writeState(repo.layout.state,state);
+    assert.equal(fx.units.start({name:BENCH_UNIT,cwd:repo.root,command:['fixture benchmark'],log:join(repo.root,'bench.log')}),null);
+    const before=gate.measured.length;assert.equal(await cycle(fx),'core');
+    assert.ok(gate.measured.slice(before).some(row=>row.commit===latest&&row.label===(route==='core'?'core':'core-probe')));
+    assert.ok(!gate.measured.slice(before).some(row=>row.label.startsWith('wide')));assert.ok(fx.units.running(BENCH_UNIT));
   }
 });
 
@@ -1040,7 +1047,7 @@ test("the nightly slot makes the benchmarks due; nts-bench measures verified in 
   assert.ok(next.lines.some(line => line.includes("already measured")), next.lines.join("\n"));
 });
 
-test("a controller that restarts while nts-bench measures adopts its unit by name, and the core waits for it; a unit gone without an outcome is started once more, then the night is given up", async t => {
+test("a controller that restarts while nts-bench measures adopts its unit by name, and the core runs beside it; a unit gone without an outcome is started once more, then the night is given up", async t => {
   const repo = repository(t), gate = fakeGate(repo), bench = stubBench(), at = machine(repo, gate, { bench });
   const first = repo.commit({ "a.txt": "1\n" }, "verified one");
   await cycle(at(BEFORE));
@@ -1048,13 +1055,12 @@ test("a controller that restarts while nts-bench measures adopts its unit by nam
   assert.equal(await cycle(at(NIGHT)), "benchmarks");
   const { job, run } = readState(repo.layout.state).benchmarks_due!.measuring!;
   assert.deepEqual(job, { unit: BENCH_UNIT, outcome: join(run, BENCH_OUTCOME), at: job!.at, starts: 1 }, "the state names the unit and its outcome");
-  // A restarted controller adopts the unit and defers new core work.
+  // A controller that restarts finds it measuring, and runs the core on the newest main beside it.
   const after = at(new Date(2026, 10, 7, 4, 0)), moved = repo.commit({ "b.txt": "2\n" }, "lands while it measures");
-  const before=gate.measured.length;
-  assert.equal(await cycle(after), "idle");
-  assert.equal(gate.measured.length,before);
+  assert.equal(await cycle(after), "core");
+  assert.equal(gate.measured.at(-1)!.commit, moved);
   assert.equal(after.units.specs.length, 1, "no second benchmarks unit");
-  assert.equal(await cycle(after), "idle", "measurement remains excluded while benchmarks run");
+  assert.equal(await cycle(after), "idle", "nothing holds it, and nothing waits for it");
   // Stopped by hand part way: gone, with no outcome. Started once more, in its tree set up afresh.
   writeFileSync(join(repo.layout.bench, "half-run.txt"), "x\n");
   after.units.stop(BENCH_UNIT);
@@ -1073,7 +1079,6 @@ test("a controller that restarts while nts-bench measures adopts its unit by nam
   assert.ok(given.tasks.some(one => one.line === `- The nightly benchmarks at ${first.slice(0, 12)} did not finish: ${BENCH_UNIT} is gone and wrote no outcome, `
     + `started 2 time(s); see ${join(run, BENCH_UNIT_LOG)}. The next nightly slot measures again.`), JSON.stringify(given.tasks));
   assert.equal(bench.calls.length, 0);
-  assert.equal(await cycle(after), "core");assert.equal(gate.measured.at(-1)!.commit,moved);
 });
 
 test("a refused results commit is published again on the newest main, a held one at once; past its attempts it is a task", async t => {

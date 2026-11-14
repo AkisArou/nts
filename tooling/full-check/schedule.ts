@@ -33,14 +33,15 @@ export function wideMemoryWaiter(waiting: readonly { priority: Priority; live: b
 /** Eligibility does not consume a start: only the actual run changes last. */
 export function wideDecision(options: {
   schedule: Schedule; last?: { commit: string; at: string }; verified: string | null;
-  since: string; now: Date; busy: string | null;
+  since: string; now: Date; busy: string | null; hardBusy?:string|null;
 }): WideDecision {
   const { schedule, last, verified, now, busy } = options;
   if (!verified) return { due: null, waiting: "nothing is verified yet" };
   const start = last ? new Date(last.at) : undefined;
   const nightly = dueNightly(schedule, start ?? new Date(options.since), now);
-  if (!nightly && verified === last?.commit) return { due: null, waiting: null };
-  const due = nightly ? "nightly" : "advanced";
+  const due = nightly ? "nightly" : verified !== last?.commit ? "advanced" : null;
+  if(options.hardBusy)return {due,waiting:options.hardBusy};
+  if(due===null)return {due,waiting:null};
   if (busy && (!nightly || now.getTime() < nightly.getTime() + NIGHTLY_IDLE_WAIT_MS)) return { due, waiting: busy };
   if (!nightly && start && now.getTime() < start.getTime() + WIDE_MIN_GAP_MS) {
     return { due, waiting: `minimum wide gap until ${new Date(start.getTime() + WIDE_MIN_GAP_MS).toISOString()}` };

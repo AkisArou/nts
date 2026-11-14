@@ -75,3 +75,12 @@ test("times of day are checked, sorted and deduplicated", () => {
   assert.throws(() => parseTimes("9:00"), /not a time of day/);
   assert.throws(() => parseTimes("24:00"), /not a time of day/);
 });
+
+
+test('a hard wide exclusion survives the nightly deadline without consuming a start',()=>{
+  const waiting='benchmark measurement: owned benchmark';
+  const options={schedule:{nightly:'03:00'},verified:'same',last:{commit:'same',at:'2026-11-05T12:00:00Z'},since:'2026-11-05T12:00:00Z',now:new Date('2026-11-06T12:00:00Z'),busy:'ordinary queue',hardBusy:waiting};
+  assert.deepEqual(wideDecision(options),{due:'nightly',waiting});
+  assert.deepEqual(wideDecision({...options,hardBusy:null}),{due:'nightly',waiting:null});
+  assert.equal(options.last.at,'2026-11-05T12:00:00Z');
+});

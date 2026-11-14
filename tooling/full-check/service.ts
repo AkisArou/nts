@@ -23,14 +23,14 @@
 //      refused or held, its delta applied again on the newest main and
 //      submitted (seconds; followRecords); then the same for the benchmarks
 //      unit and the run record it kept (followBenchmarks). A unit still
-//      running holds measurement; records may still be followed;
+//      running benchmarks hold wide; core and records continue;
 //   1. the wide steps on changed `verified`, after their minimum gap, when no
 //      landing is queued/running and no higher-priority memory request waits;
 //      the nightly run crosses the gap, before new benchmarks start;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
 //   3. due benchmarks on the newest `verified`: nts-bench built there, then
-//      measured in the benchmarks unit, excluding core/wide/probes, once the measurement
+//      measured in the benchmarks unit, beside core but excluding wide, once the measurement
 //      lock admits it with CPU 4 and its sibling 5 quiet: an attempt the lock
 //      does not admit keeps them due, asked again ten minutes later, until
 //      they run or the next nightly slot replaces them. One night's run is in
@@ -153,6 +153,10 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
     if (state.now?.doing === "restarting") { delete state.now; writeState(fx.layout.state, state); }
     return await scheduleCycle(fx, state);
   } catch (error) {
+    if(error instanceof WideBenchmarkWait){
+      state.wide.waiting=error.message;delete state.now;
+      fx.log(error.message);writeState(fx.layout.state,state);return "idle";
+    }
     if (!(error instanceof ControllerRestart)) throw error;
     if (state.now?.doing !== "restarting" || state.now.commit !== error.commit) {
       state.now = {doing:"restarting",commit:error.commit,since:fx.now().toISOString()};
@@ -173,27 +177,22 @@ function beforeRun(fx: Effects):void {
   if (target) throw new ControllerRestart(target);
 }
 
+class WideBenchmarkWait extends Error{}
+function beforeWideMeasurement(fx:Effects,state:State):void{
+  const reason=benchmarkBusy(fx,state);if(reason)throw new WideBenchmarkWait(reason);
+}
 function benchmarkBusy(fx:Pick<Effects,'units'>,state:State):string|null{
   let active:boolean;
   try{active=fx.units.running(BENCH_UNIT);}
   catch(error){throw new ToolingInstrumentError('tooling-setup','cannot observe nightly benchmark unit '+BENCH_UNIT+': '+message(error),{cause:error});}
   const retained=state.benchmarks_due?.measuring;
-  return active||retained?'benchmark measurement: '+(retained?.job?.unit??BENCH_UNIT)+' blocks core, wide and probes':null;
+  return active||retained?'benchmark measurement: '+(retained?.job?.unit??BENCH_UNIT)+' blocks wide work':null;
 }
 
 async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records" | "benchmarks" | "idle"> {
   housekeeping(fx, state);
   if (await followRecords(fx, state)) return "records";
   if (await followBenchmarks(fx, state)) return "benchmarks";
-  // Benchmarks are a hard exclusion, independent of the nightly idle
-  // deadline. A restarted controller also observes an unrecorded live unit.
-  const benchmark=benchmarkBusy(fx,state);
-  if(benchmark){
-    if(state.wide.waiting!==benchmark)fx.log(benchmark);
-    state.core.waiting=benchmark;state.wide.waiting=benchmark;
-    writeState(fx.layout.state,state);return "idle";
-  }
-  if(state.core.waiting?.startsWith('benchmark measurement:'))delete state.core.waiting;
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
   // With no previous wide result, only nights after scheduling began are
@@ -209,8 +208,9 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
   // A slot that comes while a night's run measures is answered once it ends.
   const night = dueNightly(fx.schedule, new Date(state.nightly), now);
   if (night && !state.benchmarks_due?.measuring) answerNightly(fx, state, night, verified);
+  const benchmark=benchmarkBusy(fx,state);
   const busy = fx.queue.busy() ?? fx.memoryWaiter();
-  const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now, since: state.wide.since, busy });
+  const wide = wideDecision({ schedule: fx.schedule, last: state.wide.last_run, verified, now, since: state.wide.since, busy, hardBusy:benchmark });
   if ((state.wide.waiting ?? null) !== wide.waiting) {
     if (wide.waiting) fx.log(`wide steps waiting: ${wide.waiting}`);
     state.wide.waiting = wide.waiting ?? undefined;
@@ -233,6 +233,7 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
   }
   // A search that could not finish is taken up again; what it measured is kept.
   for (const part of ["core", "wide"] as const) {
+    if(part==="wide"&&benchmark)continue;
     const red = state[part].last_run;
     if (red?.verdict === "red" && red.search?.result.startsWith("held") && now.getTime() - Date.parse(red.search.at) >= HELD_RETRY_MS) {
       holds(state, `the ${part} culprit search goes first`);
@@ -244,6 +245,7 @@ async function scheduleCycle(fx: Effects, state: State): Promise<Part | "records
   // One night's run in flight at a time, as one delta of a part's rows is: a
   // night measures once the last run has landed or been given up.
   const due = state.benchmarks_due;
+  if(benchmark)return "idle";
   if (wide.due === "nightly" && wide.waiting && due && !due.measuring) {
     holds(state, `the nightly wide run waits: ${wide.waiting}`);
     writeState(fx.layout.state, state);
@@ -265,6 +267,7 @@ export function partSteps(part: Part, lists: { all: string[]; wide: string[] }):
 }
 
 async function runPart(fx: Effects, state: State, part: Part, commit: string): Promise<void> {
+  if(part==="wide")beforeWideMeasurement(fx,state);
   const at = fx.now().toISOString();
   let lists: { all: string[]; wide: string[] };
   try { lists = fx.gate.steps(commit); }
@@ -281,6 +284,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   const m = doing(fx, state, part, commit, () => {
     fx.log(`${part}: ${steps.length} step(s) at ${short(commit)} (${fx.git.subject(commit)})`);
     beforeRun(fx);
+    if(part==="wide")beforeWideMeasurement(fx,state);
     return fx.gate.run(commit, steps, part, state[part].last_green, { reuseLanding: part === "core" });
   }, at);
   const failed = steps.filter(step => m.steps[step] === "FAIL");
@@ -458,6 +462,7 @@ function reopen(fx: Effects, state: State, finding: Finding, revert: string | nu
 /** The probe the search measures with: a composition, its steps, cached per step. */
 function probe(fx: Effects, state: State, part: Part): Measure {
   return (base, reverts, steps, fresh) => {
+    if(part==="wide")beforeWideMeasurement(fx,state);
     const key = probeKey(base, reverts);
     if (!fresh) {
       const cached = steps.map(step => state.probes.find(p => p.key === key && p.step === step));
@@ -488,6 +493,7 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     if (!present.length) return result("green", "", []);
     const m = doing(fx, state, "probe", commit, () => {
       beforeRun(fx);
+      if(part==="wide")beforeWideMeasurement(fx,state);
       return fx.gate.run(commit, present, `${part}-probe`, state[part].last_green,
         { reuseLanding: part === "core" && !fresh });
     });
@@ -910,7 +916,7 @@ function answerNightly(fx: Effects, state: State, night: Date, verified: string 
 /**
  * What holds the due benchmarks now, for the status (`benchmarks.due.waiting`);
  * the run that follows writes it down. Nothing holds a night's run that
- * measures: core, wide and probe starts wait for that owned measurement.
+ * measures: wide starts wait for that owned measurement while core continues.
  */
 function holds(state: State, what: string): void {
   if (state.benchmarks_due && !state.benchmarks_due.measuring) state.benchmarks_due.waiting = what;
