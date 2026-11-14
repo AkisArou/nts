@@ -91,11 +91,15 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
   if(!report.triggered&&!options.maintenance)return report;
   const keep=(root:string,error:unknown)=>report.kept.push({root,reason:errorText(error)});
   const revision=gitRead(pool.git,['rev-parse','refs/heads/main']);
-  const manifest=gitRead(pool.git,['show',revision+':Cargo.toml']);
-  const toolchainResult=infrastructureProbe({purpose:'disk reclamation toolchain policy',command:'git',
-    args:gitArguments(['show',revision+':rust-toolchain.toml']),cwd:pool.git.root,...(pool.git.env?{env:pool.git.env}:{}),exits:'classify'});
-  if(toolchainResult.status!==0&&toolchainResult.status!==128)throw Error('cannot read current toolchain policy');
-  const generations=Object.fromEntries((['nts-dev','clippy'] as const).map(name=>[name,buildGenerationFromInputs(manifest,toolchainResult.status===0?toolchainResult.stdout:'',name)])) as Record<BuildOutputName,string>;
+  const policyFile=(path:string,required:boolean):string=>{
+    const row=gitRead(pool.git,['ls-tree','-z',revision,'--',path]);
+    if(!row){if(required)throw Error('missing current build policy '+path);return '';}
+    const match=/^100(?:644|755) blob ([0-9a-f]{40})\t([^\0]+)\0$/.exec(row);
+    if(!match||match[2]!==path)throw Error('current build policy is not a regular tracked file: '+path);
+    return gitRead(pool.git,['cat-file','blob',match[1]!]);
+  };
+  const manifest=policyFile('Cargo.toml',true),toolchain=policyFile('rust-toolchain.toml',false);
+  const generations=Object.fromEntries((['nts-dev','clippy'] as const).map(name=>[name,buildGenerationFromInputs(manifest,toolchain,name)])) as Record<BuildOutputName,string>;
   const registered=()=>worktrees(pool.git).filter(tree=>dirname(resolve(tree.path))===resolve(pool.dir)&&/^[1-9][0-9]*$/.test(basename(tree.path)));
   const free=(tree:string):void=>{
     const current=registered().find(row=>resolve(row.path)===tree);
@@ -159,7 +163,6 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
       if(gitRead(pool.git,['rev-parse','refs/heads/main'])!==revision)throw Error('current build policy changed during reclamation');
       if(options.protectedRoots().some(owner=>[owner.root,owner.target].some(path=>under(resolve(path),root)||under(root,resolve(path)))))throw Error('live lease or build claim');
       if(!candidate.service)free(tree);
-      const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
       if(kind==='unbuilt-checkout'){
         // Ignored user files also belong to their author. Only the linker's
         // exact shared input links may disappear with an unbuilt checkout.
@@ -175,8 +178,11 @@ export function reclaimDisk(options:ReclaimOptions):ReclaimReport{
         if(!readFileSync(join(root,'CACHEDIR.TAG'),'utf8').startsWith('Signature: 8a477f597d28d172789f06886806bc55'))throw Error('target lacks Cargo cache identity');
       }else if(basename(root)!=='debug'&&marker(root,basename(root) as BuildOutputName)!=='obsolete')throw Error('profile is no longer obsolete');
       const allocatedBytes=host.allocatedBytes(root);
-      sameRoot(candidate.identity);
       const before=options.snapshot().freeBytes;
+      // Measure first; the fresh process/unit observation is immediately beside
+      // the identity fence and removal, rather than before a possibly large du.
+      const ownerFacts=options.ownership(tree,kind==='unbuilt-checkout'?join(tree,'target'):root)??[];
+      sameRoot(candidate.identity);
       if(kind==='unbuilt-checkout')gitRead(pool.git,['worktree','remove','--',root]);
       else{writable(root);rmSync(root,{recursive:true});}
       deleted=true;
