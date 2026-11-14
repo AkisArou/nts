@@ -699,7 +699,8 @@ The Node harness's declaration and path helpers are sealed runtime source in
 identity. They use Node's strip-only transform and never enter a user Program
 or discover a project config. Prepared consumers use the loader's authenticated
 runtime export. Direct conformance probes use the same source through the
-pinned Node's strip-only loader. Non-erasable syntax refuses by source name;
+pinned Node's strip-only loader. The runner owns that choice and binds the
+fixture accessor before loading a test. Non-erasable syntax refuses by source name;
 the tooling strict checker owns the source's type checking.
 
 

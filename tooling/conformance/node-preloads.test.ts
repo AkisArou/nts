@@ -225,11 +225,21 @@ test('a no-execArgv child validates copied infrastructure before its top-level c
   cpSync(join(REPOSITORY,'third_party/node/test/fixtures/utf8_test_text.txt'),join(root,'third_party/node/test/fixtures/utf8_test_text.txt'));
   write('runtime/node/subject/src/main.ts','export const value:number=1;\n');
   write('runtime/node/subject/tsconfig.json',JSON.stringify({extends:join(root,'tsconfig.fixtures.json'),files:['src/main.ts']}));
-  write('runtime/node/subject/test/control.js',"require('node:assert/strict').equal(require('subject').value,1);\n");
+  write('runtime/node/subject/test/control.js',"const assert=require('node:assert/strict'),fixtures=require('../common/fixtures');assert.equal(require('subject').value,1);assert.equal(fixtures.utf8TestText,fixtures.readSync('utf8_test_text.txt','utf8'));assert.equal(fixtures.utf8TestTextPath,fixtures.path('utf8_test_text.txt'));\n");
+  write('runtime/node/subject/test/unprepared.js',"import('../unprepared.ts');\n");
+  write('runtime/node/subject/unprepared.ts','export const value:number=23;\n');
   const plan=nodePreloadPlan(root,'subject',false),prepared=(await prepareOracle({...plan,project:null,directory:join(root,'preparation'),toolchain:oracleToolchainLocation()}));
   const driver=oracleRuntimeFile(prepared,plan.entry),file=oracleRuntimeFile(prepared,join(root,'runtime/node/subject/test/control.js'));
-  const run=()=>{const own=oracleExecution(prepared,driver,[join(root,'runtime/node/subject/test/control.js')]);return {own,result:runNodeCase(t,process.execPath,[driver,'subject',file,'-'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...own.env}})};};
+  const run=(stripDisabled=false,subject='control.js')=>{
+    const source=join(root,'runtime/node/subject/test',subject),entry=subject==='control.js'?file:oracleRuntimeFile(prepared,source);
+    const own=oracleExecution(prepared,driver,[source]);
+    return {own,result:runNodeCase(t,process.execPath,[...(stripDisabled?['--no-experimental-strip-types',...own.args]:[]),driver,'subject',entry,'-'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),...own.env}})};
+  };
   const healthy=run();assert.equal(healthy.result.status,0,healthy.result.stderr);assert.match(healthy.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(healthy.own),{ready:true});
+  const generated=run(true);assert.equal(generated.result.status,0,generated.result.stderr);assert.match(generated.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(generated.own),{ready:true});
+  const unrelated=run(true,'unprepared.js');assert.notEqual(unrelated.result.status,0);
+  const unpreparedHealth=oracleLoaderReady(unrelated.own);assert.equal(unpreparedHealth.ready,false);
+  if(!unpreparedHealth.ready)assert.match(unpreparedHealth.why,/oracle TypeScript import was not prepared: .*unprepared\.ts/);
   const common=oracleRuntimeFile(prepared,join(root,'tooling/conformance/common.mjs')),effect=join(root,'forbidden-side-effect');
   chmodSync(common,0o644);
   writeFileSync(common,"import {writeFileSync as forbiddenWrite} from 'node:fs';forbiddenWrite("+JSON.stringify(effect)+",'ran');\n"+readFileSync(common,'utf8'));

@@ -13,7 +13,7 @@ export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} fro
 // repository root. The same declarations supply parsed fixture closures.
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const DRIVER=new URL('./run-one.mjs',import.meta.url),WORKER=new URL('./run-cjs-worker.mjs',import.meta.url);
-const HARNESS_RUNTIME=new URL('./node-harness-runtime.ts',import.meta.url);
+const HARNESS_RUNTIME=new URL('../differential/oracle-node-harness.ts',import.meta.url);
 const inRoot=(root:string,asset:URL)=>join(root,relative(SOURCE_ROOT,fileURLToPath(asset)));
 
 export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:string){

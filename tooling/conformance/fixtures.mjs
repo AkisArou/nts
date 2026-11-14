@@ -10,16 +10,25 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve as resolvePath, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import {nodeHarnessRuntime} from './node-harness-runtime.ts';
-const {nodeHarnessPaths}=nodeHarnessRuntime;
 
 const HERE = dirname(new URL(import.meta.url).pathname);
 // The real path, as `run-one.mjs` takes node's test tree: a lane's tree links
 // `third_party/node`, and a test comparing `fixtures.path()` with what
 // `fs.realpath` answers (test-fs-realpath) failed on the link's spelling.
-const fixturesDir = realpathSync(nodeHarnessPaths(resolvePath(HERE,'../..')).fixtures);
+export let fixturesDir;
+export let utf8TestText;
+export let utf8TestTextPath;
+
+/** @param {typeof import('../differential/oracle-node-harness.ts').nodeHarnessPaths} nodeHarnessPaths */
+export function bind(nodeHarnessPaths) {
+  if (fixturesDir !== undefined) throw Error('Node fixtures are already bound');
+  fixturesDir = realpathSync(nodeHarnessPaths(resolvePath(HERE,'../..')).fixtures);
+  utf8TestText = readSync('utf8_test_text.txt', 'utf8');
+  utf8TestTextPath = path('utf8_test_text.txt');
+}
 
 export function path(...args) {
+  if (fixturesDir === undefined) throw Error('Node fixtures have not been bound');
   return join(fixturesDir, ...args);
 }
 
@@ -40,16 +49,13 @@ export function readKeys(enc, ...names) {
   return names.map((name) => readKey(name, enc));
 }
 
-export const utf8TestText = readFileSync(path("utf8_test_text.txt"), "utf8");
-export const utf8TestTextPath = path("utf8_test_text.txt");
-
 export default {
-  fixturesDir,
+  get fixturesDir() { return fixturesDir; },
   path,
   fileURL,
   readSync,
   readKey,
   readKeys,
-  utf8TestText,
-  utf8TestTextPath,
+  get utf8TestText() { return utf8TestText; },
+  get utf8TestTextPath() { return utf8TestTextPath; },
 };

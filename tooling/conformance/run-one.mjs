@@ -18,14 +18,20 @@ import process from "node:process";
 import { getSystemErrorMap, getSystemErrorMessage, getSystemErrorName } from "node:util";
 // Routed spawn children may not inherit execArgv. They still consume the
 // exact parent-owned manifest; no emitter or new preparation runs here.
-const {oracleLoader,nodeHarnessRuntime}=await import('./node-harness-runtime.ts');
+const oracleLoader=process.env.NTS_ORACLE_EMIT_MANIFEST
+  ? await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)))
+  : null;
 // Consume before any infrastructure/provider/program import. This handle
 // remains in this module's closure and is never exported to a test.
 const oracleHarness=oracleLoader?.oracleHarnessCapability();
+const nodeHarnessRuntime=oracleLoader
+  ? oracleLoader.oracleNodeHarness
+  : await import('../differential/oracle-node-harness.ts');
 const {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules,nodeHarnessPaths}=nodeHarnessRuntime;
 const {makeCommon,checkPending,peekPending,Skip}=await import('./common.mjs');
 const {default:tmpdir,bind:bindTmpdir}=await import('./tmpdir.mjs');
-const {default:fixtures}=await import('./fixtures.mjs');
+const {default:fixtures,bind:bindFixtures}=await import('./fixtures.mjs');
+bindFixtures(nodeHarnessPaths);
 const hijackstdio=await import('./hijackstdio.mjs');
 
 const [, , moduleName, fileArgument, addon, ...fixtureArgs] = process.argv;
