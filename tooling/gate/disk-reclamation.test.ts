@@ -51,7 +51,7 @@ test('pressure reclaims in cost order to a measured hysteresis goal, then stops'
   const log=JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8')) as {root:string;allocatedBytes:number;freeBytesChange:number;facts:string[]};
   assert.equal(log.root,join(a,'target/debug'),JSON.stringify(report?.kept));assert.equal(log.allocatedBytes,10*GiB,JSON.stringify(report?.kept));assert.equal(log.freeBytesChange,10*GiB,JSON.stringify(report?.kept));
   assert.ok(log.facts.includes('resource lock held'),JSON.stringify(report?.kept));
-  assert.deepEqual(reclaimDisk(f.options).removed,[],('headroom prevents repeated eviction')+'; kept='+JSON.stringify(report?.kept));
+  assert.deepEqual(reclaimDisk(f.options).removed,[],('headroom prevents repeated eviction')+'; kept='+JSON.stringify(repeated.kept));
 });
 
 test('free build output keeps the checkout and two warm targets; unbuilt removal uses Git',t=>{
@@ -240,7 +240,7 @@ test('an activating start-pre unit owns its future executable before PID zero st
   const f=fixture(t),tree=f.tree('1'),outside=join(f.s.dir,'outside');mkdirSync(outside);
   const entry=join(tree,'entry'),prelude=join(outside,'prelude.mjs'),ready=join(outside,'ready');
   writeFileSync(entry,'#!/bin/sh\nexit 0\n',{mode:0o755});
-  writeFileSync(prelude,generatedJavaScript(`import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`));
+  writeFileSync(prelude,generatedJavaScript(`import {writeFileSync,watch} from 'node:fs';watch(${JSON.stringify(outside)},()=>{});writeFileSync(${JSON.stringify(ready)},'ready');`));
   const unit='nts-agent-709-unit-entry-'+randomUUID()+'.service';
   const started=spawnTest('systemd-run',['--user','--collect','--quiet','--no-block','--unit='+unit,'--working-directory='+outside,
     '-p','LimitCORE=0','-p','Nice=19','-p','ExecStartPre='+process.execPath+' '+prelude,'--',entry],{env:f.s.env,encoding:'utf8'});
