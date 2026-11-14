@@ -26,7 +26,11 @@ export type BuildForecast={bytes:number;outputs:Record<BuildOutputName,number>;s
 export type BuildLease={root:string;target:string;outputs?:readonly BuildOutputName[]};
 type BuildClaim=BuildLease&{id:string;pid:number;identity:string};
 type BuildClaims={version:1;claims:BuildClaim[]};
-export type CapacitySnapshot={freeBytes:number;floorBytes:number;reservedBytes:number;availableBytes:number;
+export type TemporaryDiskClaim={id:string;pid:number;identity:string;path:string;bytes:number};
+type TemporaryDiskClaims={version:1;claims:TemporaryDiskClaim[]};
+export type TemporaryDiskLease=Readonly<TemporaryDiskClaim>&{release():void};
+export type CapacitySnapshot={freeBytes:number;floorBytes:number;reservedBytes:number;buildReservedBytes:number;temporaryReservedBytes:number;availableBytes:number;
+  temporaries:TemporaryDiskClaim[];
   leases:{root:string;remainingBytes:number;outputs:{name:BuildOutputName;allocatedBytes:number;remainingBytes:number;complete:boolean}[]}[]};
 export type PoolCapacitySource={dir:string;git:Git};
 
@@ -54,7 +58,7 @@ function poolSource(env:NodeJS.ProcessEnv):PoolCapacitySource|null {
 }
 
 export class DiskCapacity {
-  readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;
+  readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;readonly temporaryStateFile:string;
   private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
   constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null;
     reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership}}={}){
@@ -69,6 +73,9 @@ export class DiskCapacity {
       ? [{tree:landing.tree,target:landing.target,service:true},{tree:full.tree,target:full.target,service:true},
         ...[full.bench,...Object.values(full.records)].map(tree=>({tree,target:join(tree,'target'),service:true}))]:[];
     this.reclamation=options.reclamation??{services,ownership:liveReclaimOwnership};
+    // Older build owners retain their own schema and cannot overwrite a
+    // temporary claim. Both files are governed by the same capacity lock.
+    this.temporaryStateFile=this.stateFile+'.temporaries.json';
   }
   /** The same lock take() holds across its capacity check and branch switch. */
   locked<T>(body:()=>T):T {
@@ -84,6 +91,23 @@ export class DiskCapacity {
   }
   private record(claims:BuildClaim[]):void{
     assertWritableState(this.stateFile,1);durableRecord(this.stateFile,{version:1,claims});
+  }
+  private temporaryClaims():TemporaryDiskClaim[]{
+    if(!existsSync(this.temporaryStateFile))return [];
+    const row=JSON.parse(readFileSync(this.temporaryStateFile,'utf8')) as TemporaryDiskClaims;
+    assertStateVersion(row,1,this.temporaryStateFile);
+    if(row.version!==1||!Array.isArray(row.claims))throw Error('invalid temporary disk claims: '+this.temporaryStateFile);
+    const ids=new Set<string>();
+    for(const claim of row.claims){
+      if(!claim||typeof claim.id!=='string'||!claim.id||ids.has(claim.id)||!Number.isSafeInteger(claim.pid)||claim.pid<=0
+        ||typeof claim.identity!=='string'||!claim.identity||typeof claim.path!=='string'||!claim.path||resolve(claim.path)!==claim.path
+        ||!Number.isSafeInteger(claim.bytes)||claim.bytes<=0)throw Error('invalid temporary disk claim: '+this.temporaryStateFile);
+      ids.add(claim.id);
+    }
+    return row.claims.filter(claim=>claim.identity===processIdentity(claim.pid));
+  }
+  private recordTemporaries(claims:TemporaryDiskClaim[]):void{
+    assertWritableState(this.temporaryStateFile,1);durableRecord(this.temporaryStateFile,{version:1,claims});
   }
   activeLeases():BuildLease[]{
     if(!this.pool||!existsSync(this.pool.dir))return [];
@@ -112,8 +136,29 @@ export class DiskCapacity {
       const margin=outputs.every(output=>output.complete)?0:rounded-measured;
       return {root:lease.root,outputs,remainingBytes:raw?raw+margin:0};
     });
-    const freeBytes=this.host.disk(path).freeBytes,reservedBytes=rows.reduce((sum,row)=>sum+row.remainingBytes,0);
-    return {freeBytes,floorBytes:TEMP_DISK_FLOOR_BYTES,reservedBytes,availableBytes:freeBytes-TEMP_DISK_FLOOR_BYTES-reservedBytes,leases:rows};
+    const freeBytes=this.host.disk(path).freeBytes,temporaries=this.temporaryClaims();
+    const buildReservedBytes=rows.reduce((sum,row)=>sum+row.remainingBytes,0),temporaryReservedBytes=temporaries.reduce((sum,row)=>sum+row.bytes,0),reservedBytes=buildReservedBytes+temporaryReservedBytes;
+    if(!Number.isSafeInteger(freeBytes)||freeBytes<0||!Number.isSafeInteger(reservedBytes))throw Error('disk capacity bytes were not measured: '+path);
+    return {freeBytes,floorBytes:TEMP_DISK_FLOOR_BYTES,reservedBytes,buildReservedBytes,temporaryReservedBytes,temporaries,
+      availableBytes:freeBytes-TEMP_DISK_FLOOR_BYTES-reservedBytes,leases:rows};
+  }
+  /** The check and durable claim share the pool/build capacity lock. A denied
+   * attempt owns nothing; every successful attempt has its own release. */
+  tryTemporary(path:string,bytes:number):{snapshot:CapacitySnapshot;lease:TemporaryDiskLease|null}{
+    if(!path||!Number.isSafeInteger(bytes)||bytes<=0)throw Error('invalid temporary disk reservation');
+    const pid=process.pid,identity=processIdentity(pid),id=randomUUID();path=resolve(path);
+    if(!identity)throw Error('temporary disk owner has no process birth identity');
+    return this.locked(()=>{
+      const leases=[...this.activeLeases(),...this.claims()];
+      this.reclaimLocked(path,leases,undefined,bytes);
+      const snapshot=this.snapshot(path,leases);
+      if(snapshot.availableBytes<bytes)return {snapshot,lease:null};
+      const claim:TemporaryDiskClaim={id,pid,identity,path,bytes};
+      this.recordTemporaries([...snapshot.temporaries,claim]);
+      let released=false;
+      const release=()=>{if(released)return;this.locked(()=>this.recordTemporaries(this.temporaryClaims().filter(row=>row.id!==id)));released=true;};
+      return {snapshot,lease:Object.freeze({...claim,release})};
+    });
   }
   /** A service target, or an explicit build outside a pool lease, promises
    * only its declared output. Pool and build claims merge by target, so the

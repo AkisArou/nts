@@ -9,29 +9,32 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 import {releaseToken} from './case-context.ts';
-import {DiskCapacity} from './disk-capacity.ts';
+import {DiskCapacity,type TemporaryDiskLease} from './disk-capacity.ts';
 
 /** The source-owned caller chooses the policy; launcher variables never do. */
 export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
 export type TemporaryAdmissionSnapshot = {
   context: TemporaryAdmissionContext["kind"]; freeBytes: number;
-  diskFloorBytes: number; reservedBytes: number; buildPromisesBytes:number; requiredFreeBytes: number; admitted: boolean;
+  diskFloorBytes: number; reservedBytes: number; buildPromisesBytes:number; temporaryPromisesBytes:number; requiredFreeBytes: number; admitted: boolean;
 };
 type TemporaryAdmissionOptions = {
-  path: string; context: TemporaryAdmissionContext; reservedBytes: number; host?:HostObservations;capacity?:DiskCapacity;
+  path: string; context: TemporaryAdmissionContext; reservedBytes: number; host?:HostObservations;capacity?:DiskCapacity;env?:NodeJS.ProcessEnv;
 };
 
 /** One policy for an allocation into a run's registered temporary space:
  * every capture reserves its measured size above the temporary disk floor.
  * Its memory is its job's reservation in the memory ledger, never this.
- * Check before starting the allocation, outside its execution budget. */
+ * Acquire before allocation, outside its execution budget; retain the returned
+ * lease through publication and drain, and release it in finally. */
 export class TemporaryAdmission {
   #options: TemporaryAdmissionOptions;
+  #capacity:DiskCapacity;
   constructor(options: TemporaryAdmissionOptions) {
     this.#options = options;
     if (!Number.isSafeInteger(options.reservedBytes) || options.reservedBytes <= 0) throw new Error("invalid temporary space reservation");
     if (options.context?.kind !== "gate" && options.context?.kind !== "standalone") throw new Error("invalid temporary admission context");
     this.#validate();
+    this.#capacity=options.capacity??new DiskCapacity({host:options.host,env:options.env});
   }
 
   #validate(): void {
@@ -50,17 +53,14 @@ export class TemporaryAdmission {
     }
   }
 
-  check(): TemporaryAdmissionSnapshot {
+  tryAcquire():{snapshot:TemporaryAdmissionSnapshot;lease:TemporaryDiskLease|null} {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
-    const capacity=this.#options.capacity??new DiskCapacity({host:this.#options.host});
-    capacity.reclaim(path,reservedBytes);
-    const snapshot=capacity.snapshot(path),freeBytes=snapshot.freeBytes;
-    if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
+    const {snapshot,lease}=this.#capacity.tryTemporary(path,reservedBytes),freeBytes=snapshot.freeBytes;
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
-    const buildPromisesBytes=snapshot.reservedBytes;
-    const requiredFreeBytes = diskFloorBytes + reservedBytes + buildPromisesBytes;
-    return { context: context.kind, freeBytes, diskFloorBytes, reservedBytes, buildPromisesBytes,requiredFreeBytes, admitted: freeBytes >= requiredFreeBytes };
+    const buildPromisesBytes=snapshot.buildReservedBytes,temporaryPromisesBytes=snapshot.temporaryReservedBytes;
+    const requiredFreeBytes = diskFloorBytes + reservedBytes + buildPromisesBytes+temporaryPromisesBytes;
+    return {lease,snapshot:{context:context.kind,freeBytes,diskFloorBytes,reservedBytes,buildPromisesBytes,temporaryPromisesBytes,requiredFreeBytes,admitted:lease!==null}};
   }
 }
 

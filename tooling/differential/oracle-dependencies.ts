@@ -14,6 +14,7 @@ import {GateResource} from '../gate/gate-resource.ts';
 import {managerPin,withPackageManager} from '../inputs/package-manager.ts';
 import {activeCommand} from '../gate/active-command.ts';
 import {TemporaryAdmission,type TemporaryAdmissionContext} from '../gate/admission.ts';
+import type {TemporaryDiskLease} from '../gate/disk-capacity.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
@@ -163,7 +164,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
   checked(capability);
   const ledger=join(capability.admission.kind==='gate'?capability.admission.temporary.parent:capability.directory,'oracle-dependency-calls.jsonl');
   capability={...capability,directory:join(capability.directory,'node-'+process.versions.node)};
-  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES,host:hostObservations(env)});
+  const admission=new TemporaryAdmission({path:capability.directory,context:capability.admission,reservedBytes:CAPTURE_DISK_BYTES,host:hostObservations(env),env});
   mkdirSync(capability.directory,{recursive:true});
   const recordCall=(mode:'cold'|'hit'|'held')=>appendFileSync(ledger,JSON.stringify({version:1,step:capability.ownerStep,nodeVersion:process.versions.node,directory:capability.directory,mode,wallMs:performance.now()-callStart,...counts})+'\n');
   let lock:GateResource|null;
@@ -189,14 +190,16 @@ export async function captureDependencies(capability:DependencyCapability,signal
     if(existsSync(started))throw Error('oracle dependency capture was interrupted: '+started);
     const selectionStart=performance.now(),inputSet=await installInputs(capability,counts),selectionWallMs=performance.now()-selectionStart;
     publish(started,{capability,started:new Date().toISOString()});
+    let diskLease:TemporaryDiskLease|null=null;
     try{
-      let snapshot=admission.check();
-      while(!snapshot.admitted){
+      let attempt=admission.tryAcquire();
+      while(!attempt.lease){
         if(signal?.aborted)throw new ToolingInstrumentError('tooling-setup','oracle dependency capture canceled during admission');
         await pause(1000,undefined,{signal});
-        snapshot=admission.check();
+        attempt=admission.tryAcquire();
       }
-      writeFileSync(join(capability.directory,'admission.json'),JSON.stringify({at:new Date().toISOString(),...snapshot})+'\n');
+      diskLease=attempt.lease;
+      writeFileSync(join(capability.directory,'admission.json'),JSON.stringify({at:new Date().toISOString(),...attempt.snapshot,claim:{id:diskLease.id,pid:diskLease.pid,identity:diskLease.identity,path:diskLease.path,bytes:diskLease.bytes}})+'\n');
       const before=performance.now();
       const inputRecord=join(capability.directory,'install-inputs.json');publish(inputRecord,inputSet);
       const inputSha256=hash(readFileSync(inputRecord));
@@ -236,6 +239,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
       recordCall('cold');
       return ready;
     }catch(error){publish(failed,{kind:error instanceof CaseBudgetError?'case-budget':'tooling-setup',reason:String(error),finished:new Date().toISOString()});throw error;}
+    finally{diskLease?.release();}
   }catch(error){recordCall('held');throw error;}finally{lock.close();}
 }
 

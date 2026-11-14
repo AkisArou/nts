@@ -42,19 +42,19 @@ test("both capture contexts reserve above the temporary floor, and memory is not
   const options = { path, reservedBytes: 2 ** 30, host,capacity };
   const gate = new TemporaryAdmission({ ...options, context: { kind: "gate", temporary } });
   const standalone = new TemporaryAdmission({ ...options, context: { kind: "standalone" } });
-  assert.equal(gate.check().admitted, true);
-  assert.equal(standalone.check().admitted, true);
-  assert.equal(gate.check().diskFloorBytes, 40 * 2 ** 30);
-  assert.equal(gate.check().requiredFreeBytes, 41 * 2 ** 30);
-  assert.equal(standalone.check().diskFloorBytes,gate.check().diskFloorBytes);
-  assert.equal(standalone.check().requiredFreeBytes,gate.check().requiredFreeBytes);
-  setFree(40.5 * 2 ** 30);
-  assert.equal(gate.check().admitted, false, "the image reservation is in addition to the gate temporary floor");
-  assert.equal(standalone.check().admitted,false);
-  setFree(41 * 2 ** 30);
-  assert.equal(gate.check().admitted, true);
-  assert.equal(standalone.check().admitted, true);
-  assert.equal("availableGiB" in gate.check(), false, "a capture's memory is its job's reservation in the ledger");
+  for(const free of [60,40.5,41]){
+    setFree(free*2**30);
+    for(const admission of [gate,standalone]){
+      const attempt=admission.tryAcquire();
+      try{
+        assert.equal(attempt.snapshot.admitted,free>=41);
+        assert.equal(attempt.lease!==null,free>=41);
+        assert.equal(attempt.snapshot.diskFloorBytes,40*2**30);
+        assert.equal(attempt.snapshot.requiredFreeBytes,41*2**30);
+        assert.equal('availableGiB' in attempt.snapshot,false,"a capture's memory is its job's reservation in the ledger");
+      }finally{attempt.lease?.release();}
+    }
+  }
 });
 
 test("gate policy rejects a replaced registration and outside or escaping capture roots", t => {
@@ -66,9 +66,9 @@ test("gate policy rejects a replaced registration and outside or escaping captur
   symlinkSync(join(run, "outside"), join(temporary.path, "link"));
   assert.throws(() => new TemporaryAdmission({ ...options, path: join(temporary.path, "link", "capture") }), /ancestor escapes/);
   const admitted = new TemporaryAdmission({ ...options, path });
-  assert.equal(admitted.check().admitted, true);
+  const attempt=admitted.tryAcquire();assert.ok(attempt.lease);t.after(()=>attempt.lease?.release());
   renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
-  assert.throws(() => admitted.check(), /temporary directory was replaced/);
+  assert.throws(() => admitted.tryAcquire(), /temporary directory was replaced/);
   assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
 });
 

@@ -112,10 +112,10 @@ test('canonical children retain the owned bundle, while a launcher override cann
 
 test('temporary admission obeys the same owned disk even when the path cannot be read on the host',t=>{
   const root=testScratch(t,'host-observations-disk'),env=ownMemory(root,{disk:{freeBytes:0,freeInodes:0}});
-  const host=hostObservations(env),admission=new TemporaryAdmission({path:'/unreadable/missing',context:{kind:'standalone'},reservedBytes:1024,host});
-  assert.equal(admission.check().admitted,false);
+  const host=hostObservations(env),admission=new TemporaryAdmission({path:'/unreadable/missing',context:{kind:'standalone'},reservedBytes:1024,host,env});
+  assert.equal(admission.tryAcquire().lease,null);
   ownMemory(root,{disk:{freeBytes:2**40,freeInodes:2**30}});
-  assert.equal(admission.check().admitted,true);
+  const attempt=admission.tryAcquire();assert.equal(attempt.snapshot.admitted,true);assert.ok(attempt.lease);attempt.lease.release();
 });
 
 

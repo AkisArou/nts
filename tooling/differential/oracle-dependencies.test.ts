@@ -13,6 +13,8 @@ import {before,test} from 'node:test';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage} from './oracle-dependencies.ts';
 import {ownMemory,useOwnMemory} from '../gate/test-memory.ts';
+import {DiskCapacity} from '../gate/disk-capacity.ts';
+import {waitFor} from '../gate/test-wait.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 before(setupOracleTestEnvironment);
@@ -95,6 +97,42 @@ test('an unrelated dirty file does not block dependency capture reuse',async t=>
   const f=installFixture(t),cap=f.cap('one'),ready=await captureDependencies(cap),before=readFileSync(join(dirname(ready),'semantic.json'));
   f.write('docs/outside.md','dirty outside-only change\n');
   assert.equal(await captureDependencies(cap),ready);assert.deepEqual(readFileSync(join(dirname(ready),'semantic.json')),before);
+});
+test('a completed cold capture publishes its claim receipt and releases disk after drain',async t=>{
+  const f=installFixture(t),cap=f.cap('disk-lifetime'),env=canonicalFixture(cap),capacity=new DiskCapacity({env});
+  const ready=await captureDependencies(cap,undefined,env);
+  const receipt=JSON.parse(readFileSync(join(dirname(ready),'admission.json'),'utf8'));
+  assert.equal(receipt.admitted,true);assert.equal(receipt.claim.bytes,2**30);assert.equal(receipt.claim.pid,process.pid);
+  assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);
+  assert.equal(await captureDependencies(cap,undefined,env),ready,'a ready hit needs no second claim');
+  assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);
+});
+test('a real failed producer drains before its temporary claim is released',async t=>{
+  const f=installFixture(t);
+  f.write('packages/one/package.json','{"name":"owned-one","version":"1.0.0","dependencies":{"nts-missing-disk-control":"0.0.0"}}\n');
+  f.git('add','packages/one/package.json');f.git('commit','-qm','Make the real frozen install fail');
+  const cap=f.cap('failed-disk-lifetime'),env=canonicalFixture(cap),capacity=new DiskCapacity({env}),directory=join(cap.directory,'node-'+process.versions.node);
+  await assert.rejects(captureDependencies(cap,undefined,env),/capture not measured|install|lockfile/);
+  const receipt=JSON.parse(readFileSync(join(directory,'admission.json'),'utf8'));assert.equal(receipt.admitted,true);assert.ok(receipt.claim.id);
+  const command=JSON.parse(readFileSync(join(directory,'command.json'),'utf8'));assert.ok(Number.isInteger(command.status)&&command.status!==0);
+  assert.ok(readFileSync(join(directory,'failed.json'),'utf8').includes('tooling-setup'));
+  assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);
+});
+test('canceling an admission wait never owns or leaks temporary bytes',async t=>{
+  const f=installFixture(t),cap=f.cap('canceled-disk-wait');
+  ownMemory(join(f.parent,'memory'),{disk:{freeBytes:40*2**30,freeInodes:100}});
+  const env=canonicalFixture(cap),capacity=new DiskCapacity({env}),controller=new AbortController(),pending=captureDependencies(cap,controller.signal,env);
+  let stopped:string|undefined;
+  const ended=pending.then(()=>{stopped='capture completed before admission wait';return undefined;},error=>{stopped=String(error);return error;});
+  try{
+    await waitFor('the capture waiting after its started record',()=>{
+      try{readFileSync(join(cap.directory,'node-'+process.versions.node,'started.json'));return true;}
+      catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return false;throw error;}
+    },{stopped:()=>stopped});
+    assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);controller.abort();
+    assert.match(String(await ended),/abort|cancel/i);
+    assert.equal(capacity.snapshot(f.parent).temporaryReservedBytes,0);
+  }finally{controller.abort();await ended;}
 });
 test('a dirty workspace input blocks dependency capture',async t=>{
   const f=installFixture(t),cap=f.cap('one');await captureDependencies(cap);

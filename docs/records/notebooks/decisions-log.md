@@ -2994,3 +2994,13 @@ the complete nested hierarchy without relying on a process closer. A shell
 outside a bindable user-manager unit receives the exact scope rerun command.
 The historical empty-slice population was cleared by the power-cut reboot; no
 foreign or populated slice is reclaimed by this change.
+## Temporary disk admission claims capacity (11-14)
+
+TemporaryAdmission previously checked disk space without reserving it, so two
+captures could both spend the same bytes above the floor. DiskCapacity now
+checks and publishes a PID/birth-bound claim under its existing capacity lock.
+Captures receive an explicit lease, retain it through publication and resource
+drain, and release it in finally. Separate versioned temporary state preserves
+older build writers' schema; all new capacity decisions include live temporary
+promises. Owner death reclaims an abandoned claim. Resource fixtures pass their
+own complete capacity namespace rather than discovering the machine's pool.

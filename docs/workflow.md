@@ -743,8 +743,14 @@ the tooling strict checker owns the source's type checking.
   completion. Profile values and the pinned toolchain define compatibility.
   Non-pool test and Clippy builds hold claims for their selected outputs in the
   same owner, with process birth identity and dead-owner reclamation. Claims
-  for one target merge with its pool promise. Temporary admission reads that
-  same remaining promise before admitting an allocation. Fixtures carry a
+  for one target merge with its pool promise. Temporary admission checks and
+  durably claims its measured byte allowance under that same capacity lock.
+  Its explicit lease stays held through preparation, publication and resource
+  drain, then releases in `finally`; a denied attempt owns nothing. Temporary
+  claims carry PID and birth identity and use a separate versioned file, so
+  older build-claim writers cannot overwrite them. Dead holders are reclaimed
+  by the same owner liveness check. Build, pool and temporary admissions all
+  subtract these live promises before granting new capacity. Fixtures carry a
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
@@ -1191,6 +1197,11 @@ the first node task.
   compatible completed builds release it. The same owner supplies temporary
   admission. Clippy has one declared cache on every route.
   ([log](records/notebooks/decisions-log.md#active-build-disk-promises-11-12)).
+- **Temporary bytes are acquired, not only observed.** Captures hold an explicit
+  disk lease in the same capacity equation as pool/build promises. One locked
+  check-and-claim prevents concurrent requests spending the same free bytes;
+  release follows publication and drain, while dead process identities expire
+  ([log](records/notebooks/decisions-log.md#temporary-disk-admission-claims-capacity-11-14)).
 
 - **Compiled cleanup follows observed ownership.** Inactivity and CPU decisions
   consume supplied observations; real-child controls use readiness barriers.
