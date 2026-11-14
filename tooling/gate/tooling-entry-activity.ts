@@ -22,7 +22,10 @@ export function ownedToolingSpawn(value:unknown,files:ReadonlySet<string>):{file
   for(let index=1;index<args.length-1;index++){
     const flag=args[index] as string;
     if(flag==='--'){if(index!==args.length-2)return;break;}
-    if(!process.allowedNodeEnvironmentFlags.has(flag))return;
+    // The runner forwards these two normalized numeric worker controls even
+    // though Node deliberately excludes them from NODE_OPTIONS.
+    const workerControl=/^--test-(?:concurrency|timeout)=(?:0|[1-9][0-9]*)$/.test(flag);
+    if(!workerControl&&!process.allowedNodeEnvironmentFlags.has(flag))return;
     if(['--import','--require','-r','--loader','--experimental-loader'].includes(flag)){
       if(++index>=args.length-1)return;
     }else if(!flag.includes('=')){
