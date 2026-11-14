@@ -10,6 +10,7 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "748": { "kind": "kept", "why": "#748 atomic temporary disk claim controls and lifetime evidence retained for review and its written record" },
     "782": { "kind": "kept", "why": "#782 owned manager lifetime probes and raw proof retained for review and its written record" },
     "790": { "kind": "kept", "why": "#790 private config-build controls and raw proof referenced by its Markdown record" },
     "789": { "kind": "kept", "why": "#789 authenticated census timelines, attribution and raw proof cited by its Markdown record" },
