@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
-import {landingStatus,status} from './check.ts';
+import {landingStatus,status} from './status.ts';
 import {Pool} from './pool.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {ownMemory} from '../gate/test-memory.ts';
