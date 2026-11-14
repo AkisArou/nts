@@ -48,7 +48,7 @@ export class SourceFacts {
     const functions=new Set([kind.FunctionDeclaration,kind.FunctionExpression,kind.ArrowFunction,kind.MethodDeclaration,kind.Constructor,kind.GetAccessor,kind.SetAccessor]);
     const parameter=(name:BindingName,values:Map<string,SourceBinding>):void=>{
       if(ast.isIdentifier(name))values.set(name.text,{value:name,kind:'parameter'});
-      else for(const element of name.elements)if(ast.isBindingElement(element))parameter(element.name,values);
+      else for(const element of name.elements)if(ast.isBindingElement(element)&&element.name)parameter(element.name,values);
     };
     const visit=(node:Node,scope:Node,functionDepth:number):void=>{
       const start=this.nodes.length;this.nodes.push(node);
