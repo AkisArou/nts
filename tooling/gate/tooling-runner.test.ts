@@ -32,28 +32,41 @@ test('incomplete timing and activity capabilities fail before starting a worker'
   }
 });
 
-test('activity verification and cleanup retain definite failures and drain every acquired lifetime',async t=>{
+test('activity verification and cleanup retain definite failures and drain every acquired lifetime',t=>{
   const root=mkdtempSync(join(tmpdir(),'tooling-activity-lifetime-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
-  for(const failed of [false,true])for(const fault of ['none','verify','close','both']){
-    const file=join(root,`${failed}-${fault}.test.mjs`);
-    writeFileSync(file,`import{test}from'node:test';test('lifetime result',()=>{${failed?"throw Error('definite lifetime assertion');":""}});`);
-    let acquired=0,verified=0,closed=0;const pending=new Set<()=>void>(),watches=new Set<string>(),output=new PassThrough();output.resume();
-    const running=runTooling([file],{output,resultEnv:{},timing:{now:()=>0,scheduleIdle(callback){pending.add(callback);return()=>{pending.delete(callback);};}},
-      activity:{acquire:(files)=>{acquired++;assert.deepEqual([...files],[file]);return {frequency:100,
-        watch:(name,sample)=>{watches.add(name);sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{watches.delete(name);};},sample:()=>{},
-        verify:()=>{verified++;if(fault==='verify'||fault==='both')throw Error('verification control');},
-        close:()=>{closed++;if(fault==='close'||fault==='both')throw Error('cleanup control');}};}}});
-    if(failed||fault==='none'){
-      const result=await running;assert.equal(result.status,failed?1:0);assert.equal(result.completedFailures,failed?1:0);
-      if(fault!=='none')assert.match(result.observationFailure!.reason,fault==='verify'?/verification control/:/cleanup control/);
-    }else await assert.rejects(running,error=>{
-      assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,fault==='verify'?'tooling-setup':'tooling-cleanup');
-      if(fault==='verify'||fault==='both')assert.match(error.message,/verification control/);
-      if(fault==='close'||fault==='both')assert.match(error.message,/cleanup control/);
-      return true;
-    });
-    assert.deepEqual([acquired,verified,closed],[1,1,1]);assert.equal(pending.size,0);assert.equal(watches.size,0);
-  }
+  const probe=join(root,'probe.mjs');
+  writeFileSync(probe,`import assert from'node:assert/strict';import{writeFileSync}from'node:fs';import{PassThrough}from'node:stream';
+import{runTooling}from ${JSON.stringify(new URL('./tooling-runner.ts',import.meta.url).href)};
+import{ToolingInstrumentError}from ${JSON.stringify(new URL('./step-result.ts',import.meta.url).href)};
+const rows=[];
+for(const failed of [false,true])for(const fault of ['none','verify','close','verify-close','watch','releases']){
+ const file=${JSON.stringify(root)}+'/'+failed+'-'+fault+'.test.mjs';
+ writeFileSync(file,"import{test}from'node:test';test('lifetime result',()=>{"+(failed?"throw Error('definite lifetime assertion');":"")+"});");
+ let acquired=0,verified=0,closed=0,idleReleases=0,watchReleases=0;const pending=new Set(),watches=new Set(),output=new PassThrough();output.resume();
+ const running=runTooling([file],{output,resultEnv:{},timing:{now:()=>0,scheduleIdle(callback){pending.add(callback);return()=>{pending.delete(callback);idleReleases++;if(fault==='releases')throw Error('idle release control');};}},
+  activity:{acquire:(files)=>{acquired++;assert.deepEqual([...files],[file]);return {frequency:100,
+   watch:(name,sample)=>{watches.add(name);sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{watches.delete(name);watchReleases++;if(fault==='watch'||fault==='releases')throw Error('watch release control');};},sample:()=>{},
+   verify:()=>{verified++;if(fault.startsWith('verify'))throw Error('verification control');},
+   close:()=>{closed++;if(fault==='close'||fault==='verify-close')throw Error('cleanup control');}};}}});
+ let result,error;
+ try{result=await running;}catch(actual){error=actual;}
+ if(failed||fault==='none'){
+  assert.equal(error,undefined);assert.equal(result.status,failed?1:0);assert.equal(result.completedFailures,failed?1:0);
+  if(fault!=='none')assert.ok(result.observationFailure);
+ }else{assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,fault==='verify'?'tooling-setup':'tooling-cleanup');}
+ const diagnostic=error?.message??result?.observationFailure?.reason??'';
+ if(fault.startsWith('verify'))assert.match(diagnostic,/verification control/);
+ if(fault==='close'||fault==='verify-close')assert.match(diagnostic,/cleanup control/);
+ if(fault==='watch'||fault==='releases')assert.match(diagnostic,/watch release control/);
+ if(fault==='releases')assert.match(diagnostic,/idle release control/);
+ assert.deepEqual([acquired,verified,closed],[1,1,1]);assert.equal(pending.size,0);assert.equal(watches.size,0);
+ assert.ok(idleReleases>0);assert.equal(watchReleases,1);
+ rows.push({failed,fault,status:result?.status??null,completedFailures:result?.completedFailures??null,kind:error?.kind??result?.observationFailure?.kind??null,diagnostic,acquired,verified,closed,idleReleases,watchReleases,pending:pending.size,watches:watches.size});
+}
+console.log(JSON.stringify(rows));`);
+  const actual=spawnTest(process.execPath,[probe],{env:fixtureEnvironment(t),encoding:'utf8'},'activity lifetime with supplied timing');
+  assert.equal(actual.status,0,actual.stdout+actual.stderr);const rows=JSON.parse(actual.stdout.trim());
+  assert.equal(rows.length,12);assert.ok(rows.every(row=>row.acquired===1&&row.verified===1&&row.closed===1&&row.watchReleases===1&&row.pending===0&&row.watches===0));
 });
 
 test("tooling slice names preserve nesting and cannot name unrelated units",()=>{

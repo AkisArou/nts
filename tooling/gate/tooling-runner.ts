@@ -150,10 +150,14 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   };
   const source:ToolingActivitySource=options.activity??{acquire:(files,started,broken)=>new ToolingEntryActivity(files,started,broken)};
   let activity:ToolingActivityLifetime|undefined,drained=false,primaryFailure:unknown;
+  const errors:unknown[]=[];
+  const releaseIdle=(entry:Active)=>{const close=entry.cancelIdle;entry.cancelIdle=undefined;try{close?.();}catch(error){errors.push(error);}};
+  const releaseEntry=(entry:Active)=>{
+    releaseIdle(entry);const close=entry.cancelWatch;entry.cancelWatch=undefined;try{close?.();}catch(error){errors.push(error);}
+  };
   const drain=()=>{
     if(drained)return;drained=true;
-    const errors:unknown[]=[];
-    for(const entry of active.values())for(const close of [entry.cancelIdle,entry.cancelWatch])try{close?.();}catch(error){errors.push(error);}
+    for(const entry of active.values())releaseEntry(entry);
     active.clear();
     try{if(typeof activity?.close==='function')activity.close();}catch(error){errors.push(error);}
     if(errors.length)throw new ToolingInstrumentError('tooling-cleanup','cannot close tooling activity lifetime: '+errors.map(String).join('; '),{cause:new AggregateError(errors)});
@@ -187,7 +191,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
     }catch(error){broken(error);}
   };
   const arm=(file:string,entry:Active)=>{
-    entry.cancelIdle?.();
+    releaseIdle(entry);
     entry.cancelIdle=schedule(()=>{
       try{
         activity!.sample();
@@ -232,7 +236,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       const file=fileOf(data);if(!file)return;
       open.get(file)?.delete(data.testId??data.name!);
       if(resolve(data.name)===file){
-        const entry=active.get(file);entry?.cancelIdle?.();entry?.cancelWatch?.();active.delete(file);
+        const entry=active.get(file);if(entry)releaseEntry(entry);active.delete(file);
         const row=times.get(file)!;if(row.startedMs!==null){row.wallMs=clock()-begun-row.startedMs;row.passed=data.details.passed!==false;}
       }
       else if(active.has(file))touch(file);
