@@ -58,3 +58,7 @@ addons	78.1	325.1	8
 blockers	750.5	730.5	1
 divergence	118.5	99.2	1
 interop	652.0	2093.7	6
+# Whole Test262 census: healthy current release arms at bbe38a2cdbea6a9ac81770e9f1dce56ae977c43d; cgroup CPU, eight slots; JVM is contended sizing data, not calibrated performance.
+test262-census-c	573.4	2495.2	8	cgroup-v2-scope-v1
+test262-census-llvm	334.1	2040.6	8	cgroup-v2-scope-v1
+test262-census-jvm	646.3	2566.2	8	cgroup-v2-scope-v1

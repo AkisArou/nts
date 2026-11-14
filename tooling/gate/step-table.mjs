@@ -66,9 +66,11 @@ export const STEPS = [
   { name: "test262-llvm", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
   // Every test262 directory run whole on one backend (all.sh's test262_census),
   // held to its records, listing each case that runs now for the full check.
-  { name: "test262-census-c", bound: 3600, elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on C: recorded rows hold, and what runs now is listed" },
-  { name: "test262-census-llvm", bound: 3600, elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on LLVM: recorded rows hold, and what runs now is listed" },
-  { name: "test262-census-jvm", bound: 3600, elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on the JVM: recorded rows hold, and what runs now is listed",
+  // Their bounds derive from CPU history or times.tsv, including the whole
+  // concurrent run's CPU share, through step-bound.ts rather than a fixed hour.
+  { name: "test262-census-c", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on C: recorded rows hold, and what runs now is listed" },
+  { name: "test262-census-llvm", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on LLVM: recorded rows hold, and what runs now is listed" },
+  { name: "test262-census-jvm", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "every test262 directory, whole, on the JVM: recorded rows hold, and what runs now is listed",
     capabilities: ["jvm"],
   },
   // The TypeScript records on one backend each (all.sh's typescript_backend).

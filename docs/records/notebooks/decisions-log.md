@@ -2949,3 +2949,21 @@ and SHA-256. #786 puts the rule in AGENTS.md and the records audit, bounds new
 standalone tables at 16 KiB, and records legacy non-Markdown sizes through the
 audit's sole --record writer. Existing records are retained; deleting one needs
 the user's approval.
+
+## Persistent worker caps and measured census bounds (11-15)
+
+2026-11-15: #789 attributed leased-case delay to repeated manager writes of
+unchanged caps, followed by ancestor updates tied to active lease totals.
+Persistent worker registrations now retain acquired cgroup device/inode and
+their kernel allowance until filesystem observation proves departure. Every
+lease still reads real limits and ancestry and resets its own peak meter;
+replacement and unreadability refuse. Only changed limits are published, and
+only the changed parent sibling is updated.
+
+The whole Test262 censuses use the existing derived bound, with tool-written
+CPU baselines and the concurrent run's cost share, rather than a fixed hour.
+Adjacent release C and LLVM comparisons calibrate performance; the JVM pair
+overlapped a scheduled wide run unevenly and supplies sizing data and a
+supportive load control. Its timing is not a calibrated speed claim. Raw
+measurements stay in kept scratch; the task's written record retains the
+decision tables and artifact identities.

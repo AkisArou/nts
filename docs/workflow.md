@@ -886,9 +886,14 @@ the tooling strict checker owns the source's type checking.
   ledger's margin. An unknown case is charged live use and that margin.
   Active case promises and fixed steps share the run's admitted reservation;
   a case that needs more asks for admitted growth before starting. The hard
-  case cap is separate from this forecast. Before entry, the common worker
-  owner raises the worker subtree to hold its admitted case caps; nested
-  work cannot enlarge a real enclosing case cap. Each lease keeps its token
+  case cap is separate from this forecast. The common worker owner retains
+  each registered persistent scope's acquired device and inode. The worker
+  subtree's floor holds those scopes' caps until a fresh cgroup filesystem
+  observation proves departure; lease completion alone cannot lower it.
+  Replacement or unreadability refuses. Each lease still reads actual caps
+  and ancestry and resets its own peak meter. An unchanged kernel cap needs
+  no manager write, and a changed parent bound updates only that sibling.
+  Nested work cannot enlarge a real enclosing case cap. Each lease keeps its token
   until its final peak is retained and its workers have drained. A kill by
   an ancestor limit names that cgroup, its cap and the case cap, rather than
   claiming host-wide memory pressure.
@@ -1178,6 +1183,14 @@ the first node task.
   verifies the kernel boundary before entry, and completion retains the
   token through final observation and worker drain
   ([log](records/notebooks/decisions-log.md#pooled-cases-own-memory-admission-11-12)).
+
+- **Persistent scopes retain their kernel allowances across leases.** Fresh
+  per-lease observations and meters remain independent of cap publication.
+  Registered scope identities determine the ancestor floor until observed
+  departure, and unchanged limits incur no manager call. Whole census bounds
+  use measured CPU history or the committed baseline through the existing
+  concurrent-run rule
+  ([log](records/notebooks/decisions-log.md#persistent-worker-caps-and-measured-census-bounds-11-15)).
 
 - **Declared readers place inputs; inference only adds reach:** module assets
   use parsed imports and named module-relative URLs. Anchors do not claim
