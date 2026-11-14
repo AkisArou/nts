@@ -2940,3 +2940,12 @@ only type stripping; strict tooling checks already own their types. Prepared
 consumers use the authenticated loader export, while the three existing direct
 probe callers retain the same pinned Node strip-only source semantics. Output
 identity and cold-capture cost remain explicit proof obligations.
+
+## Committed records are written evidence (11-14)
+
+The user agreed that committed evidence is the written Markdown plus its
+decision-relevant table. Raw machine output stays in kept scratch, cited by path
+and SHA-256. #786 puts the rule in AGENTS.md and the records audit, bounds new
+standalone tables at 16 KiB, and records legacy non-Markdown sizes through the
+audit's sole --record writer. Existing records are retained; deleting one needs
+the user's approval.

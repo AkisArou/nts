@@ -182,6 +182,12 @@ issues; `docs/plan.md` changes when the priorities or the order of the streams
 do. Numbers are not copied into pages: they live in
 `results/`, written by tools. Observations, measurements, investigations and
 long notes go to `docs/records/` (long notes in `docs/records/notebooks/`).
+Committed records are Markdown plus the decision-relevant table. Raw machine
+output stays in kept scratch, cited by path and SHA-256. A standalone decision
+table is `.tsv` or `.csv` and at most 16 KiB; legacy non-Markdown records may only
+shrink under the size ratchet. Update that ratchet only with
+`node tooling/gate/records.ts . --record`, never by hand. Deleting an existing
+record requires the user's approval.
 A decision is written into the page it governs, in its `## Decisions` section;
 its dated entry goes in `docs/records/notebooks/decisions-log.md`.
 
