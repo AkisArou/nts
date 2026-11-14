@@ -10,7 +10,6 @@ import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {COLUMNS,COMPARATORS,POLICY,publishRun,sealRun,renderFull} from "../bench/run-record.ts";
 import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./record-numbers.ts";
-import {DECISION_TABLE_BYTES,RECORD_SIZES,parseRecordSizes,recordSizeProblems} from './records.ts';
 // The records step and tooling both exercise the canonical validator controls.
 import "../bench/run-record.test.ts";
 import {newTestScratch} from "./test-scratch.ts";
@@ -24,20 +23,9 @@ test("record numbering preserves named collisions and refuses new or stale allow
   assert.deepEqual(recordNumbers(names.filter(name=>!name.startsWith("0099"))).stale,["0099"]);
 });
 
-test('record sizes keep legacy bounds and admit only bounded decision tables',()=>{
-  const previous=parseRecordSizes({version:1,files:{'docs/records/legacy.json':12}});
-  assert.deepEqual(recordSizeProblems({'docs/records/legacy.json':12,'docs/records/table.tsv':DECISION_TABLE_BYTES,'docs/records/table.csv':32},previous),[]);
-  for(const [file,size,bound] of [['docs/records/legacy.json',13,12],['docs/records/raw.json',4,0],['docs/records/table.tsv',DECISION_TABLE_BYTES+1,DECISION_TABLE_BYTES]] as const){
-    const problems=recordSizeProblems({[file]:size},previous);assert.equal(problems.length,1);
-    assert.ok(problems[0]!.includes(`${file}: ${size} bytes; bound ${bound} bytes`));
-    assert.match(problems[0]!,/committed records are Markdown plus the decision table; raw output stays in kept scratch, cited by path and SHA-256/);
-  }
-  assert.throws(()=>parseRecordSizes({version:1,files:{'docs/records/../escape.json':1}}),/invalid record size ratchet row/);
-  assert.throws(()=>parseRecordSizes({version:1,files:{'docs/records/page.md':1}}),/invalid record size ratchet row/);
-});
-
 test("the real records step validates benchmark evidence and its rendered table",()=>{
   const root=newTestScratch("records-step");
+  const ratchet=join(root,'results/record-sizes.json'),tableBound=16*1024;
   const runGit=(...args:string[])=>{
     const result=spawnSync("git",gitArguments(args),{env:testEnvironment(),cwd:root,encoding:"utf8"});
     assert.equal(result.status,0,result.stderr);return result.stdout;
@@ -60,11 +48,11 @@ test("the real records step validates benchmark evidence and its rendered table"
     writeRecords(root,{version:1,generator_version:1,generator_digest:"a".repeat(32),seed:null,rows:[]});
     for(const number of KNOWN_DUPLICATE_RECORDS)for(const suffix of ["first","second"])writeFileSync(join(root,`docs/records/${number}-${suffix}.md`),"fixture\n");
     assert.equal(record('--initialize').status,1,'initialization cannot replace the staged production ratchet');
-    rmSync(join(root,RECORD_SIZES));
-    const legacy=join(root,'docs/records/legacy.json'),legacyBytes=DECISION_TABLE_BYTES+1;
+    rmSync(ratchet);
+    const legacy=join(root,'docs/records/legacy.json'),legacyBytes=tableBound+1;
     writeFileSync(legacy,'x'.repeat(legacyBytes));
     const initialized=record('--initialize');assert.equal(initialized.status,0,initialized.stderr);
-    assert.equal(parseRecordSizes(JSON.parse(readFileSync(join(root,RECORD_SIZES),'utf8'))).files['docs/records/legacy.json'],legacyBytes);
+    assert.equal(JSON.parse(readFileSync(ratchet,'utf8')).files['docs/records/legacy.json'],legacyBytes);
     runGit("init","-q");runGit("config","user.name","records control");runGit("config","user.email","test@example.invalid");
     runGit("add",".");runGit("commit","-qm","records fixture");
     const pin="a".repeat(40),digest="b".repeat(64),at="2026-10-29T12:00:00.000Z";
@@ -89,23 +77,29 @@ test("the real records step validates benchmark evidence and its rendered table"
     const rewritten=call();assert.equal(rewritten.status,1);assert.match(rewritten.stderr,/immutable.*rewritten/);
     writeFileSync(path,original);writeFileSync(page,rendered);
     const restored=call();assert.equal(restored.status,0,restored.stderr);
-    const raw=join(root,'docs/records/raw.json');writeFileSync(raw,'x'.repeat(DECISION_TABLE_BYTES+1));
+    const raw=join(root,'docs/records/raw.json');writeFileSync(raw,'x'.repeat(tableBound+1));
     const rejected=call();assert.equal(rejected.status,1);assert.match(rejected.stderr,/docs\/records\/raw.json: 16385 bytes; bound 0 bytes/);
     assert.match(rejected.stderr,/raw output stays in kept scratch, cited by path and SHA-256/);rmSync(raw);
     writeFileSync(join(root,'docs/records/written.md'),'written evidence\n'.repeat(2000));
     assert.equal(call().status,0,'written Markdown needs no size row');
+    const oversized=join(root,'docs/records/oversized.tsv');writeFileSync(oversized,'x'.repeat(tableBound+1));
+    const tooLarge=call();assert.equal(tooLarge.status,1);assert.match(tooLarge.stderr,/oversized.tsv: 16385 bytes; bound 16384 bytes/);rmSync(oversized);
     writeFileSync(join(root,'docs/records/decision.tsv'),'arm\tverdict\ncurrent\tPASS\n');
     const table=record();assert.equal(table.status,0,table.stderr);
     const written=call();assert.equal(written.status,0,written.stderr);
-    const ratchetBefore=readFileSync(join(root,RECORD_SIZES));
+    const ratchetBefore=readFileSync(ratchet);
     writeFileSync(legacy,'x'.repeat(legacyBytes+1));
     const grown=call();assert.equal(grown.status,1);assert.match(grown.stderr,/legacy.json: 16386 bytes; bound 16385 bytes/);
     const forbiddenRefresh=record();assert.equal(forbiddenRefresh.status,1);assert.match(forbiddenRefresh.stderr,/recorded size may only fall/);
-    assert.deepEqual(readFileSync(join(root,RECORD_SIZES)),ratchetBefore,'--record never masks growth');
+    assert.deepEqual(readFileSync(ratchet),ratchetBefore,'--record never masks growth');
     writeFileSync(legacy,'x');assert.equal(call().status,1,'the lower size must be retained before it can land');
     const lower=record();assert.equal(lower.status,0,lower.stderr);
-    assert.equal(parseRecordSizes(JSON.parse(readFileSync(join(root,RECORD_SIZES),'utf8'))).files['docs/records/legacy.json'],1);
+    assert.equal(JSON.parse(readFileSync(ratchet,'utf8')).files['docs/records/legacy.json'],1);
     writeFileSync(legacy,'xx');assert.equal(call().status,1,'a refreshed lower bound cannot regrow');writeFileSync(legacy,'x');
+    rmSync(legacy);const departed=call();assert.equal(departed.status,1);assert.match(departed.stderr,/legacy.json: absent;.*--record/);
+    const removed=record();assert.equal(removed.status,0,removed.stderr);
+    assert.equal(Object.hasOwn(JSON.parse(readFileSync(ratchet,'utf8')).files,'docs/records/legacy.json'),false);
+    const exact=call();assert.equal(exact.status,0,exact.stderr);
     const subject=join(root,"tests/programs/pending");mkdirSync(join(subject,"src"),{recursive:true});
     writeFileSync(join(subject,"tsconfig.json"),'{"files":["src/main.ts"]}');
     writeFileSync(join(subject,"src/main.ts"),"export function work(n:number):number{return n;}\n");

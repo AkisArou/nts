@@ -13,15 +13,15 @@ import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from './record-numbers.ts';
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const RECORD_DIRECTORY=relative(SOURCE,fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
 const BENCHMARK_STORE=dataDirectory(new URL('../../results/benchmarks/',import.meta.url));
-export const RECORD_SIZES=relative(SOURCE,fileURLToPath(fileInput(new URL('../../results/record-sizes.json',import.meta.url))));
-export const DECISION_TABLE_BYTES=16*1024;
+const RECORD_SIZES=relative(SOURCE,fileURLToPath(fileInput(new URL('../../results/record-sizes.json',import.meta.url))));
+const DECISION_TABLE_BYTES=16*1024;
 const RECORD_RULE='committed records are Markdown plus the decision table; raw output stays in kept scratch, cited by path and SHA-256';
-export type RecordSizes={version:1;files:Record<string,number>};
+type RecordSizes={version:1;files:Record<string,number>};
 const inRoot=(root:string,input:URL)=>join(root,relative(SOURCE,fileURLToPath(input)));
 
 const recordName=(file:string)=>file.startsWith(RECORD_DIRECTORY+'/')&&!file.endsWith('.md')
   &&!file.includes('\\')&&!file.includes('\0')&&!file.split('/').some(part=>part===''||part==='.'||part==='..');
-export function parseRecordSizes(value:unknown):RecordSizes {
+function parseRecordSizes(value:unknown):RecordSizes {
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('invalid record size ratchet');
   const row=value as {version?:unknown;files?:unknown};
   if(row.version!==1||!row.files||typeof row.files!=='object'||Array.isArray(row.files))throw Error('invalid record size ratchet');
@@ -34,7 +34,7 @@ export function parseRecordSizes(value:unknown):RecordSizes {
 }
 
 /** The legacy ratchet owns regular files only; Markdown is written evidence. */
-export function recordSizes(root:string):Record<string,number> {
+function recordSizes(root:string):Record<string,number> {
   const files:Record<string,number>={};
   const walk=(directory:string):void=>{
     for(const entry of readdirSync(join(root,directory),{withFileTypes:true}).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)){
@@ -49,7 +49,7 @@ export function recordSizes(root:string):Record<string,number> {
   walk(RECORD_DIRECTORY);return files;
 }
 
-export function recordSizeProblems(actual:Record<string,number>,previous:RecordSizes):string[] {
+function recordSizeProblems(actual:Record<string,number>,previous:RecordSizes):string[] {
   const problems:string[]=[];
   for(const [file,size] of Object.entries(actual)){
     const legacy=Object.hasOwn(previous.files,file),table=/\.(?:tsv|csv)$/.test(file);
@@ -60,7 +60,7 @@ export function recordSizeProblems(actual:Record<string,number>,previous:RecordS
   return problems;
 }
 
-export function checkRecordSizes(root:string):void {
+function checkRecordSizes(root:string):void {
   const path=join(root,RECORD_SIZES),previous=parseRecordSizes(JSON.parse(readFileSync(path,'utf8')));
   const actual=recordSizes(root),problems=recordSizeProblems(actual,previous);
   if(problems.length)throw Error(problems.join('\n'));
@@ -68,6 +68,8 @@ export function checkRecordSizes(root:string):void {
     const bound=previous.files[file]??DECISION_TABLE_BYTES;
     throw Error(`${file}: ${size} bytes; bound ${bound} bytes; run records.ts <root> --record to retain this table or lower size; ${RECORD_RULE}`);
   }
+  for(const [file,bound] of Object.entries(previous.files))if(!Object.hasOwn(actual,file))
+    throw Error(`${file}: absent; bound ${bound} bytes; run records.ts <root> --record to record its removal; ${RECORD_RULE}`);
 }
 
 /** Only the --record route publishes this ratchet. It cannot accept growth. */
