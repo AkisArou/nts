@@ -10,7 +10,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve as resolvePath, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import {nodeHarnessRuntime} from './node-harness-runtime.mjs';
+import {nodeHarnessRuntime} from './node-harness-runtime.ts';
 const {nodeHarnessPaths}=nodeHarnessRuntime;
 
 const HERE = dirname(new URL(import.meta.url).pathname);

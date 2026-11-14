@@ -1184,7 +1184,7 @@ export const RULES = [
   },
   {
     name: "the sealed node harness runtime",
-    when: p => p === "tooling/differential/oracle-node-harness.ts" || p === "tooling/conformance/node-harness-runtime.mjs",
+    when: p => p === "tooling/differential/oracle-node-harness.ts" || p === "tooling/conformance/node-harness-runtime.ts",
     settled: true,
     steps: ["tooling", "outcomes"],
     arms: [],

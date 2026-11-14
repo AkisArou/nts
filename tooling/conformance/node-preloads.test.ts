@@ -85,6 +85,21 @@ test('static shim imports add their TypeScript roots transitively and capture ev
   for(const path of ['subject/bindings.node.mjs','shared/first.mjs','shared/second.mjs'])assert.ok(plan.declarations.files[join(root,'runtime/node',path)]);
   assert.ok(plan.declarations.absent.includes(join(root,'runtime/node/subject/shape.mjs')));
 });
+test('infrastructure TypeScript stays strip-only while a program import retains its own project',t=>{
+  const {root,write}=fixture(t),entry=join(root,'tooling/conformance/infrastructure.ts'),config=join(root,'tooling/conformance/tsconfig.json');
+  write('tooling/conformance/run-one.mjs',"import './infrastructure.ts';");
+  write('tooling/conformance/infrastructure.ts','export const value:number=19;');
+  const infrastructure=nodePreloadPlan(root,'subject',false);
+  assert.ok(infrastructure.declarations.files[entry]);
+  assert.ok(!infrastructure.preloads.some(row=>row.entry===entry));
+  assert.ok(infrastructure.declarations.observations.every(row=>row.path!==config),'an infrastructure import never asks for a project');
+  write('tooling/conformance/tsconfig.json','{"files":["infrastructure.ts"]}');
+  write('runtime/node/subject/bindings.node.mjs',"import '../../../tooling/conformance/infrastructure.ts';");
+  const program=nodePreloadPlan(root,'subject',false),selected=program.preloads.find(row=>row.entry===entry);
+  assert.ok(selected,'a prior infrastructure visit cannot suppress the program role');assert.equal(selected.project,config);
+  write('tooling/conformance/infrastructure.ts','export enum NonErasable {Value=1}');
+  assert.throws(()=>nodePreloadPlan(root,'subject',false),/Node infrastructure cannot strip .*infrastructure\.ts:.*TypeScript enum is not supported/s);
+});
 test('changed declared data changes the plan; missing required roots never produce a fallback',t=>{
   const {root,write}=fixture(t),before=nodePreloadPlan(root,'subject',false);
   write('runtime/node/subject/uses','sibling\n');const after=nodePreloadPlan(root,'subject',false);

@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {dirname,join,resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parse} from 'acorn';
+import {stripRuntimeSource} from '../differential/oracle-runtime-modules.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {nodeHarnessPaths,nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from '../differential/oracle-node-harness.ts';
 export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} from '../differential/oracle-node-harness.ts';
@@ -12,7 +13,7 @@ export {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} fro
 // repository root. The same declarations supply parsed fixture closures.
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
 const DRIVER=new URL('./run-one.mjs',import.meta.url),WORKER=new URL('./run-cjs-worker.mjs',import.meta.url);
-const HARNESS_RUNTIME=new URL('./node-harness-runtime.mjs',import.meta.url);
+const HARNESS_RUNTIME=new URL('./node-harness-runtime.ts',import.meta.url);
 const inRoot=(root:string,asset:URL)=>join(root,relative(SOURCE_ROOT,fileURLToPath(asset)));
 
 export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:string){
@@ -26,18 +27,22 @@ export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:
     edges.push({from,to:entry,kind});
     if(!preloads.some(item=>item.entry===entry))preloads.push({entry,project:host.projectFor(entry)});
   };
-  const visited=new Set<string>();
-  function javascript(file:string){
-    file=host.realpath(file);if(visited.has(file))return;visited.add(file);observe(file);
-    const ast=parse(host.readFile(file)!,{ecmaVersion:'latest',sourceType:'module'});
+  const visited=new Set<string>(),roles=new Set<string>();
+  function javascript(file:string,role:'infrastructure'|'program'){
+    file=host.realpath(file);const key=JSON.stringify([file,role]);if(roles.has(key))return;roles.add(key);visited.add(file);observe(file);
+    const source=host.readFile(file)!;let text=source;
+    if(role==='infrastructure')try{text=stripRuntimeSource(source);}catch(error){throw Error('Node infrastructure cannot strip '+file+': '+String(error),{cause:error});}
+    const ast=parse(text,{ecmaVersion:'latest',sourceType:'module'});
     function visit(node:any):void{
       if(!node||typeof node!=='object')return;
       if(['ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration','ImportExpression'].includes(node.type)){
         const specifier=node.source?.value;
         if(typeof specifier==='string'&&specifier.startsWith('.')){
           const target=resolve(dirname(file),specifier);edges.push({from:file,to:target,kind:'static import'});
-          if(/\.[cm]?tsx?$/.test(target))typed(target,file,'static TypeScript import');
-          else if(/\.[cm]?js$/.test(target))javascript(target);
+          if(/\.[cm]?tsx?$/.test(target)){
+            if(role==='infrastructure')javascript(target,role);
+            else typed(target,file,'static TypeScript import');
+          }else if(/\.[cm]?js$/.test(target))javascript(target,role);
         }
       }
       for(const value of Object.values(node))if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);
@@ -49,20 +54,20 @@ export function nodePreloadPlan(root:string,name:string,compiled:boolean,addon?:
   const workerDriver=inRoot(root,WORKER);
   observe(workerDriver);
   if(host.fileExists(workerDriver)){
-    javascript(workerDriver);const source=host.realpath(workerDriver);
+    javascript(workerDriver,'infrastructure');const source=host.realpath(workerDriver);
     drivers.commonjsWorker={source,sha256:files[source]!};
   }
   observe(fileURLToPath(import.meta.url));
-  javascript(inRoot(root,DRIVER));
+  javascript(inRoot(root,DRIVER),'infrastructure');
   observe(join(subject.dir,'uses'));observe(join(subject.dir,'globals'));
   observe(subject.childFixtures);
-  if(!compiled){if(host.fileExists(subject.bindings))javascript(subject.bindings);else observe(subject.bindings);typed(subject.entry,subject.dir,'subject');}
-  if(host.fileExists(subject.shape))javascript(subject.shape);else observe(subject.shape);
+  if(!compiled){if(host.fileExists(subject.bindings))javascript(subject.bindings,'program');else observe(subject.bindings);typed(subject.entry,subject.dir,'subject');}
+  if(host.fileExists(subject.shape))javascript(subject.shape,'program');else observe(subject.shape);
   for(const global of globals??[])typed(nodeGlobalEntry(subject.dir,global),join(subject.dir,'globals'),'global '+global);
   for(const sibling of siblings){
-    if(host.fileExists(sibling.bindings))javascript(sibling.bindings);else observe(sibling.bindings);
+    if(host.fileExists(sibling.bindings))javascript(sibling.bindings,'program');else observe(sibling.bindings);
     typed(sibling.entry,join(subject.dir,'uses'),'sibling '+sibling.requestedName);
-    if(host.fileExists(sibling.shape))javascript(sibling.shape);else observe(sibling.shape);
+    if(host.fileExists(sibling.shape))javascript(sibling.shape,'program');else observe(sibling.shape);
   }
   // Preload project configs and their resolved options are captured by emit.
   const paths=nodeHarnessPaths(root,name),usesHarnessRuntime=visited.has(inRoot(root,HARNESS_RUNTIME));
