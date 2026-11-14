@@ -735,7 +735,9 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   registered and have no unpublished commits; ignored local data also keeps it.
   Git removes checkouts, preserving its worktree registry.
   Each removal rechecks physical root identity, the resource lock, leases, build
-  claims, unit ownership and process cwd/exe/open files. Readable process owners
+  claims, unit working/root directories and ExecStartPre/ExecStart/ExecStartPost
+  paths and arguments, and process cwd/exe/open files. Unit environments and
+  argument-file contents are outside this guard. Readable process owners
   always count. A non-dumpable process with a readable cgroup outside every nts
   or agent unit is excluded with its PID, birth and cgroup in the audit facts;
   unreadable nts processes and unreadable cgroups keep the root by name.

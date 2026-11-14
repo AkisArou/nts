@@ -6,7 +6,7 @@ import {join,relative,resolve,sep} from 'node:path';
 export type TreeUser={pid:number;command:string;where:string};
 type ObservedUser=TreeUser&{link:string;path:string};
 export type TreeProcessOptions={proc?:string;self?:number;/** A fixture's explicitly owned kernel processes. */pids?:readonly number[]};
-export type TreeProcessObservation={users:ObservedUser[];ignored:string[];unreadable:Error[]};
+export type TreeProcessObservation={users:ObservedUser[];ignored:{pid:number;birth:string;command:string;group:string}[];unreadable:Error[]};
 const PROC='/proc';
 const missing=(error:unknown)=>(error as NodeJS.ErrnoException).code==='ENOENT';
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -56,7 +56,7 @@ export function observeTreeProcesses(roots:readonly string[],{proc=PROC,self,pid
         const denied=['EACCES','EPERM'].includes((error as NodeJS.ErrnoException).code??'');
         if(denied&&!group.split('/').some(part=>/^nts(?:[.-]|$)/.test(part))){
           const command=readFileSync(join(dir,'comm'),'utf8').trim();
-          reading.ignored.push('ignored non-dumpable outside nts: pid '+pid+' '+command+'; birth '+birth+'; cgroup '+group);continue;
+          reading.ignored.push({pid:Number(pid),birth,command,group});continue;
         }
         throw Error('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
       }catch(reason){reading.unreadable.push(Error('tree ownership keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
@@ -75,10 +75,10 @@ export function treeUsers(tree:string,options:TreeProcessOptions={}):TreeUser[]{
   if(!reading.users.length)complete(reading);
   return reading.users.map(({pid,command,where})=>({pid,command,where}));
 }
-export function assertNoProcessUsers(roots:readonly string[],proc=PROC):string[]{
-  const reading=observeTreeProcesses(roots,{proc});
+export function assertNoProcessUsers(roots:readonly string[],options:TreeProcessOptions={}):string[]{
+  const reading=observeTreeProcesses(roots,options);
   const owner=reading.users[0];if(owner)throw Error('process '+owner.pid+' owns '+owner.link+' in '+owner.path);
-  complete(reading);return reading.ignored;
+  complete(reading);return reading.ignored.map(row=>'ignored non-dumpable outside nts: pid '+row.pid+' '+row.command+'; birth '+row.birth+'; cgroup '+row.group);
 }
 export function describeUsers(users:readonly TreeUser[],most=3):string{
   const named=users.slice(0,most).map(user=>`pid ${user.pid} ${user.command} (${user.where})`);

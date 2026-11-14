@@ -62,22 +62,67 @@ function isDirectory(path:string):boolean{
   catch(error){if(missing(error))return false;throw error;}
 }
 
-/** A queued/starting service may own a tree before /proc exposes its child. */
+export type UnitTreeOwnership={unit:string;workingDirectory:string;rootDirectory:string;
+  commands:{property:'ExecStartPre'|'ExecStart'|'ExecStartPost';path:string;args:string[]}[]};
+/** busctl preserves actual argument boundaries, including spaces and semicolons. */
+export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnership{
+  const rows=text.trim().split('\n').map(line=>JSON.parse(line) as {type:unknown;data:unknown});
+  if(rows.length!==5||rows.slice(0,2).some(row=>row.type!=='s'||typeof row.data!=='string'))throw Error('unreadable unit directories: '+unit);
+  const properties=['ExecStartPre','ExecStart','ExecStartPost'] as const;
+  const commands=properties.flatMap((property,index)=>{
+    const row=rows[index+2]!;
+    if(row.type!=='a(sasbttttuii)'||!Array.isArray(row.data))throw Error('unreadable unit '+property+': '+unit);
+    return row.data.map((entry:unknown)=>{
+      if(!Array.isArray(entry)||entry.length!==10||typeof entry[0]!=='string'||!entry[0].startsWith('/')||
+        !Array.isArray(entry[1])||entry[1].some(arg=>typeof arg!=='string'))throw Error('unreadable unit execution ownership: '+unit);
+      return {property,path:entry[0],args:[...entry[1]] as string[]};
+    });
+  });
+  return {unit,workingDirectory:rows[0]!.data as string,rootDirectory:rows[1]!.data as string,commands};
+}
+export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwnership):void{
+  const check=(path:string,field:string)=>{
+    if(roots.some(root=>under(resolve(root),path)))throw Error('unit '+reading.unit+' owns '+field+' '+path);
+  };
+  const cwd=reading.workingDirectory.replace(/^-/, '');
+  for(const [field,path] of [['WorkingDirectory',cwd],['RootDirectory',reading.rootDirectory]] as const){
+    if(!path)continue;
+    if(!path.startsWith('/'))throw Error('unresolved unit '+field+': '+reading.unit);
+    check(path,field);
+    if(field==='RootDirectory'&&roots.some(root=>under(path,resolve(root))))throw Error('unit '+reading.unit+' owns RootDirectory '+path);
+  }
+  for(const command of reading.commands){
+    check(command.path,command.property+' path');
+    for(const argument of command.args){
+      // Only the actual property values are inspected. No environment or
+      // argument-file contents, shell source, or application option grammar.
+      const value=argument.startsWith('-')&&argument.includes('=')?argument.slice(argument.indexOf('=')+1):argument;
+      if(value.startsWith('/')){check(value,command.property+' argument');check(resolve(value),command.property+' argument');}
+      else if(cwd&&!value.startsWith('-'))check(resolve(cwd,value),command.property+' argument');
+    }
+  }
+}
+/** A queued/starting service owns its execution inputs before /proc exposes
+ * the future child. Query precisely these five properties as typed values. */
 export function assertNoUnitUsers(roots:readonly string[]):void{
   const listed=infrastructureProbe({purpose:'disk reclamation unit ownership',command:'systemctl',
     args:['--user','list-units','--all','--type=service','--output=json']});
   const units=JSON.parse(listed.stdout) as {unit:string;active:string}[];
-  const names=units.filter(unit=>!['inactive','failed'].includes(unit.active)).map(unit=>unit.unit);
-  if(!names.length)return;
-  const facts=infrastructureProbe({purpose:'disk reclamation unit working directories',command:'systemctl',
-    args:['--user','show',...names,'--property=Id,WorkingDirectory,RootDirectory']}).stdout;
-  for(const group of facts.trim().split('\n\n')){
-    const values=Object.fromEntries(group.split('\n').map(line=>{const at=line.indexOf('=');return [line.slice(0,at),line.slice(at+1)];}));
-    for(const field of ['WorkingDirectory','RootDirectory']){
-      const path=values[field]?.replace(/^-/, '');
-      if(path?.includes('\\'))throw Error('unreadable escaped unit directory for '+values.Id);
-      if(path&&roots.some(root=>under(resolve(root),path)||(field==='RootDirectory'&&under(path,resolve(root)))))throw Error('unit '+values.Id+' owns '+field+' '+path);
-    }
+  const inactive=(unit:string):boolean=>{
+    const current=infrastructureProbe({purpose:'recheck departed disk unit '+unit,command:'systemctl',
+      args:['--user','show',unit,'--property=LoadState,ActiveState'],exits:'classify'});
+    return /^(?:ActiveState=inactive)$/m.test(current.stdout)&&/^(?:LoadState=(?:not-found|loaded))$/m.test(current.stdout);
+  };
+  for(const {unit} of units.filter(row=>row.active!=='inactive')){
+    const object=infrastructureProbe({purpose:'bind disk unit '+unit,command:'busctl',args:['--user','--json=short','call',
+      'org.freedesktop.systemd1','/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',unit],exits:'classify'});
+    if(object.status!==0){if(inactive(unit))continue;throw Error('unreadable disk unit identity: '+unit);}
+    const reply=JSON.parse(object.stdout) as {type:unknown;data:unknown};
+    if(reply.type!=='o'||!Array.isArray(reply.data)||reply.data.length!==1||typeof reply.data[0]!=='string'||!reply.data[0].startsWith('/org/freedesktop/systemd1/unit/'))throw Error('invalid disk unit identity: '+unit);
+    const properties=infrastructureProbe({purpose:'disk unit execution ownership '+unit,command:'busctl',args:['--user','--json=short','get-property',
+      'org.freedesktop.systemd1',reply.data[0],'org.freedesktop.systemd1.Service','WorkingDirectory','RootDirectory','ExecStartPre','ExecStart','ExecStartPost'],exits:'classify'});
+    if(properties.status!==0){if(inactive(unit))continue;throw Error('unreadable disk unit properties: '+unit);}
+    assertUnitTreeUnused(roots,parseUnitTreeOwnership(unit,properties.stdout));
   }
 }
 export const liveReclaimOwnership:ReclaimOwnership=(tree,target)=>{
