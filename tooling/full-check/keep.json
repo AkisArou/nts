@@ -10,6 +10,9 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "unit-names": { "kind": "kept", "why": "#686 task creation receipt and parent-slice probe retained with the compact unit-name investigation" },
+    "bound-clock": { "kind": "kept", "why": "#692 original admission-clock defect card and issue creation receipt" },
+    "core-wide-holds": { "kind": "kept", "why": "#740 kernel and scope evidence for the A-star and flight-planner aggregate worker-cap failures" },
     "787": { "kind": "kept", "why": "#787 supplied proc/status/build-footprint controls and raw proof referenced by the committed MD record" },
     "784": { "kind": "kept", "why": "#784 count disappearance controls and raw proof referenced by the committed MD record" },
     "709": { "kind": "kept", "why": "#709 raw controls and source receipts authenticated by docs/records/notebooks/disk-reclamation-709.json" },
