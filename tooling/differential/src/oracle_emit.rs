@@ -1678,7 +1678,10 @@ mod tests {
         );
         let mut names = std::collections::HashSet::new();
         for (file, bytes) in super::implementation_files() {
-            assert!(names.insert(file), "duplicate embedded oracle asset: {file}");
+            assert!(
+                names.insert(file),
+                "duplicate embedded oracle asset: {file}"
+            );
             assert_eq!(
                 std::fs::read(assets.join(file))
                     .unwrap_or_else(|error| panic!("embedded oracle asset {file}: {error}")),
