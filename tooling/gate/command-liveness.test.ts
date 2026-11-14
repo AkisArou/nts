@@ -31,6 +31,14 @@ test('a captured initial CPU baseline does not manufacture later progress',()=>{
   assert.equal(subject.sample(reading(299,{cpu:12})),undefined);
   assert.equal(subject.sample(reading(300,{cpu:12}))?.kind,'hung');
 });
+test('an enclosing step owns the collector budget without a hidden default CPU cutoff',()=>{
+  const subject=new CommandLiveness('tooling entry',{idleMs:300_000,budgetOwner:'enclosing-step'},0,100);
+  assert.equal(subject.budget,undefined);
+  assert.equal(subject.sample(reading(300_001,{cpu:9_000_000,own:9_000_000,processOwn:{pid:51,cpu:9_000_000}})),undefined);
+  assert.equal(subject.sample(reading(600_001,{cpu:9_000_000,own:9_000_000,processOwn:{pid:51,cpu:9_000_000}}))?.kind,'hung');
+  assert.equal(new CommandLiveness('ordinary command',{},0,100).sample(reading(1,{cpu:180_000}))?.kind,'runaway');
+  assert.throws(()=>new CommandLiveness('ambiguous budget',{budgetOwner:'enclosing-step',cpuBudgetSeconds:1},0,100),/delegated command budget/);
+});
 
 test('own CPU, per-process CPU, group budget and inactivity preserve their precedence and wording',()=>{
   const policy={idleMs:300,ownCpuSeconds:0.3,eachProcessCpuSeconds:0.5,cpuBudgetSeconds:1};

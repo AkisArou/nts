@@ -6,13 +6,15 @@ export const COMMAND_CPU_BUDGET_SECONDS=30*60;
 // allows slow launches; absence of bounded entry beyond it means the launcher
 // is wedged. This is a tooling-setup failure, never a compiled-case outcome.
 export const COMMAND_STARTUP_BOUND_MS=60_000;
-export type CommandPolicy={idleMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;startupMs?:number};
+export type CommandPolicy={idleMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;startupMs?:number;budgetOwner?:'enclosing-step'};
 export type CommandSample={now:number;cpu:number;own:number;busy:boolean;processOwn:{pid:number;cpu:number};entered?:boolean};
 export type CommandDecision={kind:'hung'|'runaway'|'timeout'|'startup';reason:string};
 const positive=(value:number,name:string)=>{if(!Number.isFinite(value)||value<=0)throw Error(name+' must be positive');return value;};
 const observation=(value:number,name:string)=>{if(!Number.isFinite(value)||value<0)throw Error('command observation '+name+' is missing or invalid');return value;};
 
 export function validateCommandPolicy(policy:CommandPolicy):void{
+  if(policy.budgetOwner!==undefined&&(policy.budgetOwner!=='enclosing-step'||policy.cpuBudgetSeconds!==undefined||policy.ownCpuSeconds!==undefined||policy.eachProcessCpuSeconds!==undefined))
+    throw Error('delegated command budget must be owned only by its enclosing step');
   positive(policy.idleMs??COMMAND_IDLE_GUARD_MS,'command idle guard');
   positive(policy.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS,'command CPU budget');
   if(policy.ownCpuSeconds!==undefined)positive(policy.ownCpuSeconds,'command own CPU bound');
@@ -23,7 +25,7 @@ export function validateCommandPolicy(policy:CommandPolicy):void{
 export class CommandLiveness {
   readonly began:number;
   readonly idle:number;
-  readonly budget:number;
+  readonly budget:number|undefined;
   readonly frequency:number;
   readonly ownBound:number|undefined;
   readonly processBound:number|undefined;
@@ -40,7 +42,9 @@ export class CommandLiveness {
     this.command=command;this.began=observation(began,'clock');this.last=began;this.clock=began;
     this.frequency=positive(frequency,'command observation CPU clock frequency');
     this.idle=policy.idleMs??COMMAND_IDLE_GUARD_MS;
-    this.budget=policy.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
+    // The tooling collector observes file inactivity; its enclosing step owns
+    // the stated/derived execution bound. Ordinary commands retain their budget.
+    this.budget=policy.budgetOwner==='enclosing-step'?undefined:policy.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
     this.ownBound=policy.ownCpuSeconds;this.processBound=policy.eachProcessCpuSeconds;
   }
   elapsed(now:number):number{
@@ -66,7 +70,7 @@ export class CommandLiveness {
     const command=this.command,frequency=this.frequency;
     if(this.ownBound!==undefined&&own/frequency>=this.ownBound)return {kind:'timeout',reason:`${command} used its ${this.ownBound} s CPU bound: its own CPU reached ${(own/frequency).toFixed(3)} s`};
     if(this.processBound!==undefined&&processOwn.cpu/frequency>=this.processBound)return {kind:'timeout',reason:`${command} used its ${this.processBound} s CPU bound: process ${processOwn.pid} own CPU reached ${(processOwn.cpu/frequency).toFixed(3)} s`};
-    if(measured/frequency>=this.budget)return {kind:'runaway',reason:`command NOT RUN (runaway): ${command}; process-group user+sys CPU ${(measured/frequency).toFixed(3)} s reached its ${this.budget} s budget`};
+    if(this.budget!==undefined&&measured/frequency>=this.budget)return {kind:'runaway',reason:`command NOT RUN (runaway): ${command}; process-group user+sys CPU ${(measured/frequency).toFixed(3)} s reached its ${this.budget} s budget`};
     // Reaping may lower the total; that still establishes a new baseline.
     if(measured!==this.used){this.used=measured;this.last=now;}
     else if(busy)this.last=now;

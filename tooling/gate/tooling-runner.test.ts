@@ -157,7 +157,7 @@ function suppliedIdleRun(t,file:string,result:string){
   const source=`import {runTooling} from ${JSON.stringify(runner)};
 let now=0;const tasks=[];
 const result=await runTooling([${JSON.stringify(file)}],{idleMs:1000,resultEnv:${JSON.stringify({NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'controlled'})},instrument:{
- frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{},now:()=>now,scheduleIdle(callback,milliseconds,file){const task={callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true;};},
+ frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,scheduleIdle(callback,milliseconds,file){const task={callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true;};},
  event(name,data){if(name==='test:dequeue'&&data.name==='unfinished'){now=9_000_000;const task=tasks.findLast(value=>!value.cancelled);if(!task)throw Error('no owned idle observation');task.callback();}}
 }});console.log('NTS_TOOLING_CONTROL '+JSON.stringify(result));`;
   const probe=file+'.control.ts';writeFileSync(probe,source);
@@ -307,7 +307,7 @@ const helper=${JSON.stringify(helper)},active=${JSON.stringify(active)},idle=${J
 const withIdle=process.argv[2]==='idle';
 {
   let now=0,progress=0;const scheduled=[];const output=new PassThrough();output.resume();
-  const result=await runTooling(withIdle?[active,idle]:[active],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{},now:()=>now,
+  const result=await runTooling(withIdle?[active,idle]:[active],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,
     scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};scheduled.push(task);return()=>{task.cancelled=true};},
     event(name,data){if(name==='test:complete'&&data.file===helper){progress++;now+=6;for(const task of [...scheduled])if(!task.cancelled&&task.at<=now){task.cancelled=true;task.callback();}}}
   }});
@@ -355,7 +355,7 @@ import{writeFileSync}from'node:fs';import{PassThrough}from'node:stream';
 const long=${JSON.stringify(long)},short=${JSON.stringify(short)};
 let now=0,progress=0,shortClosed=false,reportWasWaiting=false,transcript='';
 const tasks=[],output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
-const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{},now:()=>now,
+const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instrument:{frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},now:()=>now,
  scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true};},
  event(name,data){
   if(name!=='test:complete')return;
@@ -418,7 +418,7 @@ writeFileSync(${JSON.stringify(file)},[
 const output=new PassThrough();output.resume();let result;
 try{
  result=await runTooling([${JSON.stringify(file)}],{execArgv:['--import',${JSON.stringify(bootstrap)}],output,instrument:{
-  now:()=>0,scheduleIdle:()=>()=>{},frequency:100,watchActivity:()=>()=>{},sampleActivity:()=>{},
+  now:()=>0,scheduleIdle:()=>()=>{},frequency:100,watchActivity:(_file,sample)=>{sample({cpu:0,own:0,busy:false,processOwn:{pid:1,cpu:0}});return()=>{};},sampleActivity:()=>{},
   event(name,data){if(name==='test:complete'&&data.name==='async marker'){completed=true;for(const socket of sockets)socket.end('release');}}
  }});
 }finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}

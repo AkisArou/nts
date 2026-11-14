@@ -121,7 +121,7 @@ type ToolingInstrument={
 };
 export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;instrument?:ToolingInstrument}={}):Promise<ToolingResult> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
-  type Active={live:CommandLiveness;reading:ToolingActivitySample;cancelIdle?:()=>void;cancelWatch?:()=>void};
+  type Active={live:CommandLiveness;reading?:ToolingActivitySample;cancelIdle?:()=>void;cancelWatch?:()=>void};
   const active=new Map<string,Active>(),owners=new ToolingTestOwners(names);
   if(options.instrument!==undefined&&(!options.instrument||typeof options.instrument.now!=='function'||typeof options.instrument.scheduleIdle!=='function'
       ||typeof options.instrument.watchActivity!=='function'||typeof options.instrument.sampleActivity!=='function'||!Number.isFinite(options.instrument.frequency)||options.instrument.frequency<=0))
@@ -133,13 +133,13 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   }:options.instrument;
   try{
   const schedule=instrument.scheduleIdle;
-  let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0,instrumentError:ToolingInstrumentError|undefined,decisionKind:'hung'|'runaway'='hung';
+  let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0,instrumentError:ToolingInstrumentError|undefined;
   // Each file's tests that have started and not completed: what a hang names,
   // since a hung test prints nothing of its own.
   const open=new Map<string,Map<number|string,string>>();
   const hangReason=()=>{
     const tests=[...(hungFile?open.get(hungFile)?.values()??[]:[])];
-    return `tooling file NOT RUN (${decisionKind}): ${hungFile}; ${hung}${tests.length?` in ${tests.map(name=>JSON.stringify(name)).join(", ")}`:""}; ${priorFailures} prior assertion failure(s) retained in the transcript`;
+    return `tooling file NOT RUN (hung): ${hungFile}; ${hung}${tests.length?` in ${tests.map(name=>JSON.stringify(name)).join(", ")}`:""}; ${priorFailures} prior assertion failure(s) retained in the transcript`;
   };
   const broken=(error:unknown)=>{
     if(instrumentError)return;
@@ -152,9 +152,9 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       entry.reading=reading;const previous=entry.live.cpu;
       const decision=entry.live.sample({now:instrument.now(),...reading});
       if(decision){
-        decisionKind=decision.kind==='runaway'?'runaway':'hung';hungFile=file;hung=decision.reason;
-        if(decisionKind==='hung')publishHung(hangReason(),options.resultEnv,priorFailures);
-        else publishRunaway(hangReason(),options.resultEnv,priorFailures);
+        if(decision.kind!=='hung')throw Error('tooling inactivity observer received an undelegated budget decision');
+        hungFile=file;hung=decision.reason;
+        publishHung(hangReason(),options.resultEnv,priorFailures);
         process.stderr.write(hangReason()+'\n');controller.abort(new Error(hangReason()));
       }else if(previous!==entry.live.cpu||reading.busy)arm(file,entry);
     }catch(error){broken(error);}
@@ -162,14 +162,18 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   const arm=(file:string,entry:Active)=>{
     entry.cancelIdle?.();
     entry.cancelIdle=schedule(()=>{
-      try{instrument.sampleActivity();sample(file,entry,entry.reading);if(!hung&&!instrumentError)arm(file,entry);}
+      try{
+        instrument.sampleActivity();
+        if(entry.reading===undefined)throw Error(`missing tooling entry/activity observation at its idle bound: ${file}`);
+        sample(file,entry,entry.reading);if(!hung&&!instrumentError)arm(file,entry);
+      }
       catch(error){broken(error);}
     },options.idleMs??TOOLING_IDLE_GUARD_MS,file);
   };
   const touch=(file:string)=>{
     let entry=active.get(file);
     if(!entry){
-      entry={live:new CommandLiveness(file,{idleMs:options.idleMs??TOOLING_IDLE_GUARD_MS},instrument.now(),instrument.frequency),reading:{cpu:0,own:0,busy:false,processOwn:{pid:process.pid,cpu:0}}};
+      entry={live:new CommandLiveness(file,{idleMs:options.idleMs??TOOLING_IDLE_GUARD_MS,budgetOwner:'enclosing-step'},instrument.now(),instrument.frequency)};
       active.set(file,entry);const owned=entry;
       entry.cancelWatch=instrument.watchActivity(file,reading=>sample(file,owned,reading),broken);
     }
@@ -215,8 +219,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   if(hung){
     // Draining can deliver a completed failure after the guard's observation.
     // Publish the final evidence only after those events have been consumed.
-    if(decisionKind==='hung')publishHung(hangReason(),options.resultEnv,priorFailures);
-    else publishRunaway(hangReason(),options.resultEnv,priorFailures);
+    publishHung(hangReason(),options.resultEnv,priorFailures);
     return {status:priorFailures>0?1:2,completedFailures:priorFailures,times:measured};
   }
   return {status:success?0:1,completedFailures:priorFailures,times:measured};
