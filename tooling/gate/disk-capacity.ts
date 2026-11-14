@@ -16,6 +16,9 @@ import {infrastructureProbe} from './infrastructure-probe.ts';
 import {TEMP_DISK_FLOOR_BYTES} from './run-temporary.ts';
 import {assertStateVersion,assertWritableState} from './state-version.ts';
 import {durableRecord} from './durable-record.ts';
+import {reclaimDisk,liveReclaimOwnership,type ReclaimReport,type ReclaimTarget,type ReclaimOwnership} from './disk-reclamation.ts';
+import {landingLayout} from '../landing/layout.ts';
+import {layout as fullCheckLayout} from '../full-check/state.ts';
 
 export const DISK_CAPACITY='NTS_DISK_CAPACITY';
 export const BUILD_FOOTPRINT_FILE=new URL('../../results/builds/cold-inner.json',import.meta.url);
@@ -52,12 +55,20 @@ function poolSource(env:NodeJS.ProcessEnv):PoolCapacitySource|null {
 
 export class DiskCapacity {
   readonly host:HostObservations;readonly forecast:BuildForecast;readonly pool:PoolCapacitySource|null;readonly stateFile:string;
-  constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null}={}){
+  private readonly reclamation:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership};
+  constructor(options:{env?:NodeJS.ProcessEnv;host?:HostObservations;forecast?:BuildForecast;pool?:PoolCapacitySource|null;
+    reclamation?:{services:readonly ReclaimTarget[];ownership:ReclaimOwnership}}={}){
     const env=options.env??process.env;
     if(env[FIXTURE_ENVIRONMENT]!==undefined&&env[DISK_CAPACITY]===undefined)throw Error('fixture has no '+DISK_CAPACITY+' capability');
     this.host=options.host??hostObservations(env);this.forecast=options.forecast??coldBuildForecast();
     this.pool=options.pool===undefined?poolSource(env):options.pool;
     this.stateFile=this.pool?join(this.pool.dir,'.disk-builds.json'):env[DISK_CAPACITY]?env[DISK_CAPACITY]+'.builds.json':join(homedir(),'.cache/nts-pool/.disk-builds.json');
+    const landing=landingLayout(),full=fullCheckLayout();
+    // A private/fixture pool cannot discover the account's service trees.
+    const services=this.pool?.dir===join(homedir(),'.cache/nts-pool')&&env[FIXTURE_ENVIRONMENT]===undefined
+      ? [{tree:landing.tree,target:landing.target,service:true},{tree:full.tree,target:full.target,service:true},
+        ...[full.bench,...Object.values(full.records)].map(tree=>({tree,target:join(tree,'target'),service:true}))]:[];
+    this.reclamation=options.reclamation??{services,ownership:liveReclaimOwnership};
   }
   /** The same lock take() holds across its capacity check and branch switch. */
   locked<T>(body:()=>T):T {
@@ -112,6 +123,7 @@ export class DiskCapacity {
     if(!identity)throw Error('disk build owner has no process birth identity');
     this.locked(()=>{
       const claims=this.claims(),next={...lease,id,pid,identity};
+      this.reclaimLocked(lease.target,[...this.activeLeases(),...claims,next]);
       const snapshot=this.snapshot(lease.target,[...this.activeLeases(),...claims,next]);
       if(snapshot.availableBytes<0)throw Error('disk build admission: '+lease.target+' needs '+(-snapshot.availableBytes)+' more bytes above the 40 GiB floor and active build promises');
       this.record([...claims,next]);
@@ -121,4 +133,19 @@ export class DiskCapacity {
   }
   /** Pool callers already own this lock and pass Git facts from that instant. */
   poolSnapshot(path:string,leases:readonly BuildLease[]):CapacitySnapshot{return this.snapshot(path,[...leases,...this.claims()]);}
+  /** Explicit mutation; status/snapshot remains an observation. Admission and
+   * upkeep use this same owner and lock, with a measured cold-build margin. */
+  reclaim(path:string,extraReservedBytes=0):ReclaimReport|null {
+    return this.locked(()=>this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],undefined,extraReservedBytes));
+  }
+  private reclaimLocked(path:string,leases:readonly BuildLease[],maintenance?:{before:number;keep:number},extraReservedBytes=0):ReclaimReport|null {
+    if(!this.pool)return null;
+    return reclaimDisk({pool:this.pool,host:this.host,coldBytes:this.forecast.bytes,...this.reclamation,maintenance,
+      snapshot:()=>{const snapshot=this.snapshot(path,leases);return {...snapshot,reservedBytes:snapshot.reservedBytes+extraReservedBytes};},
+      protectedRoots:()=>[...this.activeLeases(),...this.claims(),...leases]});
+  }
+  /** Already inside the pool lock. The next take rereads Git after reclaim. */
+  poolReclaim(path:string,maintenance?:{before:number;keep:number}):ReclaimReport|null {
+    return this.reclaimLocked(path,[...this.activeLeases(),...this.claims()],maintenance);
+  }
 }

@@ -30,7 +30,8 @@ import { advanceMain, changedPaths, deleteBranch, hasCommit, isAncestor, namingI
 import { issueOfBranch } from "../tasks/branch.ts";
 import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
-import { LANDING_HOME, Queue, type Checking, type Entry, type Result } from "./queue.ts";
+import { Queue, type Checking, type Entry, type Result } from "./queue.ts";
+import {landingLayout} from './layout.ts';
 import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
 import { landingCpuMeasure, costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
@@ -252,7 +253,7 @@ export function prepareTree(root: string, tree: string, tip: string, env?: NodeJ
 
 /** The service's configuration on this machine: the shared checkout, origin, the landing tree and target, the pool. */
 export function machineConfig(root: string, select: Config["select"], log: Config["log"] = line => console.log(`landing: ${line}`)): Config {
-  const home = LANDING_HOME, tree = join(home, "tree"), target = join(home, "target");
+  const {home,tree,target}=landingLayout();
   return {
     home, root, remote: "origin", tree, target, pool: existsSync(POOL_HOME) ? new Pool(POOL_HOME, { root }, linkInputs(root)) : null,
     select, prepare: tip => prepareTree(root, tree, tip), runSteps: runLanding, log, restartAfter: ownCode,

@@ -20,7 +20,8 @@ import {withStateLock,versionedRecord,withStateWrite} from '../gate/state-file.t
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import {LANDING_HOME} from './layout.ts';
+export {LANDING_HOME} from './layout.ts';
 import { join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
 import { OOM_SCORE } from "../gate/memory-ledger.ts";
@@ -199,7 +200,6 @@ export class Queue {
 // ---------------------------------------------------------------------------
 
 /** The landing check's state on this machine: its queue and answers, its runs (kept three days), its tree and target. */
-export const LANDING_HOME = join(homedir(), ".cache/nts-landing");
 export const SERVICE_UNIT = "nts-landing-check";
 
 /** Whether a service holds the queue now. */

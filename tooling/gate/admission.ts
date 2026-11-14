@@ -54,6 +54,7 @@ export class TemporaryAdmission {
     this.#validate();
     const { path, context, reservedBytes } = this.#options;
     const capacity=this.#options.capacity??new DiskCapacity({host:this.#options.host});
+    capacity.reclaim(path,reservedBytes);
     const snapshot=capacity.snapshot(path),freeBytes=snapshot.freeBytes;
     if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
     const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;

@@ -31,7 +31,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // naming the commit that landed (LANDED_REFS), and the next upkeep resets it
 // once nothing uses it and nothing is left in it.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -43,6 +43,7 @@ import { describeUsers, treeUsers, type TreeUser } from "./tree-users.ts";
 import {DiskCapacity,coldBuildForecast,type BuildLease,type BuildForecast} from '../gate/disk-capacity.ts';
 import {completedBuild} from '../gate/build-completion.ts';
 import type {HostObservations} from '../gate/host-observations.ts';
+import type {ReclaimReport} from '../gate/disk-reclamation.ts';
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Where a held tree's branch is marked landed, at the commit that landed: refs/nts/landed/<branch>. */
@@ -84,6 +85,7 @@ export type PoolOptions = {
   /** A fixture owns the complete disk and allocated-byte observations. */
   host?:HostObservations;
   forecast?:BuildForecast;
+  reclamation?:NonNullable<ConstructorParameters<typeof DiskCapacity>[0]>['reclamation'];
   /** A tree's cargo target in bytes on disk, or null when it has none. */
   targetBytes?: (tree: string) => number | null;
 };
@@ -96,6 +98,7 @@ export type Given = { tree: PoolTree; branch: BranchOutcome[] };
 export type Pruned = {
   released: { tree: PoolTree; branch: string; outcome: BranchOutcome[] }[]; waiting: { tree: PoolTree; why: string }[];
   removed: { tree: PoolTree; targetBytes: number | null }[]; kept: { tree: PoolTree; why: string }[]; free: number;
+  reclamation:ReclaimReport|null;
 };
 
 /** The machine cannot host another tree now: `room` says why. */
@@ -115,7 +118,6 @@ function checked(git: Git, args: readonly string[], cwd: string): string {
 }
 const taskBranch = (branch: string) => /^[A-Za-z0-9._/-]+$/.test(branch) && branch !== "main" && !branch.startsWith("-") && !branch.includes("..");
 /** 1 for a tree with a cargo target, which a task reuses instead of building cold. */
-const warm = (tree: PoolTree) => existsSync(join(tree.path, "target")) ? 1 : 0;
 const compatible = (tree: PoolTree) => ['nts-dev','clippy'].every(name=>completedBuild(tree.path,name as 'nts-dev'|'clippy',join(tree.path,'target',name))) ? 1 : 0;
 
 /** A target's bytes on disk, as the gate measures its temporaries (`du -sx -B1`); null when there is no target. */
@@ -128,20 +130,12 @@ export function duTarget(tree: string): number | null {
   return bytes;
 }
 
-/** Give this user's own directories under `path` their write permission back, never through a link. */
-function writable(path: string): void {
-  const info = lstatSync(path);
-  if (info.isSymbolicLink() || !info.isDirectory() || info.uid !== process.getuid?.()) return;
-  if ((info.mode & 0o700) !== 0o700) chmodSync(path, (info.mode & 0o7777) | 0o700);
-  for (const entry of readdirSync(path, { withFileTypes: true })) if (entry.isDirectory()) writable(join(path, entry.name));
-}
-
 export class Pool {
   readonly dir: string; readonly git: Git; readonly inputs: Inputs; readonly remote: string | null;
   readonly capacity:DiskCapacity;private readonly target: (tree: string) => number | null;
   constructor(dir: string, git: Git, inputs: Inputs = () => {}, options: PoolOptions = {}) {
     this.dir = resolve(dir); this.git = git; this.inputs = inputs; this.remote = options.remote === undefined ? "origin" : options.remote;
-    this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git}});
+    this.capacity=new DiskCapacity({env:git.env,host:options.host,forecast:options.forecast,pool:{dir:this.dir,git},reclamation:options.reclamation});
     this.target = options.targetBytes ?? duTarget;
   }
 
@@ -218,6 +212,7 @@ export class Pool {
   init(n: number): PoolTree[] {
     if (!Number.isSafeInteger(n) || n < 1) throw new Error(`a pool of ${n} trees`);
     return this.locked(() => {
+      this.capacity.poolReclaim(this.dir);
       for (let i = 1; i <= n; i++) if (!existsSync(join(this.dir, String(i)))) this.grow(String(i));
       return this.trees();
     });
@@ -232,6 +227,7 @@ export class Pool {
   take(branch: string): PoolTree {
     if (!taskBranch(branch)) throw new Error(`not a task branch: ${branch}`);
     return this.locked(() => {
+      this.capacity.poolReclaim(this.dir);
       const trees = this.trees();
       const mine = trees.find(t => t.branch === branch);
       // Asked for again, a landed task's tree is held: its task goes on there.
@@ -342,7 +338,8 @@ export class Pool {
    * for one reset or removal at most.
    */
   prune({ idleMs = IDLE_LIMIT_MS, keep = WARM_MINIMUM, now = Date.now() }: { idleMs?: number; keep?: number; now?: number } = {}): Pruned {
-    const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0 };
+    if(keep<WARM_MINIMUM)throw Error('pool upkeep must keep at least two warm targets');
+    const out: Pruned = { released: [], waiting: [], removed: [], kept: [], free: 0,reclamation:null };
     if (!existsSync(this.dir)) return out;
     for (const name of this.locked(() => this.trees().filter(t => t.state === "landed").map(t => t.name))) {
       this.locked(() => {
@@ -359,37 +356,18 @@ export class Pool {
       const heads = new Map(this.trees().flatMap(t => t.branch ? [[t.branch, t.head] as const] : []));
       for (const [branch, landed] of this.landed()) if (heads.get(branch) !== landed) this.forget(branch);
     });
-    const tried = new Set<string>();
-    for (;;) {
-      const next = this.locked(() => {
-        const free = this.trees().filter(t => t.state === "free");
-        out.free = free.length;
-        const stale = free.filter(t => !tried.has(t.name) && t.movedAt !== null && now - t.movedAt > idleMs)
-          .sort((a, b) => warm(a) - warm(b) || a.movedAt! - b.movedAt! || Number(a.name) - Number(b.name));
-        if (free.length <= keep || !stale.length) return null;
-        const tree = stale[0]!;
-        tried.add(tree.name);
-        const targetBytes = this.target(tree.path);
-        const kept = this.remove(tree);
-        if (kept !== null) out.kept.push({ tree, why: kept });
-        else { out.removed.push({ tree, targetBytes }); out.free = free.length - 1; }
-        return tree;
-      });
-      if (!next) return out;
-    }
+    this.locked(()=>{
+      const trees=this.trees();
+      out.reclamation=this.capacity.poolReclaim(this.dir,{before:now-idleMs,keep});
+      for(const removal of out.reclamation?.removed??[]){
+        const tree=trees.find(row=>row.path===removal.root);
+        if(tree&&removal.kind==='unbuilt-checkout')out.removed.push({tree,targetBytes:null});
+      }
+      out.free=this.trees().filter(tree=>tree.state==='free').length;
+    });
+    return out;
   }
 
-  /**
-   * Remove a free tree with its target: `git worktree remove`, which refuses a
-   * tree with changes, then what is left of its folder, its own directories'
-   * write permission restored first. Null when it is gone; else why it stays.
-   */
-  private remove(tree: PoolTree): string | null {
-    const r = run(this.git, ["worktree", "remove", tree.path], this.git.root);
-    if (worktrees(this.git).some(t => resolve(t.path) === tree.path)) return r.stderr || `git worktree remove exited ${r.status}`;
-    if (existsSync(tree.path)) { writable(tree.path); rmSync(tree.path, { recursive: true, force: true }); }
-    return null;
-  }
 }
 
 /** A tree's untracked inputs, linked from the shared checkout by the tree's own linker, for work. */
@@ -444,8 +422,8 @@ export function pruneLines(pruned: Pruned, now = Date.now()): string[] {
   const lines = pruned.released.map(({ tree, branch, outcome }) =>
     `pool: reset tree ${tree.name}, whose task ${branch} landed, now that nothing uses it${outcome.map(b => `; its branch here ${b.state}${b.reason ? ` (${b.reason})` : ""}`).join("")}`);
   for (const { tree, why } of pruned.waiting) lines.push(`pool: kept tree ${tree.name} on its landed branch ${tree.branch}: ${why}`);
-  lines.push(...pruned.removed.map(({ tree, targetBytes }) =>
-    `pool: removed tree ${tree.name}, free and idle ${tree.movedAt === null ? "?" : idleFor(now - tree.movedAt)}${targetBytes === null ? "" : `, with its ${gb(targetBytes)} target`}`));
+  for(const row of pruned.reclamation?.removed??[])lines.push(`disk: removed ${row.root}, ${row.kind}, ${row.allocatedBytes} allocated bytes; free-space change ${row.freeBytesChange} bytes; ${row.facts.join('; ')}`);
+  for(const row of pruned.reclamation?.kept??[])lines.push(`disk: kept ${row.root}: ${row.reason}`);
   for (const { tree, why } of pruned.kept) lines.push(`pool: kept tree ${tree.name}, which could not be removed: ${why}`);
   if (pruned.removed.length) lines.push(`pool: ${pruned.free} free tree${pruned.free === 1 ? "" : "s"} kept warm`);
   return lines;

@@ -37,10 +37,10 @@ function pool(t: Parameters<typeof scratchRepo>[0], size = 2, options: PoolOptio
   const observationRoot=join(s.dir,'observations');
   const observations=ownMemory(observationRoot,{disk:{freeBytes:1000*GB,freeInodes:2**30}});
   const host=options.host??hostObservations({...s.env,...observations});
-  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {...options,host});
+  const p = new Pool(join(s.dir, "pool"), { root: s.root, env: clock(0) }, inputs, {reclamation:{services:[],ownership:()=>{}},...options,host});
   if (size) p.init(size);
   /** The same pool, `ago` ms before NOW. */
-  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {...options,host});
+  const at = (ago: number) => new Pool(p.dir, { root: s.root, env: clock(ago) }, inputs, {reclamation:{services:[],ownership:()=>{}},...options,host});
   /** Free tree `name` was last given back `ago` ms before NOW: a task's branch on it, then main again. */
   const freedAt = (name: string, ago: number) => {
     const cwd = join(p.dir, name), env = clock(ago);
@@ -300,33 +300,33 @@ test("the upkeep removes free trees idle past the limit, cold ones first, keeps 
   // 1: held since six days ago; 2 and 3: free for five days, 2 warm and 3 cold; 4: free for four days, warm;
   // 5: free since now, warm; 6: detached with work nobody committed, for five days.
   at(6 * DAY).take("fix/held");
-  for (const n of ["2", "4", "5"]) mkdirSync(join(p.dir, n, "target/release"), { recursive: true });
+  for (const n of ["2", "4", "5"]) {
+    const tree=join(p.dir,n);mkdirSync(join(tree,'target/nts-dev'),{recursive:true});
+    writeFileSync(join(tree,'target/CACHEDIR.TAG'),'Signature: 8a477f597d28d172789f06886806bc55\n');
+    completeBuild(tree,'nts-dev',join(tree,'target/nts-dev'));
+  }
   freedAt("2", 5 * DAY); freedAt("3", 5 * DAY); freedAt("4", 4 * DAY); freedAt("5", 0); freedAt("6", 5 * DAY);
   writeFileSync(join(p.dir, "6", "uncommitted.txt"), "nobody committed this\n");
   // A sealed folder in a removed tree's target: its write permission comes back before it goes.
-  mkdirSync(join(p.dir, "2", "target/sealed/inner"), { recursive: true });
-  writeFileSync(join(p.dir, "2", "target/sealed/inner/file"), "read-only\n");
-  chmodSync(join(p.dir, "2", "target/sealed/inner"), 0o555); chmodSync(join(p.dir, "2", "target/sealed"), 0o555);
+  mkdirSync(join(p.dir, "2", "target/nts-dev/sealed/inner"), { recursive: true });
+  writeFileSync(join(p.dir, "2", "target/nts-dev/sealed/inner/file"), "read-only\n");
+  chmodSync(join(p.dir, "2", "target/nts-dev/sealed/inner"), 0o555); chmodSync(join(p.dir, "2", "target/nts-dev/sealed"), 0o555);
   assert.deepEqual(names(p), ["1 held fix/held", "2 free", "3 free", "4 free", "5 free", "6 dirty"]);
 
   const pruned = p.prune({ now: NOW });
-  assert.deepEqual(pruned.removed.map(r => r.tree.name), ["3", "2"], "the cold one first, then the longest idle");
-  assert.deepEqual(pruned.kept, []);
-  assert.equal(pruned.free, 2);
-  assert.deepEqual(names(p), ["1 held fix/held", "4 free", "5 free", "6 dirty"], "two free trees stay warm");
-  for (const n of ["2", "3"]) assert.ok(!existsSync(join(p.dir, n)), `tree ${n}'s folder and target are gone`);
-  const registered = s.git(["worktree", "list", "--porcelain"]);
-  assert.ok(!registered.includes(join(p.dir, "2")) && !registered.includes(join(p.dir, "3")), registered);
-  assert.equal(s.git(["rev-parse", "--abbrev-ref", "HEAD"], join(p.dir, "1")), "fix/held", "the held tree is untouched");
-  assert.equal(readFileSync(join(p.dir, "6", "uncommitted.txt"), "utf8"), "nobody committed this\n", "the dirty tree too");
-  assert.match(pruneLines(pruned, NOW).join("\n"), /pool: removed tree 3, free and idle 5d 0h\npool: removed tree 2, free and idle 5d 0h, with its 0\.0 GB target\npool: 2 free trees kept warm/);
-  // Nothing more to do: tree 4 is idle past the limit, but the minimum holds it.
-  assert.deepEqual(p.prune({ now: NOW }).removed, []);
-  // A lower minimum lets it go; the recent one stays.
-  assert.deepEqual(p.prune({ keep: 1, now: NOW }).removed.map(r => r.tree.name), ["4"]);
-  assert.deepEqual(names(p), ["1 held fix/held", "5 free", "6 dirty"]);
-  // The next tree a task needs takes the lowest free number again.
-  p.take("fix/next"); assert.equal(p.take("fix/later").name, "2");
+  assert.deepEqual(pruned.removed.map(r => r.tree.name), ["3"], "the unbuilt checkout goes through Git");
+  assert.deepEqual(pruned.reclamation?.removed.map(row=>row.kind),['unbuilt-checkout','free-build-output']);
+  assert.ok(existsSync(join(p.dir,'2')), 'a built checkout survives output eviction');
+  assert.equal(existsSync(join(p.dir,'2/target')),false);
+  for(const n of ['4','5'])assert.ok(existsSync(join(p.dir,n,'target/nts-dev')),'two useful targets stay warm');
+  assert.equal(s.git(["rev-parse", "--abbrev-ref", "HEAD"], join(p.dir, "1")), "fix/held");
+  assert.equal(readFileSync(join(p.dir, "6", "uncommitted.txt"), "utf8"), "nobody committed this\n");
+  assert.match(pruneLines(pruned, NOW).join("\n"), /disk: removed .*unbuilt-checkout/);
+  assert.deepEqual(p.prune({now:NOW}).removed.map(row=>row.tree.name),['2'],'a later idle upkeep can remove the now unbuilt checkout');
+  assert.deepEqual(names(p), ["1 held fix/held", "4 free", "5 free", "6 dirty"]);
+  assert.throws(()=>p.prune({keep:1,now:NOW}),/at least two warm/);
+  assert.deepEqual(p.prune({now:NOW}).reclamation?.removed,[]);
+
 });
 
 test("status shows each tree's state, task, idle time and target size, for a scheduler too", t => {
