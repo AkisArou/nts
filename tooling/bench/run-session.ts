@@ -27,7 +27,7 @@ import { readJournal } from "./run-journal.ts";
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
 const CASES=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/cases/",import.meta.url))));
 const COMMON=relative(SOURCE,fileURLToPath(dataDirectory(new URL("../../benchmarks/common/",import.meta.url))));
-function command(root: string, program: string, args: string[]): string {
+function command(program: string, args: string[], root: string): string {
   const r = spawnSync(program, args, { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
@@ -44,7 +44,7 @@ export function conditions(): Json {
   };
 }
 function cleanSources(root: string): void {
-  const paths = command(root, "git", ["diff", "HEAD", "--name-only"]).split("\n").filter(Boolean);
+  const paths = command("git", gitArguments(["diff", "HEAD", "--name-only"]), root).split("\n").filter(Boolean);
   assert.ok(
     paths.every((p) => p.startsWith("results/")),
     "benchmark source tree is dirty: " + paths.filter((p) => !p.startsWith("results/")).join(", "),
@@ -53,7 +53,7 @@ function cleanSources(root: string): void {
 export function begin(root: string, binary: string, compilerCommit: string): Metadata {
   cleanSources(root);
   const pins = pinnedComparators(root),
-    commit = command(root, "git", ["rev-parse", "HEAD"]),
+    commit = command("git", gitArguments(["rev-parse", "HEAD"]), root),
     startedAt = new Date().toISOString();
   assert.match(
     compilerCommit,
@@ -112,7 +112,7 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
       kind: "official nts-bench",
       pins: pins.declaration,
       toolchain: {
-        clang: command(root, "clang", ["--version"]),
+        clang: command("clang", ["--version"], root),
         java: spawnSync("java", [...vmToolFlags("java"), "-version"], { encoding: "utf8" }).stderr,
       },
     },

@@ -1,6 +1,7 @@
 // Command position is syntax: a call's first argument, an argv vector's first
-// element, a probe's command property, or a shell command word. No wrapper
-// inference or search through ordinary string data is needed.
+// element, a probe's command property, or a shell command word. Local direct
+// process forwarders keep the command first too; ordinary string data is not
+// searched for command names.
 import {existsSync,readFileSync,readdirSync,mkdirSync} from 'node:fs';
 import {dirname,join,posix,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -23,6 +24,27 @@ export const GIT_DEBT_FILE=relative(fileURLToPath(new URL('../..',import.meta.ur
 export const EMPTY_GIT_DEBT:GitDebt={version:1,sites:[]};
 const isGit=(value:string|undefined)=>value!==undefined&&/(?:^|\/)git$/.test(value);
 const key=(row:Pick<GitInvocation,'file'|'kind'|'source'>)=>JSON.stringify([row.file,row.kind,row.source]);
+
+/** One local convention, not argument-flow inference: a function passing its
+ * own parameter directly to child_process takes that command parameter first. */
+export function inspectCommandForwarders(facts:SourceFacts,offset=0):string[]{
+  const ast=facts.ast,problems:string[]=[],seen=new Set<Node>();
+  for(const call of facts.calls){
+    if(!/^child_process\.(?:spawn|spawnSync|execFile|execFileSync)$/.test(facts.name(call.expression)))continue;
+    const command=call.arguments[0];if(!command)continue;
+    const binding=facts.binding(facts.unwrap(command));if(binding?.kind!=='parameter')continue;
+    for(const node of facts.ancestors(call)){
+      if(!(ast.isFunctionDeclaration(node)||ast.isFunctionExpression(node)||ast.isArrowFunction(node)
+        ||ast.isMethodDeclaration(node)||ast.isConstructorDeclaration(node)||ast.isGetAccessorDeclaration(node)||ast.isSetAccessorDeclaration(node)))continue;
+      const at=node.parameters.findIndex(parameter=>parameter.name===binding.value);
+      if(at>0&&!seen.has(node)){
+        seen.add(node);problems.push(`${facts.file}:${offset+facts.line(call.pos)}: command forwarder must take its command as the first parameter: ${facts.code(call).replace(/\s+/g,' ')}`);
+      }
+      break;
+    }
+  }
+  return problems;
+}
 
 export function inspectGitInvocations(facts:SourceFacts,offset=0):GitInvocation[]{
   const ast=facts.ast,rows:GitInvocation[]=[];
@@ -106,7 +128,7 @@ export function recordGitDebt(path:string,rows:readonly GitInvocation[],previous
 /** The standalone writer uses the same facts and inspectors as the host gate.
  * It does not run unrelated verdict checks while initializing its own record. */
 export function collectGitInvocations(root:string):GitInvocation[]{
-  const files:string[]=[],python:{file:string;source:string}[]=[],rows:GitInvocation[]=[];
+  const files:string[]=[],python:{file:string;source:string}[]=[],rows:GitInvocation[]=[],forwarders:string[]=[];
   const visit=(directory:string):void=>{for(const entry of readdirSync(join(root,directory),{withFileTypes:true})){
     if(entry.name==='node_modules')continue;const file=directory+'/'+entry.name;
     if(entry.isDirectory())visit(file);else if(entry.isFile()){if(/\.[cm]?[jt]s$/.test(file))files.push(file);
@@ -116,10 +138,12 @@ export function collectGitInvocations(root:string):GitInvocation[]{
   const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync'),api=new API();
   function *inputs():Iterable<SourceInput>{for(const file of files)yield {file,source:readFileSync(join(root,file),'utf8')};}
   try{inspectSourceBatches(api,inputs(),facts=>{
+    forwarders.push(...inspectCommandForwarders(facts));
     rows.push(...inspectGitInvocations(facts));const generated=new GeneratedSourceFacts(api,facts.file);
-    try{inspectRecordPublications(facts.file,facts.source,api,facts,(_text,tree,offset)=>rows.push(...inspectGitInvocations(tree,offset)),generated);
+    try{inspectRecordPublications(facts.file,facts.source,api,facts,(_text,tree,offset)=>{rows.push(...inspectGitInvocations(tree,offset));forwarders.push(...inspectCommandForwarders(tree,offset));},generated);
       rows.push(...inspectGeneratedGitShells(generated.shells));}finally{generated.close();}
   });}finally{api.close();}
+  if(forwarders.length)throw Error(forwarders.join('\n'));
   return [...rows,...inspectPythonGit(python)];
 }
 

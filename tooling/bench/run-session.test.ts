@@ -10,6 +10,9 @@ import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
 import { readJournal } from "./run-journal.ts";
+import {createRequire} from 'node:module';
+import {SourceFacts} from '../gate/source-facts.ts';
+import {inspectCommandForwarders,inspectGitInvocations} from '../gate/git-observations.ts';
 const script = fileURLToPath(new URL("./run-session.ts", import.meta.url));
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -101,6 +104,24 @@ test("session toolchain discovery rejects the old bare JVM launch", () => {
   assert.equal(findings.length, 1);
   assert.equal(findings[0]!.tool, "java");
   assert.match(findings[0]!.code, /-version/);
+});
+
+test('session Git commands are visible to the command-first audit and use its argument owner',()=>{
+  const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync'),api=new API();
+  const source=readFileSync(script,'utf8');
+  const inspect=(text:string)=>{
+    const lease=api.createSourceFile(script,text);
+    try{const facts=new SourceFacts('tooling/bench/run-session.ts',text,lease.sourceFile);
+      return {forwarders:inspectCommandForwarders(facts),git:inspectGitInvocations(facts)};
+    }finally{lease.dispose();}
+  };
+  try{
+    const current=inspect(source);assert.deepEqual(current.forwarders,[]);
+    assert.equal(current.git.length,3);assert.ok(current.git.every(row=>row.protected));
+    const changed=source.replace('gitArguments(["diff", "HEAD", "--name-only"])','["diff", "HEAD", "--name-only"]')
+      .replace('gitArguments(["rev-parse", "HEAD"])','["rev-parse", "HEAD"]');
+    assert.notEqual(changed,source);assert.equal(inspect(changed).git.filter(row=>!row.protected).length,2);
+  }finally{api.close();}
 });
 
 test("session conditions have no dependency on the old landing lock probe", t => {

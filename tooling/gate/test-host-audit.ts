@@ -14,7 +14,7 @@ import {inspectFixtureCopies,fixtureCopyProblems,type FixtureCopy} from './test-
 import {inspectRecordPublications,type RecordPublication} from './test-readiness.ts';
 import {auditModuleAsync,inspectModuleAsync,type ModuleAsyncFacts} from './module-async.ts';
 import {HOST_READ_OWNERS} from './test-host-owners.ts';
-import {inspectGitInvocations,inspectShellGit,inspectGeneratedGitShells,inspectPythonGit,gitInvocationProblems,parseGitDebt,GIT_DEBT_FILE,EMPTY_GIT_DEBT,type GitInvocation,type GitDebt} from './git-observations.ts';
+import {inspectCommandForwarders,inspectGitInvocations,inspectShellGit,inspectGeneratedGitShells,inspectPythonGit,gitInvocationProblems,parseGitDebt,GIT_DEBT_FILE,EMPTY_GIT_DEBT,type GitInvocation,type GitDebt} from './git-observations.ts';
 
 export type HostReadKind='disk'|'machine'|'kernel'|'clock'|'environment'|'fixture-constructor';
 export type HostRead={file:string;line:number;kind:HostReadKind;source:string;generated:boolean};
@@ -124,12 +124,13 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
   const inspect=(file:string,source:string,node:SourceFacts,generated:GeneratedSourceFacts)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
     declarations.set(file,node.moduleDeclarations());
     signals.push(...inspectCommandSignals(node));
+    signals.push(...inspectCommandForwarders(node));
     gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node,
-      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));},generated));
+      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));signals.push(...inspectCommandForwarders(tree,offset));},generated));
     gitInvocations.push(...inspectGeneratedGitShells(generated.shells));
   }};
   try {

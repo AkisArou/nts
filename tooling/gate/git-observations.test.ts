@@ -6,7 +6,7 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {SourceFacts,GeneratedSourceFacts} from './source-facts.ts';
 import {shellCommands} from './shell-commands.ts';
-import {inspectGitInvocations,inspectShellGit,inspectPythonGit,inspectGeneratedGitShells,recordGitDebt,parseGitDebt,gitInvocationProblems,type GitInvocation} from './git-observations.ts';
+import {inspectCommandForwarders,inspectGitInvocations,inspectShellGit,inspectPythonGit,inspectGeneratedGitShells,recordGitDebt,parseGitDebt,gitInvocationProblems,type GitInvocation} from './git-observations.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {inspectRecordPublications} from './test-readiness.ts';
 import {testScratch} from './test-scratch.ts';
@@ -20,6 +20,8 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
 function inspect(source:string){const api=new API(),lease=api.createSourceFile('tooling/gate/control.ts',source);
   try{return inspectGitInvocations(new SourceFacts('tooling/gate/control.ts',source,lease.sourceFile));}finally{lease.dispose();api.close();}}
+function forwarders(source:string){const api=new API(),lease=api.createSourceFile('tooling/gate/control.ts',source);
+  try{return inspectCommandForwarders(new SourceFacts('tooling/gate/control.ts',source,lease.sourceFile));}finally{lease.dispose();api.close();}}
 
 test('the leaf disables optional refresh and preserves mutation arguments',()=>{
   assert.deepEqual(gitArguments(['status','--porcelain']),['--no-optional-locks','status','--porcelain']);
@@ -57,6 +59,34 @@ run('git',gitArguments(['status']));function local(gitArguments:Function){run('g
   assert.deepEqual(inspect(`const prose="run('git',['status'])";const data={meaning:'git'};`),[]);
 });
 
+test('local process forwarders keep the command first instead of hiding Git behind a root',()=>{
+  const before=`import {spawnSync} from 'node:child_process';
+function command(root,program,args){return spawnSync(program,args,{cwd:root});}
+command(root,'git',['status']);`;
+  assert.deepEqual(inspect(before),[],'the existing caller audit checks command-first calls');
+  assert.equal(forwarders(before).length,1);
+  assert.match(forwarders(before)[0]!,/command forwarder must take its command as the first parameter/);
+  const after=`import {spawnSync} from 'node:child_process';import {gitArguments} from './git-arguments/main.ts';
+function command(program,args,root){return spawnSync(program,args,{cwd:root});}
+command('git',gitArguments(['status']),root);command('git',['status'],root);`;
+  assert.deepEqual(forwarders(after),[]);
+  assert.deepEqual(inspect(after).map(row=>row.protected),[true,false]);
+});
+
+test('forwarder convention uses lexical direct launch parameters, not ordinary string data',()=>{
+  const rows=forwarders(`import {spawn as launch,execFileSync} from 'node:child_process';
+const child=require('node:child_process');
+const arrow=(root,program,args)=>launch(program,args,{cwd:root});
+const object={method(root,program,args){return child.execFile(program,args,{cwd:root});}};
+function twice(root,program,args){execFileSync(program,args);execFileSync(program,args);}
+function data(root,program,args){return [root,program,args];}data(root,'git',['status']);
+function shadow(launch,root,program,args){return launch(program,args);}
+function nested(root,program,args){return ()=>child.spawnSync(program,args);}
+function fixed(root,args){return child.spawnSync('git',['--no-optional-locks',...args],{cwd:root});}`);
+  assert.equal(rows.length,3,'arrow, method and twice each have one nonconforming local owner');
+  assert.deepEqual(inspect(`const text="command(root,'git',['status'])";data(root,'git',['status']);`),[]);
+});
+
 test('shell facts distinguish arguments from prose, substitutions and redirects',()=>{
   const source=`printf '%s' 'git status'\ncat <<'DATA'\ngit status\nDATA\n"git" '--no-optional-locks' status > output\nresult=$(git status)\n`;
   const rows=inspectShellGit('tooling/control.sh',source,shellCommands(source));
@@ -66,11 +96,11 @@ test('shell facts distinguish arguments from prose, substitutions and redirects'
 
 test('generated scripts and shell launch payloads share the same audit',()=>{
   const api=new API(),source=`import {generatedJavaScript} from './generated-javascript.ts';
-const code=generatedJavaScript("const cp=require('node:child_process');cp.spawnSync('git',['status']);");
+const code=generatedJavaScript("const cp=require('node:child_process');function command(root,program,args){return cp.spawnSync(program,args,{cwd:root});}cp.spawnSync('git',['status']);");
 spawn('sh',['-c','git --no-optional-locks status']);`;
-  const lease=api.createSourceFile('tooling/gate/control.ts',source),facts=new SourceFacts('tooling/gate/control.ts',source,lease.sourceFile),generated=new GeneratedSourceFacts(api,facts.file),rows:GitInvocation[]=[];
-  try{inspectRecordPublications(facts.file,source,api,facts,(_source,tree,offset)=>rows.push(...inspectGitInvocations(tree,offset)),generated);
-    rows.push(...inspectGeneratedGitShells(generated.shells));assert.deepEqual(rows.map(row=>row.protected),[false,true]);
+  const lease=api.createSourceFile('tooling/gate/control.ts',source),facts=new SourceFacts('tooling/gate/control.ts',source,lease.sourceFile),generated=new GeneratedSourceFacts(api,facts.file),rows:GitInvocation[]=[],problems:string[]=[];
+  try{inspectRecordPublications(facts.file,source,api,facts,(_source,tree,offset)=>{rows.push(...inspectGitInvocations(tree,offset));problems.push(...inspectCommandForwarders(tree,offset));},generated);
+    rows.push(...inspectGeneratedGitShells(generated.shells));assert.deepEqual(rows.map(row=>row.protected),[false,true]);assert.equal(problems.length,1);
   }finally{generated.close();lease.dispose();api.close();}
 });
 
