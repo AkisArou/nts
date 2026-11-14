@@ -2,6 +2,8 @@ import {gitArguments} from "./git-arguments/main.ts";
 // One capacity equation for pool leases and temporary admission. Git owns a
 // lease; declared build outputs consume its measured promise. No folder size
 // outside those outputs, and no free checkout, enters that promise.
+// The configured pool outputs and capture temporaries share one filesystem;
+// this capacity namespace accounts all temporary claims against that disk.
 import {existsSync,mkdirSync,readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';

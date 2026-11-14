@@ -753,6 +753,8 @@ the tooling strict checker owns the source's type checking.
   subtract these live promises before granting new capacity. Fixtures carry a
   private `NTS_DISK_CAPACITY` namespace with their resource capability; an
   absent grant never discovers the account's pool.
+  The configured pool outputs and admitted capture temporaries share one
+  filesystem; this capacity namespace accounts for that filesystem as a whole.
 - **Pressure reclaims rebuildable disk state.** DiskCapacity explicitly reclaims
   under its pool lock before admission and during upkeep; status reads do not
   delete. Below the floor plus live promises and one measured cold build, it
