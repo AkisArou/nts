@@ -18,13 +18,14 @@ import {dependencyCache} from "../inputs/dependency-inputs.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 test('selector questions retain the infrastructure owner bound and classify ordinary exits separately',()=>{
-  const requests:{command:string;args:readonly string[];timeout:unknown;signal:unknown}[]=[];
+  const requests:{command:string;args:readonly string[]}[]=[];
   const probe=infrastructureProbes((command,args,options)=>{
-    requests.push({command,args,timeout:options.timeout,signal:options.killSignal});
+    assert.equal(options.timeout,INFRASTRUCTURE_PROBE_BOUND_MS);assert.equal(options.killSignal,'SIGKILL');
+    requests.push({command,args});
     return {pid:1,status:0,signal:null,stdout:'answer',stderr:'',output:['','answer','']} as ProbeResult;
   });
   assert.equal(selectorQuestion('git',gitArguments(['status']),{purpose:'selector git status',env:{}},probe),'answer');
-  assert.deepEqual(requests,[{command:'git',args:gitArguments(['status']),timeout:INFRASTRUCTURE_PROBE_BOUND_MS,signal:'SIGKILL'}]);
+  assert.deepEqual(requests,[{command:'git',args:gitArguments(['status'])}]);
   const nonzero=infrastructureProbes(()=>({pid:1,status:1,signal:null,stdout:'',stderr:'already removed',output:['','','already removed']} as ProbeResult));
   assert.throws(()=>selectorQuestion('git',gitArguments(['update-ref','-d','ref']),{purpose:'selector compare-and-delete',env:{}},nonzero),error=>{
     assert.equal(selectionInfrastructure(error),false);assert.equal((error as {status:number}).status,1);return true;
