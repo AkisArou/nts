@@ -2,6 +2,7 @@
 // caller holds DiskCapacity's pool lock for inventory, checks and removal.
 import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,realpathSync,rmSync} from 'node:fs';
 import {basename,dirname,join,resolve,sep} from 'node:path';
+import {userInfo} from 'node:os';
 import {worktrees,type Git} from '../landing/git.ts';
 import {assertNoProcessUsers} from '../landing/tree-users.ts';
 import {GateResource} from './gate-resource.ts';
@@ -82,9 +83,23 @@ export function parseUnitTreeOwnership(unit:string,text:string):UnitTreeOwnershi
 }
 export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwnership):void{
   const check=(path:string,field:string)=>{
-    if(roots.some(root=>under(resolve(root),path)))throw Error('unit '+reading.unit+' owns '+field+' '+path);
+    if(roots.some(root=>under(resolve(root),path)||under(resolve(root),resolve(path))))throw Error('unit '+reading.unit+' owns '+field+' '+path);
+    // Preserve component order for the kernel's symlink/.. resolution. A
+    // missing future path still has the literal check above; unreadability
+    // must not certify that an existing execution input is outside the tree.
+    let physical:string;
+    try{physical=realpathSync.native(path);}
+    catch(error){
+      if(['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??''))return;
+      throw Error('unreadable unit '+reading.unit+' '+field+' '+path,{cause:error});
+    }
+    if(roots.some(root=>under(resolve(root),physical)))throw Error('unit '+reading.unit+' owns '+field+' '+path+' -> '+physical);
   };
-  const cwd=reading.workingDirectory.replace(/^-/, '');
+  // D-Bus encodes missing-ok with ! (the unit-file spelling is -), and
+  // the user's home as ~. Other relative/unknown forms refuse below.
+  const working=reading.workingDirectory.replace(/^!/, '');
+  if((!working&&reading.workingDirectory)||working&&working!=='~'&&!working.startsWith('/'))throw Error('unresolved unit WorkingDirectory: '+reading.unit);
+  const cwd=working==='~'?userInfo().homedir:working;
   for(const [field,path] of [['WorkingDirectory',cwd],['RootDirectory',reading.rootDirectory]] as const){
     if(!path)continue;
     if(!path.startsWith('/'))throw Error('unresolved unit '+field+': '+reading.unit);
@@ -97,14 +112,14 @@ export function assertUnitTreeUnused(roots:readonly string[],reading:UnitTreeOwn
       // Only the actual property values are inspected. No environment or
       // argument-file contents, shell source, or application option grammar.
       const value=argument.startsWith('-')&&argument.includes('=')?argument.slice(argument.indexOf('=')+1):argument;
-      if(value.startsWith('/')){check(value,command.property+' argument');check(resolve(value),command.property+' argument');}
-      else if(cwd&&!value.startsWith('-'))check(resolve(cwd,value),command.property+' argument');
+      if(value.startsWith('/'))check(value,command.property+' argument');
+      else if(cwd&&!value.startsWith('-'))check(cwd+'/'+value,command.property+' argument');
     }
   }
 }
 /** A queued/starting service owns its execution inputs before /proc exposes
  * the future child. Query precisely these five properties as typed values. */
-export function assertNoUnitUsers(roots:readonly string[]):void{
+export function assertNoUnitUsers(roots:readonly string[],ownedUnits?:readonly string[]):void{
   const listed=infrastructureProbe({purpose:'disk reclamation unit ownership',command:'systemctl',
     args:['--user','list-units','--all','--type=service','--output=json']});
   const units=JSON.parse(listed.stdout) as {unit:string;active:string}[];
@@ -113,7 +128,7 @@ export function assertNoUnitUsers(roots:readonly string[]):void{
       args:['--user','show',unit,'--property=LoadState,ActiveState'],exits:'classify'});
     return /^(?:ActiveState=inactive)$/m.test(current.stdout)&&/^(?:LoadState=(?:not-found|loaded))$/m.test(current.stdout);
   };
-  for(const {unit} of units.filter(row=>row.active!=='inactive')){
+  for(const {unit} of units.filter(row=>row.active!=='inactive'&&(!ownedUnits||ownedUnits.includes(row.unit)))){
     const object=infrastructureProbe({purpose:'bind disk unit '+unit,command:'busctl',args:['--user','--json=short','call',
       'org.freedesktop.systemd1','/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',unit],exits:'classify'});
     if(object.status!==0){if(inactive(unit))continue;throw Error('unreadable disk unit identity: '+unit);}

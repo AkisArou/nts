@@ -51,7 +51,8 @@ test('pressure reclaims in cost order to a measured hysteresis goal, then stops'
   const log=JSON.parse(readFileSync(join(f.dir,'.disk-reclaim.log'),'utf8')) as {root:string;allocatedBytes:number;freeBytesChange:number;facts:string[]};
   assert.equal(log.root,join(a,'target/debug'),JSON.stringify(report?.kept));assert.equal(log.allocatedBytes,10*GiB,JSON.stringify(report?.kept));assert.equal(log.freeBytesChange,10*GiB,JSON.stringify(report?.kept));
   assert.ok(log.facts.includes('resource lock held'),JSON.stringify(report?.kept));
-  assert.deepEqual(reclaimDisk(f.options).removed,[],('headroom prevents repeated eviction')+'; kept='+JSON.stringify(repeated.kept));
+  const repeated=reclaimDisk(f.options);
+  assert.deepEqual(repeated.removed,[],'headroom prevents repeated eviction; kept='+JSON.stringify(repeated.kept));
 });
 
 test('free build output keeps the checkout and two warm targets; unbuilt removal uses Git',t=>{
@@ -234,6 +235,10 @@ test('typed unit execution properties preserve path and argument ownership',()=>
   assert.throws(()=>parseUnitTreeOwnership(unit,'{}'),/unreadable unit directories/);
   assert.throws(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:root+'/cwd'}),/WorkingDirectory/);
   assert.throws(()=>assertUnitTreeUnused([root],{...reading,rootDirectory:root+'/root'}),/RootDirectory/);
+  assert.doesNotThrow(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:'~'}));
+  assert.doesNotThrow(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:'!/outside/absent'}));
+  assert.throws(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:'-/outside'}),/unresolved unit WorkingDirectory/);
+  assert.throws(()=>assertUnitTreeUnused([root],{...reading,workingDirectory:'!!/outside'}),/unresolved unit WorkingDirectory/);
 });
 
 test('an activating start-pre unit owns its future executable before PID zero starts',async t=>{
@@ -241,18 +246,33 @@ test('an activating start-pre unit owns its future executable before PID zero st
   const entry=join(tree,'entry'),prelude=join(outside,'prelude.mjs'),ready=join(outside,'ready');
   writeFileSync(entry,'#!/bin/sh\nexit 0\n',{mode:0o755});
   writeFileSync(prelude,generatedJavaScript(`import {writeFileSync,watch} from 'node:fs';watch(${JSON.stringify(outside)},()=>{});writeFileSync(${JSON.stringify(ready)},'ready');`));
-  const unit='nts-agent-709-unit-entry-'+randomUUID()+'.service';
-  const started=spawnTest('systemd-run',['--user','--collect','--quiet','--no-block','--unit='+unit,'--working-directory='+outside,
-    '-p','LimitCORE=0','-p','Nice=19','-p','ExecStartPre='+process.execPath+' '+prelude,'--',entry],{env:f.s.env,encoding:'utf8'});
-  assert.equal(started.status,0,started.stderr);
-  try{
-    await waitFor('owned pre-exec barrier',()=>existsSync(ready));
-    const state=spawnTest('systemctl',['--user','show',unit,'--property=ActiveState,SubState,ExecMainPID'],{env:f.s.env,encoding:'utf8'});
-    assert.equal(state.status,0,state.stderr);assert.match(state.stdout,/^ActiveState=activating$/m);
-    assert.match(state.stdout,/^SubState=start-pre$/m);assert.match(state.stdout,/^ExecMainPID=0$/m);
-    assert.throws(()=>assertNoUnitUsers([tree]),error=>error instanceof Error&&error.message.includes('unit '+unit+' owns ExecStart path '+entry));
-    assert.ok(existsSync(entry));
-  }finally{
-    const stop=spawnTest('systemctl',['--user','stop',unit],{env:f.s.env,encoding:'utf8'});assert.equal(stop.status,0,stop.stderr);
+  const alias=join(outside,'entry-alias');symlinkSync(entry,alias);
+  for(const executable of [entry,alias]){
+    const unit='nts-agent-709-unit-entry-'+randomUUID()+'.service';
+    const started=spawnTest('systemd-run',['--user','--collect','--quiet','--no-block','--unit='+unit,'--working-directory='+outside,
+      '-p','LimitCORE=0','-p','Nice=19','-p','ExecStartPre='+process.execPath+' '+prelude,'--',executable],{env:f.s.env,encoding:'utf8'});
+    assert.equal(started.status,0,started.stderr);
+    try{
+      await waitFor('owned pre-exec barrier',()=>existsSync(ready));
+      const state=spawnTest('systemctl',['--user','show',unit,'--property=ActiveState,SubState,ExecMainPID'],{env:f.s.env,encoding:'utf8'});
+      assert.equal(state.status,0,state.stderr);assert.match(state.stdout,/^ActiveState=activating$/m);
+      assert.match(state.stdout,/^SubState=start-pre$/m);assert.match(state.stdout,/^ExecMainPID=0$/m);
+      assert.throws(()=>assertNoUnitUsers([tree],[unit]),error=>error instanceof Error&&error.message.includes('unit '+unit+' owns ExecStart path '+executable));
+      assert.ok(existsSync(entry));
+    }finally{
+      const stop=spawnTest('systemctl',['--user','stop',unit],{env:f.s.env,encoding:'utf8'});assert.equal(stop.status,0,stop.stderr);
+      rmSync(ready,{force:true});
+    }
+  }
+});
+
+test('unit paths follow outside aliases and symlink before parent components',t=>{
+  const f=fixture(t),tree=f.tree('1'),outside=join(f.s.dir,'outside');mkdirSync(outside);
+  mkdirSync(join(tree,'nested'));writeFileSync(join(tree,'entry'),'input');symlinkSync(join(tree,'nested'),join(outside,'jump'));
+  const reading:UnitTreeOwnership={unit:'alias.service',workingDirectory:outside,rootDirectory:'',commands:[]};
+  assert.throws(()=>assertUnitTreeUnused([tree],{...reading,workingDirectory:join(outside,'jump')}),/owns WorkingDirectory.* -> /);
+  assert.throws(()=>assertUnitTreeUnused([tree],{...reading,rootDirectory:join(outside,'jump')}),/owns RootDirectory.* -> /);
+  for(const argument of [outside+'/jump/../entry','jump/../entry']){
+    assert.throws(()=>assertUnitTreeUnused([tree],{...reading,commands:[{property:'ExecStart',path:process.execPath,args:[argument]}]}),/owns ExecStart argument.* -> /);
   }
 });
