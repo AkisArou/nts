@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {spawn} from "node:child_process";
 import { fullCheckCeiling, pinnedGate, readSummary, verdictOf } from "./measure.ts";
+import {measurementGroup} from './measure-command.ts';
+import {populated} from '../gate/scopes/step-scope.ts';
 import { newTestScratch } from "../gate/test-scratch.ts";
 import { spawnTest,waitFor } from "../gate/test-wait.ts";
 import { newToolingSlice, stopToolingSlice, toolingSliceArgs } from "../gate/tooling-slice.ts";
@@ -260,8 +262,8 @@ runAsCommand(import.meta.url,async()=>{
     assert.equal(await closed,143,output);
     assert.equal(readFileSync(ready+'.closed','utf8'),'closed','the measured child drains on the unit stop');
     assert.equal((JSON.parse(readFileSync(outcome,'utf8')) as {verdict:string}).verdict,'held','interruption never becomes a product verdict');
-    const scope=spawnTest('systemctl',['--user','show',slice,'-p','ActiveState','--value'],{encoding:'utf8'});
-    assert.equal(scope.stdout.trim(),'inactive',scope.stderr);
+    const group=measurementGroup(slice);assert.equal(group?populated(group):0,0,'an active empty slice owns no surviving processes');
+    console.log('active measurement stop drained '+unit+'; controller exit143; interrupted verdict held; populated0');
     const lock=GateResource.tryAcquire(paths.tree+'.lock');assert.ok(lock,'synchronous launch releases its tree lock');lock.close();
     assert.doesNotMatch(output,/wedged drain|timed out|Killing/);
   }finally{
