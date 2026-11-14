@@ -59,16 +59,16 @@ const staging = (): string => sha256File(resolve(chromiumSource(root), "nts/mani
 const record = (path: string): { nativeManifestSha256?: string } => JSON.parse(readFileSync(path, "utf8"));
 const built = (): string | undefined => record(resolve(profile.evidence, "build-result.json")).nativeManifestSha256;
 
-function run(label: string, command: string, args: string[]): void {
+function run(command: string, args: string[], label: string): void {
   console.log(`\n== ${label}`);
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 const tool = (label: string, script: string, ...args: string[]): void =>
-  run(label, process.execPath, [resolve(root, script), ...args]);
+  run(process.execPath, [resolve(root, script), ...args], label);
 
-run("process command lines and scope membership", process.execPath,
-  ["--test", resolve(root, "tooling/chromium/processes.test.ts")]);
-run("the bindings are current", "python3", [resolve(root, "tooling/chromium/bindgen/generate.py"), "--check"]);
+run(process.execPath, ["--test", resolve(root, "tooling/chromium/processes.test.ts")],
+  "process command lines and scope membership");
+run("python3", [resolve(root, "tooling/chromium/bindgen/generate.py"), "--check"], "the bindings are current");
 tool("the embedder's program, C and LLVM", "runtime/chromium/embedder/program/check.ts");
 tool("the contracts", "runtime/chromium/contracts/check.ts");
 tool("the standalone rows", "runtime/chromium/benchmarks/standalone/check.ts");
