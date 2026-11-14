@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registerHooks } from "node:module";
 import { gateCpus, inheritedCpus } from "../affinity.ts";
-import { waitForEmptyCgroup } from "./step-scope.ts";
+import { waitForEmptyCgroup,observeOwnedRoot } from "./step-scope.ts";
 
 test("a cgroup drain requires an observed populated zero", async () => {
   const states = [1, 1, 0] as const;
@@ -15,6 +15,25 @@ test("a cleanup deadline and a failed cgroup read cannot become a drain proof", 
   let tick = 0;
   await assert.rejects(waitForEmptyCgroup(() => 1, { now: () => 30_001 * tick++, wait: async () => {} }), /cgroup drain timed out/);
   await assert.rejects(waitForEmptyCgroup(() => { throw new Error("cgroup observation lost"); }), /cgroup observation lost/);
+});
+
+test('owned root departure needs the acquired identity, inactive manager and absent path',()=>{
+  const own={group:'/owned/root.slice',device:'28',inode:'123'};
+  const manager={loadState:'loaded',activeState:'inactive',group:''};
+  assert.deepEqual(observeOwnedRoot(own,{identity:()=>({...own}),populated:()=>0,manager:()=>{throw Error('present root needs no manager fallback');}}),{state:'present',populated:0});
+  assert.deepEqual(observeOwnedRoot(own,{identity:()=>({...own}),populated:()=>1,manager:()=>manager}),{state:'present',populated:1});
+  for(const loadState of ['loaded','not-found'])assert.deepEqual(observeOwnedRoot(own,{identity:()=>undefined,populated:()=>{throw Error('absent root supplies no populated zero');},manager:()=>({...manager,loadState})}),{state:'departed'});
+  let reads=0;
+  assert.deepEqual(observeOwnedRoot(own,{identity:()=>reads++===0?own:undefined,populated:()=>{throw Object.assign(Error('removed during events read'),{code:'ENOENT'});},manager:()=>manager}),{state:'departed'});
+  assert.throws(()=>observeOwnedRoot(own,{identity:()=>({...own,inode:'456'}),populated:()=>0,manager:()=>manager}),/identity changed/);
+  for(const activeState of ['active','activating','deactivating','failed',''])assert.throws(()=>observeOwnedRoot(own,{identity:()=>undefined,populated:()=>0,manager:()=>({...manager,activeState})}),/remains live or unknown/);
+  assert.throws(()=>observeOwnedRoot(own,{identity:()=>undefined,populated:()=>0,manager:()=>({...manager,group:'/foreign/root.slice'})}),/manager changed groups/);
+  const denied=Object.assign(Error('events unreadable'),{code:'EACCES'});
+  assert.throws(()=>observeOwnedRoot(own,{identity:()=>own,populated:()=>{throw denied;},manager:()=>manager}),error=>error===denied);
+  const missing=Object.assign(Error('events missing inside live root'),{code:'ENOENT'});
+  assert.throws(()=>observeOwnedRoot(own,{identity:()=>own,populated:()=>{throw missing;},manager:()=>manager}),error=>error===missing);
+  reads=0;assert.throws(()=>observeOwnedRoot(own,{identity:()=>reads++===0?undefined:own,populated:()=>0,manager:()=>manager}),/reappeared/);
+  reads=0;assert.throws(()=>observeOwnedRoot(own,{identity:()=>reads++===0?own:{...own,inode:'456'},populated:()=>0,manager:()=>manager}),/identity changed/);
 });
 
 test("a delegated cpuset is applied to the owned scope without creating a sibling scope", async () => {

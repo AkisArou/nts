@@ -1,17 +1,20 @@
 // One run owns these meters. Pressure is shared elapsed exposure; overlapping
 // step deltas must not be added or interpreted as a causal resource charge.
-import {HostObservationError,type HostObservations,type LoopDelay,type LoopDelayMeter,type PressureReading} from './host-observations.ts';
+import {CgroupDeparted,HostObservationError,type HostObservations,type LoopDelay,type LoopDelayMeter,type PressureReading} from './host-observations.ts';
 import {PRESSURE_RESOURCES} from './host-pressure.ts';
 
 export type PressureDelta={identity:string;stallUsec:Record<(typeof PRESSURE_RESOURCES)[number],{some:number;full:number}>};
 type PressureSet={machine:PressureReading;runner:PressureReading;workers:PressureReading|null};
 export type PressureExposure={machine:PressureDelta;runner:PressureDelta;workers:PressureDelta|null};
-type Endpoint={offsetMs:number;at:string;pressure:PressureSet};
+type WorkerPressure={observedAt:string;observedOffsetMs:number;departedAt:string|null;reading:PressureReading};
+type WorkerInterval={startedAt:string;finishedAt:string;departedAt:string|null};
+type Endpoint={offsetMs:number;at:string;pressure:PressureSet;workersPressure:WorkerPressure|null};
 export type StepDiagnostics={version:1;sourceRun:string;startedAt:string;finishedAt:string;elapsedMs:number;
-  loopDelay:LoopDelay;pressureExposure:PressureExposure;pressureBasis:'shared-scope-endpoints-overlap'};
+  loopDelay:LoopDelay;pressureExposure:PressureExposure;workersPressureInterval:WorkerInterval|null;pressureBasis:'shared-scope-endpoints-overlap'};
 export type DiagnosticsSummary={version:1;sourceRun:string;state:'running'|'complete'|'incomplete';error:string|null;
   sampleIntervalMs:1000;loopResolutionMs:20;runnerGroup:string;workersGroup:string|null;workersStartedAt:string|null;timeline:string;
   startedAt:string;finishedAt:string|null;loopDelay:LoopDelay|null;pressureExposure:PressureExposure|null;
+  workersPressure:WorkerPressure|null;
   minutes:{startedAt:string;finishedAt:string;elapsedMs:number;loopDelay:LoopDelay}[]};
 
 export function pressureDelta(before:PressureReading,after:PressureReading):PressureDelta{
@@ -28,8 +31,14 @@ export function pressureDelta(before:PressureReading,after:PressureReading):Pres
   }
   return {identity:after.identity,stallUsec};
 }
-function exposure(before:PressureSet,after:PressureSet):PressureExposure{
-  return {machine:pressureDelta(before.machine,after.machine),runner:pressureDelta(before.runner,after.runner),workers:before.workers&&after.workers?pressureDelta(before.workers,after.workers):null};
+function workerInterval(before:Endpoint,after:Endpoint):WorkerInterval|null{
+  const first=before.pressure.workers,last=after.workersPressure;
+  if(!first||!last||last.observedOffsetMs<before.offsetMs)return null;
+  return {startedAt:before.at,finishedAt:last.observedAt,departedAt:last.departedAt};
+}
+function exposure(before:Endpoint,after:Endpoint):PressureExposure{
+  return {machine:pressureDelta(before.pressure.machine,after.pressure.machine),runner:pressureDelta(before.pressure.runner,after.pressure.runner),
+    workers:workerInterval(before,after)?pressureDelta(before.pressure.workers!,after.workersPressure!.reading):null};
 }
 type Options={host:HostObservations;sourceRun:string;workersGroup?:string;startedAt:number;
   emit:(row:unknown)=>void;log:(line:string)=>void;failed:(error:unknown)=>void};
@@ -39,6 +48,8 @@ export class RunDiagnostics{
   private readonly runnerGroup:string;
   private workersGroup:string|null;
   private firstWorker:Endpoint|null=null;
+  private workersPressure:WorkerPressure|null=null;
+  private workerDeparture:(()=>boolean)|undefined;
   private readonly origin:number;
   private readonly meters:LoopDelayMeter[]=[];
   private readonly steps=new Map<string,{start:Endpoint;delay:LoopDelayMeter}>();
@@ -69,11 +80,30 @@ export class RunDiagnostics{
   private endpoint():Endpoint{
     const {host,startedAt}=this.options,offsetMs=host.now()-this.origin;
     if(offsetMs<0)throw new HostObservationError('host observation diagnostics clock moved backwards');
-    return {offsetMs,at:new Date(startedAt+offsetMs).toISOString(),pressure:{machine:host.machinePressure(),runner:host.cgroupPressure(this.runnerGroup),workers:this.workersGroup?host.cgroupPressure(this.workersGroup):null}};
+    const at=new Date(startedAt+offsetMs).toISOString();
+    const machine=host.machinePressure(),runner=host.cgroupPressure(this.runnerGroup);
+    let workers:PressureReading|null=null;
+    if(this.workersGroup&&(this.workersPressure===null||this.workersPressure.departedAt===null)){
+      const retire=()=>{
+        if(!this.workersPressure)throw new HostObservationError('host observation worker root departed before its pressure endpoint was acquired');
+        this.workersPressure={...this.workersPressure,departedAt:at};
+        this.options.emit({kind:'run-diagnostics-workers-departed',version:1,group:this.workersGroup,...this.workersPressure});
+      };
+      if(this.workerDeparture?.())retire();
+      else try{
+        workers=host.cgroupPressure(this.workersGroup);
+        if(this.workersPressure)pressureDelta(this.workersPressure.reading,workers);
+        this.workersPressure={observedAt:at,observedOffsetMs:offsetMs,departedAt:null,reading:workers};
+      }catch(error){
+        if(!(error instanceof CgroupDeparted)||error.group!==this.workersGroup||!this.workerDeparture?.())throw error;
+        retire();
+      }
+    }
+    return {offsetMs,at,pressure:{machine,runner,workers},workersPressure:structuredClone(this.workersPressure)};
   }
-  attachWorkers(group:string):void{
+  attachWorkers(group:string,departed?:()=>boolean):void{
     if(this.workersGroup!==null)throw Error('run diagnostics worker root already attached');
-    this.workersGroup=group;this.firstWorker=this.sample();
+    this.workersGroup=group;this.workerDeparture=departed;this.firstWorker=this.sample();
     this.options.emit({kind:'run-diagnostics-workers',version:1,group,...this.firstWorker});
   }
   start():void{
@@ -88,7 +118,7 @@ export class RunDiagnostics{
     if(this.closed)throw new HostObservationError('host observation diagnostics sampler is closed');
     const next=this.endpoint();
     if(next.offsetMs<this.last.offsetMs)throw new HostObservationError('host observation diagnostics clock moved backwards');
-    exposure(this.last.pressure,next.pressure);
+    exposure(this.last,next);
     const loopDelay=this.intervalDelay.read();this.intervalDelay.reset();
     this.options.emit({kind:'run-diagnostics-sample',version:1,sourceRun:this.options.sourceRun,from:this.last.at,...next,loopDelay,steps:[...this.steps.keys()]});
     if(loopDelay.maxMs!==null&&loopDelay.maxMs>1000){
@@ -107,14 +137,16 @@ export class RunDiagnostics{
   beginStep(name:string):void{
     if(this.workersGroup===null)throw Error('step diagnostics require the attached worker root');
     if(this.steps.has(name))throw Error('duplicate step diagnostics: '+name);
-    const start=this.sample();this.steps.set(name,{start,delay:this.meter()});
+    const start=this.sample();
+    if(this.workersPressure?.departedAt!==null)throw new HostObservationError('step cannot start after the owned worker root departed');
+    this.steps.set(name,{start,delay:this.meter()});
   }
   endStep(name:string):StepDiagnostics{
     const step=this.steps.get(name);if(!step)throw Error('missing step diagnostics: '+name);
     try{
       const end=this.sample();
       return {version:1,sourceRun:this.options.sourceRun,startedAt:step.start.at,finishedAt:end.at,elapsedMs:end.offsetMs-step.start.offsetMs,
-        loopDelay:step.delay.read(),pressureExposure:exposure(step.start.pressure,end.pressure),pressureBasis:'shared-scope-endpoints-overlap'};
+        loopDelay:step.delay.read(),pressureExposure:exposure(step.start,end),workersPressureInterval:workerInterval(step.start,end),pressureBasis:'shared-scope-endpoints-overlap'};
     }finally{try{step.delay.close();}finally{this.steps.delete(name);}}
   }
   close():void{
@@ -136,6 +168,7 @@ export class RunDiagnostics{
     return {version:1,sourceRun:this.options.sourceRun,state:this.error!==null?'incomplete':this.closed?'complete':'running',error:this.error,
       sampleIntervalMs:1000,loopResolutionMs:20,runnerGroup:this.runnerGroup,workersGroup:this.workersGroup,workersStartedAt:this.firstWorker?.at??null,timeline:'diagnostics.jsonl',
       startedAt:this.first.at,finishedAt:this.closed?this.last.at:null,loopDelay:this.closed?null:this.runDelay.read(),
-      pressureExposure:{...exposure(this.first.pressure,this.last.pressure),workers:this.firstWorker?.pressure.workers&&this.last.pressure.workers?pressureDelta(this.firstWorker.pressure.workers,this.last.pressure.workers):null},minutes:structuredClone(this.minutes)};
+      pressureExposure:{...exposure(this.first,this.last),workers:this.firstWorker?exposure(this.firstWorker,this.last).workers:null},
+      workersPressure:structuredClone(this.last.workersPressure),minutes:structuredClone(this.minutes)};
   }
 }

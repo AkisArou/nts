@@ -9,7 +9,7 @@ import { checkedUnitName, childSlice, newToolingSlice, unitComponent } from "../
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
-import { claimRunOwner, reapRunOwner, type RunOwner } from "./run-owner.ts";
+import { claimRunOwner, reapRunOwner, type RunOwner, type RootIdentity } from "./run-owner.ts";
 
 import {hostObservations,type HostObservations,type CgroupCpu} from '../host-observations.ts';
 import {STEP_CPU_MEASURE} from '../step-time.ts';
@@ -267,6 +267,8 @@ export class GateScopes {
   readonly directory: string;
   private readonly temporary: boolean;
   private readonly owner: ReturnType<typeof claimRunOwner> | undefined;
+  private readonly identity:RootIdentity;
+  private closed=false;
   constructor(env: NodeJS.ProcessEnv, ownerFile?: string) {
     this.host=hostObservations(env);
     for (const name of ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]) if (!env[name]) throw new Error(`step scopes require host capability ${name}; launch with the canonical host environment`);
@@ -281,13 +283,60 @@ export class GateScopes {
     if (!owner) throw new Error("gate lacks a named systemd owner");
     this.group = startSlice(this.slice, owner);
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
-    this.owner?.complete({ group: this.group, device: String(identity.dev), inode: String(identity.ino) });
+    this.identity={group:this.group,device:String(identity.dev),inode:String(identity.ino)};
+    this.owner?.complete(this.identity);
   }
-  step(limits: StepLimits): StepScope { return new StepScope(this, limits); }
+  step(limits: StepLimits): StepScope { if(this.closed)throw Error('gate scopes are closed');return new StepScope(this, limits); }
+  private observation():OwnedRootObservation{
+    const identity=():RootIdentity|undefined=>{
+      try{const value=statSync(`${CGROUP}${this.group}`,{bigint:true});return {group:this.group,device:String(value.dev),inode:String(value.ino)};}
+      catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+    };
+    return observeOwnedRoot(this.identity,{identity,populated:()=>populated(this.group),manager:()=>{
+      const text=control('show',this.slice,'--property=LoadState','--property=ActiveState','--property=ControlGroup');
+      const field=(name:string):string=>{const rows=text.split('\n').filter(row=>row.startsWith(name+'='));if(rows.length!==1)throw Error('gate root manager lacks '+name);return rows[0]!.slice(name.length+1);};
+      return {loadState:field('LoadState'),activeState:field('ActiveState'),group:field('ControlGroup')};
+    }});
+  }
+  /** Only an acquired root whose manager and path both prove departure may
+   * retire a diagnostic endpoint. Missing live roots remain failed reads. */
+  departed=():boolean=>this.observation().state==='departed';
   close(): void {
-    if (populated(this.group)) throw new Error("gate still owns populated step scopes");
-    control("stop", this.slice);
+    if(this.closed)return;
+    const observation=this.observation();
+    if(observation.state==='present'){
+      if(observation.populated)throw new Error("gate still owns populated step scopes");
+      control("stop", this.slice);
+    }
     this.owner?.close();
     if (this.temporary) rmSync(this.directory, { recursive: true, force: true });
+    this.closed=true;
   }
+}
+
+export type OwnedRootObservation={state:'present';populated:0|1}|{state:'departed'};
+type RootEffects={identity:()=>RootIdentity|undefined;populated:()=>0|1;manager:()=>{loadState:string;activeState:string;group:string}};
+/** Root absence alone is not a close proof. Preserve the acquired identity,
+ * and require the manager's terminal state plus a second absent-path answer. */
+export function observeOwnedRoot(acquired:RootIdentity,effects:RootEffects):OwnedRootObservation{
+  const same=(value:RootIdentity)=>{
+    if(value.group!==acquired.group||value.device!==acquired.device||value.inode!==acquired.inode)throw Error('gate root identity changed');
+  };
+  const departed=():OwnedRootObservation=>{
+    const manager=effects.manager();
+    if(manager.group&&manager.group!==acquired.group)throw Error('gate root manager changed groups');
+    if(!['loaded','not-found'].includes(manager.loadState)||manager.activeState!=='inactive')throw Error('gate root path is missing while its unit remains live or unknown');
+    const after=effects.identity();if(after){same(after);throw Error('gate root reappeared while checking departure');}
+    return {state:'departed'};
+  };
+  const first=effects.identity();if(!first)return departed();same(first);
+  let count:0|1;
+  try{count=effects.populated();}
+  catch(error){
+    if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
+    const after=effects.identity();if(after){same(after);throw error;}
+    return departed();
+  }
+  const after=effects.identity();if(!after)return departed();same(after);
+  return {state:'present',populated:count};
 }

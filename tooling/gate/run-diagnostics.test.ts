@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {hostObservations,type PressureReading} from './host-observations.ts';
+import {CgroupDeparted,hostObservations,type PressureReading} from './host-observations.ts';
 import {parsePressure} from './host-pressure.ts';
 import {RunDiagnostics,pressureDelta} from './run-diagnostics.ts';
 import {ownMemory} from './test-memory.ts';
@@ -100,4 +100,53 @@ test('delayed acquisition pairs its own wall clock and attaches a later worker r
   const report=diagnostics.report();assert.equal(report.finishedAt,new Date(13_000).toISOString());
   assert.equal(report.pressureExposure?.machine.stallUsec.cpu.some,900);assert.equal(report.pressureExposure?.workers?.stallUsec.cpu.some,100);
   const first=rows[0] as {pressure:{workers:unknown}};assert.equal(first.pressure.workers,null);
+});
+
+test('a proved owned worker departure keeps its last real counters and observation time',t=>{
+  const root=testScratch(t,'diagnostics-owned-departure'),clock=join(root,'clock');writeFileSync(clock,'0');
+  const env=ownMemory(root,{clock:{kind:'file',file:clock}}),base=hostObservations(env);let ended=false,total=100,workerReads=0;
+  const host={...base,cgroupPressure:(group:string)=>{
+    if(group!=='/workers')return base.cgroupPressure(group);
+    workerReads++;if(ended)throw new CgroupDeparted(group,Error('supplied exact departure'));
+    return reading('owned-worker',total);
+  }};
+  const rows:{kind?:string;pressure?:{workers:unknown}}[]=[],errors:unknown[]=[];
+  const diagnostics=new RunDiagnostics({host,sourceRun:'/run',startedAt:0,emit:row=>rows.push(row as typeof rows[number]),log:()=>{},failed:error=>errors.push(error)});
+  diagnostics.attachWorkers('/workers',()=>ended);
+  writeFileSync(clock,'1000');total=200;diagnostics.beginStep('active');
+  writeFileSync(clock,'2000');total=400;diagnostics.sample();const lastReads=workerReads;
+  writeFileSync(clock,'3000');ended=true;const departed=diagnostics.sample();assert.equal(departed.pressure.workers,null);
+  writeFileSync(clock,'4000');const step=diagnostics.endStep('active');
+  assert.equal(step.pressureExposure.workers?.stallUsec.cpu.some,200);
+  assert.deepEqual(step.workersPressureInterval,{startedAt:new Date(1000).toISOString(),finishedAt:new Date(2000).toISOString(),departedAt:new Date(3000).toISOString()});
+  assert.throws(()=>diagnostics.beginStep('too-late'),/root departed/);
+  writeFileSync(clock,'5000');diagnostics.close();
+  const report=diagnostics.report();assert.equal(report.state,'complete');assert.equal(report.finishedAt,new Date(5000).toISOString());
+  assert.equal(report.workersPressure?.observedAt,new Date(2000).toISOString());assert.equal(report.workersPressure?.departedAt,new Date(3000).toISOString());
+  assert.equal(report.workersPressure?.reading.resources.cpu.some.totalUsec,400);assert.equal(report.pressureExposure?.workers?.stallUsec.cpu.some,300);
+  assert.equal(workerReads,lastReads,'retired endpoints are never sampled as live again');assert.deepEqual(errors,[]);
+  assert.equal(rows.filter(row=>row.kind==='run-diagnostics-workers-departed').length,1);
+  const samples=rows.filter(row=>row.kind==='run-diagnostics-sample');assert.equal(samples.at(-1)?.pressure?.workers,null,'no synthetic terminal pressure endpoint');
+});
+
+test('missing unowned, changed and live-unreadable endpoints remain instrument failures',t=>{
+  const base=hostObservations(ownMemory(testScratch(t,'diagnostics-departure-refusals')));
+  for(const kind of ['unowned','foreign','live','changed','unreadable'] as const){
+    let broken=false;
+    const host={...base,cgroupPressure:(group:string)=>{
+      if(group!=='/workers')return base.cgroupPressure(group);
+      if(broken){
+        if(kind==='changed')return reading('new-worker');
+        if(kind==='unreadable')throw Error('supplied live pressure file unreadable');
+        throw new CgroupDeparted(kind==='foreign'?'/other':'/workers',Error('supplied missing endpoint'));
+      }
+      return reading('owned-worker');
+    }};
+    const diagnostics=new RunDiagnostics({host,sourceRun:'/run',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
+    diagnostics.attachWorkers('/workers',kind==='unowned'?undefined:()=>false);broken=true;
+    assert.throws(()=>diagnostics.close(),/run diagnostics incomplete/);assert.equal(diagnostics.report().state,'incomplete',kind);
+  }
+  const missing=new RunDiagnostics({host:base,sourceRun:'/run',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
+  assert.throws(()=>missing.attachWorkers('/workers',()=>true),/before its pressure endpoint was acquired/);
+  assert.throws(()=>missing.close(),/incomplete/);
 });

@@ -82,7 +82,15 @@ function livePressure(group?:string):PressureReading{
     const after=statSync(root,{bigint:true});
     if(identity.dev!==after.dev||identity.ino!==after.ino)throw Error('scope identity changed during sampling');
     return {identity:`${root}:${identity.dev}:${identity.ino}`,resources};
-  }catch(error){throw new HostObservationError(`host observation pressure ${root} failed: ${String(error)}`);}
+  }catch(error){
+    // A missing individual pressure file inside a live group is still a
+    // broken observation. Only the group's own absent path denotes departure;
+    // the acquiring owner must independently prove that it ended normally.
+    if(group!==undefined&&(error as NodeJS.ErrnoException).code==='ENOENT'){
+      try{statSync(root);}catch(missing){if((missing as NodeJS.ErrnoException).code==='ENOENT')throw new CgroupDeparted(group,error);throw missing;}
+    }
+    throw new HostObservationError(`host observation pressure ${root} failed: ${String(error)}`);
+  }
 }
 function liveLoopDelay():LoopDelayMeter{
   const histogram=monitorEventLoopDelay({resolution:20});histogram.enable();let closed=false;

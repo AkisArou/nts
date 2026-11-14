@@ -11,6 +11,7 @@
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
     "757": { "kind": "kept", "why": "#757 event-loop and PSI diagnostic controls, cost and supported proof, until the coordinator reviews the away log" },
+    "775": { "kind": "kept", "why": "#775 exact owned-root departure barriers, pressure endpoint and cancellation proofs, until coordinator review" },
     "681": { "kind": "kept", "why": "#681's pure lowering test-module move and section proof, retained until the coordinator reviews the away log" },
     "761": { "kind": "kept", "why": "#761's Rust runtime-input traces, declarations and selection census, until the coordinator reviews the away log" },
     "756": { "kind": "kept", "why": "#756's retained refusal inventory, supplied-observation controls and loaded replays, until the coordinator reviews the away log" },
