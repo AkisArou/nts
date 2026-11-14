@@ -25,6 +25,12 @@ export function ownedToolingSpawn(value:unknown,files:ReadonlySet<string>):{file
     if(!process.allowedNodeEnvironmentFlags.has(flag))return;
     if(['--import','--require','-r','--loader','--experimental-loader'].includes(flag)){
       if(++index>=args.length-1)return;
+    }else if(!flag.includes('=')){
+      // A bare string/number option could consume the apparent entry as its
+      // value. Node normalizes those worker options to --key=value. Boolean
+      // Node options have a negated form; expose-gc is the pinned V8 boolean.
+      const positive=flag.startsWith('--no-')?'--'+flag.slice(5):flag;
+      if(flag!=='--expose-gc'&&(!positive.startsWith('--')||!process.allowedNodeEnvironmentFlags.has('--no-'+positive.slice(2))))return;
     }
   }
   const entry=row.options.args.at(-1);if(typeof entry!=='string'||!files.has(resolve(entry)))return;

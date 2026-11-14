@@ -21,9 +21,9 @@ test('spawn observations bind the actual Node entry and child test environment',
     {process:child,options:{...options,args:[process.execPath,'/foreign.test.ts']}},{process:child,options:{...options,envPairs:[]}}])
     assert.equal(ownedToolingSpawn(value,files),undefined);
   for(const argv of [['--eval','helper()'],['-ehelper()'],['--print','helper()'],['-phelper()'],['helper.mjs'],
-    ['--run','build'],['--import'],['--','helper.mjs']])
+    ['--run','build'],['--import'],['--title'],['--inspect-port'],['--max-old-space-size'],['--','helper.mjs']])
     assert.equal(ownedToolingSpawn({process:child,options:{...options,args:[process.execPath,...argv,'/entry.test.ts']}},files),undefined,JSON.stringify(argv));
-  for(const argv of [[],['--'],['--import','file:///owned/preload.mjs'],['--expose-gc','--import=file:///owned/preload.mjs']])
+  for(const argv of [[],['--'],['--import','file:///owned/preload.mjs'],['--expose-gc','--import=file:///owned/preload.mjs'],['--no-warnings','--title=entry']])
     assert.ok(ownedToolingSpawn({process:child,options:{...options,args:[process.execPath,...argv,'/entry.test.ts']}},files),JSON.stringify(argv));
 });
 
