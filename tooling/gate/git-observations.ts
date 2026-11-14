@@ -28,7 +28,7 @@ const key=(row:Pick<GitInvocation,'file'|'kind'|'source'>)=>JSON.stringify([row.
 /** One local convention, not argument-flow inference: a function passing its
  * own parameter directly to child_process takes that command parameter first. */
 export function inspectCommandForwarders(facts:SourceFacts,offset=0):string[]{
-  const ast=facts.ast,problems:string[]=[],seen=new Set<Node>();
+  const ast=facts.ast,problems:string[]=[],seen=new Set<Node>(),owners=new Set<Node>();
   for(const call of facts.calls){
     if(!/^child_process\.(?:spawn|spawnSync|execFile|execFileSync)$/.test(facts.name(call.expression)))continue;
     const command=call.arguments[0];if(!command)continue;
@@ -38,13 +38,20 @@ export function inspectCommandForwarders(facts:SourceFacts,offset=0):string[]{
         ||ast.isMethodDeclaration(node)||ast.isConstructorDeclaration(node)||ast.isGetAccessorDeclaration(node)||ast.isSetAccessorDeclaration(node)))continue;
       const parameter=[...facts.ancestors(binding.value)].find(node=>ast.isParameterDeclaration(node));
       const first=node.parameters[0];
-      if(parameter&&node.parameters.includes(parameter)&&first
-        &&!(ast.isIdentifier(first.name)&&first.name===binding.value&&!first.dotDotDotToken&&!first.initializer)&&!seen.has(node)){
-        seen.add(node);problems.push(`${facts.file}:${offset+facts.line(call.pos)}: command forwarder must take its command as the first parameter: ${facts.code(call).replace(/\s+/g,' ')}`);
+      if(parameter&&node.parameters.includes(parameter)&&first){
+        owners.add(node);
+        if(!seen.has(node)){
+          const unsupported=ast.isConstructorDeclaration(node)||ast.isGetAccessorDeclaration(node)||ast.isSetAccessorDeclaration(node);
+          if(unsupported||!(ast.isIdentifier(first.name)&&first.name===binding.value&&!first.dotDotDotToken&&!first.initializer)){
+            seen.add(node);problems.push(`${facts.file}:${offset+facts.line(call.pos)}: ${unsupported?'constructor/accessor cannot own a command forwarder':'command forwarder must take its command as the first parameter (a required identifier)'}: ${facts.code(call).replace(/\s+/g,' ')}`);
+          }
+        }
       }
       break;
     }
   }
+  for(const construction of facts.constructions)if(owners.has(facts.resolve(construction.expression)))
+    problems.push(`${facts.file}:${offset+facts.line(construction.pos)}: command forwarder must use ordinary call syntax, not new: ${facts.code(construction).replace(/\s+/g,' ')}`);
   return problems;
 }
 

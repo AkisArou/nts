@@ -101,6 +101,20 @@ function correct(program,args=[]){return spawnSync(program,args);}`);
 function shadow(root,{launch},program,args){return launch(program,args);}`),[]);
 });
 
+test('constructors and accessors cannot give command forwarding an unaudited caller syntax',()=>{
+  const source=`import {spawnSync} from 'node:child_process';
+class Launch{constructor(program,args){spawnSync(program,args);}}
+class Assign{set program(program){spawnSync(program,['status']);}}
+new Launch('git',['status']);new Assign().program='git';`;
+  assert.deepEqual(inspect(source),[]);
+  const rows=forwarders(source);assert.equal(rows.length,2);
+  assert.ok(rows.every(row=>row.includes('constructor/accessor cannot own a command forwarder')));
+  const ordinary=forwarders(`import {spawnSync} from 'node:child_process';
+function launch(program,args){spawnSync(program,args);}const alias=launch;new launch('git',['status']);new alias('git',['status']);
+new URL('git',import.meta.url);new Error('git');`);
+  assert.equal(ordinary.length,2);assert.ok(ordinary.every(row=>row.includes('must use ordinary call syntax, not new')));
+});
+
 test('shell facts distinguish arguments from prose, substitutions and redirects',()=>{
   const source=`printf '%s' 'git status'\ncat <<'DATA'\ngit status\nDATA\n"git" '--no-optional-locks' status > output\nresult=$(git status)\n`;
   const rows=inspectShellGit('tooling/control.sh',source,shellCommands(source));

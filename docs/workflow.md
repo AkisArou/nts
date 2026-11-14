@@ -722,8 +722,10 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   carry the literal option. Selected generated launch sources are checked
   through the same facts. A local function that passes its own parameter
   directly to `child_process.spawn`, `spawnSync`, `execFile` or `execFileSync`
-  takes that command as its required identifier first parameter, so its callers retain the same
-  audited command position. This lexical convention grants no command meaning
+  takes that command as its required identifier first parameter and uses
+  ordinary call syntax, so its callers retain the same audited command
+  position. Constructors and accessors cannot own these forwarders. This
+  lexical convention grants no command meaning
   to ordinary string data. `results/git-observations/unprotected.json` records
   remaining exact source sites; a different unprotected site cannot consume
   a retired site's allowance. `git-observations.ts --record` writes only
