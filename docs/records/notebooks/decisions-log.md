@@ -19,6 +19,8 @@ that activity with actual test events. Its file policy explicitly delegates
 CPU limits to the enclosing step. Missing observations stay named instrument
 failures; the existing five-minute inactivity guard, completed-failure
 accounting and tooling-slice cancellation remain owned by the collector.
+An incomplete observation retains a separately validated diagnostic beside a
+definite completed FAIL and cannot replace that result with INSTRUMENT.
 The spawn subscription and sampler registrations close after its stream drains.
 
 ## Measurement admission takes memory and CPUs together (11-10)

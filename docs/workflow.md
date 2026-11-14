@@ -1248,7 +1248,9 @@ the first node task.
   entry's rooted descendants: CPU progress, runnable or I/O-blocked threads,
   and test reports renew inactivity. A file with no progress reaches the
   named five-minute hang guard. Missing identity or activity fails the
-  instrument. The enclosing step retains its execution budget; file activity
+  instrument when no assertion has completed failing. A definite completed
+  failure remains FAIL with the observation diagnostic retained beside it.
+  The enclosing step retains its execution budget; file activity
   introduces no separate CPU cutoff. Observation subscriptions and samplers
   close with the collector; its existing slice owns cancellation
   ([log](records/notebooks/decisions-log.md#tooling-file-liveness-begins-at-spawn-11-14)).
