@@ -36,7 +36,7 @@ function fixture(t:TestContext,mode:"memory"|"priority"|"active"|"ceiling") {
   });
   copyModuleClosure(["tooling/gate/run.mjs","tooling/gate/tokens.mjs"],root);
   const table=join(gate,"step-table.mjs");
-  writeFileSync(table,readFileSync(table,"utf8").replace(`name: "${STEP}", bound: 3600`,`name: "${STEP}", bound: 3`));
+  writeFileSync(table,readFileSync(table,"utf8").replace(`name: "${STEP}",`,`name: "${STEP}", bound: 3,`));
   assert.match(readFileSync(table,"utf8"),/name: "test262-census-c", bound: 3,/);
   const listed=spawnSync("sh",[join(SOURCE,"tooling/gate/all.sh"),"--list"],{env:fixtureEnvironment(t),encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
