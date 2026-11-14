@@ -1632,6 +1632,15 @@ export function parseOptions(argv: readonly string[]): Options {
   return { once, status, json, count, answer, record, benchmarks: measure, schedule, ignored };
 }
 
+/** The command owner clears a pending nap during shutdown. Leaving the body
+ * unsettled then prevents another cycle from starting while it drains. */
+export function waitForControllerCycle(milliseconds:number):Promise<void>{
+  return new Promise(resolve=>{
+    const timer=setTimeout(()=>{unregister();resolve();},milliseconds);
+    const unregister=registerCommandCloser('full-check next-cycle wait',{close:()=>clearTimeout(timer)});
+  });
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
   const layout = defaultLayout();
@@ -1668,7 +1677,6 @@ async function main(argv: readonly string[]): Promise<number> {
   const fx = production(options);
   stamp(`full check: core on main, wide steps follow verified when idle with a ${WIDE_MIN_GAP_MS / HOUR} h minimum gap, and ${options.schedule.nightly} nightly before benchmarks (due until the next nightly slot, measured on CPU 4 with its sibling idle); tree ${layout.tree}`);
   if (options.ignored.length) stamp(`ignored obsolete options ${options.ignored.join(" ")}: wide follows verified when idle; benchmarks stay due until the next nightly slot; the current unit definition omits these options`);
-  const nap = new Int32Array(new SharedArrayBuffer(4));
   for (;;) {
     if (followVerified(fx.git, layout)) return 0;
     let did: Awaited<ReturnType<typeof cycle>>;
@@ -1677,12 +1685,12 @@ async function main(argv: readonly string[]): Promise<number> {
       // A cycle that cannot run says why and waits, rather than restarting in a loop.
       stamp(`cycle failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
       if (options.once) return 1;
-      Atomics.wait(nap, 0, 0, 5 * 60_000);
+      await waitForControllerCycle(5 * 60_000);
       continue;
     }
     if (options.once) return 0;
     if (did === "restart" && followVerified(fx.git, layout)) return 0;
-    if (did === "idle" || did === "restart") Atomics.wait(nap, 0, 0, 60_000);
+    if (did === "idle" || did === "restart") await waitForControllerCycle(60_000);
   }
 }
 

@@ -10,10 +10,13 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // is once the unit ends, and a refused records commit is applied again on the
 // newest main until it lands or its attempts run out.
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
+import {spawn,spawnSync} from "node:child_process";
 import {chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync} from "node:fs";
 import {basename, dirname, join} from "node:path";
 import {test} from "node:test";
+import {randomUUID} from 'node:crypto';
+import {testScratch} from '../gate/test-scratch.ts';
+import {waitFor,spawnTest} from '../gate/test-wait.ts';
 import {applyEveryRow, assertMessage, checkoutIn, fakeGate, publishEveryRun, recording, repository, stubBench, stubQueue, stubUnits, type FakeGate, type Repository, type StubQueue, type StubUnits} from "./repository-fixture.ts";
 import type { Applier, Recorder } from "./records.ts";
 import {BENCH_ASK_AGAIN_MS, BENCH_OUTCOME, BENCH_UNIT_LOG, benchmarksUnit, controllerTarget, countOnce, cycle, rangeReaches, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDER_LOG, recordJob, recordingPins, recordPending, RECORDS_ATTEMPTS, RECORDS_OUTCOME, RECORDS_UNIT_LOG, recordsUnit, statusText, TEST262_NEW_FAILS, type CountEffects, type Effects} from "./service.ts";
@@ -1908,4 +1911,38 @@ test("culprit search consumes reused passes as the measured commit's observation
   assert.equal(readState(repo.layout.state).culprits.length, 1);
   assert.ok(f.calls.some(call => call.label === "core-probe" &&
     repo.git.subject(call.commit).startsWith("full check: ") && call.commit !== e));
+});
+
+
+test('controller cycle and error naps drain on a named unit stop',async t=>{
+  const root=testScratch(t,'full-check-stop-nap');
+  for(const milliseconds of [60_000,5*60_000]){
+    const file=join(root,String(milliseconds)+'.mjs'),ready=join(root,String(milliseconds)+'.ready');
+    writeFileSync(file,generatedJavaScript(`import {writeFileSync} from 'node:fs';
+import {waitForControllerCycle} from ${JSON.stringify(new URL('./service.ts',import.meta.url).href)};
+import {runAsCommand,registerCommandCloser} from ${JSON.stringify(new URL('../differential/command-entry/main.ts',import.meta.url).href)};
+runAsCommand(import.meta.url,async()=>{
+  registerCommandCloser('controller test receipt',{close:()=>writeFileSync(${JSON.stringify(ready)}+'.closed','closed')});
+  const waiting=waitForControllerCycle(${milliseconds});
+  writeFileSync(${JSON.stringify(ready)},'armed');
+  await waiting;writeFileSync(${JSON.stringify(ready)}+'.continued','another cycle');
+});`));
+    const unit='nts-test-controller-nap-'+randomUUID();
+    let output='',ended=false;
+    const child=spawn('systemd-run',['--user','--wait','--pipe','--collect','--unit='+unit,
+      '-p','KillMode=control-group','-p','TimeoutStopSec=120s','-p','LimitCORE=0','-p','Nice=19',
+      '--','taskset','-c','0-3,6-31',process.execPath,file],{env:hostEnvironment(process.env),stdio:['ignore','pipe','pipe']});
+    child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
+    const closed=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',code=>{ended=true;resolve(code);});});
+    try{
+      await waitFor('the controller nap to be armed',()=>existsSync(ready),{stopped:()=>ended?output:undefined});
+      const stopped=spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});assert.equal(stopped.status,0,stopped.stderr);
+      assert.equal(await closed,143,output);
+      assert.equal(readFileSync(ready+'.closed','utf8'),'closed');
+      assert.equal(existsSync(ready+'.continued'),false,'shutdown cannot start another cycle');
+      assert.doesNotMatch(output,/wedged drain|timed out|Killing/);
+    }finally{
+      spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});await closed;
+    }
+  }
 });
