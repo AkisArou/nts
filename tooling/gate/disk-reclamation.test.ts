@@ -9,9 +9,10 @@ import {hostObservations} from './host-observations.ts';
 import {ownMemory} from './test-memory.ts';
 import {completeBuild} from './build-completion.ts';
 import {DiskCapacity} from './disk-capacity.ts';
-import {reclaimDisk,assertNoProcessUsers,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
+import {reclaimDisk,type ReclaimOwnership,type ReclaimTarget} from './disk-reclamation.ts';
 import {GateResource} from './gate-resource.ts';
 import {processIdentity} from '../landing/lock.ts';
+import {assertNoProcessUsers,processCgroup} from '../landing/tree-users.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
 const GiB=2**30;
 const cargoTag='Signature: 8a477f597d28d172789f06886806bc55\n';
@@ -125,7 +126,7 @@ test('a real non-dumpable C child in the nts unit keeps its root by name',async 
   child.stdout.on('data',bytes=>{out+=String(bytes);});child.stderr.on('data',bytes=>{error+=String(bytes);});
   try{
     await waitFor('non-dumpable child readiness',()=>out.includes('ready\n'),{stopped:()=>child.exitCode===null?undefined:error||'child exited '+child.exitCode});
-    const cgroup=readFileSync('/proc/'+child.pid+'/cgroup','utf8');assert.match(cgroup,/(?:^|\/)nts[.-]/);
+    const cgroup=processCgroup(child.pid!);assert.match(cgroup,/(?:^|\/)nts[.-]/);
     const report=reclaimDisk({...f.options,ownership:(root,target)=>assertNoProcessUsers([root,target])});
     assert.deepEqual(report.removed,[]);
     assert.ok(report.kept.some(row=>row.root===tree&&row.reason.includes('unreadable tool process '+child.pid)),JSON.stringify(report));

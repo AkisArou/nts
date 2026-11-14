@@ -1,8 +1,9 @@
 // Reclaim only rebuildable outputs and clean, unbuilt pool worktrees. The
 // caller holds DiskCapacity's pool lock for inventory, checks and removal.
-import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,readlinkSync,realpathSync,rmSync} from 'node:fs';
+import {appendFileSync,chmodSync,existsSync,lstatSync,readFileSync,readdirSync,realpathSync,rmSync} from 'node:fs';
 import {basename,dirname,join,resolve,sep} from 'node:path';
 import {worktrees,type Git} from '../landing/git.ts';
+import {assertNoProcessUsers} from '../landing/tree-users.ts';
 import {GateResource} from './gate-resource.ts';
 import {gitArguments} from './git-arguments/main.ts';
 import {infrastructureProbe} from './infrastructure-probe.ts';
@@ -58,58 +59,6 @@ function missing(error:unknown):boolean{return (error as NodeJS.ErrnoException).
 function isDirectory(path:string):boolean{
   try{const info=lstatSync(path);if(info.isSymbolicLink())throw Error('aliased output root: '+path);return info.isDirectory();}
   catch(error){if(missing(error))return false;throw error;}
-}
-
-class ProcessUse extends Error{}
-/** Readable owners always count. Non-dumpable processes outside nts cannot be
- * tool owners; their readable cgroup provenance is retained in the audit.
- * Unreadable nts processes or cgroups refuse. This grants no signal authority. */
-export function assertNoProcessUsers(roots:readonly string[],proc='/proc'):string[]{
-  const uid=process.getuid?.();
-  const ignored:string[]=[],unreadable:Error[]=[];
-  for(const pid of readdirSync(proc).filter(name=>/^[1-9][0-9]*$/.test(name))){
-    const dir=join(proc,pid);
-    let birth:string;
-    try{
-      // A non-dumpable process may expose root-owned /proc inodes despite
-      // retaining this user's real UID. The readable status owns that answer.
-      const status=readFileSync(join(dir,'status'),'utf8'),owner=/^Uid:\s+(\d+)\s+\d+\s+\d+\s+\d+$/m.exec(status);
-      if(!owner)throw Error('process has no UID observation');
-      if(Number(owner[1])!==uid)continue;
-      const fields=readFileSync(join(dir,'stat'),'utf8').split(') ').at(-1)!.split(' ');
-      if(fields[0]==='Z'||fields[0]==='X')continue;
-      birth=fields[19]!;
-    }catch(error){if(missing(error))continue;unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
-    try{
-      const links=['cwd','exe',...readdirSync(join(dir,'fd')).map(fd=>'fd/'+fd)];
-      for(const link of links){
-        let path:string;
-        try{path=readlinkSync(join(dir,link)).replace(/ \(deleted\)$/,'');}
-        catch(error){if(missing(error)&&link.startsWith('fd/'))continue;throw error;}
-        if(roots.some(root=>under(resolve(root),path)))throw new ProcessUse('process '+pid+' owns '+link+' in '+path);
-      }
-    }catch(error){
-      if(error instanceof ProcessUse)throw error;
-      let current:string;
-      try{const fields=readFileSync(join(dir,'stat'),'utf8').split(') ').at(-1)!.split(' ');if(fields[0]==='Z'||fields[0]==='X')continue;current=fields[19]!;}
-      catch(again){if(missing(again))continue;unreadable.push(Error('unreadable process ownership '+dir,{cause:error}));continue;}
-      if(current!==birth)continue;
-      try{
-        const cgroup=readFileSync(join(dir,'cgroup'),'utf8');
-        const lines=cgroup.trim().split('\n'),group=lines.length===1&&/^0::(\/.*)$/.exec(lines[0]!)?.[1];
-        if(!group||group.split('/').some(part=>part==='.'||part==='..'))throw Error('invalid unified cgroup identity');
-        const denied=['EACCES','EPERM'].includes((error as NodeJS.ErrnoException).code??'');
-        if(denied&&!group.split('/').some(part=>/^nts(?:[.-]|$)/.test(part))){
-          const command=readFileSync(join(dir,'comm'),'utf8').trim();
-          ignored.push('ignored non-dumpable outside nts: pid '+pid+' '+command+'; birth '+birth+'; cgroup '+group);
-          continue;
-        }
-        throw Error('live unreadable tool process '+pid+'; cgroup '+group+': '+errorText(error));
-      }catch(reason){unreadable.push(Error('disk reclamation keeps unreadable process '+pid+': '+errorText(reason),{cause:error}));}
-    }
-  }
-  if(unreadable.length)throw new AggregateError(unreadable,'disk reclamation keeps root: '+unreadable.map(error=>error.message).join('; '));
-  return ignored;
 }
 
 /** A queued/starting service may own a tree before /proc exposes its child. */
