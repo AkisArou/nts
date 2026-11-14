@@ -2878,3 +2878,12 @@ and cumulative counter continuity. They describe overlapping shared exposure,
 not a causal step allocation. Missing facts are named instrument failures.
 Meters drain before the final timeline record and before scopes disappear;
 reused diagnostics preserve the original source run under origin.
+
+## Command-first process forwarders (11-14)
+
+A local function that forwards its own parameter directly to the command
+position of child_process spawn/execFile takes it first. The existing Git
+caller audit then checks the same syntactic argument position everywhere;
+it does not infer argument flow or interpret ordinary string data. Both the
+host audit and standalone Git audit enforce the convention, including selected
+generated launch sources. Benchmark and verification helpers use that form.

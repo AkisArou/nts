@@ -720,7 +720,11 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   positions: a call's first argument, an argv vector's first element, a
   probe's command property, and shell command words. Shell and Python argv
   carry the literal option. Selected generated launch sources are checked
-  through the same facts. `results/git-observations/unprotected.json` records
+  through the same facts. A local function that passes its own parameter
+  directly to `child_process.spawn`, `spawnSync`, `execFile` or `execFileSync`
+  takes that command as its first parameter, so its callers retain the same
+  audited command position. This lexical convention grants no command meaning
+  to ordinary string data. `results/git-observations/unprotected.json` records
   remaining exact source sites; a different unprotected site cannot consume
   a retired site's allowance. `git-observations.ts --record` writes only
   decreases, under its owner lock.
@@ -980,6 +984,10 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- Local process forwarders keep their command parameter first. The source
+  audit checks that one direct forwarding hop; Git arguments at callers use
+  the shared argument owner without parameter-flow inference.
 
 - **Stall diagnostics preserve scope and time.** Native histograms retain real
   percentiles per window, and PSI retains each scope's identity and cumulative
