@@ -9,12 +9,42 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
-import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
-import {committedChanges} from "./change-paths.ts";
+import { selectRange, selectionInfrastructure, selectorQuestion, unionViews, type RuleView } from "./owed-range.ts";
+import {committedChanges,contentChanges} from "./change-paths.ts";
+import {infrastructureProbes,INFRASTRUCTURE_PROBE_BOUND_MS,type ProbeResult} from './infrastructure-probe.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 import {waitFor} from "./test-wait.ts";
 import {dependencyCache} from "../inputs/dependency-inputs.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+test('selector questions retain the infrastructure owner bound and classify ordinary exits separately',()=>{
+  const requests:{command:string;args:readonly string[];timeout:unknown;signal:unknown}[]=[];
+  const probe=infrastructureProbes((command,args,options)=>{
+    requests.push({command,args,timeout:options.timeout,signal:options.killSignal});
+    return {pid:1,status:0,signal:null,stdout:'answer',stderr:'',output:['','answer','']} as ProbeResult;
+  });
+  assert.equal(selectorQuestion('git',gitArguments(['status']),{purpose:'selector git status',env:{}},probe),'answer');
+  assert.deepEqual(requests,[{command:'git',args:gitArguments(['status']),timeout:INFRASTRUCTURE_PROBE_BOUND_MS,signal:'SIGKILL'}]);
+  const nonzero=infrastructureProbes(()=>({pid:1,status:1,signal:null,stdout:'',stderr:'already removed',output:['','','already removed']} as ProbeResult));
+  assert.throws(()=>selectorQuestion('git',gitArguments(['update-ref','-d','ref']),{purpose:'selector compare-and-delete',env:{}},nonzero),error=>{
+    assert.equal(selectionInfrastructure(error),false);assert.equal((error as {status:number}).status,1);return true;
+  });
+});
+test('a wedged endpoint is named infrastructure and never a completed selector answer',()=>{
+  const timedOut=Object.assign(new Error('supplied wedged endpoint'),{code:'ETIMEDOUT'});
+  const probe=infrastructureProbes(()=>({pid:1,status:null,signal:'SIGKILL',stdout:'',stderr:'',output:['','',''],error:timedOut} as ProbeResult));
+  assert.throws(()=>selectorQuestion(process.execPath,['--endpoint','/owned/tree','revision'],{purpose:'selector endpoint revision',env:{}},probe),error=>{
+    assert.equal(selectionInfrastructure(error),true);assert.match(String(error),/INSTRUMENT selector endpoint revision/);
+    assert.match(String(error),/300000 ms wedged-probe bound/);return true;
+  });
+});
+test('content precision may fall back on an ordinary missing answer but never on a failed observation',()=>{
+  const change={path:'input.ts',added:false,deleted:false};
+  const unavailable=infrastructureProbes(()=>({pid:1,status:1,signal:null,stdout:'',stderr:'missing',output:['','','missing']} as ProbeResult));
+  assert.deepEqual(contentChanges('/owned',[change],'before','after',request=>unavailable({...request,env:{}})),[change]);
+  const broken=()=>{throw new ToolingInstrumentError('tooling-setup','named content observation unavailable');};
+  assert.throws(()=>contentChanges('/owned',[change],'before','after',broken),/named content observation unavailable/);
+});
 function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {
   execFileSync("git",gitArguments(["clone","--quiet","--shared","--no-checkout",ROOT,repo]),{env,stdio:["ignore","pipe","pipe"]});
   const git=(cwd:string,...args:string[])=>execFileSync("git",gitArguments(args),{cwd,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();

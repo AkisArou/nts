@@ -1,5 +1,6 @@
 import {gitArguments} from "./git-arguments/main.ts";
-import {execFileSync} from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe} from './infrastructure-probe.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 import {lstatSync,readFileSync} from "node:fs";
 import {join} from "node:path";
 
@@ -32,8 +33,12 @@ export function parseNameStatus(text:string):PathChange[] {
   return out;
 }
 
-export function contentChanges(repo:string,changes:PathChange[],from:string,to:string|null):PathChange[] {
-  const git=(...args:string[])=>execFileSync("git",gitArguments(args),{cwd:repo,encoding:"utf8",stdio:["ignore","pipe","ignore"],maxBuffer:8<<20});
+export function contentChanges(repo:string,changes:PathChange[],from:string,to:string|null,probe:InfrastructureProbe=infrastructureProbe):PathChange[] {
+  const git=(...args:string[])=>{
+    const result=probe({purpose:`selector content git ${args[0]}`,command:'git',args:gitArguments(args),cwd:repo,stdio:['ignore','pipe','pipe'],maxBuffer:8<<20,exits:'classify'});
+    if(result.status!==0)throw Error(`selector content git ${args[0]} exited ${result.status}: ${(result.stderr??'').trim()}`);
+    return result.stdout;
+  };
   return changes.map(change=>{
     if(change.added||change.deleted)return change;
     try {
@@ -42,11 +47,11 @@ export function contentChanges(repo:string,changes:PathChange[],from:string,to:s
       const newMode=to?mode(to):file!.isFile()?file!.mode&0o111?"100755":"100644":"other";
       if(!["100644","100755"].includes(oldMode)||oldMode!==newMode)return change;
       return {...change,sameMode:true,before:git("show",`${from}:${change.path}`),after:to?git("show",`${to}:${change.path}`):readFileSync(join(repo,change.path),"utf8")};
-    } catch {return change;}
+    } catch(error) {if(error instanceof ToolingInstrumentError)throw error;return change;}
   });
 }
 
-export function committedChanges(repo:string,from:string,to:string):PathChange[] {
-  const status=execFileSync("git",gitArguments(["diff","--name-status","-z","-M",from,to]),{cwd:repo,encoding:"utf8"});
-  return contentChanges(repo,parseNameStatus(status),from,to);
+export function committedChanges(repo:string,from:string,to:string,probe:InfrastructureProbe=infrastructureProbe):PathChange[] {
+  const status=probe({purpose:'selector committed Git paths',command:'git',args:gitArguments(["diff","--name-status","-z","-M",from,to]),cwd:repo}).stdout;
+  return contentChanges(repo,parseNameStatus(status),from,to,probe);
 }

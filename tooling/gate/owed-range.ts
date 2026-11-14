@@ -4,7 +4,7 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // The caller's working files and the other endpoint cannot narrow that view.
 import { createHash } from "node:crypto";
 import { registerHooks } from "node:module";
-import { execFileSync } from "node:child_process";
+import {infrastructureProbe,type InfrastructureProbe,type ProbeRequest} from './infrastructure-probe.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import {basename,dirname,join,relative} from "node:path";
@@ -32,11 +32,21 @@ export function selectionInfrastructure(error:unknown):boolean {
     || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
 }
 function infrastructure<T>(operation:string,run:()=>T):T {
-  try{return run();}catch(error){throw new SelectionInfrastructureError(`${operation}: ${String(error)}`,{cause:error});}
+  try{return run();}catch(error){throw new SelectionInfrastructureError(`INSTRUMENT ${operation}: ${String(error)}`,{cause:error});}
+}
+
+/** Probe failures are unavailable instruments; ordinary exits remain the
+ * selector's answer to classify (including compare-and-delete races). */
+export function selectorQuestion(command:string,args:readonly string[],options:Omit<ProbeRequest,'command'|'args'|'exits'>,probe:InfrastructureProbe=infrastructureProbe):string{
+  let result;
+  try{result=probe({...options,command,args,exits:'classify'});}
+  catch(error){throw new SelectionInfrastructureError(`INSTRUMENT ${options.purpose}: ${String(error)}`,{cause:error});}
+  if(result.status!==0)throw Object.assign(new Error(`${options.purpose} exited ${result.status}: ${(result.stderr??'').trim()}`),{status:result.status});
+  return result.stdout;
 }
 
 function git(repo: string, ...args: string[]): string {
-  return infrastructure(`selector git ${args[0]}`,()=>execFileSync("git",gitArguments( args), { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim());
+  return infrastructure(`selector git ${args[0]}`,()=>selectorQuestion("git",gitArguments(args),{purpose:`selector git ${args[0]}`,cwd:repo,stdio:["ignore","pipe","pipe"],maxBuffer:64<<20}).trim());
 }
 
 function processIdentity(pid:number):{start:string;live:boolean}|null {
@@ -54,8 +64,11 @@ function collectPin(repo:string,ref:string,expected:string):void {
     // Another collector can remove this exact dead owner's ref after our
     // enumeration. Only an independently confirmed absence completes it;
     // a changed ref or any other Git failure remains infrastructure failure.
-    try{execFileSync("git",gitArguments(["show-ref","--verify","--quiet",ref]),{cwd:repo,stdio:["ignore","pipe","pipe"]});}
-    catch(probe){if((probe as {status?:number;signal?:string}).status===1&&!(probe as {signal?:string}).signal)return;}
+    try{selectorQuestion("git",gitArguments(["show-ref","--verify","--quiet",ref]),{purpose:`selector ref absence ${ref}`,cwd:repo,stdio:["ignore","pipe","pipe"]});}
+    catch(probe){
+      if(selectionInfrastructure(probe))throw probe;
+      if((probe as {status?:number;signal?:string}).status===1&&!(probe as {signal?:string}).signal)return;
+    }
     throw error;
   }
 }
@@ -147,7 +160,7 @@ export function unionViews(views: RuleView[]): Checks {
 
 export function selectRange(repo: string, range: string): RangeSelection {
   const [base, tip] = endpoints(repo, range);
-  const changes=committedChanges(repo,base,tip);
+  const changes=infrastructure('selector committed paths',()=>committedChanges(repo,base,tip));
   const parent = join(homedir(), ".cache/nts-owed-range");
   const shared=dirname(git(repo,"rev-parse","--path-format=absolute","--git-common-dir"));
   infrastructure("selector directory",()=>mkdirSync(parent,{recursive:true}));
@@ -178,12 +191,12 @@ export function selectRange(repo: string, range: string): RangeSelection {
         infrastructure("selector inputs",()=>linkTree(tree, "work", shared));
       }
       try {
-        const text = execFileSync(process.execPath, [SELF, "--endpoint", tree, revision],
-          { cwd: tree, input:JSON.stringify(changes),encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], maxBuffer: 64 << 20 });
+        const text = selectorQuestion(process.execPath, [SELF, "--endpoint", tree, revision],
+          {purpose:`selector endpoint ${revision}`,cwd:tree,input:JSON.stringify(changes),stdio:["pipe","pipe","pipe"],maxBuffer:64<<20});
         views.push(readView(text, revision));
       } catch (error) {
         const command=error as NodeJS.ErrnoException&{signal?:string;status?:number};
-        if(command.status===INFRASTRUCTURE_EXIT || command.signal || typeof command.code==="string")throw new SelectionInfrastructureError(`selector worker unavailable at ${revision}: ${String(error)}`,{cause:error});
+        if(selectionInfrastructure(error)||command.status===INFRASTRUCTURE_EXIT || command.signal || typeof command.code==="string")throw new SelectionInfrastructureError(`selector worker unavailable at ${revision}: ${String(error)}`,{cause:error});
         throw new Error(`cannot evaluate owed rules at ${revision}: ${String(error)}`, { cause: error });
       }
     }
@@ -233,8 +246,8 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     if (broken) throw new Error(`rule self-test failed at ${revision}: ${broken}`);
   } else {
     // Historical rule modules exposed their checks only through this command.
-    execFileSync(process.execPath, [join(tree, "tooling/gate/owed.mjs"), "--self-test"],
-      { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
+    selectorQuestion(process.execPath, [join(tree, "tooling/gate/owed.mjs"), "--self-test"],
+      {purpose:`historical selector self-test ${revision}`,cwd:tree,stdio:["ignore","pipe","pipe"]});
   }
   const select=(paths:PathChange[]):RuleView=>{
     const rules: Rule[] = m.owed(paths);
