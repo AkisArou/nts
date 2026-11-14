@@ -15,6 +15,7 @@ import { bindsToProperties } from "../gate/scopes/bound-slice.ts";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { OWNER_MARK } from "../conformance/node-environment.ts";
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
