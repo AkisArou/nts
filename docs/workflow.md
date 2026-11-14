@@ -349,16 +349,21 @@ they cannot poison the reusable baseline for unchanged artifacts.
   on-device and the rest, about an hour more) run on the newest `verified`
   commit when it has advanced since their last run and at least four hours
   have passed since that run started. They start only while no landing is
-  queued or running and no higher-priority memory request waits. Changes
-  coalesce onto the newest verified; skipped opportunities consume no start.
+  queued or running and no higher-priority memory request waits. Wide work
+  and its culprit probes also wait while the controller's benchmarks measure,
+  as reported by retained ownership or the actual benchmark unit. An unreadable
+  unit observation refuses by name. Changes coalesce onto the newest verified;
+  skipped opportunities consume no start.
   The nightly run, at 03:00 by default, can cross the gap and repeat an
   unchanged commit before new benchmarks start. It waits for idleness for
   at most two hours after the nightly slot, then enters normal full-check
   admission even while higher-priority work waits. Ledger priorities still
-  put landings and agents first. Daytime runs remain idle-only.
+  put landings and agents first. That deadline never overrides the benchmark
+  exclusion. Daytime runs remain idle-only.
   A core already running finishes first. There are no daytime clock slots.
 - **Records, the benchmarks and the count run beside the parts,** each in a
-  unit of its own, so neither part waits for them. A part's records run
+  unit of its own. The core continues beside them; wide work waits for benchmark
+  measurement. A part's records run
   (below) records in `nts-full-check-records-<part>`, in that part's records
   tree, and the nightly benchmarks measure in `nts-full-check-bench`, in a
   bench tree, while the core goes on running on each new `main`; the hourly
@@ -374,6 +379,11 @@ core, wide or culprit-probe launch. A busy controller-tree lock leaves the
 status at `restarting for verified <sha>` and starts no run. A run already in
 flight finishes normally; background units remain adoptable after restart.
 A restart request is neither a held run nor evidence against a commit.
+
+Between cycles the controller awaits a timer owned by its command lifetime.
+Shutdown clears the timer without starting another cycle. An active measurement
+is interrupted through the controller unit's control group and its bound
+measurement scope; an interrupted measurement stays held.
 
 The landing receipt names the checked commit and tree, actual outcomes and
 coverage, environment identity, producer profile and binary identities.

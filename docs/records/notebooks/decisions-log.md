@@ -2907,3 +2907,13 @@ Per-entry completion, timer renewal and final drain retain all release failures;
 completed assertion remains FAIL with observation cleanup recorded separately.
 Missing-identity controls advance supplied time from readiness and deliver only the
 idle arm’s callback, so scheduling delay cannot turn pass/fail completion into idle.
+
+
+2026-11-14: #779 makes nightly benchmark measurement a hard exclusion for wide
+work and wide culprit probes, including after the nightly idle deadline. Core
+work and core probes continue beside benchmarks as previously specified; their
+measurement methodology remains a separate user decision. The controller checks
+retained ownership and the actual benchmark unit, refusing an unreadable
+observation. Between-cycle waits use command-owned awaited timers so shutdown
+can clear them without starting another cycle. The real active synchronous
+measurement stop control did not justify an asynchronous gate/search refactor.
