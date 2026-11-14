@@ -108,19 +108,61 @@ test('missing spawn identity stays separate from completed product failures',t=>
   for(const scenario of ['idle','pass','fail']){
     const completed=scenario!=='idle',failed=scenario==='fail';
     const root=testScratch(t,'tooling-missing-entry'),staged=join(root,'staged'),frame=join(root,'instrument.json');
+    const ready=join(root,'ready'),release=join(root,'release'),clockReceipt=join(root,'clock.json');
     copyModuleClosure(['tooling/gate/tooling-runner.ts'],staged);
     const owner=join(staged,'tooling/gate/tooling-entry-activity.ts'),source=readFileSync(owner,'utf8'),anchor='this.identities.set(file,';
     assert.equal(source.split(anchor).length,2,'one actual spawn identity boundary');
     writeFileSync(owner,source.replace(anchor,'if(false)this.identities.set(file,'));
     const file=join(root,'missing.test.mjs');
-    writeFileSync(file,completed?`import{test}from'node:test';test('completed without identity',()=>{${failed?"throw Error('definite identity assertion');":""}});\n`:
-      "import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
-    const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
+    writeFileSync(file,completed?`import{test}from'node:test';import{watch,writeFileSync,existsSync}from'node:fs';
+test('completed without identity',()=>new Promise((resolve,reject)=>{
+  const finish=()=>{if(existsSync(${JSON.stringify(release)})){watcher.close();${failed?"reject(Error('definite identity assertion'));":"resolve();"}}};
+  const watcher=watch(${JSON.stringify(root)},finish);writeFileSync(${JSON.stringify(ready)},'ready');finish();
+}));\n`:
+      `import{test}from'node:test';import{createServer}from'node:net';import{writeFileSync}from'node:fs';
+test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1',()=>writeFileSync(${JSON.stringify(ready)},'ready'))));\n`);
+    // Supply only the actual collector's clock/timer effects. Its native
+    // activity owner and terminal identity verification remain exercised.
+    const collector=join(staged,'tooling/gate/tooling-runner.ts');
+    let worker=readFileSync(collector,'utf8');
+    const clockAnchor='now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},';
+    const entryAnchor='export async function runTooling(';
+    const runAnchor="const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:[...(request.execArgv??[]),'--import',bootstrap],resultEnv});";
+    for(const actual of [clockAnchor,entryAnchor,runAnchor])assert.equal(worker.split(actual).length,2,'one collector fixture boundary: '+actual);
+    worker=worker.replace(entryAnchor,`let suppliedNow=0,armed=0,delivered=0;
+const suppliedTimers=new Set<{callback:()=>void;cancelled:boolean}>();
+${entryAnchor}`).replace(clockAnchor,`now:()=>suppliedNow,scheduleIdle:callback=>{
+      const task={callback,cancelled:false};suppliedTimers.add(task);armed++;
+      return()=>{task.cancelled=true;suppliedTimers.delete(task);};
+    },`).replace(runAnchor,`const {watch,existsSync}=await import('node:fs');
+      let readyObserved=false,watcherClosed=false;
+      const advance=()=>{
+        if(readyObserved||!existsSync(${JSON.stringify(ready)}))return;
+        readyObserved=true;suppliedNow=TOOLING_IDLE_GUARD_MS+1;
+        ${completed?`writeFileSync(${JSON.stringify(release)},'release');`:`const task=[...suppliedTimers].find(task=>!task.cancelled);
+        if(!task)throw Error('ready missing-entry fixture has no armed idle timer');
+        delivered++;task.callback();`}
+      };
+      const watcher=watch(${JSON.stringify(root)},advance);
+      const closeWatcher=()=>{if(!watcherClosed){watcher.close();watcherClosed=true;}};
+      const unregisterFixture=registerCommandCloser('supplied missing-entry clock watcher',{close:closeWatcher});
+      let result;
+      try{advance();${runAnchor.replace('const result=','result=')}}
+      finally{
+        closeWatcher();unregisterFixture();
+        writeFileSync(${JSON.stringify(clockReceipt)},JSON.stringify({readyObserved,now:suppliedNow,armed,delivered,pending:suppliedTimers.size,watcherClosed}));
+      }`);
+    writeFileSync(collector,worker);
+    const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(collector).href)};
 import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
-try{const report=await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});console.log(JSON.stringify({report,transcript}));}
+try{const report=await runScopedTooling([${JSON.stringify(file)}],{fixture:true,output});console.log(JSON.stringify({report,transcript}));}
 catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,transcript}));}`;
     const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t,{NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'missing',NTS_GATE_STEP_RESULT:frame}),encoding:'utf8'},'missing collector spawn result');
     assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
+    const supplied=JSON.parse(readFileSync(clockReceipt,'utf8'));
+    assert.equal(supplied.readyObserved,true);assert.equal(supplied.now,300001);
+    assert.ok(supplied.armed>0,'actual collector arms the supplied idle timer');
+    assert.equal(supplied.delivered,completed?0:1);assert.equal(supplied.pending,0);assert.equal(supplied.watcherClosed,true);
     assert.match(observed.transcript,/missing tooling spawn\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
     assert.match(observed.transcript,completed?/at completion/:/at its idle bound/);
     if(failed){
