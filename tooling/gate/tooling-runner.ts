@@ -16,6 +16,7 @@ import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 import {CommandLiveness} from './command-liveness.ts';
 import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
+import {commandCpuFrequency} from './active-process.ts';
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -126,10 +127,10 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   if(options.instrument!==undefined&&(!options.instrument||typeof options.instrument.now!=='function'||typeof options.instrument.scheduleIdle!=='function'
       ||typeof options.instrument.watchActivity!=='function'||typeof options.instrument.sampleActivity!=='function'||!Number.isFinite(options.instrument.frequency)||options.instrument.frequency<=0))
     throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
-  const activity=options.instrument===undefined?new ToolingEntryActivity(names,file=>touch(file),error=>broken(error)):undefined;
+  let activity:ToolingEntryActivity|undefined;
   const instrument:ToolingInstrument=options.instrument===undefined?{
     now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
-    frequency:activity!.frequency,watchActivity:activity!.watch,sampleActivity:activity!.sample,
+    frequency:commandCpuFrequency(),watchActivity:(file,sample,broken)=>activity!.watch(file,sample,broken),sampleActivity:()=>activity!.sample(),
   }:options.instrument;
   try{
   const schedule=instrument.scheduleIdle;
@@ -183,6 +184,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   // Each file's own wrapper test marks its process's start and end.
   const clock=instrument.now,begun=clock();
   const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
+  if(options.instrument===undefined)activity=new ToolingEntryActivity(names,file=>touch(file),error=>broken(error));
   const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
     events.on("test:dequeue",data=>{
