@@ -1196,7 +1196,8 @@ test("a nightly slot that comes while a night's run measures does not replace it
   assert.ok(!next.lines.some(line => line.includes("replaced the night")), next.lines.join("\n"));
   measureIn(next);
   assert.equal(await cycle(next), "benchmarks");
-  assert.equal(await cycle(next), "wide", "the deferred nightly wide attempt starts once measurement ends");
+  assert.equal(await cycle(next), "idle", "the completed benchmark's newly queued record still holds the wide start");
+  assert.match(readState(repo.layout.state).wide.waiting!,/a fixture landing is queued/);
   assert.ok(next.lines.some(line => line.includes(`already measured verified ${first.slice(0, 12)}`)), next.lines.join("\n"));
   assert.notEqual(readState(repo.layout.state).nightly, answered, "answered once the run ended");
 });
