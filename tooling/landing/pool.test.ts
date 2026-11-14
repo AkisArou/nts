@@ -271,10 +271,11 @@ test("a tree a process still uses stays on its landed branch, says what uses it,
 });
 
 test("a landed branch that moves on is its task's again: its mark goes and its tree stays held", async t => {
-  const { s, p } = pool(t);
+  let ownedPid:number|undefined;
+  const { s, p } = pool(t,2,{users:tree=>treeUsers(tree,{pids:ownedPid===undefined?[]:[ownedPid]})});
   const a = p.take("fix/a");
   const shell = spawn("cat", [], {env:fixtureEnvironment(t), cwd: a.path, stdio: ["pipe", "ignore", "ignore"] });
-  await once(shell, "spawn");
+  await once(shell, "spawn");ownedPid=shell.pid;
   try {
     assert.equal(p.release("fix/a", a.head).state, "kept");
     assert.deepEqual(names(p), ["1 landed fix/a", "2 free"]);
