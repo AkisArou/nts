@@ -66,7 +66,7 @@ for(const failed of [false,true])for(const fault of ['none','verify','close','ve
 console.log(JSON.stringify(rows));`);
   const actual=spawnTest(process.execPath,[probe],{env:fixtureEnvironment(t),encoding:'utf8'},'activity lifetime with supplied timing');
   assert.equal(actual.status,0,actual.stdout+actual.stderr);const rows=JSON.parse(actual.stdout.trim());
-  assert.equal(rows.length,12);assert.ok(rows.every(row=>row.acquired===1&&row.verified===1&&row.closed===1&&row.watchReleases===1&&row.pending===0&&row.watches===0));
+  assert.equal(rows.length,12);assert.ok(rows.every((row:{acquired:number;verified:number;closed:number;watchReleases:number;pending:number;watches:number})=>row.acquired===1&&row.verified===1&&row.closed===1&&row.watchReleases===1&&row.pending===0&&row.watches===0));
 });
 
 test("tooling slice names preserve nesting and cannot name unrelated units",()=>{

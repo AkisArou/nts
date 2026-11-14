@@ -943,7 +943,12 @@ the pinned bootstrap checks the bytes it supplies before a module body runs.
   exit wiring behind readiness/release barriers, without asserting how quickly
   the scheduler runs them. Own-process and per-process CPU timeouts, group
   runaway and inactivity retain their distinct outcomes and precedence.
-  Tooling-file guards own their clock and idle scheduler together. The shared
+  Tooling-file guards own their clock and idle scheduler together. Timing and
+  activity are separate capabilities: supplying timing keeps native acquisition,
+  verification and drain. A supplied activity source acquires its complete
+  frequency/watch/sample/verify/close lifetime explicitly. Each timer, watch and
+  lifetime closes once; every cleanup error remains beside a completed failure.
+  The shared
   test entry yields before each case to give queued reports a serialization
   opportunity before a following synchronous body blocks the worker. Its
   scheduler is captured before fixture clocks are installed; the turn changes no deadline.
@@ -1281,7 +1286,9 @@ the first node task.
   failure remains FAIL with the observation diagnostic retained beside it.
   The enclosing step retains its execution budget; file activity
   introduces no separate CPU cutoff. Observation subscriptions and samplers
-  close with the collector; its existing slice owns cancellation
+  close with the collector; timing injection preserves that native lifetime.
+  Entry completion and final drain retain every release error without replacing
+  a definite completed FAIL. The existing slice owns cancellation
   ([log](records/notebooks/decisions-log.md#tooling-file-liveness-begins-at-spawn-11-14)).
 
 - **Fixture tooling comes from its declared closure.** A private test repository

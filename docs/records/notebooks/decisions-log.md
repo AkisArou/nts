@@ -2897,3 +2897,13 @@ retain conservative fallback or compare-and-delete meaning; a wedged or broken
 instrument propagates a named selection failure and grants no scope. This
 closes an unbounded production wait under #773 without attributing the earlier
 concurrent preflight hang to a particular operation.
+
+## Collector timing and activity lifetimes (11-14)
+
+The tooling collector accepts timing and acquired activity as separate capabilities.
+Supplying now/scheduleIdle retains native entry acquisition and terminal verification.
+A supplied activity source owns a complete frequency/watch/sample/verify/close lifetime.
+Per-entry completion, timer renewal and final drain retain all release failures; a
+completed assertion remains FAIL with observation cleanup recorded separately.
+Missing-identity controls advance supplied time from readiness and deliver only the
+idle arm’s callback, so scheduling delay cannot turn pass/fail completion into idle.
