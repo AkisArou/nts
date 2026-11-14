@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createWriteStream,existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {startArgs} from '../../agents/agents.ts';
 import {gateEnvironment} from '../canonical-environment.ts';
 import {copyModuleClosure} from '../module-closure-fixture.ts';
@@ -36,7 +37,7 @@ if (!setupFailure) {
 }
 `;
   writeFileSync(entry,original.replace(marker,fence+'\n'+marker));
-  const listed=spawnTest('sh',[join(repo,'tooling/gate/all.sh'),'--list'],{cwd:repo,env,encoding:'utf8'});
+  const listed=spawnTest('sh',[fileURLToPath(new URL('../all.sh',import.meta.url)),'--list'],{cwd:repo,env,encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);
   writeFileSync(join(repo,'tooling/gate/all.sh'),`#!/bin/sh
 if [ "$1" = --list ]; then
