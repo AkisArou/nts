@@ -60,6 +60,7 @@ else exit 0; fi
   });
   const stop=()=>{const answer=spawnTest('systemctl',['--user','stop',unit],{env,encoding:'utf8'});assert.equal(answer.status,0,answer.stderr);};
   t.after(async()=>{if(!result)stop();await closed;});
+  try{
   await waitFor('the actual runner to acquire its worker endpoint before any step',()=>existsSync(join(own,'ready.json')),
     {stopped:()=>result?JSON.stringify(result):undefined});
   const ready=JSON.parse(readFileSync(join(own,'ready.json'),'utf8')) as {pressure:{departedAt:string|null}};
@@ -79,4 +80,9 @@ else exit 0; fi
   }
   t.diagnostic(JSON.stringify({arm,exit,verdict:summary.verdict,interrupted:summary.interrupted,cleanup:summary.scope_cleanup,
     diagnostics:summary.diagnostics.state,workersPressure:summary.diagnostics.workersPressure}));
+  }finally{
+    // Drain before testScratch/fixtureEnvironment's teardown hooks can remove
+    // files still used by the runner or its resource reporters.
+    try{if(!result)stop();}finally{await closed;}
+  }
 });
