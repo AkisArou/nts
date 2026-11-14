@@ -333,9 +333,15 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
 function nodeTestRoots(input: CountInput, context: Context): string[] {
   const owner = (dir: string) => { try { return Number(readFileSync(join(dir, OWNER_MARK), "utf8").trim().split(" ")[0]); } catch { return null; } };
   const running = (pid: number | null) => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
-  const left = folders(input.cache, input.folderStat).filter(entry => /^n[0-9a-z]{2,7}$/.test(entry.name)
-    && readdirSync(entry.path).every(name => name === OWNER_MARK || name.startsWith(".tmp."))
-    && input.now - entry.mtimeMs > DAY && !running(owner(entry.path)));
+  const left = folders(input.cache, input.folderStat).filter(entry => {
+    if (!/^n[0-9a-z]{2,7}$/.test(entry.name)) return false;
+    try { if (!readdirSync(entry.path).every(name => name === OWNER_MARK || name.startsWith(".tmp."))) return false; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+    return input.now - entry.mtimeMs > DAY && !running(owner(entry.path));
+  });
   return left.length ? [`~/.cache/n<pid>: ${aged(left, context)}, NODE_TEST_DIR roots left by tooling/conformance/node-environment.ts; a runner removes its own`] : [];
 }
 

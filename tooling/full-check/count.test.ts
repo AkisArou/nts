@@ -269,6 +269,24 @@ test("listed cache stat errors other than disappearance retain their named failu
   }
 });
 
+test("a listed node test root that disappears before its contents are read is absent", t => {
+  const cache = mkdtempSync(join(tmpdir(), "full-check-vanished-node-root-"));
+  t.after(() => rmSync(cache, { recursive: true, force: true }));
+  const root = join(cache, "n12345"); mkdirSync(root);
+  writeFileSync(join(root, OWNER_MARK), "0\n");
+  utimesSync(root, new Date(NOW - 2 * DAY), new Date(NOW - 2 * DAY));
+  let observed = 0;
+  const folderStat = (path: string) => {
+    const info = lstatSync(path);
+    // cacheLines lists first; nodeTestRoots then takes its own real listing.
+    if (path === root && ++observed === 2) rmSync(root, { recursive: true });
+    return info;
+  };
+  const result = count(input(t, { cache, local: ["main"], remote: ["main"], pulls: [], issues: [], worktrees: [], folderStat }), {});
+  assert.equal(observed, 2, "removal follows nodeTestRoots's real listing and stat");
+  assert.deepEqual(result, { verdict: "PASS", red: [], notes: [], removable: [], stoppable: [] });
+});
+
 test("the count names an empty nts slice bound to no active unit, and only that", t => {
   const cache = mkdtempSync(join(tmpdir(), "full-check-cache-"));
   t.after(() => rmSync(cache, { recursive: true, force: true }));

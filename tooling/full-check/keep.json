@@ -11,7 +11,7 @@
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
     "784": { "kind": "kept", "why": "#784 count disappearance controls and raw proof referenced by the committed MD record" },
-    "709": { "kind": "kept", "why": "#709 ownership and pressure-reclamation controls, reboot recovery and proof, until #709 closes" },
+    "709": { "kind": "kept", "why": "#709 raw controls and source receipts authenticated by docs/records/notebooks/disk-reclamation-709.json" },
     "783": { "kind": "kept", "why": "raw #783 evidence and the #785 preparation refusal referenced by docs/records/notebooks/sealed-node-harness-783.md" },
     "779": { "kind": "kept", "why": "#779 benchmark exclusion and responsive controller stop controls, retained until coordinator review" },
     "770": { "kind": "kept", "why": "#770 command-forwarder audit, protected Git controls and supported proof, until #770 closes" },
