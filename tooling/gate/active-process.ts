@@ -26,7 +26,9 @@ export function processActivity(text:string) {
   const fields=text.slice(end+2).trim().split(/\s+/);
   const values=[2,3,11,12,13,14,19].map(at=>Number(fields[at]));
   if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw new Error("invalid process activity counters");
-  return {group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),own:values[2]!+values[3]!,started:values[6]!,busy:busyState(fields[0]!)};
+  const parent=Number(fields[1]);
+  if(!Number.isSafeInteger(parent)||parent<0)throw new Error('invalid process parent');
+  return {parent,group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),own:values[2]!+values[3]!,started:values[6]!,busy:busyState(fields[0]!)};
 }
 /**
  * A thread running or waiting for a CPU (R), or waiting on the kernel's I/O
@@ -59,8 +61,11 @@ function processIdentityAt(pid:number){
   if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw Error('invalid process activity counters');
   return {group:values[0]!,session:values[1]!,started:values[2]!};
 }
+/** Read-only identity and counters; a rooted observer gains no signal owner. */
+export function commandProcessIdentity(pid:number){return processAt(pid);}
+export function commandCpuFrequency():number{return clockTicks();}
 type ProcessActivity=ReturnType<typeof processActivity>;
-function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessActivity> {
+function activitySnapshot(owned:ReadonlySet<number>,roots:ReadonlySet<number>=new Set()):ReadonlyMap<number,ProcessActivity> {
   const records=new Map<number,ProcessActivity>();
   for(const name of readdirSync("/proc")){
     if(!/^\d+$/.test(name))continue;
@@ -68,17 +73,25 @@ function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessA
     // A disappearing unrelated /proc entry cannot invalidate this command's
     // observer. An unreadable directly owned leader is an instrument failure.
     const pid=Number(name);
-    try{record=processAt(pid);}catch(error){if(owned.has(pid))throw error;continue;}
+    try{record=processAt(pid);}catch(error){if(owned.has(pid)||roots.has(pid))throw error;continue;}
     // Rust's owned child groups remain in this directly spawned session.
     // Counting the session forwards nested CPU without trusting a heartbeat
     // or treating a waiting compiler as idle. Signals still use only spawn's
     // directly owned group; the nested supervisor owns its children's groups.
-    if(record&&owned.has(record.session))records.set(pid,{...record,busy:record.busy||threadsBusy(pid)});
+    if(record)records.set(pid,record);
   }
-  return records;
+  const selected=new Map<number,ProcessActivity>();
+  for(const [pid,record] of records){
+    let ancestor=pid;const visited=new Set<number>();
+    while(!roots.has(ancestor)&&records.has(ancestor)&&!visited.has(ancestor)){
+      visited.add(ancestor);ancestor=records.get(ancestor)!.parent;
+    }
+    if(owned.has(record.session)||roots.has(ancestor))selected.set(pid,{...record,busy:record.busy||threadsBusy(pid)});
+  }
+  return selected;
 }
 
-export type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean,processOwn:{pid:number;cpu:number})=>void;broken:(error:unknown)=>void};
+export type ActivityWatch={group:number;started:number;scope?:'descendants';parent?:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean,processOwn:{pid:number;cpu:number})=>void;broken:(error:unknown)=>void};
 /** One snapshot per tick for every live command; activity stays group-local. */
 export class CommandActivitySampler {
   private readonly watches=new Set<ActivityWatch>();
@@ -102,20 +115,32 @@ export class CommandActivitySampler {
     const watches=[...this.watches];
     if(!watches.length)return;
     let records:ReadonlyMap<number,ProcessActivity>;
-    try{records=this.snapshot(new Set(watches.map(watch=>watch.group)));}
+    try{records=this.snapshot(new Set(watches.filter(watch=>!watch.scope).map(watch=>watch.group)),new Set(watches.filter(watch=>watch.scope==='descendants').map(watch=>watch.group)));}
     catch(error){for(const watch of watches)watch.broken(error);return;}
-    const totals=new Map<number,number>(),busy=new Set<number>(),mostOwn=new Map<number,{pid:number;cpu:number}>();
+    const roots=new Set(watches.filter(watch=>watch.scope==='descendants').map(watch=>watch.group));
+    type Total={cpu:number;busy:boolean;mostOwn:{pid:number;cpu:number}};
+    const sessions=new Map<number,Total>(),trees=new Map<number,Total>();
+    const add=(map:Map<number,Total>,key:number,pid:number,record:ProcessActivity)=>{
+      const total=map.get(key)??{cpu:0,busy:false,mostOwn:{pid:key,cpu:0}};
+      total.cpu+=record.cpu;total.busy ||= record.busy;
+      if(record.own>total.mostOwn.cpu)total.mostOwn={pid,cpu:record.own};map.set(key,total);
+    };
     for(const [pid,record] of records){
-      if(record.own>(mostOwn.get(record.session)?.cpu??0))mostOwn.set(record.session,{pid,cpu:record.own});
-      totals.set(record.session,(totals.get(record.session)??0)+record.cpu);
-      if(record.busy)busy.add(record.session);
+      add(sessions,record.session,pid,record);
+      let ancestor=pid;const seen=new Set<number>();
+      while(records.has(ancestor)&&!seen.has(ancestor)){
+        seen.add(ancestor);if(roots.has(ancestor))add(trees,ancestor,pid,record);
+        ancestor=records.get(ancestor)!.parent;
+      }
     }
     for(const watch of watches){
       if(!this.watches.has(watch))continue;
       try{
         const leader=records.get(watch.group);
-        if(leader&&(leader.started!==watch.started||leader.group!==watch.group||leader.session!==watch.group))throw new Error("command process-group identity changed");
-        watch.sample(totals.get(watch.group)??0,leader?.own??0,busy.has(watch.group),mostOwn.get(watch.group)??{pid:watch.group,cpu:0});
+        if(leader&&(leader.started!==watch.started||(!watch.scope&&(leader.group!==watch.group||leader.session!==watch.group))
+            ||watch.parent!==undefined&&leader.parent!==watch.parent))throw new Error("command process-group identity changed");
+        const total=(watch.scope==='descendants'?trees:sessions).get(watch.group);
+        watch.sample(total?.cpu??0,leader?.own??0,total?.busy??false,total?.mostOwn??{pid:watch.group,cpu:0});
       }catch(error){watch.broken(error);}
     }
   }

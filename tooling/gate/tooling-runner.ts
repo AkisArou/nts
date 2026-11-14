@@ -14,6 +14,8 @@ import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingI
 import {checkedUnitName,newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
 import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
+import {CommandLiveness} from './command-liveness.ts';
+import {ToolingEntryActivity,type ToolingActivitySample} from './tooling-entry-activity.ts';
 
 /** Shell entry and reporter fixtures share this exact collector command. */
 export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
@@ -111,38 +113,73 @@ export class ToolingTestOwners {
 
 type ToolingInstrument={
   scheduleIdle:(callback:()=>void,milliseconds:number,file:string)=>()=>void;
+  frequency:number;
+  watchActivity:(file:string,sample:(value:ToolingActivitySample)=>void,broken:(error:unknown)=>void)=>()=>void;
+  sampleActivity:()=>void;
   event?:(name:string,data:TestActivity)=>void;
   now:()=>number;
 };
 export async function runTooling(files:string[],options:{idleMs?:number;execArgv?:string[];output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv;instrument?:ToolingInstrument}={}):Promise<ToolingResult> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
-  const active=new Map<string,()=>void>(),owners=new ToolingTestOwners(names);
+  type Active={live:CommandLiveness;reading:ToolingActivitySample;cancelIdle?:()=>void;cancelWatch?:()=>void};
+  const active=new Map<string,Active>(),owners=new ToolingTestOwners(names);
+  if(options.instrument!==undefined&&(!options.instrument||typeof options.instrument.now!=='function'||typeof options.instrument.scheduleIdle!=='function'
+      ||typeof options.instrument.watchActivity!=='function'||typeof options.instrument.sampleActivity!=='function'||!Number.isFinite(options.instrument.frequency)||options.instrument.frequency<=0))
+    throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
+  const activity=options.instrument===undefined?new ToolingEntryActivity(names):undefined;
   const instrument:ToolingInstrument=options.instrument===undefined?{
     now:()=>performance.now(),scheduleIdle:(callback,milliseconds)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);},
+    frequency:activity!.frequency,watchActivity:activity!.watch,sampleActivity:activity!.sample,
   }:options.instrument;
-  if(!instrument||typeof instrument.now!=='function'||typeof instrument.scheduleIdle!=='function')throw new ToolingInstrumentError('tooling-setup','tooling observation capability is incomplete');
+  try{
   const schedule=instrument.scheduleIdle;
-  let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0;
+  let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0,instrumentError:ToolingInstrumentError|undefined,decisionKind:'hung'|'runaway'='hung';
   // Each file's tests that have started and not completed: what a hang names,
   // since a hung test prints nothing of its own.
   const open=new Map<string,Map<number|string,string>>();
   const hangReason=()=>{
     const tests=[...(hungFile?open.get(hungFile)?.values()??[]:[])];
-    return `tooling file NOT RUN (hung): ${hungFile}; no test activity for ${options.idleMs??TOOLING_IDLE_GUARD_MS} ms${tests.length?` in ${tests.map(name=>JSON.stringify(name)).join(", ")}`:""}; ${priorFailures} prior assertion failure(s) retained in the transcript`;
+    return `tooling file NOT RUN (${decisionKind}): ${hungFile}; ${hung}${tests.length?` in ${tests.map(name=>JSON.stringify(name)).join(", ")}`:""}; ${priorFailures} prior assertion failure(s) retained in the transcript`;
+  };
+  const broken=(error:unknown)=>{
+    if(instrumentError)return;
+    instrumentError=new ToolingInstrumentError('tooling-setup',`cannot observe tooling file activity: ${String(error)}`);
+    controller.abort(instrumentError);
+  };
+  const sample=(file:string,entry:Active,reading:ToolingActivitySample)=>{
+    if(hung||instrumentError||!active.has(file))return;
+    try{
+      entry.reading=reading;const previous=entry.live.cpu;
+      const decision=entry.live.sample({now:instrument.now(),...reading});
+      if(decision){
+        decisionKind=decision.kind==='runaway'?'runaway':'hung';hungFile=file;hung=decision.reason;
+        if(decisionKind==='hung')publishHung(hangReason(),options.resultEnv,priorFailures);
+        else publishRunaway(hangReason(),options.resultEnv,priorFailures);
+        process.stderr.write(hangReason()+'\n');controller.abort(new Error(hangReason()));
+      }else if(previous!==entry.live.cpu||reading.busy)arm(file,entry);
+    }catch(error){broken(error);}
+  };
+  const arm=(file:string,entry:Active)=>{
+    entry.cancelIdle?.();
+    entry.cancelIdle=schedule(()=>{
+      try{instrument.sampleActivity();sample(file,entry,entry.reading);if(!hung&&!instrumentError)arm(file,entry);}
+      catch(error){broken(error);}
+    },options.idleMs??TOOLING_IDLE_GUARD_MS,file);
   };
   const touch=(file:string)=>{
-    active.get(file)?.();
-    active.set(file,schedule(()=>{
-      if(hung)return;
-      hungFile=file;hung=hangReason();
-      publishHung(hung,options.resultEnv,priorFailures);process.stderr.write(hung+"\n");controller.abort(new Error(hung));
-    },options.idleMs??TOOLING_IDLE_GUARD_MS,file));
+    let entry=active.get(file);
+    if(!entry){
+      entry={live:new CommandLiveness(file,{idleMs:options.idleMs??TOOLING_IDLE_GUARD_MS},instrument.now(),instrument.frequency),reading:{cpu:0,own:0,busy:false,processOwn:{pid:process.pid,cpu:0}}};
+      active.set(file,entry);const owned=entry;
+      entry.cancelWatch=instrument.watchActivity(file,reading=>sample(file,owned,reading),broken);
+    }
+    entry.live.output(instrument.now());arm(file,entry);
   };
   const fileOf=(data:TestActivity)=>owners.file(data);
   // Each file's own wrapper test marks its process's start and end.
   const clock=instrument.now,begun=clock();
   const times=new Map<string,ToolingFileTime>([...names].map(file=>[file,{file,startedMs:null,wallMs:null,passed:null}]));
-  const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
+  const stream=run({files:[...names],execArgv:[...(options.execArgv??[]),...(activity?['--import',activity.preload]:[])],concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
     events.on("test:dequeue",data=>{
       const file=fileOf(data);if(!file)return;
@@ -160,7 +197,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       const file=fileOf(data);if(!file)return;
       open.get(file)?.delete(data.testId??data.name!);
       if(resolve(data.name)===file){
-        active.get(file)?.();active.delete(file);
+        const entry=active.get(file);entry?.cancelIdle?.();entry?.cancelWatch?.();active.delete(file);
         const row=times.get(file)!;if(row.startedMs!==null){row.wallMs=clock()-begun-row.startedMs;row.passed=data.details.passed!==false;}
       }
       else if(active.has(file))touch(file);
@@ -171,17 +208,19 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   }});
   const report=stream.compose(spec);
   report.pipe(options.output??process.stdout,{end:false});
-  try{await finished(report);}catch(error){if(!hung)throw error;}
-  finally{for(const cancel of active.values())cancel();}
+  try{await finished(report);}catch(error){if(!hung&&!instrumentError)throw error;}
+  if(instrumentError)throw instrumentError;
   // node:test runs this many files at once when concurrency is true.
   const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
   if(hung){
     // Draining can deliver a completed failure after the guard's observation.
     // Publish the final evidence only after those events have been consumed.
-    publishHung(hangReason(),options.resultEnv,priorFailures);
+    if(decisionKind==='hung')publishHung(hangReason(),options.resultEnv,priorFailures);
+    else publishRunaway(hangReason(),options.resultEnv,priorFailures);
     return {status:priorFailures>0?1:2,completedFailures:priorFailures,times:measured};
   }
   return {status:success?0:1,completedFailures:priorFailures,times:measured};
+  }finally{for(const entry of active.values()){entry.cancelIdle?.();entry.cancelWatch?.();}activity?.close();}
 }
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */
