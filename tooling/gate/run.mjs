@@ -1769,7 +1769,7 @@ try { scopes = new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); 
 catch (error) {if(isCommandExit(error))throw error; setupFailure = `step scope setup failed: ${error.message}`; }
 if(diagnosticsFailure)setupFailure=`host observation setup failed: ${diagnosticsFailure}`;
 if(!setupFailure&&scopes){
-  try{diagnostics?.attachWorkers(scopes.group,scopes.departed);}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);setupFailure=`host observation setup failed: ${error}`;}
+  try{diagnostics?.attachWorkers(scopes.pressureEndpoint());}catch(error){if(isCommandExit(error))throw error;diagnosticsFailure=String(error);setupFailure=`host observation setup failed: ${error}`;}
 }
 if (!setupFailure) {
   try { await reserveMemory(); }

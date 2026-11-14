@@ -8,6 +8,7 @@ import {RunDiagnostics,pressureDelta} from './run-diagnostics.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {waitFor} from './test-wait.ts';
+import {observeOwnedRoot,readOwnedRootPressure} from './scopes/step-scope.ts';
 
 const reading=(identity:string,total=0):PressureReading=>{
   const resource=()=>({some:{avg10:12.5,totalUsec:total},full:{avg10:2.5,totalUsec:total/2}});
@@ -112,7 +113,7 @@ test('a proved owned worker departure keeps its last real counters and observati
   }};
   const rows:{kind?:string;pressure?:{workers:unknown}}[]=[],errors:unknown[]=[];
   const diagnostics=new RunDiagnostics({host,sourceRun:'/run',startedAt:0,emit:row=>rows.push(row as typeof rows[number]),log:()=>{},failed:error=>errors.push(error)});
-  diagnostics.attachWorkers('/workers',()=>ended);
+  diagnostics.attachWorkers({group:'/workers',read:()=>host.cgroupPressure('/workers'),departed:()=>ended});
   writeFileSync(clock,'1000');total=200;diagnostics.beginStep('active');
   writeFileSync(clock,'2000');total=400;diagnostics.sample();const lastReads=workerReads;
   writeFileSync(clock,'3000');ended=true;const departed=diagnostics.sample();assert.equal(departed.pressure.workers,null);
@@ -143,10 +144,33 @@ test('missing unowned, changed and live-unreadable endpoints remain instrument f
       return reading('owned-worker');
     }};
     const diagnostics=new RunDiagnostics({host,sourceRun:'/run',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
-    diagnostics.attachWorkers('/workers',kind==='unowned'?undefined:()=>false);broken=true;
+    diagnostics.attachWorkers(kind==='unowned'?'/workers':{group:'/workers',read:()=>host.cgroupPressure('/workers'),departed:()=>false});broken=true;
     assert.throws(()=>diagnostics.close(),/run diagnostics incomplete/);assert.equal(diagnostics.report().state,'incomplete',kind);
   }
   const missing=new RunDiagnostics({host:base,sourceRun:'/run',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
-  assert.throws(()=>missing.attachWorkers('/workers',()=>true),/before its pressure endpoint was acquired/);
+  assert.throws(()=>missing.attachWorkers({group:'/workers',read:()=>base.cgroupPressure('/workers'),departed:()=>true}),/before its pressure endpoint was acquired/);
   assert.throws(()=>missing.close(),/incomplete/);
+});
+
+test('owned pressure acquisition rejects replacement and discards removal during a read',t=>{
+  const base=hostObservations(ownMemory(testScratch(t,'pressure-read-identity'))),acquired={group:'/workers',device:'28',inode:'123'};
+  for(const mutation of ['replace-first','remove-first','remove-later'] as const){
+    let current:typeof acquired|undefined=acquired,mutate=mutation!=='remove-later';
+    const endpoint={group:acquired.group,
+      departed:()=>observeOwnedRoot(acquired,{identity:()=>current,populated:()=>0,manager:()=>({loadState:'not-found',activeState:'inactive',group:''})}).state==='departed',
+      read:()=>readOwnedRootPressure(acquired,()=>current,()=>{
+        if(mutate){current=mutation==='replace-first'?{...acquired,inode:'456'}:undefined;return reading('foreign-pressure-root',900);}
+        return reading('accepted-pressure-root',100);
+      })};
+    const diagnostics=new RunDiagnostics({host:base,sourceRun:'/run',startedAt:0,emit:()=>{},log:()=>{},failed:()=>{}});
+    if(mutation==='remove-later'){
+      diagnostics.attachWorkers(endpoint);mutate=true;diagnostics.sample();diagnostics.close();
+      const report=diagnostics.report();assert.equal(report.state,'complete');assert.equal(report.workersPressure?.reading.identity,'accepted-pressure-root');
+      assert.equal(report.workersPressure?.reading.resources.cpu.some.totalUsec,100);assert.ok(report.workersPressure?.departedAt);
+    }else{
+      assert.throws(()=>diagnostics.attachWorkers(endpoint),mutation==='replace-first'?/identity changed/:/before its pressure endpoint was acquired/);
+      current=undefined;assert.throws(()=>diagnostics.close(),/incomplete/);
+      assert.equal(diagnostics.report().workersPressure,null,'an unaccepted initial point supplies no counters');
+    }
+  }
 });

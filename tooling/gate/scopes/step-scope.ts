@@ -11,7 +11,8 @@ import { readStepEntry, type StepEntry } from "./step-entry.ts";
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner, type RootIdentity } from "./run-owner.ts";
 
-import {hostObservations,type HostObservations,type CgroupCpu} from '../host-observations.ts';
+import {CgroupDeparted,HostObservationError,hostObservations,type HostObservations,type CgroupCpu,type PressureReading} from '../host-observations.ts';
+import type {OwnedPressureEndpoint} from '../host-pressure.ts';
 import {STEP_CPU_MEASURE} from '../step-time.ts';
 import {readLimits} from './memory-limits.ts';
 
@@ -287,12 +288,12 @@ export class GateScopes {
     this.owner?.complete(this.identity);
   }
   step(limits: StepLimits): StepScope { if(this.closed)throw Error('gate scopes are closed');return new StepScope(this, limits); }
+  private currentIdentity():RootIdentity|undefined{
+    try{const value=statSync(`${CGROUP}${this.group}`,{bigint:true});return {group:this.group,device:String(value.dev),inode:String(value.ino)};}
+    catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  }
   private observation():OwnedRootObservation{
-    const identity=():RootIdentity|undefined=>{
-      try{const value=statSync(`${CGROUP}${this.group}`,{bigint:true});return {group:this.group,device:String(value.dev),inode:String(value.ino)};}
-      catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
-    };
-    return observeOwnedRoot(this.identity,{identity,populated:()=>populated(this.group),manager:()=>{
+    return observeOwnedRoot(this.identity,{identity:()=>this.currentIdentity(),populated:()=>populated(this.group),manager:()=>{
       const text=control('show',this.slice,'--property=LoadState','--property=ActiveState','--property=ControlGroup');
       const field=(name:string):string=>{const rows=text.split('\n').filter(row=>row.startsWith(name+'='));if(rows.length!==1)throw Error('gate root manager lacks '+name);return rows[0]!.slice(name.length+1);};
       return {loadState:field('LoadState'),activeState:field('ActiveState'),group:field('ControlGroup')};
@@ -301,6 +302,11 @@ export class GateScopes {
   /** Only an acquired root whose manager and path both prove departure may
    * retire a diagnostic endpoint. Missing live roots remain failed reads. */
   departed=():boolean=>this.observation().state==='departed';
+  pressureEndpoint():OwnedPressureEndpoint{
+    if(this.closed)throw Error('gate scopes are closed');
+    return Object.freeze({group:this.group,departed:this.departed,
+      read:()=>readOwnedRootPressure(this.identity,()=>this.currentIdentity(),()=>this.host.cgroupPressure(this.group))});
+  }
   close(): void {
     if(this.closed)return;
     const observation=this.observation();
@@ -312,6 +318,18 @@ export class GateScopes {
     if (this.temporary) rmSync(this.directory, { recursive: true, force: true });
     this.closed=true;
   }
+}
+
+/** The endpoint read itself, including the first one, must remain inside the
+ * acquired lifetime. A read followed by removal is not a new terminal point. */
+export function readOwnedRootPressure(acquired:RootIdentity,identity:()=>RootIdentity|undefined,read:()=>PressureReading):PressureReading{
+  const verify=()=>{
+    const observed=identity();
+    if(!observed)throw new CgroupDeparted(acquired.group,Error('owned root absent around pressure read'));
+    if(observed.group!==acquired.group||observed.device!==acquired.device||observed.inode!==acquired.inode)
+      throw new HostObservationError('gate root identity changed during pressure read');
+  };
+  verify();const value=read();verify();return value;
 }
 
 export type OwnedRootObservation={state:'present';populated:0|1}|{state:'departed'};

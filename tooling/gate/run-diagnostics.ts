@@ -1,7 +1,7 @@
 // One run owns these meters. Pressure is shared elapsed exposure; overlapping
 // step deltas must not be added or interpreted as a causal resource charge.
 import {CgroupDeparted,HostObservationError,type HostObservations,type LoopDelay,type LoopDelayMeter,type PressureReading} from './host-observations.ts';
-import {PRESSURE_RESOURCES} from './host-pressure.ts';
+import {PRESSURE_RESOURCES,type OwnedPressureEndpoint} from './host-pressure.ts';
 
 export type PressureDelta={identity:string;stallUsec:Record<(typeof PRESSURE_RESOURCES)[number],{some:number;full:number}>};
 type PressureSet={machine:PressureReading;runner:PressureReading;workers:PressureReading|null};
@@ -49,7 +49,7 @@ export class RunDiagnostics{
   private workersGroup:string|null;
   private firstWorker:Endpoint|null=null;
   private workersPressure:WorkerPressure|null=null;
-  private workerDeparture:(()=>boolean)|undefined;
+  private workerOwner:OwnedPressureEndpoint|undefined;
   private readonly origin:number;
   private readonly meters:LoopDelayMeter[]=[];
   private readonly steps=new Map<string,{start:Endpoint;delay:LoopDelayMeter}>();
@@ -89,22 +89,22 @@ export class RunDiagnostics{
         this.workersPressure={...this.workersPressure,departedAt:at};
         this.options.emit({kind:'run-diagnostics-workers-departed',version:1,group:this.workersGroup,...this.workersPressure});
       };
-      if(this.workerDeparture?.())retire();
+      if(this.workerOwner?.departed())retire();
       else try{
-        workers=host.cgroupPressure(this.workersGroup);
+        workers=this.workerOwner?this.workerOwner.read():host.cgroupPressure(this.workersGroup);
         if(this.workersPressure)pressureDelta(this.workersPressure.reading,workers);
         this.workersPressure={observedAt:at,observedOffsetMs:offsetMs,departedAt:null,reading:workers};
       }catch(error){
-        if(!(error instanceof CgroupDeparted)||error.group!==this.workersGroup||!this.workerDeparture?.())throw error;
+        if(!(error instanceof CgroupDeparted)||error.group!==this.workersGroup||!this.workerOwner?.departed())throw error;
         retire();
       }
     }
     return {offsetMs,at,pressure:{machine,runner,workers},workersPressure:structuredClone(this.workersPressure)};
   }
-  attachWorkers(group:string,departed?:()=>boolean):void{
+  attachWorkers(root:string|OwnedPressureEndpoint):void{
     if(this.workersGroup!==null)throw Error('run diagnostics worker root already attached');
-    this.workersGroup=group;this.workerDeparture=departed;this.firstWorker=this.sample();
-    this.options.emit({kind:'run-diagnostics-workers',version:1,group,...this.firstWorker});
+    this.workersGroup=typeof root==='string'?root:root.group;this.workerOwner=typeof root==='string'?undefined:{...root};this.firstWorker=this.sample();
+    this.options.emit({kind:'run-diagnostics-workers',version:1,group:this.workersGroup,...this.firstWorker});
   }
   start():void{
     if(this.timer||this.closed||this.error!==null)throw Error('run diagnostics sampler already started, failed or closed');

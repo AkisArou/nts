@@ -5,6 +5,8 @@ export const PRESSURE_RESOURCES=['cpu','memory','io'] as const;
 export type PressureLine={avg10:number;totalUsec:number};
 export type Pressure={some:PressureLine;full:PressureLine};
 export type PressureReading={identity:string;resources:Record<(typeof PRESSURE_RESOURCES)[number],Pressure>};
+/** An acquired scope owner binds the complete read to its retained identity. */
+export type OwnedPressureEndpoint=Readonly<{group:string;read():PressureReading;departed():boolean}>;
 export type LoopDelay={count:number;maxMs:number|null;p99Ms:number|null};
 export type LoopDelayMeter={read():LoopDelay;reset():void;close():void};
 
