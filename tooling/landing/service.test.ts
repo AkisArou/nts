@@ -18,6 +18,7 @@ import { fixtureContract } from "../gate/verdict-contract-fixture.ts";
 import { verdictPath, type LandingVerdict } from "./verdict.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {treeUsers,describeUsers} from "./tree-users.ts";
 import { Pool } from "./pool.ts";
 import { Queue } from "./queue.ts";
 import type { Ran, RunOptions } from "./run.ts";
@@ -36,8 +37,12 @@ function selection(steps: string[]): Selection {
 
 function service(t: TestContext, overrides: Partial<Config> = {}) {
   const s = scratchRepo(t, "landing-service");
+  s.commit({"Cargo.toml":"[workspace]\n[profile.nts-dev]\ndebug=0\n",".gitignore":"target/\n"},"fixture build policy");
   // A fixed disk reading: the host's free disk must not decide whether a fixture's tree can be made.
-  const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env }, undefined);
+  const ownedProcesses=new Set<number>();
+  const users=(tree:string)=>treeUsers(tree,{pids:[...ownedProcesses]});
+  const pool = new Pool(join(s.dir, "pool"), { root: s.root, env: s.env }, undefined,{users,
+    reclamation:{services:[],ownership:tree=>{const owners=users(tree);if(owners.length)throw Error('fixture owns '+describeUsers(owners));}}});
   pool.init(2);
   const logs: string[] = [], checked: string[] = [];
   const config: Config = {
@@ -61,7 +66,7 @@ function service(t: TestContext, overrides: Partial<Config> = {}) {
     return { tree: tree.path, sha };
   };
   const submit = (branch: string, sha: string, first = false) => queue.submit(sha, { branch, first });
-  return { s, pool, config, queue, logs, checked, task, submit, main: () => s.git(["rev-parse", "main"]), origin: () => s.git(["ls-remote", "origin", "refs/heads/main"]).split("\t")[0] };
+  return { s, pool, config, queue, logs, checked, task, submit, ownedProcesses, main: () => s.git(["rev-parse", "main"]), origin: () => s.git(["ls-remote", "origin", "refs/heads/main"]).split("\t")[0] };
 }
 
 test("queued changes land one at a time, each rebased onto the newest main, pushed, its branch deleted and its tree freed", async t => {
@@ -188,7 +193,7 @@ test("a change already on main lands as nothing, and its branch and tree are sti
   assert.equal(r.state, "landed");
   assert.match(r.message, /is on main already/);
   assert.deepEqual(f.checked, [], "nothing to check");
-  assert.equal(f.s.git(["branch", "--list", "fix/a"]), "");
+  assert.equal(f.s.git(["branch", "--list", "fix/a"]), "",JSON.stringify({result:r,logs:f.logs}));
 });
 
 test("a service that stopped after moving main finishes the landing; one that stopped mid-check checks again", async t => {
@@ -287,7 +292,7 @@ test("a landing whose tree a process still uses keeps the tree on its branch and
   const tests = spawn("cat", [], {env:fixtureEnvironment(t), cwd: a.tree, stdio: ["pipe", "ignore", "ignore"] });
   // Ended when its input closes, here or, if an assertion stops the test first, after it.
   t.after(() => { tests.stdin.end(); });
-  await once(tests, "spawn");
+  await once(tests, "spawn");f.ownedProcesses.add(tests.pid!);
   const ea = f.submit("fix/a", a.sha);
   await drain(f.config);
   const r = f.queue.result(ea.id)!;
@@ -298,7 +303,7 @@ test("a landing whose tree a process still uses keeps the tree on its branch and
   assert.equal(f.s.git(["rev-parse", "--abbrev-ref", "HEAD"], a.tree), "fix/a", "nothing changed under the running tests");
   assert.equal(f.s.git(["ls-remote", "--heads", "origin", "fix/a"]), "", "its branch on origin is deleted as before");
   assert.deepEqual(f.pool.trees().map(t => `${t.name} ${t.state}`), ["1 landed", "2 free"]);
-  tests.stdin.end(); await once(tests, "exit");
+  tests.stdin.end(); await once(tests, "exit");f.ownedProcesses.delete(tests.pid!);
   assert.deepEqual(f.pool.prune().released.map(released => `${released.tree.name} ${released.branch}`), ["1 fix/a"]);
   assert.deepEqual(f.pool.trees().map(t => `${t.name} ${t.state}`), ["1 free", "2 free"]);
   assert.equal(f.pool.trees()[0]!.head, f.main(), "at the main it landed as");
