@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { acquire } from "./lock.ts";
 import { Queue } from "./queue.ts";
 import { scratchRepo } from "./scratch-repo.ts";
-import {landingStatus,status} from './status.ts';
+import {landingStatus,reportLandingStatus} from './status.ts';
 import {Pool} from './pool.ts';
 import {hostObservations} from '../gate/host-observations.ts';
 import {ownMemory} from '../gate/test-memory.ts';
@@ -127,7 +127,7 @@ test('landing status reports an ownership failure on its tree line and returns s
   assert.equal(model.pool.trees[0]!.ownershipError,failure.message);
   const output:string[]=[];t.mock.method(console,'log',(...values:unknown[])=>output.push(values.map(String).join(' ')));
   for(const json of [false,true]){
-    assert.equal(status(c.s.root,json,model),0);
+    assert.equal(reportLandingStatus(model,json),0);
     const text=output.pop()!;assert.ok(text.includes(tree.path));assert.ok(text.includes(failure.message));
   }
   assert.throws(()=>pool.trees(),error=>error===failure,'status diagnostics cannot certify ownership for reset');

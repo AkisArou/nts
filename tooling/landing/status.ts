@@ -3,8 +3,8 @@ import {join} from 'node:path';
 import {issueOfBranch} from '../tasks/branch.ts';
 import {revParse} from './git.ts';
 import {holder} from './lock.ts';
-import {describePool,Pool,POOL_HOME,type PoolTree} from './pool.ts';
-import {LANDING_HOME,Queue,SERVICE_UNIT,type Checking,type Entry,type Result,type Status} from './queue.ts';
+import {describePool,Pool,type PoolTree} from './pool.ts';
+import {Queue,SERVICE_UNIT,type Checking,type Entry,type Result,type Status} from './queue.ts';
 const short=(sha:string)=>sha.slice(0,12);
 
 /** A change as the status gives it, with the issue its task's branch names. */
@@ -42,7 +42,7 @@ export type LandingStatus = {
 const RECENT = 50;
 const DAY_MS = 86_400_000;
 
-export function landingStatus(root: string, home = LANDING_HOME, pool = POOL_HOME, now = Date.now(), poolOwner:Pick<Pool,'statusTrees'>=new Pool(pool,{root})): LandingStatus {
+export function landingStatus(root: string, home:string, pool:string, now:number, poolOwner:Pick<Pool,'statusTrees'>=new Pool(pool,{root})): LandingStatus {
   const queue = new Queue(home), s = queue.status(), pid = holder(join(home, "serve.lock"));
   const issue = (branch: string | null) => branch === null ? null : issueOfBranch(branch);
   const change = (e: Entry): Change => ({ id: e.id, sha: e.sha, branch: e.branch, issue: issue(e.branch), by: e.by, first: e.first, submitted_at: e.submitted_at, note: e.note ?? null });
@@ -91,7 +91,7 @@ export function statusText(m: LandingStatus): string {
   return lines.join("\n");
 }
 
-export function status(root: string, json: boolean, model:LandingStatus=landingStatus(root)): number {
+export function reportLandingStatus(model:LandingStatus,json:boolean): number {
   console.log(json ? JSON.stringify(model, null, 2) : statusText(model));
   return 0;
 }
