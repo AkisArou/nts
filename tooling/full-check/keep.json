@@ -10,6 +10,7 @@
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "789": { "kind": "kept", "why": "#789 authenticated census timelines, attribution and raw proof cited by its Markdown record" },
     "786": { "kind": "kept", "why": "#786 record-size policy controls and raw proof referenced by its Markdown evidence record" },
     "unit-names": { "kind": "kept", "why": "#686 task creation receipt and parent-slice probe retained with the compact unit-name investigation" },
     "bound-clock": { "kind": "kept", "why": "#692 original admission-clock defect card and issue creation receipt" },
