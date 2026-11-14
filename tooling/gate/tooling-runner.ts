@@ -33,7 +33,8 @@ export function completedTestFailure(data:{details:{passed?:boolean;error?:unkno
 export type ToolingFileTime={file:string;startedMs:number|null;wallMs:number|null;passed:boolean|null};
 /** A run's own times: its wall, how many files it runs at once, and each file's. */
 export type ToolingTimes={version:1;wallMs:number;concurrency:number;files:ToolingFileTime[]};
-export type ToolingResult={status:0|1|2;completedFailures:number;times?:ToolingTimes};
+export type ToolingResult={status:0|1|2;completedFailures:number;times?:ToolingTimes;
+  observationFailure?:{kind:ToolingInstrumentError['kind'];reason:string}};
 function readToolingTimes(value:unknown):ToolingTimes {
   const times=value as ToolingTimes,span=(n:unknown)=>n===null||typeof n==="number"&&Number.isFinite(n)&&n>=0;
   if(typeof value!=="object"||value===null||times.version!==1||typeof times.wallMs!=="number"||!span(times.wallMs)
@@ -50,7 +51,15 @@ export function readToolingCompletion(value:unknown,nonce:string,status:number):
   if(report.version!==2||report.nonce!==nonce||![0,1,2].includes(report.status as number)||report.status!==status
       ||typeof report.completedFailures!=="number"||!Number.isSafeInteger(report.completedFailures)||report.completedFailures<0
       ||(report.completedFailures>0&&status!==1))throw new ToolingInstrumentError("tooling-setup","tooling worker completion disagrees with its process status or completed-failure evidence");
-  return {status:report.status as ToolingResult["status"],completedFailures:report.completedFailures,...(report.times===undefined?{}:{times:readToolingTimes(report.times)})};
+  let observationFailure:ToolingResult['observationFailure'];
+  if(report.observationFailure!==undefined){
+    const value=report.observationFailure as NonNullable<ToolingResult['observationFailure']>;
+    if(typeof value!=='object'||value===null||!['tooling-setup','tooling-cleanup'].includes(value.kind)||typeof value.reason!=='string'||!value.reason
+        ||report.status!==1||report.completedFailures===0)throw new ToolingInstrumentError('tooling-setup','invalid tooling observation failure beside completed results');
+    observationFailure={kind:value.kind,reason:value.reason};
+  }
+  return {status:report.status as ToolingResult["status"],completedFailures:report.completedFailures,...(report.times===undefined?{}:{times:readToolingTimes(report.times)}),
+    ...(observationFailure?{observationFailure}:{})};
 }
 
 /**
@@ -215,10 +224,19 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   const report=stream.compose(spec);
   report.pipe(options.output??process.stdout,{end:false});
   try{await finished(report);}catch(error){if(!hung&&!instrumentError)throw error;}
-  if(instrumentError)throw instrumentError;
-  if(!hung)activity?.verify();
+  if(!instrumentError&&!hung)try{activity?.verify();}
+  catch(error){instrumentError=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error));}
   // node:test runs this many files at once when concurrency is true.
   const measured:ToolingTimes={version:1,wallMs:clock()-begun,concurrency:Math.max(availableParallelism()-1,1),files:[...times.values()]};
+  if(instrumentError){
+    if(!priorFailures){publishToolingFailure(instrumentError,options.resultEnv);throw instrumentError;}
+    // A definite assertion result survives an incomplete observer. The named
+    // diagnostic remains separate; no INSTRUMENT frame replaces that FAIL.
+    process.stderr.write(`${instrumentError.name}: ${instrumentError.message}\n`);
+    if(hung)publishHung(hangReason(),options.resultEnv,priorFailures);
+    return {status:1,completedFailures:priorFailures,times:measured,
+      observationFailure:{kind:instrumentError.kind,reason:instrumentError.message}};
+  }
   if(hung){
     // Draining can deliver a completed failure after the guard's observation.
     // Publish the final evidence only after those events have been consumed.

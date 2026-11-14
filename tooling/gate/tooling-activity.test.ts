@@ -104,27 +104,33 @@ const result=await running;console.log(JSON.stringify({now,...result}));
   }
 });
 
-test('a missing spawn identity is a named instrument through the actual collector',t=>{
-  for(const completed of [false,true]){
-  const root=testScratch(t,'tooling-missing-entry'),staged=join(root,'staged');
-  copyModuleClosure(['tooling/gate/tooling-runner.ts'],staged);
-  const preload=join(staged,'tooling/gate/tooling-entry-activity.ts'),source=readFileSync(preload,'utf8');
-  const anchor='this.identities.set(file,';
-  assert.equal(source.split(anchor).length,2,'one actual spawn identity boundary');
-  writeFileSync(preload,source.replace(anchor,'if(false)this.identities.set(file,'));
-  const file=join(root,'missing.test.mjs');
-  writeFileSync(file,completed?"import{test}from'node:test';test('completed without identity',()=>{});\n":
-    "import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
-  const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
+test('missing spawn identity stays separate from completed product failures',t=>{
+  for(const scenario of ['idle','pass','fail']){
+    const completed=scenario!=='idle',failed=scenario==='fail';
+    const root=testScratch(t,'tooling-missing-entry'),staged=join(root,'staged'),frame=join(root,'instrument.json');
+    copyModuleClosure(['tooling/gate/tooling-runner.ts'],staged);
+    const owner=join(staged,'tooling/gate/tooling-entry-activity.ts'),source=readFileSync(owner,'utf8'),anchor='this.identities.set(file,';
+    assert.equal(source.split(anchor).length,2,'one actual spawn identity boundary');
+    writeFileSync(owner,source.replace(anchor,'if(false)this.identities.set(file,'));
+    const file=join(root,'missing.test.mjs');
+    writeFileSync(file,completed?`import{test}from'node:test';test('completed without identity',()=>{${failed?"throw Error('definite identity assertion');":""}});\n`:
+      "import{test}from'node:test';import{createServer}from'node:net';test('missing identity',()=>new Promise(()=>createServer().listen(0,'127.0.0.1')));\n");
+    const script=`import{runScopedTooling}from ${JSON.stringify(pathToFileURL(join(staged,'tooling/gate/tooling-runner.ts')).href)};
 import{PassThrough}from'node:stream';let transcript='';const output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
-try{await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});throw Error('missing observation was accepted');}
+try{const report=await runScopedTooling([${JSON.stringify(file)}],{fixture:true,idleMs:1000,output});console.log(JSON.stringify({report,transcript}));}
 catch(error){console.log(JSON.stringify({kind:error.kind,message:error.message,transcript}));}`;
-  const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t),encoding:'utf8'},'missing collector spawn refusal');
-  assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
-  assert.equal(observed.kind,'tooling-setup');assert.match(observed.message,/without a completed report/);
-  assert.match(observed.transcript,/missing tooling spawn\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
-  assert.match(observed.transcript,completed?/at completion/:/at its idle bound/);
-  // The collector's stderr is in the observed output stream, not an inferred
-  // application assertion or a manufactured zero-CPU hung observation.
+    const actual=spawnTest(process.execPath,['--input-type=module','-e',script],{env:fixtureEnvironment(t,{NTS_GATE_STEP:'tooling',NTS_GATE_STEP_ATTEMPT:'missing',NTS_GATE_STEP_RESULT:frame}),encoding:'utf8'},'missing collector spawn result');
+    assert.equal(actual.status,0,actual.stderr);const observed=JSON.parse(actual.stdout.trim());
+    assert.match(observed.transcript,/missing tooling spawn\/activity observation/);assert.doesNotMatch(observed.transcript,/NOT RUN \(hung\)/);
+    assert.match(observed.transcript,completed?/at completion/:/at its idle bound/);
+    if(failed){
+      assert.equal(observed.report.status,1);assert.equal(observed.report.completedFailures,1);
+      assert.equal(observed.report.observationFailure.kind,'tooling-setup');
+      assert.match(observed.report.observationFailure.reason,/at completion/);
+      assert.match(observed.transcript,/definite identity assertion/);assert.equal(existsSync(frame),false,'no INSTRUMENT frame replaces the completed product FAIL');
+    }else{
+      assert.equal(observed.kind,'tooling-setup');assert.match(observed.message,/without a completed report/);
+      assert.equal(JSON.parse(readFileSync(frame,'utf8')).verdict,'INSTRUMENT');
+    }
   }
 });

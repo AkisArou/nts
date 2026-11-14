@@ -216,6 +216,11 @@ test("worker completion requires nonce-bound final failure evidence",()=>{
       {...valid,status:0},{...valid,status:2}])
     assert.throws(()=>readToolingCompletion(changed,"owned",typeof changed==="object"&&changed!==null&&"status" in changed?Number(changed.status):1),/completion/);
   assert.throws(()=>readToolingCompletion(valid,"owned",0),/completion/);
+  const observationFailure={kind:'tooling-setup' as const,reason:'missing actual entry identity'};
+  assert.deepEqual(readToolingCompletion({...valid,observationFailure},'owned',1),{status:1,completedFailures:2,observationFailure});
+  for(const changed of [null,{}, {...observationFailure,kind:'unknown'},{...observationFailure,reason:''}])
+    assert.throws(()=>readToolingCompletion({...valid,observationFailure:changed},'owned',1),/observation failure/);
+  assert.throws(()=>readToolingCompletion({...valid,status:0,completedFailures:0,observationFailure},'owned',0),/observation failure/);
   const times={version:1,wallMs:20,concurrency:2,files:[{file:"/r/a.test.ts",startedMs:0,wallMs:20,passed:true},{file:"/r/b.test.ts",startedMs:null,wallMs:null,passed:null}]};
   assert.deepEqual(readToolingCompletion({...valid,times},"owned",1),{status:1,completedFailures:2,times});
   for(const changed of [{...times,version:2},{...times,wallMs:-1},{...times,concurrency:0},{...times,files:[{file:"/r/a.test.ts",startedMs:"0",wallMs:20,passed:true}]},{...times,files:[{file:"/r/a.test.ts",startedMs:0,wallMs:20,passed:"yes"}]}])
