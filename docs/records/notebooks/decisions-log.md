@@ -15,7 +15,9 @@ Issue #775: a named cancellation can remove a run's bound worker root before
 the runner samples pressure or closes its root receipt. The root owner keeps
 its acquired device/inode identity and accepts departure only after the
 manager is inactive or unloaded and the path remains absent. Missing live
-reads and changed/populated roots remain failures. Diagnostics retain the last
+reads and changed/populated roots remain failures. An owned endpoint binds
+every pressure read to the acquired identity before and after the callback;
+replacement/removal supplies no newly accepted point. Diagnostics retain the last
 real worker pressure point with its observation time and a separately observed
 departure time, ending that exposure at the real point. Cleanup success does
 not turn interruption into a green run. Readiness barriers cover the original

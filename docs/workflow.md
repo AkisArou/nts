@@ -991,7 +991,9 @@ the first node task.
   acquired cgroup device and inode independently of its ownership receipt.
   Cleanup accepts the same empty root, or an absent path whose exact unit is
   inactive or unloaded. A changed, populated or live-unreadable root still
-  refuses. Worker PSI retains its last actual counters and observation time,
+  refuses. The owner binds every pressure read, including the first, to that
+  identity before and after the read; replacement or removal leaves the new
+  point unaccepted. Worker PSI retains its last actual counters and observation time,
   plus the time departure was observed; it supplies no new terminal counters.
   Worker exposure ends at that real sample, and a new step cannot start after
   departure. Successful ownership cleanup leaves a canceled run interrupted
