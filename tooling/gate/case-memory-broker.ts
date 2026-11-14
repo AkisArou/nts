@@ -6,9 +6,13 @@ import {CaseMemoryLease,caseIdentity} from './case-memory.ts';
 import {caseHistoryFile,readCaseHistory,writeCaseHistory,KEPT_PEAKS,type CaseHistory,type CaseObservation} from './step-scheduling.ts';
 import type {HostObservations} from './host-observations.ts';
 import {readLimits} from './scopes/memory-limits.ts';
+import {statSync} from 'node:fs';
+import {ToolingInstrumentError} from './step-result.ts';
 
 export type CaseTokenRequest={step:string;lease?:string;context:string|null;answered?:boolean;memory?:CaseMemoryLease};
 type WorkerBoundary={group:string;raise(bytes:number):Promise<void>};
+type KernelIdentity={dev:bigint;ino:bigint};
+type RegisteredWorker={group:string;scope:string;cap:number;groupIdentity:KernelIdentity;scopeIdentity:KernelIdentity};
 type BrokerOptions={root:string;env:NodeJS.ProcessEnv;host:HostObservations;boundary(step:string):WorkerBoundary;report(message:string):void};
 function decoded(text:string|null):Record<string,unknown>{
   if(text?.startsWith('json64:'))return JSON.parse(Buffer.from(text.slice(7),'base64url').toString('utf8')) as Record<string,unknown>;
@@ -29,11 +33,27 @@ async function stopWorker(unit:string):Promise<void>{
   });
 }
 const under=(parent:string,child:string)=>child.startsWith(parent+'/')&&!child.split('/').includes('..');
+function kernelIdentity(group:string):KernelIdentity{
+  const value=statSync('/sys/fs/cgroup'+group,{bigint:true});return {dev:value.dev,ino:value.ino};
+}
+function registeredWorkerPresent(worker:RegisteredWorker):boolean{
+  for(const [path,identity] of [[worker.group,worker.groupIdentity],[worker.scope,worker.scopeIdentity]] as const){
+    let actual:KernelIdentity;
+    try{actual=kernelIdentity(path);}
+    catch(error){
+      if((error as NodeJS.ErrnoException).code==='ENOENT')return false;
+      throw new ToolingInstrumentError('tooling-setup','case memory: registered worker observation failed: '+path,{cause:error});
+    }
+    if(actual.dev!==identity.dev||actual.ino!==identity.ino)
+      throw new ToolingInstrumentError('tooling-setup','case memory: registered worker identity changed: '+path);
+  }
+  return true;
+}
 
 export class CaseMemoryBroker {
   #histories=new Map<string,CaseHistory>();
   #completed=new Map<string,CaseObservation[]>();
-  #active=new Map<string,Set<CaseMemoryLease>>();
+  #workers=new Map<string,Map<string,RegisteredWorker>>();
   #options:BrokerOptions;
   constructor(options:BrokerOptions){this.#options=options;}
   prepare(request:CaseTokenRequest):void{
@@ -54,7 +74,18 @@ export class CaseMemoryBroker {
       },
     });
   }
-  caps(step:string):number{return [...this.#active.get(step)??[]].reduce((sum,lease)=>sum+lease.capBytes,0);}
+  caps(step:string):number{
+    const workers=this.#workers.get(step);
+    if(!workers)return 0;
+    for(const [scope,worker] of workers)if(!registeredWorkerPresent(worker))workers.delete(scope);
+    // Concurrent scopes in one worker share its cap; a nested worker is
+    // already within its registered ancestor. Idle resident workers retain
+    // their allowance until the exact acquired scope actually departs.
+    const groups=new Map<string,number>();
+    for(const worker of workers.values())groups.set(worker.group,Math.max(groups.get(worker.group)??0,worker.cap));
+    return [...groups].filter(([group])=>![...groups.keys()].some(other=>other!==group&&under(other,group)))
+      .reduce((sum,[,cap])=>sum+cap,0);
+  }
   async attach(request:CaseTokenRequest,{group,cap,scope}:{group:string;cap:number;scope:string}):Promise<void>{
     const lease=request.memory;if(!lease||lease.closed)throw Error('case memory: registration has no live lease');
     const boundary=this.#options.boundary(request.step);
@@ -66,8 +97,17 @@ export class CaseMemoryBroker {
       const limit=readLimits(at).max;
       if(limit<cap)throw Error(`case memory: case cap ${cap} exceeds enclosing ${at} cap ${limit}`);
     }
+    // Scope lifetime is independent of the case lease. A completed case
+    // closes its meter, while the persistent worker still needs its cap.
+    this.caps(request.step);
+    const workers=this.#workers.get(request.step)??new Map<string,RegisteredWorker>();
+    this.#workers.set(request.step,workers);
+    const registered=workers.get(scope);
+    if(registered&&registered.group!==group)throw Error('case memory: registered scope changed worker groups');
+    const worker=registered?{...registered,cap}:{group,scope,cap,groupIdentity:kernelIdentity(group),scopeIdentity:kernelIdentity(scope)};
     lease.attach(group,cap);
-    const active=this.#active.get(request.step)??new Set<CaseMemoryLease>();active.add(lease);this.#active.set(request.step,active);
+    if(!registeredWorkerPresent(worker))throw new ToolingInstrumentError('tooling-setup','case memory: worker departed during registration: '+scope);
+    workers.set(scope,worker);
     await boundary.raise(this.caps(request.step));
     for(const at of [group,scope]){
       // A resident worker retains its kernel cap across leases. Read it
@@ -77,17 +117,16 @@ export class CaseMemoryBroker {
       const actual=readLimits(at).max;
       if(!Number.isSafeInteger(actual)||actual>cap||actual<cap-4096)throw Error('case memory: kernel did not enforce registered case cap');
     }
+    if(!registeredWorkerPresent(worker))throw new ToolingInstrumentError('tooling-setup','case memory: worker departed during registration: '+scope);
   }
   retire(request:CaseTokenRequest,group:string):void{request.memory?.retire(group);}
   async completed(request:CaseTokenRequest):Promise<void>{
     const lease=request.memory;if(!lease)return;
     const groups=lease.groups;
-    try{
-      lease.close(Boolean(request.answered));
-      // A lost controller cannot return its CPU token while its workers
-      // still run. The broker owns these exact authenticated slice names.
-      if(!request.answered)for(const group of groups)await stopWorker(basename(group));
-    }finally{this.#active.get(request.step)?.delete(lease);}
+    lease.close(Boolean(request.answered));
+    // A lost controller cannot return its CPU token while its workers
+    // still run. The broker owns these exact authenticated slice names.
+    if(!request.answered)for(const group of groups)await stopWorker(basename(group));
   }
   flush(step:string):void{
     const rows=this.#completed.get(step);if(!rows?.length)return;
