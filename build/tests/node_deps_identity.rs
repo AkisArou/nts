@@ -138,16 +138,25 @@ fn libuv_bytes_identity_and_observations_survive_two_roots_and_relocation() {
         let first_archive = &first.archives[0];
         let second_archive = &second.archives[0];
         let bytes = read(first_archive);
-        assert_eq!(
-            bytes,
-            read(second_archive),
+        assert!(
+            bytes == read(second_archive),
             "full archive parity with {compiler}"
         );
         let first_dir = first_archive.parent().expect("first entry");
         let second_dir = second_archive.parent().expect("second entry");
-        assert_eq!(
-            read(first_dir.join("invocation.json")),
-            read(second_dir.join("invocation.json"))
+        let before = json(first_dir.join("invocation.json"));
+        let after = json(second_dir.join("invocation.json"));
+        let fields = before
+            .as_array()
+            .expect("invocation tuple")
+            .iter()
+            .zip(after.as_array().expect("invocation tuple"))
+            .enumerate()
+            .filter_map(|(index, (a, b))| (a != b).then_some(index))
+            .collect::<Vec<_>>();
+        assert!(
+            before == after,
+            "{compiler} invocation identity differs at fields {fields:?}"
         );
         assert_eq!(
             deterministic_members(&bytes).len(),
@@ -282,7 +291,7 @@ fn all_zig_target_routes_accept_the_same_mapping_contract() {
         request.target = plan.target.clone();
         request.libraries.clear();
         let output = node_deps::ensure(&request)
-            .expect("cross driver proves __FILE__ mapping before archives");
+            .unwrap_or_else(|error| panic!("{} cross mapping: {error}", plan.target));
         assert!(output.archives.is_empty());
     }
 }
@@ -306,7 +315,9 @@ fn zig_target(target: &str) -> &str {
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn changed_external_header_flag_and_compiler_cannot_reuse_stale_archive_inputs() {
     let own = scratch::StdScratchDir::in_std_target("native-input-invalidation");
-    let (header, child) = (own.join("forced.h"), own.join("external.h"));
+    let headers = own.join("headers");
+    std::fs::create_dir(&headers).expect("private header input directory");
+    let (header, child) = (headers.join("forced.h"), headers.join("external.h"));
     std::fs::write(&header, "#include \"external.h\"\n").expect("forced include");
     std::fs::write(&child, "#define NTS_NATIVE_CONTROL 1\n").expect("external header");
     let mut request = request(own.join("cache"), &["clang"]);
@@ -359,6 +370,36 @@ fn changed_external_header_flag_and_compiler_cannot_reuse_stale_archive_inputs()
     std::fs::write(&old, "retained").expect("old bytes");
     node_deps::ensure(&request).expect("existing generation hit");
     assert_eq!(read(old), b"retained");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn unrelated_cached_source_generation_does_not_change_gcc_search_identity() {
+    let own = scratch::StdScratchDir::in_std_target("gcc-source-parent");
+    let request = request(own.join("cache"), &["gcc"]);
+    let first = node_deps::ensure(&request).expect("first GCC archive");
+    let object = objects(first.archives[0].parent().expect("entry")).remove(0);
+    let stamp = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
+    std::fs::File::options()
+        .write(true)
+        .open(&object)
+        .expect("object stamp")
+        .set_times(std::fs::FileTimes::new().set_modified(stamp))
+        .expect("sentinel");
+    let unrelated = request.cache.join("sources/unrelated-generation");
+    std::fs::create_dir(&unrelated).expect("another source generation");
+    std::fs::write(unrelated.join("unrelated.h"), "not a compiler input\n")
+        .expect("unrelated source");
+    let second =
+        node_deps::ensure(&request).expect("unrelated generation is not a header-search input");
+    assert_eq!(first.archives, second.archives);
+    assert_eq!(
+        std::fs::metadata(object)
+            .expect("reused object")
+            .modified()
+            .expect("mtime"),
+        stamp
+    );
 }
 
 #[test]

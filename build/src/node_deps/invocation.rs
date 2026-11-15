@@ -148,12 +148,28 @@ impl Context {
         // Even a failed input write must join the acquired compiler process.
         let output = child.wait_with_output()?;
         wrote.context("writing bundled dependency source mapping probe")?;
-        if !output.status.success()
-            || String::from_utf8_lossy(&output.stdout).lines().last()
-                != Some(serde_json::to_string(&expected)?.as_str())
-        {
+        let expected = serde_json::to_string(&expected)?;
+        // A Windows target may spell its file macro with target separators,
+        // while preprocessing still reads physical POSIX paths on this host.
+        let coff = if self.format == ObjectFormat::Coff {
+            Some(serde_json::to_string(
+                &self
+                    .source
+                    .virtual_root()
+                    .join("nts-prefix-map-probe.c")
+                    .to_string_lossy()
+                    .replace('/', "\\"),
+            )?)
+        } else {
+            None
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let observed = stdout.lines().last();
+        let mapped = observed == Some(expected.as_str())
+            || coff.as_deref().is_some_and(|value| observed == Some(value));
+        if !output.status.success() || !mapped {
             bail!(
-                "bundled dependency compiler cannot map source paths with -ffile-prefix-map and -fdebug-prefix-map: {}",
+                "bundled dependency compiler cannot map source paths with -ffile-prefix-map and -fdebug-prefix-map; observed {observed:?}, expected {expected}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
