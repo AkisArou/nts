@@ -830,14 +830,30 @@ attempt, including those represented only by counts in the decision report.
 ## The machine
 
 Every `.ts` and `.mjs` module under `tooling/` belongs to the single strict
-project `tooling/tsconfig.json`. The gate's `tooling-types` step validates its
-strict settings and compares its file list with the modules on disk before
-checking them. New modules start without diagnostics. The remaining legacy
-diagnostics are recorded per module in `results/tooling-types/diagnostics.json`;
-counts may only fall. `node tooling/gate/tooling-types.ts --record` writes those
-improvements and refuses a rise. The fixture base excludes its own tooling
-subtree, while each child fixture still discovers its own sources. Imported
-compiler and runtime sources retain their own projects and diagnostic policy.
+project `tooling/tsconfig.json`. The existing `tooling-types` step also checks
+the product projects declared by `tooling-type-projects.ts`, each under its own
+platform declarations and strict options. Node host bindings have a checked-JS
+project with `allowJs` and `checkJs`; WPT and ICU use their owning projects.
+The JVM generation entry has its own project. The registry and read-only pending
+discovery have no checker or oracle execution dependency.
+
+The checker validates each project's settings, complete owned population and
+Program membership. A removed project, an omitted module or a disabled JS
+owner refuses before diagnostic counts can fall. New modules in recorded
+projects start without diagnostics. Records include zero-count inventories and
+are keyed by project and module in `results/tooling-types/diagnostics.json`;
+diagnostic limits may only fall. A newly registered project without a row is
+pending and does not fail landing. After the green core run, the full check's
+ordinary `record-pending` cycle writes its first measured row. The existing
+`--record` writer refuses an increase in any established project or module.
+
+Each project's measurement identity covers the compiler's actual input reads,
+its options and population, and the checker recipe. A source edit is checked
+again against the established limits; it does not reset them. The records delta
+holds the same identity, so a changed binding invalidates a stale measurement
+before application. The fixture base excludes its own tooling subtree, while
+each child fixture still discovers its own sources. Product type defects are
+recorded debt owned by their product tasks; checking adds no behavior changes.
 
 Imported tooling modules evaluate synchronously. The test-host audit rejects
 top-level await in runtime-imported modules and Worker entry closures; a
@@ -1374,6 +1390,14 @@ the first node task.
   stage both through their actual command roots, then may replace the command
   without changing library exports or inventing a second module layout.
 
+- **Product type projects share tooling's diagnostic ratchet.** One registry
+  supplies the existing strict gate step, read-only pending discovery and input
+  declarations. Each project uses its own declarations and has independent
+  per-module limits and a complete inventory. New projects follow the ordinary
+  pending-record rule; the green core records cycle measures their first rows.
+  A recorded project's limits never rise, including after a source edit, and a
+  records delta applies only to the complete input identity it measured
+  ([log](records/notebooks/decisions-log.md#product-projects-share-the-type-ratchet-11-15)).
 
 - **Pinned corpora coexist by revision.** AWFY, TypeScript and test262 have
   plain revision data files under tooling/bootstrap. Rust includes those same

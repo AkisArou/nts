@@ -417,7 +417,7 @@ export const ASKS = {
   reformat: ["hygiene", "no whitespace-only diffs"],
   tooling: ["valid", "do the gate's own tools pass their tests (tokens, owed)"],
   "test-host": ["hygiene", "do tooling tests and their dependencies obey host observation ownership"],
-  "tooling-types": ["hygiene", "does every tooling module keep or lower its strict diagnostic count"],
+  "tooling-types": ["hygiene", "does every registered TypeScript project keep or lower its diagnostic counts"],
   "gate-inputs": ["hygiene", "does every newly placed gate input keep the full-fallback inventory from growing"],
 };
 

@@ -620,6 +620,14 @@ test('the AWFY data pin owes its benchmark reference readers',()=>{
   assert.ok([...covering(stepInputs(),'tooling/bootstrap/awfy.pin')].includes('tooling'),'real acquisition/link controls read the pin');
 });
 
+test('product type-project inputs reach the existing strict checker step',()=>{
+  for(const path of ['runtime/node/net/bindings.node.mjs','runtime/node/tsconfig.bindings.json','runtime/web-platform/test/wpt/harness.ts',
+    'runtime/ecmascript/providers/icu/c/provider.ts','runtime/ecmascript/providers/icu/java/provider.ts','compiler/codegen/jvm/generate-members.ts']){
+    assert.ok(covering(stepInputs(),path).has('tooling-types'),'the declared type-project registry reads '+path);
+    assert.ok(gateSteps(owed([{path,added:false}])).includes('tooling-types'),path);
+  }
+});
+
 test('the TypeScript and test262 data pins owe their suite readers',()=>{
   for(const family of ['typescript','test262'])for(const added of [false,true]){
     const path='tooling/bootstrap/'+family+'.pin',rules=owed([{path,added}]);

@@ -3496,3 +3496,13 @@ rather than silently discounting it. The main reader is measured through a
 separate proof-only module URL against a private 2-to-3-to-2 transition.
 The old resume-log control is replaced by eight final-case receipts after
 physical higher admission, retaining the outcome, yield and shrink assertions.
+## Product projects share the type ratchet (11-15)
+
+The existing tooling-types owner also checks each registered product project
+under its own declarations. Project and module inventories, including clean
+modules, prevent coverage from disappearing as an apparent improvement. Each
+project has independent may-only-fall diagnostic limits. New projects land
+pending; the normal green core records cycle writes their first measurements.
+The checker recipe and actual project input graph identify each measurement,
+so a stale delta cannot apply after a product input changes. Real product type
+defects remain debt for their owners rather than behavior changes in tooling.

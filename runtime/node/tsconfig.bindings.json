@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.module.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "noCheck": false
+  },
+  "include": ["**/bindings.node.mjs"]
+}
