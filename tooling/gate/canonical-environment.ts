@@ -229,7 +229,7 @@ export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal,
       if(!nodeProcessAlive(context.resolutionOwner))throw new Error('oracle resolution run owner changed');
       const execution=JSON.parse(readFileSync(new URL('../differential/oracle-toolchain.json',import.meta.url),'utf8')).execution.args as string[];
       const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
-      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),context.resolutionOwner.pid,onSession);
+      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),planned.env,context.resolutionOwner.pid,onSession);
     }
   }catch(error){if(isCommandExit(error))throw error;if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
   const next=JSON.stringify(cap);

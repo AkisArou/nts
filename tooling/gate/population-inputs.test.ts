@@ -53,7 +53,7 @@ test('Git fence descriptors follow their indexed owners and retain control-file 
 test('oracle workspace staging separates verified installer pins from explicit status candidates',t=>{
   const source=fileURLToPath(new URL('../..',import.meta.url)),tree=testScratch(t,'oracle-workspace-pins');
   const git=(root:string,...args:string[])=>{
-    const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout;
+    const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8',maxBuffer:Infinity});assert.equal(result.status,0,result.stderr+String(result.error??''));return result.stdout;
   };
   const shared=dirname(git(source,'rev-parse','--path-format=absolute','--git-common-dir').trim());
   const catalog=readDependencyCatalog(installationCatalogTrust(shared,source),source);assert.equal(catalog.state,'current');

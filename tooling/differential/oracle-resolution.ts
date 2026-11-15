@@ -66,7 +66,7 @@ function readyFile(directory:string,watchDirectory:NonNullable<ResolutionAcquisi
 /** Async initialization is safe in a parent draining other children's pipes.
  * Other platforms retain the existing bounded live path, without using an
  * executable identity that they cannot authenticate through Linux /proc. */
-export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void,acquisition:ResolutionAcquisition={}):Promise<NodeResolutionSession|null>{
+export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,env:NodeJS.ProcessEnv,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void,acquisition:ResolutionAcquisition={}):Promise<NodeResolutionSession|null>{
   if(process.platform!=='linux')return null;
   mkdirSync(directory,{recursive:true,mode:0o700});
   const permissions=lstatSync(directory);
@@ -90,7 +90,7 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
       const log=openSync(join(directory,'holder.stderr'),'ax',0o600);
       // This starter owns completion immediately, before readiness or validation
       // can fail. A successful handoff may outlive the preparing process group.
-      try{child=spawn(process.execPath,[...options.flags,helper,'--serve',directory],{env:process.env,detached:true,stdio:['ignore','ignore',log]});}
+      try{child=spawn(process.execPath,[...options.flags,helper,'--serve',directory],{env,detached:true,stdio:['ignore','ignore',log]});}
       finally{closeSync(log);}
       const acquired=child;
       exited=new Promise(done=>{
@@ -144,7 +144,10 @@ async function serve(directory:string){
   const init=JSON.parse(readFileSync(join(directory,'start.json'),'utf8')) as Omit<NodeResolutionSession,'holder'|'conditions'>,self=nodeExecutableIdentity(process.pid);
   if(init.version!==1||init.directory!==directory||self.dev!==init.executable.dev||self.ino!==init.executable.ino||init.nodeVersion!==process.versions.node||!nodeProcessAlive(init.owner))throw Error('oracle Node resolution service launch identity changed');
   const conditions:NodeResolutionSession['conditions']={esm:[],cjs:[]};
-  const session:NodeResolutionSession={...init,conditions,holder:{pid:process.pid,birth:nodeProcessBirth(process.pid)}};
+  // Report the actual launch, independently of what the parent's request
+  // claimed. Session validation compares these facts with intended options.
+  const options:NodeResolutionOptions={flags:[...process.execArgv],nodeOptions:process.env.NODE_OPTIONS??''};
+  const session:NodeResolutionSession={...init,options,conditions,holder:{pid:process.pid,birth:nodeProcessBirth(process.pid)}};
   const empty=join(directory,'probe-empty.cjs');writeFileSync(empty,'// Never evaluated.\n',{flag:'wx'});
   let active:NodeResolutionQuery|undefined,answer:NodeResolutionAnswer|undefined,sequence=0,totalQueries=0,probeModuleLoads=0;
   registerHooks({resolve(specifier,context,next){

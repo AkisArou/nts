@@ -49,6 +49,28 @@ function run(cmd, args, env, input, holdInput = false) {
 }
 const tokenEnv = (p, step = "examples") => ({ NTS_GATE_TOKENS: p.addr, NTS_GATE_STEP: step, NTS_GATE_TOKEN_HELD: "" });
 
+for(const phase of ['before-request','after-grant'])test('a malformed canonical packet '+phase+' releases every acquired token before refusing',async()=>{
+  const observations=[],p=await pool(1,{observe:event=>observations.push(event)});
+  const context='NTS_GATE_ENV_CONTEXT',malformed=JSON.stringify({report:{version:0},owned:{}});
+  const mutate=`process.env[${JSON.stringify(context)}]=${JSON.stringify(malformed)};`;
+  const sabotage=phase==='before-request'?mutate:`
+    const original=net.connect;
+    net.connect=(...args)=>{const socket=original(...args);socket.prependListener('data',chunk=>{if(chunk.toString().startsWith('go')){${mutate}}});return socket;};
+    syncBuiltinESMExports();`;
+  const source=`import assert from 'node:assert/strict';import net from 'node:net';import {syncBuiltinESMExports} from 'node:module';
+    ${sabotage}
+    const {acquireToken}=await import(${JSON.stringify(new URL('./tokens.mjs',import.meta.url).href)});
+    await assert.rejects(acquireToken({scope:'step'}),/invalid owned environment value handoff/);
+    console.log('binding refused after drain');`;
+  try{
+    const result=await run(process.execPath,['--input-type=module','-e',source],tokenEnv(p));
+    assert.equal(result.status,0,result.out);assert.equal(result.out,'binding refused after drain\n');
+    const expected=phase==='after-grant'?1:0;
+    for(const event of ['token.request','token.grant','token.release'])assert.equal(observations.filter(row=>row.event===event).length,expected,event);
+    assert.equal(p.total,0);assert.equal(p.active.size,0);assert.equal(p.waiting.length,0);assert.ok([...p.held.values()].every(count=>count===0));
+  }finally{p.close();await p.closed;}
+});
+
 test("no more commands run at once than there are tokens, and every one runs", async () => {
   // Measured on the commands themselves, not on the server's count: a client
   // that stopped waiting for `go` would keep the server's books and break the

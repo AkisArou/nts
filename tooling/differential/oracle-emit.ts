@@ -576,7 +576,7 @@ async function publishNodeRoutes(directory:string,stored:OracleManifest,descript
   const began=performance.now(),cpu=process.cpuUsage();
   const execution=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8')).execution.args as string[];
   const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
-  const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),ownerPid);
+  const session=await startNodeResolutionSession(sessionDirectory,nodeResolutionOptions(execution,process.env,bootstrap),process.env,ownerPid);
   descriptor.runtimeAssets=compileChildAssets(directory,sessionDirectory,stored.identity,session?.nodeSha256??process.versions.node,parser);
   stored.runtimeAssets=descriptor.runtimeAssets;Object.assign(stored.outputs,descriptor.runtimeAssets);
   if(!session)return;

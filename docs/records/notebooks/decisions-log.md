@@ -3408,3 +3408,15 @@ program role. Resolution helpers become owned at spawn, including failed
 readiness and invalid session paths; cleanup joins them before releasing their
 namespace. Gate-owned foreign command entries keep both cold captures and
 reused-image handoffs inside their enclosing gate temporary's lifetime.
+
+## Resolver launch and token binding ownership (11-15)
+
+The resolver starter receives its planned environment explicitly. Its helper
+reports actual Node arguments and received NODE_OPTIONS instead of copying the
+parent's intended options; validation compares the two. This fixes an existing
+main defect shared by gate and standalone preparation, where an ambient
+launcher condition could change resolution under a claimed canonical identity.
+The token controller checks its owned-value packet before requesting capacity.
+If the packet changes and binding fails after a grant, the controller releases
+and joins the actual lease before propagating the binding error, retaining any
+cleanup error alongside it. The grant remains the marker's timing boundary.

@@ -38,6 +38,40 @@ test('holder disappearance propagates other read failures',()=>{
   for(const error of [Object.assign(new Error('denied'),{code:'EACCES'}),Object.assign(new Error('read failed'),{code:'EIO'}),new Error('uncategorized read')])
     assert.throws(()=>holderGone(()=>{throw error;}),observed=>observed===error);
 });
+test('resolution sessions report the actual launch and isolate canonical conditions from an ambient launcher',t=>{
+  if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
+  const root=fixture(t),packageRoot=join(root,'node_modules/conditional');mkdirSync(packageRoot,{recursive:true});
+  writeFileSync(join(root,'entry.mjs'),'');
+  writeFileSync(join(packageRoot,'package.json'),JSON.stringify({type:'module',exports:{poison:'./poison.mjs',default:'./default.mjs'}}));
+  for(const name of ['poison','default'])writeFileSync(join(packageRoot,name+'.mjs'),'throw Error("resolution must not evaluate the subject");');
+  const planned=fixtureEnvironment(t,{NODE_OPTIONS:undefined}),poison=fixtureEnvironment(t,{NODE_OPTIONS:'--conditions=poison'});
+  const source=`import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+    import {nodeProcessAlive} from ${JSON.stringify(new URL('./oracle-runtime.ts',import.meta.url).href)};
+    import {startNodeResolutionSession,queryNodeResolutions,closeNodeResolutionSession} from ${JSON.stringify(new URL('./oracle-resolution.ts',import.meta.url).href)};
+    const request=JSON.parse(readFileSync(0,'utf8'));assert.equal(process.env.NODE_OPTIONS,'--conditions=poison');
+    let holder,session,closed;
+    try{
+      session=await startNodeResolutionSession(request.directory,request.options,request.env,process.pid,(_session,completion)=>{closed=completion;},{ready:async waiting=>holder=await waiting});
+      assert.notEqual(request.expected,null,'an actual/intended option mismatch must refuse');
+      const response=await queryNodeResolutions(session,[{specifier:'conditional',parentURL:request.parentURL,mode:'esm',conditions:[],importAttributes:{}}]);
+      assert.equal(response.answers[0].ok,true);assert.equal(response.answers[0].result.url,request.expected);
+      assert.deepEqual(session.options,request.options);console.log(JSON.stringify({url:response.answers[0].result.url,options:session.options}));
+    }catch(error){
+      if(request.expected!==null)throw error;
+      assert.match(String(error),/oracle resolution options identity changed/);assert.ok(holder);assert.equal(nodeProcessAlive(holder.holder),false);
+      console.log(JSON.stringify({refused:true,drained:true,actual:holder.options}));
+    }finally{if(session){await closeNodeResolutionSession(session);await closed;}}
+  `;
+  for(const [label,env,options,expected]of [
+    ['canonical',planned,nodeResolutionOptions([],planned),pathToFileURL(join(packageRoot,'default.mjs')).href],
+    ['planned-poison',poison,nodeResolutionOptions([],poison),pathToFileURL(join(packageRoot,'poison.mjs')).href],
+    ['mismatch',poison,nodeResolutionOptions([],planned),null],
+  ] as const){
+    const result=spawnSync(process.execPath,['--input-type=module','-e',source],{env:poison,encoding:'utf8',input:JSON.stringify({directory:join(root,label),env,options,expected,parentURL:pathToFileURL(join(root,'entry.mjs')).href})});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    const value=JSON.parse(result.stdout);if(expected===null){assert.equal(value.refused,true);assert.equal(value.drained,true);}else assert.equal(value.url,expected);
+  }
+});
 test('one executable holder batches Node answers without evaluating subjects',async t=>{
   if(process.platform!=='linux'){t.skip('the inode-bound fast path is Linux-specific; other platforms retain bounded live resolution');return;}
   const root=fixture(t),directory=join(root,'service');
@@ -46,7 +80,7 @@ test('one executable holder batches Node answers without evaluating subjects',as
   mkdirSync(join(root,'node_modules/tiny'),{recursive:true});
   writeFileSync(join(root,'node_modules/tiny/package.json'),'{"type":"module","exports":"./value.mjs"}');
   writeFileSync(join(root,'node_modules/tiny/value.mjs'),'throw new Error("probe evaluated a package");\n');
-  const options=nodeResolutionOptions([]),sessions=await Promise.all([startNodeResolutionSession(directory,options),startNodeResolutionSession(directory,options)]),session=sessions[0]!;assert.deepEqual(sessions[1],session);
+  const options=nodeResolutionOptions([]),sessions=await Promise.all([startNodeResolutionSession(directory,options,process.env),startNodeResolutionSession(directory,options,process.env)]),session=sessions[0]!;assert.deepEqual(sessions[1],session);
   try{
     assert.equal(statSync(directory).mode&0o077,0,'the holder token directory is private');
     const parentURL=pathToFileURL(join(root,'entry.mjs')).href;
@@ -56,7 +90,7 @@ test('one executable holder batches Node answers without evaluating subjects',as
     if(first.answers[0]!.ok)assert.deepEqual(first.answers[0]!.result,{url:pathToFileURL(join(root,'value.mjs')).href,format:'module'});
     if(first.answers[1]!.ok)assert.equal(first.answers[1]!.result.url,pathToFileURL(join(root,'node_modules/tiny/value.mjs')).href);
     if(!first.answers[2]!.ok)assert.equal(first.answers[2]!.error.code,'ERR_MODULE_NOT_FOUND');
-    const again=(await startNodeResolutionSession(directory,options))!;assert.deepEqual(again,session,'one holder is shared by later parent batches');
+    const again=(await startNodeResolutionSession(directory,options,process.env))!;assert.deepEqual(again,session,'one holder is shared by later parent batches');
     const second=await queryNodeResolutions(again,[{specifier:'./value.cjs',parentURL,mode:'cjs',conditions:['node','require','module-sync','node-addons'],importAttributes:{}}]);
     assert.equal(second.answers.length,1);assert.ok(second.answers[0]!.ok);
     if(second.answers[0]!.ok)assert.equal(second.answers[0]!.result.url,pathToFileURL(join(root,'value.cjs')).href);
@@ -67,7 +101,7 @@ test('one executable holder batches Node answers without evaluating subjects',as
 test('a run holder survives the completed preparation helper process group',async t=>{
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),moduleURL=pathToFileURL(join(here,'oracle-resolution.ts')).href;
-  const source=`import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const value=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([]),${process.pid});console.log(JSON.stringify(value));`;
+  const source=`import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const value=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([],process.env),process.env,${process.pid});console.log(JSON.stringify(value));`;
   // The fixture wrapper owns and drains its command pipes. The test parent
   // owns no asynchronous program pipes while waiting for that wrapper.
   const activeURL=pathToFileURL(join(here,'../gate/active-command.ts')).href;
@@ -79,7 +113,7 @@ test('a run holder survives the completed preparation helper process group',asyn
 });
 test('a holder exiting early cannot authenticate another child',async t=>{
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
-  const session=(await startNodeResolutionSession(join(fixture(t),'service'),nodeResolutionOptions([])))!;
+  const session=(await startNodeResolutionSession(join(fixture(t),'service'),nodeResolutionOptions([],process.env),process.env))!;
   checkNodeResolutionSession(session,session.options);await close(session);
   assert.throws(()=>checkNodeResolutionSession(session,session.options),/oracle Node executable holder changed/);
 });
@@ -87,7 +121,7 @@ test('an async resolution batch leaves the parent free to drain a child pipe',as
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),entry=join(root,'entry.mjs'),target=join(root,'value.mjs');
   writeFileSync(entry,'');writeFileSync(target,'throw new Error("must not evaluate");\n');
-  const session=(await startNodeResolutionSession(join(root,'service'),nodeResolutionOptions([])))!;
+  const session=(await startNodeResolutionSession(join(root,'service'),nodeResolutionOptions([],process.env),process.env))!;
   try{
     const child=spawn(process.execPath,['-e',"process.stdout.end('x'.repeat(4*2**20))"],{env:fixtureEnvironment(t),stdio:['ignore','pipe','pipe']});
     let bytes=0,errors='';child.stdout.on('data',(chunk:Buffer)=>{bytes+=chunk.length;});child.stderr.on('data',(chunk:Buffer)=>{errors+=chunk.toString('utf8');});
@@ -105,7 +139,7 @@ test('replacing a held executable by rename gives the child a different identity
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),binary=join(root,'node'),record=join(root,'session.json'),moduleURL=pathToFileURL(join(here,'oracle-resolution.ts')).href;
   copyFileSync(process.execPath,binary,constants.COPYFILE_FICLONE);chmodSync(binary,0o755);
-  const start=`import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const session=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([]),process.ppid);durableRecord(${JSON.stringify(record)},session);`;
+  const start=`import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(moduleURL)};const session=await startNodeResolutionSession(${JSON.stringify(join(root,'service'))},nodeResolutionOptions([],process.env),process.env,process.ppid);durableRecord(${JSON.stringify(record)},session);`;
   const initial=spawnSync(binary,['--input-type=module','-e',start],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(initial.status,0,initial.stderr);
   const session=JSON.parse(readFileSync(record,'utf8')) as NodeResolutionSession;
   const check=`import {readFileSync} from 'node:fs';import {checkNodeResolutionSession} from ${JSON.stringify(moduleURL)};const session=JSON.parse(readFileSync(${JSON.stringify(record)},'utf8'));try{checkNodeResolutionSession(session,session.options);console.log('healthy');}catch(error){console.log(error.message);process.exitCode=1;}`;
@@ -122,7 +156,7 @@ for(const failure of ['readiness','invalid-session'] as const)test('failed '+fai
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),directory=join(root,'service');
   let holder:NodeResolutionSession|undefined,published=false;
-  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},{ready:async waiting=>{
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env,process.pid,()=>{published=true;},{ready:async waiting=>{
     holder=await waiting;
     assert.equal(nodeProcessAlive(holder.holder),true,'the actual acquired helper is live before the failure');
     if(failure==='readiness')throw Error('supplied resolution readiness failure');
@@ -140,7 +174,7 @@ test('a resolution watcher-construction failure keeps its original error through
   if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
   const directory=join(fixture(t),'service'),expected=Error('supplied resolution watcher construction failure');
   let watched=false,published=false;
-  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},{watch:(actual)=>{
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([],process.env),process.env,process.pid,()=>{published=true;},{watch:(actual)=>{
     assert.equal(actual,directory);watched=true;throw expected;
   }}),error=>error===expected,'the uninitialized cancellation path must not replace the watcher error');
   assert.equal(watched,true);assert.equal(published,false);

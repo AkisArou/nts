@@ -25,7 +25,7 @@ export function resolutionSubject(observed:string,session:string,status:number):
 import {durableRecord} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};
 import {startNodeResolutionSession,nodeResolutionOptions} from ${JSON.stringify(new URL('../differential/oracle-resolution.ts',import.meta.url).href)};
 const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT);
-const holder=await startNodeResolutionSession(${JSON.stringify(session)},nodeResolutionOptions([],process.env),context.resolutionOwner.pid);
+const holder=await startNodeResolutionSession(${JSON.stringify(session)},nodeResolutionOptions([],process.env),process.env,context.resolutionOwner.pid);
 durableRecord(${JSON.stringify(observed)},{holder,version:process.env.CANDIDATE_VERSION,canonical:context.report.canonical,tmp:process.env.TMPDIR,there:existsSync(process.env.TMPDIR),bin:process.env.NTS_BIN,node:process.versions.node,command:process.pid});
 process.exitCode=${status};\n`);
 }

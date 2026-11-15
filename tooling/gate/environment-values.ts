@@ -2,9 +2,15 @@
 // This supplies no authority to a launcher's unregistered values.
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import type {Context} from './environment-types.ts';
-export function assignOwnedValues(env:NodeJS.ProcessEnv,values:NodeJS.ProcessEnv):void{
+function valueContext(env:NodeJS.ProcessEnv):Context|undefined{
   const context:Context|undefined=env[ENVIRONMENT_CONTEXT]?JSON.parse(env[ENVIRONMENT_CONTEXT]):undefined;
   if(context&&(context.report?.version!==1||!context.owned))throw Error('invalid owned environment value handoff');
+  return context;
+}
+/** Binding a later grant requires an already valid canonical packet. */
+export function assertOwnedValueHandoff(env:NodeJS.ProcessEnv):void{valueContext(env);}
+export function assignOwnedValues(env:NodeJS.ProcessEnv,values:NodeJS.ProcessEnv):void{
+  const context=valueContext(env);
   for(const [name,value]of Object.entries(values)){
     if(value===undefined)delete env[name];else env[name]=value;
   }

@@ -700,6 +700,11 @@ Each standalone entry validates and names its command options as source-owned
 values. In an inherited canonical handoff, an option outside that entry's list
 must equal its inherited owned value or refuse by name before admission; it
 cannot silently become a default during preparation or same-source reuse.
+Resolution services receive that exact planned environment. Their session
+reports actual Node arguments and received `NODE_OPTIONS`; validation compares
+those launch facts with the intended options. Token acquisition validates its
+owned-value packet before requesting capacity. A later binding failure releases
+and joins the granted lease before propagating the error.
 The dependency image archives installation metadata and named workspace command
 targets, together with the installed third-party packages. Importer directories
 are not installation inputs. Workspace aliases retain their verified installed
@@ -1259,6 +1264,14 @@ the first node task.
   pending wants. A completed growth re-enters scheduling on the next event-loop
   turn, so sampling, feeding, time bounds and child completion keep running
   ([log](records/notebooks/decisions-log.md#gate-memory-adjustment-retains-pending-demand-11-16)).
+
+- **Resource acquisition and option identity share their real owner.** A Node
+  resolution helper launches with the explicit environment that supplied its
+  expected options and reports its actual arguments and `NODE_OPTIONS`.
+  A token controller validates the canonical packet before requesting a lease;
+  if binding fails after a grant, it releases and drains that lease while
+  retaining the binding and cleanup errors
+  ([log](records/notebooks/decisions-log.md#resolver-launch-and-token-binding-ownership-11-15)).
 
 - **Rust publication belongs to one owner.** `nts-publication` stages files,
   links and immutable directories in an exclusively acquired sibling claim

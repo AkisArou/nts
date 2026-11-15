@@ -21,7 +21,7 @@
 // function call -- a resident worker's case, answered later on its stdout --
 // so it hands back the release instead of running a callback.
 import { connect } from "node:net";
-import {assignOwnedValues} from './environment-values.ts';
+import {assignOwnedValues,assertOwnedValueHandoff} from './environment-values.ts';
 import {randomUUID} from 'node:crypto';
 import {runWithToken,closeCaseWorkers,releaseToken} from './case-context.ts';
 export {runWithToken,releaseToken} from './case-context.ts';
@@ -117,11 +117,18 @@ const gate = ENABLED ? tokenClient(WHERE, STEP) : null;
  * `acquire`), of `bytes` when the case's size is known. Outside a gate it
  * resolves at once to a release that does nothing.
  */
-export function acquireToken(context, signal, bytes) {
-  return gate ? gate.acquire(context, signal, bytes).then(release=>{
-    if(release)assignOwnedValues(process.env,{NTS_GATE_TOKEN_HELD:'1'});
-    return release;
-  }) : Promise.resolve(() => {});
+export async function acquireToken(context, signal, bytes) {
+  if(!gate)return () => {};
+  assertOwnedValueHandoff(process.env);
+  const release=await gate.acquire(context,signal,bytes);
+  if(!release)return null;
+  try{assignOwnedValues(process.env,{NTS_GATE_TOKEN_HELD:'1'});}
+  catch(primary){
+    try{await releaseToken(release);}
+    catch(cleanup){throw new AggregateError([primary,cleanup],'token environment binding and release failed',{cause:primary});}
+    throw primary;
+  }
+  return release;
 }
 
 export async function withToken(fn, context) {
