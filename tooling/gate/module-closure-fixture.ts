@@ -165,6 +165,15 @@ function fixtureMetadata(snapshot:InputSnapshot,destination:string,grants:Readon
   }
 }
 
+/** Selection retains inspection facts; a private reproduction stages only
+ * its modules, declared data and reproductive observations. A second role
+ * promotes a shared path in the graph, before this projection is taken. */
+export function fixtureStagingSnapshot(snapshot:InputSnapshot):InputSnapshot{
+  const staged=new Set(snapshot.stagingFiles);
+  return {...snapshot,files:[...snapshot.stagingFiles],...(snapshot.runtimeFiles?{runtimeFiles:snapshot.runtimeFiles.filter(file=>staged.has(file))}:{}),ownedFiles:snapshot.ownedFiles.filter(file=>staged.has(file)),
+    optionalFiles:snapshot.optionalFiles.filter(row=>!row.inspectionOnly)};
+}
+
 /** Complete the graph before callers apply private mutations. Existing equal
  * modules are harmless; a different fixture file is never overwritten. */
 export function copyModuleClosure(entries: readonly InputEntry[], root: string, options: FixtureClosureOptions = {}): string[] {
@@ -186,7 +195,8 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   catch(error){throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});}
   finally {graph.close();}
   validateReaderSourceObservations(snapshot,source);
-  const data=fixtureData(snapshot,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
+  const staged=fixtureStagingSnapshot(snapshot);
+  const data=fixtureData(staged,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;
   const inputs=files.map(name=>{
     const from=resolve(source,name),to=resolve(destination,name);
     if (to === from) throw new Error("fixture destination is the source: " + name);
@@ -210,8 +220,8 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
     if (options.link) symlinkSync(from, to);
     else copyFileSync(from, to);
   }
-  fixtureMetadata(snapshot,destination,dataNamespaces,fixtureEntries,data.publish||data.manifest.data.length>0);
+  fixtureMetadata(staged,destination,dataNamespaces,fixtureEntries,data.publish||data.manifest.data.length>0);
   if(data.publish)durableRecord(join(destination,FIXTURE_INPUT_MANIFEST),data.manifest);
-  replayFixtureReaderObservations(snapshot,source,destination,fixtureEntries,!!(options.link||options.reuseSourceLinks));
+  replayFixtureReaderObservations(staged,source,destination,fixtureEntries,!!(options.link||options.reuseSourceLinks));
   return files;
 }

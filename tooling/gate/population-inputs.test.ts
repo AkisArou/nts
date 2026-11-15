@@ -160,3 +160,24 @@ test('population and host leaves do not inherit the execution fences',()=>{
     assert.ok(graph.describe(['tooling/inputs/dependency-source-state.ts']).files.includes('tooling/tasks/new.ts'),'the actual executable fence keeps its declared population');
   }finally{graph.close();}
 });
+
+test('fixture staging separates fence inspection from reproductive facts with order-independent promotion',t=>{
+  const root=testScratch(t,'staging-roles'),put=(name:string,body:string)=>{mkdirSync(dirname(join(root,name)),{recursive:true});writeFileSync(join(root,name),body);};
+  put('tooling/gate/reader-inputs/main.ts','export const dependencySourceInputs=(url:URL)=>({url});');
+  put('tooling/fence.ts',"import {dependencySourceInputs} from './gate/reader-inputs/main.ts';export const input=dependencySourceInputs(new URL('../',import.meta.url));");
+  put('tooling/unrelated.ts','export const value=1;');put('.gitignore','ignored\n');
+  const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};git('init','-q');git('add','.');
+  const describe=(entries:Parameters<ReturnType<typeof moduleGraph>['describe']>[0])=>{const graph=moduleGraph({sourceRoot:root});try{return graph.describe(entries);}finally{graph.close();}};
+  const selected=describe(['tooling/fence.ts']);
+  assert.ok(selected.files.includes('tooling/unrelated.ts'));assert.ok(!selected.placingFiles.includes('tooling/unrelated.ts'));assert.ok(!selected.stagingFiles.includes('tooling/unrelated.ts'));
+  assert.ok(selected.optionalFiles.some(row=>row.path==='.gitignore'&&row.inspectionOnly));
+  const destination=testScratch(t,'stage-fence');copyModuleClosure(['tooling/fence.ts'],destination,{sourceRoot:root});
+  assert.equal(existsSync(join(destination,'tooling/unrelated.ts')),false);assert.equal(existsSync(join(destination,'.gitignore')),false);
+  for(const entries of [['tooling/fence.ts','tooling/unrelated.ts'],['tooling/unrelated.ts','tooling/fence.ts']]){
+    assert.ok(describe(entries).stagingFiles.includes('tooling/unrelated.ts'));
+    const promoted=testScratch(t,'stage-promotion');copyModuleClosure(entries,promoted,{sourceRoot:root});assert.equal(readFileSync(join(promoted,'tooling/unrelated.ts'),'utf8'),'export const value=1;');
+  }
+  const direct=dependencySourceInputs(pathToFileURL(root+'/')),explicit=testScratch(t,'stage-explicit');
+  assert.ok(describe([direct]).stagingFiles.includes('tooling/unrelated.ts'));copyModuleClosure([direct],explicit,{sourceRoot:root});
+  assert.equal(readFileSync(join(explicit,'.gitignore'),'utf8'),'ignored\n');assert.ok(existsSync(join(explicit,'tooling/unrelated.ts')));
+});

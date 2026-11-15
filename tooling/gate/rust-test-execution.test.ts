@@ -35,7 +35,7 @@ const request=(path:string,operation='open'):RuntimeObservation=>({phase:'test-r
   cwd:'/',args:operation==='execute'?['0','0','0','0','0','0']:['ffffffffffffff9c','0','0','0','0','0'],operation,syscall:operation==='lookup'?'newfstatat':operation==='execute'?'execve':'openat',
   outcome:'unknown',image:2,canceled:false,subjects:[{kind:'path',arg:operation==='execute'?0:1,dirfdArg:operation==='execute'?-1:0,name:path,raw:Buffer.from(path).toString('hex'),anchor:{kind:'absolute'}}],probes:[]});
 function assess(root:string,row:RuntimeObservation){
-  const empty:InputSnapshot={files:[],runtimeFiles:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],optionalFiles:[],memberships:[],observations:[],directories:[]};
+  const empty:InputSnapshot={files:[],runtimeFiles:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],optionalFiles:[],memberships:[],observations:[],directories:[]};
   return runtimeSubjectValidator(root,empty).assess(row,row.subjects[0] as InputSubject,observer);
 }
 

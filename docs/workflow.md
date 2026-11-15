@@ -1282,6 +1282,15 @@ the first node task.
   A pin edit reaches its benchmark readers through their data declarations
   ([log](records/notebooks/decisions-log.md#awfy-reference-corpus-is-pinned-11-15)).
 
+- **One graph owns three file roles.** Selection retains all input `files`;
+  producer identity hashes `placingFiles`; fixture reproduction copies
+  `stagingFiles`. The staging role includes modules, declared data and compiler
+  or Node observations. Nested source/status fence populations are inspection
+  only; an explicit population entry stages itself, and any reproductive visit
+  promotes a shared path. Source validation keeps the complete observations.
+  Fixture staging finishes before private mutations.
+
+
 - **Runtime module edges follow Node stripping.** Clause-level `import type` and
   `export type` do not make runtime inputs; the tooling type project owns them.
   Named type-specifier lists retain the module's side effects. Parser-free

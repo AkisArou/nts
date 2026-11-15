@@ -16,7 +16,7 @@ export type DirectoryDeclaration={reader:string;directory:string;files:readonly 
   /** Private fixture reach records the declaration without claiming its production members. */
   fixture?:{entry:string;owner:string}};
 export type ReaderContext={entry:string;dataNamespaces:DataNamespaces};
-export type OptionalFileDeclaration={reader:string;path:string;present:boolean;context:ReaderContext};
+export type OptionalFileDeclaration={reader:string;path:string;present:boolean;context:ReaderContext;inspectionOnly?:true};
 export type MemberType='file'|'directory'|'symlink';
 export type DirectoryEntry={name:string;type:MemberType};
 export type MembershipDeclaration={reader:string;directory:string;entries:DirectoryEntry[];context:ReaderContext};

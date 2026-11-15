@@ -29,7 +29,7 @@ test("missing full-run environment refuses before setup", t => {
   assert.equal(existsSync(join(home, ".cache/nts-full")), false);
 });
 
-function fixture(t: { after(fn: () => void): void }) {
+function fixture(t: { after(fn: () => void): void },runner=false) {
   const directory = newTestScratch("full-run");
   t.after(() => removeOracleSnapshot(directory));
   const root = join(directory, "repo"), home = join(directory, "full");
@@ -44,7 +44,7 @@ function fixture(t: { after(fn: () => void): void }) {
   const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   writeFileSync(join(root, "results/marker"), "main record\n");
   writeFileSync(join(root, "tooling/gate/pinned.sh"), readFileSync(new URL("../gate/pinned.sh", import.meta.url)));
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json", "tooling/inputs/linker.ts"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json", "tooling/inputs/linker.ts",...(runner?["tooling/gate/run.mjs"]:[])], root);
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
@@ -73,8 +73,7 @@ test("the default full run refuses a non-main pin and writes nothing", t => {
 });
 
 test("a plain full run canonically accepts exactly the landing's standing skips",t=>{
-  const f=fixture(t),gate=join(f.root,"tooling/gate");
-  copyModuleClosure(["tooling/gate/run.mjs"],f.root);
+  const f=fixture(t,true),gate=join(f.root,"tooling/gate");
   symlinkSync(new URL("../gate/times.tsv",import.meta.url),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[new URL("../gate/all.sh",import.meta.url).pathname,"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);

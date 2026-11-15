@@ -32,7 +32,7 @@ export type ReaderObservation={reader:string;context:ReaderContext;protocol:Read
 /** The canonical graph owns derived facts; the declaration leaf has no parser
  * or oracle dependency in either import direction. */
 export type UnavailableInput={kind:'installation-inputs';reader:string;context:ReaderContext;reason:string};
-export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
+export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];stagingFiles:string[];directories:DirectoryDeclaration[];
   unavailableInputs?:UnavailableInput[];
   optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
 
@@ -138,7 +138,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     if(closed)throw Error('module graph is closed');
     if(batching&&projectRead===readProject)throw Error('module graph already has an active batch');
     const runtimeFiles=new Set<string>();
-    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
+    const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),staging=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     const observations:ReaderObservation[]=[];
     const unavailableInputs:UnavailableInput[]=[];
@@ -153,16 +153,16 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
       }
     };
-    function optionalPresence(context:Context,reader:string,path:string):boolean{
+    function optionalPresence(context:Context,reader:string,path:string,inspectionOnly=false):boolean{
       metadataParents(root,path,'optional file');
       let stat:ReturnType<typeof lstatSync>|undefined;
       try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
       const name=nameOf(path);
       if(stat&&(!stat.isFile()||stat.isSymbolicLink()))throw Error('optional file input is not a regular file: '+name);
-      optionalFiles.push({reader,path:name,present:!!stat,context:{entry:context.entry,dataNamespaces:context.namespaces}});
+      optionalFiles.push({reader,path:name,present:!!stat,context:{entry:context.entry,dataNamespaces:context.namespaces},...(inspectionOnly?{inspectionOnly:true as const}:{})});
       // Even an absent candidate may become bytes in the next source tree.
       reportByteInput?.({reader,path:name});
-      if(stat)visit(context,path,false,false);
+      if(stat)visit(context,path,false,false,false,false,!inspectionOnly);
       return !!stat;
     }
     function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
@@ -177,8 +177,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         if(path!==root)throw Error(kind+' must name the canonical source root: '+reader);
         const statusPopulation=(paths:readonly string[])=>{
           const population=gitStatusInputPopulation(paths,sourceFiles());
-          for(const name of population.files)optionalPresence(context,reader,resolve(root,name));
-          for(const name of population.controls)optionalPresence(context,reader,resolve(root,name));
+          for(const name of population.files)optionalPresence(context,reader,resolve(root,name),reader!=='<entry>');
+          for(const name of population.controls)optionalPresence(context,reader,resolve(root,name),reader!=='<entry>');
           for(const directory of population.directories){
             const row:DirectoryDeclaration={reader,directory,kind:'inspection',files:population.files.filter(file=>file.startsWith(directory+'/')),context:{entry:context.entry,dataNamespaces:{...context.namespaces}}};
             directories.push(row);reportDirectory?.(row);
@@ -369,13 +369,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       directories.push(row);reportDirectory?.(row);
       if(grant)return;
       for(const file of members){
-        if(kind==='data'){files.add(file);runtimeFiles.add(file);placing.add(file);}
+        if(kind==='data'){files.add(file);runtimeFiles.add(file);placing.add(file);staging.add(file);}
         else visit(context,resolve(root,file),kind!=='inspection',kind!=='inspection',host);
       }
     }
-    function visit(context:Context,path:string,enter=true,place=true,host=enter,compileOnly=false):void {
+    function visit(context:Context,path:string,enter=true,place=true,host=enter,compileOnly=false,stage=true):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
-      const name=nameOf(path);if(!compileOnly)runtimeFiles.add(name);
+      const name=nameOf(path);if(!compileOnly)runtimeFiles.add(name);if(stage)staging.add(name);
       if(enter?context.entered.has(name)&&(!host||context.host.has(name)):context.owned.has(name)){if(place)placing.add(name);return;}
       if(!ownedSources.has(path)){
         if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
@@ -420,7 +420,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path,true,true,!buildModules?.files.has(nameOf(path)),buildModules?.files.has(nameOf(path))??false);
     }
-    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
+    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),stagingFiles:[...staging].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler
    * requests include their complete recipe and namespace context. Each first

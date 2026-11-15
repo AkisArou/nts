@@ -45,7 +45,7 @@ test('portable selector records retain live roles, exact bytes and candidate abs
 test('selector projection never traverses unconsumed callback provenance or unused snapshot columns',()=>{
   // The source may have arbitrarily many causes. Accessors make any traversal
   // fail deterministically, without allocating a multi-gigabyte test string.
-  const snapshot:Parameters<typeof rustSelectorRoles>[1]={files:['input.ts'],moduleFiles:['input.ts'],placingFiles:['input.ts'],
+  const snapshot:Parameters<typeof rustSelectorRoles>[1]={files:['input.ts'],moduleFiles:['input.ts'],placingFiles:['input.ts'],stagingFiles:['input.ts'],
     get ownedFiles():never{throw Error('selector traversed unused ownership column');},
     get hostFiles():never{throw Error('selector traversed unused host column');},directories:[],optionalFiles:[],memberships:[],
     observations:[{reader:'reader.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},

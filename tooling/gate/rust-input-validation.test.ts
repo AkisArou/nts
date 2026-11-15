@@ -16,7 +16,7 @@ import {durableRecordStream} from './durable-record.ts';
 import type {RuntimeInputClaim} from './rust-input-claims.ts';
 
 const basis:FileObserverReceipt={version:1,observedPath:'/observer',artifactPath:'/retained/observer',sha256:'0'.repeat(64),sourceSha256:'1'.repeat(64),abi:'linux-x86_64-v1'};
-const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,directories:[],optionalFiles:[],memberships:[],observations:[]});
+const snapshot=(files:string[]):InputSnapshot=>({files,ownedFiles:files,moduleFiles:[],hostFiles:[],placingFiles:files,stagingFiles:files,directories:[],optionalFiles:[],memberships:[],observations:[]});
 const request=(cwd:string):RuntimeObservation=>({phase:'test-runtime',source:'crate/src/lib.rs',attempt:{id:'1',tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0'},
   cwd,args:['ffffffffffffff9c','0','0','0','0','0'],operation:'open',syscall:'openat',outcome:'unknown',image:1,canceled:false,subjects:[],probes:[]});
 const subject=(root:string,name:string):InputSubject=>({kind:'path',arg:1,dirfdArg:0,name,raw:Buffer.from(name).toString('hex'),anchor:{kind:'cwd',path:root}});

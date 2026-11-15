@@ -237,7 +237,7 @@ for(int i=0;i<3;i++){int status;if(waitpid(children[i],&status,0)!=children[i]||
     assert.ok(byteFactText(request.entry.environment,'large captured environment').length>48*1024);
   }
   const counts=statistics as {elfHits:number;loaderHits:number;loaderMisses:number};assert.ok(counts.elfHits>=2);assert.ok(counts.loaderHits>=1);assert.ok(counts.loaderMisses>=2);
-  const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},{capturedIdentities:true});
+  const classifier=rustTestExecutionClassifier(undefined,repository),sourceClassifier=rustTestExecutionClassifier(undefined,root),validator=runtimeSubjectValidator(repository,{files:[],ownedFiles:[],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},{capturedIdentities:true});
   let probes=0,sourceProbes=0;
   for(const row of rows){const image=images.get(row.image)!;classifier.observe(row,image);sourceClassifier.observe(row,image);for(const part of row.subjects){
     if(image.path!==target||part.kind!=='path'||!part.name.startsWith(first+'/'))continue;
@@ -332,12 +332,12 @@ test('the native observer retains actual images, attempted inputs and original p
   const validation=await validateRustInputCapture({capture:{raw:record,index:published,cwd:root,root,observer:prepared.receipt,
     target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}},output:join(root,'validation.gz'),targets:new Map([['fixture.rs',{
       target:{source:'fixture.rs',name:'syscalls',kind:['test'],unitTests:true,doctests:false},
-      snapshot:{files:['subject','subject.c'],ownedFiles:['subject','subject.c'],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},
+      snapshot:{files:['subject','subject.c'],ownedFiles:['subject','subject.c'],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},
     }]])});
   assert.ok(validation.counts.claimed>0,'the actual executed file retains its exact input authority');
   const actualEmpty=descriptorCalls.find(row=>row.syscall==='statx'&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false))!;
   const actualSubject=actualEmpty.subjects.find(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false)!;
-  const assessed=runtimeSubjectValidator(root,{files:['value'],ownedFiles:['value'],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]})
+  const assessed=runtimeSubjectValidator(root,{files:['value'],ownedFiles:['value'],moduleFiles:[],hostFiles:[],placingFiles:[],stagingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]})
     .assess(actualEmpty,actualSubject,prepared.receipt);
   assert.equal(assessed.identity?.path,join(root,'value'),'empty-path stat names the regular file, without appending a directory separator');
   assert.equal(assessed.state,'claimed','the descriptor metadata keeps its actual canonical input claim');

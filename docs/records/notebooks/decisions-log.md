@@ -3339,3 +3339,12 @@ exports. Named type specifiers preserve side-effect imports under Node's
 verbatim stripping. Type checking owns its complete project independently.
 Population, identity data and host-environment utilities are separate leaves;
 only executable source and installation fences declare their Git populations.
+
+## Selection, producer and fixture file roles (11-15)
+
+The graph publishes selection files, producer placement files and reproduction
+staging files independently. Only nested source/status fence observations are
+omitted from reproduction; explicit population entries and reproductive roles
+retain their bytes, regardless of visit order. Compiler and Node observations
+remain reproductive. The copier validates full source facts before applying its
+staging projection. Fixtures complete staging before private mutations.
