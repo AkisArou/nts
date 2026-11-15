@@ -1,6 +1,7 @@
 // One Node-only Cargo inventory feeds crate reach and portable test identities.
 import {dirname,relative,resolve,sep} from 'node:path';
 import type {execFileSync} from 'node:child_process';
+import {infrastructureProbe} from './infrastructure-probe.ts';
 import {cargoOutput,withCargoConfigurationSync} from './cargo.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 import {cargoRustRuntimeTargets,cargoRustTargetInventory,type RustInputTarget} from './rust-runtime-declarations.ts';
@@ -31,7 +32,9 @@ export function cargoMetadata(root:string,execute?:Execute,env:NodeJS.ProcessEnv
   try{
   // The supplied-effects seam has the one encoding used here; the invocation
   // owner retains Node's full execFileSync overloads for its other callers.
-  const body=cargoOutput(args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1<<28},execute as typeof execFileSync|undefined);
+  const bounded:Execute=(command,args,options)=>infrastructureProbe({purpose:'selector Cargo inventory',command,args,
+    cwd:options.cwd,env:options.env,stdio:options.stdio,maxBuffer:options.maxBuffer}).stdout;
+  const body=cargoOutput(args,{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1<<28},(execute??bounded) as typeof execFileSync);
   const value=JSON.parse(String(body)) as CargoMetadata;
   if(!value||!Array.isArray(value.packages)||value.packages.some(row=>!row||typeof row.name!=='string'||typeof row.manifest_path!=='string'||!Array.isArray(row.targets)||!Array.isArray(row.dependencies)
     ||row.dependencies.some(dependency=>!dependency||typeof dependency.name!=='string'||dependency.path!==undefined&&typeof dependency.path!=='string'||dependency.kind!==undefined&&dependency.kind!==null&&typeof dependency.kind!=='string')))
