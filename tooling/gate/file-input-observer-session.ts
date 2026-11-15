@@ -18,7 +18,7 @@ const sha=(value:Buffer|string)=>createHash('sha256').update(value).digest('hex'
 export function prepareObserverImageReader(){
   const graph=moduleGraph({sourceRoot:ROOT});let files:{path:string;sha256:string}[];
   try{
-    const members=graph.describe([ENTRY]).moduleFiles.filter(executableModuleSource),generation=new Map(graph.sourceInputs().map(row=>[row.path,row.sha256]));
+    const members=graph.describe([fileURLToPath(ENTRY)]).moduleFiles.filter(executableModuleSource),generation=new Map(graph.sourceInputs().map(row=>[row.path,row.sha256]));
     files=members.sort().map(path=>{const absolute=resolve(ROOT,path),digest=generation.get(path)??generation.get(absolute);
       if(!digest||sha(readFileSync(absolute))!==digest)throw Error('image-reader source generation changed: '+path);
       return {path:absolute,sha256:digest};});
