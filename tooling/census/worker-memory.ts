@@ -14,6 +14,7 @@ import { checkedUnitName, childSlice, toolingSlice, unitComponent } from "../gat
 import { bindsToProperties, ownUnit, stepWorkersSlice } from "../gate/scopes/bound-slice.ts";
 import { activeCommand, CommandNotMeasuredError, COMMAND_STARTUP_BOUND_MS } from "../gate/active-process.ts";
 import {caseEnvironment,caseReceipt,ownCaseWorker,retireCaseScope,type CaseReceipt} from '../gate/case-context.ts';
+import {assignOwnedValues} from '../gate/environment-values.ts';
 import {readLimits} from '../gate/scopes/memory-limits.ts';
 import {ancestorMemoryIncident,memoryAncestors,type AncestorMemory} from '../gate/memory-ancestry.ts';
 import {hostInfrastructure} from '../gate/host-infrastructure.ts';
@@ -388,12 +389,15 @@ export class MemoryWorker {
     const childEnvironment=caseEnvironment(environment);
     this.#receipt=caseReceipt(childEnvironment);
     const bootstrap=Math.min(this.bytes,this.run.effectiveBudgetBytes());
+    const workerEnvironment={...childEnvironment};
+    assignOwnedValues(workerEnvironment,{...hostInfrastructure(process.env),NTS_CENSUS_WORKER_GROUP:this.group,
+      NTS_CENSUS_WORKER_MAX_BYTES:String(this.bytes),NTS_CENSUS_RUN_GROUP:this.run.group,NTS_CENSUS_RUN_MAX_BYTES:String(this.run.budgetBytes)});
     // A program's filtered environment need not carry the launcher's bus.
     // The bounded-entry scope uses only its parent's declared infrastructure.
     const scope = {
       unit, ready,
       argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${bootstrap}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=kill", "bash", "--noprofile", "--norc", "--posix", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
-      env: { ...childEnvironment, ...hostInfrastructure(process.env), NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
+      env:workerEnvironment,
     };
     this.#scopes.add(scope);
     return scope;
@@ -473,9 +477,8 @@ export async function serialRun(tools: CompilerTools): Promise<void> {
   const run = memoryRun();
   const worker = run.worker("serial", Number(tools.memoryCapKb ?? WORKER_CAP_KB) * 1024);
   const scope = worker.scope(process.execPath, [...process.execArgv, ...process.argv.slice(1)]);
-  scope.env.NTS_CENSUS_CASE_CONCURRENCY = "exclusive";
   const activeCase = join(run.directory, "serial-case.txt");
-  scope.env.NTS_CENSUS_ACTIVE_CASE = activeCase;
+  assignOwnedValues(scope.env,{NTS_CENSUS_CASE_CONCURRENCY:'exclusive',NTS_CENSUS_ACTIVE_CASE:activeCase});
   const before = worker.counters(), aggregateBefore = run.aggregateOoms();
   let result;
   try {

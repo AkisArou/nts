@@ -3,6 +3,7 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {connect} from 'node:net';
 import {ToolingInstrumentError} from './step-result.ts';
+import {assignOwnedValues} from './environment-values.ts';
 
 export const CASE_LEASE_ADDRESS='NTS_GATE_CASE_LEASE_ADDRESS';
 export const CASE_LEASE_ID='NTS_GATE_CASE_LEASE_ID';
@@ -60,7 +61,9 @@ export function caseReceipt(env:NodeJS.ProcessEnv=process.env):CaseReceipt|undef
 }
 export function caseEnvironment(env:NodeJS.ProcessEnv):NodeJS.ProcessEnv{
   const receipt=caseReceipt(env);
-  return receipt?{...env,[CASE_LEASE_ADDRESS]:receipt.address,[CASE_LEASE_ID]:receipt.id}:env;
+  if(!receipt)return env;
+  const child={...env};assignOwnedValues(child,{[CASE_LEASE_ADDRESS]:receipt.address,[CASE_LEASE_ID]:receipt.id});
+  return child;
 }
 export function runWithToken<T>(release:TokenRelease,run:()=>T):T{
   return release.case?current.run(release.case,run):run();
