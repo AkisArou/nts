@@ -15,6 +15,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 camino.workspace = true
 hmac-sha256.workspace = true
+nix.workspace = true
 nts-codegen-c.workspace = true
 nts-codegen-common.workspace = true
 nts-codegen-jvm.workspace = true

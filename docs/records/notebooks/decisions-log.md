@@ -3087,3 +3087,14 @@ the reply can charge running time as excluded admission wait and miss the
 step's execution bound. Unsized, synchronous sized and asynchronous sized
 grants share the same order. The real census control keeps its original
 assertions; a supplied socket/clock interleaving checks the boundary directly.
+## Benchmark build CPU has an explicit basis (11-15)
+
+Benchmark build stages retain exact waited child rusage through the existing
+child-rusage/phase-child owner, under case-bound's unchanged CPU and activity
+policy. The observer is prepared once per run. A bound kill can leave final
+waited accounting unavailable; its last sampled own CPU is labelled separately.
+Sequential in-process nts phases retain calling-thread CPU and exclude shared
+checker CPU. One explicit per-row recorder carries optional versioned details
+through success, failure and journal recovery. Old immutable records and
+throughput verdicts stay unchanged.
+

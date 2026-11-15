@@ -44,22 +44,28 @@ impl Libraries {
     /// A tiny link separates an unavailable optional dependency from errors in
     /// the reference. Only the linker's explicit missing-library diagnostic for
     /// a declared name is optional. Broken tools and other link errors fail.
-    pub(super) fn probe(&self, root: &Utf8Path, binary: &Utf8Path) -> Result<Option<String>> {
+    pub(super) fn probe(
+        &self,
+        binary: &Utf8Path,
+        builds: &mut super::build::Recorder<'_>,
+    ) -> Result<Option<String>> {
         if self.0.is_empty() {
             return Ok(None);
         }
         let source = Utf8PathBuf::from(format!("{binary}.cpp"));
         std::fs::write(&source, "int main() { return 0; }\n")?;
-        let output = super::build::output(
-            root,
-            std::process::Command::new("clang++")
-                .arg(&source)
-                .args(nts_codegen_common::compile_flags::LTO)
-                .args(self.flags())
-                .arg("-o")
-                .arg(binary),
-        )
-        .context("probing C++ reference libraries with clang++")?;
+        let output = builds
+            .output(
+                "C++",
+                "reference library probe",
+                std::process::Command::new("clang++")
+                    .arg(&source)
+                    .args(nts_codegen_common::compile_flags::LTO)
+                    .args(self.flags())
+                    .arg("-o")
+                    .arg(binary),
+            )
+            .context("probing C++ reference libraries with clang++")?;
         std::fs::write(format!("{binary}.stdout"), &output.stdout)?;
         std::fs::write(format!("{binary}.stderr"), &output.stderr)?;
         if output.status.success() {
@@ -160,14 +166,14 @@ mod tests {
         let dir = crate::scratch::ScratchDir::path_in_target("nts-reference-link");
         std::fs::create_dir(&dir).expect("valid reference-link control");
         let result = (|| -> anyhow::Result<()> {
+            let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let session = crate::build::Session::new(&root)?;
+            let mut builds = crate::build::Recorder::new(&session);
             assert!(Libraries::read(&dir)?.flags().next().is_none());
             std::fs::write(dir.join("ref.link"), "m\n")?;
             assert!(
                 Libraries::read(&dir)?
-                    .probe(
-                        &Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-                        &dir.join("available")
-                    )?
+                    .probe(&dir.join("available"), &mut builds)?
                     .is_none()
             );
             std::fs::write(
@@ -176,10 +182,7 @@ mod tests {
             )?;
             assert!(
                 Libraries::read(&dir)?
-                    .probe(
-                        &Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-                        &dir.join("missing")
-                    )?
+                    .probe(&dir.join("missing"), &mut builds)?
                     .expect("valid reference-link control")
                     .contains("nts_reference_library_deliberately_missing_781")
             );

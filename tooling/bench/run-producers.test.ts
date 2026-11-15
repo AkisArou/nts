@@ -62,6 +62,18 @@ test("native producer keeps a runtime abort distinct from refusal and absent ref
   assert.equal(filtered.cells["nts C"].status, "NOT_RUN");
   assert.equal(filtered.cells["nts JVM"].status, "NOT_RUN");
 });
+
+test('native build details survive both successful rows and failed builds',()=>{
+  const builds={version:1,stages:[{kind:'thread',column:'nts C',phase:'capture/prepare/emit',cpu_s:0.125,
+    basis:'getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded',complete:true}]};
+  const successful=fromNts(meta(),{...raw(),builds:{a:builds}});
+  assert.deepEqual(successful.rows[0].builds,builds);
+  const failed=fromNts(meta(),{...raw(),measured:[],builds:{a:builds},row_failures:{a:{kind:'build_failed',reason:'clang timed out'}}});
+  assert.equal(failed.rows[0].cells['nts C'].status,'BUILD_FAILED');assert.deepEqual(failed.rows[0].builds,builds);
+  assert.equal(fromNts(meta(),raw()).rows[0].builds,undefined);
+  builds.stages[0].cpu_s=-1;
+  assert.throws(()=>fromNts(meta(),{...raw(),builds:{a:builds}}),/thread CPU/);
+});
 test("checksum mutation invalidates every timing instead of publishing a fast wrong result", () => {
   const r = raw();
   r.measured[0].results[0] = { ...measurement, checksum: "0000000000000000" };

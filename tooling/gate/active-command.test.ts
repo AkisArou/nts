@@ -102,6 +102,20 @@ test("structured stdout stays separate while command diagnostics are retained",a
   assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout),{value:7});assert.equal(result.stderr,"diagnostic\n");assert.ok(result.out.includes("diagnostic\n"));assert.ok(result.out.includes(result.stdout));
 });
 
+test('bound CPU samples retain their process and sampled basis through command drain',async t=>{
+  for(const each of [false,true]){
+    const {root,env}=fixture(t),control=commandObservationFixture();
+    const pending=activeCommand(process.execPath,['-e','Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)'],
+      {cwd:root,env,observations:control.observations,...(each?{eachProcessCpuSeconds:0.3}:{ownCpuSeconds:0.3})});
+    await control.attached;
+    const pid=control.group()!;
+    control.sample(300,{cpu:32,own:31,processCpu:32,pid:each?71:pid});
+    const result=await pending;
+    assert.equal(result.signal,'SIGKILL');assert.ok(result.timeout);
+    assert.deepEqual(result.sampledAtBound,{pid:each?71:pid,cpu_s:each?0.32:0.31});
+  }
+});
+
 test("live session observations include CPU in a nested owned group",async t=>{
   const {root,env}=fixture(t),ready=join(root,'ready'),release=join(root,'release'),live=liveCommandObservations(env);
   let descendant=false;

@@ -10,12 +10,14 @@ import {fixtureEnvironment} from "./test-environment.ts";
 //   node --test tooling/gate/case-bound.test.ts
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync,writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { type activeCommand, COMMAND_CPU_BUDGET_SECONDS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
 import { CASE_TIMEOUT_EXIT, CASE_UNMEASURED_EXIT, parseCaseBound, runCaseBound } from "./case-bound.ts";
 import { testScratch } from "./test-scratch.ts";
+import {prepareChildObserver} from './child-rusage.ts';
+import {readBuildUsage} from './build-usage.ts';
 
 const observed=(samples:readonly CommandSample[],output:Partial<ActiveResult>={}):typeof activeCommand=>async(command,_args,options)=>{
   assert.equal(options.env.NTS_GATE_STEP_RESULT,undefined,'the case owns its diagnostic frame');
@@ -108,5 +110,41 @@ process.exitCode=await runCaseBound(${JSON.stringify(options)},process.env,undef
     assert.equal(result.status,mode==="spin"?CASE_TIMEOUT_EXIT:CASE_UNMEASURED_EXIT,result.stdout+result.stderr);
     assert.equal(result.stderr,"");
     assert.match(result.stdout,mode==="spin"?/partial stdout\ntimed out: /:/partial stdout\nnot measured: /);
+  }
+});
+
+test('build usage retains exact completed CPU and original streams and exits',async t=>{
+  const f=frame(t),directory=join(f.path,'..'),prepared=prepareChildObserver(directory,f.env);
+  assert.ok(prepared.observer,prepared.error);
+  for(const status of [0,7]){
+    const report=join(directory,'usage-'+status+'.json'),out:string[]=[],err:string[]=[];
+    const args=['-e',"let x=0;for(let i=0;i<5e6;i++)x^=i;process.stdout.write('answer:'+x);process.stderr.write('diagnostic');process.exitCode="+status];
+    const code=await runCaseBound(bound({command:process.execPath,args,eachProcessCpuSeconds:600,
+      usage:{observer:prepared.observer,report}}),f.env,{out:text=>out.push(text),err:text=>err.push(text)});
+    assert.equal(code,status);assert.equal(out.join(''),'answer:0');assert.equal(err.join(''),'diagnostic');
+    const usage=readBuildUsage(JSON.parse(readFileSync(report,'utf8')));
+    assert.equal(usage.status,status);assert.equal(usage.waited?.exit,status);assert.equal(usage.waited?.signal,0);
+    assert.ok(usage.waited&&usage.waited.user_s+usage.waited.sys_s>0,'a command shorter than the polling window still has waited CPU');
+    assert.deepEqual(usage.args,args);assert.equal(usage.unavailable,null);assert.equal(usage.sampledAtBound,null);
+    assert.equal(f.read(),null);
+  }
+});
+
+test('a killed build keeps its sampled bound CPU separate from unavailable final rusage',async t=>{
+  const f=frame(t),directory=join(f.path,'..'),report=join(directory,'killed.json');
+  const run=observed([],{status:null,signal:'SIGKILL',timeout:'linker own CPU reached 604.130 s',sampledAtBound:{pid:71,cpu_s:604.13}});
+  const code=await runCaseBound(bound({eachProcessCpuSeconds:600,usage:{observer:{directory,binary:'private-observer'},report}}),f.env,quiet,run);
+  assert.equal(code,CASE_TIMEOUT_EXIT);assert.equal(f.read(),null);
+  const usage=readBuildUsage(JSON.parse(readFileSync(report,'utf8')));
+  assert.equal(usage.waited,null);assert.match(usage.unavailable!,/before final waited rusage/);
+  assert.deepEqual(usage.sampledAtBound,{pid:71,cpu_s:604.13});assert.match(usage.reason!,/604\.130/);
+});
+
+test('successful builds refuse missing or malformed waited accounting instead of inventing zero',async t=>{
+  const f=frame(t),directory=join(f.path,'..'),report=join(directory,'invalid.json');
+  for(const body of [undefined,'{}']){
+    if(body!==undefined)writeFileSync(report+'.child',body);
+    const code=await runCaseBound(bound({eachProcessCpuSeconds:600,usage:{observer:{directory,binary:'private-observer'},report}}),f.env,quiet,observed([]));
+    assert.equal(code,CASE_UNMEASURED_EXIT);assert.equal(f.read()?.kind,'tooling-setup');assert.equal(existsSync(report),false);
   }
 });

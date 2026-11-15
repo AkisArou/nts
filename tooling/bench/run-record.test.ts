@@ -79,6 +79,27 @@ function fixture(label = "one", at = "2026-10-29T12:00:00.000Z"): RunRecord {
 function temp(): string {
   return newTestScratch("bench-record-test");
 }
+
+test('optional build details retain their CPU bases without changing historical records or verdicts',()=>{
+  const old=fixture();assert.deepEqual(parseRun(JSON.parse(JSON.stringify(old))),old);
+  assert.equal(Object.hasOwn(old.rows[0],'builds'),false);
+  const recorded=structuredClone(old);
+  recorded.rows[0].builds={version:1,stages:[
+    {kind:'thread',column:'nts C',phase:'capture/prepare/emit',cpu_s:0.125,basis:'getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded',complete:true},
+    {kind:'external',column:'nts C',phase:'clang compile',receipt:{version:1,command:'clang',args:['-c','case.c'],status:0,reason:null,
+      waited:{version:1,cpu_measure:'wait4-rusage-v1',pid:71,user_s:0.1,sys_s:0.02,wall_s:1,exit:0,signal:0,exec_errno:0},unavailable:null,sampledAtBound:null}},
+    {kind:'external',column:'nts LLVM',phase:'ThinLTO link',receipt:{version:1,command:'clang++',args:['case.o'],status:125,reason:'own CPU reached 604.130 s',
+      waited:null,unavailable:'observer killed before wait4 returned',sampledAtBound:{pid:72,cpu_s:604.13}}},
+  ]};
+  const parsed=parseRun(JSON.parse(JSON.stringify(recorded)));
+  assert.deepEqual(parsed.rows[0].builds,recorded.rows[0].builds);
+  assert.deepEqual(parsed.rows.map(row=>row.verdicts),old.rows.map(row=>row.verdicts));
+  const page=renderFull(parsed);
+  assert.match(page,/RUSAGE_THREAD; shared checker CPU excluded/);assert.match(page,/wait4; user/);
+  assert.match(page,/final waited CPU unavailable/);assert.match(page,/604\.130 CPU s sampled at bound/);
+  const malformed=structuredClone(recorded);malformed.rows[0].builds!.version=2 as 1;
+  assert.throws(()=>parseRun(malformed),/build details/);
+});
 function git(root: string, args: string[]): string {
   const r = spawnSync("git", gitArguments(args), {env:testEnvironment(), cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);

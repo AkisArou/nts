@@ -19,6 +19,11 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 // frame says so (runaway, hung, tooling-setup) and it exits 124, as every
 // unmeasured check does.
 import { constants } from "node:os";
+import {readFileSync} from 'node:fs';
+import {isAbsolute,join} from 'node:path';
+import {prepareChildObserver,readChildUsage,type ChildObserver} from './child-rusage.ts';
+import {durableRecord} from './durable-record.ts';
+import {readBuildUsage,type BuildUsage} from './build-usage.ts';
 
 
 import { activeCommand, commandMemoryFailure, COMMAND_ACTIVITY_POLL_MS, COMMAND_CPU_BUDGET_SECONDS, COMMAND_IDLE_GUARD_MS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
@@ -27,11 +32,13 @@ import { CaseBudgetError, publishPressure, publishHung, publishRunaway, publishT
 export const CASE_TIMEOUT_EXIT = 125;
 export const CASE_UNMEASURED_EXIT = 124;
 
-export type CaseBoundArguments = { ownCpuSeconds?: number; eachProcessCpuSeconds?: number; cpuSeconds: number; idleMs: number; command: string; args: string[] };
+export type CaseBoundArguments = { ownCpuSeconds?: number; eachProcessCpuSeconds?: number; cpuSeconds: number; idleMs: number; command: string; args: string[];
+  usage?:{observer:ChildObserver;report:string} };
 
 export function parseCaseBound(argv: readonly string[]): CaseBoundArguments {
   const rest = [...argv];
   let ownCpuSeconds: number | undefined, eachProcessCpuSeconds: number | undefined, cpuSeconds = COMMAND_CPU_BUDGET_SECONDS, idleMs = COMMAND_IDLE_GUARD_MS;
+  let usageReport:string|undefined,observerDirectory:string|undefined;
   const seconds = (flag: string) => {
     const value = Number(rest.shift());
     if (!Number.isFinite(value) || value <= 0) throw new Error(`${flag} needs a positive number of seconds`);
@@ -44,11 +51,17 @@ export function parseCaseBound(argv: readonly string[]): CaseBoundArguments {
     else if (flag === "--build") eachProcessCpuSeconds = COMPILE_CPU_BOUND_SECONDS;
     else if (flag === "--cpu") cpuSeconds = seconds(flag);
     else if (flag === "--idle") idleMs = seconds(flag) * 1000;
+    else if (flag === '--usage-report') usageReport=rest.shift();
+    else if (flag === '--observer-directory') observerDirectory=rest.shift();
     else throw new Error(`usage: case-bound.ts [--compile | --build] [--cpu <s>] [--idle <s>] -- <command> [argument ...]${flag === undefined ? "" : `; unknown argument ${flag}`}`);
   }
   const [command, ...args] = rest;
   if (!command) throw new Error("case-bound.ts needs a command after --");
-  return { ...(eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds }), ...(ownCpuSeconds === undefined ? {} : { ownCpuSeconds }), cpuSeconds, idleMs, command, args };
+  const usage=usageReport!==undefined||observerDirectory!==undefined;
+  if(usage&&(!usageReport||!observerDirectory||!isAbsolute(usageReport)||!isAbsolute(observerDirectory)||eachProcessCpuSeconds===undefined||ownCpuSeconds!==undefined))
+    throw Error('build usage needs --build, absolute --usage-report and --observer-directory, without --compile');
+  return { ...(eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds }), ...(ownCpuSeconds === undefined ? {} : { ownCpuSeconds }), cpuSeconds, idleMs, command, args,
+    ...(usage?{usage:{report:usageReport!,observer:{directory:observerDirectory!,binary:join(observerDirectory!,'phase-child')}}}:{}) };
 }
 
 /** Run one bounded case and say how it ended, as an exit status. */
@@ -56,17 +69,39 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
   write = { out: (text: string) => { process.stdout.write(text); }, err: (text: string) => { process.stderr.write(text); } }, run:typeof activeCommand=activeCommand): Promise<number> {
   // The case's own outcome never reaches the step's frame; only a hold does, below.
   const own = { ...env }; delete own.NTS_GATE_STEP_RESULT;
-  let result;
+  let result:Awaited<ReturnType<typeof activeCommand>>|undefined;
+  const finish=(status:number,reason:string|null=null):number=>{
+    if(!bound.usage)return status;
+    try{
+      let waited:BuildUsage['waited']=null,unavailable:string|null=null;
+      try{waited=readChildUsage(JSON.parse(readFileSync(bound.usage.report+'.child','utf8')));}
+      catch(error){
+        if(!result||result.timeout||result.hung||result.runaway||result.error||result.memory)unavailable='observer ended before final waited rusage: '+String(error);
+        else throw error;
+      }
+      const receipt=readBuildUsage({version:1,command:bound.command,args:bound.args,status,reason,waited,unavailable,sampledAtBound:result?.sampledAtBound??null});
+      durableRecord(bound.usage.report,receipt);return status;
+    }catch(error){
+      const failure=new ToolingInstrumentError('tooling-setup','cannot retain build usage: '+String(error));
+      publishToolingFailure(failure,env);write.err('not measured: '+failure.message+'\n');return CASE_UNMEASURED_EXIT;
+    }
+  };
   try {
-    result = await run(bound.command, bound.args, { cwd: process.cwd(), env: own, cpuBudgetSeconds: bound.cpuSeconds, idleMs: bound.idleMs,
+    const command=bound.usage?bound.usage.observer.binary:bound.command;
+    const args=bound.usage?[bound.usage.report+'.child','--',bound.command,...bound.args]:bound.args;
+    result = await run(command, args, { cwd: process.cwd(), env: own, cpuBudgetSeconds: bound.cpuSeconds, idleMs: bound.idleMs,
       pollMs: Math.min(COMMAND_ACTIVITY_POLL_MS, bound.idleMs / 4),
       ...(bound.eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds: bound.eachProcessCpuSeconds }),
       ...(bound.ownCpuSeconds === undefined ? {} : { ownCpuSeconds: bound.ownCpuSeconds }) });
+    if(bound.usage&&!result.timeout&&!result.hung&&!result.runaway&&!result.error&&!result.memory){
+      const usage=readChildUsage(JSON.parse(readFileSync(bound.usage.report+'.child','utf8')));
+      if(usage.exec_errno)throw new ToolingInstrumentError('tooling-setup',`cannot start ${bound.command}: exec errno ${usage.exec_errno}`);
+    }
   } catch (error) {
     const failure = error instanceof ToolingInstrumentError ? error : new ToolingInstrumentError("tooling-setup", `cannot supervise ${bound.command}: ${String(error)}`);
     publishToolingFailure(failure, env);
     write.err(`not measured: ${failure.message}\n`);
-    return CASE_UNMEASURED_EXIT;
+    return finish(CASE_UNMEASURED_EXIT,failure.message);
   }
   write.out(result.stdout); write.err(result.stderr);
   const last=result.stderr || result.stdout;
@@ -75,23 +110,29 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
   const memoryFailure = commandMemoryFailure(result, bound.command);
   if (memoryFailure) {
     diagnosticLine(memoryFailure.message);
-    if (memoryFailure instanceof CaseBudgetError) return 128 + constants.signals.SIGKILL;
+    if (memoryFailure instanceof CaseBudgetError) return finish(128 + constants.signals.SIGKILL,memoryFailure.message);
     publishPressure(memoryFailure, env);
-    return CASE_UNMEASURED_EXIT;
+    return finish(CASE_UNMEASURED_EXIT,memoryFailure.message);
   }
-  if (result.timeout) { diagnosticLine(`timed out: ${result.timeout}`); return CASE_TIMEOUT_EXIT; }
-  if (result.runaway) { publishRunaway(result.runaway, env); diagnosticLine(`not measured: ${result.runaway}`); return CASE_UNMEASURED_EXIT; }
-  if (result.hung) { publishHung(result.hung, env); diagnosticLine(`not measured: ${result.hung}`); return CASE_UNMEASURED_EXIT; }
+  if (result.timeout) { diagnosticLine(`timed out: ${result.timeout}`); return finish(CASE_TIMEOUT_EXIT,result.timeout); }
+  if (result.runaway) { publishRunaway(result.runaway, env); diagnosticLine(`not measured: ${result.runaway}`); return finish(CASE_UNMEASURED_EXIT,result.runaway); }
+  if (result.hung) { publishHung(result.hung, env); diagnosticLine(`not measured: ${result.hung}`); return finish(CASE_UNMEASURED_EXIT,result.hung); }
   if (result.error) {
     publishToolingFailure(new ToolingInstrumentError("tooling-setup", `cannot start ${bound.command}: ${result.error.message}`), env);
     diagnosticLine(`not measured: cannot start ${bound.command}: ${result.error.message}`);
-    return CASE_UNMEASURED_EXIT;
+    return finish(CASE_UNMEASURED_EXIT,result.error.message);
   }
-  if (result.signal) return 128 + (constants.signals[result.signal] ?? 0);
-  return result.status ?? CASE_UNMEASURED_EXIT;
+  if (result.signal) return finish(128 + (constants.signals[result.signal] ?? 0));
+  return finish(result.status ?? CASE_UNMEASURED_EXIT);
 }
 
 runAsCommand(import.meta.url,async()=>{
+  if(process.argv[2]==='--prepare-build-observer'){
+    if(process.argv.length!==4||!isAbsolute(process.argv[3]!))throw new ToolingInstrumentError('tooling-setup','--prepare-build-observer needs one absolute owned directory');
+    const prepared=prepareChildObserver(process.argv[3]!,process.env);
+    if(!prepared.observer)throw new ToolingInstrumentError('tooling-setup',prepared.error??'cannot prepare waited build observer');
+    console.log(JSON.stringify(prepared.observer));return;
+  }
   let bound;
   try { bound = parseCaseBound(process.argv.slice(2)); }
   catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exit(2); }

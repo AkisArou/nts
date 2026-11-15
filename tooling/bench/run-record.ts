@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
 import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
+import {readBuildDetails,describeBuilds,type BuildDetails} from './build-details.ts';
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -64,6 +65,7 @@ export type Row = {
   conditions: Json;
   cells: Record<string, Cell>;
   verdicts: Record<Backend, Record<Comparator, Verdict>>;
+  builds?:BuildDetails;
 };
 export type Build = {
   version: string | null;
@@ -318,7 +320,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
     const at = "row " + index,
       r = obj(
         value,
-        ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts"],
+        ["name", "workloadIdentity", "eligibleForBest", "conditions", "cells", "verdicts",...(value&&typeof value==='object'&&Object.hasOwn(value,'builds')?['builds']:[])],
         at,
       );
     const name = text(r.name, at + ".name");
@@ -356,6 +358,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
       conditions: json(r.conditions, name + ".conditions"),
       cells,
       verdicts: expected,
+      ...(Object.hasOwn(r,'builds')?{builds:readBuildDetails(r.builds)}:{}),
     };
   });
   check(new Set(rows.map((r) => r.name)).size === rows.length, "duplicate benchmark row");
@@ -725,6 +728,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
         ([name, c]) => "- " + row.name + ", " + name + ": " + c.status + ": " + escape(c.reason!),
       ),
   );
+  notes.push(...run.rows.flatMap(row=>row.builds?describeBuilds(row.builds).map(detail=>'- '+row.name+', build: '+escape(detail)):[]));
   if (!groups.length) return header + "\n" + tableFor(model.rows) + "\n\n" + notes.join("\n") + "\n";
   const grouped = new Set<string>(), sections: string[] = [];
   const section = (title: string, declaredBy: string | null, rows: RowResult[]) => {

@@ -92,12 +92,13 @@ pub(super) fn print_row(
     measured: &super::Measurements,
     lanes: Option<&[String]>,
     failure: Option<&super::RowFailure>,
+    builds: &super::build::Details,
 ) -> Result<()> {
     let failures = failure.map_or_else(
         || serde_json::json!({}),
         |f| serde_json::json!({measured.shown.clone():f}),
     );
-    let raw = serde_json::json!({"metadata":metadata,"cases":[measured.shown],"measured":[measured],"lanes":lanes,"spoiled":[],"failed":[],"row_failures":failures});
+    let raw = serde_json::json!({"metadata":metadata,"cases":[measured.shown],"measured":[measured],"lanes":lanes,"spoiled":[],"failed":[],"row_failures":failures,"builds":{measured.shown.clone():builds}});
     let path = root
         .join("target/bench")
         .join(format!("{}.row.json", measured.shown));

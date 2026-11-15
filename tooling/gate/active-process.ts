@@ -159,7 +159,7 @@ export function liveCommandObservations(env:NodeJS.ProcessEnv,boundedEntry?:Boun
   return {now:()=>host.now(),frequency:clockTicks(),entryReady:()=>boundedEntry===undefined||boundedEntry.ready(),initialCpu:pid=>processAt(pid)?.cpu??0,watch:watch=>activitySampler.watch(watch)};
 }
 
-export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
+export type ActiveResult={stdoutRaw?:Buffer;stderrRaw?:Buffer;status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number;sampledAtBound?:{pid:number;cpu_s:number}};
 // `ownCpuSeconds` bounds the command's own CPU, its threads and not its
 // children: a case's compile. `eachProcessCpuSeconds` applies the same kind of
 // bound independently to every process in a build session (a driver can wait
@@ -186,7 +186,7 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
     }catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]});
     let out="",stdout="",stderr="",started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,timeout:string|undefined,instrument:ToolingInstrumentError|undefined;
-    let cancelActivity=()=>{};
+    let cancelActivity=()=>{},sampledAtBound:ActiveResult['sampledAtBound'];
     const stop=()=>{
       if(!child.pid||child.pid<=1)return;
       // A re-used leader PID can never authorize signalling its new group.
@@ -240,7 +240,7 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
         publishToolingFailure(instrument,options.env);
       }
       if(instrument)reject(instrument);
-      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs,
+      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,timeout,elapsedMs,...(sampledAtBound?{sampledAtBound}:{}),
         ...(raw?{stdoutRaw:Buffer.concat(raw.out),stderrRaw:Buffer.concat(raw.err)}:{})});
     });
     if(!child.pid)return; // spawn's error/close events retain their ordinary meaning.
@@ -256,7 +256,12 @@ export function activeCommand(command:string,args:readonly string[],options:Acti
           const decision=liveness.sample({now,cpu:measured,own,busy,processOwn,entered:observations.entryReady()});
           if(decision){
             if(decision.kind==='startup'){broken(new ToolingInstrumentError('tooling-setup',decision.reason));return;}
-            if(decision.kind==='timeout')timeout=decision.reason;
+            if(decision.kind==='timeout'){
+              timeout=decision.reason;
+              sampledAtBound=options.eachProcessCpuSeconds===undefined
+                ?{pid:child.pid!,cpu_s:own/observations.frequency}
+                :{pid:processOwn.pid,cpu_s:processOwn.cpu/observations.frequency};
+            }
             else if(decision.kind==='runaway'){runaway=decision.reason;publishRunaway(runaway,options.env);}
             else{hung=decision.reason;publishHung(hung,options.env);}
             cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;

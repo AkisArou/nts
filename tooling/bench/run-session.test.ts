@@ -10,6 +10,7 @@ import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
 import { readJournal } from "./run-journal.ts";
+import {fromNts} from './run-producers.ts';
 import {createRequire} from 'node:module';
 import {SourceFacts} from '../gate/source-facts.ts';
 import {inspectCommandForwarders,inspectGitInvocations} from '../gate/git-observations.ts';
@@ -68,6 +69,20 @@ test("journal recovery accepts only a complete ordered prefix and never an inter
   assert.throws(() => readJournal(path), SyntaxError);
   writeFileSync(path, header.slice(0, -1));
   assert.throws(() => readJournal(path), /no committed header/);
+});
+
+test('journal recovery preserves completed build CPU on a failed row and omits an unfinished row',t=>{
+  const root=testScratch(t,'bench-build-journal'),path=join(root,'run.jsonl'),raw=fixture();
+  const builds={version:1,stages:[{kind:'external',column:'nts C',phase:'clang compile',receipt:{version:1,command:'clang',args:['case.c'],status:125,
+    waited:null,unavailable:'observer killed',sampledAtBound:{pid:71,cpu_s:604.13},reason:'used its 600 s CPU bound'}}]};
+  const header={version:1,metadata:raw.metadata,cases:['control','next'],requested:[],lanes:null};
+  const frame={name:'control',measured:null,failure:{kind:'build_failed',reason:'clang timed out'},spoiled:false,failed:['clang timed out'],conditions:{},builds};
+  writeFileSync(path,JSON.stringify(header)+'\n'+JSON.stringify(frame)+'\n'+JSON.stringify({name:'next',builds}));
+  const saved=readJournal(path);
+  assert.deepEqual(saved.raw.builds,{control:builds});assert.deepEqual(saved.unreached,['next']);
+  const record=fromNts(raw.metadata,saved.raw);
+  assert.deepEqual(record.rows[0].builds,builds);assert.equal(record.rows[0].cells['nts C'].status,'BUILD_FAILED');
+  assert.equal(record.rows[1].builds,undefined);
 });
 test("actual session CLI renders a header and a typed row, and rejects the old missing-import bridge", () => {
   const root = newTestScratch("bench-session-cli");

@@ -494,9 +494,11 @@ fn count_cases(
     let lanes = wanted_lanes();
     let mut failed: Vec<String> = Vec::new();
     let mut row_failures = std::collections::BTreeMap::new();
+    let build_session = build::Session::new(root)?;
     for case in cases {
         let name = case.file_name().unwrap_or("?");
-        let computed = run_case(root, case, out, Some(counting));
+        let mut recorder = build::Recorder::new(&build_session);
+        let computed = run_case(root, case, out, Some(counting), &mut recorder);
         let Some(measured) = accept_build(name, computed, &mut row_failures, &mut failed)? else {
             continue;
         };
@@ -531,7 +533,9 @@ fn measure_cases(
     let mut spoiled = Vec::new();
     let mut failed = Vec::new();
     let mut conditions = std::collections::BTreeMap::new();
+    let mut builds = std::collections::BTreeMap::new();
     let mut row_failures = std::collections::BTreeMap::new();
+    let build_session = build::Session::new(root)?;
     for case in cases {
         let name = case.file_name().unwrap_or("?");
         let failed_before = failed.len();
@@ -547,7 +551,9 @@ fn measure_cases(
         // them again, which is the point of saving them.
         let before = results::conditions(root)?;
         let sibling = reserved::read().ok();
-        let computed = run_case(root, case, out, None);
+        let mut recorder = build::Recorder::new(&build_session);
+        let computed = run_case(root, case, out, None, &mut recorder);
+        builds.insert(name.to_owned(), recorder.finish());
         let late = early.is_none().then(|| sibling_busy(sibling)).flatten();
         disturbance_note(name, late.as_deref());
         if early.is_some() || late.is_some() {
@@ -578,7 +584,7 @@ fn measure_cases(
         if let Some(journal) = &mut journal {
             journal.append(&serde_json::json!({
                 "name": name, "measured": observation, "failure": row_failures.get(name),
-                "conditions": conditions.get(name), "spoiled": early.is_some() || late.is_some(),
+                "conditions": conditions.get(name), "builds": builds.get(name), "spoiled": early.is_some() || late.is_some(),
                 "failed": &failed[failed_before..]
             }))?;
         }
@@ -589,12 +595,14 @@ fn measure_cases(
                 observation,
                 lanes.as_deref(),
                 row_failures.get(name),
+                &builds[name],
             )?;
         }
     }
 
     let run = Run {
         metadata: Some(metadata),
+        builds,
         conditions,
         row_failures,
         lanes,
@@ -744,6 +752,7 @@ fn run_case(
     case: &Utf8Path,
     out: &Utf8Path,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case_tsconfig(case, out, name)?;
@@ -768,23 +777,25 @@ fn run_case(
     let rendered = out.join(format!("{name}.specialized.ll"));
     // Capture once for both the source contract and the first compilation.
     // Drop the checker snapshot before any timed child runs.
-    let (workload, source_capture, specialized_text) = {
-        let snapshot = capture_snapshot(&tsconfig)?;
-        let custom = ["driver.cpp", "driver.java", "driver.mjs"]
-            .iter()
-            .all(|driver| case.join(driver).exists());
-        let workload = workload::Workload::from_source(&snapshot, &case.join("case.ts"), custom)?;
-        let program = prepare_snapshot(
-            &snapshot,
-            &workload.roots,
-            true,
-            provider,
-            nts_codegen_common::Backend::C,
-        )?;
-        let text = emit_program(&program, false);
-        let source_capture = capture::Capture::of(&snapshot, root, case)?;
-        (workload, source_capture, text)
-    };
+    let (workload, source_capture, specialized_text) =
+        builds.thread("nts C", "capture/prepare/emit", || {
+            let snapshot = capture_snapshot(&tsconfig)?;
+            let custom = ["driver.cpp", "driver.java", "driver.mjs"]
+                .iter()
+                .all(|driver| case.join(driver).exists());
+            let workload =
+                workload::Workload::from_source(&snapshot, &case.join("case.ts"), custom)?;
+            let program = prepare_snapshot(
+                &snapshot,
+                &workload.roots,
+                true,
+                provider,
+                nts_codegen_common::Backend::C,
+            )?;
+            let text = emit_program(&program, false);
+            let source_capture = capture::Capture::of(&snapshot, root, case)?;
+            Ok((workload, source_capture, text))
+        })?;
     let entry = &workload.roots;
     if let Ok(numeric) = workload.numeric() {
         println!("workload: {shown}: {}({})", numeric.callee, numeric.input());
@@ -808,11 +819,18 @@ fn run_case(
     let lowers = refused.is_none();
     std::fs::write(&specialized, &specialized_text)
         .with_context(|| format!("writing {specialized}"))?;
-    std::fs::write(&plain, emit(&tsconfig, entry, false, provider, false)?)
-        .with_context(|| format!("writing {plain}"))?;
+    std::fs::write(
+        &plain,
+        builds.thread("nts f64", "capture/prepare/emit", || {
+            emit(&tsconfig, entry, false, provider, false)
+        })?,
+    )
+    .with_context(|| format!("writing {plain}"))?;
     // The second backend is allowed to fail here and further down. Anything it
     // cannot render leaves its column empty rather than taking the row with it.
-    let renderable = match emit(&tsconfig, entry, true, provider, true) {
+    let renderable = match builds.thread("nts LLVM", "capture/prepare/emit", || {
+        emit(&tsconfig, entry, true, provider, true)
+    }) {
         Ok(text) => std::fs::write(&rendered, text).is_ok(),
         Err(_) => false,
     };
@@ -837,6 +855,7 @@ fn run_case(
         emission,
         &workload,
         counting,
+        builds,
     )?;
     let hosts = measure_hosts(root, case, out, name, &workload, counting)?;
     let node = results::host_measured(&hosts, "node")?;
@@ -900,6 +919,7 @@ fn variants(
     emission: Emission<'_>,
     workload: &workload::Workload,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<(Vec<Option<Measured>>, Absences)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
@@ -954,7 +974,7 @@ fn variants(
         let libraries = if variant.generated == Generated::None {
             let libraries = reference_link::Libraries::read(case)?;
             if let Some(reason) =
-                libraries.probe(root, &out.join(format!("{name}.reference-link")))?
+                libraries.probe(&out.join(format!("{name}.reference-link")), builds)?
             {
                 cpp_absence = Some(reason);
                 results.push(None);
@@ -978,7 +998,7 @@ fn variants(
             // row -- the same bargain the LLVM column keeps.
             Generated::Jvm => {
                 let run = jvm_case(
-                    root, case, out, name, tsconfig, provider, workload, counting,
+                    root, case, out, name, tsconfig, provider, workload, counting, builds,
                 );
                 match observe(run, Generated::Jvm, &mut outcomes) {
                     Ok(measured) => {
@@ -996,7 +1016,7 @@ fn variants(
                 continue;
             }
             Generated::JavaReference => {
-                results.push(java_cell(root, case, out, name, counting)?);
+                results.push(java_cell(root, case, out, name, counting, builds)?);
                 continue;
             }
             Generated::Specialized => c.push(specialized.to_owned()),
@@ -1008,7 +1028,17 @@ fn variants(
             }
             Generated::None => {}
         }
-        let built = compile(root, &cpp, &c, &binary, defines, &libraries).and_then(|()| {
+        let built = compile(
+            root,
+            &cpp,
+            &c,
+            &binary,
+            defines,
+            &libraries,
+            builds,
+            variant.label,
+        )
+        .and_then(|()| {
             measure_or_count(
                 &mut std::process::Command::new(&binary),
                 counting,
@@ -1258,6 +1288,8 @@ struct RowFailure {
 /// exactly as the run did, from the same facts.
 #[derive(Serialize, Deserialize)]
 struct Run {
+    #[serde(default)]
+    builds: std::collections::BTreeMap<String, build::Details>,
     #[serde(default)]
     metadata: Option<serde_json::Value>,
     #[serde(default)]
@@ -1648,8 +1680,9 @@ fn java_cell(
     out: &Utf8Path,
     name: &str,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Option<Measured>> {
-    match java_reference(root, case, out, name, counting) {
+    match java_reference(root, case, out, name, counting, builds) {
         Ok(measured) => Ok(measured),
         Err(error) if error.is::<build::Timeout>() || error.is::<build::NotMeasured>() => {
             Err(error)
@@ -1754,6 +1787,7 @@ fn jvm_case(
     provider: hir::Memory,
     workload: &workload::Workload,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -1785,25 +1819,28 @@ fn jvm_case(
     } else {
         Some(workload.numeric()?)
     };
-    let program = prepared_program(
-        tsconfig,
-        &workload.roots,
-        true,
-        provider,
-        nts_codegen_common::Backend::Jvm,
-    )?;
-    let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
-    if !mismatches.is_empty() {
-        let messages = mismatches
-            .iter()
-            .map(|d| format!("{} {}", d.code, d.message))
-            .collect::<Vec<_>>();
-        bail!("{DECLINED}{}", messages.join("; "));
-    }
-    let emitted = nts_codegen_jvm::emit(&program);
-    if !emitted.is_complete() {
-        bail!("{DECLINED}{} function(s)", emitted.diagnostics.len());
-    }
+    let emitted = builds.thread("nts JVM", "capture/prepare/emit", || {
+        let program = prepared_program(
+            tsconfig,
+            &workload.roots,
+            true,
+            provider,
+            nts_codegen_common::Backend::Jvm,
+        )?;
+        let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
+        if !mismatches.is_empty() {
+            let messages = mismatches
+                .iter()
+                .map(|d| format!("{} {}", d.code, d.message))
+                .collect::<Vec<_>>();
+            bail!("{DECLINED}{}", messages.join("; "));
+        }
+        let emitted = nts_codegen_jvm::emit(&program);
+        if !emitted.is_complete() {
+            bail!("{DECLINED}{} function(s)", emitted.diagnostics.len());
+        }
+        Ok(emitted)
+    })?;
     let dir = out.join(format!("{name}.jvm"));
     std::fs::create_dir_all(&dir)?;
     for class in &emitted.classes {
@@ -1834,7 +1871,7 @@ fn jvm_case(
             std::fs::read_to_string(&supplied).with_context(|| format!("reading {supplied}"))?;
         let driver_path = dir.join("Case.java");
         std::fs::write(&driver_path, text)?;
-        return run_driver(root, &dir, &jar, &driver_path, counting, name);
+        return run_driver(root, &dir, &jar, &driver_path, counting, name, builds);
     };
     // The driver, from the workload the C shim already declares. Every input is
     // a `volatile` field for the reason the C shim makes them `volatile`: a
@@ -1892,7 +1929,7 @@ fn jvm_case(
     let driver_path = dir.join("Case.java");
     std::fs::write(&driver_path, driver)?;
 
-    run_driver(root, &dir, &jar, &driver_path, counting, name)
+    run_driver(root, &dir, &jar, &driver_path, counting, name, builds)
 }
 
 /// Compile a driver against the emitted classes and time it.
@@ -1901,25 +1938,28 @@ fn jvm_case(
 /// apart on the flags -- which would make one row's number mean something
 /// slightly different from the rest of the column.
 fn run_driver(
-    root: &Utf8Path,
+    _root: &Utf8Path,
     dir: &Utf8Path,
     jar: &Utf8Path,
     driver_path: &Utf8Path,
     counting: Option<&Counting>,
     name: &str,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Measured> {
     let javac = java_tool("javac");
-    let built = build::output(
-        root,
-        nts_codegen_jvm::toolchain::command(javac)
-            .arg("-cp")
-            .arg(dir)
-            .arg("-d")
-            .arg(dir)
-            .arg(root.join("benchmarks/common/Bench.java"))
-            .arg(driver_path),
-    )
-    .context("running javac")?;
+    let built = builds
+        .output(
+            "nts JVM",
+            "javac driver",
+            nts_codegen_jvm::toolchain::command(javac)
+                .arg("-cp")
+                .arg(dir)
+                .arg("-d")
+                .arg(dir)
+                .arg(root.join("benchmarks/common/Bench.java"))
+                .arg(driver_path),
+        )
+        .context("running javac")?;
     if !built.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&built.stderr));
     }
@@ -1967,6 +2007,7 @@ fn handwritten_java(
     out: &Utf8Path,
     name: &str,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -1997,7 +2038,7 @@ fn handwritten_java(
     // rather than per-case because a classpath entry that nothing imports costs
     // nothing, and the alternative is a list of which cases are allowed to see
     // it -- which is the table this replaced.
-    let awfy = awfy_classes(root, out)?;
+    let awfy = awfy_classes(root, out, builds)?;
     let mut classpath = dir.to_string();
     if let Some(ref classes) = awfy {
         classpath = format!("{classes}:{classpath}");
@@ -2007,16 +2048,18 @@ fn handwritten_java(
     if let Some(ref classes) = awfy {
         javac.arg("-cp").arg(classes.as_str());
     }
-    let compiled = build::output(
-        root,
-        javac
-            .arg("-d")
-            .arg(dir.as_str())
-            .arg(case.join("ref.java").as_str())
-            .arg(root.join("benchmarks/common/Bench.java").as_str())
-            .arg(driver_path.as_str()),
-    )
-    .context("running javac over a hand-written Java reference")?;
+    let compiled = builds
+        .output(
+            "Java",
+            "javac reference",
+            javac
+                .arg("-d")
+                .arg(dir.as_str())
+                .arg(case.join("ref.java").as_str())
+                .arg(root.join("benchmarks/common/Bench.java").as_str())
+                .arg(driver_path.as_str()),
+        )
+        .context("running javac over a hand-written Java reference")?;
     if !compiled.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
     }
@@ -2038,7 +2081,11 @@ fn handwritten_java(
 /// `Ok(None)` where the suite is not cloned, which is the same bargain the C++
 /// column keeps: the reference is absent and the cell renders `--`, rather than
 /// the run failing.
-fn awfy_classes(root: &Utf8Path, out: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+fn awfy_classes(
+    root: &Utf8Path,
+    out: &Utf8Path,
+    builds: &mut build::Recorder<'_>,
+) -> Result<Option<Utf8PathBuf>> {
     let sources = root.join("third_party/are-we-fast-yet/benchmarks/Java/src");
     if !sources.exists() {
         return Ok(None);
@@ -2052,15 +2099,17 @@ fn awfy_classes(root: &Utf8Path, out: &Utf8Path) -> Result<Option<Utf8PathBuf>> 
     std::fs::create_dir_all(&built)?;
     let mut listing = Vec::new();
     collect_java(&sources, &mut listing)?;
-    let compiled = build::output(
-        root,
-        nts_codegen_jvm::toolchain::command(java_tool("javac"))
-            .arg("-nowarn")
-            .arg("-d")
-            .arg(built.as_str())
-            .args(listing.iter().map(|path| path.as_str())),
-    )
-    .context("running javac over the Are We Fast Yet Java sources")?;
+    let compiled = builds
+        .output(
+            "Java",
+            "javac shared AWFY classes",
+            nts_codegen_jvm::toolchain::command(java_tool("javac"))
+                .arg("-nowarn")
+                .arg("-d")
+                .arg(built.as_str())
+                .args(listing.iter().map(|path| path.as_str())),
+        )
+        .context("running javac over the Are We Fast Yet Java sources")?;
     if !compiled.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
     }
@@ -2082,11 +2131,12 @@ fn java_reference(
     out: &Utf8Path,
     name: &str,
     counting: Option<&Counting>,
+    builds: &mut build::Recorder<'_>,
 ) -> Result<Option<Measured>> {
     if !case.join("ref.java").exists() {
         return Ok(None);
     }
-    handwritten_java(root, case, out, name, counting).map(Some)
+    handwritten_java(root, case, out, name, counting, builds).map(Some)
 }
 
 fn collect_java(dir: &Utf8Path, into: &mut Vec<Utf8PathBuf>) -> Result<()> {
@@ -2359,6 +2409,8 @@ fn compile(
     binary: &Utf8Path,
     defines: &[&str],
     libraries: &reference_link::Libraries,
+    builds: &mut build::Recorder<'_>,
+    column: &str,
 ) -> Result<()> {
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
     // `LTO`), for nts's code and the C++ reference alike: the same compiler and
@@ -2417,20 +2469,22 @@ fn compile(
                 "{}.o",
                 source.file_name().unwrap_or("unit").replace('.', "_")
             ));
-            let output = build::output(
-                root,
-                std::process::Command::new(driver)
-                    .args(&shared)
-                    .args(&extra)
-                    .args(references::warning_flags(source)?)
-                    .args(defines)
-                    .args(&includes)
-                    .arg("-c")
-                    .arg(source)
-                    .arg("-o")
-                    .arg(&object),
-            )
-            .with_context(|| format!("running {driver}"))?;
+            let output = builds
+                .output(
+                    column,
+                    &format!("{driver} compile {}", source.file_name().unwrap_or("unit")),
+                    std::process::Command::new(driver)
+                        .args(&shared)
+                        .args(&extra)
+                        .args(references::warning_flags(source)?)
+                        .args(defines)
+                        .args(&includes)
+                        .arg("-c")
+                        .arg(source)
+                        .arg("-o")
+                        .arg(&object),
+                )
+                .with_context(|| format!("running {driver}"))?;
             if !output.status.success() {
                 bail!("{driver}: {}", String::from_utf8_lossy(&output.stderr));
             }
@@ -2441,18 +2495,20 @@ fn compile(
         }
     }
 
-    let link = build::output(
-        root,
-        std::process::Command::new("clang++")
-            .args(&shared)
-            .args(loops_at_link)
-            .args(&objects)
-            .arg("-o")
-            .arg(binary)
-            .arg("-lm")
-            .args(libraries.flags()),
-    )
-    .context("linking")?;
+    let link = builds
+        .output(
+            column,
+            "ThinLTO link",
+            std::process::Command::new("clang++")
+                .args(&shared)
+                .args(loops_at_link)
+                .args(&objects)
+                .arg("-o")
+                .arg(binary)
+                .arg("-lm")
+                .args(libraries.flags()),
+        )
+        .context("linking")?;
     if !link.status.success() {
         bail!("link: {}", String::from_utf8_lossy(&link.stderr));
     }
@@ -3396,7 +3452,6 @@ mod tests {
     }
 }
 
-#[cfg(test)]
 #[path = "../../../compiler/test-support/scratch.rs"]
 mod scratch;
 

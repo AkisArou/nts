@@ -13,7 +13,7 @@ export function readJournal(path: string) {
   assert.ok(cases.every(name => typeof name === "string") && new Set(cases).size === cases.length, "invalid journal case inventory");
   const raw = { metadata: header.metadata, cases, requested: header.requested, lanes: header.lanes,
     measured: [] as unknown[], conditions: {} as Record<string, unknown>, row_failures: {} as Record<string, unknown>,
-    spoiled: [] as string[], failed: [] as string[] };
+    spoiled: [] as string[], failed: [] as string[],builds:{} as Record<string,unknown> };
   let completed = 0;
   for (const line of lines) {
     const frame = JSON.parse(line), name = cases[completed];
@@ -24,6 +24,7 @@ export function readJournal(path: string) {
     }
     if (frame.failure !== null) raw.row_failures[name] = frame.failure;
     raw.conditions[name] = frame.conditions;
+    if(frame.builds!==undefined&&frame.builds!==null)raw.builds[name]=frame.builds;
     if (frame.spoiled) raw.spoiled.push(name);
     assert.ok(Array.isArray(frame.failed) && frame.failed.every((why: unknown) => typeof why === "string"), "invalid journal failures");
     raw.failed.push(...frame.failed);

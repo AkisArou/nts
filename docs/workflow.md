@@ -550,6 +550,17 @@ Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
 (4 and 5), and produce the report with every row and its ratios. A
 regression becomes a task.
 
+Build details travel with each completed row, including failed builds and
+journal recovery. External build stages retain exact waited user and system
+CPU from the shared child-rusage owner, including waited descendants, while
+case-bound remains their only CPU and inactivity supervisor. A bound kill
+may prevent final waited accounting; that stays unavailable, with the last
+own-CPU sample separately labelled "sampled at bound" and the failure reason
+retained. Sequential nts capture, preparation and emission retain only the
+calling thread's CPU, explicitly excluding shared checker CPU. These build
+observations do not decide throughput verdicts. Old immutable run records
+without the optional versioned build details keep their original shape.
+
 **Rows belong to foundation groups.** Each foundation page's `Rows` section
 is the canonical declaration, naming case names and never numbers.
 `nts-bench --group <name>` measures exactly one group's rows, and
@@ -1725,3 +1736,11 @@ the first node task.
   established comparator decide the backend and nightly row verdict;
   absolute times do not decide a regression
   ([log](records/notebooks/decisions-log.md#own-best-benchmarks-compare-ratios-11-15)).
+
+- **Benchmark build CPU has an explicit basis.** External stages reuse the
+  waited-child owner beneath case-bound; nts's sequential compiler phases
+  use calling-thread CPU, excluding shared checker work. Missing final
+  accounting after a bound kill is distinct from the supervisor's last
+  sampled own CPU. Optional versioned row details survive failures and
+  journal recovery without changing old records or throughput verdicts
+  ([log](records/notebooks/decisions-log.md#benchmark-build-cpu-has-an-explicit-basis-11-15)).

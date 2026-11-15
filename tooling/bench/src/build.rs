@@ -1,7 +1,170 @@
 //! Build tools share the gate's CPU policy and process supervision.
 use anyhow::{Context, Result};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
+use serde::{Deserialize, Serialize};
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// One compiled wait4 adapter for the run. Its private reports and executable
+/// stay alive until all row recorders and supervised commands have drained.
+#[derive(Debug)]
+pub(super) struct Session {
+    root: Utf8PathBuf,
+    directory: crate::scratch::ScratchDir,
+    next: AtomicU64,
+}
+impl Session {
+    pub(super) fn new(root: &Utf8Path) -> Result<Self> {
+        let directory = crate::scratch::ScratchDir::path_in_target("bench-build-usage");
+        std::fs::create_dir(&directory)?;
+        let output = Command::new("node")
+            .arg(root.join("tooling/gate/case-bound.ts"))
+            .arg("--prepare-build-observer")
+            .arg(directory.as_str())
+            .output()?;
+        if !output.status.success() {
+            return Err(NotMeasured(String::from_utf8_lossy(&output.stderr).into_owned()).into());
+        }
+        let descriptor: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        anyhow::ensure!(
+            descriptor["directory"] == directory.as_str()
+                && descriptor["binary"] == directory.join("phase-child").as_str(),
+            "unexpected waited build observer"
+        );
+        Ok(Self {
+            root: root.to_owned(),
+            directory,
+            next: AtomicU64::new(0),
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub(super) enum Stage {
+    External {
+        column: String,
+        phase: String,
+        receipt: serde_json::Value,
+    },
+    Thread {
+        column: String,
+        phase: String,
+        cpu_s: f64,
+        basis: String,
+        complete: bool,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(super) struct Details {
+    version: u8,
+    stages: Vec<Stage>,
+}
+
+#[derive(Debug)]
+pub(super) struct Recorder<'a> {
+    session: &'a Session,
+    stages: Vec<Stage>,
+}
+impl<'a> Recorder<'a> {
+    pub(super) fn new(session: &'a Session) -> Self {
+        Self {
+            session,
+            stages: Vec::new(),
+        }
+    }
+    pub(super) fn finish(self) -> Details {
+        Details {
+            version: 1,
+            stages: self.stages,
+        }
+    }
+    pub(super) fn output(
+        &mut self,
+        column: &str,
+        phase: &str,
+        tool: &mut Command,
+    ) -> Result<Output> {
+        let report = self.session.directory.join(format!(
+            "stage-{}.json",
+            self.session.next.fetch_add(1, Ordering::Relaxed)
+        ));
+        let result = supervised(
+            &self.session.root,
+            tool,
+            Some((&self.session.directory, &report)),
+        );
+        let receipt = (|| -> Result<serde_json::Value> {
+            let value: serde_json::Value = serde_json::from_slice(&std::fs::read(&report)?)?;
+            anyhow::ensure!(
+                value["version"] == 1
+                    && value["command"] == tool.get_program().to_string_lossy().as_ref(),
+                "build receipt belongs to another command"
+            );
+            let args: Vec<_> = tool
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            anyhow::ensure!(
+                value["args"] == serde_json::to_value(args)?,
+                "build receipt arguments changed"
+            );
+            Ok(value)
+        })();
+        match receipt {
+            Ok(receipt) => self.stages.push(Stage::External {
+                column: column.into(),
+                phase: phase.into(),
+                receipt,
+            }),
+            Err(error) => {
+                return Err(NotMeasured(format!(
+                    "build usage unavailable: {error:#}; command result: {result:?}"
+                ))
+                .into());
+            }
+        }
+        result
+    }
+    /// The caller thread performs capture/prepare/emission sequentially.
+    /// Shared checker processes and their worker threads are excluded.
+    pub(super) fn thread<T>(
+        &mut self,
+        column: &str,
+        phase: &str,
+        work: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let before = thread_cpu()?;
+        let result = work();
+        let cpu_s = thread_cpu()? - before;
+        anyhow::ensure!(
+            cpu_s.is_finite() && cpu_s >= 0.,
+            "thread CPU moved backwards"
+        );
+        self.stages.push(Stage::Thread {
+            column: column.into(),
+            phase: phase.into(),
+            cpu_s,
+            basis: "getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded".into(),
+            complete: result.is_ok(),
+        });
+        result
+    }
+}
+
+fn thread_cpu() -> Result<f64> {
+    use nix::sys::{
+        resource::{UsageWho, getrusage},
+        time::TimeValLike,
+    };
+    let usage = getrusage(UsageWho::RUSAGE_THREAD)
+        .map_err(|error| NotMeasured(format!("cannot read thread CPU: {error}")))?;
+    Ok(
+        (usage.user_time().num_microseconds() + usage.system_time().num_microseconds()) as f64
+            / 1e6,
+    )
+}
 
 #[derive(Debug)]
 pub(super) struct Timeout(String);
@@ -26,11 +189,29 @@ impl std::error::Error for NotMeasured {}
 
 /// Keep the tool's arguments, cwd and explicit environment intact. The shared
 /// supervisor owns the build session, including a driver's linker children.
+#[cfg(test)]
 pub(super) fn output(root: &Utf8Path, tool: &mut Command) -> Result<Output> {
+    supervised(root, tool, None)
+}
+
+fn supervised(
+    root: &Utf8Path,
+    tool: &mut Command,
+    usage: Option<(&Utf8Path, &Utf8Path)>,
+) -> Result<Output> {
     let mut command = Command::new("node");
     command
         .arg(root.join("tooling/gate/case-bound.ts"))
-        .args(["--build", "--"])
+        .arg("--build");
+    if let Some((observer, report)) = usage {
+        command
+            .arg("--observer-directory")
+            .arg(observer)
+            .arg("--usage-report")
+            .arg(report);
+    }
+    command
+        .arg("--")
         .arg(tool.get_program())
         .args(tool.get_args());
     if let Some(cwd) = tool.get_current_dir() {
@@ -289,6 +470,56 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
         );
         assert!(failures.is_empty());
         assert_eq!(failed, Vec::<String>::new());
+        Ok(())
+    }
+
+    #[test]
+    fn row_build_recorder_keeps_success_failure_and_thread_accounting() -> Result<()> {
+        let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let session = Session::new(&root)?;
+        let mut recorder = Recorder::new(&session);
+        for code in [0, 7] {
+            let result=recorder.output("nts C","native control",Command::new("node").args(["-e",&format!("let x=0;for(let i=0;i<5e6;i++)x^=i;process.stdout.write('answer:'+x);process.exitCode={code}")]))?;
+            assert_eq!(result.status.code(), Some(code));
+            assert_eq!(result.stdout, b"answer:0");
+        }
+        let answer = recorder.thread("nts C", "compiler control", || {
+            let mut answer = 0;
+            for i in 0..1_000_000 {
+                answer ^= std::hint::black_box(i);
+            }
+            Ok(answer)
+        })?;
+        assert_eq!(answer, 0);
+        let failure = recorder.thread::<()>("nts LLVM", "failed compiler control", || {
+            anyhow::bail!("retained failure")
+        });
+        assert!(
+            failure
+                .unwrap_err()
+                .to_string()
+                .contains("retained failure")
+        );
+        let details = serde_json::to_value(recorder.finish())?;
+        assert_eq!(details["version"], 1);
+        let stages = details["stages"].as_array().expect("stage inventory");
+        assert_eq!(stages.len(), 4);
+        for (stage, code) in stages[..2].iter().zip([0, 7]) {
+            assert_eq!(stage["receipt"]["status"], code);
+            assert_eq!(stage["receipt"]["waited"]["exit"], code);
+            assert!(
+                stage["receipt"]["waited"]["user_s"].as_f64().unwrap()
+                    + stage["receipt"]["waited"]["sys_s"].as_f64().unwrap()
+                    > 0.
+            );
+        }
+        assert_eq!(
+            stages[2]["basis"],
+            "getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded"
+        );
+        assert!(stages[2]["cpu_s"].as_f64().unwrap() > 0.);
+        assert_eq!(stages[2]["complete"], true);
+        assert_eq!(stages[3]["complete"], false);
         Ok(())
     }
 }

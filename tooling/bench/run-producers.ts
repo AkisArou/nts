@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import {readBuildDetails} from './build-details.ts';
 import {
   COMPARATORS,
   sealRun,
@@ -267,7 +268,7 @@ export function fromNts(
     if (failure?.kind === "invalid")
       for (const [column, c] of Object.entries(cells))
         if (c.status === "OK") cells[column] = absent("INVALID", string(failure.reason), c);
-    return row(
+    const result=row(
       name,
       cells,
       {
@@ -279,6 +280,9 @@ export function fromNts(
       identities[name] ?? workloadIdentity(m?.source_capture, m?.workload),
       Boolean(identities[name] ?? m?.source_capture) && !values(raw.spoiled).includes(name),
     );
+    const builds=object(raw.builds??{})[name];
+    if(builds!==undefined)result.builds=readBuildDetails(builds);
+    return result;
   });
   return sealRun({ ...meta, rows });
 }
