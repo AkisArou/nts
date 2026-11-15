@@ -21,7 +21,7 @@ import {readRustBuildProvenance,runtimeProvenanceClassifier} from './rust-input-
 
 export type RuntimeSubjectAssessment={subject:InputSubject;requirement:InputRequirement;outcome:'unknown';
   state:'claimed'|'uncovered'|'literal';spelling?:string;identity?:InputIdentity;endpoint?:RuntimeClaimAnswer;
-  identityBasis:'current-source';components:{observation:HostObservation;answer:RuntimeClaimAnswer}[];reason?:string};
+  identityBasis:'current-source'|'capture-components'|'capture-descriptor';components:{observation:HostObservation;answer:RuntimeClaimAnswer}[];reason?:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
 
 /** Scope is a report of current component identity, never an exemption or a
@@ -44,15 +44,35 @@ export function runtimeAssessmentScope(root:string,assessment:RuntimeSubjectAsse
  * Resolve raw component order first, then check every recorded component's
  * own required role. Outside components remain explicit gaps for a separately
  * bound external protocol; an outside spelling cannot bypass source claims. */
-export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot){
+export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot,options:{capturedIdentities?:boolean}={}){
   const claims=runtimeRepositoryClaims(root,snapshot),anchor=runtimeSourceAnchor(root);
   return {assess(row:RuntimeObservation,subject:InputSubject,observer:FileObserverReceipt|null):RuntimeSubjectAssessment{
     const requirement=runtimeInputRequirement(row,subject,observer),components:RuntimeSubjectAssessment['components']=[];
-    const base={subject:structuredClone(subject),requirement,outcome:'unknown' as const,identityBasis:'current-source' as const,components};
+    const captured=options.capturedIdentities||subject.kind==='path'&&subject.resolution!==undefined;
+    const identityBasis:RuntimeSubjectAssessment['identityBasis']=captured?(subject.kind==='descriptor'?'capture-descriptor':'capture-components'):'current-source';
+    const base={subject:structuredClone(subject),requirement,outcome:'unknown' as const,identityBasis,components};
     if(requirement.kind==='literal')return {...base,state:'literal'};
     if(requirement.kind==='unknown')return {...base,state:'uncovered',reason:requirement.reason};
     return anchor.fence(()=>{
     const spelling=subject.kind==='descriptor'?subject.target:subject.anchor.kind==='absolute'?subject.name:subject.anchor.path+'/'+subject.name;
+    if(captured){
+      let identity:InputIdentity;
+      if(subject.kind==='descriptor')identity={state:'resolved',path:subject.target};
+      else{
+        const proof=subject.resolution;
+        if(!proof||proof.state==='unavailable')return {...base,state:'uncovered',spelling,reason:'capture-time pathname identity unavailable'+(proof?': '+proof.error:'')};
+        if(proof.finalLink&&requirement.following==='no-follow')return {...base,state:'uncovered',spelling,reason:'capture-time final no-follow link identity was not retained'};
+        for(const part of proof.components){
+          const observations:HostObservation[]=[{kind:'runtimeKind',path:part.path,value:part.kind==='missing'?null:part.kind}];
+          if(part.kind==='symlink'&&part.link!==undefined)observations.push({kind:'readlink',path:part.path,value:part.link});
+          for(const observation of observations)components.push({observation,answer:inside(root,observation.path)?claims.matchComponent(observation):anchor.component(observation)});
+        }
+        const final=proof.components.at(-1);
+        identity=proof.state==='resolved'?{state:'resolved',path:proof.path}:{state:proof.state,path:spelling,component:proof.path,kind:final?.kind==='missing'?null:final?.kind??null};
+      }
+      const endpoint=claims.match(requirement,identity),complete=endpoint.kind==='claimed'&&components.every(row=>row.answer.kind==='claimed');
+      return {...base,state:complete?'claimed':'uncovered',spelling,identity,endpoint};
+    }
     const facts:HostObservation[]=[],filesystem=new OracleFilesystem(fact=>{facts.push(fact);});
     const recordComponents=()=>{for(const observation of facts){
       const answer=inside(root,observation.path)?claims.matchComponent(observation):anchor.component(observation);
@@ -99,7 +119,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
       batch.push(line);size+=bytes;if(size>=64*1024)await flush();
     };
     const pool=rustInputReportPool(emit);
-    await emit({kind:'validation-start',version:5,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'current-source',
+    await emit({kind:'validation-start',version:5,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'capture-identity-or-labelled-history',
       provenance:{build:buildReference??null,execution:options.execution??null}});
     receipt=await authenticateRustInputTrace(capture,async row=>{
       if(row.kind==='execution'){images.set(row.id,row);return;}
@@ -122,7 +142,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
           await emit({kind:'project-host-observation',source,observation:fact.observation,environment:fact.environment,scope:'host-environment'});
         for(const fact of inputs.snapshot.observations)if(fact.dependency)
           await emit({kind:'project-installed-observation',source,observation:fact.observation,dependency:fact.dependency,scope:'installed-dependency'});
-        validator=runtimeSubjectValidator(capture.root,inputs.snapshot);validators.set(source,validator);
+        validator=runtimeSubjectValidator(capture.root,inputs.snapshot,{capturedIdentities:execution?.version===2||build.buildNamespace!==undefined});validators.set(source,validator);
       }
       counts.runtimeAttempts++;counts.probes+=row.probes.length;
       for(const subject of row.subjects){

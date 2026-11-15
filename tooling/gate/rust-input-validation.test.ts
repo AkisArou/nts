@@ -46,6 +46,34 @@ test('captured alias facts retain independent authority and a changed target inv
   assert.ok(changed.components.some(row=>row.observation.kind==='readlink'&&row.answer.kind==='uncovered'));
 });
 
+test('new captures retain their source endpoint after an alias or descriptor pathname is replaced',t=>{
+  const root=testScratch(t,'captured-source-identity');mkdirSync(join(root,'data'));
+  const first=join(root,'data/first'),second=join(root,'data/second'),alias=join(root,'alias');
+  writeFileSync(first,'first');writeFileSync(second,'second');symlinkSync('data/first',alias);
+  const observed:InputSubject={...subject(root,'alias'),kind:'path',arg:1,dirfdArg:0,name:'alias',raw:Buffer.from('alias').toString('hex'),anchor:{kind:'cwd',path:root},
+    resolution:{state:'resolved',path:first,finalLink:true,components:[
+      {path:root,kind:'directory',dev:'1',ino:'1'},
+      {path:alias,kind:'symlink',dev:'1',ino:'2',link:'data/first'},
+      {path:join(root,'data'),kind:'directory',dev:'1',ino:'3'},
+      {path:first,kind:'file',dev:'1',ino:'4'},
+    ]}};
+  unlinkSync(alias);symlinkSync('data/second',alias);
+  const inputs=snapshot(['data/second']),filesystem=new OracleFilesystem();filesystem.readlink(alias);
+  inputs.observations=captureReaderObservations(root,filesystem.captured()).map(row=>({reader:'entry.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},...row}));
+  const row=request(root),legacy=runtimeSubjectValidator(root,inputs).assess(row,subject(root,'alias'),basis);
+  assert.equal(legacy.identity?.path,second);assert.equal(legacy.identityBasis,'current-source');
+  const captured=runtimeSubjectValidator(root,inputs,{capturedIdentities:true}).assess(row,observed,basis);
+  assert.equal(captured.identityBasis,'capture-components');assert.equal(captured.identity?.path,first);assert.equal(captured.endpoint?.kind,'uncovered');
+  assert.ok(captured.components.some(part=>part.observation.kind==='readlink'&&part.observation.value==='data/first'&&part.answer.kind==='uncovered'));
+  unlinkSync(first);symlinkSync('second',first);
+  const descriptor:InputSubject={kind:'descriptor',arg:0,fd:3,target:first,raw:Buffer.from(first).toString('hex')};
+  const stat={...row,operation:'descriptor',syscall:'fstat',args:['3','0','0','0','0','0']};
+  const fd=runtimeSubjectValidator(root,inputs,{capturedIdentities:true}).assess(stat,descriptor,basis);
+  assert.equal(fd.identityBasis,'capture-descriptor');assert.equal(fd.identity?.path,first);assert.equal(fd.endpoint?.kind,'uncovered');
+  const missing=runtimeSubjectValidator(root,inputs,{capturedIdentities:true}).assess(row,subject(root,'alias'),basis);
+  assert.equal(missing.state,'uncovered');assert.equal(missing.identity,undefined);assert.match(missing.reason!,/capture-time.*unavailable/);
+});
+
 test('conservative component checks refuse introduced aliases and captured file or directory replacement',t=>{
   const root=testScratch(t,'conservative-validator-components');mkdirSync(join(root,'types/nested'),{recursive:true});writeFileSync(join(root,'reader.rs'),'');
   for(const name of ['first','second','nested/old'])writeFileSync(join(root,'types',name),name);
