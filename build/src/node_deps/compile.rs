@@ -1,5 +1,7 @@
+use super::paths::{InputPath, SourcePaths};
 use super::{Request, Target, cache, hash, invocation};
 use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -106,11 +108,18 @@ fn object(
     Ok(object)
 }
 
+#[derive(Serialize, Deserialize)]
+pub(super) struct Observation {
+    pub path: InputPath,
+    pub sha256: String,
+}
+
 pub(super) fn observations(
+    paths: &SourcePaths,
     source: &Path,
     target: &Target,
     directory: &Path,
-) -> Result<BTreeMap<String, String>> {
+) -> Result<Vec<Observation>> {
     let mut inputs = BTreeMap::new();
     for input in &target.sources {
         if Path::new(input)
@@ -118,10 +127,7 @@ pub(super) fn observations(
             .is_some_and(|ext| ext == "s" || ext == "asm")
         {
             let path = source.join(input);
-            inputs.insert(
-                path.to_string_lossy().into_owned(),
-                hash(&std::fs::read(&path)?),
-            );
+            inputs.insert(paths.input(&path)?, hash(&std::fs::read(&path)?));
             continue;
         }
         let id = hash(input.as_bytes());
@@ -139,13 +145,16 @@ pub(super) fn observations(
                 source.join(name)
             };
             if let std::collections::btree_map::Entry::Vacant(entry) =
-                inputs.entry(path.to_string_lossy().into_owned())
+                inputs.entry(paths.input(&path)?)
             {
                 entry.insert(hash(&std::fs::read(path)?));
             }
         }
     }
-    Ok(inputs)
+    Ok(inputs
+        .into_iter()
+        .map(|(path, sha256)| Observation { path, sha256 })
+        .collect())
 }
 
 fn make_words(input: &str) -> Result<Vec<String>> {

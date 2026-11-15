@@ -2,6 +2,7 @@
 mod cache;
 mod compile;
 mod invocation;
+mod paths;
 mod search;
 mod source;
 
@@ -135,7 +136,7 @@ pub fn ensure(request: &Request) -> Result<Artifacts> {
     }
     let targets = closure(plan, &request.libraries)?;
     let start = Instant::now();
-    let source = source::ensure(&request.cache)?;
+    let source = source::ensure(&request.cache)?.canonicalize()?;
     let source_validation_s = start.elapsed().as_secs_f64();
     let start = Instant::now();
     let identity = invocation::Context::new(request, &source, plan)?;

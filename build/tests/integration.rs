@@ -4,6 +4,9 @@
 #[path = "node_deps.rs"]
 mod node_deps;
 
+#[path = "node_deps_identity.rs"]
+mod node_deps_identity;
+
 #[path = "provider_manifest.rs"]
 mod provider_manifest;
 

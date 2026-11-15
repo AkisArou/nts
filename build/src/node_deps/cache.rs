@@ -2,7 +2,6 @@ use super::{Request, Target, bundle, compile, hash, invocation};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fs::File,
     path::{Path, PathBuf},
     time::Instant,
@@ -10,9 +9,10 @@ use std::{
 
 #[derive(Serialize, Deserialize)]
 struct Entry {
+    version: u32,
     identity: String,
     archive: String,
-    inputs: BTreeMap<String, String>,
+    inputs: Vec<compile::Observation>,
     wall_seconds: f64,
     objects: usize,
 }
@@ -39,7 +39,7 @@ pub(super) fn ensure(
     std::fs::write(directory.join("invocation.json"), &identity.record)?;
     let archive = directory.join(format!("lib{}.a", target.name));
     let manifest = directory.join("complete.json");
-    if valid(&manifest, &archive, &identity.key)? {
+    if valid(&manifest, &archive, identity)? {
         return Ok(archive);
     }
     if manifest.exists() {
@@ -64,9 +64,10 @@ pub(super) fn ensure(
                 );
             }
             let entry = Entry {
+                version: 2,
                 identity: identity.key.clone(),
                 archive: hash(&std::fs::read(staged_archive)?),
-                inputs: compile::observations(source, target, &directory)?,
+                inputs: compile::observations(&identity.source, source, target, &directory)?,
                 wall_seconds: start.elapsed().as_secs_f64(),
                 objects: objects.len(),
             };
@@ -78,16 +79,20 @@ pub(super) fn ensure(
     Ok(archive)
 }
 
-fn valid(manifest: &Path, archive: &Path, identity: &str) -> Result<bool> {
+fn valid(manifest: &Path, archive: &Path, identity: &invocation::Context) -> Result<bool> {
     if !manifest.is_file() || !archive.is_file() {
         return Ok(false);
     }
     let entry: Entry = serde_json::from_slice(&std::fs::read(manifest)?)?;
-    if entry.identity != identity || hash(&std::fs::read(archive)?) != entry.archive {
+    if entry.version != 2
+        || entry.identity != identity.key
+        || hash(&std::fs::read(archive)?) != entry.archive
+    {
         return Ok(false);
     }
-    for (path, expected) in entry.inputs {
-        if !std::fs::read(path).is_ok_and(|bytes| hash(&bytes) == expected) {
+    for input in entry.inputs {
+        let path = identity.source.resolve(&input.path)?;
+        if !std::fs::read(path).is_ok_and(|bytes| hash(&bytes) == input.sha256) {
             return Ok(false);
         }
     }

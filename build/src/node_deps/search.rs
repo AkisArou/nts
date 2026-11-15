@@ -63,10 +63,25 @@ pub(super) fn fingerprint(context: &invocation::Context) -> Result<String> {
             roots.push(parent.to_owned());
         }
     }
-    Ok(hash(&serde_json::to_vec(&(directories(roots)?, configs))?))
+    let configs = configs
+        .into_iter()
+        .map(|(path, sha)| Ok((context.source.identity(std::path::Path::new(&path))?, sha)))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(hash(&serde_json::to_vec(&(
+        directories_with(roots, Some(&context.source))?,
+        configs,
+    ))?))
 }
 
-pub(super) fn directories(mut pending: Vec<PathBuf>) -> Result<String> {
+#[cfg(test)]
+fn directories(pending: Vec<PathBuf>) -> Result<String> {
+    directories_with(pending, None)
+}
+
+fn directories_with(
+    mut pending: Vec<PathBuf>,
+    source: Option<&super::paths::SourcePaths>,
+) -> Result<String> {
     let mut visited = BTreeSet::new();
     let mut records = Vec::new();
     let mut budget = 1_000_000usize;
@@ -117,6 +132,18 @@ pub(super) fn directories(mut pending: Vec<PathBuf>) -> Result<String> {
             records.push((path, format!("file:{mode}")));
         }
     }
+    let mut records = records
+        .into_iter()
+        .map(|(path, value)| {
+            Ok((
+                source.map_or_else(
+                    || Ok(path.to_string_lossy().into_owned()),
+                    |source| source.identity(&path),
+                )?,
+                value,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
     records.sort();
     Ok(hash(&serde_json::to_vec(&records)?))
 }

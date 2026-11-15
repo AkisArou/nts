@@ -84,6 +84,23 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 A library has no loop. A C program that embeds one and wants its timers or I/O
 installs a host of its own (`nts_host_install`).
 
+## Bundled dependency archives
+
+`build/src/node_deps` builds the selected libraries from the embedded Node
+source bundle. Its invocation owner maps that bundle's extraction directory
+to `/nts/node-deps/<bundle SHA>` for file macros and debug information. A
+compiler support probe checks the mapping before objects are compiled;
+caller prefix maps are refused in flags, leading arguments and configuration.
+Shipped assertion strings therefore name the virtual bundle path.
+
+The archive key includes a versioned mapping policy, source content, recipe,
+tools and flags. Bundle observations are relative to the bundle and validated
+against the caller's extraction root; external headers and tools keep their
+absolute paths and content checks. Archives use deterministic metadata and
+sorted members. Moving an otherwise identical private cache reuses its entry
+after source and observation validation. Previous key generations are retained;
+the native dependency cache has no automatic eviction policy.
+
 ## Products
 
 | product        | constructor                                                       | artifact                                                         |
@@ -201,6 +218,14 @@ int main(void) {
 
 ## Decisions
 
+- Bundled native archives have content identity across extraction roots.
+  One invocation owner supplies and verifies the source prefix maps, and
+  records the virtual bundle location rather than an extraction directory.
+  Runtime assertions and debug information use `/nts/node-deps/<bundle SHA>`;
+  bundle-relative observations replay at each caller's root while external
+  observations remain checked. Caller mappings refuse rather than competing
+  with the owner. Old cache generations remain untouched
+  ([log](../records/notebooks/decisions-log.md#native-dependency-content-identity-11-15)).
 - Shipped native programs count references; `NoGc` is for testing only
   ([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)).
 - One analysis before counting gives every allocation site one home; workers

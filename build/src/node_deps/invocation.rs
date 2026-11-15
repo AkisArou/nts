@@ -1,10 +1,14 @@
-use super::{ObjectFormat, Recipe, Request, SOURCE_BUNDLE, bundle, hash};
+use super::{
+    ObjectFormat, Recipe, Request, SOURCE_BUNDLE, bundle, hash,
+    paths::{MAPPING_POLICY, SourcePaths},
+};
 use anyhow::{Context as _, Result, bail};
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    path::{Path, PathBuf},
-    process::Command,
+    io::Write as _,
+    path::Path,
+    process::{Command, Stdio},
 };
 
 pub(super) struct Context {
@@ -13,7 +17,7 @@ pub(super) struct Context {
     pub flags: Vec<String>,
     compiler: Vec<String>,
     archiver: Vec<String>,
-    directory: PathBuf,
+    pub(super) source: SourcePaths,
     environment: BTreeMap<String, Option<OsString>>,
     format: ObjectFormat,
 }
@@ -27,7 +31,7 @@ impl Context {
             flags: arguments(&request.flags, &origin)?,
             compiler: tool(&request.compiler, &origin)?,
             archiver: tool(&request.archiver, &origin)?,
-            directory: source.to_owned(),
+            source: SourcePaths::new(source)?,
             environment: environment(&origin)?,
             format: plan.object_format,
         };
@@ -43,28 +47,40 @@ impl Context {
             1
         };
         admitted_options(&context.compiler[leading..])?;
+        for target in &plan.targets {
+            for flag in &target.cflags {
+                refuse_prefix_map(flag)?;
+            }
+        }
         if std::env::var_os("CCC_OVERRIDE_OPTIONS").is_some() {
             bail!("bundled dependency builds do not admit CCC_OVERRIDE_OPTIONS");
         }
+        // Explicit and implicit configs are checked before the mapping probe
+        // or any object compile, so a caller never installs a competing map.
+        let compiler_inputs = context.tool_inputs(&context.compiler)?;
+        let archiver_inputs = context.tool_inputs(&context.archiver)?;
+        let flag_inputs = context.tool_inputs(&context.flags)?;
+        let search = super::search::fingerprint(&context)?;
+        context.verify_mapping()?;
         let environment: BTreeMap<_, _> = context
             .environment
             .iter()
-            .map(|(k, v)| (k, v.as_ref().map(|s| s.as_encoded_bytes())))
-            .collect();
+            .map(|(k, v)| Ok((k, context.identity_environment(k, v.as_ref())?)))
+            .collect::<Result<_>>()?;
         context.record = serde_json::to_vec_pretty(&(
             SOURCE_BUNDLE,
             serde_json::to_string(&(&bundle().node, &bundle().source_sha256, plan))?,
             &request.target,
-            &context.compiler,
-            &context.archiver,
-            &context.flags,
-            &context.directory,
+            context.identity_words(&context.compiler)?,
+            context.identity_words(&context.archiver)?,
+            context.identity_words(&context.flags)?,
+            (MAPPING_POLICY, context.source.virtual_root()),
             context.version(&context.compiler)?,
             context.version(&context.archiver)?,
-            tool_inputs(&context.compiler)?,
-            tool_inputs(&context.archiver)?,
-            tool_inputs(&context.flags)?,
-            super::search::fingerprint(&context)?,
+            compiler_inputs,
+            archiver_inputs,
+            flag_inputs,
+            search,
             environment,
         ))?;
         context.key = hash(&context.record);
@@ -73,7 +89,7 @@ impl Context {
 
     fn command(&self, words: &[String]) -> Command {
         let mut command = Command::new(&words[0]);
-        command.args(&words[1..]).current_dir(&self.directory);
+        command.args(&words[1..]).current_dir(self.source.root());
         command.env("LC_ALL", "C");
         for (name, value) in &self.environment {
             if let Some(value) = value {
@@ -85,7 +101,9 @@ impl Context {
         command
     }
     pub(super) fn compiler(&self) -> Command {
-        self.command(&self.compiler)
+        let mut command = self.command(&self.compiler);
+        command.args(self.source.mappings());
+        command
     }
     pub(super) fn archiver(&self) -> Command {
         let mut command = self.command(&self.archiver);
@@ -105,6 +123,153 @@ impl Context {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+
+    fn verify_mapping(&self) -> Result<()> {
+        let physical = self.source.root().join("nts-prefix-map-probe.c");
+        let expected = self.source.virtual_root().join("nts-prefix-map-probe.c");
+        let input = format!("#line 1 {}\n__FILE__\n", serde_json::to_string(&physical)?);
+        let mut child = self
+            .compiler()
+            .args(&self.flags)
+            .args(["-E", "-P", "-x", "c", "-"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("probing bundled dependency source mapping")?;
+        let wrote = child.stdin.take().map_or_else(
+            || {
+                Err(std::io::Error::other(
+                    "source mapping probe has no input pipe",
+                ))
+            },
+            |mut pipe| pipe.write_all(input.as_bytes()),
+        );
+        // Even a failed input write must join the acquired compiler process.
+        let output = child.wait_with_output()?;
+        wrote.context("writing bundled dependency source mapping probe")?;
+        if !output.status.success()
+            || String::from_utf8_lossy(&output.stdout).lines().last()
+                != Some(serde_json::to_string(&expected)?.as_str())
+        {
+            bail!(
+                "bundled dependency compiler cannot map source paths with -ffile-prefix-map and -fdebug-prefix-map: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
+    }
+
+    fn identity_words(&self, words: &[String]) -> Result<Vec<String>> {
+        let mut path_next = false;
+        words
+            .iter()
+            .map(|word| {
+                if path_next {
+                    path_next = false;
+                    return self.source.identity(Path::new(word));
+                }
+                path_next = path_operand(word);
+                for prefix in [
+                    "--sysroot=",
+                    "--config=",
+                    "--config-user-dir=",
+                    "--config-system-dir=",
+                    "-I",
+                    "-L",
+                    "-F",
+                ] {
+                    if let Some(path) = word.strip_prefix(prefix).filter(|s| !s.is_empty()) {
+                        return Ok(format!(
+                            "{prefix}{}",
+                            self.source.identity(Path::new(path))?
+                        ));
+                    }
+                }
+                if Path::new(word).is_absolute() {
+                    return self.source.identity(Path::new(word));
+                }
+                Ok(word.clone())
+            })
+            .collect()
+    }
+
+    fn tool_inputs(&self, words: &[String]) -> Result<BTreeMap<String, String>> {
+        tool_inputs(words)?
+            .into_iter()
+            .map(|(path, sha)| Ok((self.source.identity(Path::new(&path))?, sha)))
+            .collect()
+    }
+
+    fn identity_environment(
+        &self,
+        name: &str,
+        value: Option<&OsString>,
+    ) -> Result<Option<Vec<u8>>> {
+        let Some(value) = value else {
+            return Ok(None);
+        };
+        let bytes = if PATH_LISTS.contains(&name) {
+            let paths = std::env::split_paths(value)
+                .map(|path| self.source.identity(&path))
+                .collect::<Result<Vec<_>>>()?;
+            std::env::join_paths(paths)?.as_encoded_bytes().to_vec()
+        } else if [
+            "GCC_EXEC_PREFIX",
+            "SDKROOT",
+            "CLANG_CONFIG_FILE_SYSTEM_DIR",
+            "CLANG_CONFIG_FILE_USER_DIR",
+        ]
+        .contains(&name)
+            && Path::new(value).is_absolute()
+        {
+            self.source.identity(Path::new(value))?.into_bytes()
+        } else {
+            value.as_encoded_bytes().to_vec()
+        };
+        Ok(Some(bytes))
+    }
+}
+
+const PATH_LISTS: &[&str] = &[
+    "PATH",
+    "CPATH",
+    "C_INCLUDE_PATH",
+    "CPLUS_INCLUDE_PATH",
+    "OBJC_INCLUDE_PATH",
+    "LIBRARY_PATH",
+    "COMPILER_PATH",
+];
+
+fn path_operand(word: &str) -> bool {
+    matches!(
+        word,
+        "-I" | "-L"
+            | "-F"
+            | "-isystem"
+            | "-iquote"
+            | "-include"
+            | "-imacros"
+            | "-isysroot"
+            | "--sysroot"
+            | "--config"
+    )
+}
+
+fn refuse_prefix_map(word: &str) -> Result<()> {
+    if [
+        "-ffile-prefix-map",
+        "-fdebug-prefix-map",
+        "-fmacro-prefix-map",
+    ]
+    .iter()
+    .any(|flag| word == *flag || word.starts_with(&format!("{flag}=")))
+    {
+        bail!(
+            "bundled dependency source mappings are owner-controlled; caller flag is not allowed: {word}"
+        );
+    }
+    Ok(())
 }
 
 fn absolute(path: &str, origin: &Path) -> Result<String> {
@@ -132,18 +297,7 @@ fn arguments(words: &[String], origin: &Path) -> Result<Vec<String>> {
                 path_next = false;
                 return absolute(word, origin);
             }
-            path_next = matches!(
-                word.as_str(),
-                "-I" | "-L"
-                    | "-F"
-                    | "-isystem"
-                    | "-iquote"
-                    | "-include"
-                    | "-imacros"
-                    | "-isysroot"
-                    | "--sysroot"
-                    | "--config"
-            );
+            path_next = path_operand(word);
             for prefix in [
                 "--sysroot=",
                 "--config=",
@@ -242,6 +396,7 @@ pub(super) fn config_options(bytes: &[u8]) -> Result<()> {
     for line in std::str::from_utf8(bytes)?.lines() {
         let line = line.split('#').next().unwrap_or("");
         for word in line.split_ascii_whitespace() {
+            refuse_prefix_map(word)?;
             if !scalar_option(word)
                 || word.contains('@')
                 || word.contains('"')
@@ -296,6 +451,7 @@ fn scalar_option(word: &str) -> bool {
 fn admitted_options(words: &[String]) -> Result<()> {
     let mut operand = false;
     for word in words {
+        refuse_prefix_map(word)?;
         if operand {
             operand = false;
             continue;
@@ -350,15 +506,6 @@ fn admitted_options(words: &[String]) -> Result<()> {
 }
 
 fn environment(origin: &Path) -> Result<BTreeMap<String, Option<OsString>>> {
-    let lists = [
-        "PATH",
-        "CPATH",
-        "C_INCLUDE_PATH",
-        "CPLUS_INCLUDE_PATH",
-        "OBJC_INCLUDE_PATH",
-        "LIBRARY_PATH",
-        "COMPILER_PATH",
-    ];
     let names = [
         "PATH",
         "CPATH",
@@ -386,7 +533,7 @@ fn environment(origin: &Path) -> Result<BTreeMap<String, Option<OsString>>> {
         .into_iter()
         .map(|name| {
             let mut value = std::env::var_os(name);
-            if lists.contains(&name)
+            if PATH_LISTS.contains(&name)
                 && let Some(paths) = &value
             {
                 value = Some(std::env::join_paths(

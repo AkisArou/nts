@@ -3142,3 +3142,16 @@ The synchronous owner tracks canonical parents by ThreadId in one process
 registry. Same-thread re-entry refuses by name; other threads wait on its
 Condvar, with the OS lock still coordinating processes. The thread-bound Lock
 releases the OS lock before removing and notifying its registry claim.
+
+## Native dependency content identity (11-15)
+
+The native invocation owner maps embedded source locations to
+`/nts/node-deps/<bundle SHA>` for file macros and debug information, and probes
+that contract on every admitted compiler route. Caller prefix maps refuse by
+name in flags, leading arguments and configs. The identity includes the mapping
+policy and virtual root; bundle observations replay against the current
+extraction root while external observations retain their path and hash checks.
+Deterministic archive metadata and member order preserve full-byte identity.
+Shipped assertions name the virtual source path. Old native cache generations
+remain untouched; eviction is a separate deletion policy requiring the user's
+decision.
