@@ -12,6 +12,7 @@ import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
 import { count, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
 import {scratchRepo} from '../landing/scratch-repo.ts';
+import {acceptedRevision} from '../gate/accepted-revision-data.ts';
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
 import { bindsToProperties } from "../gate/scopes/bound-slice.ts";
 import { spawn } from "node:child_process";
@@ -439,14 +440,16 @@ test('record citation paths retain exact issue boundaries and both issue folder 
 
 test('record retention reads immutable main blobs, independently of working edits and another committed branch',t=>{
   const s=scratchRepo(t,'count-record-citations'),cache=join(s.dir,'cache');
-  assert.deepEqual(readScratchRecordCitations(s.root,cache,s.git(['rev-parse','main']).trim()),[],'Git grep no-match is a measured empty citation set');
+  const reader=()=>{const value=acceptedRevision(s.root);assert.ok(!('error' in value));return value;};
+  assert.deepEqual(readScratchRecordCitations(reader(),cache),[],'Git grep no-match is a measured empty citation set');
   s.commit({'docs/records/receipt.md':'evidence nts-scratch/42/raw.json\n'},'main record');
-  const main=s.git(['rev-parse','main']).trim();
+  const main=reader();
   writeFileSync(join(s.root,'docs/records/receipt.md'),'dirty nts-scratch/43/raw.json\n');
-  assert.deepEqual(readScratchRecordCitations(s.root,cache,main),['nts-scratch/42']);
+  assert.deepEqual(readScratchRecordCitations(main,cache),['nts-scratch/42']);
   s.git(['switch','-qc','candidate']);s.commit({'docs/records/receipt.md':'candidate nts-scratch/44/raw.json\n'},'candidate record');
-  assert.deepEqual(readScratchRecordCitations(s.root,cache,s.git(['rev-parse','main']).trim()),['nts-scratch/42']);
-  const missing=readScratchRecordCitations(s.root,cache,'f'.repeat(40));assert.ok(!Array.isArray(missing)&&missing.error.length>0);
+  assert.deepEqual(readScratchRecordCitations(reader(),cache),['nts-scratch/42']);
+  s.git(['update-ref','-d','refs/heads/main']);
+  const missing=acceptedRevision(s.root);assert.ok('error' in missing&&missing.error.length>0);
   const f=issueFixture(t);f.folder('nts-scratch/45');
   const result=count({...f.value,recordCitations:missing},ISSUE_KEEP);
   assert.deepEqual(result.red,[]);assert.deepEqual(result.removable,[]);

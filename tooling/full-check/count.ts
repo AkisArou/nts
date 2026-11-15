@@ -42,7 +42,7 @@ import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
 import {acceptedRevisionData} from "../gate/reader-inputs/main.ts";
-import {acceptedRevision} from "../gate/accepted-revision-data.ts";
+import {acceptedRevision,type AcceptedRevision} from "../gate/accepted-revision-data.ts";
 
 const RECORD_DIRECTORY=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
 const PLAN=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));
@@ -542,8 +542,8 @@ export function scratchRecordCitations(text:string,cache:string):string[]{
 
 /** One Git grep over immutable main blobs; working edits cannot manufacture
  * retention. Unknown Git state keeps issue folders through the decision API. */
-export function readScratchRecordCitations(repo:string,cache:string,revision:string):string[]|Unavailable{
-  const result=acceptedRevision(repo,revision).grep(RECORD_DIRECTORY,'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch');
+export function readScratchRecordCitations(reader:AcceptedRevision,cache:string):string[]|Unavailable{
+  const result=reader.grep(RECORD_DIRECTORY,'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch');
   return typeof result==='string'?scratchRecordCitations(result,cache):result;
 }
 
@@ -601,8 +601,9 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   const slices = readSlices(repo);
-  const main=sha('main');
-  const plan=main?acceptedRevision(repo,main).show(PLAN):{error:'main revision unavailable'};
+  const reader=acceptedRevision(repo);
+  if('error' in reader)throw Error('accepted main plan: '+reader.error);
+  const main=reader.revision,plan=reader.show(PLAN);
   if(typeof plan!=='string')throw Error('accepted main plan: '+plan.error);
   return {
     plan,
@@ -610,7 +611,7 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
     remote: remote.ok ? remote.out.split("\n").filter(Boolean).map(line => line.split("\t")[1]!.slice("refs/heads/".length)) : { error: remote.error },
     pulls: pulls.ok ? JSON.parse(pulls.out) as Pull[] : { error: pulls.error },
     issues: issues.ok ? (JSON.parse(issues.out) as { number: number }[]).map(issue => issue.number) : { error: issues.error },
-    recordCitations:main?readScratchRecordCitations(repo,cache,main):{error:'main revision unavailable'},
+    recordCitations:readScratchRecordCitations(reader,cache),
     worktrees: parseWorktrees(git(["worktree", "list", "--porcelain"])),
     shared: dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim()),
     cache,

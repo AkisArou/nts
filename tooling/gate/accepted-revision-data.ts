@@ -8,6 +8,9 @@ import {gitArguments} from './git-arguments/main.ts';
 declare const ACCEPTED_DATA:unique symbol;
 export type AcceptedRevisionData={readonly [ACCEPTED_DATA]:true};
 export type RevisionContent=string|{error:string};
+declare const ACCEPTED_REVISION:unique symbol;
+export type AcceptedRevision={readonly [ACCEPTED_REVISION]:true;readonly revision:string;
+  show(descriptor:AcceptedRevisionData):RevisionContent;grep(descriptor:AcceptedRevisionData,pattern:string):RevisionContent};
 const paths=new WeakMap<AcceptedRevisionData,string>();
 const root=fileURLToPath(new URL('../..',import.meta.url));
 
@@ -19,13 +22,16 @@ export function acceptedRevisionData(url:URL):AcceptedRevisionData{
   paths.set(descriptor,path);return descriptor;
 }
 
-/** The caller captures main once. Every read names that immutable commit;
- * failed reads stay unavailable, including an absent or invalid revision. */
-export function acceptedRevision(repo:string,mainSha:string){
+/** Capture accepted main here, never a caller's candidate commit. Every read
+ * uses this immutable revision even if the repository's refs later move. */
+export function acceptedRevision(repo:string):AcceptedRevision|{error:string}{
+  const main=spawnSync('git',gitArguments(['rev-parse','--verify','refs/heads/main^{commit}']),{cwd:repo,encoding:'utf8'});
+  const mainSha=main.stdout?.trim();
+  if(main.error||main.status!==0||!mainSha||!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(mainSha))
+    return {error:main.error?.message||main.stderr?.trim()||'accepted main revision unavailable'};
   const read=(descriptor:AcceptedRevisionData,operation:'show'|'grep',pattern?:string):RevisionContent=>{
     const path=paths.get(descriptor);
     if(!path)throw Error('accepted revision read requires its owned descriptor');
-    if(!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(mainSha))return {error:'accepted main revision is not a full commit id: '+mainSha};
     const args=operation==='show'?['show',mainSha+':'+path]:
       ['grep','--no-color','--no-textconv','-I','-h','-E',pattern!,mainSha,'--',path];
     const result=spawnSync('git',gitArguments(args),{cwd:repo,encoding:'utf8',maxBuffer:1<<26});
@@ -33,6 +39,6 @@ export function acceptedRevision(repo:string,mainSha:string){
       return {error:result.error?.message||result.stderr.trim()||'git '+operation+' exit '+result.status};
     return result.stdout;
   };
-  return {show:(descriptor:AcceptedRevisionData)=>read(descriptor,'show'),
-    grep:(descriptor:AcceptedRevisionData,pattern:string)=>read(descriptor,'grep',pattern)};
+  return Object.freeze({revision:mainSha,show:(descriptor:AcceptedRevisionData)=>read(descriptor,'show'),
+    grep:(descriptor:AcceptedRevisionData,pattern:string)=>read(descriptor,'grep',pattern)}) as AcceptedRevision;
 }

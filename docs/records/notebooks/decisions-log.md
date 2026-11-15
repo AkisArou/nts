@@ -3020,7 +3020,8 @@ scratch through their existing retention kinds.
 Count reads its plan and record citations from captured main Git blobs, so a
 working-tree data declaration falsely owed ordinary tests for candidate edits.
 The acceptedRevisionData kind instead carries an opaque descriptor to one
-show/grep owner, which always supplies the captured commit. The audit refuses
+show/grep owner, which resolves main itself and always supplies that captured
+commit rather than accepting a caller's candidate revision. The audit refuses
 other uses, including conversion to a working-tree path. The selector and copier
 create no candidate obligations for this kind; independent working-tree data
 readers remain authoritative for the same paths. Count and service keep their

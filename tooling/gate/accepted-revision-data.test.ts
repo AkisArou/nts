@@ -13,7 +13,8 @@ const records=acceptedRevisionData(new URL('../../docs/records/',import.meta.url
 test('accepted revision show and grep retain main blobs across dirty and committed candidate edits',t=>{
   const s=scratchRepo(t,'accepted-revision-data');
   s.commit({'docs/plan.md':'main plan\n','docs/records/receipt.md':'main receipt\n'},'main inputs');
-  const main=s.git(['rev-parse','main']).trim(),reader=acceptedRevision(s.root,main);
+  const main=s.git(['rev-parse','main']).trim(),reader=acceptedRevision(s.root);
+  assert.ok(!('error' in reader));assert.equal(reader.revision,main);
   assert.equal(reader.show(plan),'main plan\n');assert.equal(reader.grep(records,'absent'),'');
   writeFileSync(join(s.root,'docs/plan.md'),'dirty plan\n');
   writeFileSync(join(s.root,'docs/records/receipt.md'),'dirty receipt\n');
@@ -21,8 +22,11 @@ test('accepted revision show and grep retain main blobs across dirty and committ
   s.git(['switch','-qc','candidate']);
   s.commit({'docs/plan.md':'candidate plan\n','docs/records/receipt.md':'candidate receipt\n'},'candidate inputs');
   assert.equal(reader.show(plan),'main plan\n');assert.equal(reader.grep(records,'receipt'),'main receipt\n');
-  assert.ok(typeof acceptedRevision(s.root,'HEAD').show(plan)!=='string');
-  assert.ok(typeof acceptedRevision(s.root,'f'.repeat(40)).grep(records,'receipt')!=='string');
+  const fresh=acceptedRevision(s.root);assert.ok(!('error' in fresh));
+  assert.notEqual(s.git(['rev-parse','HEAD']).trim(),fresh.revision);
+  assert.equal(fresh.grep(records,'receipt'),'main receipt\n');
+  s.git(['update-ref','-d','refs/heads/main']);
+  const missing=acceptedRevision(s.root);assert.ok('error' in missing&&missing.error.length>0);
 });
 
 test('accepted main plan and record edits owe only their declared tree checks',()=>{

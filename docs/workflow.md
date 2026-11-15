@@ -168,8 +168,9 @@ their strings or imports into readers. A later real import enters a file even
 if an earlier reader reached it as data or exact bytes.
 `acceptedRevisionData(new URL("path", import.meta.url))` declares data read only
 from captured accepted-main blobs. Its opaque value can be consumed only by
-`acceptedRevision(repo, mainSha).show` or `.grep`; that owner always passes the
-captured commit to Git and returns content or a named unavailable observation.
+`acceptedRevision(repo).show` or `.grep`; that owner resolves `refs/heads/main`
+once, exposes its read-only revision and always passes that commit to Git.
+It returns content or a named unavailable observation.
 The source audit refuses every other use of the descriptor. These reads create
 no candidate-tree byte, membership, placement or staging obligation. Independent
 working-tree readers of the same path retain all their own obligations.
