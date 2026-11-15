@@ -27,10 +27,11 @@ export function ownsDependencyRun(cap:{seal?:DependencyRunSeal},env:NodeJS.Proce
     return true;
   }catch{throw dependencySealError(cap.seal?.record??'invalid canonical handoff');}
 }
-/** One lstat and compare; no source, package, Git or helper-process work. */
-export function dependencySealReady(cap:{version:number;directory:string;ownerStep?:string|null;admission?:{kind:string;temporary?:{parent:string}};seal?:DependencyRunSeal},env:NodeJS.ProcessEnv=process.env,nodeVersion=process.versions.node):string|null{
-  if(!ownsDependencyRun(cap,env))return null;
-  const began=performance.now(),seal=cap.seal!,record=join(cap.directory,'node-'+nodeVersion,'ready.json');
+/** Image validation is shared by a run seal and its owned preparation candidate.
+ * This checks immutable image identity; canonical ownership is its caller's fence. */
+export function dependencyImageReady(cap:{version:number;directory:string;seal?:DependencyRunSeal},nodeVersion=process.versions.node):string{
+  const seal=cap.seal,record=join(cap.directory,'node-'+nodeVersion,'ready.json');
+  if(!seal)throw dependencySealError(record);
   const identity=seal.identity;
   if(cap.version!==1||seal.version!==1||seal.record!==record||seal.nodeVersion!==nodeVersion||!isAbsolute(cap.directory)||
      !/^26\.\d+\.\d+$/.test(nodeVersion)||!identity||Object.keys(identity).sort().join(',')!==[...DEPENDENCY_SEAL_FIELDS].sort().join(',')||
@@ -38,6 +39,12 @@ export function dependencySealReady(cap:{version:number;directory:string;ownerSt
      !/^[0-9a-f]{64}$/.test(seal.readySha256)||!/^[0-9a-f]{64}$/.test(seal.semanticSha256))throw dependencySealError(record);
   try{const actual=dependencySealIdentity(record);if(DEPENDENCY_SEAL_FIELDS.some(key=>actual[key]!==identity[key]))throw dependencySealError(record);}
   catch{throw dependencySealError(record);}
+  return record;
+}
+/** One lstat and compare; no source, package, Git or helper-process work. */
+export function dependencySealReady(cap:{version:number;directory:string;ownerStep?:string|null;admission?:{kind:string;temporary?:{parent:string}};seal?:DependencyRunSeal},env:NodeJS.ProcessEnv=process.env,nodeVersion=process.versions.node):string|null{
+  if(!ownsDependencyRun(cap,env))return null;
+  const began=performance.now(),record=dependencyImageReady(cap,nodeVersion);
   // Telemetry never changes product authority and never fsyncs a hit.
   try{
     const root=cap.admission?.kind==='gate'?cap.admission.temporary?.parent:cap.directory;

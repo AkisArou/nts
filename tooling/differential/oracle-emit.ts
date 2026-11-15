@@ -525,7 +525,7 @@ function protect(dir:string):void{
  * Never chmod or traverse a symlink into another capture or source tree. */
 
 const removeSnapshot=removeOracleSnapshot;
-type DependencyHandle={record:string;sha256:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;inputSet:{identity:{importers:string[]}};entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
+type DependencyHandle={record:string;sha256:string;source:string;sourceRevision:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;inputSet:{identity:{importers:string[]}};entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
 const dependencyImages=new Map<string,DependencyHandle>();
 const UNPREPARED_ORACLE_IMAGE='oracle dependency image is unprepared; run node tooling/gate/inner.ts --no-agree or the gate route';
 function dependencies():DependencyHandle{
@@ -538,8 +538,8 @@ function dependencies():DependencyHandle{
   const bytes=readFileSync(record),semantic=readFileSync(join(dirname(record),'semantic.json'));
   if(sealed&&(hash(bytes)!==cap.seal.readySha256||hash(semantic)!==cap.seal.semanticSha256))throw dependencySealError(record);
   const image=JSON.parse(bytes.toString('utf8')),packageInventory=JSON.parse(semantic.toString('utf8'));
-  if(image.version!==1||image.inputSet?.version!==1||image.inputSet.identity.node!==process.versions.node||JSON.stringify(image.inputSet)!==JSON.stringify(packageInventory.inputSet)||image.lockfileSha256!==cap.lockfileSha256||image.sourceRevision!==cap.sourceRevision||image.source!==cap.source||!sealed&&hash(JSON.stringify(image.entries))!==image.treeSha256)throw Error('oracle dependency capture identity mismatch');
-  const handle={record,sha256:hash(semantic),image};dependencyImages.set(key,handle);return handle;
+  if(image.version!==1||image.inputSet?.version!==1||image.inputSet.identity.node!==process.versions.node||JSON.stringify(image.inputSet)!==JSON.stringify(packageInventory.inputSet)||image.lockfileSha256!==cap.lockfileSha256||!sealed&&hash(JSON.stringify(image.entries))!==image.treeSha256)throw Error('oracle dependency capture identity mismatch');
+  const handle={record,sha256:hash(semantic),source:cap.source,sourceRevision:cap.sourceRevision,image};dependencyImages.set(key,handle);return handle;
 }
 type RuntimeIndexInput={trees:{root:string;paths:string[];absent:string[];coverage:RuntimeCoverage}[];files:{source:string;output:string;group:string;execution:string;tree:string}[];links:{output:string;target:string;text?:string;present?:boolean}[];checkerImports:CheckerImportRelation[]};
 /** Type erasure and import rewriting happen once in this registered run.
@@ -771,7 +771,7 @@ async function publishRuntimeSnapshot(directory:string,stored:OracleManifest,ind
       }else if(item.kind==='link')value.link=item.target;
     }
     for(const path of semantic.omittedInstallerPaths){const file=resolve(root,path),part=relative(root,file);if(isAbsolute(path)||part==='..'||part.startsWith('..'+sep))throw Error('oracle omitted dependency escapes its image');const value=nodes.get(file)??node(file,null);value.excluded=true;}
-    dependencies={root,roots:[...new OraclePathPrefixes(semantic.packages.filter(item=>item.kind==='directory').map(item=>resolve(root,item.path))).paths],source:dependency.image.source,sourceRevision:dependency.image.sourceRevision,semanticSha256:dependency.sha256,nodeVersion:process.versions.node};
+    dependencies={root,roots:[...new OraclePathPrefixes(semantic.packages.filter(item=>item.kind==='directory').map(item=>resolve(root,item.path))).paths],source:dependency.source,sourceRevision:dependency.sourceRevision,semanticSha256:dependency.sha256,nodeVersion:process.versions.node};
   }
   for(const [path,value] of nodes)records.set('path\0'+path,value);
   const descriptor:OracleRuntimeDescriptor={version:1,captureSha256:hash(process.env.NTS_ORACLE_DEPENDENCIES??''),identity:stored.identity,entry:stored.entry,trees,preloads:stored.preloads??[],...(dependencies?{dependencies}:{}),...(stored.identity.declarationsSha256?{declarationsSha256:stored.identity.declarationsSha256}:{})};
@@ -1421,7 +1421,7 @@ export class OracleWorker{
       for(const path of [...paths])if(path.startsWith(target+sep))paths.push(alias+path.slice(target.length));
     }
     if(dependency){
-      this.filesystem.readBytes(join(dependency.image.source,'pnpm-lock.yaml'));
+      this.filesystem.readBytes(join(dependency.source,'pnpm-lock.yaml'));
     }
     const original=(file:string)=>resolve(parse(job.entry).root,relative(tree,file));
     const aliases=links.filter(link=>link.target.startsWith('@runtime/')).map(link=>({path:original(join(job.directory,link.output)),target:original(join(job.directory,link.target.slice('@runtime/'.length)))}));

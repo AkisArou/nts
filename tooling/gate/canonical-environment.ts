@@ -197,8 +197,12 @@ export function gateEnvironment(
   // A sealed parent image may already occupy the default directory. Keep it
   // intact while the candidate independently captures and seals its own root.
   const capture=join(temporary.path,"oracle-dependencies",...(foreignRoot?["source-"+createHash("sha256").update(toolingRoot).digest("hex")]:[]));
+  // Carry the candidate inside the owned handoff so an unsealed child can
+  // prepare too. It grants no source authority until ordinary validation.
+  const parentImage=foreignRoot&&inheritedCapability?.seal?inheritedCapability:undefined;
+  if(parentImage)assertSealedOracleRun(launcher);
   const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify(dependencyCapability(toolingRoot,capture,admission,null,env)):undefined);
+    JSON.stringify({...dependencyCapability(toolingRoot,capture,admission,null,env),...(parentImage?{parentImage}:{})}):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,
@@ -250,8 +254,9 @@ export async function withPreparedOracle(
   if(raw)try{inherited=JSON.parse(raw);}catch(error){if(isCommandExit(error))throw error;throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}
   if(inherited?.seal){
     assertSealedOracleRun(base);
-    if(inherited.source!==source)throw new ToolingInstrumentError('tooling-setup','oracle entry seal belongs to another source: '+inherited.source);
-    return main(base);
+    if(inherited.source===source)return main(base);
+    // A foreign handoff is only an image candidate. Preparation validates
+    // this source independently before issuing its own canonical seal.
   }
   const abort=new AbortController();
   let finishSetup!:()=>void;

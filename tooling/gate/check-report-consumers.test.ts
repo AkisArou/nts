@@ -1,7 +1,7 @@
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
 import {spawnTest} from "./test-wait.ts";
-import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {tmpdir} from "node:os";
 import {basename, dirname, join, relative} from "node:path";
@@ -9,6 +9,7 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
 
 const source = dirname(fileURLToPath(import.meta.url));
 
@@ -20,25 +21,24 @@ function sandbox(t: TestContext) {
     "tests/programs/invalid", "tests/programs/unsupported", "benchmarks/cases/control"]) {
     mkdirSync(join(root, directory), { recursive: true });
   }
+  const metadata=oracleWorkspaceFixture(t,root);
   for (const script of [new URL("./gate.sh",import.meta.url),new URL("./rc.sh",import.meta.url),new URL("./bench-agree.sh",import.meta.url),new URL("./declines.sh",import.meta.url)]) {
     copyFileSync(script, join(root, "tooling/gate", basename(fileURLToPath(script))));
   }
   copyFileSync(new URL("../jvm/agrees-with-c.sh",import.meta.url), join(root, "tooling/jvm/agrees-with-c.sh"));
-  writeFileSync(join(root, "tooling/conformance/web-platform/compiled/tsconfig.json"), "{}");
-  for (const name of ["control", "invalid", "unsupported"]) {
-    writeFileSync(join(root, "tests/programs", name, "tsconfig.json"), "{}");
-  }
-  writeFileSync(join(root, "benchmarks/cases/control/case.ts"), "export function work(n: number): number { return n; }");
   copyModuleClosure([
     new URL("../differential/check-consumers.ts",import.meta.url),new URL("../differential/oracle-toolchain.json",import.meta.url),
+    new URL("../differential/check-report/main.ts",import.meta.url),
     new URL("../conformance/pin.ts",import.meta.url),new URL("../npm-survey/verdict.ts",import.meta.url),
   ].map(url=>relative(join(source,"../.."),fileURLToPath(url))), root,{dataNamespaces:{"tests/programs":"check consumer controls","benchmarks/cases":"check consumer controls","tooling/conformance/web-platform/compiled":"compiled web controls"}});
-  assert.deepEqual(readdirSync(join(root,"tests/programs")).sort(),["control","invalid","unsupported"]);
-  assert.deepEqual(readdirSync(join(root,"benchmarks/cases")),["control"]);
-  // Package imports use the same provisioned toolchain as the real entry.
-  symlinkSync(join(source, "../../node_modules"), join(root, "node_modules"));
+  const metadataChildren=(directory:string)=>metadata.filter(path=>path.startsWith(directory+'/')).map(path=>path.slice(directory.length+1).split('/')[0]!);
+  assert.deepEqual(readdirSync(join(root,"tests/programs")).sort(),[...new Set(["control","invalid","unsupported",...metadataChildren('tests/programs')])].sort());
+  assert.deepEqual(readdirSync(join(root,"benchmarks/cases")).sort(),[...new Set(["control",...metadataChildren('benchmarks/cases')])].sort());
   copyFileSync(new URL('../sweep/run.sh',import.meta.url), join(root, "tooling/sweep/run.sh"));
   copyFileSync(new URL('../conformance/web-platform/compiled/check.sh',import.meta.url), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
+  writeFileSync(join(root, "tooling/conformance/web-platform/compiled/tsconfig.json"), "{}");
+  for (const name of ["control", "invalid", "unsupported"])writeFileSync(join(root, "tests/programs", name, "tsconfig.json"), "{}");
+  writeFileSync(join(root, "benchmarks/cases/control/case.ts"), "export function work(n: number): number { return n; }");
   writeFileSync(join(root, "tooling/gate/tokens.mjs"), "export async function withToken(fn) { return fn(); }\n");
   writeFileSync(join(root, "tooling/sweep/sweep.mjs"), "console.log('export function work(n: number): number { return n; }');\n");
   writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
@@ -122,7 +122,7 @@ test("a named program disagreement stays loud and cannot accept another fixture 
   const known = join(root, "tests/programs/typed-array-aliasing");
   mkdirSync(known);writeFileSync(join(known, "tsconfig.json"), "{}");
   const run = (mode: string, name: string, mutation: string) => spawnTest("sh", [join(root, `tooling/gate/${mode}.sh`), name], {
-    cwd: root, encoding: "utf8", env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    cwd: root, encoding: "utf8", env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}),
   });
   for (const mode of ["gate", "rc"]) {
     const accepted = run(mode, "typed-array-aliasing", "wrong");
@@ -138,7 +138,7 @@ test("declines.sh reads backend-stage fields and keeps runtime declines separate
   const {root, compiler} = sandbox(t);
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/gate/declines.sh")], {
     cwd: root, encoding: "utf8", 
-    env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}),
   });
   const refused = run("backend-refusal");
   assert.equal(refused.status, 0, refused.stdout + refused.stderr);
@@ -158,7 +158,7 @@ test("agrees-with-c.sh compares structured compiled answers and rejects answer m
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/jvm/agrees-with-c.sh"),
     join(root, "tests/programs/control/tsconfig.json")], {
     cwd: root, encoding: "utf8", 
-    env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+    env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}),
   });
   const control = run("wrong");
   assert.equal(control.status, 0, control.stdout + control.stderr);
@@ -175,7 +175,7 @@ for (const script of ["gate.sh", "rc.sh"]) {
     const run = (mutation = "") => spawnTest(script === "rc.sh" ? "bash" : "sh",
       [join(root, "tooling/gate", script)], {
         cwd: root, encoding: "utf8", 
-        env: { ...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation },
+        env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation }),
       });
     const control = run();
     assert.equal(control.status, 0, control.stdout + control.stderr);
@@ -195,7 +195,7 @@ test("bench-agree.sh holds each benchmark to its run record: what reproduces pas
   const header = `# nts-benchmark-runs {"version":1,"backend":"jvm","commit":"${"a".repeat(40)}","compiler":"${"b".repeat(16)}","under":"benchmarks/cases"}\n`;
   const record = (outcome: object) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${header}benchmarks/cases/control\t${JSON.stringify(outcome)}\n`); };
   const run = (mutation = "", ...args: string[]) => spawnTest("sh", [join(root, "tooling/gate/bench-agree.sh"), ...args], { cwd: root, encoding: "utf8",
-    env: { ...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation } });
+    env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation }) });
   // No record yet: every benchmark is pending, listed, and not run.
   const pending = run("wrong");
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
@@ -237,7 +237,7 @@ test("gate.sh lists a program with no oracle record as pending, and fails one wi
   const { root, compiler } = sandbox(t);
   mkdirSync(join(root, "tests/programs/second")); writeFileSync(join(root, "tests/programs/second/tsconfig.json"), "{}");
   const run = () => spawnTest("sh", [join(root, "tooling/gate/gate.sh")], { cwd: root, encoding: "utf8",
-    env: { ...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "pending" } });
+    env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "pending" }) });
   const pending = run();
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
   assert.match(pending.stdout, /pending: tests\/programs\/control is not recorded in results\/oracle-counts\/tests\/programs\/control\.json yet/);
@@ -262,7 +262,7 @@ test("the npm survey reads diagnostic fields and refuses a broken report", t => 
     writeFileSync(compiler,compilerSource.replaceAll("process.env.CHECK_MUTATION",JSON.stringify(mutation)));
     return spawnTest(process.execPath, [join(root, "tooling/npm-survey/verdict.ts")], {
     cwd: root, encoding: "utf8", 
-    env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler},
+    env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler}),
   });};
   for (const [mutation, outcome, code] of [["lowering-refusal", "refused", ""], ["typecheck", "typecheck-failed", "TS2304"]]) {
     const result = run(mutation!); assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -280,7 +280,7 @@ for (const script of ["tooling/sweep/run.sh", "tooling/conformance/web-platform/
   test(`${script} requires structured completed comparisons`, t => {
     const {root, compiler} = sandbox(t);
     const run = (mutation = "") => spawnTest("sh", [join(root, script)], {cwd: root, encoding: "utf8", 
-      env: {...fixtureEnvironment(t), NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation}});
+      env: fixtureEnvironment(t,{ NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation})});
     const control = run(); assert.equal(control.status, 0, control.stdout + control.stderr);
     for (const mutation of ["unavailable", "legacy-text", "contradiction"]) {
       const result = run(mutation); assert.notEqual(result.status, 0, result.stdout + result.stderr);
@@ -303,8 +303,8 @@ mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(comm
   writeFileSync(join(bin, "node"), `#!/bin/sh\nexec '${process.execPath}' --experimental-test-module-mocks --import '${preload}' "$@"\n`, {mode: 0o755});
   const resultPath = join(root, "instrument.json");
   const run = (mutation: string) => spawnTest("sh", [join(root, "tooling/gate/gate.sh")], {cwd: root, encoding: "utf8", 
-    env: {...fixtureEnvironment(t), PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation,
-      NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "real-owner", NTS_GATE_STEP_RESULT: resultPath}});
+    env: fixtureEnvironment(t,{ PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation,
+      NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "real-owner", NTS_GATE_STEP_RESULT: resultPath})});
   const hung = run("hang-after-output");
   assert.equal(hung.status, 124, hung.stdout + hung.stderr); assert.doesNotMatch(hung.stdout, /^DIS/m);
   let frame = JSON.parse(readFileSync(resultPath, "utf8"));
@@ -323,7 +323,7 @@ test("the actual gate owns typed per-call stops including cleanup after all answ
   const run=(mutation:string)=>{
     rmSync(resultPath,{force:true});
     return spawnTest('sh',[join(root,'tooling/gate/gate.sh'),'control'],{cwd:root,encoding:'utf8',
-      env:{...fixtureEnvironment(t),NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath}});
+      env: fixtureEnvironment(t,{NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath})});
   };
   for(const mutation of ['supervisor-hung','supervisor-cleanup']) {
     const result=run(mutation);assert.equal(result.status,124,result.stdout+result.stderr);
@@ -348,8 +348,8 @@ const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(
   mkdirSync(join(root, "tests/programs/spin")); writeFileSync(join(root, "tests/programs/spin/tsconfig.json"), "{}");
   const resultPath = join(root, "instrument.json");
   const result = spawnTest("sh", [join(root, "tooling/gate/gate.sh")], {cwd: root, encoding: "utf8",
-    env: {...fixtureEnvironment(t), PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "spin",
-      NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "compile-bound", NTS_GATE_STEP_RESULT: resultPath}});
+    env: fixtureEnvironment(t,{ PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "spin",
+      NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "compile-bound", NTS_GATE_STEP_RESULT: resultPath})});
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^TIMEOUT  spin \(compile\): .*used its 0\.5 s CPU bound/m);
   assert.match(result.stdout, /^1 of 2 agree with node$/m, "control, after spin in name order, still ran");
@@ -365,8 +365,8 @@ test("the real batch owner publishes typed setup and cleanup failures", t => {
       : `const realOs=await import('node:os');const {default:unusedOs,...osNamed}=realOs;mock.module('node:os',{namedExports:{...osNamed,homedir:()=>${JSON.stringify(root)}},defaultExport:{...realOs.default}});const real=await import('node:fs');const {default:unused,...named}=real;mock.module('node:fs',{namedExports:{...named,rmSync:(path,options)=>{if(String(path).includes('/nts-check-consumers/run-'))throw new Error('cleanup control');return real.rmSync(path,options);}},defaultExport:{...real.default}});`;
     writeFileSync(script, `import {mock} from 'node:test';${mutation}\nconst {runBatch}=await import(${JSON.stringify(pathToFileURL(join(root, "tooling/differential/check-consumers.ts")).href)});process.exitCode=await runBatch('programs');\n`);
     return spawnTest(process.execPath, ["--experimental-test-module-mocks", script], {cwd: root, encoding: "utf8", 
-      env: {...fixtureEnvironment(t), NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "", NTS_GATE_STEP: "examples",
-        NTS_GATE_STEP_ATTEMPT: "lifecycle", NTS_GATE_STEP_RESULT: resultPath}});
+      env: fixtureEnvironment(t,{ NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "", NTS_GATE_STEP: "examples",
+        NTS_GATE_STEP_ATTEMPT: "lifecycle", NTS_GATE_STEP_RESULT: resultPath})});
   };
   for (const phase of ["setup", "cleanup"] as const) {
     const result = run(phase); assert.equal(result.status, 124, result.stdout + result.stderr);

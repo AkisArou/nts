@@ -1,9 +1,7 @@
 import {gitArguments} from "./git-arguments/main.ts";
 import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
-import {symlinkSync} from "node:fs";
-import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from './module-closure-fixture.ts';
-import {testEnvironmentHandoff,fixtureEnvironment} from './test-environment.ts';
+import {testEnvironmentHandoff,fixtureEnvironment,assignTestValues} from './test-environment.ts';
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
@@ -15,13 +13,15 @@ import { writeRecords } from "../differential/oracle-records.ts";
 import { testScratch } from "./test-scratch.ts";
 import { ownMemory } from "./test-memory.ts";
 import { gateEnvironment } from "./canonical-environment.ts";
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
 
 function fixture(t:{after(fn:()=>void):void}) {
   const directory=testScratch(t, "agree-new-project-case");
   const root=join(directory,"repo"),home=join(directory,"home");mkdirSync(root);mkdirSync(home);
-  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
+  let env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(fixtureEnvironment(t)).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
   // agree.mjs reserves its workers' memory in a ledger of this fixture's own.
-  Object.assign(env,ownMemory(join(directory,"memory")),{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",
+  const memory=ownMemory(join(directory,"memory"));
+  Object.assign(env,memory,{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});
   const git=(...args:string[])=>{
     const result=spawnTest("git",gitArguments(args),{cwd:root,env,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();
@@ -30,13 +30,14 @@ function fixture(t:{after(fn:()=>void):void}) {
   const header={version:1,generator_version:1,generator_digest:"a".repeat(32),seed:null} as const;
   const row=(name:string)=>({kind:"measured" as const,source:`tests/programs/${name}/src/main.ts`,signature:"b".repeat(64),keys:{c:"c".repeat(32)},cases_sha256:"d".repeat(64),driver_sha256:"e".repeat(64),count:2,complete:true as const});
   const table=(names:string[])=>JSON.stringify({...header,rows:names.map(row)});
+  const metadata=oracleWorkspaceFixture(t,root);
   mkdirSync(join(root,"benchmarks/cases"),{recursive:true});
   put("benchmarks/cases/.keep", "");
   put("tooling/inputs/link.sh", "#!/bin/sh\nexit 0\n");
   for(const name of ["existing","previously-unrecorded","previously-no-config"])put(`tests/programs/${name}/src/main.ts`,"export function work(n:number):number{return n;}");
   put("tests/programs/existing/tsconfig.json","{}");put("tests/programs/previously-unrecorded/tsconfig.json","{}");
   put("results/oracle-counts.json",table(["existing"]));
-  git("init","-q","-b","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
+  git("init","-q","-b","main");git("add","-f","tooling/inputs/link.sh");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
   put("tests/programs/new-fixture/tsconfig.json","{}");
   put("tests/programs/previously-no-config/tsconfig.json","{}");
   put("tests/programs/new-fixture/src/main.ts","export function work(n:number):number{return n;}");
@@ -50,9 +51,9 @@ function fixture(t:{after(fn:()=>void):void}) {
     'tests/programs':'new-project agreement fixture','benchmarks/cases':'new-project agreement fixture'}});
   writeFileSync(join(root,"tooling/inputs/link.sh"),privateLinker);
   assert.deepEqual(readFileSync(join(root,"tooling/inputs/link.sh")),privateLinker,"the agreement fixture keeps its private linker after staging");
-  assert.deepEqual(readdirSync(join(root,'tests/programs')).sort(),['existing','new-fixture','previously-no-config','previously-unrecorded']);
+  const metadataPrograms=metadata.filter(path=>path.startsWith('tests/programs/')).map(path=>path.slice('tests/programs/'.length).split('/')[0]!);
+  assert.deepEqual(readdirSync(join(root,'tests/programs')).sort(),[...new Set(['existing','new-fixture','previously-no-config','previously-unrecorded',...metadataPrograms])].sort());
   assert.deepEqual(readdirSync(join(root,'benchmarks/cases')),['.keep']);
-  symlinkSync(join(fileURLToPath(new URL("../..",import.meta.url)),"node_modules"),join(root,"node_modules"));
   const binaries=["before","after"].map(role=>{
     const path=join(directory,role,"nts");mkdirSync(dirname(path));
     writeFileSync(path,`#!${process.execPath}
@@ -76,7 +77,8 @@ console.log(JSON.stringify(value));
   });
   const [before,after]=binaries;
   writeFileSync(join(dirname(before),"provenance.json"),JSON.stringify({sha:base,clean:true,applied:null,binary_sha256:createHash("sha256").update(readFileSync(before)).digest("hex")}));
-  const run=(extra:NodeJS.ProcessEnv={},comparisonBase=base)=>spawnTest(process.execPath,[join(root,"tooling/differential/agree.mjs"),before,after,"--only=new-fixture,existing",`--base=${comparisonBase}`],{cwd:root,env:{...env,...extra},encoding:"utf8"});
+  env=gateEnvironment({...fixtureEnvironment(t),...env},{run:join(home,'.cache/agree-fixture'),owned:{NTS_AGREE_JOBS:'1',...memory}}).env;
+  const run=(extra:NodeJS.ProcessEnv={},comparisonBase=base)=>{const child={...env};assignTestValues(child,extra);return spawnTest(process.execPath,[join(root,"tooling/differential/agree.mjs"),before,after,"--only=new-fixture,existing",`--base=${comparisonBase}`],{cwd:root,env:child,encoding:"utf8"});};
   return {root,directory,base,before,after,run,put,git,env};
 }
 
@@ -186,9 +188,9 @@ test("inside an unsealed canonical run, every check's own temporary is registere
   const f=fixture(t),log=join(f.directory,"context.log"),check=join(f.directory,"context-check.mjs");
   writeFileSync(check,`import {ownedCacheEnvironment} from ${JSON.stringify(new URL("./host-environment.ts",import.meta.url).href)};\ntry{ownedCacheEnvironment(process.env,{temporary:process.env.TMPDIR});}catch(error){console.error(error.message);process.exit(1);}\n`);
   // The context the full check's records unit runs in: canonical, its oracle dependencies unsealed.
-  const planned=gateEnvironment(f.env,{run:join(f.env.HOME!,".cache/gate-run"),owned:{NTS_AGREE_JOBS:"1",...ownMemory(join(f.directory,"context-memory"))}});
+  const planned=gateEnvironment(f.env,{run:join(f.env.HOME!,".cache/gate-run"),oracleRoot:f.root,owned:{TEST_CONTEXT_LOG:log,TEST_CONTEXT_CHECK:check,NTS_AGREE_JOBS:"1",...ownMemory(join(f.directory,"context-memory"))}});
   const result=spawnTest(process.execPath,[join(f.root,"tooling/differential/agree.mjs"),f.before,f.after,"--only=new-fixture,existing",`--base=${f.base}`],
-    {cwd:f.root,env:{...planned.env,TEST_CONTEXT_LOG:log,TEST_CONTEXT_CHECK:check},encoding:"utf8"});
+    {cwd:f.root,env:planned.env,encoding:"utf8"});
   assert.equal(result.status,0,result.stdout+result.stderr);
   const seen=readFileSync(log,"utf8").trim().split("\n");
   assert.ok(seen.length>=3&&seen.every(line=>line==="held"),seen.join("\n"));

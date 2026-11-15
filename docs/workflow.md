@@ -678,7 +678,12 @@ real repository. Git-fence descriptors consume their owner's indexed candidate
 population and its ignore/attribute controls, without executable placement.
 Standalone oracle command entries use `withPreparedOracle` at their boundary.
 It takes their admission, creates the canonical run and uses the same sealing
-owner as the gate. A valid inherited seal is consumed directly. Commands that
+owner as the gate. A valid inherited seal for the same source is consumed directly.
+For another source, preparation treats the parent's image as a candidate inside
+the owned handoff. Matching producer, lockfile and validated installation inputs
+reuse that existing immutable image under a handoff bound to the new source;
+otherwise preparation builds an image as usual. Reuse neither rewrites the
+parent's records nor changes its image or resolution-helper lifetime. Commands that
 read ambient environment values re-enter once with the complete sealed
 environment; callbacks can instead receive it explicitly. The command lifetime
 drains children and newly acquired resolution services before releasing its
@@ -1976,6 +1981,10 @@ the first node task.
 - **Standalone oracle preparation belongs to the command entry.** Entries
   share the gate parent's preparation and sealing owner, reuse valid inherited
   seals and hold admission through complete child and infrastructure drain.
+  A different source can reuse the parent's image only after producer,
+  lockfile and complete installation-input validation; its own canonical
+  handoff supplies the source binding. Mismatching inputs prepare normally.
+  No cross-run store or fixture-only rebinding API participates.
   Internal commands accept only a sealed-parent handoff. The source audit
   inventories entries and shell Node programs; report-only imports stay in
   pure leaves rather than acquiring preparation or an audit exception

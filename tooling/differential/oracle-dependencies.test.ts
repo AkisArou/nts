@@ -2,6 +2,7 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {testEnvironment,fixtureEnvironment} from "../gate/test-environment.ts";
 import * as dependencyOwner from './oracle-dependencies.ts';
+import {dependencySealIdentity} from './oracle-seal/main.ts';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -18,7 +19,7 @@ import {waitFor} from '../gate/test-wait.ts';
 import {testScratch} from '../gate/test-scratch.ts';
 import {prepareChildObserver,observedSpawnSync,type ChildUsage} from '../gate/child-rusage.ts';
 import {fileInput} from '../gate/reader-inputs/main.ts';
-import {projectConfig} from '../gate/reader-inputs/main.ts';
+import {projectConfig,installationStatusInputs} from '../gate/reader-inputs/main.ts';
 import {moduleGraph} from '../gate/module-closure.ts';
 import {runtimeRepositoryClaims} from '../gate/rust-input-claims.ts';
 import {pathToFileURL} from 'node:url';
@@ -309,6 +310,39 @@ function canonicalFixture(cap:unknown):NodeJS.ProcessEnv{
   context.owned.NTS_ORACLE_DEPENDENCIES=raw;context.report.host.NTS_ORACLE_DEPENDENCIES=raw;
   return {...testEnvironment(),NTS_ORACLE_DEPENDENCIES:raw,NTS_GATE_ENV_CONTEXT:JSON.stringify(context)};
 }
+test('ordinary preparation reuses its parent image only for identical source inputs',async t=>{
+  const f=installFixture(t);
+  f.write('packages/one/package.json','{"name":"owned-one","version":"1.0.0","bin":{"owned":"command.js"}}\n');
+  f.write('packages/one/command.js','#!/usr/bin/env node\nconsole.log(1);\n');
+  f.git('add','.');f.git('commit','-qm','Bind a named command for reuse controls');
+  const initial=f.cap('parent'),parent=await dependencyOwner.sealDependencyCapability(initial,canonicalFixture(initial));
+  assert.ok(parent.seal);const parentBytes=readFileSync(parent.seal.record);
+  for(const mutation of ['same','manifest','bin','producer']){
+    const source=join(f.parent,'copy-'+mutation);mkdirSync(source);
+    const files=copyModuleClosure(['tooling/differential/oracle-dependencies.ts',installationStatusInputs(pathToFileURL(f.root))],source,{sourceRoot:f.root});
+    const git=(...args:string[])=>execFileSync('git',gitArguments(['-C',source,'-c','user.name=nts fixture','-c','user.email=fixture@invalid',...args]),{env:fixtureEnvironment(t),encoding:'utf8'});
+    git('init','-q');git('add','-f',...files);git('commit','-qm','Bind copied preparation source');
+    const change=mutation==='manifest'?'packages/one/package.json':mutation==='bin'?'packages/one/command.js':'tooling/inputs/dependency-inventory.ts';
+    if(mutation!=='same'){
+      const file=join(source,change),bytes=readFileSync(file,'utf8');
+      writeFileSync(file,mutation==='manifest'?JSON.stringify({...JSON.parse(bytes),description:'changed input'}):bytes+'\n// changed '+mutation+' input\n');
+      git('add',change);git('commit','-qm','Change only '+mutation);
+    }
+    const candidate={...dependencyCapability(source,join(f.parent,'candidate-'+mutation,'tmp','dependencies'),parent.admission),parentImage:parent};
+    const prepared=await dependencyOwner.sealDependencyCapability(candidate,canonicalFixture(candidate));
+    assert.ok(prepared.seal);assert.equal(prepared.source,source);assert.equal(prepared.parentImage,undefined);
+    assert.equal(prepared.seal.record===parent.seal.record,mutation==='same',mutation+' must not authorize the wrong reuse');
+    assert.deepEqual(readFileSync(parent.seal.record),parentBytes,'preparing another source never rewrites its parent image');
+    assert.deepEqual(dependencySealIdentity(parent.seal.record),parent.seal.identity,'the live parent seal keeps its original identity');
+    if(mutation==='same'){
+      assert.equal(existsSync(join(candidate.directory,'node-'+process.versions.node)),false,'a hit creates no second image');
+      const forged={...candidate,parentImage:{...parent,seal:{...parent.seal,semanticSha256:'0'.repeat(64)}}};
+      await assert.rejects(dependencyOwner.sealDependencyCapability(forged,canonicalFixture(forged)),/parent oracle image seal changed/);
+      const handed=canonicalFixture(prepared);
+      assert.equal(await dependencyOwner.captureDependencies(prepared,undefined,handed),parent.seal.record);
+    }
+  }
+});
 test('a run dependency seal rejects a same-byte rewrite after the unchanged positive control',async t=>{
   const f=installFixture(t),initial=f.cap('sealed'),environment=canonicalFixture(initial);
   const seal=Reflect.get(dependencyOwner,'sealDependencyCapability');

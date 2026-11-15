@@ -5,6 +5,7 @@ import {registerCommandCloser,runAsCommand} from "./command-entry/main.ts";
 // owns registry integrity; an application installation is never a fallback.
 import {createHash} from 'node:crypto';
 import {dependencySealIdentity,dependencySealReady,ownsDependencyRun,capturedPackageMetadata,type DependencyRunSeal} from './oracle-filesystem.ts';
+import {dependencyImageReady} from './oracle-seal/main.ts';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
@@ -28,7 +29,7 @@ export {CaseBudgetError,ToolingInstrumentError};
 
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
-export type DependencyCapability={seal?:DependencyRunSeal;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
+export type DependencyCapability={seal?:DependencyRunSeal;parentImage?:DependencyCapability;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
 import {dependencyInventory,dependencyPackageInventory,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
 export {dependencyInventory,dependencyPackageInventory} from '../inputs/dependency-inventory.ts';
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
@@ -128,20 +129,23 @@ async function installInputs(capability:DependencyCapability,counts:{pnpmSelecti
   }finally{rmSync(selection,{recursive:true,force:true});}
 }
 
+class ReadyInputMismatch extends Error{}
 function validateReadyInputs(capability:DependencyCapability,record:InstallInputs):void{
   const metadata=selectionRows(capability,capability.sourceRevision),selectionPaths=metadata.map(row=>row.slice(row.indexOf('\t')+1));
-  if(record?.version!==1||!Array.isArray(record.paths)||!Array.isArray(record.treeRows)||JSON.stringify(record.selectionPaths)!==JSON.stringify(selectionPaths)||
+  if(record?.version!==1||!Array.isArray(record.paths)||!Array.isArray(record.selectionPaths)||!Array.isArray(record.treeRows)||
      record.paths.some(path=>typeof path!=='string'||!path||path==='.'||isAbsolute(path)||!inside(capability.source,resolve(capability.source,path)))||
      hash(JSON.stringify({paths:record.paths,selectionPaths:record.selectionPaths,treeRows:record.treeRows}))!==record.treeSha256)
     throw Error('oracle dependency recorded install inputs are invalid');
+  if(JSON.stringify(record.selectionPaths)!==JSON.stringify(selectionPaths))throw new ReadyInputMismatch('oracle dependency recorded install selection changed');
   if(!record.identity||typeof record.identity!=='object')throw Error('oracle dependency recorded installer identity is missing');
   const {key,...value}=record.identity,pin=managerPin(capability.source);
-  if(value.version!==2||value.node!==process.versions.node||value.platform!==process.platform||value.arch!==process.arch||value.pnpm!==pin.version||value.manager!=='sha512.'+pin.sha512||hash(JSON.stringify(value))!==key||!Array.isArray(value.inputs))throw Error('oracle dependency recorded installer identity changed');
-  if(JSON.stringify(inputRows(capability,[...new Set([...record.paths,...selectionPaths])].sort(),metadata))!==JSON.stringify(record.treeRows))throw Error('oracle dependency recorded install input rows changed');
+  if(value.version!==2||hash(JSON.stringify(value))!==key||!Array.isArray(value.inputs))throw Error('oracle dependency recorded installer identity is invalid');
+  if(value.node!==process.versions.node||value.platform!==process.platform||value.arch!==process.arch||value.pnpm!==pin.version||value.manager!=='sha512.'+pin.sha512)throw new ReadyInputMismatch('oracle dependency recorded installer identity changed');
+  if(JSON.stringify(inputRows(capability,[...new Set([...record.paths,...selectionPaths])].sort(),metadata))!==JSON.stringify(record.treeRows))throw new ReadyInputMismatch('oracle dependency recorded install input rows changed');
   for(const input of value.inputs){
     if(!record.paths.includes(input.path))throw Error('oracle dependency input is outside its recorded path set');
     const file=join(capability.source,input.path),actual=existsSync(file)?hash(readFileSync(file)):'absent';
-    if(actual!==input.sha256)throw Error('oracle dependency recorded input bytes changed: '+input.path);
+    if(actual!==input.sha256)throw new ReadyInputMismatch('oracle dependency recorded input bytes changed: '+input.path);
   }
 }
 
@@ -150,7 +154,35 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
   ownsDependencyRun(capability,env,true);
   if(capability.seal?.nodeVersion===process.versions.node){try{dependencySealReady(capability,env);return capability;}catch(error){throw new ToolingInstrumentError('tooling-setup',String(error));}}
   const unsealed={...capability};delete unsealed.seal;
-  const ready=await captureDependencies(unsealed,signal,env),image:DependencyImage=JSON.parse(readFileSync(ready,'utf8'));
+  let ready:string|undefined;
+  if(unsealed.parentImage){
+    const began=performance.now(),parent=unsealed.parentImage;
+    const record=dependencyImageReady(parent);
+    if(!record||!parent.seal)throw new ToolingInstrumentError('tooling-setup','parent oracle image is not sealed');
+    const bytes=readFileSync(record),semanticBytes=readFileSync(join(dirname(record),'semantic.json'));
+    if(hash(bytes)!==parent.seal.readySha256||hash(semanticBytes)!==parent.seal.semanticSha256)throw new ToolingInstrumentError('tooling-setup','parent oracle image seal changed: '+record);
+    const image:DependencyImage=JSON.parse(bytes.toString()),semantic=JSON.parse(semanticBytes.toString());
+    checked(unsealed);
+    if(image.version!==1||JSON.stringify(image.inputSet)!==JSON.stringify(semantic.inputSet))throw new ToolingInstrumentError('tooling-setup','parent oracle image inputs changed: '+record);
+    if(semantic.producerSha256===unsealed.producerSha256&&image.lockfileSha256===unsealed.lockfileSha256){
+      try{validateReadyInputs(unsealed,image.inputSet);ready=record;}
+      catch(error){if(!(error instanceof ReadyInputMismatch))throw error;}
+      if(ready){
+        // Keep the image in the parent's lifetime; only this handoff's source
+        // binding changes after ordinary input validation.
+        const ledger=join(unsealed.admission.kind==='gate'?unsealed.admission.temporary.parent:unsealed.directory,'oracle-dependency-calls.jsonl');
+        mkdirSync(dirname(ledger),{recursive:true});
+        const result={...unsealed,directory:parent.directory,seal:{...parent.seal}};delete result.parentImage;
+        appendFileSync(ledger,JSON.stringify({version:1,step:result.ownerStep,nodeVersion:process.versions.node,directory:dirname(ready),mode:'hit',rebound:true,source:result.source,wallMs:performance.now()-began,pnpmSelectionCommands:0})+'\n');
+        // Parent sealing already validated and protected the complete tree.
+        // Do not chmod its records again: even an unchanged mode changes ctime
+        // and would invalidate the parent's still-live immutable-image seal.
+        return result;
+      }
+    }
+  }
+  ready??=await captureDependencies(unsealed,signal,env);
+  const image:DependencyImage=JSON.parse(readFileSync(ready,'utf8'));
   const directory=dirname(ready),semanticBytes=readFileSync(join(directory,'semantic.json')),semantic=JSON.parse(semanticBytes.toString('utf8'));
   const actual=dependencyInventory(join(directory,'tree'));
   const packageMetadata=dependencyPackageInventory(actual).filter((entry):entry is Extract<Entry,{kind:'file'}>=>entry.kind==='file'&&entry.path.endsWith('/package.json')).map(entry=>({path:entry.path,sha256:entry.sha256,metadata:capturedPackageMetadata(dirname(join(directory,'tree',entry.path)))}));
@@ -158,7 +190,8 @@ export async function sealDependencyCapability(capability:DependencyCapability,e
      JSON.stringify(dependencyPackageInventory(actual))!==JSON.stringify(semantic.packages)||JSON.stringify(packageMetadata)!==JSON.stringify(semantic.packageMetadata))throw new ToolingInstrumentError('tooling-setup','oracle dependency image changed before sealing: '+ready);
   chmodSync(join(directory,'semantic.json'),0o444);chmodSync(ready,0o444);
   const seal:DependencyRunSeal={version:1,nodeVersion:process.versions.node,record:ready,readySha256:hash(readFileSync(ready)),semanticSha256:hash(semanticBytes),identity:dependencySealIdentity(ready)};
-  return {...capability,seal};
+  const result={...capability,seal};delete result.parentImage;
+  return result;
 }
 export async function captureDependencies(capability:DependencyCapability,signal?:AbortSignal,env:NodeJS.ProcessEnv=process.env):Promise<string>{
   try{const sealed=dependencySealReady(capability,env);if(sealed)return sealed;}catch(error){throw new ToolingInstrumentError('tooling-setup',String(error));}

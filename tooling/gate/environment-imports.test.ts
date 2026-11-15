@@ -28,3 +28,12 @@ test('Node eval and heredoc imports use the shared shell observer and actual mod
   assert.deepEqual(problems('tooling/shell.sh',old.replace('canonical-environment.ts','host-environment.ts')),[]);
   assert.ok(problems('tooling/shell.sh',`node --input-type=module - <<'JS'\nimport {ownedCacheEnvironment} from './canonical-environment.ts';\nJS\n`).length);
 });
+test('moved oracle APIs are rejected through the same direct, generated and shell observer',()=>{
+  for(const source of [
+    "import {oracleRecipeIdentity} from '../differential/oracle-emit.ts';",
+    "import {writeFileSync} from 'node:fs'; const child=`import {OracleWorker,oracleRecipeIdentity} from '../differential/oracle-emit.ts';`; writeFileSync('child.mjs',child);",
+    "import {writeFileSync} from 'node:fs'; const url=new URL('../differential/oracle-emit.ts',import.meta.url).href; const child=`const {oracleRecipeIdentity}=await import(${JSON.stringify(url)});`; writeFileSync('child.mjs',child);",
+  ])assert.ok(problems('tooling/gate/fixture.ts',source).some(row=>row.includes('oracleRecipeIdentity must be imported')),source);
+  assert.deepEqual(problems('tooling/gate/fixture.ts',"import {oracleRecipeIdentity} from '../differential/oracle-runtime.ts'; import {OracleWorker} from '../differential/oracle-emit.ts';"),[]);
+  assert.ok(problems('tooling/shell.sh',`node --input-type=module - <<'JS'\nimport {OracleBudgetError} from './oracle-emit.ts';\nJS\n`).some(row=>row.includes('OracleBudgetError must be imported')));
+});

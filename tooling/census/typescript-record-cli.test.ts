@@ -103,7 +103,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: ownMemoryEnv(lowMemory?starved:memory, { ...fixtureEnvironment(t), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
+        env: ownMemoryEnv(lowMemory?starved:memory, { ...fixtureEnvironment(t,{NTS_ORACLE_DEPENDENCIES:undefined}), NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
           NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile },
           lowMemory?{availableKiB:0,totalKiB:2**20}:undefined) });
   }
@@ -160,6 +160,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(shifted.status, 0, shifted.stdout + shifted.stderr);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).observations[target].validator, "Queue<N>#push TypeId(N) type N at: 7");
   const contents = serializeTypeScriptRecord(recorded);
+  // Resume and report use no dependency seal and admit no work at all.
   const resumed=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,root,true);
   assert.equal(resumed.status,0,resumed.stdout+resumed.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).observations[target],pass);

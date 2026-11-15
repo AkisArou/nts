@@ -3372,7 +3372,12 @@ Consume-only oracles exposed standalone entry gaps, including the full check's
 post-landing recorder. One withPreparedOracle owner at command boundaries uses
 canonical preparation and sealing under the entry's admission. Ambient entries
 re-enter in a sealed child; explicit callbacks receive the environment. Valid
-parent seals are consumed directly. Children, newly started resolution services
+parent seals for the same source are consumed directly. A copied source goes
+through the ordinary preparer's producer, lockfile and installation-input
+validation before reusing the parent's immutable image with its own canonical
+source binding. Mismatches prepare normally. This adds neither a cross-run
+store nor a fixture rebinding API, and leaves the live parent's record identity
+and helper lifetime untouched. Children, newly started resolution services
 and admission drain in ownership order. Internal workers require their parent
 seal. The entry audit and shared shell observer cover imports, command entries,
 prefixed Node commands and inline programs. Report/identity readers use pure
