@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,writeFileSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {dirname,join,relative} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test} from 'node:test';
 import {testScratch} from '../gate/test-scratch.ts';
@@ -11,6 +11,7 @@ import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {LINKER_INPUTS} from '../inputs/linker.ts';
 import {corpus} from '../inputs/corpus.ts';
 import {AWFY} from './awfy.ts';
+const SOURCE=fileURLToPath(new URL('../../',import.meta.url));
 function repository(parent:string,env:NodeJS.ProcessEnv){
   const root=join(parent,'upstream');mkdirSync(root);
   const git=(...args:string[])=>execFileSync('git',gitArguments(args),{cwd:root,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
@@ -40,7 +41,7 @@ test('the production linker keeps two candidate pins and the legacy checkout ind
   const own=testScratch(t,'awfy-link'),env=fixtureEnvironment(t),f=repository(own,env),shared=join(own,'shared');
   const first=f.owner(),source=first.acquire(shared,env),legacy=join(shared,'third_party/are-we-fast-yet');mkdirSync(legacy);writeFileSync(join(legacy,'owned'),'legacy\n');
   const stage=(name:string,pin:string)=>{
-    const tree=join(own,name);mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>fileURLToPath(url)),tree);
+    const tree=join(own,name);mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>relative(SOURCE,fileURLToPath(url))),tree);
     // Private stand-ins for the linker's other acquisition owners.
     for(const path of ['tooling/inputs/node-inputs.ts','tooling/inputs/dependency-inputs.ts'])writeFileSync(join(tree,path),'process.exitCode=0;\n');
     writeFileSync(join(tree,'tooling/bootstrap/awfy.pin'),pin+'\n');return tree;
@@ -59,7 +60,7 @@ test('a repository without an acquired pin retains explicit corpus absence',t=>{
 });
 test('a real link acquisition failure names its cause and retry without publishing a slot',t=>{
   const own=testScratch(t,'awfy-fetch-failure'),env=fixtureEnvironment(t),f=repository(own,env),tree=join(own,'tree'),shared=join(own,'shared'),upstream=join(own,'missing-upstream');
-  mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>fileURLToPath(url)),tree);
+  mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>relative(SOURCE,fileURLToPath(url))),tree);
   const entry=join(tree,'tooling/bootstrap/awfy.ts'),source=readFileSync(entry,'utf8');assert.ok(source.includes(AWFY.upstream));
   writeFileSync(entry,source.replace(AWFY.upstream,upstream));writeFileSync(join(tree,'tooling/bootstrap/awfy.pin'),f.pin+'\n');
   const packet=join(own,'instrument.json'),result=spawnSync('sh',[join(tree,'tooling/inputs/link.sh'),'work',shared,tree],{cwd:tree,env:{...env,NTS_GATE_STEP:'awfy-acquisition',NTS_GATE_STEP_ATTEMPT:'failure',NTS_GATE_STEP_RESULT:packet},encoding:'utf8'});
