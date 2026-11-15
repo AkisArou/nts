@@ -2,21 +2,21 @@ import {testEnvironment} from "../gate/test-environment.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {heapReport} from './layouts-heap.ts';
-import {newTestScratch} from '../gate/test-scratch.ts';
+import {TestScratch,testScratchBase} from '../gate/test-scratch.ts';
 
 test('heap helper compiles strictly and moves observed main/thread placement',{skip:process.platform!=='linux'||process.arch!=='x64'},()=>{
- const dir=newTestScratch('layout-heap');
+ const owned=new TestScratch(process.env.NTS_TEST_SCRATCH_ROOT??testScratchBase(),'layout-heap'),dir=owned.path;
  try {
   const source=fileURLToPath(new URL('./layouts-heap.c',import.meta.url)),library=join(dir,'heap.so');
-  let r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared',source,'-ldl','-pthread','-o',library],{env:testEnvironment(),encoding:'utf8'});
+  let r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared',source,'-ldl','-pthread','-o',library],{cwd:dir,env:testEnvironment(),encoding:'utf8'});
   assert.equal(r.status,0,r.stderr);
   const probe=join(dir,'probe.c'),binary=join(dir,'probe');
   writeFileSync(probe,'#include <pthread.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\nstatic void *run(void *p){(void)p;void *a=malloc(64);if(!a)return (void*)1;printf("%llu\\n",(unsigned long long)(uintptr_t)a);free(a);return NULL;}\nint main(void){pthread_t t;if(run(NULL)||pthread_create(&t,NULL,run,NULL))return 1;void *p;if(pthread_join(t,&p)||p)return 1;return 0;}\n');
-  r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror',probe,'-pthread','-o',binary],{env:testEnvironment(),encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+  r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror',probe,'-pthread','-o',binary],{cwd:dir,env:testEnvironment(),encoding:'utf8'});assert.equal(r.status,0,r.stderr);
   const positions:[number[],number[]]=[[],[]];
   for(const seed of [101,307,509,701,907,1103,1301,1511,1709,1907]){
    const report=join(dir,seed+'.jsonl');
@@ -29,5 +29,5 @@ test('heap helper compiles strictly and moves observed main/thread placement',{s
   assert.ok(new Set(positions[0]).size>=5);assert.ok(new Set(positions[1]).size>=5);
   r=spawnSync(binary,[],{encoding:'utf8',env:{...testEnvironment(),LD_PRELOAD:library,NTS_LAYOUT_HEAP_SEED:'0',NTS_LAYOUT_HEAP_REPORT:join(dir,'bad.jsonl')}});
   assert.equal(r.status,125);assert.throws(()=>readFileSync(join(dir,'bad.jsonl')));
- }finally{rmSync(dir,{recursive:true,force:true});}
+ }finally{owned.finish();}
 });

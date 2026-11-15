@@ -86,6 +86,14 @@ impl<'a> Recorder<'a> {
             stages: self.stages,
         }
     }
+    pub(super) fn link_output(
+        &mut self,
+        column: &str,
+        phase: &str,
+        tool: &mut Command,
+    ) -> Result<Output> {
+        with_link_directory(tool, |tool| self.output(column, phase, tool))
+    }
     pub(super) fn output(
         &mut self,
         column: &str,
@@ -268,6 +276,21 @@ fn supervised(
     Ok(result)
 }
 
+/// GNU ld's libgcc script probes cwd for libgcc_s.so.1. This lookup belongs
+/// to a fresh owned directory, including outside a test runner. All object,
+/// library and output arguments are absolute when the benchmark calls this.
+pub(super) fn link_output(root: &Utf8Path, tool: &mut Command) -> Result<Output> {
+    with_link_directory(tool, |tool| output(root, tool))
+}
+
+fn with_link_directory(
+    tool: &mut Command,
+    run: impl FnOnce(&mut Command) -> Result<Output>,
+) -> Result<Output> {
+    let directory = crate::scratch::ScratchDir::in_target("benchmark-link");
+    run(tool.current_dir(&directory))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,6 +403,31 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
                 .env_remove("HOME");
             Ok(tool)
         }
+    }
+
+    #[test]
+    fn link_cwd_is_owned_and_removed_with_and_without_the_test_runner() -> Result<()> {
+        let own = fixture()?;
+        let marker = own.dir.join("next built");
+        let mut tool = own.tool("complete")?;
+        assert!(link_output(&own.root, &mut tool)?.status.success());
+        let text = std::fs::read_to_string(marker)?;
+        let cwd = Utf8PathBuf::from(text.split('|').nth(1).expect("recorded cwd"));
+        let parent = std::env::var("NTS_TEST_SCRATCH_ROOT")
+            .map_or_else(|_| own.root.join("target/tmp"), Utf8PathBuf::from);
+        assert!(cwd.starts_with(parent.canonicalize_utf8()?), "{cwd}");
+        assert!(!cwd.exists(), "link cwd must be removed after drain: {cwd}");
+        if std::env::var_os("NTS_BENCH_LINK_CWD_FALLBACK_CONTROL").is_none() {
+            crate::self_test::run(
+                "build::tests::link_cwd_is_owned_and_removed_with_and_without_the_test_runner",
+                |command| {
+                    command
+                        .env_remove("NTS_TEST_SCRATCH_ROOT")
+                        .env("NTS_BENCH_LINK_CWD_FALLBACK_CONTROL", "1");
+                },
+            );
+        }
+        Ok(())
     }
 
     #[test]
