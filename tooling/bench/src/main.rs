@@ -942,12 +942,7 @@ fn variants(
     builds: &mut build::Recorder<'_>,
 ) -> Result<(Vec<Option<Measured>>, Absences)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
-    // Why the JVM column is empty, where it is. Two different absences that a
-    // single blank -- or a single `refused` -- would flatten into one.
-    let mut jvm_absence: Option<JvmAbsence> = None;
-    let mut cpp_absence = None;
-    let mut java_absence = None;
-    let mut outcomes = std::collections::BTreeMap::new();
+    let mut absences = Absences::default();
     let driver = native_driver(case, out, name, emission.initializes, workload)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
@@ -963,7 +958,7 @@ fn variants(
             && !only.iter().any(|want| lane_matches(want, variant.label))
         {
             if matches!(variant.generated, Generated::Jvm) {
-                jvm_absence = Some(JvmAbsence::NotRun);
+                absences.jvm = Some(JvmAbsence::NotRun);
             }
             results.push(None);
             continue;
@@ -989,24 +984,14 @@ fn variants(
             results.push(None);
             continue;
         }
-        if matches!(
-            variant.generated,
-            Generated::None | Generated::JavaReference
-        ) && let Some(reason) =
-            references::corpus_absence(case, variant.source, builds.awfy().is_some())?
-        {
-            if matches!(variant.generated, Generated::None) {
-                cpp_absence = Some(reason);
-            } else {
-                java_absence = Some(reason);
-            }
+        if absences.missing_corpus(case, variant, builds.awfy().is_some())? {
             results.push(None);
             continue;
         }
         let (libraries, unavailable) =
             reference_libraries(case, out, name, variant.generated, builds)?;
         if let Some(reason) = unavailable {
-            cpp_absence = Some(reason);
+            absences.cpp = Some(reason);
             results.push(None);
             continue;
         }
@@ -1026,15 +1011,15 @@ fn variants(
                 let run = jvm_case(
                     root, case, out, name, tsconfig, provider, workload, counting, builds,
                 );
-                match observe(run, Generated::Jvm, &mut outcomes) {
+                match observe(run, Generated::Jvm, &mut absences.outcomes) {
                     Ok(measured) => {
                         if measured.is_none() {
-                            jvm_absence = Some(JvmAbsence::RuntimeAbort);
+                            absences.jvm = Some(JvmAbsence::RuntimeAbort);
                         }
                         results.push(measured);
                     }
                     Err(error) if error.to_string().starts_with(DECLINED) => {
-                        jvm_absence = Some(JvmAbsence::Refused);
+                        absences.jvm = Some(JvmAbsence::Refused);
                         results.push(None);
                     }
                     Err(error) => return Err(error),
@@ -1070,17 +1055,9 @@ fn variants(
                 variant.label,
             )
         });
-        results.push(observe(built, variant.generated, &mut outcomes)?);
+        results.push(observe(built, variant.generated, &mut absences.outcomes)?);
     }
-    Ok((
-        results,
-        Absences {
-            jvm: jvm_absence,
-            cpp: cpp_absence,
-            java: java_absence,
-            outcomes,
-        },
-    ))
+    Ok((results, absences))
 }
 
 fn reference_libraries(
@@ -1121,7 +1098,7 @@ fn observe(
 }
 
 /// Why the columns that may be missing are, for one row.
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 struct Absences {
     #[serde(default)]
     outcomes: std::collections::BTreeMap<execution::Column, execution::Outcome>,
@@ -1130,6 +1107,29 @@ struct Absences {
     cpp: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     java: Option<String>,
+}
+
+impl Absences {
+    fn missing_corpus(
+        &mut self,
+        case: &Utf8Path,
+        variant: &Variant,
+        available: bool,
+    ) -> Result<bool> {
+        if matches!(
+            variant.generated,
+            Generated::None | Generated::JavaReference
+        ) && let Some(reason) = references::corpus_absence(case, variant.source, available)?
+        {
+            if variant.generated == Generated::None {
+                self.cpp = Some(reason);
+            } else {
+                self.java = Some(reason);
+            }
+            return Ok(true);
+        }
+        Ok(false)
+    }
 }
 
 /// The engines, the checksum agreement, and the printed row.
