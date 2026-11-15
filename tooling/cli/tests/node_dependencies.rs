@@ -127,7 +127,7 @@ fn a_blocked_loop_driver_is_unmeasured_in_its_private_packet() {
     // no elapsed-time comparison decides this control.
     let output = loop_command(
         &root().join("tooling/cli/tests/fixtures/node-loop-blocked.cjs"),
-        &[ready.clone()],
+        std::slice::from_ref(&ready),
         &packet,
         &["--idle", "1"],
     )
