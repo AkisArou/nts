@@ -4,7 +4,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import {spawn,type ChildProcess} from 'node:child_process';
 import {registerHooks,createRequire} from 'node:module';
 import {createConnection,createServer,type Socket} from 'node:net';
-import {closeSync,constants,createReadStream,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,statSync,unlinkSync,watch,writeFileSync} from 'node:fs';
+import {closeSync,constants,createReadStream,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,statSync,unlinkSync,watch,writeFileSync,type FSWatcher} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {nodeExecutableIdentity,nodeProcessBirth,nodeProcessAlive,checkNodeResolutionSession,type NodeResolutionOptions,type NodeResolutionSession} from './oracle-runtime.ts';
@@ -50,13 +50,14 @@ function receive(socket:Socket):Promise<Buffer>{
     socket.once('close',()=>{if(!complete)error(Error('oracle Node resolution connection closed before its response'));});
   });
 }
-function readyFile(directory:string):{ready:Promise<NodeResolutionSession>;cancel:()=>void}{
-  const file=join(directory,'holder.json');let cancel!:()=>void;
+type ResolutionAcquisition={ready?:(waiting:Promise<NodeResolutionSession>)=>Promise<NodeResolutionSession>;watch?:(directory:string,listener:()=>void)=>FSWatcher};
+function readyFile(directory:string,watchDirectory:NonNullable<ResolutionAcquisition['watch']>=watch):{ready:Promise<NodeResolutionSession>;cancel:()=>void}{
+  const file=join(directory,'holder.json');let cancel=()=>{};
   const ready=new Promise<NodeResolutionSession>((done,fail)=>{
     let complete=false;
     const finish=(error?:unknown,value?:NodeResolutionSession)=>{if(complete)return;complete=true;clearTimeout(timer);watcher.close();if(error)fail(error);else done(value!);};
     const check=()=>{try{if(existsSync(file))finish(undefined,JSON.parse(readFileSync(file,'utf8')));}catch(error){finish(error);}};
-    const watcher=watch(directory,check),timer=setTimeout(()=>finish(Error('oracle Node resolution service did not start')),30_000);
+    const watcher=watchDirectory(directory,check),timer=setTimeout(()=>finish(Error('oracle Node resolution service did not start')),30_000);
     cancel=()=>finish(Error('oracle Node resolution service acquisition cancelled'));
     watcher.once('error',finish);check();
   });
@@ -65,7 +66,7 @@ function readyFile(directory:string):{ready:Promise<NodeResolutionSession>;cance
 /** Async initialization is safe in a parent draining other children's pipes.
  * Other platforms retain the existing bounded live path, without using an
  * executable identity that they cannot authenticate through Linux /proc. */
-export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void,readiness?:(waiting:Promise<NodeResolutionSession>)=>Promise<NodeResolutionSession>):Promise<NodeResolutionSession|null>{
+export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void,acquisition:ResolutionAcquisition={}):Promise<NodeResolutionSession|null>{
   if(process.platform!=='linux')return null;
   mkdirSync(directory,{recursive:true,mode:0o700});
   const permissions=lstatSync(directory);
@@ -76,7 +77,7 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
     checkNodeResolutionSession(session,options);return session;
   }
-  const waiting=readyFile(directory),claim=join(directory,'starting.json');
+  const waiting=readyFile(directory,acquisition.watch),claim=join(directory,'starting.json');
   let starter=false,child:ChildProcess|undefined,closed:Promise<void>|undefined;
   let exited:Promise<{code:number|null;signal:NodeJS.Signals|null;error?:Error}>|undefined;
   try{
@@ -101,7 +102,7 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
       void closed.catch(()=>{});child.unref();
       if(!child.pid)throw Error('oracle Node resolution service launch failed');
     }
-    const pending=readiness?readiness(waiting.ready):waiting.ready;
+    const pending=acquisition.ready?acquisition.ready(waiting.ready):waiting.ready;
     const early=exited?.then(result=>{throw result.error??Error('oracle Node resolution holder stopped before readiness: '+(result.signal??result.code));});
     const session=await (early?Promise.race([pending,early]):pending);
     if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');

@@ -122,15 +122,27 @@ for(const failure of ['readiness','invalid-session'] as const)test('failed '+fai
   if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
   const root=fixture(t),directory=join(root,'service');
   let holder:NodeResolutionSession|undefined,published=false;
-  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},async waiting=>{
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},{ready:async waiting=>{
     holder=await waiting;
     assert.equal(nodeProcessAlive(holder.holder),true,'the actual acquired helper is live before the failure');
     if(failure==='readiness')throw Error('supplied resolution readiness failure');
     const invalid={...holder,helperSha256:'0'.repeat(64)};
     writeFileSync(join(directory,'holder.json'),JSON.stringify(invalid));return invalid;
-  }),failure==='readiness'?/supplied resolution readiness failure/:/oracle Node resolution service identity changed/);
+  }}),failure==='readiness'?/supplied resolution readiness failure/:/oracle Node resolution service identity changed/);
   assert.ok(holder);assert.equal(published,false,'an invalid acquisition never publishes successful ownership');
   assert.equal(nodeProcessAlive(holder.holder),false,'the owned child has closed before acquisition rejects');
   rmSync(directory,{recursive:true});
   assert.equal(nodeProcessAlive(holder.holder),false,'no helper can read or publish into removed output');
+});
+
+
+test('a resolution watcher-construction failure keeps its original error through acquisition cleanup',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux resolution helper acquisition');return;}
+  const directory=join(fixture(t),'service'),expected=Error('supplied resolution watcher construction failure');
+  let watched=false,published=false;
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},{watch:(actual)=>{
+    assert.equal(actual,directory);watched=true;throw expected;
+  }}),error=>error===expected,'the uninitialized cancellation path must not replace the watcher error');
+  assert.equal(watched,true);assert.equal(published,false);
+  rmSync(directory,{recursive:true});
 });
