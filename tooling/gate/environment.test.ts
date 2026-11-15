@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { gateCapabilities, gateEnvironmentError, GATE_ENVIRONMENT, missingEnvironment, systemdEnvironment } from "./environment.ts";
 import { FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
+import {moduleGraph} from './module-closure.ts';
 
 const roots: string[] = [];
 after(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -85,4 +86,17 @@ test("step and project declarations cover the actual JVM, Android and Valgrind c
   assert.ok(sites.some(site => site.project === "native-string" && site.capabilities.includes("valgrind")));
   assert.ok(sites.some(site => site.project === "java-from-ts" && site.capabilities.includes("jvm")));
   assert.ok(readFileSync(join(root, "tests/interop/native-string/build.sh"), "utf8").includes("valgrind"));
+});
+
+test('capability discovery owns shallow project names and build headers without framework bytes',()=>{
+  const graph=moduleGraph();
+  try{
+    const snapshot=graph.describe(['tooling/gate/environment.ts']);
+    const members=snapshot.memberships.find(row=>row.reader==='tooling/gate/environment.ts'&&row.directory==='tests/interop');
+    assert.ok(members);assert.ok(members.entries.some(row=>row.name==='macos-pods'&&row.type==='directory'));
+    assert.ok(snapshot.optionalFiles.some(row=>row.reader==='tooling/gate/environment.ts'&&row.path==='tests/interop/native-string/build.sh'&&row.present));
+    assert.ok(snapshot.files.includes('tests/interop/native-string/build.sh'));
+    assert.ok(!snapshot.files.some(path=>path.startsWith('tests/interop/macos-pods/Beep/')));
+    assert.ok(!snapshot.directories.some(row=>row.reader==='tooling/gate/environment.ts'&&row.kind==='data'&&row.directory==='tests/interop'));
+  }finally{graph.close();}
 });

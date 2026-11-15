@@ -97,8 +97,10 @@ import { mergeTest262Record, parseTest262Row } from "../census/test262-record.ts
 import { ARMS, COMPILE_ARMS, calibrationEntries, compileTimeModules, readCounterTable, tableLines, withCalibrationEntries, withTableLines, type CompileArm } from "../gate/compile-counter.ts";
 import { appliedLine, DELTA_FILE, MalformedDelta, parseDelta, serializeDelta, type ApplyCounts, type Delta, type DeltaRow } from "./delta.ts";
 import { inventory, listedIn, pendingLine } from "./pending.ts";
+import {RUST_SELECTOR_CASE,rustSelectorPending,rustSelectorSourceKey} from '../gate/rust-selector-write.ts';
+import {RUST_SELECTOR_RECORD,parseRustSelectorRecord,MAX_RUST_SELECTOR_RECORD_BYTES} from '../gate/rust-selector-record.ts';
 
-export const KINDS = ["oracle-counts", "typescript", "test262", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times"] as const;
+export const KINDS = ["oracle-counts", "typescript", "test262", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times", "rust-selector"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
@@ -118,6 +120,7 @@ export const KIND_STEPS: Readonly<Record<Kind, readonly string[]>> = {
   outcomes: ["outcomes"],
   dex: ["dex"],
   "compile-times": ["compile-time", "compile-time-rc"],
+  "rust-selector": ["records"],
 };
 export type Part = "core" | "wide";
 /** The part of the full check that runs a kind's checks: a kind is recorded after that part is green. */
@@ -154,6 +157,7 @@ const compileRows = (record: string, text: string) => isCompileTable(record) ? t
 /** Every pending case of one kind on the tree at `root`, from its sources and records alone. */
 export function findPending(root: string, kind: Kind): Pending[] {
   switch (kind) {
+    case 'rust-selector': return rustSelectorPending(root)?[{kind,name:RUST_SELECTOR_CASE,record:RUST_SELECTOR_RECORD}]:[];
     case "oracle-counts":
       return pendingFixtures(root).map(name => ({ kind, name, record: recordPath(name) }));
     case "test262":
@@ -238,6 +242,7 @@ export function oracleRefreshes(root:string):Pending[]{
 /** The recorder runs one kind needs for its pending cases and accepted changes, as node arguments from the root. */
 export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][] {
   switch (kind) {
+    case 'rust-selector': return [[relative(SOURCE_ROOT,fileURLToPath(new URL('../gate/rust-selector-write.ts',import.meta.url))),'--write']];
     case "oracle-counts":
       // One run per fixture: the recorder writes nothing when any fixture it
       // was given cannot be measured, so one such fixture would keep every
@@ -285,6 +290,7 @@ function recordFiles(root: string, kind: Kind): string[] {
       .filter(entry => entry.isFile() && entry.name.endsWith(".json"))
       .map(entry => relative(root, join(entry.parentPath, entry.name))).sort();
   switch (kind) {
+    case 'rust-selector': return [RUST_SELECTOR_RECORD];
     case "oracle-counts": return under(RECORDS);
     case "typescript": return BACKENDS.map(typescriptRecord);
     case "test262": return TEST262_RECORDS;
@@ -353,6 +359,11 @@ function acceptedRow(kind: LineKind, before: string, after: string): string | nu
 export function auditRecord(kind: Kind, file: string, before: string | null, after: string | null, pending: ReadonlySet<string>): string[] {
   if (before === after) return [];
   assert.ok(after !== null, `${file} was removed`);
+  if(kind==='rust-selector'){
+    assert.equal(file,RUST_SELECTOR_RECORD);assert.ok(pending.has(RUST_SELECTOR_CASE),'Rust selector refresh was not pending');
+    assert.ok(Buffer.byteLength(after)<=MAX_RUST_SELECTOR_RECORD_BYTES,'Rust selector record exceeds committed size budget');
+    parseRustSelectorRecord(JSON.parse(after) as unknown);return [RUST_SELECTOR_CASE+' (pending projection)'];
+  }
   if (kind === "compile-times") return auditCompileTimes(file, before, after, pending);
   if (kind === "typescript" || kind === "test262" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex") {
     // A test262 record's header names the run that wrote it, on all three of its lines.
@@ -504,7 +515,7 @@ function changedRows(kind: Kind, file: string, before: string | null, after: str
     return [...rows(after, kind).rows].filter(([key, row]) => was.get(key)?.line !== row.line)
       .map(([key, row]) => ({ kind, record: file, case: row.name, key, before: was.get(key)?.line ?? null, after: row.line }));
   }
-  const name = caseOfRecord(kind, file);
+  const name = kind==='rust-selector'?RUST_SELECTOR_CASE:caseOfRecord(kind, file);
   return [{ kind, record: file, case: name, key: name, before, after }];
 }
 
@@ -563,11 +574,15 @@ const sha256 = (bytes: string | Uint8Array) => createHash("sha256").update(bytes
 export function sourceDigests(root: string, cases: readonly { kind: Kind; name: string }[]): Map<string, string | null> {
   // A test262 case is a file of the test262 checkout, which nts's git does not track: its digest is its own bytes.
   const digests = new Map<string, string | null>();
+  if(cases.some(one=>one.kind==='rust-selector')){
+    const path=join(root,RUST_SELECTOR_RECORD);
+    digests.set('rust-selector\0'+RUST_SELECTOR_CASE,existsSync(path)?rustSelectorSourceKey(root,readFileSync(path,'utf8'))??null:null);
+  }
   for (const one of cases.filter(one => one.kind === "test262")) {
     const file = join(root, "third_party/test262", one.name);
     digests.set(`test262\0${one.name}`, existsSync(file) ? sha256(JSON.stringify([[one.name, sha256(readFileSync(file))]])) : null);
   }
-  const wanted = new Map(cases.filter(one => one.kind !== "test262").map(one => [`${one.kind}\0${one.name}`, sourcesOf(one.kind, one.name)]));
+  const wanted = new Map(cases.filter(one => one.kind !== "test262"&&one.kind!=='rust-selector').map(one => [`${one.kind}\0${one.name}`, sourcesOf(one.kind, one.name)]));
   const files = filesUnder(root, [...new Set([...wanted.values()].flatMap(one => one.paths))]);
   const content = new Map<string, string>();
   const digestOf = (file: string) => {
@@ -732,6 +747,7 @@ function checkDelta(delta: Delta): void {
       : kind === "benchmark-runs" ? BENCH_AGREE_BACKENDS.map(runsRecord) : kind === "dex" ? [DEX_RECORD]
       : kind === "outcomes" ? (/^tests\/outcomes\/[^/]+$/.test(row.case) ? [outcomesRecord(row.case.slice("tests/outcomes/".length))] : [])
       : kind === "compile-times" ? COMPILE_TIME_RECORDS
+      : kind === 'rust-selector' ? row.case===RUST_SELECTOR_CASE?[RUST_SELECTOR_RECORD]:[]
       : (() => { try { return [recordPath(row.case)]; } catch { return []; } })();
     if (!records.includes(row.record)) bad(row, `no ${kind} recorder writes that record`);
     if (kind === "compile-times") {
@@ -835,7 +851,7 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
     return pendingByKind.get(kind)!;
   };
   // A compile row is held to its own digests below; every other row to its case's files.
-  const sources = sourceDigests(root, delta.rows.filter(row => row.kind !== "benchmarks").map(row => ({ kind: row.kind as Kind, name: row.case })));
+  const sources = sourceDigests(root, delta.rows.filter(row => row.kind !== "benchmarks"&&row.kind!=='rust-selector').map(row => ({ kind: row.kind as Kind, name: row.case })));
 
   let ready: DeltaRow[] = [];
   for (const row of delta.rows) {
@@ -852,7 +868,7 @@ export async function applyDelta(root: string, delta: Delta, options: ApplyOptio
       if (pending instanceof Error) { skip(row, `the pending ${row.kind} cases cannot be listed here: ${pending.message}`); continue; }
       if (!pending.has(`${row.record}\0${row.case}`)) { skip(row, "it is not a pending case here"); continue; }
     }
-    const digest = row.kind === "benchmarks" ? row.sources : sources.get(`${row.kind}\0${row.case}`);
+    const digest = row.kind === "benchmarks" ? row.sources : row.kind==='rust-selector'?rustSelectorSourceKey(root,row.after):sources.get(`${row.kind}\0${row.case}`);
     if (digest !== row.sources) { skip(row, digest === null ? "its sources are gone" : `its sources changed${since}`); continue; }
     ready.push(row);
   }

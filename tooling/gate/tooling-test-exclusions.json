@@ -1,1 +1,3 @@
-[]
+[
+  {"path":"tooling/gate/selector-population.test.ts","reason":"one real full-population live selector control; landing range controls use a one-crate fixture","step":"integrity"}
+]

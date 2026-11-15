@@ -6,8 +6,8 @@ import {test,type TestContext} from 'node:test';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {moduleGraph,type InputSnapshot,type ModuleDeclarations} from './module-closure.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
-import {projectInput,projectConfig} from './reader-inputs/main.ts';
-import {captureReaderObservations,validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation,readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {projectConfig} from './reader-inputs/main.ts';
+import {captureReaderObservations,validateReaderSourceObservations,replayFixtureReaderObservations,NonPortableReaderObservation,readerObservationDependency,readerObservationIndex,readerObservationProjection,readerDependencyIndex} from './reader-observations.ts';
 import type {ReaderObservation} from './module-closure.ts';
 import {testScratch} from './test-scratch.ts';
 import {spawnTest} from './test-wait.ts';
@@ -25,6 +25,26 @@ function snapshot(source:string,entries:Parameters<ReturnType<typeof moduleGraph
   const graph=moduleGraph({sourceRoot:source,...(node?{nodeMajor:26 as const}:{})});
   try{return graph.describe(entries);}finally{graph.close();}
 }
+
+test('an exact non-directory negative replays only with its own unchanged regular blocking component',t=>{
+  const f=fixture(t),blocker=join(f.source,'blocked'),path=join(blocker,'tsconfig.json');writeFileSync(blocker,'regular blocker');
+  const filesystem=new OracleFilesystem();assert.equal(filesystem.fileExists(path),false);
+  const facts=captureReaderObservations(f.source,filesystem.captured());
+  const base=snapshot(f.source,['src/main.ts']),observations:ReaderObservation[]=facts.map(fact=>({reader:'src/main.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},...fact}));
+  const captured={...base,observations};validateReaderSourceObservations(captured,f.source);
+  writeFileSync(blocker,'different bytes still block traversal');validateReaderSourceObservations(captured,f.source);
+  const positive=structuredClone(captured);positive.observations.find(row=>row.observation.kind==='fileExists')!.observation.value=true;
+  assert.throws(()=>validateReaderSourceObservations(positive,f.source),/ancestor is not an owned directory/);
+  for(const change of ['reader','context'] as const){
+    const foreign=structuredClone(captured),witness=foreign.observations.find(row=>row.observation.kind==='runtimeKind'&&row.observation.path===blocker)!;
+    if(change==='reader')witness.reader='another.ts';else witness.context.entry='another.ts';
+    assert.throws(()=>validateReaderSourceObservations(foreign,f.source),/ancestor is not an owned directory/,change+' cannot lend a blocker');
+  }
+  rmSync(blocker);mkdirSync(blocker);
+  assert.throws(()=>validateReaderSourceObservations(captured,f.source),/runtimeKind changed/,'a directory invalidates the captured blocker even while the child stays absent');
+  rmSync(blocker,{recursive:true});mkdirSync(join(f.source,'target'));symlinkSync('target',blocker);
+  assert.throws(()=>validateReaderSourceObservations(captured,f.source),/ancestor is not an owned directory/,'a link cannot borrow the regular blocker fact');
+});
 
 test('explicit Node capture retains nearer package candidates without entering type-only modules',t=>{
   const f=fixture(t),first=snapshot(f.source,['src/main.ts'],true);
@@ -45,7 +65,7 @@ test('explicit Node capture retains nearer package candidates without entering t
 });
 
 test('compiled roots and later host imports retain both roles in either discovery order',t=>{
-  const f=fixture(t),project=projectInput(pathToFileURL(join(f.source,'src/main.ts')));
+  const f=fixture(t),project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json')));
   const compiled=snapshot(f.source,[project],true);
   assert.deepEqual(compiled.hostFiles,[]);assert.ok(compiled.moduleFiles.includes('src/helper.ts'));
   assert.ok(compiled.observations.some(row=>row.protocol==='project'));
@@ -56,8 +76,8 @@ test('compiled roots and later host imports retain both roles in either discover
     assert.ok(both.observations.some(row=>row.protocol==='project'));
     assert.ok(both.observations.some(row=>row.protocol==='node26'&&row.reader==='src/main.ts'));
   }
-  const fromEntry=copyModuleClosure([project],f.destination,{sourceRoot:f.source});
-  assert.deepEqual(copyModuleClosure([projectConfig(pathToFileURL(join(f.source,'tsconfig.json')))],f.destination,{sourceRoot:f.source}),fromEntry);
+  const copied=copyModuleClosure([project],f.destination,{sourceRoot:f.source});
+  assert.ok(copied.includes('tsconfig.json'));
 });
 
 test('source stat facts validate before copying and retain both non-portable destination values',t=>{
@@ -116,7 +136,7 @@ test('nested fixture contexts inherit compiled/type-only roles and promote on a 
     ['compiled.ts',{imports:[],assets:[{kind:'fixture',path:'./child.ts',dataNamespaces:{}}]}],
     ['child.ts',{imports:[],assets:[{kind:'fixture',path:'./grandchild.ts',dataNamespaces:{}}]}],
   ]);
-  const project=projectInput(pathToFileURL(join(f.source,'compiled.ts'))),graph=moduleGraph({sourceRoot:f.source,nodeMajor:26,declarations});
+  const project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json'))),graph=moduleGraph({sourceRoot:f.source,nodeMajor:26,declarations});
   try{
     const compiled=graph.describe([project]);assert.deepEqual(compiled.hostFiles,[]);
     assert.ok(compiled.observations.every(row=>row.protocol!=='node26'));
@@ -206,6 +226,9 @@ test('missing and non-directory alias components retain negative facts and prese
   f.write('missing','not a directory');
   const blocked=new OracleFilesystem();blocked.fileExists(join(f.source,'data/alias'));
   const blockedRows=captured(f.source,blocked),blockedIndex=readerObservationIndex(f.source,blockedRows,['data/alias','relay','missing']);
+  const absentStat:ReaderObservation={reader:'reader.ts',protocol:'project',context:{entry:'<entry>',dataNamespaces:{}},observation:{kind:'stat',path:join(f.source,'missing/child.md'),value:null},causes:[]};
+  assert.equal(readerObservationDependency(f.source,absentStat)?.bytes,false);
+  assert.equal(readerObservationIndex(f.source,[absentStat],['missing']).affected([{path:'missing',sameMode:true}]).size,0,'a negative stat under an ordinary file has no content dependency');
   assert.equal(blockedIndex.affected([{path:'missing',sameMode:true}]).size,0,'ENOTDIR remains false after a content edit');
   assert.ok(blockedIndex.affected([{path:'missing',deleted:true},{path:'missing/child.md',added:true}]).size>0);
   symlinkSync('cycle-b',join(f.source,'cycle-a'));symlinkSync('cycle-a',join(f.source,'cycle-b'));
@@ -238,4 +261,22 @@ test('source ownership reuse stays inside a graph while captured answers and fre
   const outside=join(dirname(f.source),'outside.ts');writeFileSync(outside,'export {};');
   rmSync(join(f.source,'owned.ts'));symlinkSync(outside,join(f.source,'owned.ts'));
   assert.throws(()=>snapshot(f.source,['entry.ts']),/module is not an owned source file: owned.ts/);
+});
+
+
+test('portable selector dependencies use exactly the live typed-fact decision algorithm',t=>{
+  const f=fixture(t);f.write('target.md','target');mkdirSync(join(f.source,'data'));symlinkSync('../target.md',join(f.source,'data/alias'));
+  const filesystem=new OracleFilesystem();filesystem.getAccessibleEntries(join(f.source,'data'));filesystem.fileExists(join(f.source,'missing.json'));filesystem.stat(join(f.source,'target.md'));
+  const rows=captured(f.source,filesystem),paths=['target.md','data/alias'];
+  const projected=rows.map(row=>({reader:row.reader,dependency:readerObservationProjection(f.source,row)}));
+  const live=readerObservationIndex(f.source,rows,paths),recorded=readerDependencyIndex(projected,row=>row.dependency,paths);
+  for(const changes of [[{path:'target.md',sameMode:true}],[{path:'target.md',deleted:true}],[{path:'data/alias',sameMode:true}],[{path:'missing.json',added:true}]]){
+    assert.deepEqual([...live.affected(changes).keys()].map(row=>rows.indexOf(row)),[...recorded.affected(changes).keys()].map(row=>projected.indexOf(row)));
+  }
+  const dependency=projected.find(row=>row.dependency)?.dependency;assert.ok(dependency);dependency.context.entry='mutated';
+  assert.ok(rows.every(row=>row.context.entry==='<entry>'),'reported dependency contexts are detached');
+  const supplied={path:'watched.txt',kind:'readlink' as const,bytes:false,directoryStat:false,context:{entry:'entry.ts',dataNamespaces:{}}};
+  const indexed=readerDependencyIndex([supplied],row=>row,['watched.txt']);
+  supplied.path='elsewhere.txt';supplied.context.entry='changed';
+  assert.equal(indexed.affected([{path:'watched.txt',sameMode:true}]).size,1,'index snapshots its decision fields');
 });

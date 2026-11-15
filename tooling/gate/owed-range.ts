@@ -13,12 +13,16 @@ import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
 import {linkTree} from "../inputs/linker.ts";
 import {cargoConfigurationFailure,withCargoConfigurationSync} from './cargo.ts';
+import {acceptedRustSelectorIdentity,type RustSelectorTrust} from "./rust-selector.ts";
+import {readRustRecordDecision,type RustRecordDecision,type RustRecordDecisionAtRevision} from './rust-selector-decision.ts';
+import {installationCatalogTrust,installationCatalogPath,installationIdentityPath} from '../inputs/dependency-inputs.ts';
+import {readDependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
 export type StepSuccessors = Record<string, { steps: string[]; reason?: string }>;
-export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
-export type RangeSelection = { base: string; tip: string; checks: Checks; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
+export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; rules: Rule[]; selector?: { identity: string | null; existing: RuleView; decision?:RustRecordDecision } };
+export type RangeSelection = { base: string; tip: string; checks: Checks; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] }; acceptedRustRecord?: {revision:string;blob:string}|null;rustRecords?:RustRecordDecisionAtRevision[] };
 const SELF = fileURLToPath(import.meta.url);
 const INFRASTRUCTURE_CODE = "NTS_SELECTION_INFRASTRUCTURE";
 const INFRASTRUCTURE_EXIT = 75;
@@ -112,6 +116,7 @@ function readView(text: string, revision: string): RuleView {
   const problem = stepSuccessorProblem(view.successors, view.catalogue);
   if (problem) throw new Error(`invalid owed selection at ${revision}: ${problem}`);
   if(view.selector){
+    if(view.selector.decision!==undefined)view.selector.decision=readRustRecordDecision(view.selector.decision);
     if(view.selector.identity!==null&&(typeof view.selector.identity!=="string"||!/^[a-f0-9]{64}$/.test(view.selector.identity)))throw new Error(`invalid selector identity at ${revision}`);
     if(view.selector.existing?.selector)throw new Error(`recursive selector view at ${revision}`);
     view.selector.existing=readView(JSON.stringify(view.selector.existing),revision);
@@ -159,43 +164,80 @@ export function unionViews(views: RuleView[]): Checks {
   return joined;
 }
 
-export function selectRange(repo: string, range: string): RangeSelection {
-  const [base, tip] = endpoints(repo, range);
-  const changes=infrastructure('selector committed paths',()=>committedChanges(repo,base,tip));
+/** One synchronous lifetime for committed selector sources. Each endpoint is
+ * prepared once by its own ordinary linker; no working-tree output is copied.
+ * Callers receive the exact catalog from that preparation, never ambient trust. */
+export function withSelectorSources<T>(repo:string,revisions:readonly string[],operation:(sources:{shared:string;prepare:(index:number)=>string})=>T):T{
+  if(!revisions.length||revisions.length>2||revisions.some(revision=>!/^[a-f0-9]{40,64}$/.test(revision)))throw Error('selector sources need one or two resolved commits');
   const parent = join(homedir(), ".cache/nts-owed-range");
   const shared=dirname(git(repo,"rev-parse","--path-format=absolute","--git-common-dir"));
+  const dependencyReceipts:string[]=[];
   infrastructure("selector directory",()=>mkdirSync(parent,{recursive:true}));
   const directory=infrastructure("selector directory",()=>mkdtempSync(join(parent,"range-")));
   const registry=join(directory,"registry.git");
   const pins:string[]=[];
-  const views: RuleView[] = [];
-  let result: RangeSelection | undefined;
-  const errors: unknown[] = [];
+  let result:T|undefined;
+  const errors:unknown[]=[];
+  const prepared=new Set<number>();
   try {
     const owner=selectorPins(repo,basename(directory));
-    // The private registry never creates objects. Keep every borrowed endpoint
-    // reachable in the source until its owned range has finished, including
-    // when a caller names a dangling commit or moves a source branch.
-    for(const [index,revision] of [base,tip].entries()){
-      const ref=`${owner}/${index===0?"base":"tip"}`;
-      git(repo,"update-ref",ref,revision,"0".repeat(revision.length));pins.push(ref);
+    for(const [index,revision]of revisions.entries()){
+      const ref=`${owner}/${index===0?'base':'tip'}`;
+      git(repo,'update-ref',ref,revision,'0'.repeat(revision.length));pins.push(ref);
     }
-    const objects=git(repo,"rev-parse","--path-format=absolute","--git-path","objects");
-    git(directory,"init","--quiet","--bare","--template=",registry);
+    const objects=git(repo,'rev-parse','--path-format=absolute','--git-path','objects');
+    git(directory,'init','--quiet','--bare','--template=',registry);
     // Git's alternates format uses C-quoted byte paths, including whitespace.
     infrastructure("selector object store",()=>writeFileSync(join(registry,"objects/info/alternates"),`"${Array.from(Buffer.from(objects),byte=>`\\${byte.toString(8).padStart(3,"0")}`).join("")}"\n`));
     infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:2,pid:process.pid,created:Date.now(),repo:shared,registry,pins})+"\n"));
-    for (const [index, revision] of [base, tip].entries()) {
-      const tree = join(directory, `${basename(directory)}-${index}`);
-      git(registry, "worktree", "add", "--quiet", "--detach", tree, revision);
-      if (existsSync(join(tree, "pnpm-lock.yaml"))) {
-        infrastructure("selector inputs",()=>linkTree(tree, "work", shared));
-      }
+    result=operation({shared,prepare(index){
+      if(!Number.isInteger(index)||index<0||index>=revisions.length||prepared.has(index))throw Error('selector source preparation must name one unused endpoint');
+      prepared.add(index);const revision=revisions[index]!;
+      const tree=join(directory,`${basename(directory)}-${index}`);
+      git(registry,'worktree','add','--quiet','--detach',tree,revision);
+      dependencyReceipts.push(installationIdentityPath(shared,tree),installationCatalogPath(shared,tree));
+      if(existsSync(join(tree,'pnpm-lock.yaml')))infrastructure('selector inputs',()=>linkTree(tree,'work',shared));
+      return tree;
+    }});
+    if(result&&typeof (result as {then?:unknown}).then==='function')throw Error('selector source callback must be synchronous');
+  } catch(error){errors.push(error);}
+  finally {
+    // All registrations are private to this directory. Removing it also
+    // collects a partially created endpoint, without consulting shared state.
+    try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
+    for(const path of dependencyReceipts)try{infrastructure('selector installation receipt cleanup',()=>rmSync(path,{force:true}));}catch(error){errors.push(error);}
+    for(const ref of pins)try{git(repo,"update-ref","-d",ref);}catch(error){errors.push(error);}
+  }
+  if(errors.length)throw new AggregateError(errors,`selector sources failed; no source authority was granted: ${errors.map(String).join('; ')}`);
+  return result!;
+}
+
+/** The writer and its consumers assess one immutable HEAD source and its
+ * ordinary verified installation, independently from the candidate body. */
+export type CommittedSelectorSource={tree:string;revision:string;dependencyCatalog:ReturnType<typeof installationCatalogTrust>};
+export function withCommittedSelectorSource<T>(repo:string,operation:(source:CommittedSelectorSource)=>T):T{
+  const revision=git(repo,'rev-parse','--verify','--end-of-options','HEAD^{commit}');
+  return withSelectorSources(repo,[revision],sources=>{
+    const tree=sources.prepare(0),dependencyCatalog=infrastructure('selector committed installation catalog identity',()=>installationCatalogTrust(sources.shared,tree));
+    return operation({tree,revision,dependencyCatalog});
+  });
+}
+
+export function selectRange(repo:string,range:string):RangeSelection{
+  const [base,tip]=endpoints(repo,range);
+  const acceptedRustRecord=infrastructure('selector accepted record identity',()=>acceptedRustSelectorIdentity(repo));
+  const changes=infrastructure('selector committed paths',()=>committedChanges(repo,base,tip));
+  return withSelectorSources(repo,[base,tip],sources=>{
+    const views:RuleView[]=[];let dependencyCatalog:RustSelectorTrust['dependencyCatalog']=null;
+    for(const [index,revision]of [base,tip].entries()){
+      const tree=sources.prepare(index);
+      if(index===0)dependencyCatalog=infrastructure('selector base installation catalog identity',()=>installationCatalogTrust(sources.shared,tree));
+      const trust:RustSelectorTrust={acceptedRustRecordBlob:acceptedRustRecord?.blob??null,dependencyCatalog};
       try {
         const env=process.env;
         const text=withCargoConfigurationSync([tree,...(env.NTS_TEST_SCRATCH_ROOT?[env.NTS_TEST_SCRATCH_ROOT]:[])],env,()=>
           selectorQuestion(process.execPath, [SELF, "--endpoint", tree, revision],
-            {purpose:`selector endpoint ${revision}`,cwd:tree,env,input:JSON.stringify(changes),stdio:["pipe","pipe","pipe"],maxBuffer:64<<20}));
+            {purpose:`selector endpoint ${revision}`,cwd:tree,env,input:JSON.stringify({version:1,changes,...trust}),stdio:["pipe","pipe","pipe"],maxBuffer:64<<20}));
         views.push(readView(text, revision));
       } catch (error) {
         const command=error as NodeJS.ErrnoException&{signal?:string;status?:number};
@@ -208,21 +250,15 @@ export function selectRange(repo: string, range: string): RangeSelection {
     // Existing paths retain their independent base obligations.
     const identity=views[0].selector?.identity;
     const stable=identity&&identity===views[1].selector?.identity;
+    const rustRecords=views.flatMap(view=>view.selector?.decision?[{revision:view.revision,decision:view.selector.decision}]:[]);
     if(stable)views[0]=views[0].selector!.existing;
-    result = { base, tip, checks: unionViews(views), views,
+    return { base, tip, checks: unionViews(views), views,acceptedRustRecord:acceptedRustRecord??null,
+      ...(rustRecords.length?{rustRecords}:{}),
       ...(stable?{candidateNewPaths:{identity,paths:changes.filter(change=>change.added).map(change=>change.path)}}:{}) };
-  } catch (error) { errors.push(error); }
-  finally {
-    // All registrations are private to this directory. Removing it also
-    // collects a partially created endpoint, without consulting shared state.
-    try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
-    for(const ref of pins)try{git(repo,"update-ref","-d",ref);}catch(error){errors.push(error);}
-  }
-  if (errors.length) throw new AggregateError(errors, `range selection failed; no owed scope was granted: ${errors.map(String).join("; ")}`);
-  return result!;
+  });
 }
 
-async function endpoint(tree: string, revision: string, changes:PathChange[]): Promise<RuleView> {
+async function endpoint(tree: string, revision: string, changes:PathChange[],trust:RustSelectorTrust): Promise<RuleView> {
   const loaded=new Map<string,string>();let complete=true;
   const hooks=registerHooks({load(url,context,next){
     const result=next(url,context);
@@ -245,7 +281,7 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     throw new SelectionInfrastructureError(`Cargo metadata is unavailable at ${revision}; dependency reach is unknown`);
   }
   if (typeof m.selfTest === "function") {
-    const broken = m.selfTest();
+    const broken = m.selfTest(trust);
     if (broken) throw new Error(`rule self-test failed at ${revision}: ${broken}`);
   } else {
     // Historical rule modules exposed their checks only through this command.
@@ -253,7 +289,7 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
       {purpose:`historical selector self-test ${revision}`,cwd:tree,stdio:["ignore","pipe","pipe"]});
   }
   const select=(paths:PathChange[]):RuleView=>{
-    const rules: Rule[] = m.owed(paths);
+    const rules: Rule[] = m.owed(paths,trust);
     const projects = typeof m.interopOwed==="function"?m.interopOwed(rules):null;
     const doctests = [...new Set(rules.flatMap(r => r.doctests ?? []))];
     return { revision, checks: { steps: rules.some(r => r.full && r.wide) ? "all" : m.gateSteps(rules),
@@ -273,7 +309,8 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     loaded.set(`data:${path}`,bytes===null?"absent":createHash("sha256").update(bytes).digest("hex"));
   }
   const identity=complete?createHash("sha256").update(JSON.stringify([...loaded].sort(([a],[b])=>a<b?-1:a>b?1:0))).digest("hex"):null;
-  return {...full,selector:{identity,existing}};
+  const decision=typeof m.rustRecordDecision==='function'?m.rustRecordDecision(trust):undefined;
+  return {...full,selector:{identity,existing,...(decision===undefined?{}:{decision:readRustRecordDecision(decision)})}};
   }finally{hooks.deregister();}
 }
 
@@ -281,6 +318,18 @@ runAsCommand(import.meta.url,async()=>{
   try {
     const [operation, tree, revision, ...rest] = process.argv.slice(2);
     if (operation !== "--endpoint" || !tree || !revision || rest.length) throw new Error("invalid owed endpoint invocation");
-    process.stdout.write(JSON.stringify(await endpoint(tree, revision, JSON.parse(readFileSync(0,"utf8")))));
+    const input:unknown=JSON.parse(readFileSync(0,"utf8"));
+    // A historical request has no accepted-record capability. Absence stays
+    // explicit; the private endpoint never consults its own main or shell.
+    let changes:PathChange[],trust:RustSelectorTrust;
+    if(Array.isArray(input)){changes=input;trust={acceptedRustRecordBlob:null,dependencyCatalog:null};}
+    else{
+      if(!input||typeof input!=='object'||!('version'in input)||input.version!==1||!('changes'in input)||!Array.isArray(input.changes)
+        ||!('acceptedRustRecordBlob'in input)||input.acceptedRustRecordBlob!==null&&(typeof input.acceptedRustRecordBlob!=='string'
+        ||!/^([a-f0-9]{40}|[a-f0-9]{64})$/.test(input.acceptedRustRecordBlob)))throw Error('invalid owed endpoint trust input');
+      changes=input.changes;trust={acceptedRustRecordBlob:input.acceptedRustRecordBlob,
+        dependencyCatalog:readDependencyCatalogTrust('dependencyCatalog'in input?input.dependencyCatalog:null)};
+    }
+    process.stdout.write(JSON.stringify(await endpoint(tree, revision,changes,trust)));
   } catch (error) { console.error(String(error)); process.exitCode = selectionInfrastructure(error) ? INFRASTRUCTURE_EXIT : 1; }
 });

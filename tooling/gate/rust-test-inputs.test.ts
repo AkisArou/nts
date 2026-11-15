@@ -138,7 +138,7 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   await publishInputTrace({raw,output,cwd:'/source/ignored',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}});
   const rows:InputIndexObservation[]=[];
   const result=await readInputTraceIndex(output,row=>{if(row.kind==='observation')rows.push(row);});
-  assert.equal(result.header.version,4);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
+  assert.equal(result.header.version,5);assert.equal(result.header.observer,null,'absence of capture ABI evidence remains explicit');
   assert.deepEqual(rows.map(row=>row.attempt.id),['41','42']);
   assert.deepEqual(rows[0]!.subjects,[
     {kind:'path',arg:1,dirfdArg:0,name:'link/../value',raw:bytes('link/../value').hex,anchor:{kind:'dirfd',fd:3,path:'/source/first',raw:bytes('/source/first').hex}},
@@ -184,7 +184,8 @@ test('descriptor-backed null paths are retained and non-filesystem dirfds never 
   assert.ok(decoded.descriptorProbes.some(row=>row.probeKind==='non-file-dirfd'&&row.raw===Buffer.from('socket:[123]').toString('hex')));
   const rows:unknown[]=[];await readCompressedRecords(output,row=>{rows.push(row);});
   const changed=(name:string,values:unknown[])=>{const path=join(root,name+'.gz');writeFileSync(path,gzipSync(values.map(row=>JSON.stringify(row)).join('\n')+'\n'));return path;};
-  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:5},...rows.slice(1)]),()=>{}),/unsupported input index version 5/);
+  await assert.rejects(readInputTraceIndex(changed('future',[{...(rows[0] as object),version:6},...rows.slice(1)]),()=>{}),/unsupported input index version 6/);
+  await assert.rejects(readInputTraceIndex(changed('before-empty-path',[{...(rows[0] as object),version:4},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   await assert.rejects(readInputTraceIndex(changed('legacy',[{...(rows[0] as object),version:3},...rows.slice(1)]),()=>{}),/rederive legacy normalized indices/);
   const footer=rows.at(-1) as {counts:{observations:number}};
   await assert.rejects(readInputTraceIndex(changed('counts',[...rows.slice(0,-1),{...footer,counts:{...footer.counts,observations:footer.counts.observations+1}}]),()=>{}),/count mismatch/);
@@ -223,7 +224,7 @@ test('input index publication and its typed reader exceed one string with bounde
   let encodedBytes=0;
   await durableRecordStream(output,async append=>{
     const put=async(row:unknown)=>{const line=JSON.stringify(row)+'\n';encodedBytes+=Buffer.byteLength(line);await append(line);};
-    await put({kind:'index-start',version:4,mechanism:'seccomp-user-notification',outcomes:'unknown',observer:null,target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
+    await put({kind:'index-start',version:5,mechanism:'seccomp-user-notification',outcomes:'unknown',observer:null,target:{package:'fixture',name:'unit',kind:['test'],source:'src/lib.rs'}});
     for(let id=1;id<=repeats;id++){await put({...context,id,pid:id,birth:String(id)});await put({kind:'observation',image:id,attempt:{id:String(id),tid:id,tgid:id,ppid:0,birth:String(id),parentBirth:'0'},cwd:'/source',args:['0','0','0','0','0','0'],operation:'lifetime',syscall:'exit',outcome:'unknown',canceled:false,phase:'test-runtime',source:'src/lib.rs',subjects:[],probes:[]});}
     await put({kind:'index-complete',terminal:{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:repeats,errors:0,drainComplete:true,observerSignal:0},
       raw:{path:'/private/raw.gz',sha256:'0'.repeat(64),bytes:1},counts:{images:repeats,attempts:repeats,observations:0,probes:0,terminalFacts:0,inherited:0}});

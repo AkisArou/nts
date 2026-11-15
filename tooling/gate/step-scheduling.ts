@@ -312,6 +312,24 @@ export function historyFile(env: NodeJS.ProcessEnv = process.env, root: string =
   return join(resolve(env.NTS_GATE_COSTS_DIR ?? join(target, "gate-costs")), COST_HISTORY_NAME);
 }
 
+/** An observed run starts with the tree's measured sizing, but writes only
+ * its own history. The snapshot uses the ordinary writer's lock and keeps
+ * its exact bytes (including an unsupported version's refusal). */
+export function snapshotCostHistory(source:string,destination:string):void{
+  if(resolve(source)===resolve(destination))throw Error('observation history must be separate from ordinary history');
+  if(!existsSync(dirname(source)))return;
+  const unlock=lockHistory(source);
+  if(!unlock)throw Error(`${source} stayed locked for ${LOCK_WAIT_SECONDS} s while snapshotting observation history`);
+  const pending=`${destination}.${process.pid}.${randomUUID()}`;
+  try{
+    const input=basename(source)===COST_HISTORY_NAME&&!existsSync(source)?join(dirname(source),'steps.json'):source;
+    let bytes:Buffer;try{bytes=readFileSync(input);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+    if(existsSync(destination))throw Error('observation history already exists: '+destination);
+    mkdirSync(dirname(destination),{recursive:true});
+    writeFileSync(pending,bytes,{flag:'wx',mode:0o600});renameSync(pending,destination);
+  }finally{try{rmSync(pending,{force:true});}finally{unlock();}}
+}
+
 export type StepObservation = {
   name: string; verdict?: string; cpu?: number;cpu_measure?:string;
   /** The most it held, per unit: present only for a step that ran to its own end. */

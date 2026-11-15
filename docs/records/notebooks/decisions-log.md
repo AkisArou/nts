@@ -3164,3 +3164,155 @@ that growth requests. Otherwise a granted growth can be immediately given back
 and requested again. Growth completion schedules one re-evaluation on the next
 event-loop turn, allowing sampling and child completion to interleave. This
 changes no capacity, bound or verdict policy. See #800.
+## Conservative runtime inputs remain visible (11-14)
+
+The shared graph now has an explicit conservative directory role for generated
+private programs whose exact repository dependencies are not yet modelled.
+Current regular bytes remain immutable and non-placing; recursive names/kinds,
+absent roots and reader contexts remain independently checked. The copier
+cannot fabricate metadata or substitute those bytes. Runtime assessment checks
+captured component kinds and links before any generic namespace authority, so
+an introduced alias or a file/directory replaced by a link stays uncovered.
+The full-gate census lists unique tracked paths intersecting these roots with
+reader and step provenance, without claiming they have no other precise reader.
+The coordinator authorized the wider dependency declarations; #778 holds precise
+private-source modelling and #777 holds shared directory-config recipes.
+
+## Selector records bind accepted derivation (11-14)
+
+The committed Rust selector projection interns only the roles selection uses.
+Its validation key covers actual source bytes and modes, compiler/engine/Cargo
+identities, typed callback answers, negative candidates, aliases and populations.
+Reuse also requires equality with an independently acquired accepted main blob.
+An unchanged accepted stale record stays pending and selection builds live;
+record-pending refreshes it after landing. A changed record must pass actual
+rebuild equality before it can become future accepted authority. Recomputed
+self hashes cannot authorize a narrowed payload, including one made stale first
+and later made key-current again. The bounded Node-only read does not acquire a
+Program. Runtime validation and copying keep using their live graph boundaries.
+
+2026-11-14: #761 uses collision-checked 48-bit routing IDs for paths, roles and
+ordered blocks, with full SHA256 payload/key authentication unchanged. The
+positional format's actual Rust comment rewrite added 715 bytes to isolated
+packed history, but its selected fixture addition added 111,762 bytes. The
+saved-record stable-ID comparison added 452 and 1,338 bytes respectively, at
+about 4.81 MB uncompressed. This measured rewrite basis replaces the speculative
+2 MiB file target with a 6 MiB descriptor-read/publication bound. The real writer
+cohort remains separately required before integration; this diagnostic comparison
+does not claim live derivation or coverage.
+
+The real stable-ID CLI writer cohort subsequently validated all 55 targets
+after each write. Its Rust edit and selected fixture addition added 782 and
+1,894 bytes to an isolated packed history including the changed source blobs;
+the three records were 4,811,332, 4,811,332 and 4,811,695 bytes. This is the
+accepted rewrite basis. The saved-record transform remains a separate
+diagnostic, and the earlier positional cohort remains retained.
+
+## Compiled readers name their config (11-14)
+
+After #783 moved the Node harness into the sealed runtime, no production reader
+declared an unconfigured compiled entry. #761 removes the unused projectInput
+descriptor, fixed compiler options and entry discovery arm. Compiled readers and
+fixture staging use explicit projectConfig or generatedProject declarations; a
+future compiled entry names its config rather than acquiring an ambient policy.
+
+## Installed Programs depend on cataloged packages and repository pins (11-14)
+
+2026-11-14: #761 records a declared config or generated Program's installed
+reads against the existing dependency inventory algorithm. The verified frozen
+installation atomically publishes its finite catalog beside its identity; the
+source selection owner supplies its path and digest explicitly to private
+endpoints. Package names, versions and content hashes remain metadata, while
+selection depends on identity.inputs and the actual producer recipe closure.
+No selector installs an image or gives package bytes runtime or fixture-copy
+authority. Missing or stale catalogs conservatively owe all Rust targets, with
+the changed pin named in the structured decision and census. Uncataloged
+positive reads and malformed catalogs refuse. The three real declared configs
+replay with this boundary; the real installation and exact inventory-repeat
+measurements remain separate evidence rather than an installation speed claim.
+
+## Exact ENOTDIR readers retain their regular blocker (11-14)
+
+2026-11-14: #761's source replay retains an exact negative below a recorded
+regular file when that blocking component belongs to the same reader, protocol,
+context and original callback cause. Replay checks the live component and
+rejects aliases, a directory or symlink replacement, a positive answer and
+foreign provenance. Changing the blocking file's bytes does not change the
+negative traversal answer. This grants no leaf bytes or fixture-copy authority.
+
+## Installation attribution fences source state before parser acquisition (11-14)
+
+2026-11-14: #761's fresh endpoint exposed that recipe discovery cannot require
+TypeScript before the frozen install provides it. The existing installer now
+captures producer HEAD, exact porcelain-v2 output and the digest of its binary
+working diff before installation. The diff also distinguishes edits to a file
+that was already dirty. Target state observes tracked source bytes and its
+independently verified installation inputs; new untracked installation output
+is not target source. After the verified install, the existing parser derives
+the closure, and present producer and target recipe members must be tracked.
+Both state endpoints and the installation identity are checked immediately
+before atomic catalog publication. Main accepted the attribution fence's
+inability to detect an edit reverted to identical state during the transaction;
+it grants no record trust, package authority or reuse exemption.
+
+## Endpoint catalog trust comes from the prepared base (11-15)
+
+2026-11-15: #761's range owner acquires the installation catalog after the
+base endpoint's existing verified offline install, then passes that exact path
+and digest to both endpoints. The source checkout's installation is not an
+authority for those endpoints. The ordinary installer still verifies offline
+on every call and republishes a missing catalog, including an identity-current
+installation. Both endpoints' installation receipts are collected with the
+range. A tip with different pinning inputs retains the named all-Rust fallback.
+Structured trusted-record decisions report when the catalog is current.
+
+## Selector records are derived from clean committed source (11-15)
+
+2026-11-15: #761's landing-shaped route found ignored tsconfig.tsbuildinfo
+outputs in the pool writer's exact directory answers. The writer, pending
+inspection, mandatory derivation and record-delta key check now share the
+selector's existing pinned private source preparation and verified catalog.
+They observe committed HEAD, refuse uncommitted source changes, and retain the
+caller's independent bounded candidate body. Ignored output is not copied or
+filtered out of an answer. Source preparation and all receipts/pins drain
+before publication. #790 separately owns the config audit's in-place build-info
+writer; this contract does not depend on its repair.
+
+## Installation attribution fences executable members per path (11-15)
+
+2026-11-15: #761's ordinary and traced controls both exposed that whole-tree
+Git state rejects unrelated writes in a live gate tree, and that the closure's
+scheduling data is not installation code. The parser-free snapshot now captures
+index entries, exact per-path porcelain-v2 state and dirty working hashes.
+After the verified install, the shared graph supplies only executable module
+members. Each clean member must retain its index blob, and each dirty member
+its captured hash; both index and status entries must also remain unchanged.
+Untracked or ignored recipe code refuses. An unborn target uses its index.
+Staged producer fixtures track the same executable inventory before committing.
+Unrelated data writes and commits cannot invalidate unchanged producer code;
+installation data remains independently bound by identity.inputs. All production
+installer callers execute from Git trees or a HEAD-bound cap.source helper;
+the image target is explicitly initialized with an unborn index.
+
+## Gate-inputs assesses Rust records on committed source (11-15)
+
+2026-11-15: #761's warm-tree trace found that ignored compiler build-info outputs
+could make gate-inputs derive the Rust graph live although the writer and mandatory
+derivation assessed clean committed inputs. Gate-inputs now shares their fenced
+source preparation. Only its Rust arm uses the prepared source and catalog,
+passed explicitly with the tree and revision in the graph's memo context.
+Accepted main is acquired from the original repository and the candidate remains
+the caller's independently bounded working record. The non-Rust graph and census
+publication stay on the caller tree. A clean source cannot authorize changed
+candidate bytes or suppress non-Rust working-tree observations.
+
+## Selector controls use small landing fixtures and a wide population (11-15)
+
+2026-11-15: #761's range controls repeatedly derived the full repository when
+their copied record was stale. Landing controls now keep the real selector,
+policy, verified catalog and one Rust crate in an owned fixture. Base/tip union,
+dirty-policy exclusion and new-leaf precision retain their assertions. The
+complete source-population control runs under the existing wide integrity step,
+using the exact tooling-test ownership table and scoped runner. Discovery counts
+that file under its named owner, and edits to it owe integrity. This separates
+selection soundness from the cost of repeatedly discovering the whole graph.

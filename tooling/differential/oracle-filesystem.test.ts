@@ -9,6 +9,43 @@ import {join,dirname,basename,resolve,sep} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex} from './oracle-filesystem.ts';
 import {MAX_SNAPSHOT_BUCKET_BYTES,snapshotSlot,oracleNodePackageScopes} from './oracle-runtime.ts';
+test('input identities preserve component order and resolve an external alias into source first',t=>{
+  const root=fixture(t),source=join(root,'source'),outside=join(root,'outside');
+  mkdirSync(join(source,'physical/inner'),{recursive:true});mkdirSync(join(source,'logical'));mkdirSync(outside);
+  writeFileSync(join(source,'physical/target'),'physical');writeFileSync(join(source,'logical/target'),'lexical');
+  symlinkSync('../physical/inner',join(source,'logical/jump'));
+  symlinkSync(join(source,'physical/inner'),join(outside,'bridge'));
+  for(const path of [source+'/logical/jump/../target',outside+'/bridge/../target']){
+    const filesystem=new OracleFilesystem(),identity=filesystem.inputIdentity(path,source);
+    assert.deepEqual(identity,{state:'resolved',path:join(source,'physical/target')});
+    assert.equal(identity.path,realpathSync.native(path));assert.equal(readFileSync(path,'utf8'),'physical');
+    assert.ok(filesystem.captured().some(row=>row.kind==='readlink'));
+    assert.ok(filesystem.captured().every(row=>row.kind!=='file'),'identity facts grant no content read');
+  }
+});
+test('input identities retain failed components before dot-dot and distinguish final-link and directory rules',t=>{
+  const root=fixture(t),source=join(root,'source');mkdirSync(join(source,'directory'),{recursive:true});
+  const file=join(source,'value');writeFileSync(file,'value');
+  symlinkSync('directory',join(source,'link'));symlinkSync('absent/child',join(source,'dangling'));
+  symlinkSync('value/',join(source,'file-with-slash'));
+  const filesystem=new OracleFilesystem();
+  const missing=source+'/missing/../value',notDirectory=file+'/../value';
+  assert.throws(()=>statSync(missing),{code:'ENOENT'});assert.throws(()=>statSync(notDirectory),{code:'ENOTDIR'});
+  assert.deepEqual(filesystem.inputIdentity(missing,source),{state:'missing',path:missing,component:join(source,'missing'),kind:null});
+  assert.deepEqual(filesystem.inputIdentity(notDirectory,source),{state:'not-directory',path:notDirectory,component:file,kind:'file'});
+  assert.deepEqual(filesystem.inputIdentity(join(source,'absent'),source),{state:'missing',path:join(source,'absent'),component:join(source,'absent'),kind:null});
+  assert.deepEqual(filesystem.inputIdentity(join(source,'dangling'),source),{state:'missing',path:join(source,'dangling'),component:join(source,'absent'),kind:null});
+  assert.deepEqual(filesystem.inputIdentity(join(source,'dangling'),source,false),{state:'resolved',path:join(source,'dangling')});
+  assert.deepEqual(filesystem.inputIdentity(join(source,'link'),source,false),{state:'resolved',path:join(source,'link')});
+  assert.deepEqual(filesystem.inputIdentity(source+'/link/',source,false),{state:'resolved',path:join(source,'directory')});
+  assert.ok(lstatSync(source+'/link/').isDirectory(),'a trailing slash follows the final directory link');
+  for(const path of [file+'/',source+'/file-with-slash']){
+    assert.throws(()=>statSync(path),{code:'ENOTDIR'});
+    assert.deepEqual(filesystem.inputIdentity(path,source),{state:'not-directory',path:file,component:file,kind:'file'});
+  }
+  assert.throws(()=>filesystem.inputIdentity('relative',source),/needs an absolute pathname/);
+  assert.throws(()=>filesystem.inputIdentity(source+'/bad\0path',source),/needs an absolute pathname/);
+});
 test('the Node scope protocol retains query order and its node_modules boundary',()=>{
   assert.deepEqual([...oracleNodePackageScopes('/app/src/main.ts')],['/app/src/package.json','/app/package.json','/package.json']);
   assert.deepEqual([...oracleNodePackageScopes('/app/node_modules/pkg/src/main.ts')],['/app/node_modules/pkg/src/package.json','/app/node_modules/pkg/package.json']);

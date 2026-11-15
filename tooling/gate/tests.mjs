@@ -42,6 +42,9 @@ import {publishInputTrace,readTestArtifactTargets,readTestBuildStatus,readDoctes
 import {testInvocation} from './test-profile.ts';
 import {cargoConfiguration} from './cargo.ts';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
+import {durableRecord} from './durable-record.ts';
+import {prepareRustTestExecution} from './rust-test-execution.ts';
+import {createHash} from 'node:crypto';
 
 /** @param {unknown} error */
 function traceFailure(error){return new ToolingInstrumentError('tooling-setup','Rust test inputs: '+String(error),{cause:error});}
@@ -54,7 +57,8 @@ const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
 let fileObserver;
 try{
   if(traceDirectory&&!isAbsolute(traceDirectory))throw Error('trace destination must be absolute');
-  if(traceDirectory){mkdirSync(traceDirectory,{recursive:true});fileObserver=prepareFileObserver(join(traceDirectory,'observer'),process.env);}
+  if(traceDirectory){mkdirSync(traceDirectory,{recursive:true});fileObserver=prepareFileObserver(join(traceDirectory,'observer'),process.env);
+    durableRecord(join(traceDirectory,'observer-receipt.json'),fileObserver.receipt);}
 }catch(error){if(isCommandExit(error))throw error;throw traceFailure(error);}
 try {
   const layout=assertTestLayout(ROOT);
@@ -84,7 +88,9 @@ if (process.env[runnerVar]) {
 const recorder = join(work, "record.sh");
 const calls = join(work, "calls");
 mkdirSync(calls);
-const doctestCalls=traceDirectory?join(work,"doctest-calls"):undefined;
+// Independent post-run derivation needs the original call inventory after
+// command scratch has drained, including an explicitly empty inventory.
+const doctestCalls=traceDirectory?join(traceDirectory,"doctest-calls"):undefined;
 if(doctestCalls)mkdirSync(doctestCalls);
 const CALL_RECORDER=fileURLToPath(new URL("./rust-test-inputs.ts",import.meta.url));
 const shellQuote=(/** @type {string} */ value)=>"'"+value.replaceAll("'","'\\''")+"'";
@@ -164,6 +170,9 @@ const cost = {};
 let next = 0;
 /** @type {string[]} */
 const traceFailures=[];
+/** @type {{path:string;sha256:string;bytes:number}[]} */
+const executionReceipts=[];
+/** @type {(key:string)=>Promise<void>} */
 const runOne = (key) =>
   new Promise((done) => {
     const r = keyed.get(key);
@@ -175,14 +184,31 @@ const runOne = (key) =>
     // The incoming caller environment owns the override check.
     const replayCargoGuard=cargoConfiguration([ROOT,r.cwd,scratch.path],process.env);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
-    const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
+    const replayEnvironment=scratch.environment(r.env);
+    /** @type {ReturnType<typeof prepareRustTestExecution>|undefined} */
+    let execution;
+    try{execution=trace&&artifactFile?prepareRustTestExecution({artifacts:artifactFile,root:ROOT,cwd:r.cwd,argv:r.argv,env:replayEnvironment}):undefined;}
+    catch(error){
+      if(isCommandExit(error))throw error;
+      const failure=traceFailure(error);traceFailures.push(failure.message);
+      const leftovers=scratch.finish();
+      results.set(key,{status:2,signal:null,out:'NOT MEASURED: '+failure.message+'\n'+leftovers.join('\n'),seconds:0});
+      done();return;
+    }
+    const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: replayEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
     child.on("error", (e) => { out += `error: ${e.message}\n`; });
     child.on("close", async (status, signal) => {
       if(trace){
-        try{await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target,observer:fileObserver?.receipt});}
+        try{
+          const complete=await publishInputTrace({raw:trace,output:trace.replace(/\.raw\.gz$/,'.index.jsonl.gz'),cwd:r.cwd,root:ROOT,target,observer:fileObserver?.receipt});
+          if(!execution)throw Error('missing pre-spawn replay receipt');
+          const path=trace.replace(/\.raw\.gz$/,'.execution.json');
+          durableRecord(path,execution.finish(complete.raw,complete.terminal.root));
+          const bytes=readFileSync(path);executionReceipts.push({path,sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length});
+        }
         catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);traceFailures.push(failure.message);out+='NOT MEASURED: '+failure.message+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;
@@ -200,6 +226,7 @@ const runOne = (key) =>
 await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () => {
   while (next < queue.length) await runOne(queue[next++]);
 }));
+if(traceDirectory)durableRecord(join(traceDirectory,'executions.json'),{version:1,executions:executionReceipts.sort((a,b)=>a.path.localeCompare(b.path))});
 recordCosts("tests", cost);
 
 let passed = 0, failed = 0, ignored = 0;

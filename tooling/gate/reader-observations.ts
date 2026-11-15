@@ -1,11 +1,15 @@
 // Replay the original typed facts. Existence/stat never acquires bytes, and a
 // byte copier cannot silently certify source timestamps on a copied object.
 import {isAbsolute,join,posix,relative,resolve,sep} from 'node:path';
+import {captureToolchain,toolchainDescriptor,toolchainFact,type Capture} from '../differential/oracle-toolchain.ts';
 import {OracleFilesystem,readHostObservation,validateHostObservations} from '../differential/oracle-filesystem.ts';
 import {readdirSync} from 'node:fs';
 import type {HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot,ReaderObservation} from './module-closure.ts';
 import {metadataParents,membershipIndex,type MetadataChange} from './reader-metadata.ts';
+import {generatedProjectFact} from './generated-project.ts';
+import {projectEnvironmentFact} from './project-environment.ts';
+import {projectDependencies} from './project-dependencies.ts';
 
 /** The original callback remains unchanged. Additional real observations
  * retain alias text, intermediate presence/kind and followed target identity.
@@ -20,7 +24,7 @@ export function captureReaderObservations(root:string,rows:readonly HostObservat
   });
   for(const row of rows){
     cause={kind:row.kind,path:row.path};filesystem.merge([row]);
-    const follow=!['readlink','runtimeKind'].includes(row.kind),physical=filesystem.inputIdentity(row.path,root,follow);
+    const follow=!['readlink','runtimeKind'].includes(row.kind),physical=filesystem.inputIdentity(row.path,root,follow).path;
     if(physical!==row.path){
       switch(row.kind){
         case 'file':filesystem.readBytes(physical);break;
@@ -38,7 +42,7 @@ export function captureReaderObservations(root:string,rows:readonly HostObservat
       let names:string[];
       try{names=readdirSync(row.path);}catch(error){if(!['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??''))throw error;names=[];}
       for(const name of names){
-        const child=join(row.path,name),target=filesystem.inputIdentity(child,root);
+        const child=join(row.path,name),target=filesystem.inputIdentity(child,root).path;
         if(target!==child){filesystem.fileExists(target);filesystem.directoryExists(target);}
       }
     }
@@ -47,25 +51,38 @@ export function captureReaderObservations(root:string,rows:readonly HostObservat
 }
 
 export function readerObservationDependency(root:string,row:ReaderObservation):{path:string;bytes:boolean;directoryStat:boolean}|undefined{
+  if(row.capability||row.environment||row.dependency)return;
   const path=relative(root,row.observation.path).split(sep).join('/');
   if(path==='..'||path.startsWith('../')||isAbsolute(path))return;
   const value=row.observation.value,directoryStat=row.observation.kind==='stat'&&!!value&&typeof value==='object'&&'mode' in value&&(value.mode&0o170000)===0o040000;
-  return {path,bytes:row.observation.kind==='file'||row.observation.kind==='stat'&&!directoryStat,directoryStat};
+  return {path,bytes:row.observation.kind==='file'||row.observation.kind==='stat'&&row.observation.value!==null&&!directoryStat,directoryStat};
+}
+
+/** A selector projection retains sensitivity, provenance and paths; it is
+ * never a reusable filesystem answer for a copier or runtime consumer. */
+export type ReaderDependency={path:string;kind:HostObservation['kind'];bytes:boolean;directoryStat:boolean;context:ReaderObservation['context']};
+export function readerObservationProjection(root:string,row:ReaderObservation):ReaderDependency|undefined{
+  const dependency=readerObservationDependency(root,row);
+  return dependency?{...dependency,kind:row.observation.kind,context:structuredClone(row.context)}:undefined;
+}
+export function readerObservationIndex<R extends ReaderObservation>(root:string,rows:Iterable<R>,paths:Iterable<string>,names?:ReturnType<typeof membershipIndex>){
+  return readerDependencyIndex(rows,row=>readerObservationProjection(root,row),paths,names);
 }
 
 /** Typed facts retain their original kinds. Only facts beside a changed path,
  * or below a changed ancestor, are considered; a full census never rescans
  * every observation for every tracked file. */
-export function readerObservationIndex<R extends ReaderObservation>(root:string,rows:Iterable<R>,paths:Iterable<string>,names?:ReturnType<typeof membershipIndex>){
+export function readerDependencyIndex<R>(rows:Iterable<R>,dependencyOf:(row:R)=>ReaderDependency|undefined,paths:Iterable<string>,names?:ReturnType<typeof membershipIndex>){
   const tracked=new Set(paths),members=names??membershipIndex(tracked),directories=new Map<string,Set<R>>(),ancestors=new Map<string,Set<R>>();
-  const dependencies=new Map<R,NonNullable<ReturnType<typeof readerObservationDependency>>>();
+  const dependencies=new Map<R,ReaderDependency>();
   const add=(map:Map<string,Set<R>>,path:string,row:R)=>{const values=map.get(path)??new Set<R>();values.add(row);map.set(path,values);};
   for(const row of rows){
-    const dependency=readerObservationDependency(root,row);if(!dependency)continue;dependencies.set(row,dependency);
+    const supplied=dependencyOf(row);if(!supplied)continue;
+    const dependency=structuredClone(supplied);dependencies.set(row,dependency);
     for(let parent=dependency.path;;parent=posix.dirname(parent)){
       add(ancestors,parent==='.'?'':parent,row);if(parent===''||parent==='.')break;
     }
-    if(dependency.directoryStat||['entries','runtimeEntries','directoryExists','runtimeKind'].includes(row.observation.kind))add(directories,dependency.path,row);
+    if(dependency.directoryStat||['entries','runtimeEntries','directoryExists','runtimeKind'].includes(dependency.kind))add(directories,dependency.path,row);
   }
   let nested:Map<string,number>|undefined;
   const descendants=(path:string)=>{
@@ -107,12 +124,13 @@ export function readerObservationIndex<R extends ReaderObservation>(root:string,
     }
     const affected=new Map<R,string[]>();
     for(const [row,subjects]of candidates){
-      const dependency=dependencies.get(row)!,path=dependency.path,kind=row.observation.kind;
-      const ancestor=changes.some(change=>change.path!==path&&under(change.path,path));
+      const dependency=dependencies.get(row)!,path=dependency.path,kind=dependency.kind;
+      const ancestor=changes.some(change=>change.path!==path&&under(change.path,path)
+        &&(dependency.bytes||kind==='readlink'||change.added||change.deleted||change.sameMode!==true));
       let changed=ancestor;
       if(!changed&&!dependency.bytes){
         if(['entries','runtimeEntries'].includes(kind)||dependency.directoryStat){
-          changed=members.affected({directory:path,context:{entry:row.context.entry,dataNamespaces:{}}},changes)
+          changed=members.affected({directory:path,context:{entry:dependency.context.entry,dataNamespaces:{}}},changes)
             ||dependency.directoryStat&&changes.some(change=>(posix.dirname(change.path)==='.'?'':posix.dirname(change.path))===path);
         }else if(kind==='directoryExists'||kind==='runtimeKind')changed=typeChanged(path,kind,changes);
         else changed=changes.some(change=>change.path===path&&(kind==='readlink'||change.added||change.deleted||change.sameMode!==true));
@@ -128,11 +146,83 @@ function nameIn(root:string,path:string):string{
   if(name==='..'||name.startsWith('..'+sep)||isAbsolute(name))throw Error('reader observation needs an external capability: '+path);
   return name.split(sep).join('/');
 }
+/** Capability replay stays at the authenticated installed paths. It never
+ * maps a package fact into a copied root or substitutes private source bytes. */
+function derivedReaderValidator(source?:string){
+  const captures=new Map<string,Capture>();
+  const dependencies=new Map<string,ReturnType<typeof projectDependencies>>();
+  return (row:ReaderObservation):boolean=>{
+    if(row.dependency){
+      const descriptor=row.dependency;
+      if(row.protocol!=='project'||descriptor.kind!=='installed-project-dependency'||source!==undefined&&descriptor.source!==resolve(source))throw Error('installed project dependency has no declared source');
+      const key=JSON.stringify([descriptor.source,descriptor.catalog]);
+      let current=dependencies.get(key);if(!current){current=projectDependencies(descriptor.source,descriptor.catalog);dependencies.set(key,current);}
+      if(current.state!=='current')throw Error('installed project dependency catalog is pending: '+current.reason);
+      const actual=current.match(row.observation);
+      if(!actual||JSON.stringify(actual)!==JSON.stringify(descriptor))throw Error('installed project dependency identity changed: '+row.observation.path);
+      validateHostObservations([row.observation]);return true;
+    }
+    if(row.environment){
+      if(row.protocol!=='project'||source!==undefined&&row.environment.source!==resolve(source)||!projectEnvironmentFact(row.environment,row.observation))throw Error('reader project host absence has no declared Program provenance: '+row.observation.path);
+      if(readHostObservation('runtimeKind',row.observation.path)!==null)throw Error('reader project host absence is now present: '+row.observation.path);
+      validateHostObservations([row.observation]);return true;
+    }
+    if(!row.capability)return false;
+    const descriptor=row.capability;
+    if(descriptor.kind==='generated-project'){
+      if(!generatedProjectFact(descriptor,row.observation))throw Error('generated project fact does not match its prepared recipe: '+row.observation.path);
+      return true;
+    }
+    if(descriptor.kind!=='typescript-sdk')throw Error('unknown installed reader capability');
+    let capture=captures.get(descriptor.root);
+    if(!capture){capture=captureToolchain(descriptor.root);captures.set(descriptor.root,capture);}
+    if(JSON.stringify(toolchainDescriptor(capture))!==JSON.stringify(descriptor)||!toolchainFact(capture,row.observation))
+      throw Error('reader observation is not an authenticated installed SDK fact: '+row.observation.path);
+    validateHostObservations([row.observation]);return true;
+  };
+}
+/** One explicit batch validates every distinct answer before returning any
+ * snapshot. Deduplication changes only the number of identical replay reads;
+ * conflicting answers refuse, and no fact supplies ownership to another row. */
+export function validateReaderBatchObservations(snapshots:readonly InputSnapshot[]):void{
+  const installed=derivedReaderValidator(),facts=new Map<string,string>();
+  for(const snapshot of snapshots)for(const row of snapshot.observations){
+    const key=JSON.stringify([row.observation.kind,row.observation.path]),answer=JSON.stringify(row.observation.value);
+    // Each authority descriptor is checked even when another row has the
+    // same answer: equality cannot lend declared provenance to ambient rows.
+    if(row.environment||row.dependency)installed(row);
+    const previous=facts.get(key);
+    if(previous!==undefined){
+      if(previous!==answer)throw Error('reader batch observation changed during discovery: '+row.observation.kind+' '+row.observation.path);
+      continue;
+    }
+    facts.set(key,answer);
+    if(!installed(row))validateHostObservations([row.observation]);
+  }
+}
+/** ENOTDIR is an exact negative, witnessed by this callback's own regular
+ * blocking component. It grants neither leaf bytes nor alias authority. */
+function blockedReaderNegative(snapshot:InputSnapshot,row:ReaderObservation,source:string):boolean{
+  const {kind,path,value}=row.observation;
+  if(!((kind==='fileExists'||kind==='directoryExists')&&value===false||(kind==='file'||kind==='stat')&&value===null))return false;
+  const filesystem=new OracleFilesystem(),identity=filesystem.inputIdentity(path,source);
+  if(identity.state!=='not-directory'||identity.kind!=='file'||identity.component===path
+    ||filesystem.captured().some(fact=>fact.kind==='readlink'&&fact.value!==null))return false;
+  const context=JSON.stringify(row.context);
+  const witness=snapshot.observations.some(fact=>fact.reader===row.reader&&fact.protocol===row.protocol&&JSON.stringify(fact.context)===context
+    &&fact.observation.kind==='runtimeKind'&&fact.observation.path===identity.component&&fact.observation.value==='file'
+    &&fact.causes.some(cause=>cause.kind===kind&&cause.path===path));
+  if(!witness)return false;
+  metadataParents(source,identity.component,'reader blocking component');
+  return true;
+}
 export function validateReaderSourceObservations(snapshot:InputSnapshot,source:string):void{
-  const owned=new Set(snapshot.ownedFiles);
+  const owned=new Set(snapshot.ownedFiles),installed=derivedReaderValidator(source);
   for(const row of snapshot.observations){
+    if(installed(row))continue;
     const name=nameIn(source,row.observation.path);
-    if(name!=='')metadataParents(source,row.observation.path,'reader observation');
+    if(name!=='')try{metadataParents(source,row.observation.path,'reader observation');}
+    catch(error){if(!blockedReaderNegative(snapshot,row,source))throw error;}
     if(row.observation.kind==='file'&&row.observation.value!==null&&!owned.has(name))
       throw Error('reader byte observation has no immutable owned input: '+name+' ('+row.reader+')');
     validateHostObservations([row.observation]);
@@ -156,9 +246,11 @@ export class NonPortableReaderObservation extends Error{
 export function replayFixtureReaderObservations(snapshot:InputSnapshot,source:string,destination:string,
   fixtureEntries:ReadonlySet<string>,sourceLinks=false):void{
   source=resolve(source);destination=resolve(destination);
-  const owned=new Set(snapshot.ownedFiles);
+  const owned=new Set(snapshot.ownedFiles),installed=derivedReaderValidator(source);
   for(const row of snapshot.observations){
     if(row.context.entry!=='<entry>'&&!fixtureEntries.has(row.context.entry))continue;
+    if(row.dependency)throw Error('fixture requires its own authenticated installation for declared Program: '+row.reader);
+    if(installed(row))continue;
     const name=nameIn(source,row.observation.path),path=join(destination,name);
     if(name!=='')metadataParents(destination,path,'fixture reader observation');
     const actual:HostObservation={kind:row.observation.kind,path,value:readHostObservation(row.observation.kind,path)};

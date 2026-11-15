@@ -51,6 +51,7 @@ import { STEPS } from "../gate/step-table.mjs";
 import { isListedLine } from "../records/pending.ts";
 import { reserveJob, type Priority, type Reservation } from "../gate/memory-ledger.ts";
 import { validContract, type VerdictContract } from "../gate/verdict-contract.ts";
+import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate/rust-selector-decision.ts';
 
 export const PROFILE = TEST_PROFILE;
 type BinaryIdentities = Record<string, string | null>;
@@ -62,9 +63,11 @@ export type StepResult = {
   diagnostics?:StepDiagnostics;
 };
 export type Ran = { state: "green" | "red" | "held"; message: string; run: string; steps: StepResult[]; pending: string[]; wall_s: number;
+  rustRecords?:RustRecordDecisionAtRevision[];
   contract?: VerdictContract; binaries?: BinaryIdentities };
 export type RunOptions = {
   tree: string; target: string; run: string; commit: string;
+  rustRecords?:readonly RustRecordDecisionAtRevision[];
   /** The landing steps, as all.sh names them; `build` is the compiler's build. */
   steps: readonly string[];
   interop?: string | null; doctests?: string | null;
@@ -106,6 +109,7 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
 export async function runLanding(options: RunOptions): Promise<Ran> {
   const started = Date.now();
   const { tree, target, run } = options;
+  const rustRecords=options.rustRecords===undefined?undefined:readRustRecordDecisions(options.rustRecords);
   mkdirSync(run, { recursive: true });
   const results: StepResult[] = [];
   let contract: VerdictContract | undefined;
@@ -119,6 +123,7 @@ export async function runLanding(options: RunOptions): Promise<Ran> {
     const binaries = results.find(row => row.name === "build")?.binaries ??
       results.find(row => row.binaries)?.binaries ?? {};
     const ran: Ran = { state, message, run, steps: results, pending: pendingLines(run), wall_s: (Date.now() - started) / 1000,
+      ...(rustRecords?{rustRecords}:{}),
       ...(state === "green" && contract ? { contract, binaries } : {}) };
     writeFileSync(join(run, "landing.json"), JSON.stringify(ran, null, 2) + "\n");
     return ran;

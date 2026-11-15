@@ -2114,6 +2114,9 @@ integrity() {
   out=$(node tooling/conformance/integrity.ts 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
+  # The discovery table assigns this complete source population to the wide
+  # integrity step. Landing's selector tests retain a one-crate control.
+  node tooling/gate/tooling-runner.ts --step integrity || status=1
   return $status
 }
 

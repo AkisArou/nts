@@ -184,6 +184,15 @@ project declarations retain their placement in either discovery order.
 Inspection-owned bytes cannot be substituted by a fixture data grant. The
 census reports each directory's role. Declared byte readers survive both prose
 precision and explicit execution-reader overrides.
+`conservativeDirectory(new URL("types/", import.meta.url))` declares a
+deliberately wider dependency while a reader lacks a precise model. Its row
+keeps the conservative role and reader context. It owns immutable current
+regular bytes and recursive presence/type facts, including absent roots, but
+grants neither executable placement nor private data substitution. Symbolic or
+unsupported traversal refuses by name. The census lists tracked paths under
+these roots with their readers and steps, separately from full-gate fallback.
+An intersecting path can also have a precise reader. A conservative namespace
+never replaces an exact component kind/link check during runtime assessment.
 `optionalFile(new URL("candidate", import.meta.url))` declares immutable regular
 bytes when present and the exact negative dependency when absent. It grants no
 placement or substitution. `directoryMembership(new URL("directory/",
@@ -199,18 +208,41 @@ substitutes immutable bytes. Selection compares complete before/after child
 membership, including first or last descendants and batched renames, before
 prose or records shortcuts. Parsed runner handovers propagate these obligations
 alongside byte readers.
+`optionalModule(new URL("driver.mjs", import.meta.url))` uses the same exact
+presence owner, then enters a present module's real imports under its enclosing
+host/context role. Rust command declarations retain their Cargo module
+authority; compiled-only visits cannot become host entries accidentally.
+`directoryCandidates(new URL("cases/", import.meta.url), candidates)` retains
+physical shallow membership and each child's followed directory test. Literal
+candidate rows keep optional bytes, followed path existence, regular-file tests
+and directory tests distinct. An empty list retains only the enumerator and its
+directory filter. These metadata reads supply no module placement.
 The `jvm-members` step owns generated JVM catalogue freshness and reserved-name
 exclusivity. Its strict tooling operation scans its declared compiler, JVM
 runtime and tooling populations; synthetic controls exercise that same operation.
 Rust tests retain member semantics without launching this repository-wide audit.
-`projectInput(new URL("entry.ts", import.meta.url))` declares an entry compiled
-under its owning TypeScript project. Its runtime descriptor is accepted by the
-shared closure copier too. `OracleFilesystem.projectFor` owns discovery and the
-pinned parser supplies the actual config reads, inherited configs, project
-references and roots. Configs remain leaf bytes; roots enter the module graph.
-Discovery runs only for project declarations and is fresh for each graph.
 `projectConfig(new URL("tsconfig.solution.json", import.meta.url))` selects the
-config named by a compiler command directly, through that same parser.
+config named by a compiler command. The pinned parser supplies its actual reads,
+inherited configs, project references and roots. Configs remain leaf bytes;
+roots enter the module graph.
+The graph acquires one project API lazily and owns its close. Each request
+still gets a fresh filesystem transaction and full Program with the declared
+config's original options. The pinned Program owns per-usage import/require
+conditions, package goals, explicit resolution-mode attributes, ambient roots and actual source
+edges. Authenticated installed SDK observations remain capabilities, separate
+from repository ownership.
+Only a declared config or generated Program can retain an absent `node_modules`
+on a strict ancestor of the source root as a host-environment observation.
+Its descriptor names the request, config and Program's unresolved imports and
+explicit types; it does not attribute a callback to one import. Every replay
+checks the exact negative answer and physical absence. These facts remain keyed
+but contribute no repository reach. Present external paths and ambient or
+untagged external observations refuse.
+`generatedProject(configURL, directory, include)` first honors a supplied case
+config; its fallback uses the declared extends file and exact directory or
+TypeScript-tree include recipe at a real private ConfigDir. Only the prepared
+config's known private facts are derived; other callbacks retain their original
+repository or SDK provenance. Cleanup preserves read and cleanup failures.
 The parser's filesystem callbacks retain their actual typed answers, including
 negative lookups, followed directory entries, real paths and stat mode, size
 and Date timestamp. Metadata facts grant no placement or content-open
@@ -669,6 +701,45 @@ The local Rust input census uses
 Cargo's artifact report binds each executable to its target source. Temporary
 doctest executables run during the original Cargo/rustdoc lifetime; only
 profile-owned binaries are recorded for the workspace replay.
+
+`rust-runtime-inputs.json` binds Cargo source/name/kind identities to shared
+reader rows. The structural Rust module owner retains module directories and
+literal path attributes; every traversed reader needs a row. Compile-source
+edges alone grant no runtime-byte authority. Unit and library-doctest routes
+remain independent, including doctest-only libraries.
+
+Selection consumes the same canonical graph as explicit post-run validation.
+Its writer, mandatory derivation, delta source-key check and gate-inputs Rust arm
+use the selector's clean committed-source owner and verified endpoint installation.
+Gate-inputs passes that source's tree and revision explicitly through its graph
+options and memo context; its non-Rust graph still observes the caller tree.
+Ignored working outputs never enter the Rust key; the candidate record body remains independently
+bounded and authenticated. Its tool-written selector record interns portable paths
+and consumed roles;
+the key validates source bytes/modes, engine, Cargo and SDK identities, exact
+typed answers, candidates, aliases and populations. Fast selection requires
+bytes identical to an independently acquired accepted main blob and a current
+key. The range selection owner acquires main's record blob once and passes it
+explicitly to both private endpoints. Reuse requires the endpoint's record blob
+to match and its working bytes to equal the bounded immutable Git body. Missing
+trust is explicit, never discovered from a candidate ref or environment. The
+trust blob is part of every memo key that depends on the record decision.
+Landing's range controls exercise the real selector with one Rust crate and
+its verified installation catalog. The wide `integrity` step owns the complete
+source-population control through the exact tooling-test ownership table and
+the ordinary scoped test runner; it is excluded from landing's tooling group.
+Missing or stale accepted records log their kind/path, remain pending and
+use a live projection. The full check refreshes pending records after landing.
+New record bytes require an actual rebuild comparison before gaining future
+authority; malformed payloads and unverified stale candidates refuse by name.
+The byte-bounded Node-only reader acquires no compiler API.
+
+Interned paths, roles and ordered blocks use content-derived routing IDs, so a
+new input cannot renumber existing references. Every ID is checked against its
+row and duplicate IDs refuse; these short IDs grant no authentication authority.
+The complete payload and key retain SHA256 authentication. The committed file
+bound has headroom over the measured stable format; packed history growth,
+rather than the uncompressed file size alone, determines this representation.
 
 The observer records attempted filesystem operations with fresh task image,
 cwd and process birth facts. Continuing a notification establishes neither its
@@ -1240,6 +1311,17 @@ the first node task.
   and non-green
   ([log](records/notebooks/decisions-log.md#owned-root-departure-11-14)).
 
+- **Conservative reach remains explicit and non-placing.** A declared wide
+  namespace may retain a harness's input obligations without pretending to be
+  an exact generated Program. Immutable bytes, recursive presence and reader
+  context survive records and handovers; the census identifies the wider paths.
+  Runtime identity components still require their captured kind/link facts
+  ([log](records/notebooks/decisions-log.md#conservative-runtime-inputs-remain-visible-11-14)).
+- **Fast selector records inherit derivation authority from accepted bytes.**
+  Current keys alone cannot authorize a narrowed payload. Accepted-byte equality
+  permits reuse after fresh input validation; stale accepted records use the
+  live graph, while new records must pass actual derivation checks
+  ([log](records/notebooks/decisions-log.md#selector-records-bind-accepted-derivation-11-14)).
 - **Derived reader facts preserve the operation and context.** Project callbacks
   and explicitly selected Node scope discovery retain typed non-placing facts,
   alias provenance and immutable byte reads in the canonical graph. Selection
@@ -1404,10 +1486,27 @@ the first node task.
   dependencies, and every module context retains its immutable inputs
   ([log](records/notebooks/decisions-log.md#reader-contexts-replace-module-text-inference-11-13)).
 - **Compiled entries declare their project context:** selection and staging
-  consume the same `projectInput` descriptor. Discovery uses the oracle's
-  existing owner and parsed inputs, with no guessed neighbouring config or
+  consume the same explicit `projectConfig` descriptor. Discovery uses the
+  oracle's existing owner and parsed inputs, with no guessed neighbouring config or
   separate copier option
-  ([log](records/notebooks/decisions-log.md#compiled-entry-projects-are-declared-11-13)).
+  ([log](records/notebooks/decisions-log.md#compiled-readers-name-their-config-11-14)).
+- **Installed Program inputs owe their repository pins:** a declared config's
+  installed reads must match the verified installation's finite package catalog,
+  including aliases, membership and content hashes. Selection retains package
+  identity and depends on the installation inputs and recipe closure; it neither
+  installs packages nor grants runtime byte or fixture-copy authority. The source
+  owner passes the catalog path and digest explicitly to private endpoints.
+  Installation snapshots Git index entries, per-path status and dirty file
+  hashes before parser acquisition. After the verified install it derives the
+  executable recipe modules, requires tracked regular code, and rechecks only
+  those members plus the input identity before publication. Clean members must
+  still equal their index blobs; dirty members must equal their captured bytes.
+  Unrelated data writes do not change the code generation. An unborn tree uses
+  its index, while executing producer code always requires a Git source.
+  Missing or stale catalogs owe all Rust targets with a structured reason;
+  malformed catalogs and uncataloged positive reads refuse by name. The census
+  retains that fallback separately from path reach.
+  ([log](records/notebooks/decisions-log.md#installed-programs-depend-on-cataloged-packages-and-repository-pins-11-14)).
 - **Unknown reach and explicit full policies have separate inventories:** only
   the unplaced fallback set is ratcheted. Full-by-policy paths name their
   governing rules, and a rule change owes the full gate
@@ -1536,9 +1635,8 @@ the first node task.
 - **Fixture tooling comes from its declared closure.** A private test repository
   stages command entries through `copyModuleClosure`, including their imports
   and named assets. A fixture that compiles TypeScript supplies the same
-  `projectInput` or `projectConfig` descriptor as its compiling reader. The
-  shared project owner supplies inherited configs, references and roots;
-  nearest-entry discovery remains with `OracleFilesystem.projectFor`.
+  `projectConfig` descriptor as its compiling reader. The shared project owner supplies inherited configs, references and roots;
+  a compiled entry must declare its config explicitly.
   Private mutations follow staging. A fixture may grant its own populated
   namespace only at an exact declared data directory. The copier refuses an
   undeclared namespace or any replacement of module-owned bytes, and publishes

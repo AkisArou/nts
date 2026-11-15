@@ -98,6 +98,18 @@ test('committing an unrelated file preserves an existing dependency image',async
   assert.equal(await captureDependencies(cap),ready);
   assert.deepEqual(readFileSync(join(dirname(ready),'semantic.json')),before);
 });
+test('the shared inventory leaf is sealed by the dependency producer identity and invalidates an old image',async t=>{
+  const f=installFixture(t),original=f.cap('inventory-before'),ready=await captureDependencies(original);
+  const before=JSON.parse(readFileSync(join(dirname(ready),'semantic.json'),'utf8'));
+  const leaf='tooling/inputs/dependency-inventory.ts';
+  f.write(leaf,readFileSync(join(f.root,leaf),'utf8')+'\n// private inventory identity control\n');
+  f.git('add','--',leaf);f.git('commit','--quiet','-m','Change the shared inventory implementation');
+  const changed=f.cap('inventory-after');assert.notEqual(changed.producerSha256,original.producerSha256);
+  await assert.rejects(captureDependencies(original),/dependency producer source changed/);
+  const after=JSON.parse(readFileSync(join(dirname(await captureDependencies(changed)),'semantic.json'),'utf8'));
+  assert.equal(before.producerSha256,original.producerSha256);assert.equal(after.producerSha256,changed.producerSha256);
+  assert.notEqual(after.producerSha256,before.producerSha256);
+});
 test('committing a workspace manifest invalidates its install input identity',async t=>{
   const f=installFixture(t),cap=f.cap('one'),ready=await captureDependencies(cap),before=readFileSync(join(dirname(ready),'semantic.json'));
   f.write('packages/one/package.json','{"name":"owned-one","version":"1.0.1"}\n');f.git('add','--','packages/one/package.json');f.git('commit','--quiet','-m','Change a real workspace manifest');

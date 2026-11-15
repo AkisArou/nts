@@ -32,6 +32,8 @@ import { runLanding } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
 import { describeSelection, landingSteps } from "./selection.ts";
 import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
+import {COST_HISTORY_NAME,historyFile,snapshotCostHistory} from '../gate/step-scheduling.ts';
+import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
 
 const say = (line: string) => console.log(`landing: ${line}`);
 const short = (sha: string) => sha.slice(0, 12);
@@ -53,6 +55,7 @@ function dryRun(root: string, sha: string, argv: string[]): number {
   const paths = changedPaths({ root }, base, sha);
   const costs = option(argv, "--costs") ? resolve(option(argv, "--costs")!) : join(LANDING_HOME, "costs.json");
   const selected = ruleSelect(root, costs, BUDGET)(base, sha, paths);
+  reportRustRecordDecisions(selected.rustRecords,say);
   say(`${note}: ${paths.length} path(s); ${selected.kind === "rust" ? "recompiles Rust" : "recompiles no Rust"}`);
   console.log(describeSelection(selected.selection));
   if (paths.some(p => p.startsWith("tooling/landing/") || p === "tooling/gate/owed.mjs" || p === "tooling/gate/step-table.mjs")) {
@@ -69,10 +72,13 @@ async function here(root: string, sha: string,traceRustInputs=false): Promise<nu
   const { base, note } = rangeOf(root, sha);
   const selected = ruleSelect(root, join(LANDING_HOME, "costs.json"), BUDGET)(base, sha, changedPaths({ root }, base, sha));
   const steps = landingSteps(selected.selection);
+  reportRustRecordDecisions(selected.rustRecords,say);
   prune(join(LANDING_HOME, "runs"), KEEP_DAYS);
   const run = join(LANDING_HOME, "runs", `here-${short(sha)}-${Date.now()}`);
+  if(traceRustInputs)snapshotCostHistory(historyFile({CARGO_TARGET_DIR:join(tree,'target')},tree),join(run,'observation-costs',COST_HISTORY_NAME));
   say(`${note}: ${steps.join(" ")} in ${tree}, estimate ~${Math.round(selected.selection.estimate.seconds)} s; logs ${run}`);
   const ran = await runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
+    rustRecords:selected.rustRecords,
     // An agent's own pre-check: it yields its unused reservation to a queued landing (#672).
     priority: "agent",
     ...(traceRustInputs?{owned:{NTS_RUST_INPUT_TRACE:join(run,'rust-inputs'),NTS_GATE_COSTS_DIR:join(run,'observation-costs')}}:{}),

@@ -45,6 +45,7 @@
     "linux": { "kind": "kept", "writer": "tooling/linux/build-libuv.sh", "why": "the Linux musl libuv builds" },
     "node-compile-cache": { "kind": "kept", "writer": "tooling/gate/canonical-environment.ts", "why": "the shared Node compile cache, bounded by hourly age and byte retention in tooling/full-check/node-cache-retention.ts" },
     "node-deps": { "kind": "kept", "writer": "tooling/conformance/node-deps.mjs", "why": "the bundled Node native dependencies" },
+    "project-inputs": { "kind": "scratch", "writer": "tooling/gate/generated-project.ts" },
     "proxy-app": { "kind": "kept", "writer": "tooling/android/proxy-app.sh", "why": "the Android proxy app's build" },
     "swift": { "kind": "kept", "writer": "build/src/swift.rs", "why": "the Swift toolchain" },
     "swift-kept": { "kind": "kept", "writer": "tooling/cli/src/swift.rs", "why": "what is kept per Swift toolchain" },

@@ -360,6 +360,12 @@ runAsCommand(import.meta.url,async()=>{
       process.stdout.write(`tooling tests: ${selection.files.length} collected, ${selection.exclusions.length} explicitly assigned to another step, ${selection.inventoryCount} inventoried\n`);
       for(const row of selection.exclusions)process.stdout.write(`  ${row.path}: ${row.step} (${row.reason})\n`);
       process.exitCode=reportTimes(await runScopedTooling(selection.files.map(file=>resolve(root,file))),root);
+    } else if(args[0]==='--step') {
+      if(args.length!==2||!args[1])throw new ToolingInstrumentError('tooling-setup','the tooling step runner needs exactly one step name');
+      const {toolingTestsForStep}=await import('./tooling-discovery.ts');
+      const root=resolve(fileURLToPath(new URL('../..',import.meta.url))),files=toolingTestsForStep(root,args[1]);
+      process.stdout.write(`tooling tests for ${args[1]}: ${files.length} assigned by the exclusions table\n`);
+      process.exitCode=reportTimes(await runScopedTooling(files.map(file=>resolve(root,file))),root);
     } else {
       if(!args.length)throw new ToolingInstrumentError("tooling-setup","tooling runner needs explicit test files");
       process.exitCode=reportTimes(await runScopedTooling(args),process.cwd());

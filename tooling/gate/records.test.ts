@@ -1,3 +1,5 @@
+import {RUST_RUNTIME_DECLARATIONS} from './rust-selector-selection.ts';
+import {RUST_SELECTOR_RECORD} from './rust-selector-record.ts';
 import {fixtureInput} from './reader-inputs/main.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from './module-closure-fixture.ts';
@@ -35,6 +37,9 @@ test("the real records step validates benchmark evidence and its rendered table"
   try {
     for(const input of ["docs/records","docs/foundations","results/benchmarks/runs","tests/programs","benchmarks/cases"])mkdirSync(join(root,input),{recursive:true});
     copyModuleClosure([fixtureInput(new URL("./records.ts",import.meta.url),{dataNamespaces:{"docs/records":"records CLI control","docs/foundations":"records CLI control","results/benchmarks":"records CLI control","tests/programs":"records CLI control","benchmarks/cases":"records CLI control"}})],root);
+    // The copied CLI includes selector assets, but this benchmark-only repository
+    // declares no Rust harness. Its private mutation retains that genuine negative.
+    for(const path of [RUST_RUNTIME_DECLARATIONS,RUST_SELECTOR_RECORD])rmSync(join(root,path),{force:true});
     assert.deepEqual(readdirSync(join(root,'docs/records')),[],'the record-number control starts with no production records');
     writeFileSync(join(root,"docs/primitives.md"),"fixture\n");
     assert.deepEqual(readdirSync(join(root,"results/benchmarks/runs")),[]);

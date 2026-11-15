@@ -5,7 +5,7 @@ import {registerCommandCloser,runAsCommand} from "./command-entry/main.ts";
 import {createHash} from 'node:crypto';
 import {dependencySealIdentity,dependencySealReady,ownsDependencyRun,capturedPackageMetadata,type DependencyRunSeal} from './oracle-filesystem.ts';
 import {execFileSync} from 'node:child_process';
-import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,readlinkSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
+import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as pause} from 'node:timers/promises';
@@ -25,7 +25,8 @@ export {CaseBudgetError,ToolingInstrumentError};
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
 export type DependencyCapability={seal?:DependencyRunSeal;version:1;source:string;sourceRevision:string;lockfileSha256:string;helperSha256:string;producerSha256:string;directory:string;admission:TemporaryAdmissionContext;ownerStep:string|null};
-type Entry={path:string;kind:'directory';mode:number}|{path:string;kind:'file';mode:number;bytes:number;sha256:string}|{path:string;kind:'link';target:string};
+import {dependencyInventory,dependencyPackageInventory,type DependencyEntry as Entry} from '../inputs/dependency-inventory.ts';
+export {dependencyInventory,dependencyPackageInventory} from '../inputs/dependency-inventory.ts';
 type InstallInputs={version:1;identity:Identity;paths:string[];selectionPaths:string[];treeRows:string[];treeSha256:string};
 export type DependencyImage={version:1;source:string;sourceRevision:string;inputSet:InstallInputs;lockfileSha256:string;treeSha256:string;manager:ReturnType<typeof managerPin>;entries:Entry[];ownerStep:string|null;cost:{wallMs:number;selectionWallMs:number;userSeconds:number;systemSeconds:number;bytes:number;allocatedBytes:number;peakBytes:number;residentBudgetBytes:number;cpuBudgetSeconds:number;reservedBytes:number}};
 function git(root:string,...args:string[]){return execFileSync('git',gitArguments(args),{cwd:root,encoding:'utf8',maxBuffer:Infinity}).trim();}
@@ -53,22 +54,6 @@ export function dependencyCapability(source:string,directory:string,admission:Te
   return {version:1,source,sourceRevision,lockfileSha256:hash(readFileSync(join(source,'pnpm-lock.yaml'))),
     helperSha256:hash(readFileSync(fileURLToPath(import.meta.url))),producerSha256:producerIdentity(source),directory:resolve(directory),admission,ownerStep};
 }
-export function dependencyInventory(root:string):Entry[]{
-  const result:Entry[]=[];
-  const walk=(directory:string)=>{
-    for(const name of readdirSync(directory).sort()){
-      const file=join(directory,name),info=lstatSync(file),path=relative(root,file);
-      if(info.isSymbolicLink()){
-        const target=readlinkSync(file);
-        if(isAbsolute(target)||!inside(root,resolve(dirname(file),target)))throw Error('oracle dependency link escapes capture: '+file);
-        result.push({path,kind:'link',target});
-      }else if(info.isDirectory()){result.push({path,kind:'directory',mode:info.mode&0o777});walk(file);}
-      else if(info.isFile()){const bytes=readFileSync(file);result.push({path,kind:'file',mode:info.mode&0o777,bytes:bytes.length,sha256:hash(bytes)});}
-      else throw Error('oracle dependency capture contains unsupported file: '+file);
-    }
-  };
-  walk(root);return result;
-}
 export function protectDependencyImage(root:string):Entry[]{
   const entries=dependencyInventory(root);
   for(const entry of entries)if(entry.kind==='file'&&lstatSync(join(root,entry.path)).nlink!==1)throw Error('oracle dependency image shares a regular-file inode: '+entry.path);
@@ -78,13 +63,6 @@ export function protectDependencyImage(root:string):Entry[]{
   }
   chmodSync(root,0o555);
   return entries;
-}
-export function dependencyPackageInventory(entries:Entry[]):Entry[]{
-  const bookkeeping=(path:string)=>path.split(sep).some((part,i,parts)=>parts[i-1]==='node_modules'&&part==='.bin')||
-    /(?:^|\/)node_modules\/(?:\.modules\.yaml|\.pnpm-workspace-state-v1\.json)$/.test(path)||
-    /(?:^|\/)node_modules\/\.pnpm\/lock\.yaml$/.test(path);
-  const workspaces=entries.filter(entry=>entry.kind==='link').map(entry=>resolve('/',dirname(entry.path),entry.target).slice(1)).filter(path=>!path.split(sep).includes('node_modules'));
-  return entries.filter(entry=>!bookkeeping(entry.path)&&(entry.path.split(sep).includes('node_modules')||workspaces.some(root=>entry.path===root||entry.path.startsWith(root+sep))));
 }
 function publish(file:string,value:unknown){const pending=file+'.pending';writeFileSync(pending,JSON.stringify(value,null,2)+'\n',{flag:'wx'});renameSync(pending,file);}
 function checked(capability:DependencyCapability){

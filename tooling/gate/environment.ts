@@ -5,11 +5,11 @@ import {infrastructureProbe,type InfrastructureProbe} from "./infrastructure-pro
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join,relative } from "node:path";
 import {fileURLToPath} from 'node:url';
-import {dataDirectory} from './reader-inputs/main.ts';
+import {directoryCandidates} from './reader-inputs/main.ts';
 
 const SOURCE=fileURLToPath(new URL('../..',import.meta.url));
 const RUNNER=new URL('./run.mjs',import.meta.url);
-const INTEROP=dataDirectory(new URL('../../tests/interop/',import.meta.url));
+const INTEROP=directoryCandidates(new URL('../../tests/interop/',import.meta.url),[{kind:'optional-file',name:'build.sh'}]);
 
 type Capability = "android" | "jvm" | "valgrind";
 type Variable = { name: string; capability?: Capability };
@@ -53,7 +53,7 @@ export function gateCapabilities(tree: string, requested: readonly string[] | "a
     return { step, capabilities: table[step] };
   });
   if (steps.includes("interop")) {
-    const directory = join(tree, relative(SOURCE,fileURLToPath(INTEROP)));
+    const directory = join(tree, relative(SOURCE,fileURLToPath(INTEROP.url)));
     const selected = interop?.trim() ? interop.trim().split(/\s+/) : readdirSync(directory).sort();
     for (const project of selected) {
       if (project.includes("/") || project === "." || project === "..") throw new Error(`invalid interop project ${project}`);

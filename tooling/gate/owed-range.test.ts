@@ -8,15 +8,13 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, sy
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
-import { fileURLToPath } from "node:url";
 import { selectRange, selectionInfrastructure, selectorQuestion, unionViews, type RuleView } from "./owed-range.ts";
 import {committedChanges,contentChanges} from "./change-paths.ts";
 import {infrastructureProbes,INFRASTRUCTURE_PROBE_BOUND_MS,type ProbeResult} from './infrastructure-probe.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 import {waitFor} from "./test-wait.ts";
-import {dependencyCache} from "../inputs/dependency-inputs.ts";
+import {smallSelectorRepository as fixtureRepository} from "./selector-repository-fixture.ts";
 
-const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 test('selector questions retain the infrastructure owner bound and classify ordinary exits separately',()=>{
   const requests:{command:string;args:readonly string[]}[]=[];
   const probe=infrastructureProbes((command,args,options)=>{
@@ -50,17 +48,6 @@ test('an unrelated typed instrumentation failure keeps its existing selection cl
   assert.equal(selectionInfrastructure(new ToolingInstrumentError('tooling-setup','unrelated reader observation failed')),false);
   assert.equal(selectionInfrastructure(new ToolingInstrumentError('tooling-cleanup','Cargo configuration: unrelated cleanup')),false);
 });
-function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {
-  execFileSync("git",gitArguments(["clone","--quiet","--shared","--no-checkout",ROOT,repo]),{env,stdio:["ignore","pipe","pipe"]});
-  const git=(cwd:string,...args:string[])=>execFileSync("git",gitArguments(args),{cwd,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
-  git(repo,"checkout","--quiet","--detach",git(ROOT,"rev-parse","HEAD"));
-  // These fixtures change only policy/data, so use the same acquired registry
-  // bytes as the source. Installed endpoint trees still belong to each range.
-  const shared=dirname(git(ROOT,"rev-parse","--path-format=absolute","--git-common-dir"));
-  const cache=dependencyCache(repo);assert.equal(existsSync(cache),false);
-  mkdirSync(dirname(cache),{recursive:true});symlinkSync(dependencyCache(shared),cache,"dir");
-  t.after(()=>rmSync(cache,{force:true}));
-}
 test("committed paths preserve spaces, Unicode, tabs and line breaks across a rename",t=>{
   const repo=mkdtempSync(join(tmpdir(),"owed-paths-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
   const env={...fixtureEnvironment(t),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
@@ -351,6 +338,8 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   git("commit", "-qm", "classify a previously unmatched path");
   const tip = git("rev-parse", "HEAD");
   const selected = selectRange(repo, `${base}..${tip}`);
+  assert.equal(selected.rustRecords?.length,2);
+  for(const row of selected.rustRecords!){assert.equal(row.decision.record,'trusted');assert.match(row.decision.reason,/installation catalog current/);}
   const expanded = (v: RuleView) => v.checks.steps === "all" ? v.catalogue : v.checks.steps;
   const oldOnly = expanded(selected.views[0]).filter(s => !expanded(selected.views[1]).includes(s));
   assert.ok(oldOnly.length > 0, "the candidate-only control must really narrow the old obligations");
@@ -363,8 +352,8 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   const worktrees = git("worktree", "list", "--porcelain");
   assert.equal(worktrees.split("\n").filter(l => l.startsWith(`worktree ${directory}/`)).length, 1, "only the fixture's own primary tree remains registered");
   const committed = git("show", `${tip}:tooling/gate/owed.mjs`);
-  assert.ok(committed.includes("export function selfTest() {"));
-  writeFileSync(policy, committed.replace("export function selfTest() {", 'export function selfTest() { return "broken rule control"; }\nfunction unusedOriginalSelfTest() {'));
+  assert.ok(committed.includes("export function selfTest(options) {"));
+  writeFileSync(policy, committed.replace("export function selfTest(options) {", 'export function selfTest(options) { return "broken rule control"; }\nfunction unusedOriginalSelfTest(options) {'));
   git("add", "tooling/gate/owed.mjs");
   git("commit", "-qm", "break the rule self-check");
   assert.throws(() => selectRange(repo, `${tip}..HEAD`), /broken rule control/);
@@ -482,8 +471,10 @@ test("the real unchanged selector reaches a newly added census test without a co
   const base=git("rev-parse","HEAD"),path="tooling/census/new-scope-control.test.ts";
   writeFileSync(join(repo,path),"import {test} from 'node:test';test('new leaf',()=>{});\n");git("add",path);git("commit","-qm","new leaf");
   const selected=selectRange(repo,`${base}..HEAD`);
+  assert.equal(selected.rustRecords?.length,2);
+  for(const row of selected.rustRecords!){assert.equal(row.decision.record,'trusted');assert.match(row.decision.reason,/installation catalog current/);}
   assert.deepEqual(selected.candidateNewPaths?.paths,[path]);
   assert.ok(selected.checks.steps.includes("tooling"));
   assert.equal(selected.views.some(view=>view.rules.some(rule=>rule.name==="owes the full gate")),false);
-  assert.deepEqual([...selected.checks.steps].sort(),["build","clippy","gate-inputs","jvm-members","old-paths","rustfmt","test-host","tests","tooling","tooling-types"]);
+  assert.deepEqual([...selected.checks.steps].sort(),["build","clippy","gate-inputs","old-paths","rustfmt","test-host","tests","tooling","tooling-types"]);
 });

@@ -3,22 +3,27 @@
 import {existsSync,mkdirSync,readFileSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import type {RustRecordDecision} from './rust-selector-decision.ts';
 
 export const FULL_GATE_RECORD=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../results/gate/full-gate.json',import.meta.url))).replaceAll('\\','/');
 type FullPath={path:string;reasons:string[]};
 export type FullGateRecord={version:1;files:string[]}|{version:2;files:string[];policy:FullPath[]};
-export type InputDirectory={reader:string;directory:string;kind:'module'|'data'|'inspection';files:number;steps:string[];member?:string;fixture?:{entry:string;owner:string}};
-export type FullGateCensus={version:2;tracked:number;full:FullPath[];unplaced:FullPath[];policy:FullPath[];directories:InputDirectory[]};
+export type InputDirectory={reader:string;directory:string;kind:'module'|'data'|'inspection'|'conservative';files:number;steps:string[];member?:string;fixture?:{entry:string;owner:string}};
+export type ConservativePath={path:string;readers:string[];steps:string[]};
+export type FullGateCensus={version:2;tracked:number;full:FullPath[];unplaced:FullPath[];policy:FullPath[];directories:InputDirectory[];conservative:ConservativePath[];
+  rustSelection?:{allTargets:boolean;decision:RustRecordDecision}};
 
 export function collectFullGateCensus(paths:readonly string[],inspect:(path:string)=>{full:boolean;reasons:string[];policyReasons?:string[]},directories:InputDirectory[]):FullGateCensus {
-  const full:FullPath[]=[],unplaced:FullPath[]=[],policy:FullPath[]=[];
+  const full:FullPath[]=[],unplaced:FullPath[]=[],policy:FullPath[]=[],conservative:ConservativePath[]=[];
   for(const path of [...new Set(paths)].sort()){
+    const broad=directories.filter(row=>row.kind==='conservative'&&(row.directory===''||path===row.directory||path.startsWith(row.directory+'/')));
+    if(broad.length)conservative.push({path,readers:[...new Set(broad.map(row=>row.reader))].sort(),steps:[...new Set(broad.flatMap(row=>row.steps))].sort()});
     const result=inspect(path);if(!result.full)continue;
     const row={path,reasons:result.reasons};full.push(row);
     if(result.policyReasons?.length)policy.push({path,reasons:[...new Set(result.policyReasons)].sort()});
     else unplaced.push(row);
   }
-  return {version:2,tracked:new Set(paths).size,full,unplaced,policy,directories};
+  return {version:2,tracked:new Set(paths).size,full,unplaced,policy,directories,conservative};
 }
 export function parseFullGateRecord(value:unknown):FullGateRecord {
   if(typeof value!=='object'||value===null)throw Error('full-gate census record must be an object');

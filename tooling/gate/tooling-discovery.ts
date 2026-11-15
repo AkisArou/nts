@@ -87,6 +87,14 @@ export function discoverToolingTests(root:string):{files:string[];exclusions:Too
   validateToolingCoverage(inventory,files,exclusions);
   return {files,exclusions,inventoryCount:inventory.length};
 }
+/** Named wide owners run precisely the entries assigned by the same table
+ * that removes them from ordinary tooling collection. */
+export function toolingTestsForStep(root:string,step:string):string[]{
+  const selection=discoverToolingTests(root);
+  const files=selection.exclusions.filter(row=>toolingTestStep(row.path,selection.exclusions)===step).map(row=>row.path);
+  if(!files.length)throw new ToolingInstrumentError('tooling-setup',`no tooling test entries are assigned to step ${JSON.stringify(step)}`);
+  return files;
+}
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   try {
     const mode=process.argv.slice(2);

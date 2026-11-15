@@ -3,7 +3,9 @@ import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
-import {readInputTraceIndex,type InputIndexObservation,type InputSubject} from "./rust-test-inputs.ts";
+import {readDoctestCalls,readInputTraceIndex,type InputIndexObservation,type InputSubject} from "./rust-test-inputs.ts";
+import {authenticateRustInputTrace} from './rust-input-authentication.ts';
+import {retainedFileObserverReceipt} from './file-input-observer.ts';
 import {readStepInstrument} from "./step-result.ts";
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -49,6 +51,12 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     await readInputTraceIndex(join(trace,'cargo.index.jsonl.gz'),row=>{if(row.kind==='observation')cargo.observations.push(row);});
     const index=await readInputTraceIndex(join(trace,'binary-0.index.jsonl.gz'),row=>{if(row.kind==='observation')binary.observations.push(row);});
     assert.equal(index.header.target?.source,'src/lib.rs');
+    const retainedCalls=readDoctestCalls(join(trace,'doctest-calls'));
+    assert.equal(retainedCalls.length,1,'the actual executable doctest call survives command scratch cleanup');
+    const observerReceipt=retainedFileObserverReceipt(JSON.parse(readFileSync(join(trace,'observer-receipt.json'),'utf8')));
+    const independentlyDerived=await authenticateRustInputTrace({root,cwd:root,raw:join(trace,'cargo.raw.gz'),index:join(trace,'cargo.index.jsonl.gz'),
+      observer:observerReceipt,doctestCalls:retainedCalls});
+    assert.equal(independentlyDerived.complete.terminal.complete,true);
     const named=(subject:InputSubject)=>subject.kind==='descriptor'?subject.target:subject.anchor.kind==='absolute'?subject.name:subject.anchor.path+'/'+subject.name;
     assert.ok(cargo.observations.some(row=>row.phase==='doctest-runtime'&&row.source==='src/lib.rs'&&row.cwd===join(root,'runtime-data')&&row.subjects.some(subject=>subject.kind==='path'&&subject.name==='value'&&named(subject)===join(root,'runtime-data/value'))));
     assert.ok(cargo.observations.some((row:{phase:string})=>row.phase==='rustdoc-setup'));

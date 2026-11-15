@@ -8,6 +8,9 @@ import {test} from 'node:test';
 import {gzipSync,gunzipSync,constants} from 'node:zlib';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
 import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {authenticateRustInputTrace} from './rust-input-authentication.ts';
+import {runtimeSubjectValidator,validateRustInputCapture} from './rust-input-validation.ts';
+import {runtimeInputRequirement} from './rust-input-operations.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -55,6 +58,12 @@ int main(int argc,char **argv){
     if(openat(-2,"invalid-fd",O_RDONLY)!=-1||errno!=EBADF)return 97;
     struct statx st;
     if(syscall(SYS_statx,value,NULL,AT_EMPTY_PATH,STATX_BASIC_STATS,&st))return 113;
+    if(syscall(SYS_statx,value,"",AT_EMPTY_PATH,STATX_BASIC_STATS,&st))return 134;
+    struct stat descriptor_stat;
+    if(syscall(SYS_newfstatat,value,"",&descriptor_stat,AT_EMPTY_PATH))return 135;
+    if(syscall(SYS_newfstatat,value,"",&descriptor_stat,0)!=-1||errno!=ENOENT)return 136;
+    if(syscall(SYS_statx,dir,"value",AT_EMPTY_PATH,STATX_BASIC_STATS,&st))return 137;
+    if(syscall(SYS_faccessat2,value,"",R_OK,AT_EMPTY_PATH))return 138;
     int socket_fd=socket(AF_UNIX,SOCK_STREAM,0);if(socket_fd<0)return 114;
     if(openat(socket_fd,"socket-relative",O_RDONLY)!=-1||errno!=ENOTDIR)return 115;
     close(socket_fd);
@@ -63,6 +72,14 @@ int main(int argc,char **argv){
     if(syscall(SYS_renameat2,dir,"value",other,"renamed",0))return 121;
     if(syscall(SYS_renameat2,other,"renamed",dir,"value",0))return 122;
     close(other);
+    if(symlinkat("missing",dir,"symbolic"))return 130;
+    char link_text[16];ssize_t link_size=readlinkat(dir,"symbolic",link_text,sizeof(link_text));
+    if(link_size!=7||memcmp(link_text,"missing",7))return 131;
+    int symbolic_fd=openat(dir,"symbolic",O_PATH|O_NOFOLLOW);if(symbolic_fd<0)return 139;
+    link_size=readlinkat(symbolic_fd,"",link_text,sizeof(link_text));close(symbolic_fd);
+    if(link_size!=7||memcmp(link_text,"missing",7))return 140;
+    if(linkat(dir,"value",dir,"hard",0))return 132;
+    if(unlinkat(dir,"hard",0)||unlinkat(dir,"symbolic",0))return 133;
     char entries[4096];if(syscall(SYS_getdents64,dir,entries,sizeof(entries))<0)return 98;
     close(value);close(dir);if(write(2,"err",3)!=3)return 104;return 7;
   }
@@ -124,10 +141,48 @@ test('the native observer retains actual images, attempted inputs and original p
   const decoded:{observations:InputIndexObservation[];descriptorProbes:InputIndexProbe[]}={observations:[],descriptorProbes:[]};
   const indexed=await readInputTraceIndex(published,row=>{if(row.kind==='observation')decoded.observations.push(row);if(row.kind==='observation')decoded.descriptorProbes.push(...row.probes);});
   assert.deepEqual(indexed.header.observer,prepared.receipt);
+  const descriptorCalls=decoded.observations.filter(row=>['statx','newfstatat','faccessat2','readlinkat'].includes(row.syscall));
+  for(const syscall of ['statx','newfstatat','faccessat2','readlinkat']){
+    const row=descriptorCalls.find(row=>row.syscall===syscall&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false));
+    assert.ok(row,syscall+' retains its actual empty-string descriptor provenance');
+    const subject=row.subjects.find(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false)!;
+    assert.equal(runtimeInputRequirement(row,subject,prepared.receipt).kind,syscall==='readlinkat'?'readlink':'metadata');
+  }
+  const unflagged=descriptorCalls.find(row=>row.syscall==='newfstatat'&&row.args[3]==='0'&&row.subjects.some(subject=>subject.kind==='path'&&subject.name===''));
+  assert.ok(unflagged,'unflagged empty path remains a pathname rather than inventing descriptor authority');
+  assert.equal(runtimeInputRequirement(unflagged,unflagged.subjects[0]!,prepared.receipt).kind,'unknown');
+  assert.ok(descriptorCalls.some(row=>row.syscall==='statx'&&row.args[2]==='1000'&&row.subjects.some(subject=>subject.kind==='path'&&subject.name==='value')),
+    'a nonempty pathname remains an independent path even when AT_EMPTY_PATH is set');
   assert.deepEqual(indexed.complete.raw,{path:record,...artifact});
+  const authenticated=await authenticateRustInputTrace({raw:record,index:published,cwd:root,root,observer:prepared.receipt,
+    target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}});
+  assert.deepEqual(authenticated.header,indexed.header);
+  const validation=await validateRustInputCapture({capture:{raw:record,index:published,cwd:root,root,observer:prepared.receipt,
+    target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}},output:join(root,'validation.gz'),targets:new Map([['fixture.rs',{
+      target:{source:'fixture.rs',name:'syscalls',kind:['test'],unitTests:true,doctests:false},
+      snapshot:{files:['subject','subject.c'],ownedFiles:['subject','subject.c'],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]},
+    }]])});
+  assert.ok(validation.counts.claimed>0,'the actual executed file retains its exact input authority');
+  const actualEmpty=descriptorCalls.find(row=>row.syscall==='statx'&&row.subjects.some(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false))!;
+  const actualSubject=actualEmpty.subjects.find(subject=>subject.kind==='descriptor'&&subject.pathArgument?.value.null===false)!;
+  const assessed=runtimeSubjectValidator(root,{files:['value'],ownedFiles:['value'],moduleFiles:[],hostFiles:[],placingFiles:[],directories:[],optionalFiles:[],memberships:[],observations:[]})
+    .assess(actualEmpty,actualSubject,prepared.receipt);
+  assert.equal(assessed.identity?.path,join(root,'value'),'empty-path stat names the regular file, without appending a directory separator');
+  assert.equal(assessed.state,'claimed','the descriptor metadata keeps its actual canonical input claim');
+  assert.equal(validation.coverage,'incomplete','external and deliberately unsupported fixture operations remain named gaps');
+  await assert.rejects(authenticateRustInputTrace({raw:record,index:published,cwd:root,root,observer:{...prepared.receipt,sha256:'0'.repeat(64)},
+    target:{package:'fixture',name:'syscalls',kind:['test'],source:'fixture.rs'}}),/observer digest changed/);
   const opens=decoded.observations.filter(row=>row.operation==='open').map(row=>classifyInputOpen(row,indexed.header.observer));
   if(prepared.receipt.abi==='linux-x86_64-v1'){
     assert.ok(opens.some(row=>row.kind==='path'));assert.ok(opens.some(row=>row.kind==='directory'));assert.ok(opens.some(row=>row.kind==='write'&&row.reason==='temporary inode requested'));
+    const requirements=decoded.observations.flatMap(row=>row.subjects.map(subject=>({syscall:row.syscall,arg:subject.arg,requirement:runtimeInputRequirement(row,subject,indexed.header.observer)})));
+    assert.ok(requirements.some(row=>row.syscall==='statx'&&row.requirement.kind==='metadata'&&row.requirement.following==='descriptor'));
+    assert.ok(requirements.some(row=>row.syscall==='getdents64'&&row.requirement.kind==='enumeration'));
+    assert.ok(requirements.some(row=>row.syscall==='symlinkat'&&row.arg===0&&row.requirement.kind==='literal'&&row.requirement.text==='missing'));
+    assert.ok(requirements.some(row=>row.syscall==='symlinkat'&&row.arg===2&&row.requirement.kind==='mutation'&&row.requirement.role==='link-destination'));
+    assert.ok(requirements.some(row=>row.syscall==='readlinkat'&&row.requirement.kind==='readlink'));
+    assert.ok(requirements.some(row=>row.syscall==='linkat'&&row.arg===1&&row.requirement.kind==='hard-link-source'));
+    assert.ok(requirements.some(row=>row.syscall==='linkat'&&row.arg===3&&row.requirement.kind==='mutation'&&row.requirement.role==='link-destination'));
   }else assert.ok(opens.every(row=>row.kind==='unknown'));
   await assert.rejects(publishInputTrace({raw:record,output:join(root,'wrong-observer.gz'),cwd:root,root,observer:{...prepared.receipt,sha256:'0'.repeat(64)}}),/observer digest changed/);
   await assert.rejects(publishInputTrace({raw:record,output:join(root,'wrong-image.gz'),cwd:root,root,observer:{...prepared.receipt,observedPath:'/wrong/observer'},target:{package:'fixture',name:'test',kind:['test'],source:'fixture.rs'}}),/root image does not match/);

@@ -3,28 +3,41 @@ import {gitArguments} from "./git-arguments/main.ts";
 // Literal relative import() is followed like a static import; computed imports
 // (variables or interpolated templates) must be named as another entry.
 import {lstatSync, readFileSync, realpathSync} from "node:fs";
-import {isAbsolute, relative, resolve, sep} from "node:path";
+import {isAbsolute, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {createRequire} from "node:module";
 import {execFileSync} from "node:child_process";
+import {createHash} from 'node:crypto';
 import {SourceFacts} from './source-facts.ts';
-import {projectInputs} from './project-inputs.ts';
-import {fixtureNamespaces,moduleMemberName,matchesModuleMember,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext} from './reader-inputs/main.ts';
+import {captureToolchain,type Capture,type InstalledTypeScript} from '../differential/oracle-toolchain.ts';
+import type {BuildModuleInputs} from './rust-modules.ts';
+import {projectInputOwner,type ProjectInputs,type ProjectRequest} from './project-inputs.ts';
+import {executableModuleSource,fixtureNamespaces,moduleMemberName,projectMemberPrefix,relativeProjectInput,matchesModuleMember,directoryCandidates,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext,type ReaderProtocol} from './reader-inputs/main.ts';
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
-import {captureReaderObservations} from './reader-observations.ts';
+import {captureReaderObservations,validateReaderBatchObservations} from './reader-observations.ts';
+import type {ProjectEnvironmentAbsence} from './project-environment.ts';
+import type {InstalledProjectDependency} from './project-dependencies.ts';
+import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
+import type {GeneratedProjectCapability} from './generated-project.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
-export type ReaderObservation={reader:string;context:ReaderContext;protocol:'project'|'node26';observation:HostObservation;
-  causes:{kind:HostObservation['kind'];path:string}[]};
+export type ReaderObservation={reader:string;context:ReaderContext;protocol:ReaderProtocol;observation:HostObservation;
+  environment?:ProjectEnvironmentAbsence;
+  dependency?:InstalledProjectDependency;selectorOnly?:true;
+  capability?:InstalledTypeScript|GeneratedProjectCapability;causes:{kind:HostObservation['kind'];path:string}[]};
 /** The canonical graph owns derived facts; the declaration leaf has no parser
  * or oracle dependency in either import direction. */
-export type InputSnapshot={files:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
+export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
   optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
 export type ByteInputDeclaration={reader:string;path:string};
+export type ModuleDescriptionRequest={entries:readonly InputEntry[];buildModules?:BuildModuleInputs};
+export type ModuleDescription={snapshot:InputSnapshot;byteInputs:ByteInputDeclaration[]};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
+  dependencyCatalog?:DependencyCatalogTrust|null;
+  generatedTemporaryParent?:string;
   byteInput?:(declaration:ByteInputDeclaration)=>void;
   /** Only an actual Node invocation owner selects this versioned protocol. */
   nodeMajor?:26;
@@ -34,6 +47,13 @@ const inside = (root: string, path: string) => {
   const part = relative(root, path);
   return part !== ".." && !part.startsWith(".." + sep) && !isAbsolute(part);
 };
+
+/** Close only acquired owners; one cleanup failure cannot replace another. */
+export function closeModuleGraphOwners(owners:readonly ({name:string;close:()=>void}|undefined)[]):void{
+  const errors:Error[]=[];
+  for(const owner of owners)if(owner)try{owner.close();}catch(error){errors.push(new Error('module graph '+owner.name+' close failed: '+String(error),{cause:error}));}
+  if(errors.length)throw new AggregateError(errors,'module graph cleanup failed');
+}
 
 /** Declarations, including type imports, re-exports and literal relative
  * import() calls. Data strings,
@@ -54,6 +74,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
   if(options.nodeMajor!==undefined&&!ORACLE_NODE_RESOLUTION_RECIPE.nodeMajors.includes(options.nodeMajor))
     throw Error('unsupported host module Node recipe: '+String(options.nodeMajor));
   const references = new Map<string,ModuleDeclarations>();
+  const sourceInputs=new Map<string,string>();
   // The same graph owns parsed source bytes and their source-file identity.
   // Namespace/host promotion reuses that identity without repeating realpath.
   // Captured protocol observations have their own fresh read/validation path.
@@ -83,25 +104,37 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
     return selected;
   }
-  let api:import('typescript/sync').API|undefined;
+  let api:import('typescript/sync').API|undefined,toolchain:Capture|undefined,projects:ReturnType<typeof projectInputOwner>|undefined;
+  let closed=false,batching=false;
+  const installed=()=>toolchain??=captureToolchain(resolve(require.resolve('typescript/package.json'),'..'));
   function parsed(path: string) {
     const known = references.get(path);
     if (known) return known;
     const supplied=options.declarations?.get(relative(root,path).split(sep).join('/'));
     if(supplied){references.set(path,supplied);hostImports.set(path,new Set(supplied.imports));return supplied;}
     api??=new API({cwd:root});
-    const source=readFileSync(path,'utf8'),lease=api.createSourceFile(path,source);
+    const bytes=readFileSync(path),source=bytes.toString('utf8'),lease=api.createSourceFile(path,source);
+    sourceInputs.set(relative(root,path).split(sep).join('/'),createHash('sha256').update(bytes).digest('hex'));
     try {
       const facts=new SourceFacts(relative(root,path).split(sep).join('/'),source,lease.sourceFile),result=facts.moduleDeclarations();
       hostImports.set(path,new Set(facts.hostModuleImports()));
       references.set(path,result);return result;
     } finally {lease.dispose();}
   }
-  function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput):InputSnapshot {
+  type ProjectRead=(request:ProjectRequest,context:ReaderContext)=>ProjectInputs;
+  const readProject:ProjectRead=request=>(projects??=projectInputOwner(root,installed,options.generatedTemporaryParent,options.dependencyCatalog??null)).read([request]);
+  function describe(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory']=options.directory,reportByteInput:ModuleClosureOptions['byteInput']=options.byteInput,buildModules?:BuildModuleInputs):InputSnapshot {
+    return describeUsing(entries,reportDirectory,reportByteInput,buildModules,readProject);
+  }
+  function describeUsing(entries:readonly InputEntry[],reportDirectory:ModuleClosureOptions['directory'],reportByteInput:ModuleClosureOptions['byteInput'],buildModules:BuildModuleInputs|undefined,projectRead:ProjectRead):InputSnapshot {
+    if(closed)throw Error('module graph is closed');
+    if(batching&&projectRead===readProject)throw Error('module graph already has an active batch');
+    const runtimeFiles=new Set<string>();
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     const observations:ReaderObservation[]=[];
-    type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>};
+    type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
+      compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
@@ -111,22 +144,110 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol,...captured});
       }
     };
+    function optionalPresence(context:Context,reader:string,path:string):boolean{
+      metadataParents(root,path,'optional file');
+      let stat:ReturnType<typeof lstatSync>|undefined;
+      try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+      const name=nameOf(path);
+      if(stat&&(!stat.isFile()||stat.isSymbolicLink()))throw Error('optional file input is not a regular file: '+name);
+      optionalFiles.push({reader,path:name,present:!!stat,context:{entry:context.entry,dataNamespaces:context.namespaces}});
+      // Even an absent candidate may become bytes in the next source tree.
+      reportByteInput?.({reader,path:name});
+      if(stat)visit(context,path,false,false);
+      return !!stat;
+    }
     function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
-      // This reader names immutable main blobs, never candidate filesystem
-      // facts, placement, directory membership or fixture staging bytes.
+      // Accepted main blobs have no candidate filesystem or staging role.
       if(kind==='accepted-revision')return;
-      if(kind==='optional-file'){
-        metadataParents(root,path,'optional file');
-        let stat:ReturnType<typeof lstatSync>|undefined;
-        try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-        const name=nameOf(path);
-        if(stat&&(!stat.isFile()||stat.isSymbolicLink()))throw Error('optional file input is not a regular file: '+name);
-        optionalFiles.push({reader,path:name,present:!!stat,context:{entry:context.entry,dataNamespaces:context.namespaces}});
-        // Even an absent candidate may become bytes in the next source tree.
-        reportByteInput?.({reader,path:name});
-        if(stat)visit(context,path,false,false);
+      if(kind==='conservative'){
+        if(path!==root)metadataParents(root,path,'conservative directory');
+        const filesystem=new OracleFilesystem(),members:string[]=[];
+        filesystem.inputIdentity(path,root,false);
+        const walk=(directory:string,mayBeAbsent=false):void=>{
+          const type=filesystem.runtimeKind(directory);
+          if(type===null&&mayBeAbsent)return;
+          if(type!=='directory')throw Error('conservative directory traversal is not an owned directory: '+nameOf(directory));
+          const entries=directoryEntries(directory),names=filesystem.runtimeEntries(directory);
+          if(JSON.stringify(entries.map(row=>row.name).sort())!==JSON.stringify([...names].sort()))throw Error('conservative directory changed during traversal: '+nameOf(directory));
+          for(const entry of entries){
+            const target=join(directory,entry.name),type=filesystem.runtimeKind(target);
+            if(type!==entry.type)throw Error('conservative input changed during traversal: '+nameOf(target));
+            if(type==='directory')walk(target);
+            else if(type==='file'){visit(context,target,false,false,false);members.push(nameOf(target));}
+            else throw Error('conservative traversal refuses symbolic or unsupported input: '+nameOf(target));
+          }
+        };
+        walk(path,true);observe(context,reader,'filesystem',filesystem.captured());
+        const row:DirectoryDeclaration={reader,directory:nameOf(path),kind:'conservative',files:members.sort(),context:{entry:context.entry,dataNamespaces:{...context.namespaces}}};
+        directories.push(row);reportDirectory?.(row);return;
+      }
+      if(kind==='directory-candidates'){
+        const candidates=directoryCandidates(pathToFileURL(path),input.candidates!).candidates;
+        asset(context,reader,path,{kind:'membership',path:input.path},false);
+        const entries=directoryEntries(path),filesystem=new OracleFilesystem();
+        for(const entry of entries)if(filesystem.directoryExists(join(path,entry.name))){
+          for(const candidate of candidates){
+            const target=join(path,entry.name,candidate.name);
+            if(candidate.kind==='optional-file')optionalPresence(context,reader,target);
+            else if(candidate.kind==='file-exists')filesystem.fileExists(target);
+            else if(candidate.kind==='directory-exists')filesystem.directoryExists(target);
+            else{
+              const identity=filesystem.inputIdentity(target,root);
+              if(!inside(root,identity.path))throw Error('directory candidate resolves outside source root: '+target);
+              // Path::exists follows links and accepts every existing kind;
+              // fileExists deliberately answers the different is_file query.
+              if(identity.state==='resolved')filesystem.runtimeKind(identity.path);
+            }
+          }
+        }
+        observe(context,reader,'filesystem',filesystem.captured());
+        if(JSON.stringify(directoryEntries(path))!==JSON.stringify(entries))throw Error('directory candidate population changed during discovery: '+nameOf(path));
+        return;
+      }
+      if(kind==='project-choice'){
+        if(!Array.isArray(input.alternatives))throw Error('project choice has no relative alternatives: '+reader);
+        const candidates=[path,...input.alternatives.map(value=>fileURLToPath(new URL(relativeProjectInput(value),pathToFileURL(path))))];
+        if(candidates.some(candidate=>!inside(root,candidate)))throw Error('project choice escapes source root: '+reader);
+        for(const candidate of candidates)if(optionalPresence(context,reader,candidate)){
+          asset(context,reader,candidate,{kind:'project-config',path:''},false);return;
+        }
+        throw Error('project choice has no present config: '+reader);
+      }
+      if(kind==='project-catalogue'){
+        if(typeof input.directory!=='string')throw Error('project catalogue has no directory: '+reader);
+        asset(context,reader,path,{kind:'file',path:input.path},false);
+        const directory=fileURLToPath(new URL(relativeProjectInput(input.directory),pathToFileURL(path)));
+        if(!inside(root,directory))throw Error('project catalogue directory escapes source root: '+reader);
+        // Catalogue bytes are immutable. Only the choosing source's parser
+        // selects these configs; no adjacent directory becomes a byte grant.
+        const text=readFileSync(path,'utf8'),names=new Set<string>();
+        for(const [index,line]of text.split(/\r?\n/).entries()){
+          if(!line||line.startsWith('#'))continue;
+          const fields=line.split('\t');
+          if(fields.length!==5)throw Error('project catalogue needs five columns: '+nameOf(path)+':'+(index+1));
+          const name=moduleMemberName(fields[0]);
+          if(names.has(name))throw Error('project catalogue repeats a project: '+name);names.add(name);
+          asset(context,reader,join(directory,name,'tsconfig.json'),{kind:'project-config',path:''},false);
+        }
+        if(readFileSync(path,'utf8')!==text)throw Error('project catalogue changed during discovery: '+nameOf(path));
+        return;
+      }
+      if(kind==='project-members'){
+        const prefix=projectMemberPrefix(input.prefix);
+        asset(context,reader,path,{kind:'membership',path:input.path},false);
+        const entries=directoryEntries(path),filesystem=new OracleFilesystem();
+        for(const entry of entries)if(entry.name.startsWith(prefix)){
+          const config=join(path,entry.name,'tsconfig.json');
+          if(!input.optional||filesystem.fileExists(config))asset(context,reader,config,{kind:'project-config',path:''},false);
+        }
+        if(input.optional)observe(context,reader,'project',filesystem.captured());
+        if(JSON.stringify(directoryEntries(path))!==JSON.stringify(entries))throw Error('project member population changed during discovery: '+nameOf(path));
+        return;
+      }
+      if(kind==='optional-file'||kind==='optional-module'){
+        if(optionalPresence(context,reader,path)&&kind==='optional-module')visit(context,path,true,true,host||buildModules?.files.has(reader)===true);
         return;
       }
       if(kind==='membership'){
@@ -150,16 +271,40 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           throw Error('fixture data namespace is not a declared data input: '+directory+' ('+entry+')');
         return;
       }
-      if(kind==='project'||kind==='project-config'){
+      if(kind==='project-config'||kind==='generated-project'){
         const entry=nameOf(path);
-        const key=kind+'\0'+entry;
+        const key=JSON.stringify([kind,entry,input.directory,input.include]);
         if(context.projects.has(key))return;
         context.projects.add(key);
-        visit(context,path,kind==='project',true,false);
-        const project=projectInputs([{kind:kind==='project'?'entry':'config',path:entry}],root);
+        let request:import('./project-inputs.ts').ProjectRequest={kind:'config',path:entry};
+        if(kind==='generated-project'){
+          if(typeof input.directory!=='string'||input.include!=='directory'&&input.include!=='typescript-tree')throw Error('generated project has no exact include recipe: '+reader);
+          const directory=fileURLToPath(new URL(relativeProjectInput(input.directory),pathToFileURL(path)));
+          if(!inside(root,directory))throw Error('generated project directory escapes source root: '+reader);
+          const supplied=join(directory,'tsconfig.json');
+          request=optionalPresence(context,reader,supplied)?{kind:'config',path:nameOf(supplied)}:{kind:'generated',path:entry,directory:nameOf(directory),include:input.include};
+        }
+        if(kind!=='generated-project'||request.kind==='generated')visit(context,path,false,true,false);
+        const project=projectRead(request,{entry:context.entry,dataNamespaces:context.namespaces});
         observe(context,reader,'project',project.observations);
+        for(const fact of project.dependencyObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
+          observation:structuredClone(fact.observation),dependency:structuredClone(fact.dependency),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of captureReaderObservations(root,project.pinObservations)){
+          if(fact.observation.kind==='file'&&fact.observation.value!==null)visit(context,fact.observation.path,false,false,false,true);
+          observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',...fact,selectorOnly:true});
+        }
+        for(const fact of project.hostObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
+          observation:structuredClone(fact.observation),environment:structuredClone(fact.environment),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.installedObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
+          observation:structuredClone(fact.observation),capability:structuredClone(fact.capability),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
+        for(const fact of project.generatedObservations)observations.push({reader,context:{entry:context.entry,dataNamespaces:context.namespaces},protocol:'project',
+          observation:structuredClone(fact.observation),capability:structuredClone(fact.capability),causes:[{kind:fact.observation.kind,path:fact.observation.path}]});
         for(const config of project.configs)visit(context,resolve(root,config),false);
-        for(const entry of project.roots)visit(context,resolve(root,entry),true,true,false);
+        // A compiler project has its own resolution and visit state. Literal
+        // host imports and another project's options cannot replace its edges.
+        const compiled:Context={entry:context.entry,namespaces:context.namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:context.projects,data:context.data,
+          compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
+        for(const entry of new Set([...project.roots,...project.modules.map(row=>row.path)]))visit(compiled,resolve(root,entry),true,true,false);
         return;
       }
       if (!lstatSync(path).isDirectory()) {
@@ -185,13 +330,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       directories.push(row);reportDirectory?.(row);
       if(grant)return;
       for(const file of members){
-        if(kind==='data'){files.add(file);placing.add(file);}
+        if(kind==='data'){files.add(file);runtimeFiles.add(file);placing.add(file);}
         else visit(context,resolve(root,file),kind!=='inspection',kind!=='inspection',host);
       }
     }
-    function visit(context:Context,path:string,enter=true,place=true,host=enter):void {
+    function visit(context:Context,path:string,enter=true,place=true,host=enter,compileOnly=false):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
-      const name=nameOf(path);
+      const name=nameOf(path);if(!compileOnly)runtimeFiles.add(name);
       if(enter?context.entered.has(name)&&(!host||context.host.has(name)):context.owned.has(name)){if(place)placing.add(name);return;}
       if(!ownedSources.has(path)){
         if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
@@ -202,7 +347,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       context.entered.add(name);moduleFiles.add(name);
       if(host){
         context.host.add(name);hostFiles.add(name);
-        if(options.nodeMajor!==undefined&&/\.[cm]?[jt]sx?$/.test(path)&&! /\.d\.[cm]?ts$/.test(path)){
+        if(options.nodeMajor!==undefined&&executableModuleSource(path)&&! /\.d\.[cm]?ts$/.test(path)){
           const filesystem=new OracleFilesystem(),physical=filesystem.realpath(path);
           for(const route of new Set([path,physical]))for(const candidate of oracleNodePackageScopes(route)){
             const bytes=filesystem.readBytes(candidate);
@@ -216,27 +361,84 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       }
       // Aggregate ownership never suppresses another namespace context. A
       // later production import must still restore its real data membership.
-      if(!/\.[cm]?[jt]sx?$/.test(path)&&!options.declarations?.has(name))return;
+      if(!executableModuleSource(path)&&!options.declarations?.has(name))return;
+      for(const target of buildModules?.imports.get(name)??[])visit(context,resolve(root,target),true,true,false,true);
       const {imports,assets}=parsed(path);
-      for(const specifier of imports)visit(context,fileURLToPath(new URL(specifier,pathToFileURL(path))),true,true,host&&hostImports.get(path)!.has(specifier));
+      const compiled=context.compiledImports?.get(name);
+      if(compiled)for(const target of compiled)visit(context,resolve(root,target),true,true,false);
+      else for(const specifier of imports)visit(context,fileURLToPath(new URL(specifier,pathToFileURL(path))),true,true,(host||buildModules?.files.has(name)===true)&&hostImports.get(path)!.has(specifier));
       for(const input of assets)asset(context,name,fileURLToPath(new URL(input.path,pathToFileURL(path))),input,host);
     }
     const production:Context={entry:'<entry>',namespaces:{},entered:new Set(),host:new Set(),owned:new Set(),projects:new Set(),data:new Set()};
     for(const entry of entries){
       if(typeof entry!=='string'){
         asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
-          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member,...(entry.data?{data:true}:{})}:{})});
+          ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member,...(entry.data?{data:true}:{})}:entry.kind==='project-choice'?{alternatives:[...entry.alternatives]}:entry.kind==='project-catalogue'?{directory:entry.directory}:entry.kind==='project-members'?{prefix:entry.prefix,...(entry.optional?{optional:true}:{})}:entry.kind==='generated-project'?{directory:entry.directory,include:entry.include}:entry.kind==='directory-candidates'?{candidates:entry.candidates}:{})});
         continue;
       }
       if(isAbsolute(entry))throw Error('module entry must be repository-relative: '+entry);
       const path=resolve(root,entry);
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
-      else visit(production,path);
+      else visit(production,path,true,true,!buildModules?.files.has(nameOf(path)),buildModules?.files.has(nameOf(path))??false);
     }
-    return {files:[...files].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations};
+    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations};
   }
-  return {describe,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
-    membershipIndex:()=>metadataIndex??=membershipIndex(sourceFiles()),close:()=>api?.close()};
+  /** A batch is one transaction, not a graph-lifetime result cache. Compiler
+   * requests include their complete recipe and namespace context. Each first
+   * request gets a fresh Program/filesystem; duplicate requests share only its
+   * detached primitive answers, validated before anything escapes this call. */
+  function describeBatch(requests:readonly ModuleDescriptionRequest[]):ModuleDescription[]{
+    if(closed)throw Error('module graph is closed');
+    if(batching)throw Error('module graph already has an active batch');
+    batching=true;
+    // Parser references are an intra-walk optimization too. Another explicit
+    // batch must parse changed modules and enumerate its current tracked set.
+    references.clear();sourceInputs.clear();ownedSources.clear();hostImports.clear();
+    tracked=undefined;directoryFiles.clear();memberFiles.clear();metadataIndex=undefined;
+    const discoveries=new Map<string,ProjectInputs>();
+    const batchRead:ProjectRead=(request,context)=>{
+      const key=JSON.stringify([request,context.entry,Object.entries(context.dataNamespaces).sort(([a],[b])=>a.localeCompare(b))]);
+      let result=discoveries.get(key);
+      if(!result){result=readProject(request,context);discoveries.set(key,result);}
+      return result;
+    };
+    try{
+      const results=requests.map(request=>{
+        const byteInputs:ByteInputDeclaration[]=[];
+        const snapshot=describeUsing(request.entries,()=>{},row=>byteInputs.push({...row}),request.buildModules,batchRead);
+        return {snapshot,byteInputs};
+      });
+      validateReaderBatchObservations(results.map(row=>row.snapshot));
+      for(const result of results){
+        for(const row of result.snapshot.optionalFiles){
+          const path=resolve(root,row.path);metadataParents(root,path,'reader batch optional file');
+          let stat:ReturnType<typeof lstatSync>|undefined;
+          try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+          if(stat&&(!stat.isFile()||stat.isSymbolicLink())||!!stat!==row.present)throw Error('reader batch optional file changed: '+row.path);
+        }
+        for(const row of result.snapshot.memberships){
+          const path=resolve(root,row.directory);metadataParents(root,path,'reader batch membership');
+          const stat=lstatSync(path);
+          if(!stat.isDirectory()||stat.isSymbolicLink()||JSON.stringify(directoryEntries(path))!==JSON.stringify(row.entries))
+            throw Error('reader batch membership changed: '+row.directory);
+        }
+      }
+      for(const [path,sha256]of sourceInputs)if(createHash('sha256').update(readFileSync(resolve(root,path))).digest('hex')!==sha256)
+        throw Error('reader batch source changed after parse: '+path);
+      for(const path of ownedSources)if(!lstatSync(path).isFile()||!inside(root,realpathSync(path)))throw Error('reader batch source ownership changed: '+nameInRoot(path));
+      if(tracked&&JSON.stringify(sourceFiles())!==JSON.stringify(execFileSync('git',gitArguments(['ls-files','-z','--cached']),{cwd:root,encoding:'utf8',maxBuffer:64<<20}).split('\0').filter(Boolean)))
+        throw Error('reader batch tracked population changed during discovery');
+      return results;
+    }finally{discoveries.clear();batching=false;}
+  }
+  const nameInRoot=(path:string)=>relative(root,path).split(sep).join('/');
+  return {describe,describeBatch,closure:(entries:readonly InputEntry[],reportDirectory?:ModuleClosureOptions['directory'])=>describe(entries,reportDirectory??options.directory).files,
+    sourceInputs:()=>{if(closed)throw Error('module graph is closed');return [...sourceInputs].map(([path,sha256])=>({path,sha256}));},
+    membershipIndex:()=>{if(closed)throw Error('module graph is closed');return metadataIndex??=membershipIndex(sourceFiles());},close:()=>{
+      if(batching)throw Error('module graph cannot close an active batch');
+      if(closed)return;closed=true;
+      closeModuleGraphOwners([projects&&{name:'project API',close:()=>projects!.close()},api&&{name:'parser API',close:()=>api!.close()}]);
+    }};
 }
 
 /** A public walk always gets a fresh graph, including fresh source bytes. */

@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord,durableRecordStream} from './durable-record.ts';
+import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
 import {byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact} from './file-input-observer.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
@@ -150,7 +151,7 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:4;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexStart={kind:'index-start';version:5;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
 export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'>&{argvRaw:string};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
 export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number};
@@ -158,88 +159,103 @@ export type InputIndexEnd={kind:'index-complete';terminal:ObservationEnd;counts:
 export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexObservation|InheritedDescriptor|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
 const emptyCounts=():InputIndexCounts=>({images:0,attempts:0,observations:0,probes:0,terminalFacts:0,inherited:0});
 
-/** Versioned line records keep both publication and consumption independent of
- * the document's total size. Current task contexts and an output batch with a
- * 64 KiB flush target remain in memory; a row is bounded at 256 KiB. The
- * lossless native record stays separately retained. */
-export async function publishInputTrace(options:{raw:string;output:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[];observer?:FileObserverReceipt}):Promise<void>{
+export type InputTraceDerivation={raw:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[];observer?:FileObserverReceipt};
+/** The one bounded raw-to-index transform. Publication and independent
+ * authentication consume identical records; neither retains the full trace. */
+export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:InputIndexRow)=>void|Promise<void>):Promise<void>{
   if(!isAbsolute(options.raw))fail('raw capture path must be absolute');
   const observer=options.observer?retainedFileObserverReceipt(options.observer):null;
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
+  await emit({kind:'index-start',version:5,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  const capture=await readFileObservation(options.raw,async row=>{
+    if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
+    if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
+    if(row.kind!=='attempt')return;
+    counts.attempts++;
+    if(canceledLifetime(row)){counts.terminalFacts++;await emit({kind:'terminal-fact',fact:row});return;}
+    const image=phases.observe(row);
+    if(observer&&!observerBound&&row.tgid===root){
+      if(byteFactText(row.image,'root observer image')!==observer.observedPath)fail('raw root image does not match observer receipt');
+      observerBound=true;
+    }
+    if(image.id>counts.images){
+      counts.images++;
+      const {args,...context}=image;
+      void args;
+      await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:''});
+    }
+    const subjects:InputSubject[]=[],probes:InputIndexProbe[]=[];
+    const probe=(probeKind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{probes.push({probeKind,raw,error,...(fd===undefined?{}:{fd}),...(rawPath===undefined?{}:{rawPath})});};
+    const descriptor=(fd:InputAttempt['dirfds'][number],pathArgument?:InputAttempt['paths'][number])=>{
+      if(fd.target.error||fd.target.null){probe('descriptor-probe',fd.target.hex,fd.target.error,fd.fd);return;}
+      const target=byteFactText(fd.target,'descriptor target');
+      if(isAbsolute(target))subjects.push({kind:'descriptor',arg:fd.arg,fd:fd.fd,target,raw:fd.target.hex,...(pathArgument?{pathArgument}: {})});
+      else probe('non-file-descriptor',fd.target.hex,0,fd.fd);
+    };
+    for(const path of row.paths){
+      if(path.value.null){
+        probe('null-path','',0);
+        const fd=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(fd)descriptor(fd,path);
+        continue;
+      }
+      const name=factPath(path.value,'attempted path')!;
+      const empty=name===''?emptyPathDescriptorArgument(row,observer):undefined;
+      if(empty&&path.arg===empty.pathArg&&path.dirfdArg===empty.descriptorArg){
+        const fd=row.dirfds.find(fd=>fd.arg===empty.descriptorArg);if(!fd)fail('missing empty-path descriptor');
+        descriptor(fd,path);continue;
+      }
+      let anchor:InputPathAnchor;
+      if(isAbsolute(name))anchor={kind:'absolute'};
+      else if(path.dirfdArg<0)anchor={kind:'cwd',path:byteFactText(row.cwd,'actual cwd')};
+      else{
+        const fd=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!fd)fail('missing path directory descriptor');
+        if(fd.fd===-100)anchor={kind:'cwd',path:byteFactText(row.cwd,'actual cwd')};
+        else{
+          if(fd.fd<0){probe('invalid-dirfd',path.value.hex,fd.target.error,fd.fd);continue;}
+          const target=byteFactText(fd.target,'path directory descriptor');
+          if(!isAbsolute(target)){probe('non-file-dirfd',fd.target.hex,0,fd.fd,path.value.hex);continue;}
+          anchor={kind:'dirfd',fd:fd.fd,path:target,raw:fd.target.hex};
+        }
+      }
+      // Preserve spelling and its actual anchor. resolve()/join() here would
+      // erase a symlink component before '..' could be interpreted by the kernel.
+      subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor});
+    }
+    if(!row.paths.length)for(const fd of row.dirfds)descriptor(fd);
+    for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args,row,observer);
+    for(const value of probes)readProbe(value);
+    counts.observations+=subjects.length;counts.probes+=probes.length;
+    const {id,tid,tgid,ppid,birth,parentBirth}=row;
+    await emit({kind:'observation',...image.phase,attempt:{id,tid,tgid,ppid,birth,parentBirth},cwd:byteFactText(row.cwd,'actual cwd'),args:row.args,
+      operation:row.operation,syscall:row.syscall,outcome:'unknown',image:image.id,canceled:row.canceled,subjects,probes});
+  });
+  if(observer){
+    if(!observerBound)fail('raw capture has no matching observer entry');
+    retainedFileObserverReceipt(observer);
+  }
+  phases.finish();await emit({kind:'index-complete',terminal:capture.terminal,raw:{path:options.raw,...capture.artifact},counts});
+}
+
+/** Versioned line records keep both publication and consumption independent of
+ * total size. The output batch has a 64 KiB flush target; each row is bounded
+ * at 256 KiB. The lossless native record remains separately retained. */
+export async function publishInputTrace(options:InputTraceDerivation&{output:string}):Promise<InputIndexEnd>{
+  let complete:InputIndexEnd|undefined;
   await durableRecordStream(options.output,async append=>{
     let batch:string[]=[],batchBytes=0;
     const flush=async()=>{if(batchBytes){const bytes=batch.join('');batch=[];batchBytes=0;await append(bytes);}};
-    const emit=async(row:InputIndexRow)=>{
+    await deriveInputTrace(options,async row=>{
+      if(row.kind==='index-complete')complete=row;
       const line=JSON.stringify(row)+'\n',size=Buffer.byteLength(line);
       if(size>MAX_OBSERVATION_ROW_BYTES)fail('index row exceeds bounded row size');
       batch.push(line);batchBytes+=size;if(batchBytes>=64*1024)await flush();
-    };
-    await emit({kind:'index-start',version:4,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
-    const capture=await readFileObservation(options.raw,async row=>{
-      if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
-      if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
-      if(row.kind!=='attempt')return;
-      counts.attempts++;
-      if(canceledLifetime(row)){counts.terminalFacts++;await emit({kind:'terminal-fact',fact:row});return;}
-      const image=phases.observe(row);
-      if(observer&&!observerBound&&row.tgid===root){
-        if(byteFactText(row.image,'root observer image')!==observer.observedPath)fail('raw root image does not match observer receipt');
-        observerBound=true;
-      }
-      if(image.id>counts.images){
-        counts.images++;
-        const {args,...context}=image;
-        void args;
-        await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:''});
-      }
-      const subjects:InputSubject[]=[],probes:InputIndexProbe[]=[];
-      const probe=(probeKind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{probes.push({probeKind,raw,error,...(fd===undefined?{}:{fd}),...(rawPath===undefined?{}:{rawPath})});};
-      const descriptor=(fd:InputAttempt['dirfds'][number],pathArgument?:InputAttempt['paths'][number])=>{
-        if(fd.target.error||fd.target.null){probe('descriptor-probe',fd.target.hex,fd.target.error,fd.fd);return;}
-        const target=byteFactText(fd.target,'descriptor target');
-        if(isAbsolute(target))subjects.push({kind:'descriptor',arg:fd.arg,fd:fd.fd,target,raw:fd.target.hex,...(pathArgument?{pathArgument}: {})});
-        else probe('non-file-descriptor',fd.target.hex,0,fd.fd);
-      };
-      for(const path of row.paths){
-        if(path.value.null){
-          probe('null-path','',0);
-          const fd=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(fd)descriptor(fd,path);
-          continue;
-        }
-        const name=factPath(path.value,'attempted path')!;
-        let anchor:InputPathAnchor;
-        if(isAbsolute(name))anchor={kind:'absolute'};
-        else if(path.dirfdArg<0)anchor={kind:'cwd',path:byteFactText(row.cwd,'actual cwd')};
-        else{
-          const fd=row.dirfds.find(fd=>fd.arg===path.dirfdArg);if(!fd)fail('missing path directory descriptor');
-          if(fd.fd===-100)anchor={kind:'cwd',path:byteFactText(row.cwd,'actual cwd')};
-          else{
-            if(fd.fd<0){probe('invalid-dirfd',path.value.hex,fd.target.error,fd.fd);continue;}
-            const target=byteFactText(fd.target,'path directory descriptor');
-            if(!isAbsolute(target)){probe('non-file-dirfd',fd.target.hex,0,fd.fd,path.value.hex);continue;}
-            anchor={kind:'dirfd',fd:fd.fd,path:target,raw:fd.target.hex};
-          }
-        }
-        // Preserve spelling and its actual anchor. resolve()/join() here would
-        // erase a symlink component before '..' could be interpreted by the kernel.
-        subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor});
-      }
-      if(!row.paths.length)for(const fd of row.dirfds)descriptor(fd);
-      for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args);
-      for(const value of probes)readProbe(value);
-      counts.observations+=subjects.length;counts.probes+=probes.length;
-      const {id,tid,tgid,ppid,birth,parentBirth}=row;
-      await emit({kind:'observation',...image.phase,attempt:{id,tid,tgid,ppid,birth,parentBirth},cwd:byteFactText(row.cwd,'actual cwd'),args:row.args,
-        operation:row.operation,syscall:row.syscall,outcome:'unknown',image:image.id,canceled:row.canceled,subjects,probes});
     });
-    if(observer){
-      if(!observerBound)fail('raw capture has no matching observer entry');
-      retainedFileObserverReceipt(observer);
-    }
-    phases.finish();await emit({kind:'index-complete',terminal:capture.terminal,raw:{path:options.raw,...capture.artifact},counts});await flush();
+    await flush();
   },{gzip:true});
+  if(!complete)fail('trace publication has no completion');
+  return complete;
 }
 
 function indexObject(value:unknown):Record<string,unknown>{
@@ -253,7 +269,7 @@ const phaseValid=(row:Record<string,unknown>)=>['cargo-setup','rustdoc-setup','d
 const absolute=(value:unknown):value is string=>typeof value==='string'&&isAbsolute(value)&&!value.includes('\0');
 const digestValid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value);
 const position=(value:unknown):value is number=>integer(value)&&value>=0&&value<6;
-function readSubject(value:unknown,cwd:string,args:readonly string[]):InputSubject{
+function readSubject(value:unknown,cwd:string,args:readonly string[],request:{syscall:string;operation:string},observer:FileObserverReceipt|null):InputSubject{
   const row=indexObject(value);
   const descriptor=(position:number)=>Number(BigInt.asIntN(32,BigInt('0x'+args[position]!)));
   if(!position(row.arg)||!hex(row.raw))fail('malformed input subject');
@@ -272,7 +288,11 @@ function readSubject(value:unknown,cwd:string,args:readonly string[]):InputSubje
     if(!integer(row.fd)||row.fd<0&&row.fd!==-100||!absolute(row.target)||Buffer.from(row.target).toString('hex')!==row.raw||descriptor(row.arg)!==row.fd)fail('malformed descriptor subject');
     if(row.pathArgument!==undefined){
       const path=indexObject(row.pathArgument),value=indexObject(path.value);
-      if(!position(path.arg)||path.dirfdArg!==row.arg||value.hex!==''||value.error!==0||value.truncated!==false||value.null!==true)fail('malformed descriptor pathname provenance');
+      if(!position(path.arg)||path.dirfdArg!==row.arg||value.hex!==''||value.error!==0||value.truncated!==false||typeof value.null!=='boolean')fail('malformed descriptor pathname provenance');
+      if(!value.null){
+        const empty=emptyPathDescriptorArgument({...request,args},observer);
+        if(!empty||path.arg!==empty.pathArg||path.dirfdArg!==empty.descriptorArg)fail('empty pathname has no descriptor semantics');
+      }
     }
   }else fail('unknown input subject');
   return row as InputSubject;
@@ -301,7 +321,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==4)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(row.version!==5)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -330,7 +350,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       const context=tasks.get(key(attempt.tgid,attempt.birth));
       if(!context||context.id!==row.image||context.cwd!==row.cwd||context.phase!==row.phase||context.source!==row.source)
         fail('input attempt differs from its current execution context');
-      for(const value of row.subjects)readSubject(value,row.cwd,row.args);
+      for(const value of row.subjects)readSubject(value,row.cwd,row.args,{syscall:row.syscall,operation:row.operation},header.observer);
       for(const value of row.probes)readProbe(value);
       counts.attempts++;counts.observations+=row.subjects.length;counts.probes+=row.probes.length;
     }else if(row.kind==='inherited'){

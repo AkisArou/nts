@@ -3,11 +3,13 @@ import {fixtureEnvironment} from "./test-environment.ts";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {mkdirSync,mkdtempSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
+import {mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
 import {join,resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {collectToolingTests,discoverToolingTests,isToolingTest,parseToolingTestExclusions,toolingTestInventory,toolingTestStep,validateToolingCoverage} from "./tooling-discovery.ts";
+import {collectToolingTests,discoverToolingTests,isToolingTest,parseToolingTestExclusions,toolingTestInventory,toolingTestStep,toolingTestsForStep,validateToolingCoverage,type ToolingTestExclusion} from "./tooling-discovery.ts";
+import {STEPS} from './step-table.mjs';
+import {shellCommands} from './shell-commands.ts';
 
 function fixture(t:{after:(fn:()=>void)=>void}):{root:string;file:(path:string)=>void} {
   const root=mkdtempSync(join(tmpdir(),"tooling-discovery-"));
@@ -42,6 +44,45 @@ test("a valid exception names a real owning step and remains an owed test",()=>{
   assert.equal(toolingTestStep("tooling/new/deep.test.ts",rows),"tooling");
   assert.equal(toolingTestStep("tooling/bench/helper.ts",rows),undefined);
 });
+test('a named step selects exactly its table entries and refuses an empty owner',t=>{
+  const {root,file}=fixture(t);
+  for(const path of ['tooling/a.test.ts','tooling/b.test.ts','tooling/c.test.ts','tooling/gate/all.sh','tooling/gate/tooling-test-exclusions.json'])file(path);
+  writeFileSync(join(root,'tooling/gate/all.sh'),"printf '%s\\n' tooling integrity examples\n");
+  const rows=[{path:'tooling/a.test.ts',step:'integrity',reason:'first wide control'},
+    {path:'tooling/b.test.ts',step:'integrity',reason:'second wide control'},
+    {path:'tooling/c.test.ts',step:'examples',reason:'another owner'}];
+  writeFileSync(join(root,'tooling/gate/tooling-test-exclusions.json'),JSON.stringify(rows));
+  assert.deepEqual(toolingTestsForStep(root,'integrity'),['tooling/a.test.ts','tooling/b.test.ts']);
+  assert.deepEqual(toolingTestsForStep(root,'examples'),['tooling/c.test.ts']);
+  assert.throws(()=>toolingTestsForStep(root,'missing'),/no tooling test entries.*missing/);
+  rows[1]!.step='examples';writeFileSync(join(root,'tooling/gate/tooling-test-exclusions.json'),JSON.stringify(rows));
+  assert.deepEqual(toolingTestsForStep(root,'integrity'),['tooling/a.test.ts']);
+  assert.deepEqual(toolingTestsForStep(root,'examples'),['tooling/b.test.ts','tooling/c.test.ts']);
+});
+function assertStepRunners(rows:readonly ToolingTestExclusion[],steps:Iterable<string>,source:string):void{
+  const names=new Set(steps),parsed=shellCommands(source),definitions=[...source.matchAll(/^([a-z_][a-z0-9_]*)\(\) \{/gm)];
+  for(const row of rows){
+    assert.ok(names.has(row.step),`${row.path}: unknown owning step ${row.step}`);
+    const call=parsed.commands.find(command=>command.name==='step'&&command.args[0]?.value===row.step&&!command.args[0].dynamic);
+    assert.ok(call,`${row.path}: ${row.step} has no all.sh step invocation`);
+    const owner=call.args[1];assert.ok(owner&&!owner.dynamic,`${row.path}: ${row.step} has no literal step body`);
+    const at=definitions.findIndex(match=>match[1]===owner.value);assert.ok(at>=0,`${row.path}: missing body ${owner.value}`);
+    const definition=definitions[at]!,body=source.slice(definition.index!+definition[0].length,definitions[at+1]?.index??source.length);
+    assert.ok(shellCommands(body).commands.some(command=>command.name==='node'&&command.args.length===3
+      &&command.args.every(word=>!word.dynamic)&&command.args[0]!.value==='tooling/gate/tooling-runner.ts'
+      &&command.args[1]!.value==='--step'&&command.args[2]!.value===row.step),`${row.path}: ${row.step} does not run tooling-runner.ts --step ${row.step}`);
+  }
+}
+test('every excluded test owner has a real step body running that table selection',()=>{
+  const root=resolve(fileURLToPath(new URL('../..',import.meta.url))),selection=discoverToolingTests(root);
+  assertStepRunners(selection.exclusions,STEPS.map(row=>row.name),readFileSync(join(root,'tooling/gate/all.sh'),'utf8'));
+  const row={path:'tooling/private.test.ts',step:'integrity',reason:'owned control'};
+  const script='integrity() {\n  node tooling/gate/tooling-runner.ts --step integrity\n}\nstep "integrity" integrity\n';
+  assertStepRunners([row],['integrity'],script);
+  assert.throws(()=>assertStepRunners([row],[],script),/private.test.ts.*unknown owning step integrity/);
+  assert.throws(()=>assertStepRunners([row],['integrity'],script.replace('--step integrity','--step examples')),/private.test.ts.*integrity does not run/);
+  assert.throws(()=>assertStepRunners([row],['integrity'],script.replace('node tooling/gate/tooling-runner.ts --step integrity','# node tooling/gate/tooling-runner.ts --step integrity')),/private.test.ts.*integrity does not run/);
+});
 test("exceptions reject unknown owners, absent reasons, non-exact paths and duplicates",()=>{
   const good={path:"tooling/bench/a.test.ts",reason:"owned measurement",step:"bench-agree"};
   const steps=["tooling","bench-agree"];
@@ -71,5 +112,9 @@ test("the actual tooling tree has no test outside collection or the named exclus
   for(const path of ["tooling/bench/run-session.test.ts","tooling/bootstrap/typescript.test.ts","tooling/conformance/provider-family-paths.test.ts","tooling/conformance/web-platform/host-tests.test.ts"])
     assert.ok(result.files.includes(path),path);
   assert.equal(result.files.length+result.exclusions.length,result.inventoryCount);
+  const population='tooling/gate/selector-population.test.ts';
+  assert.equal(result.files.includes(population),false,'the full population is outside landing tooling');
+  assert.equal(result.exclusions.find(row=>row.path===population)?.step,'integrity');
+  assert.equal(toolingTestStep(population,result.exclusions),'integrity');
   assert.equal(isToolingTest("tooling/another/nested.test.mjs"),true);
 });

@@ -82,7 +82,7 @@ export const STEPS = [
   },
   { name: "outcomes", needs: ["program-oracles"], slots: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
   { name: "expect-ir", slots: 1, nts: true, fe: true, doc: "representation facts in the corpora hold" },
-  { name: "integrity", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
+  { name: "integrity", elastic: true, slots: 8, min: 2, nts: true, fe: true, doc: "listings and full-population selector obligations are consistent" },
   // Reads integrity-runtime's `hir --prepared` listings when both are in the
   // run (NTS_DEFINITIONS_FROM), rather than lowering the corpus again.
   { name: "definitions", elastic: true, slots: 4, min: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },

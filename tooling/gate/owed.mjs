@@ -1,6 +1,8 @@
 import {cargoOutput} from './cargo.ts';
 import {ToolingInstrumentError} from './step-result.ts';
 import {gitArguments} from "./git-arguments/main.ts";
+import {cargoRustRuntimeTargets} from "./rust-runtime-declarations.ts";
+import {cargoMetadata,cargoRuntimeLinkageFromMetadata} from './cargo-inputs.ts';
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
 //
@@ -87,7 +89,9 @@ import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { moduleGraph } from "./module-closure.ts";
-import {readerObservationDependency,readerObservationIndex} from './reader-observations.ts';
+import {readerObservationDependency,readerObservationIndex,readerDependencyIndex} from './reader-observations.ts';
+import {rustSelectorInputs,rustSelectorTrust} from './rust-selector-selection.ts';
+import {withRustSelectorSource} from './rust-selector-write.ts';
 import {sameOracleObservation} from '../differential/oracle-runtime.ts';
 import {matchesModuleMember} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
@@ -152,12 +156,16 @@ const TREE = execFileSync("git",gitArguments( ["rev-parse", "--show-toplevel"]),
 // Policy data and lexer/tool versions, as distinct from the derived project
 // and reader graph. The range selector fingerprints these plus every loaded
 // module before using candidate reach for a newly added path.
-export const SELECTOR_POLICY_DATA = [
+const FULL_SELECTOR_POLICY_DATA = [
   "tooling/config/src/target.ts",
   "tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/comment-tokens.rs",
   TOOLING_TEST_EXCLUSIONS,
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
+// Data changes invalidate stable-selector reuse, but owe their actual readers
+// rather than the full gate that a change to verdict policy owes.
+export const SELECTOR_POLICY_DATA = [...FULL_SELECTOR_POLICY_DATA,
+  "tooling/gate/rust-runtime-inputs.json", "results/gate-inputs/rust-runtime.json"];
 
 export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit", "test-host", "tooling-types", "gate-inputs"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
@@ -596,7 +604,7 @@ export const RULES = [
     // The target API determines corpus membership, the comment lexer decides
     // whether compiler work is owed, and package/toolchain pins choose the
     // implementations every step invokes. Their reach is the gate itself.
-    when: (/** @type {string} */ p) => SELECTOR_POLICY_DATA.includes(/** @type {string} */ p) || p === ".tool-versions",
+    when: (/** @type {string} */ p) => FULL_SELECTOR_POLICY_DATA.includes(/** @type {string} */ p) || p === ".tool-versions",
     full: true,
     steps: [],
     arms: [],
@@ -1382,28 +1390,33 @@ export function allSteps() {
 export { STEP_SUCCESSORS };
 
 /** Production/build dependency reach; workspace tests cover dev dependencies. */
-function cargoCrates(execute = execFileSync) {
-  const args = ["metadata", "--format-version", "1", "--no-deps", "--offline"];
+function cargoCrates(execute) {
   try {
-    const meta = JSON.parse(cargoOutput(args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 }, execute));
-    const byName = new Map(meta.packages.map((p) => [p.name, rel(dirname(p.manifest_path))]));
+    const meta = cargoMetadata(TREE,execute);
+    const runtimeTargets=cargoRustRuntimeTargets(meta,TREE);
+    const graph=cargoRuntimeLinkageFromMetadata(meta,TREE);
     const out = new Map();
-    for (const p of meta.packages) {
-      const dir = rel(dirname(p.manifest_path));
-      out.set(dir, { name: p.name, doctests: p.targets.some(t => t.doctest && t.kind.some(k => ["lib", "rlib", "dylib", "proc-macro"].includes(k))), deps: [...new Set(p.dependencies.filter((d) => d.kind !== "dev" && d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
+    for (const p of graph.packages) {
+      const dir = p.directory;
+      const targets=runtimeTargets.get(dir)??[];
+      const ownedTargets=Object.freeze(targets.map(target=>Object.freeze({...target,kind:Object.freeze([...target.kind])})));
+      out.set(dir, { name: p.name, runtimeTargets:ownedTargets, doctests:targets.some(target=>target.doctests), deps: [...new Set(p.dependencies.filter((d) => d.kind !== "dev").map((d) => d.directory))], users: [] });
     }
     for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
     return out;
   } catch (error) {
     if(error instanceof ToolingInstrumentError)throw error;
-    const stderr = error.stderr?.toString().trim();
-    throw new SelectionInfrastructureError(`selector cargo ${args.join(" ")} in ${TREE} failed: ${String(error)}${stderr ? `\nstderr: ${stderr}` : ""}`, { cause: error });
+    throw new SelectionInfrastructureError(`selector ${String(error)}`, { cause: error });
   }
 }
 
 export function crates() {
   return once("crates", () => cargoCrates());
 }
+
+/** Portable runtime identities share the crate graph's single metadata read. */
+/** @returns {import('./rust-runtime-declarations.ts').RustRuntimeTarget[]} */
+export function rustRuntimeTargets(){return structuredClone([...crates().values()].flatMap(crate=>crate.runtimeTargets));}
 
 /** The crate a path is in (the longest crate directory above it), or null. */
 export function crateOf(path) {
@@ -1604,8 +1617,15 @@ export function corpusInputs() {
  * paths a step's body in all.sh names, and what each named script names and
  * imports in turn.
  */
-function stepInputGraph() {
-  return once("stepInputs", () => {
+/** @param {Iterable<string>} steps */
+function readsRustInputs(steps) {
+  for(const step of steps)if(step==='tests'||step==='doctests')return true;
+  return false;
+}
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+function stepInputGraph(options) {
+  const trust=rustSelectorTrust(TREE,options);
+  return once("stepInputs:"+JSON.stringify(trust), () => {
     const toolingTests=discoverToolingTests(TREE);
     const text = readFileSync(join(TREE, "tooling/gate/all.sh"), "utf8");
     const bodies = new Map();
@@ -1670,14 +1690,16 @@ function stepInputGraph() {
     const memberships=new Map();
     /** @type {Map<string,import('./module-closure.ts').ReaderObservation&{steps:Set<string>}>} */
     const observations=new Map();
+    /** @type {Map<string,import('./rust-selector-record.ts').RustSelectorRoles['typedDependencies'][number]&{steps:Set<string>}>} */
+    const projectedDependencies=new Map();
     const modules = moduleGraph({sourceRoot:TREE});
-    const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration} */ row,/** @type {string} */ step) => {
+    const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration|import('./rust-selector-record.ts').RustSelectorRoles['directories'][number]} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
-      const key=[reader,row.directory,row.kind,row.member??"",row.fixture?.entry??"",row.fixture?.owner??""].join("\0");
+      const key=[reader,row.directory,row.kind,row.member??"",row.fixture?.entry??"",row.fixture?.owner??"",JSON.stringify(row.context??null)].join("\0");
       if(row.member)map.declareMember(row.directory,row.member,step);
       // A declared data population includes future members. Private grants
       // suppress only their production population and never claim it here.
-      if((row.kind==='data'||row.kind==='inspection')&&!row.fixture){map.add(row.directory,step);byteReaders.add(row.directory,step);}
+      if((row.kind==='data'||row.kind==='inspection'||row.kind==='conservative')&&!row.fixture){map.add(row.directory,step);byteReaders.add(row.directory,step);}
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
@@ -1692,7 +1714,7 @@ function stepInputGraph() {
         const fact=memberships.get(key)??{...row,steps:new Set()};fact.steps.add(step);memberships.set(key,fact);
       }
       for(const row of snapshot.observations){
-        const key=JSON.stringify([row.reader,row.protocol,row.observation.kind,row.observation.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
+        const key=JSON.stringify([row.reader,row.protocol,row.observation.kind,row.observation.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort(),row.capability??null]);
         const previous=observations.get(key);
         if(previous&&!sameOracleObservation(previous.observation.value,row.observation.value))throw Error('reader observation changed during selection: '+row.observation.path);
         const fact=previous??{...row,steps:new Set()};fact.steps.add(step);observations.set(key,fact);
@@ -1815,6 +1837,30 @@ function stepInputGraph() {
         queue.push(...references.named, ...references.other);
       }
     }
+    // Cargo routes consume the same canonical graph roles as post-run
+    // validation. Accepted records replace only their expensive discovery.
+    const catalogue=new Set(allSteps());
+    /** @type {import('./rust-selector-decision.ts').RustRecordDecision|undefined} */
+    let rustRecord;
+    /** @type {Set<string>} */
+    const allRustSteps=new Set();
+    if(readsRustInputs(catalogue)){
+      const selected=rustSelectorInputs(TREE,rustRuntimeTargets(),message=>console.error(message),trust);
+      rustRecord=selected.decision;
+      if(selected.state==='live'&&selected.allRust)for(const step of ['tests','doctests','addons'])if(catalogue.has(step))allRustSteps.add(step);
+      for(const {target,roles}of selected.targets)for(const step of ['tests','doctests']){
+        if(!catalogue.has(step)||!(step==='tests'?target.unitTests:target.doctests))continue;
+        for(const path of roles.files)map.add(path,step);
+        for(const path of roles.placingFiles)declared.add(path);
+        for(const row of roles.directories)directory(row,step);
+        metadata({...roles,observations:[]},step);
+        for(const row of roles.byteInputs){map.add(row.path,step);byteReaders.add(row.path,step);}
+        for(const row of roles.typedDependencies){
+          const key=JSON.stringify(row),fact=projectedDependencies.get(key)??{...structuredClone(row),steps:new Set()};fact.steps.add(step);projectedDependencies.set(key,fact);
+          if(row.dependency.bytes){map.add(row.dependency.path,step);byteReaders.add(row.dependency.path,step);}
+        }
+      }
+    }
     // **Hand-overs through the runner.** run.mjs gives one step another's
     // output (`if (step.name === "definitions" && plan.includes("integrity-
     // runtime")) e.NTS_DEFINITIONS_FROM = ...`): definitions and compile-time
@@ -1825,19 +1871,23 @@ function stepInputGraph() {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
-      for(const facts of [optionalFiles,memberships,observations])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
+      for(const facts of [directories,optionalFiles,memberships,observations,projectedDependencies])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,
+    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,projectedDependencies,rustRecord,allRustSteps,
       observationIndex:observations.size?readerObservationIndex(TREE,observations.values(),trackedFiles(),modules.membershipIndex()):undefined,
+      projectedIndex:projectedDependencies.size?readerDependencyIndex(projectedDependencies.values(),row=>row.dependency,trackedFiles(),modules.membershipIndex()):undefined,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
     } finally {modules.close();}
   });
 }
 
-export function stepInputs() { return stepInputGraph().reach; }
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function stepInputs(options) { return stepInputGraph(options).reach; }
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function rustRecordDecision(options) { const row=stepInputGraph(options).rustRecord;return row?structuredClone(row):undefined; }
 
-function declaredInput(/** @type {string} */ path) {
-  const graph=stepInputGraph();
+function declaredInput(/** @type {string} */ path,/** @type {import('./rust-selector-selection.ts').RustSelectorOptions} */ options) {
+  const graph=stepInputGraph(options);
   if(graph.reach.declaresMember(path))return true;
   if(graph.declared.has(path))return true;
   if(!graph.tracked.has(path))return false;
@@ -1848,20 +1898,23 @@ function declaredInput(/** @type {string} */ path) {
   }
 }
 
-export function inputDirectoryDeclarations() {
-  return [...stepInputGraph().directories.values()].map(row => ({
-    reader: row.reader, directory: row.directory, kind:row.kind, files: row.files.length, steps: [...row.steps].sort(),
-    ...(row.fixture?{fixture:row.fixture}:{}),...(row.member?{member:row.member}:{}),
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function inputDirectoryDeclarations(options) {
+  return [...stepInputGraph(options).directories.values()].map(row => ({
+    reader: row.reader, directory: row.directory, kind:row.kind, files: 'files' in row?row.files.length:row.fileCount, steps: [...row.steps].sort(),
+    ...(row.fixture?{fixture:row.fixture}:{}),...(row.member?{member:row.member}:{}),...(row.context?{context:structuredClone(row.context)}:{}),
   })).sort((a, b) => a.reader.localeCompare(b.reader) || a.directory.localeCompare(b.directory));
 }
 
 /** Canonical metadata keeps its context; it is never an ownership prefix. */
-export function inputMetadataDeclarations(){
-  const graph=stepInputGraph();
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function inputMetadataDeclarations(options){
+  const graph=stepInputGraph(options);
   const context=(/** @type {import('./reader-inputs/main.ts').ReaderContext} */ value)=>({entry:value.entry,dataNamespaces:{...value.dataNamespaces}});
   return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,context:context(row.context),steps:[...row.steps].sort()})),
     memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()})),
-    observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),causes:structuredClone(row.causes),steps:[...row.steps].sort()}))};
+    observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),causes:structuredClone(row.causes),steps:[...row.steps].sort()})),
+    dependencies:[...graph.projectedDependencies.values()].map(row=>({...structuredClone(row),steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
@@ -2000,7 +2053,9 @@ function rulesFor(/** @type {string} */ path,/** @type {boolean} */ added) {
   return matches.get(path);
 }
 
-export function owed(changes) {
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function owed(changes,options) {
+  const trust=rustSelectorTrust(TREE,options);
   const out = [];
   // `projects`: the interop projects these steps owe, when the source can
   // say; otherwise every one (see `interopOwed`).
@@ -2026,9 +2081,12 @@ export function owed(changes) {
 
   // Structural reads precede prose and record precision: a new Markdown child
   // can change an enumeration even though editing its prose cannot.
-  const metadataGraph=stepInputGraph();
+  const metadataGraph=stepInputGraph(trust);
+  if(changes.length&&metadataGraph.allRustSteps.size)add('Rust installation catalog requires all targets',changes[0].path,[...metadataGraph.allRustSteps],{precise:false,wide:true});
   for(const [row,subjects]of metadataGraph.observationIndex?.affected(changes)??[])
     for(const path of subjects)add(row.observation.kind+' read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
+  for(const [row,subjects]of metadataGraph.projectedIndex?.affected(changes)??[])
+    for(const path of subjects)add(row.dependency.kind+' read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
   if(metadataGraph.membershipIndex)for(const row of metadataGraph.memberships.values()){
     if(!metadataGraph.membershipIndex.affected(row,changes))continue;
     for(const change of changes)if(row.directory===''||change.path===row.directory||change.path.startsWith(row.directory+'/'))
@@ -2038,7 +2096,7 @@ export function owed(changes) {
   for (const change of changes) {
     const { path, added = false } = change;
     if (path.startsWith("results/") && all) {
-      const readers = new Set([...covering(stepInputs(), path)]);
+      const readers = new Set([...covering(stepInputs(trust), path)]);
       for (const name of covering(corpusInputs(), path)) for (const step of CORPORA.find(c => c.name === name).steps) readers.add(step);
       for (const rule of rulesFor(path, added)) for (const step of rule.steps) readers.add(step);
       const fullReader = rulesFor(path, added).some(rule => rule.full);
@@ -2060,7 +2118,7 @@ export function owed(changes) {
       const steps = precise === "classification meaning" ? ["audit", "test262", ...records] : [...TREE_CHECKS];
       // Declared byte reads survive token/prose precision. An ordinary module
       // import alone does not turn every comment into an execution change.
-      steps.push(...covering(stepInputGraph().byteReaders,path));
+      steps.push(...covering(stepInputGraph(trust).byteReaders,path));
       const row = add(precise, path, steps, { precise: true });
       if (precise === "comments" && path.endsWith(".rs") && all?.get(ownCrate)?.doctests) {
         const name = all?.get(ownCrate)?.name;
@@ -2082,7 +2140,7 @@ export function owed(changes) {
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && !declaredInput(path)) unrun = true;
+      if (rule.placedBy === "stepInputs" && !declaredInput(path,trust)) unrun = true;
     }
     // A settled rule is the claim that no gate step reaches the path, which is
     // the question an unplaced instrument leaves open.
@@ -2097,6 +2155,13 @@ export function owed(changes) {
       for (const dir of dependents(root)) {
         const rules = rulesFor(`${dir}/src/lib.rs`, false).filter((r) => r.steps.length || r.full);
         const via = dir === root ? path : `${path} (through ${all.get(dir).name})`;
+        // Compilation is independent of a harness's runtime byte readers.
+        // Embedded source bytes and production dependencies retain the same
+        // Cargo unit/doctest routes as a direct Rust source change.
+        const crate=all.get(dir),compiled=['clippy',...(crate.runtimeTargets.some(target=>target.unitTests)?['tests']:[]),...(crate.doctests?['doctests']:[])];
+        const compiledRow=add('a Rust compile input through Cargo',via,compiled,{wide:false});
+        if(crate.doctests)compiledRow.doctests=[...new Set([...(compiledRow.doctests??[]),crate.name])];
+        gave+=compiled.length;
         if (rules.length === 0) {
           full.push(`${path} (${all.get(dir).name} has no rule in owed.mjs)`);
           continue;
@@ -2124,8 +2189,8 @@ export function owed(changes) {
     // What the steps run.
     const declaredReaders = rulesFor(path, added).map(rule => rule.stepReaders?.(path)).filter(readers => readers !== undefined);
     const steps = declaredReaders.length
-      ? [...new Set([...declaredReaders.flat(),...covering(stepInputGraph().byteReaders,path)])]
-      : [...covering(stepInputs(), path)];
+      ? [...new Set([...declaredReaders.flat(),...covering(stepInputGraph(trust).byteReaders,path)])]
+      : [...covering(stepInputs(trust), path)];
     if (steps.length) {
       // A step's own scripts owe that step, wide or not; the corpora it reads
       // are owed by their own rules, and a fixture's wide steps run in the
@@ -2134,7 +2199,7 @@ export function owed(changes) {
     }
 
     if (unplaced) full.push(`${path} (${unplaced})`);
-    else if (gave === 0 && !settled && !declaredInput(path)) full.push(path);
+    else if (gave === 0 && !settled && !declaredInput(path,trust)) full.push(path);
   }
 
   if (full.length) {
@@ -2212,46 +2277,51 @@ export function gateSteps(rules) {
 }
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
-export function selfTest() {
+/** @param {import('./rust-selector-selection.ts').RustSelectorOptions} [options] */
+export function selfTest(options) {
+  const trust=rustSelectorTrust(TREE,options);
+  const checkedOwed=changes=>owed(changes,trust);
   const successorProblem = stepSuccessorProblem(STEP_SUCCESSORS, allSteps());
   if (successorProblem) return successorProblem;
   try {
     cargoCrates(() => { throw Object.assign(new Error("Cargo control failure"), { stderr: "metadata control stderr" }); });
     return "a failed Cargo metadata command granted a crate graph";
   } catch (error) {
-    if (!selectionInfrastructure(error) || !String(error).includes("cargo metadata --format-version 1 --no-deps --offline") || !String(error).includes("metadata control stderr")) return "a Cargo metadata failure lost its infrastructure cause or stderr";
+    if (!selectionInfrastructure(error) || !String(error).includes("cargo metadata --format-version 1 --offline") || !String(error).includes("metadata control stderr")) return "a Cargo metadata failure lost its infrastructure cause or stderr";
   }
-  const names = (changes) => owed(changes).map((r) => r.name).join(", ");
+  const names = (changes) => checkedOwed(changes).map((r) => r.name).join(", ");
   const example = names([{ path: "tests/programs/is-array-of-object/tsconfig.json", added: true }, { path: "tests/programs/is-array-of-object/src/main.ts", added: true }]);
   if (!example.includes("a new example") || example.includes("an example changed")) return `a new example: ${example}`;
   const blocked = names([{ path: "tooling/conformance/build-floor.sh", added: false }]);
   if (!blocked.includes("an instrument")) return `a change to build-floor.sh: ${blocked}`;
   const tool = names([{ path: "tooling/census/rows.ts", added: false }]);
   if (!tool.includes("an instrument")) return `a change to a TypeScript tool: ${tool}`;
-  const blocker = owed([{ path: "tests/refusals/x/src/main.ts", added: true }]);
+  const blocker = checkedOwed([{ path: "tests/refusals/x/src/main.ts", added: true }]);
   if (blocker.some((r) => r.name === "an instrument")) return "a blockers fixture's source read as an instrument";
   if (!blocker.find((r) => r.name === "a blockers fixture")?.steps.includes("integrity")) return "a blockers fixture does not owe integrity";
   const backend = names([{ path: "compiler/codegen/c/src/emit.rs", added: false }]);
   if (!backend.includes("the C backend") || !backend.includes("every change")) return `a backend change: ${backend}`;
   const helper = names([{ path: "runtime/c/nts_runtime.h", added: false }]);
   if (!helper.includes("a runtime helper") || !helper.includes("the C runtime")) return `a runtime header change: ${helper}`;
-  if (owed([]).length !== 0) return "an empty change owed something";
-  const printed = owed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
+  if (checkedOwed([]).length !== 0) return "an empty change owed something";
+  const printed = checkedOwed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
   if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
-  const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
+  const lowered = checkedOwed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-c", "typescript-llvm", "typescript-jvm"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets on every backend";
   if (!lowered.steps.includes("benches")) return "a lowering change does not owe the benches corpus";
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
-  const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 13).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  const order = gateSteps(checkedOwed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
+  const forced=stepInputGraph(trust).allRustSteps;
+  const ordinaryOrder=order.filter(step=>!forced.has(step)||ALWAYS.steps.includes(step));
+  if (ordinaryOrder.slice(0, 13).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
   for (const st of allSteps()) if (!ASKS[st]) return `all.sh defines step "${st}", which ASKS does not describe`;
   const landingProblem = landingTableProblem(LANDING, allSteps());
   if (landingProblem) return landingProblem;
-  const lowering = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
+  const lowering = checkedOwed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   const asked = new Set(lowering.arms.filter((a) => !a.if).map((a) => a.kind));
   if (!asked.has("answers") || !asked.has("whether")) return `a lowering change owes only ${[...asked].join(", ")}`;
   if (!lowering.arms.some((a) => /emitted-diff/.test(a.run))) return "a lowering change does not owe the emitted-C diff that tells neutral's two causes apart";
@@ -2261,15 +2331,24 @@ export function selfTest() {
 function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--full-census")) {
-    const {census,problems}=runFullGateCensus(TREE,()=>{
+    const accepted=rustSelectorTrust(TREE);
+    /** @param {import('./rust-selector-selection.ts').RustSelectorOptions} trust */
+    const collect=trust=>runFullGateCensus(TREE,()=>{
       const paths=trackedFiles();
-      return collectFullGateCensus(paths,path=>{
-        const rules=owed([{path,added:false}]);
+      const census=collectFullGateCensus(paths,path=>{
+        const rules=owed([{path,added:false}],trust);
         return {full:rules.some(rule=>rule.full),reasons:rules.filter(rule=>rule.full).map(rule=>rule.name),policyReasons:rules.filter(rule=>rule.full&&!rule.fallback).map(rule=>rule.name)};
-      },inputDirectoryDeclarations());
+      },inputDirectoryDeclarations(trust));
+      const graph=stepInputGraph(trust);
+      if(graph.rustRecord)census.rustSelection={allTargets:graph.allRustSteps.size>0,decision:structuredClone(graph.rustRecord)};
+      return census;
     },{record:argv.includes("--record"),initialize:argv.includes("--initialize")});
+    const {census,problems}=readsRustInputs(allSteps())
+      ?withRustSelectorSource(TREE,source=>collect(rustSelectorTrust(TREE,{...accepted,committedSource:source})))
+      :collect(accepted);
     if(argv.includes("--json"))console.log(JSON.stringify({census,problems},null,2));
-    else console.log(`gate input placement: ${census.full.length} of ${census.tracked} tracked files owe the full gate; ${census.unplaced.length} unplaced fallback, ${census.policy.length} full by policy; ${census.directories.length} directory declarations`);
+    else console.log(`gate input placement: ${census.full.length} of ${census.tracked} tracked files owe the full gate; ${census.unplaced.length} unplaced fallback, ${census.policy.length} full by policy; ${census.directories.length} directory declarations, ${census.conservative.length} paths under conservative dependencies`+
+      (census.rustSelection?`; all Rust targets ${census.rustSelection.allTargets?'owed':'selected by reach'}: ${census.rustSelection.decision.reason}`:''));
     if(problems.length){console.error(problems.join("\n"));process.exitCode=1;}
     return;
   }

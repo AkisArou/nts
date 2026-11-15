@@ -19,6 +19,7 @@ import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {LINKER_INPUTS} from '../inputs/linker.ts';
 import {corporaFixture,CORPUS_STORE_IGNORES} from '../bootstrap/corpora-test-fixture.ts';
+import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
 
 export const REGISTRY_FIXTURE_PACKAGE = "nts-registry-input-fixture";
 export const REGISTRY_FIXTURE_MARKER = "candidate-registry-input-v1";
@@ -98,7 +99,9 @@ export async function registryInputsFixture(t: TestContext,
   // A frozen destination executes its own Node provisioner and catalog.
   // Commit that real import closure so both clones retain the same authority.
   writeFileSync(join(main,"tooling/inputs/node-inputs.json"),JSON.stringify(table));
-  writeFileSync(join(consumer,"package.json"),'{"type":"module"}\n');
+  // This separately staged linker executes producer code too. Give it the
+  // same tracked recipe and installed-SDK authority as other oracle fixtures.
+  oracleWorkspaceFixture(t,consumer,toolingRoot);
   const inputs=join(linkerDir,"link.sh");
   const packageJson = { name: REGISTRY_FIXTURE_PACKAGE, version: "1.0.0", type: "module",
     exports: "./index.js", license: "MIT" };

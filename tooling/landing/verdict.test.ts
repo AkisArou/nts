@@ -42,6 +42,17 @@ test("receipts preserve actual checked-tip evidence after logs and queue state d
   assert.equal(readLandingVerdict(f.home, f.input.submission, tree, f.contract, ["tests"]).receipt, undefined);
 });
 
+test('portable receipts retain detached endpoint record decisions without changing step reuse',t=>{
+  const f=fixture(t),rustRecords=[{revision:commit,decision:{record:'stale-live' as const,reason:'source key changed; canonical live projection',blob:null}}];
+  const receipt=writeLandingVerdict(f.home,{...f.input,selected:{...f.input.selected,rustRecords}})!;
+  rustRecords[0]!.decision.reason='caller mutation';
+  assert.equal(receipt.rustRecords![0]!.decision.reason,'source key changed; canonical live projection');
+  const result=readLandingVerdict(f.home,commit,tree,f.contract,['build','tests']);
+  assert.deepEqual(result.receipt!.rustRecords,receipt.rustRecords);assert.deepEqual(result.execute,[]);
+  writeFileSync(verdictPath(f.home,commit),JSON.stringify({...receipt,rustRecords:[{revision:commit,decision:{record:'trusted',reason:'forged',blob:null}}]}));
+  assert.deepEqual(readLandingVerdict(f.home,commit,tree,f.contract,['tests']).execute,['tests']);
+});
+
 test("missing, malformed and incompatible receipts execute every requested step", t => {
   const f = fixture(t), requested = ["build", "tests", "examples"];
   const assertFallback = () => {

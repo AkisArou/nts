@@ -39,10 +39,11 @@ import { durableRecord } from "../gate/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
 import { linkTree } from "../inputs/linker.ts";
 import { writeLandingVerdict } from "./verdict.ts";
+import {reportRustRecordDecisions} from '../gate/rust-selector-decision.ts';
 
 export const KEEP_DAYS = 3;
 
-export type Selected = { selection: Selection; kind: ChangeKind; interop: string | null; doctests: string | null };
+export type Selected = { selection: Selection; kind: ChangeKind; interop: string | null; doctests: string | null;rustRecords?:import('../gate/rust-selector-decision.ts').RustRecordDecisionAtRevision[] };
 export type Config = {
   home: string; root: string; remote: string | null; tree: string; target: string; pool: Pool | null;
   env?: NodeJS.ProcessEnv;
@@ -154,6 +155,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking): Pr
       return queue.answer(entry, { state: selectionInfrastructure(error) ? "held" : "refused", base, tip, message });
     }
     const steps = landingSteps(selected.selection);
+    reportRustRecordDecisions(selected.rustRecords,config.log);
     const run = join(config.home, "runs", `${short(tip)}-${Date.now()}`);
     queue.update({ run });
     queue.setStatus({ state: "checking", id: entry.id, sha: entry.sha, run, message: `${steps.join(" ")} on ${short(tip)}, ~${Math.round(selected.selection.estimate.seconds)} s` });
@@ -164,6 +166,7 @@ export async function landOne(config: Config, queue: Queue, entry: Checking): Pr
       try { config.prepare(tip); }
       catch (error) { return queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }); }
       ran = await config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
+        rustRecords:selected.rustRecords,
         ceiling: landingCeiling(selected.selection.estimate.seconds),
         env: config.env, hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
       // What the steps cost is for the next estimate; it never decides this one.

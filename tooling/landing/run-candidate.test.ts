@@ -55,9 +55,11 @@ test("missing and wrong-version candidate Node installations hold without a laun
     const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed");
     writeFileSync(join(f.tree,".tool-versions"),`nodejs ${pin}\n`);
     if(present)nodeInstallation(installations,pin,join(f.own,"node-launches.jsonl"),"98.0.0");
-    const ran=await runLanding(f.options(["rustfmt"],{nodeInstallations:installations}));
+    const rustRecords=[{revision:'a'.repeat(40),decision:{record:'absent-live' as const,reason:'unverified-record: no accepted blob',blob:null}}];
+    const ran=await runLanding(f.options(["rustfmt"],{nodeInstallations:installations,rustRecords}));
     assert.equal(ran.state,"held");assert.match(ran.message,/pinned Node 99\.1\.0/);
     assert.match(ran.message,/asdf install nodejs 99\.1\.0/);assert.deepEqual(f.calls(),[]);
+    assert.deepEqual(JSON.parse(readFileSync(join(f.run,'landing.json'),'utf8')).rustRecords,rustRecords,'even a held run retains its structured selection decision');
   });
 });
 

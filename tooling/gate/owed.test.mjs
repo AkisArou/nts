@@ -21,6 +21,27 @@ import {auditTestHost} from "./test-host-audit.ts";
 import {spawnTest} from './test-wait.ts';
 import {testScratch} from './test-scratch.ts';
 
+test('the real selector self-test preserves ordinary order with an explicit missing-catalog fallback',()=>{
+  assert.equal(selfTest({acceptedRustRecordBlob:null,dependencyCatalog:null}),null);
+});
+
+test('the full selector population has its actual wide integrity owner',()=>{
+  const rows=owed([{path:'tooling/gate/selector-population.test.ts',added:false}]);
+  const owner=rows.find(row=>row.name==='a tooling test entry');assert.ok(owner);
+  assert.deepEqual(owner.steps,['integrity']);assert.ok('wide' in owner);assert.equal(owner.wide,true);
+});
+
+test('Rust selector data retains fingerprint safety and owes its actual records and census readers',()=>{
+  for(const path of ['tooling/gate/rust-runtime-inputs.json','results/gate-inputs/rust-runtime.json']){
+    assert.ok(policy.SELECTOR_POLICY_DATA.includes(path));
+    const rules=owed([{path,sameMode:true,before:"{}",after:'{"changed":true}'}]);
+    assert.ok(!rules.some(rule=>rule.full),path);
+    const steps=gateSteps(rules);
+    assert.ok(steps.includes('records'),path+' is checked by derivation');
+    assert.ok(steps.includes('gate-inputs'),path+' is consumed by the census');
+  }
+});
+
 test('unknown or incomplete CLI requests fail before the first Git call',t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-arguments-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
   const bin=join(root,'bin'),marker=join(root,'git-called');mkdirSync(bin);
@@ -248,8 +269,8 @@ step "tooling" node tooling/empty.test.ts
 `);
   put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
   put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
-  put('tooling/gate/reader-inputs/main.ts','export const projectInput=url=>({kind:"project",url});');
-  put('tooling/private/reader.ts',"import {projectInput} from '../gate/reader-inputs/main.ts';projectInput(new URL('../../docs/data/src/main.ts',import.meta.url));projectInput(new URL('../census/data/src/main.ts',import.meta.url));");
+  put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",url});');
+  put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url));projectConfig(new URL('../census/data/tsconfig.json',import.meta.url));");
   for(const prefix of ['docs/data','tooling/census/data']){
     put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
@@ -502,15 +523,22 @@ test("the real Chromium runtime readers are complete", () => {
   assert.ok(paths.length > 0, "the real Chromium runtime inventory is empty");
   const declaration = RULES.find(rule => rule.name === "the Chromium runtime").stepReaders;
   const inputs = stepInputs();
+  const conservative = policy.inputDirectoryDeclarations().filter(row => row.kind === 'conservative');
   for(const path of paths) {
     const declared = declaration(path);
     assert.ok(Array.isArray(declared), `no direct-reader declaration for ${path}`);
     // Data strings cannot add a host reader. Every remaining edge must come
     // from the complete production reader declaration.
     const allowed = new Set(declared);
+    // The explicit direct-reader override remains separate from independently
+    // declared conservative byte readers, as in owed's actual precision merge.
+    for(const row of conservative)if(path===row.directory||path.startsWith(row.directory+'/'))
+      for(const step of row.steps)allowed.add(step);
     const unexpected = [...covering(inputs, path)].filter(step => !allowed.has(step));
     assert.deepEqual(unexpected, [], `a new reader of runtime/chromium: update the Chromium runtime's stepReaders (${path}: ${unexpected.join(" ")})`);
   }
+  assert.ok(conservative.some(row=>row.reader==='compiler/codegen/c/tests/foreign_window.rs'&&row.directory==='runtime/chromium/dom/types'&&row.steps.includes('tests')));
+  assert.ok(stepsFor('runtime/chromium/dom/types/dom-testing.d.ts').includes('tests'));
 });
 
 test("every nested tooling test owes its recursive collector without an unknown-path full gate",()=>{
@@ -621,7 +649,7 @@ test("a failed Cargo metadata prerequisite is named instead of losing crate reac
     encoding: "utf8", env: { ...fixtureEnvironment(t), PATH: `${bin}:${process.env.PATH}` },
   });
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stderr, /cargo metadata --format-version 1 --no-deps --offline/);
+  assert.match(result.stderr, /cargo metadata --format-version 1 --offline/);
   assert.match(result.stderr, /metadata prerequisite control: offline input unavailable/);
   assert.doesNotMatch(result.stdout, /the LLVM backend's steps|the gate steps owed/);
 });
@@ -1261,7 +1289,7 @@ test("an unavailable Cargo metadata prerequisite grants no scope for compiled in
   const got = JSON.parse(r.stdout);
   for (const row of got) {
     assert.equal(row.infrastructure, true, JSON.stringify(row));
-    assert.match(row.message, /cargo metadata --format-version 1 --no-deps --offline/);
+    assert.match(row.message, /cargo metadata --format-version 1 --offline/);
     assert.match(row.message, /metadata control stderr: toolchain unavailable/);
     assert.equal(row.rules, undefined, "no scope is granted without the dependency graph");
   }
@@ -1315,4 +1343,30 @@ test('the shared publication crate has an explicit directory rule',()=>{
   const rules=owed([{path:'tooling/publication/src/lib.rs',added:true}]);
   assert.ok(rules.some(rule=>rule.name==='shared atomic publication'));
   superset(gateSteps(rules),['build','tests','config','examples'],'publication reaches its production consumers');
+});
+
+test('optional project member metadata retains structural gate selection without ancestor byte reach',t=>{
+  const root=mkdtempSync(join(tmpdir(),'owed-optional-project-members-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const put=(/** @type {string} */ path,/** @type {string} */ text)=>{mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),text);};
+  put('Cargo.toml','[package]\nname="optional-members"\nversion="0.0.0"\nedition="2021"\n');put('src/lib.rs','');
+  put('package.json','{}');put('tooling/gate/run.mjs','');put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');
+  put('tooling/gate/all.sh',`#!/bin/sh
+if [ "$1" = --list ]; then printf '%s\\n' profile tooling; exit; fi
+step "profile" node tooling/private/reader.ts
+step "tooling" node tooling/empty.test.ts
+`);
+  put('tooling/gate/reader-inputs/main.ts','export const projectMembers=(url,prefix,options)=>({kind:"project-members",url,prefix,...options});');
+  put('tooling/private/reader.ts',"import {projectMembers} from '../gate/reader-inputs/main.ts';projectMembers(new URL('../../docs/projects/',import.meta.url),'',{optional:true});");
+  put('docs/projects/ordinary.md','before');put('docs/projects/present/tsconfig.json','{"compilerOptions":{"types":[]},"files":["main.ts"]}');put('docs/projects/present/main.ts','export {};');
+  const env=fixtureEnvironment(t);
+  for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}
+  const script=`import {owed,gateSteps,inputMetadataDeclarations} from ${JSON.stringify(new URL('./owed.mjs',import.meta.url).href)};
+const choose=changes=>gateSteps(owed(changes));
+console.log(JSON.stringify({edit:choose([{path:'docs/projects/ordinary.md',sameMode:true,before:'before',after:'after'}]),added:choose([{path:'docs/projects/new/tsconfig.json',added:true}]),replaced:choose([{path:'docs/projects/ordinary.md',deleted:true},{path:'docs/projects/ordinary.md/tsconfig.json',added:true}]),metadata:inputMetadataDeclarations()}));`;
+  const result=spawnTest(process.execPath,['--input-type=module','-e',script],{cwd:root,env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);const value=JSON.parse(result.stdout);
+  assert.ok(!value.edit.includes('profile'),'ordinary ancestor prose does not change the ENOTDIR answer');
+  for(const key of ['added','replaced'])assert.ok(value[key].includes('profile'),key+' changes the enumerated project choices');
+  assert.ok(value.metadata.observations.some((/** @type {{observation:{kind:string,path:string,value:unknown}}} */ row)=>row.observation.kind==='fileExists'&&row.observation.path.endsWith('/docs/projects/ordinary.md/tsconfig.json')&&row.observation.value===false));
+
 });

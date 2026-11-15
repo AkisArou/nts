@@ -5,7 +5,7 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 import {execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {DEPENDENCY_ROOT_INPUTS,dependencyCache} from '../inputs/dependency-inputs.ts';
+import {DEPENDENCY_ROOT_INPUTS,dependencyCache,dependencyRecipeModules} from '../inputs/dependency-inputs.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {RECIPE_SOURCES} from './oracle-result-publisher.ts';
 
@@ -19,8 +19,9 @@ export function oracleWorkspaceFixture(t:{after(fn:()=>void):void},tree:string,s
   // Runtime-read assets are not static imports. The reader's own bundle
   // declaration supplies the same recipe files to copied synthetic runners.
   copyModuleClosure(RECIPE_SOURCES.map(name=>'tooling/differential/'+name),tree,{sourceRoot:source});
+  const producer=dependencyRecipeModules(source);
   writeFileSync(join(tree,'.gitignore'),'tooling/\nnode_modules/\n');
-  git(tree,'init','-q','-b','main');git(tree,'add','-f','.gitignore',...metadata);git(tree,'commit','-qm','owned oracle workspace');
+  git(tree,'init','-q','-b','main');git(tree,'add','-f','.gitignore',...metadata,...producer);git(tree,'commit','-qm','owned oracle workspace');
   const shared=dirname(git(source,'rev-parse','--path-format=absolute','--git-common-dir')),cache=dependencyCache(tree);
   if(existsSync(cache))throw Error('oracle fixture registry alias already exists: '+cache);
   mkdirSync(dirname(cache),{recursive:true});symlinkSync(dependencyCache(shared),cache,'dir');

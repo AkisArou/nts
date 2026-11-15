@@ -1,4 +1,5 @@
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {fixtureInput} from '../gate/reader-inputs/main.ts';
 import {testEnvironment} from "../gate/test-environment.ts";
 // A real library test's oracle preparation inside the tests step runs in the
 // run's reservation, whatever the host reads: it neither waits nor refuses for
@@ -26,7 +27,7 @@ const cleanup:(()=>void)[]=[];
 const unit='nts-oracle-reservation-'+randomUUID()+'.scope';
 try{
   mkdirSync(tree);
-  copyModuleClosure(['tooling/gate/run.mjs'],tree);
+  copyModuleClosure([fixtureInput(new URL('../gate/run.mjs',import.meta.url),{dataNamespaces:{}})],tree);
   oracleWorkspaceFixture({after:fn=>cleanup.push(fn)},tree);
   // Apply a retained before control only after the executed closure and the
   // recipe owner's immutable inputs have both been staged. The real library

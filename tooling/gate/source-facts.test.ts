@@ -7,6 +7,21 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
 
+test('generated project declarations retain literal include recipes through lexical factory bindings',()=>{
+  const api=new API();
+  try{
+    for(const include of ['directory','typescript-tree']){
+      const source="import {generatedProject as generated} from './reader-inputs/main.ts';generated(new URL('./base.json',import.meta.url),'./case/',"+JSON.stringify(include)+");";
+      const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,[{kind:'generated-project',path:'./base.json',directory:'./case/',include}]);}finally{lease.dispose();}
+    }
+    for(const argumentsText of ["new URL('./base.json',import.meta.url),'./case/'","new URL('./base.json',import.meta.url),directory,'directory'","new URL('./base.json',import.meta.url),'./case/','unknown'","new URL('./',import.meta.url),'./case/','directory'"]){
+      const source="import {generatedProject} from './reader-inputs/main.ts';generatedProject("+argumentsText+");",lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations(),/generated[Pp]roject|generated project/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});
+
 test('host edges exclude erased type declarations while retaining source ownership and side-effect imports',()=>{
   const api=new API(),source="import type {A} from './types.ts';export type {B} from './more-types.ts';import {type C} from './effects.ts';export {type D} from './more-effects.ts';import './side-effect.ts';";
   const lease=api.createSourceFile('host-edges.ts',source);
@@ -179,17 +194,17 @@ test('invalid metadata factory arguments cannot turn a root anchor into a module
   }}finally{api.close();}
 });
 
-test('compiled project entries keep lexical factory ownership',()=>{
-  const api=new API(),source=`import {projectInput as project} from './reader-inputs/main.ts';
+test('compiled project configs keep lexical factory ownership',()=>{
+  const api=new API(),source=`import {projectConfig as project} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';
-const alias=project;const {projectInput:destructured}=inputs;
-project(new URL('./direct.ts',import.meta.url));alias(new URL('./alias.ts',import.meta.url));
-inputs.projectInput(new URL('./namespace.ts',import.meta.url));destructured(new URL('./destructured.ts',import.meta.url));
-function shadow(project:Function){project(new URL('./shadow.ts',import.meta.url));}`;
+const alias=project;const {projectConfig:destructured}=inputs;
+project(new URL('./direct.json',import.meta.url));alias(new URL('./alias.json',import.meta.url));
+inputs.projectConfig(new URL('./namespace.json',import.meta.url));destructured(new URL('./destructured.json',import.meta.url));
+function shadow(project:Function){project(new URL('./shadow.json',import.meta.url));}`;
   const lease=api.createSourceFile('tooling/gate/reader.ts',source);
   try{
     assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
-      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.ts',kind:'project'})),{path:'./shadow.ts',kind:'module'}]);
+      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.json',kind:'project-config'})),{path:'./shadow.json',kind:'module'}]);
   }finally{lease.dispose();api.close();}
 });
 
@@ -261,6 +276,74 @@ test('explicit config and mixed data roles are literal declarations of the same 
       [{path:'./solution.json',kind:'project-config'},{path:'./population/',kind:'members',member:'nts.config.ts',data:true}]);}finally{lease.dispose();}
     for(const option of ['options','{data:false}','{data:true,other:true}','{...options}','{[name]:true}']){
       const text="import {moduleMembers} from './reader-inputs/main.ts';moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',"+option+");";
+      const lease=api.createSourceFile('tooling/gate/reader.ts',text);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});
+
+
+test('project collection factories use literal lexical selections and preserve root arity refusals',()=>{
+  const api=new API();
+  try{
+    const source="import {projectCatalogue as catalogue,projectMembers as members} from './reader-inputs/main.ts';catalogue(new URL('./projects.tsv',import.meta.url),'./cases/');members(new URL('./',import.meta.url),'chosen-');members(new URL('./projects/',import.meta.url),'',{optional:true});";
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [{kind:'project-catalogue',path:'./projects.tsv',directory:'./cases/'},{kind:'project-members',path:'./',prefix:'chosen-'},{kind:'project-members',path:'./projects/',prefix:'',optional:true}]);}finally{lease.dispose();}
+    for(const call of ["projectMembers(new URL('./',import.meta.url))","projectMembers(new URL('./',import.meta.url),prefix)","projectMembers(new URL('./',import.meta.url),'../escape')","projectCatalogue(new URL('./projects.tsv',import.meta.url),directory)","projectMembers(new URL('./',import.meta.url),'',options)","projectMembers(new URL('./',import.meta.url),'',{optional:false})","projectMembers(new URL('./',import.meta.url),'',{optional:true,extra:true})"]){
+      const text="import {projectCatalogue,projectMembers} from './reader-inputs/main.ts';"+call;
+      const lease=api.createSourceFile('tooling/gate/reader.ts',text);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});
+
+
+test('shallow directory candidate factories require complete literal rows even at the root',()=>{
+  const api=new API();
+  try{
+    const parse=(call:string)=>{
+      const source="import {directoryCandidates as candidates} from './reader-inputs/main.ts';"+call;
+      const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      try{return new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets;}finally{lease.dispose();}
+    };
+    assert.deepEqual(parse("candidates(new URL('./',import.meta.url),[{name:'ref.cpp',kind:'path-exists'},{kind:'file-exists',name:'ref.cpp'}]);"),
+      [{kind:'directory-candidates',path:'./',candidates:[{name:'ref.cpp',kind:'path-exists'},{name:'ref.cpp',kind:'file-exists'}]}]);
+    assert.deepEqual(parse("candidates(new URL('./',import.meta.url),[]);"),[{kind:'directory-candidates',path:'./',candidates:[]}]);
+    for(const call of ["candidates(new URL('./',import.meta.url),rows)","candidates(new URL('./',import.meta.url),[{name:'../escape',kind:'optional-file'}])","candidates(new URL('./',import.meta.url),[{name:'ref.cpp',kind:mode}])","candidates(new URL('./',import.meta.url),[{name:'ref.cpp',kind:'unknown'}])","candidates(new URL('./',import.meta.url),[{name:'ref.cpp',kind:'path-exists'}],{})"])
+      assert.throws(()=>parse(call),/literal|candidate/);
+  }finally{api.close();}
+});
+
+test('optional module entries retain literal lexical factory ownership and arity',()=>{
+  const api=new API();
+  try{
+    const parse=(source:string)=>{const lease=api.createSourceFile('tooling/gate/reader.ts',source);try{return new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets;}finally{lease.dispose();}};
+    assert.deepEqual(parse("import {optionalModule as entry} from './reader-inputs/main.ts';entry(new URL('./driver.mjs',import.meta.url));"),[{kind:'optional-module',path:'./driver.mjs'}]);
+    assert.deepEqual(parse("function entry(url:URL){return url;}entry(new URL('./driver.mjs',import.meta.url));"),[{kind:'module',path:'./driver.mjs'}]);
+    for(const call of ["entry(new URL('./',import.meta.url))","entry(new URL('./driver.mjs',import.meta.url),{})"])
+      assert.throws(()=>parse("import {optionalModule as entry} from './reader-inputs/main.ts';"+call),/needs/);
+  }finally{api.close();}
+});
+
+test('conservative directory factories retain explicit root ownership and refuse invalid arity',()=>{
+  const api=new API();
+  try{
+    const parse=(body:string)=>{const source="import {conservativeDirectory as broad} from './reader-inputs/main.ts';"+body,lease=api.createSourceFile('tooling/gate/reader.ts',source);try{return new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets;}finally{lease.dispose();}};
+    assert.deepEqual(parse("broad(new URL('./',import.meta.url));broad(new URL('./types/',import.meta.url));"),[{kind:'conservative',path:'./'},{kind:'conservative',path:'./types/'}]);
+    assert.throws(()=>parse("broad(new URL('./',import.meta.url),{});"),/exactly one URL/);
+  }finally{api.close();}
+});
+
+test('ordered project alternatives are literal declarations of the same reader owner',()=>{
+  const api=new API();
+  try{
+    const source="import {projectChoice as choose} from './reader-inputs/main.ts';choose(new URL('./first.json',import.meta.url),['../fallback.json']);";
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+      [{kind:'project-choice',path:'./first.json',alternatives:['../fallback.json']}]);}finally{lease.dispose();}
+    for(const values of ['choices','[...choices]','[choice]',"['file:///outside.json']"]){
+      const text="import {projectChoice} from './reader-inputs/main.ts';projectChoice(new URL('./first.json',import.meta.url),"+values+");";
       const lease=api.createSourceFile('tooling/gate/reader.ts',text);
       try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
     }

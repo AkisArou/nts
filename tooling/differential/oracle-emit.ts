@@ -1,3 +1,5 @@
+import {captureToolchain,type Capture,type TypeScriptIdentity} from './oracle-toolchain.ts';
+export type {TypeScriptIdentity} from './oracle-toolchain.ts';
 import {runAsCommand} from "./command-entry/main.ts";
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
 import {compileRuntimeModules,type RuntimeParser,type RuntimeModules} from './oracle-runtime-modules.ts';
@@ -11,17 +13,14 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,oracleTranspileFileName,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
 export const ORACLE_LOADER=new URL('./oracle-loader.ts',import.meta.url).href;
 const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 
-export type TypeScriptIdentity={version:string;rootPackageSha256:string;packageSha256:string;nativeSha256:string;nativePackageSha256:string};
-type ToolchainRecord=TypeScriptIdentity&{nativePackage:string;executable:string};
-type ToolchainRecords={version:1;platforms:Record<string,ToolchainRecord>;execution:{manifestVersion:3;options:string;args:string[]}};
-export type OracleIdentity={publisherSha256:string;runtimeModulesSha256:string;childBootstrapSha256:string;executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
+export type OracleIdentity={toolchainCaptureSha256:string;publisherSha256:string;runtimeModulesSha256:string;childBootstrapSha256:string;executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
 export type EmitOptions=CompilerOptions;
 export type RuntimeCoverage={version:3;recipe:typeof ORACLE_NODE_RESOLUTION_RECIPE;aliases:CapturedAlias[];roots:CapturedModulePath[];excluded:CapturedModulePath[];directories:CapturedModulePath[];packages:({directory:CapturedModulePath;sha256:string}&ReturnType<typeof capturedPackageMetadata>)[]};
 // No compiler map does not prohibit an authored sourceMappingURL comment.
@@ -543,47 +542,7 @@ export class TypeScriptDiagnosticError extends Error {
     this.status=status;this.diagnostics=diagnostics;
   }
 }
-type Capture={root:string;compiler:string;identity:TypeScriptIdentity;files:Map<string,Buffer>;nativeFiles:Map<string,Buffer>;nativePackage:string;executable:string};
 
-// Capture each byte once. Execution uses this capture, never a second read of
-// files whose hashes were checked: a concurrently replaced installation is
-// either refused or has no effect on the worker's owned snapshot.
-function captureToolchain(location?:string):Capture{
-  if(!location)throw Error('oracle TypeScript capability NTS_ORACLE_TYPESCRIPT is missing');
-  const root=realpathSync(location),records:ToolchainRecords=JSON.parse(readFileSync(fileURLToPath(new URL('./oracle-toolchain.json',import.meta.url)),'utf8'));
-  const expected=records.platforms[process.platform+'-'+process.arch];
-  if(records.version!==1||!expected)throw Error('oracle TypeScript toolchain has no recorded identity for '+process.platform+'-'+process.arch);
-  const files=new Map<string,Buffer>(),digest=createHash('sha256');
-  function walk(dir:string){
-    for(const item of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en'))){
-      const path=join(dir,item.name);
-      if(item.isDirectory())walk(path);
-      else if(item.isFile()){
-        const bytes=readFileSync(path),key=relative(root,path).split(sep).join('/');files.set(key,bytes);
-        digest.update(JSON.stringify([key,bytes.length])+'\n');digest.update(bytes);
-      }else throw Error('oracle TypeScript package contains an unsupported entry: '+path);
-    }
-  }
-  walk(root);
-  const actualRoot=digest.copy().digest('hex');
-  if(actualRoot!==expected.rootPackageSha256)throw Error(`oracle TypeScript root package hash mismatch: expected ${expected.rootPackageSha256}; actual ${actualRoot}`);
-  const require=createRequire(pathToFileURL(join(root,'package.json')));
-  const nativeRoot=dirname(require.resolve(expected.nativePackage+'/package.json')),compiler=join(nativeRoot,expected.executable);
-  const nativeFiles=new Map<string,Buffer>(),nativeDigest=createHash('sha256');
-  function nativeWalk(dir:string){
-    for(const item of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en'))){
-      const path=join(dir,item.name);if(item.isDirectory())nativeWalk(path);
-      else if(item.isFile()){const bytes=readFileSync(path),key=relative(nativeRoot,path).split(sep).join('/');nativeFiles.set(key,bytes);nativeDigest.update(JSON.stringify([key,bytes.length])+'\n');nativeDigest.update(bytes);}
-      else throw Error('oracle TypeScript platform package contains an unsupported entry: '+path);
-    }
-  }
-  nativeWalk(nativeRoot);const nativeSha256=hash(nativeFiles.get(expected.executable)!);
-  digest.update(JSON.stringify(['native-executable',nativeSha256]));
-  const actual={version:JSON.parse(files.get('package.json')!.toString('utf8')).version,rootPackageSha256:actualRoot,packageSha256:digest.digest('hex'),nativeSha256,nativePackageSha256:nativeDigest.digest('hex')};
-  for(const key of ['version','rootPackageSha256','packageSha256','nativeSha256','nativePackageSha256'] as const)
-    if(actual[key]!==expected[key])throw Error(`oracle TypeScript ${key} mismatch: expected ${expected[key]}; actual ${actual[key]}`);
-  return {root,compiler,identity:actual,files,nativeFiles,nativePackage:expected.nativePackage,executable:expected.executable};
-}
 function entries(dir:string):string[]{
   return readdirSync(dir,{withFileTypes:true}).flatMap(item=>item.isDirectory()?entries(join(dir,item.name)):[join(dir,item.name)]);
 }
@@ -963,17 +922,7 @@ export class OracleWorker{
   /** NodeNext's per-file module goal depends on extension and package bytes,
    * never on types. Every scope lookup goes through the capture adapter. */
   private transpileFileName(file:string,options:EmitOptions):string{
-    if(!options.module||options.module<100||options.module>=200)return file;
-    if(/\.[cm]ts$/.test(file))return file;
-    let goal='commonjs';
-    for(let directory=dirname(file);;directory=dirname(directory)){
-      const text=this.filesystem.readFile(join(directory,'package.json'));
-      if(text!==null){goal=JSON.parse(text).type==='module'?'module':'commonjs';break;}
-      if(directory===dirname(directory))break;
-    }
-    // The public standalone SDK accepts its implied Node format through the
-    // source extension. Keep the real identity everywhere outside this call.
-    return file.replace(/\.tsx?$/,goal==='module'?'.mts':'.cts');
+    return oracleTranspileFileName(file,options.module,this.filesystem.readFile);
   }
   private transpileOwner(job:Job,group:EmitGroup):void{
     const context=this.contexts.get(group)!,root=join(this.snapshot,'node_modules/typescript');

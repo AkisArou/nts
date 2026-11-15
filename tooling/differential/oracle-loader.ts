@@ -71,6 +71,7 @@ if(!identity||identity.version!==1||identity.options!==records.execution.options
    identity.assetsSha256!==hash(readFileSync(join(assets,'oracle-assets.ts')))||identity.filesystemSha256!==hash(readFileSync(join(assets,'oracle-filesystem.ts')))||
    identity.emitterSha256!==hash(readFileSync(join(assets,'oracle-emit.ts')))||identity.loaderSha256!==hash(readFileSync(join(assets,'oracle-loader.ts')))||
    identity.publisherSha256!==hash(readFileSync(join(assets,'oracle-result-publisher.ts')))||
+   identity.toolchainCaptureSha256!==hash(readFileSync(join(assets,'oracle-toolchain.ts')))||
    identity.runtimeModulesSha256!==hash(readFileSync(join(assets,'oracle-runtime-modules.ts')))||
    identity.childBootstrapSha256!==hash(readFileSync(join(assets,'oracle-child-bootstrap.ts')))||
    identity.toolchainRecordSha256!==hash(readFileSync(join(assets,'oracle-toolchain.json'))))throw Error('oracle TypeScript emit identity mismatch or incomplete preparation');

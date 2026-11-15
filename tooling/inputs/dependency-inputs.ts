@@ -13,15 +13,43 @@ import {ToolingInstrumentError,publishToolingFailure} from "../gate/step-result.
 import {GateResource} from "../gate/gate-resource.ts";
 import {durableRecord} from "../gate/durable-record.ts";
 import {withPackageManager,type PackageManager} from "./package-manager.ts";
+import {fileURLToPath} from 'node:url';
+import {moduleGraph} from '../gate/module-closure.ts';
+import {dependencySourceCandidates,sourceState,assertSourceState} from './dependency-source-state.ts';
+import {executableModuleSource} from '../gate/reader-inputs/main.ts';
+import {installationCatalog,installationCatalogBytes,dependencyHash,type DependencyCatalogTrust} from './dependency-catalog.ts';
 
 const digest=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
 export function dependencyCache(root:string):string {
   return join(userInfo().homedir,".cache/nts-dependencies",digest(realpathSync(root)));
 }
+export function installationIdentityPath(root:string,tree:string):string{
+  return join(dependencyCache(root),'trees',digest(realpathSync(tree))+'.json');
+}
+export function installationCatalogPath(root:string,tree:string):string{
+  return installationIdentityPath(root,tree).replace(/\.json$/,'.catalog.json');
+}
+/** Only the real source owner discovers this; endpoints receive it by value. */
+export function installationCatalogTrust(root:string,tree:string):DependencyCatalogTrust|null{
+  const catalogPath=installationCatalogPath(root,tree);
+  try{return {catalogPath,catalogSha256:dependencyHash(installationCatalogBytes(catalogPath))};}
+  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
+}
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);
-function git(repo:string,...args:string[]):string {
+function gitBytes(repo:string,...args:string[]):string {
   // Repository inventories grow with the corpus, not a subprocess buffer cap.
-  return execFileSync("git",gitArguments(args),{cwd:repo,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]}).trim();
+  return execFileSync("git",gitArguments(args),{cwd:repo,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]});
+}
+const git=(repo:string,...args:string[])=>gitBytes(repo,...args).trim();
+/** One code-membership owner for installation and staged producer fixtures.
+ * Scheduling observations and other data assets do not produce package bytes;
+ * installation data is bound independently by identity.inputs. Imported data
+ * can be rewritten by other tools (results/builds/cold-inner.json, for example):
+ * this fence identifies the code that ran, rather than that mutable data. */
+export function dependencyRecipeModules(source:string):string[]{
+  const graph=moduleGraph({sourceRoot:source});
+  try{return graph.describe(['tooling/inputs/dependency-inputs.ts']).moduleFiles.filter(executableModuleSource);}
+  finally{graph.close();}
 }
 function hasDependencies(tree:string):boolean {
   if(!existsSync(join(tree,"pnpm-lock.yaml"))) {
@@ -131,17 +159,34 @@ export async function installDependencies(root:string,tree:string,options:{manag
   if(!hasDependencies(tree))return;
   assertPrivate(root,tree);
   const cache=dependencyCache(root);
+  const source=realpathSync(fileURLToPath(new URL('../..',import.meta.url))),sameSource=source===tree;
+  // A fresh tree has no parser until installation finishes. Bind its source
+  // state first; derive executable membership after the verified install.
+  // A CLI producer executing in its target has one code generation, so both
+  // roles share the same parser-free snapshot and final membership check.
+  const candidates=dependencySourceCandidates(source),capturedProducer=sourceState(source,candidates),capturedTarget=sameSource?undefined:sourceState(tree,candidates);
   return locked(join(cache,"trees",digest(realpathSync(tree))+".lock"),async()=>withPackageManager(tree,{workers:options.managerWorkers},async manager=>{
-    const id=await identity(tree,manager),state=join(cache,"trees",digest(realpathSync(tree))+".json");
+    const id=await identity(tree,manager),state=installationIdentityPath(root,tree),catalog=installationCatalogPath(root,tree);
     if(options.expectedIdentityKey!==undefined&&id.key!==options.expectedIdentityKey)throw failure("archive does not contain the exact selected install inputs");
     let previous:string[]=[];
     if(existsSync(state)) {
       const record=JSON.parse(readFileSync(state,"utf8"));if(record.version!==1)throw failure("unsupported importer inventory");previous=record.importers;
       if(!Array.isArray(previous)||previous.some(p=>typeof p!=="string"||resolve(tree,p)!==tree&&!resolve(tree,p).startsWith(tree+sep)))throw failure("invalid previous importer inventory");
     }
+    rmSync(catalog,{force:true});
     removeModules(tree,[...new Set([...previous,...id.importers])]);
     await manager.run(["install","--offline","--frozen-lockfile","--ignore-scripts","--verify-store-integrity","--store-dir",storeAt(root,id),"--reporter=append-only",...(options.packageImportMethod?["--package-import-method="+options.packageImportMethod]:[])]);
     if((await identity(tree,manager)).key!==id.key)throw failure("dependency inputs changed during offline installation");
+    const members=dependencyRecipeModules(source);
+    const recipes=members.map(path=>{
+      const present=existsSync(join(tree,path));
+      return {path,sha256:present?dependencyHash(readFileSync(join(tree,path))):'absent'};
+    });
+    const built=installationCatalog(tree,id,recipes);
+    if((await identity(tree,manager)).key!==id.key)throw failure('dependency inputs changed during catalog inventory');
+    assertSourceState(source,capturedProducer,members,'producer');
+    if(!sameSource)assertSourceState(tree,capturedTarget!,members,'target');
+    durableRecord(catalog,built);
     durableRecord(state,{version:1,identity:id.key,importers:id.importers});
     durableRecord(recordAt(root,id),{version:1,identity:id,acquired:true});
     return id.key;

@@ -23,10 +23,10 @@ function removePending(record:Publication):void{
   try{if(record.file!==undefined){const fd=record.file;record.file=undefined;closeSync(fd);}}
   finally{rmSync(record.temporary,{force:true});}
 }
-export function durableRecord(path: string, value: unknown): void {
+export function durableRecord(path: string, value: unknown,options:{compact?:true}={}): void {
   const record=publication(path);
   try {
-    writeFileSync(record.file!,JSON.stringify(value,null,2)+'\n');publish(record);
+    writeFileSync(record.file!,JSON.stringify(value,null,options.compact?undefined:2)+'\n');publish(record);
   }finally{removePending(record);}
 }
 

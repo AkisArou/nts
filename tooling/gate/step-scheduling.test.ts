@@ -16,7 +16,7 @@ import {randomUUID} from "node:crypto";
 import {newToolingSlice, stopToolingSlice, toolingSlice} from "./tooling-slice.ts";
 import {once} from "node:events";
 import {COST_HISTORY_VERSION,historyFile as schedulingHistoryFile,RESERVATION_PER_PEAK, caseMemoryKey, caseHistoryFile, caseReservation, elasticHeldBytes, readCaseHistory, writeCaseHistory, inheritedStepWork, KEPT_PEAKS, LEAST_RESERVATION_BYTES, machineShare, orderStepStarts, peakReservation, readCostHistory, readPreviousStepCpu, stepCpu,
-  unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
+  snapshotCostHistory,unitReservation, jobReservation, usableWidth, writeCostHistory} from "./step-scheduling.ts";
 import {testScratch, newTestScratch} from "./test-scratch.ts";
 import {ownMemory, type OwnMemory} from "./test-memory.ts";
 import {OOM_SCORE,readLedger} from "./memory-ledger.ts";
@@ -374,6 +374,24 @@ fi
   const step = (name: string) => summary.steps.find(row => row.name === name)!;
   return { own,result, summary, step, output: result.stdout + result.stderr, history,ledger:memory.NTS_MEMORY_LEDGER, canonical: (summary as { environment?: { canonical?: boolean } }).environment?.canonical === true };
 }
+
+test('an observed run uses ordinary measured ledger sizing and leaves ordinary history byte-identical',t=>{
+  const fixture:MemoryFixture={steps:'format',rows:{format:{slots:1,reserve:1.5,bound:60}},times:'format\t1\t1\t1\n',payload:':',availableKiB:16*2**20};
+  const ordinary=memoryRun(t,fixture);
+  let source='',snapshot='',before:Buffer|undefined;
+  const traced=memoryRun(t,{...fixture,before:(own,memory)=>{
+    source=schedulingHistoryFile(memory);before=readFileSync(source);
+    snapshot=join(own,'observation-costs','steps-v5.json');snapshotCostHistory(source,snapshot);
+    assert.deepEqual(readFileSync(snapshot),before);
+    memory.NTS_GATE_COSTS_DIR=dirname(snapshot);
+  }});
+  for(const actual of [ordinary,traced]){assert.equal(actual.result.status,0,actual.output);assert.equal(actual.summary.verdict,'green');}
+  const sizing=(value:ReturnType<typeof memoryRun>)=>({bytes:value.step('format').memory.reserved_bytes,basis:value.step('format').memory.basis});
+  assert.deepEqual(sizing(traced),sizing(ordinary));assert.equal(sizing(traced).basis,'measured');
+  assert.deepEqual(readFileSync(source),before,'the traced runner writes only its copied history');
+  assert.equal(writeCostHistory(snapshot,{steps:[{name:'format',memory:{unit:'step',peak:8*GiB}}]}),undefined);
+  assert.deepEqual(readFileSync(source),before,'even observer-inflated samples cannot change ordinary sizing');
+});
 
 for(const lateCleanup of ['broker','ledger','diagnostics'] as const)test(`a late ${lateCleanup} cleanup failure is in the published summary before the tree lock ends`,t=>{
   const fixture:MemoryFixture={steps:'clippy',rows:{clippy:{slots:1,reserve:1,bound:2}},times:'clippy\t1\t1\t1\n',payload:':',availableKiB:24*2**20,lateCleanup};

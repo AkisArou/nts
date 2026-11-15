@@ -29,6 +29,6 @@ export function ruleSelect(root: string, costs: string, budget: Budget): (base: 
       owed: { steps: range.checks.steps, reach: owedReach(rules, catalogue) }, paths, catalogue, table: LANDING as Table, inCorpus, rows: ROWS,
       cost: costLookup(readLandingCosts(costs), baseline, kind, ROWS, budget), budget,
     });
-    return { selection, kind, interop: range.checks.interop, doctests: range.checks.doctests ?? null };
+    return { selection, kind, interop: range.checks.interop, doctests: range.checks.doctests ?? null,...(range.rustRecords?{rustRecords:range.rustRecords}:{}) };
   };
 }

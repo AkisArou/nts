@@ -5,14 +5,24 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration,BindingName} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import {fixtureNamespaces,moduleMemberName,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,projectCatalogue,relativeProjectInput,projectMemberPrefix,directoryCandidates,type DirectoryCandidate,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
 
 const INPUT_OWNER='tooling/gate/reader-inputs/main.ts';
 const READER_FACTORIES:Readonly<Record<string,{owner:string;kind:InputKind}>>={
-  dataDirectory:{owner:INPUT_OWNER,kind:'data'},inspectionDirectory:{owner:INPUT_OWNER,kind:'inspection'},
-  fileInput:{owner:INPUT_OWNER,kind:'file'},optionalFile:{owner:INPUT_OWNER,kind:'optional-file'},
-  directoryMembership:{owner:INPUT_OWNER,kind:'membership'},projectInput:{owner:INPUT_OWNER,kind:'project'},
-  projectConfig:{owner:INPUT_OWNER,kind:'project-config'},fixtureInput:{owner:INPUT_OWNER,kind:'fixture'},
+  dataDirectory:{owner:INPUT_OWNER,kind:'data'},
+  inspectionDirectory:{owner:INPUT_OWNER,kind:'inspection'},
+  conservativeDirectory:{owner:INPUT_OWNER,kind:'conservative'},
+  fileInput:{owner:INPUT_OWNER,kind:'file'},
+  optionalFile:{owner:INPUT_OWNER,kind:'optional-file'},
+  optionalModule:{owner:INPUT_OWNER,kind:'optional-module'},
+  directoryMembership:{owner:INPUT_OWNER,kind:'membership'},
+  directoryCandidates:{owner:INPUT_OWNER,kind:'directory-candidates'},
+  projectConfig:{owner:INPUT_OWNER,kind:'project-config'},
+  projectChoice:{owner:INPUT_OWNER,kind:'project-choice'},
+  projectCatalogue:{owner:INPUT_OWNER,kind:'project-catalogue'},
+  projectMembers:{owner:INPUT_OWNER,kind:'project-members'},
+  generatedProject:{owner:INPUT_OWNER,kind:'generated-project'},
+  fixtureInput:{owner:INPUT_OWNER,kind:'fixture'},
   moduleMembers:{owner:INPUT_OWNER,kind:'members'},
   acceptedRevisionData:{owner:'tooling/gate/accepted-revision-data.ts',kind:'accepted-revision'},
 };
@@ -237,15 +247,58 @@ export class SourceFacts {
         const parent=this.parents.get(node);
         const factory=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.readerFactory(parent.expression):undefined;
         const owner=!!factory;
+        if(owner&&['generatedProject','optionalModule'].includes(factory!.name)&&!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..'))throw Error(factory!.name+' needs a file URL: '+this.file);
         if(!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')
-          &&!(factory?.name==='directoryMembership'))continue;
-        if(owner&&['optionalFile','directoryMembership','acceptedRevisionData'].includes(factory.name)
+          &&!(owner&&['directoryMembership','projectMembers','directoryCandidates','conservativeDirectory'].includes(factory!.name)))continue;
+        if(owner&&['optionalFile','optionalModule','directoryMembership','conservativeDirectory','acceptedRevisionData'].includes(factory!.name)
           &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
-          throw Error(factory.name+' needs exactly one URL input: '+this.file);
-        if(factory?.name==='fixtureInput'){
+          throw Error(factory!.name+' needs exactly one URL input: '+this.file);
+        if(owner&&factory!.name==='directoryCandidates'){
+          const values=parent&&ast.isCallExpression(parent)&&parent.arguments.length===2?parent.arguments[1]:undefined;
+          if(!values||!ast.isArrayLiteralExpression(values))throw Error('directoryCandidates needs one URL and literal candidates: '+this.file);
+          const rows=values.elements.map(value=>{
+            if(!ast.isObjectLiteralExpression(value)||value.properties.length!==2)throw Error('directoryCandidates needs literal name/kind rows: '+this.file);
+            const row:Record<string,string>={};
+            for(const field of value.properties){
+              if(!ast.isPropertyAssignment(field)||!(ast.isIdentifier(field.name)||ast.isStringLiteral(field.name))||!ast.isStringLiteral(field.initializer)||Object.hasOwn(row,field.name.text))
+                throw Error('directoryCandidates needs literal name/kind rows: '+this.file);
+              row[field.name.text]=field.initializer.text;
+            }
+            return {name:row.name!,kind:row.kind as DirectoryCandidate['kind']};
+          });
+          assets.push({path:literal.text,kind:'directory-candidates',candidates:directoryCandidates(new URL('file:///candidates'),rows).candidates});
+        }else if(owner&&factory!.name==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
-        }else if(factory?.name==='moduleMembers'){
+        }else if(owner&&factory!.name==='projectChoice'){
+          const alternatives=parent&&ast.isCallExpression(parent)&&parent.arguments.length===2?parent.arguments[1]:undefined;
+          if(!alternatives||!ast.isArrayLiteralExpression(alternatives)||alternatives.elements.some(node=>!ast.isStringLiteral(node)))
+            throw Error('projectChoice needs one URL and literal relative alternatives: '+this.file);
+          assets.push({path:literal.text,kind:'project-choice',alternatives:alternatives.elements.map(node=>relativeProjectInput((node as import('typescript/ast').StringLiteral).text))});
+        }else if(owner&&factory!.name==='generatedProject'){
+          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==3||!parent.arguments[1]||!parent.arguments[2]
+            ||!ast.isStringLiteral(parent.arguments[1])||!ast.isStringLiteral(parent.arguments[2]))throw Error('generatedProject needs a config URL, literal directory and include recipe: '+this.file);
+          const include=parent.arguments[2].text;if(include!=='directory'&&include!=='typescript-tree')throw Error('unsupported generated project include recipe: '+this.file);
+          assets.push({path:literal.text,kind:'generated-project',directory:relativeProjectInput(parent.arguments[1].text),include});
+        }else if(owner&&['projectCatalogue','projectMembers'].includes(factory!.name)){
+          if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
+            throw Error(factory!.name+' needs one URL and a literal selection: '+this.file);
+          const selection=parent.arguments[1].text;
+          if(factory!.name==='projectMembers'){
+            let optional:true|undefined;
+            if(parent.arguments.length===3){
+              const options=parent.arguments[2],property=options&&ast.isObjectLiteralExpression(options)&&options.properties.length===1?options.properties[0]:undefined;
+              if(!property||!ast.isPropertyAssignment(property)||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))||property.name.text!=='optional'||property.initializer.kind!==ast.SyntaxKind.TrueKeyword)
+                throw Error('projectMembers optional mode must be literal {optional:true}: '+this.file);
+              optional=true;
+            }
+            assets.push({path:literal.text,kind:'project-members',prefix:projectMemberPrefix(selection),...(optional?{optional}:{})});
+          }else{
+            if(parent.arguments.length!==2)throw Error('projectCatalogue needs exactly two inputs: '+this.file);
+            projectCatalogue(new URL('file:///catalogue.tsv'),selection);
+            assets.push({path:literal.text,kind:'project-catalogue',directory:selection});
+          }
+        }else if(owner&&factory!.name==='moduleMembers'){
           if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
             throw Error('moduleMembers needs a directory and literal member name: '+this.file);
           let data:true|undefined;

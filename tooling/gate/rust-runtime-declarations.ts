@@ -1,13 +1,15 @@
 // Portable declarations only. The ordinary execution owner must not acquire
 // the graph, SDK, selector or trace validator through this module.
 import {readFileSync} from 'node:fs';
-import {posix} from 'node:path';
-import type {InputKind,ModuleDeclarations,ReaderInput} from './reader-inputs/main.ts';
+import {dirname,isAbsolute,posix,relative,sep} from 'node:path';
+import type {InputKind,ModuleDeclarations,ReaderInput,DirectoryCandidate} from './reader-inputs/main.ts';
 
 export type RustInputTarget={source:string;name:string;kind:string[]};
+export type RustRuntimeTarget=RustInputTarget&{unitTests:boolean;doctests:boolean};
 export type RustRuntimeDeclaration={target:RustInputTarget;declarations:ModuleDeclarations};
-export type RustRuntimeManifest={version:1;targets:RustRuntimeDeclaration[]};
-const kinds=new Set<InputKind>(['module','data','inspection','file','optional-file','membership','project','project-config','fixture','members']);
+export type RustRuntimeReader={source:string;declarations:ModuleDeclarations};
+export type RustRuntimeManifest={version:1;targets:RustRuntimeDeclaration[];readers?:RustRuntimeReader[]};
+const kinds=new Set<InputKind>(['module','data','inspection','conservative','file','optional-file','optional-module','membership','directory-candidates','project-config','project-choice','project-catalogue','project-members','generated-project','fixture','members']);
 function fail(message:string):never{throw Error('Rust runtime declarations: '+message);}
 function object(value:unknown,purpose:string):Record<string,unknown>{
   if(!value||typeof value!=='object'||Array.isArray(value))fail(purpose+' is not an object');
@@ -43,8 +45,32 @@ function target(value:unknown):RustInputTarget{
 function input(value:unknown,source:string):ReaderInput{
   const row=object(value,'input in '+source),path=specifier(row.path,'input path in '+source),kind=text(row.kind,'input kind') as InputKind;
   if(!kinds.has(kind))fail('unknown input kind '+kind+' in '+source);
-  const extra=kind==='fixture'?['dataNamespaces']:kind==='members'?['member','data']:[];
+  const extra=kind==='fixture'?['dataNamespaces']:kind==='members'?['member','data']:kind==='project-choice'?['alternatives']:kind==='project-catalogue'?['directory']:kind==='project-members'?['prefix','optional']:kind==='generated-project'?['directory','include']:kind==='directory-candidates'?['candidates']:[];
   keys(row,['kind','path',...extra],'input in '+source);
+  if(kind==='directory-candidates'){
+    if(!Array.isArray(row.candidates))fail('directory candidates are not an array in '+source);
+    const seen=new Set<string>();
+    const candidates=row.candidates.map(value=>{
+      const entry=object(value,'directory candidate');keys(entry,['name','kind'],'directory candidate');
+      const name=sourcePath(entry.name,'directory candidate name'),kind=text(entry.kind,'directory candidate kind');
+      if(name.includes('/')||/[*?\[\]]/.test(name)||!['optional-file','path-exists','file-exists','directory-exists'].includes(kind))fail('invalid directory candidate in '+source);
+      const key=JSON.stringify([name,kind]);if(seen.has(key))fail('duplicate directory candidate in '+source);seen.add(key);
+      return {name,kind:kind as DirectoryCandidate['kind']};
+    });
+    return {kind,path,candidates};
+  }
+  if(kind==='generated-project'){
+    if(row.include!=='directory'&&row.include!=='typescript-tree')fail('unsupported generated project include recipe in '+source);
+    return {kind,path,directory:specifier(row.directory,'generated project directory'),include:row.include};
+  }
+  if(kind==='project-choice')return {kind,path,alternatives:strings(row.alternatives,'project alternatives in '+source).map(value=>specifier(value,'project alternative'))};
+  if(kind==='project-catalogue')return {kind,path,directory:specifier(row.directory,'project catalogue directory in '+source)};
+  if(kind==='project-members'){
+    const prefix=row.prefix===''?'':sourcePath(row.prefix,'project member prefix');
+    if(prefix.includes('/')||/[*?\[\]]/.test(prefix))fail('project member prefix is not literal in '+source);
+    if(row.optional!==undefined&&row.optional!==true)fail('project member optional mode is not true in '+source);
+    return {kind,path,prefix,...(row.optional?{optional:true}:{})};
+  }
   if(kind==='fixture'){
     const namespaces=object(row.dataNamespaces,'fixture namespaces in '+source),dataNamespaces:Record<string,string>={};
     for(const [name,owner]of Object.entries(namespaces)){
@@ -63,25 +89,87 @@ function input(value:unknown,source:string):ReaderInput{
 }
 
 export function parseRustRuntimeManifest(value:unknown):RustRuntimeManifest{
-  const manifest=object(value,'manifest');keys(manifest,['version','targets'],'manifest');
+  const manifest=object(value,'manifest');keys(manifest,['version','targets','readers'],'manifest');
   if(manifest.version!==1)fail('unsupported manifest version '+String(manifest.version));
   if(!Array.isArray(manifest.targets))fail('manifest has no target array');
-  const seen=new Set<string>(),targets:RustRuntimeDeclaration[]=[];
+  const seen=new Set<string>(),targets:RustRuntimeDeclaration[]=[],readers:RustRuntimeReader[]=[];
+  const declarations=(value:unknown,source:string):ModuleDeclarations=>{
+    const declared=object(value,'declarations for '+source);keys(declared,['imports','assets'],'declarations for '+source);
+    const imports=strings(declared.imports,'imports for '+source).map(path=>specifier(path,'module input'));
+    if(!Array.isArray(declared.assets))fail('assets are not an array for '+source);
+    return {imports,assets:declared.assets.map(value=>input(value,source))};
+  };
   for(const value of manifest.targets){
     const row=object(value,'target declaration');keys(row,['target','declarations'],'target declaration');
     const identity=target(row.target);
     if(seen.has(identity.source))fail('duplicate source owner '+identity.source);seen.add(identity.source);
-    const declared=object(row.declarations,'declarations for '+identity.source);keys(declared,['imports','assets'],'declarations for '+identity.source);
-    const imports=strings(declared.imports,'imports for '+identity.source).map(path=>specifier(path,'module input'));
-    if(!Array.isArray(declared.assets))fail('assets are not an array for '+identity.source);
-    const assets=declared.assets.map(value=>input(value,identity.source));
-    targets.push({target:identity,declarations:{imports,assets}});
+    targets.push({target:identity,declarations:declarations(row.declarations,identity.source)});
   }
-  return {version:1,targets};
+  if(manifest.readers!==undefined){
+    if(!Array.isArray(manifest.readers))fail('shared readers are not an array');
+    for(const value of manifest.readers){
+      const row=object(value,'shared reader');keys(row,['source','declarations'],'shared reader');
+      const source=sourcePath(row.source,'shared reader source');
+      if(seen.has(source))fail('duplicate source owner '+source);seen.add(source);
+      readers.push({source,declarations:declarations(row.declarations,source)});
+    }
+  }
+  return {version:1,targets,...(manifest.readers===undefined?{}:{readers})};
 }
 
 export function readRustRuntimeManifest(path:string):RustRuntimeManifest{
   return parseRustRuntimeManifest(JSON.parse(readFileSync(path,'utf8')) as unknown);
+}
+
+/** Consume the selector's existing Cargo response. This module never invokes
+ * Cargo or infers a target from an executable filename. The traced build binds
+ * this portable inventory independently before coverage is accepted. */
+export function cargoRustTargetInventory(value:unknown,root:string,scope:'workspace'|'repository'='workspace'):Map<string,RustRuntimeTarget[]>{
+  if(!isAbsolute(root))fail('Cargo source root is not absolute');
+  const metadata=object(value,'Cargo metadata');
+  if(metadata.version!==1)fail('unsupported Cargo metadata version '+String(metadata.version));
+  if(!Array.isArray(metadata.packages)||!Array.isArray(metadata.workspace_members))fail('Cargo metadata has no workspace inventory');
+  const members=new Set(strings(metadata.workspace_members,'Cargo workspace members'));
+  if(members.size!==metadata.workspace_members.length)fail('duplicate Cargo workspace member');
+  const groups=new Map<string,RustRuntimeTarget[]>(),sources=new Set<string>(),found=new Set<string>();
+  const local=(value:unknown,purpose:string):string=>{
+    const path=text(value,purpose);if(!isAbsolute(path))fail(purpose+' is not absolute');
+    return sourcePath(relative(root,path).split(sep).join('/'),purpose);
+  };
+  for(const value of metadata.packages){
+    const row=object(value,'Cargo package'),id=text(row.id,'Cargo package id');
+    const member=members.has(id),manifestPath=text(row.manifest_path,'Cargo manifest');
+    if(!isAbsolute(manifestPath))fail('Cargo manifest is not absolute');
+    const part=relative(root,manifestPath),inRoot=part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);
+    if(!member&&(scope!=='repository'||!inRoot))continue;
+    if(found.has(id))fail('duplicate Cargo repository package '+id);found.add(id);
+    const manifest=local(row.manifest_path,'Cargo manifest'),directory=dirname(manifest).split(sep).join('/');
+    const crate=directory==='.'?'':directory;
+    if(groups.has(crate))fail('ambiguous Cargo package directory '+crate);
+    if(!Array.isArray(row.targets))fail('Cargo package has no targets: '+id);
+    const targets:RustRuntimeTarget[]=[];
+    for(const value of row.targets){
+      const entry=object(value,'Cargo target');
+      if(typeof entry.test!=='boolean')fail('Cargo target has no test setting: '+id);
+      if(typeof entry.doctest!=='boolean')fail('Cargo target has no doctest setting: '+id);
+      if(!member&&(!Array.isArray(entry.kind)||!entry.kind.some(kind=>['lib','rlib','dylib','cdylib','staticlib','proc-macro'].includes(String(kind)))))continue;
+      const identity=target({source:local(entry.src_path,'Cargo target source'),name:entry.name,kind:entry.kind});
+      // Cargo's doctest setting is independent of test and applies only to
+      // library targets: https://doc.rust-lang.org/cargo/reference/cargo-targets.html#the-doctest-field
+      const doctests=entry.doctest&&identity.kind.some(kind=>['lib','rlib','dylib','cdylib','staticlib','proc-macro'].includes(kind));
+      if(sources.has(identity.source))fail('ambiguous Cargo source owner '+identity.source);
+      sources.add(identity.source);targets.push({...identity,unitTests:entry.test,doctests});
+    }
+    groups.set(crate,targets);
+  }
+  for(const id of members)if(!found.has(id))fail('Cargo workspace member has no package: '+id);
+  return groups;
+}
+
+/** Test eligibility does not decide whether a production library can be
+ * linked by another target. Keep that complete identity in the same parser. */
+export function cargoRustRuntimeTargets(value:unknown,root:string):Map<string,RustRuntimeTarget[]>{
+  return new Map([...cargoRustTargetInventory(value,root)].map(([directory,targets])=>[directory,targets.filter(row=>row.unitTests||row.doctests)]));
 }
 
 /** Cargo supplies this inventory. Never invent ownership from an executable
@@ -104,5 +192,9 @@ export function bindRustRuntimeDeclarations(manifest:RustRuntimeManifest,invento
     declarations.set(row.target.source,row.declarations);
   }
   for(const source of expected.keys())if(!declarations.has(source))fail('Cargo target lacks runtime declarations: '+source);
+  for(const row of manifest.readers??[]){
+    if(declarations.has(row.source)||expected.has(row.source))fail('duplicate source owner '+row.source);
+    declarations.set(row.source,row.declarations);
+  }
   return declarations;
 }

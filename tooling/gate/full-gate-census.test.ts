@@ -9,9 +9,17 @@ test('the full-gate inventory counts tracked subjects once and retains directory
   const directories=[{reader:'tooling/reader.ts',directory:'tests/data',kind:'data' as const,files:3,steps:['tooling']}];
   const census=collectFullGateCensus(['z','a','z'],path=>({full:path==='z',reasons:['no declared reader']}),directories);
   const full=[{path:'z',reasons:['no declared reader']}];
-  assert.deepEqual(census,{version:2,tracked:2,full,unplaced:full,policy:[],directories});
+  assert.deepEqual(census,{version:2,tracked:2,full,unplaced:full,policy:[],directories,conservative:[]});
   assert.deepEqual(fullGateProblems({version:1,files:['z']},census),[]);
   assert.match(fullGateProblems({version:1,files:['a']},census)[0]!,/z newly owes the full gate/);
+});
+test('conservative paths are counted once with explicit overlapping reader and step provenance',()=>{
+  const census=collectFullGateCensus(['types/a.ts','types/nested/b.ts','types-other/c.ts'],()=>({full:false,reasons:[]}),[
+    {reader:'first.rs',directory:'types',kind:'conservative',files:2,steps:['tests']},
+    {reader:'second.rs',directory:'types/nested',kind:'conservative',files:1,steps:['doctests','tests']},
+  ]);
+  assert.deepEqual(census.conservative,[{path:'types/a.ts',readers:['first.rs'],steps:['tests']},{path:'types/nested/b.ts',readers:['first.rs','second.rs'],steps:['doctests','tests']}]);
+  assert.deepEqual(census.full,[]);
 });
 test('the tool-owned ceiling can only fall, including when the total count stays the same',t=>{
   const root=testScratch(t,'full-gate-census');

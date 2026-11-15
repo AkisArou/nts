@@ -4,15 +4,18 @@ import {runAsCommand} from "../differential/command-entry/main.ts";
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync} from 'node:fs';
-import {dirname,join,resolve} from 'node:path';
+import {dirname,join,relative,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {fileInput} from '../gate/reader-inputs/main.ts';
 
 
 const ROOT=resolve(import.meta.dirname,'../..');
+const VERSION_INPUT=fileInput(new URL('../../.tool-versions',import.meta.url));
 export const DEPENDENCIES=['openssl','brotli','zlib','zstd','uv'] as const;
 export const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 export function nodePin(root=ROOT,revision?:string):string {
- const text=revision===undefined?readFileSync(join(root,'.tool-versions'),'utf8'):execFileSync('git',gitArguments(['-C',root,'show',revision+':.tool-versions']),{encoding:'utf8'});
+ const path=relative(ROOT,fileURLToPath(VERSION_INPUT));
+ const text=revision===undefined?readFileSync(join(root,path),'utf8'):execFileSync('git',gitArguments(['-C',root,'show',revision+':'+path]),{encoding:'utf8'});
  const entries=text.split('\n').filter(line=>/^nodejs\s/.test(line));
  const pin=entries.length===1?/^nodejs\s+(\d+\.\d+\.\d+)\s*$/.exec(entries[0])?.[1]:undefined;
  if(!pin)throw Error('.tool-versions must name exactly one Node release');

@@ -19,6 +19,7 @@ const EXECUTION_INPUTS=[
 ] as const;
 const RECIPE_INPUTS={
   emitter:new URL('./oracle-emit.ts',import.meta.url),
+  toolchainCapture:new URL('./oracle-toolchain.ts',import.meta.url),
   loader:new URL('./oracle-loader.ts',import.meta.url),
   filesystem:new URL('./oracle-filesystem.ts',import.meta.url),
   runtime:new URL('./oracle-runtime.ts',import.meta.url),
@@ -43,6 +44,7 @@ export function oracleIdentityFor(typescript:OracleIdentity['typescript']):Oracl
   return recipeIdentity??={version:1,typescript,executionSha256:hash(JSON.stringify(EXECUTION_INPUTS.map(input=>hash(readFileSync(input))))),
     ...(dependency?{dependencyRecipeSha256:hash(JSON.stringify([dependency.lockfileSha256,dependency.producerSha256]))}:{}),
     emitterSha256:hash(readFileSync(RECIPE_INPUTS.emitter)),
+    toolchainCaptureSha256:hash(readFileSync(RECIPE_INPUTS.toolchainCapture)),
     loaderSha256:hash(readFileSync(RECIPE_INPUTS.loader)),
     filesystemSha256:hash(readFileSync(RECIPE_INPUTS.filesystem)),
     runtimeSha256:hash(readFileSync(RECIPE_INPUTS.runtime)),
@@ -236,6 +238,19 @@ export type ObservationKind='file'|'fileExists'|'directoryExists'|'entries'|'rea
 export type DirectoryEntries={files:string[];directories:string[]};
 export type FileStat={mode:number;size:number;mtimeMs:number};
 export type HostObservation={kind:ObservationKind;path:string;value:string|null|boolean|DirectoryEntries|string[]|FileStat};
+/** The standalone pinned compiler receives NodeNext's per-file goal through
+ * its source extension. Every package candidate uses the caller's captured
+ * filesystem; this is compiler resolution, separate from Node host scopes. */
+export function oracleTranspileFileName(file:string,module:number|undefined,readFile:(path:string)=>string|null):string{
+  if(!module||module<100||module>=200||/\.[cm]ts$/.test(file))return file;
+  let goal='commonjs';
+  for(let directory=dirname(file);;directory=dirname(directory)){
+    const text=readFile(join(directory,'package.json'));
+    if(text!==null){goal=(JSON.parse(text) as {type?:unknown}).type==='module'?'module':'commonjs';break;}
+    if(directory===dirname(directory))break;
+  }
+  return file.replace(/\.tsx?$/,goal==='module'?'.mts':'.cts');
+}
 /** Immutable output namespaces; the construction count is a deterministic cost guard. */
 export class OraclePathPrefixes{
   readonly paths:readonly string[];

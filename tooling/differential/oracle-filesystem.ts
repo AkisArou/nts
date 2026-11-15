@@ -64,6 +64,7 @@ function answer(kind:ObservationKind,path:string):HostObservation['value']{
 }
 export {answer as readHostObservation};
 export function validateHostObservations(observations:HostObservation[],read:(kind:ObservationKind,path:string)=>HostObservation['value']=answer):{count:number;wallMs:number}{return validateRuntimeObservations(observations,read);}
+export type InputIdentity={state:'resolved';path:string}|{state:'missing'|'not-directory';path:string;component:string;kind:string|null};
 
 /** One instance per preparation worker; reset between fully drained batches. */
 export class OracleFilesystem{
@@ -94,29 +95,37 @@ export class OracleFilesystem{
   };
   /** Canonical reader capture records the actual followed identity, including
    * dangling targets. lstat/readlink facts retain each in-root component; a
-   * final lstat/readlink query deliberately does not follow its final link. */
-  inputIdentity(path:string,boundary:string,followFinal=true):string{
-    boundary=resolve(boundary);path=resolve(path);let links=0;
+   * final lstat/readlink query deliberately does not follow its final link.
+   * A stopped component stays explicit. These are current filesystem facts,
+   * never the return value of a previously observed syscall attempt. */
+  inputIdentity(path:string,boundary:string,followFinal=true,externalFact?:(row:HostObservation)=>void):InputIdentity{
+    if(!isAbsolute(path)||path.includes('\0'))throw Error('reader input identity needs an absolute pathname');
+    boundary=resolve(boundary);let links=0,directoryRequired=path.endsWith(sep);
     const inside=(path:string)=>{const part=relative(boundary,path);return part!=='..'&&!part.startsWith('..'+sep)&&!isAbsolute(part);};
-    let current=inside(path)?boundary:parse(path).root,parts=relative(current,path).split(sep).filter(Boolean);
+    // The source boundary is already canonical. Slice only its literal prefix;
+    // resolve()/relative() would erase a symlink or failed component before '..'.
+    const rooted=path===boundary||path.startsWith(boundary+sep);
+    let current=rooted?boundary:parse(path).root,parts=path.slice(current.length).split(sep).filter(Boolean);
     const seen=new Set<string>();if(inside(current))this.runtimeKind(current);
     while(parts.length){
       const state=JSON.stringify([current,parts]);if(seen.has(state))throw Error('reader input alias cycle: '+path);seen.add(state);
       const part=parts.shift()!;if(part==='.')continue;if(part==='..'){current=dirname(current);continue;}
       current=join(current,part);
-      const kind=inside(current)?this.runtimeKind(current):runtimeKind(current),final=parts.length===0;
-      if(kind==='symlink'&&(!final||followFinal)){
+      const local=inside(current),kind=local?this.runtimeKind(current):runtimeKind(current),final=parts.length===0;
+      if(!local)externalFact?.({kind:'runtimeKind',path:current,value:kind});
+      if(kind==='symlink'&&(!final||followFinal||directoryRequired)){
         const text=this.readlink(current);if(text===null)throw Error('reader input alias changed during capture: '+current);
         if(++links>64)throw Error('reader input alias chain exceeds its bound: '+path);
+        if(final&&text.endsWith(sep))directoryRequired=true;
         current=isAbsolute(text)?parse(text).root:dirname(current);
         parts=[...text.split(sep).filter(Boolean),...parts];
-      }else if(kind===null||!final&&kind!=='directory'){
+      }else if(kind===null||(!final||directoryRequired)&&kind!=='directory'){
         // Do not normalize a failed component followed by '..' into a path
         // the kernel never reached. The recorded component retains the cause.
-        return final?current:path;
+        return {state:kind===null?'missing':'not-directory',path:final?current:path,component:current,kind};
       }
     }
-    return current;
+    return {state:'resolved',path:current};
   }
   projectFor(entry:string):string|null{
     for(let dir=resolve(entry,'..');;dir=resolve(dir,'..')){

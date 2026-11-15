@@ -10,6 +10,7 @@ import { unrunPlatforms, type UnrunPlatform } from "../gate/verdict-policy.ts";
 import { isListedLine } from "../records/pending.ts";
 import type { Selection } from "./selection.ts";
 import type { Ran, StepResult } from "./run.ts";
+import {readRustRecordDecisions,type RustRecordDecisionAtRevision} from '../gate/rust-selector-decision.ts';
 
 export type CheckedStep = {
   outcome: StepResult;
@@ -31,6 +32,7 @@ export type LandingVerdict = {
   contract: VerdictContract;
   steps: CheckedStep[];
   deferred: Selection["deferred"];
+  rustRecords?:RustRecordDecisionAtRevision[];
 };
 
 const objectId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
@@ -46,7 +48,7 @@ export function verdictPath(home: string, commit: string): string {
 /** An absent contract is the compatibility path for older candidate gates. */
 export function writeLandingVerdict(home: string, input: {
   commit: string; tree: string; submission: string; landing: string; base: string;
-  selected: { selection: Selection; interop: string | null; doctests: string | null };
+  selected: { selection: Selection; interop: string | null; doctests: string | null;rustRecords?:readonly RustRecordDecisionAtRevision[] };
   ran: Ran;
 }): LandingVerdict | undefined {
   const { ran, selected } = input;
@@ -76,6 +78,7 @@ export function writeLandingVerdict(home: string, input: {
     version: 1, commit: input.commit, tree: input.tree, submission: input.submission,
     landing: input.landing, base: input.base, at: new Date().toISOString(), run: ran.run,
     profile: "nts-dev", binaries: ran.binaries ?? {}, contract: ran.contract, steps, deferred: selected.selection.deferred,
+    ...(selected.rustRecords?{rustRecords:readRustRecordDecisions(selected.rustRecords)}:{}),
   };
   versionedRecord(verdictPath(home,input.commit),1,receipt,join(home,"verdicts"));
   return receipt;
@@ -84,6 +87,7 @@ export function writeLandingVerdict(home: string, input: {
 function checkedReceipt(value: unknown): value is LandingVerdict {
   if (!value || typeof value !== "object") return false;
   const receipt = value as LandingVerdict;
+  try{if(receipt.rustRecords!==undefined)readRustRecordDecisions(receipt.rustRecords);}catch{return false;}
   return receipt.version === 1 && objectId(receipt.commit) && objectId(receipt.tree) &&
     objectId(receipt.submission) && objectId(receipt.base) && typeof receipt.landing === "string" &&
     typeof receipt.run === "string" && typeof receipt.at === "string" &&
