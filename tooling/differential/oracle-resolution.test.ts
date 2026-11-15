@@ -46,10 +46,15 @@ test('resolution sessions report the actual launch and isolate canonical conditi
   for(const name of ['poison','default'])writeFileSync(join(packageRoot,name+'.mjs'),'throw Error("resolution must not evaluate the subject");');
   const planned=fixtureEnvironment(t,{NODE_OPTIONS:undefined}),poison=fixtureEnvironment(t,{NODE_OPTIONS:'--conditions=poison'});
   const source=`import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+    import {registerCommandCloser} from ${JSON.stringify(new URL('./command-entry/main.ts',import.meta.url).href)};
     import {nodeProcessAlive} from ${JSON.stringify(new URL('./oracle-runtime.ts',import.meta.url).href)};
     import {startNodeResolutionSession,queryNodeResolutions,closeNodeResolutionSession} from ${JSON.stringify(new URL('./oracle-resolution.ts',import.meta.url).href)};
     const request=JSON.parse(readFileSync(0,'utf8'));assert.equal(process.env.NODE_OPTIONS,'--conditions=poison');
     let holder,session,closed;
+    registerCommandCloser('conditional resolution fixture',{close:async()=>{
+      if(!session)return;await closeNodeResolutionSession(session);await closed;
+      assert.equal(nodeProcessAlive(session.holder),false);console.log(JSON.stringify({drained:true}));
+    }});
     try{
       session=await startNodeResolutionSession(request.directory,request.options,request.env,process.pid,(_session,completion)=>{closed=completion;},{ready:async waiting=>holder=await waiting});
       assert.notEqual(request.expected,null,'an actual/intended option mismatch must refuse');
@@ -60,7 +65,7 @@ test('resolution sessions report the actual launch and isolate canonical conditi
       if(request.expected!==null)throw error;
       assert.match(String(error),/oracle resolution options identity changed/);assert.ok(holder);assert.equal(nodeProcessAlive(holder.holder),false);
       console.log(JSON.stringify({refused:true,drained:true,actual:holder.options}));
-    }finally{if(session){await closeNodeResolutionSession(session);await closed;}}
+    }
   `;
   for(const [label,env,options,expected]of [
     ['canonical',planned,nodeResolutionOptions([],planned),pathToFileURL(join(packageRoot,'default.mjs')).href],
@@ -69,7 +74,8 @@ test('resolution sessions report the actual launch and isolate canonical conditi
   ] as const){
     const result=spawnSync(process.execPath,['--input-type=module','-e',source],{env:poison,encoding:'utf8',input:JSON.stringify({directory:join(root,label),env,options,expected,parentURL:pathToFileURL(join(root,'entry.mjs')).href})});
     assert.equal(result.status,0,result.stdout+result.stderr);
-    const value=JSON.parse(result.stdout);if(expected===null){assert.equal(value.refused,true);assert.equal(value.drained,true);}else assert.equal(value.url,expected);
+    const reports=result.stdout.trim().split('\n').map(line=>JSON.parse(line)),value=reports[0];
+    if(expected===null){assert.equal(value.refused,true);assert.equal(value.drained,true);}else{assert.equal(value.url,expected);assert.deepEqual(reports[1],{drained:true});}
   }
 });
 test('one executable holder batches Node answers without evaluating subjects',async t=>{
