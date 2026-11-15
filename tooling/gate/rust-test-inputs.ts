@@ -16,9 +16,10 @@ function fail(message:string):never{throw Error('Rust test inputs: '+message);}
 /** Cargo's owner publishes its exit separately from the observer's status. */
 export function testBuildStatus(value:unknown):number{
   if(!value||typeof value!=='object')fail('missing Cargo artifact evidence');
-  const row=value as {version?:unknown;status?:unknown;buildFinished?:unknown;artifacts?:unknown};
+  const row=value as {version?:unknown;status?:unknown;buildFinished?:unknown;artifacts?:unknown;buildNamespace?:unknown;buildScripts?:unknown};
   if(row.version!==1&&row.version!==2||typeof row.status!=='number'||!Number.isInteger(row.status)||row.status<0||row.status>255
-    ||typeof row.buildFinished!=='boolean'||!Array.isArray(row.artifacts))fail('invalid Cargo completion evidence');
+    ||typeof row.buildFinished!=='boolean'||!Array.isArray(row.artifacts)
+    ||row.version===2&&(typeof row.buildNamespace!=='string'||!isAbsolute(row.buildNamespace)||!Array.isArray(row.buildScripts)))fail('invalid Cargo completion evidence');
   return row.status;
 }
 export function readTestBuildStatus(file:string):number{return testBuildStatus(JSON.parse(readFileSync(file,'utf8')));}

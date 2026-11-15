@@ -19,6 +19,8 @@ test('Cargo artifacts bind arbitrary binary paths to source targets without nami
   for(const value of [{...evidence(),version:2},{...evidence(),status:-1},{...evidence(),status:256},{...evidence(),status:null}])
     assert.throws(()=>testBuildStatus(value),/invalid Cargo completion/);
   const targets=testArtifactTargets(evidence(),'/source');
+  const current={...evidence(),version:2,buildNamespace:'/source/target',buildScripts:[]};
+  assert.equal(testBuildStatus(current),0);assert.deepEqual(testArtifactTargets(current,'/source'),targets);
   assert.deepEqual(targets.get(artifact.executable),{package:'pkg-id',name:'integration',kind:['test'],source:'crate/tests/integration.rs'});
   assert.throws(()=>testArtifactTargets({...evidence(),status:7},'/source'),/incomplete Cargo/);
   assert.throws(()=>testArtifactTargets({...evidence(),buildFinished:false},'/source'),/incomplete Cargo/);
