@@ -17597,6 +17597,13 @@
         "imports": [],
         "assets": []
       }
+    },
+    {
+      "source": "tooling/publication/tests/publication.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
     }
   ]
 }
