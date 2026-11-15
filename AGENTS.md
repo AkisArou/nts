@@ -147,7 +147,11 @@ and bisect against `verified`. Stop it only with
 (`nts-full-check-bench`) and its hourly count (`nts-full-check-count.timer`)
 are units of their own, stopped by name the same way, and a restarted
 controller adopts a records or benchmarks unit still running. A tool that
-keeps a folder in `~/.cache` adds it to `tooling/full-check/keep.json`.
+keeps a folder in `~/.cache` adds it to `tooling/full-check/keep.json`, except
+issue-named scratch: `nts-scratch/<N>` and `nts-<N>-scratch` are kept while
+issue N is open or a committed record cites them. Do not add per-issue rows.
+Unknown issue or citation state keeps the folder by name. Closed, uncited
+issue folders are reported only; deleting them awaits the user's decision.
 
 **Tests and benchmarks land without records** (user, 2026-11-05 and 11-06).
 Every record check lists a case that has no row yet as pending and does not

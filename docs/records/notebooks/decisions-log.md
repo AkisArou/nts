@@ -3004,3 +3004,13 @@ drain, and release it in finally. Separate versioned temporary state preserves
 older build writers' schema; all new capacity decisions include live temporary
 promises. Owner death reclaims an abandoned claim. Resource fixtures pass their
 own complete capacity namespace rather than discovering the machine's pool.
+
+## Issue scratch retention is derived (11-15)
+
+Per-task keep.json rows made otherwise independent landings conflict. Issue-named
+scratch now derives retention from open issue state or a path citation in committed
+records on main. Unknown observations keep the folder by name. Closed, uncited
+folders are reported after the existing grace period; deleting them remains held
+for the user. Non-issue exceptions stay explicit. The same change corrects the
+full-check and pinned-input writers and declares inner logs and Chromium bus
+scratch through their existing retention kinds.

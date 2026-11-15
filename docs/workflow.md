@@ -832,14 +832,21 @@ the tooling strict checker owns the source's type checking.
   (`tooling/full-check/count.ts`) is red when a branch is named by no open
   issue and not in [`plan.md`](plan.md), a worktree is outside the pool and no task names its
   path, or `~/.cache` holds an nts folder that `tooling/full-check/keep.json`
-  does not name with its reason. Rules alone let 1,364 branches, 185
+  does not name with its reason. Issue-named scratch (`nts-scratch/<N>` and
+  `nts-<N>-scratch`) needs no per-issue row: an open issue or a literal path
+  citation in committed `docs/records/` on main keeps it. Unknown issue or
+  citation state keeps the folder and names the observation failure. Closed,
+  uncited folders are reported after the scratch grace period; they are never
+  placed in the automatic removal list. Non-issue exceptions remain explicit.
+  Rules alone let 1,364 branches, 185
   worktrees and 120 GB of evidence folders pile up by 11-06; a red step does
   not.
 - **The full check removes four kinds of leftover itself,** each hour before
   it counts: what a stopped run left in a tool's scratch root past that
   root's age in `keep.json`, with nothing inside it changed since; its own
   pins of commits that are neither `main` nor `verified`, a day old and named
-  by no task; the logs of gates run by hand (`~/.cache/nts-gate/runs`)
+  by no task; the logs of gates run by hand (`~/.cache/nts-gate/runs`) and
+  inner runs (`~/.cache/nts-inner`)
   past three days, with nothing inside them changed for those three days;
   and an empty nts slice bound to no active unit, stopped by name.
   Everything else the count only reports.
@@ -1619,3 +1626,9 @@ the first node task.
   requiring native planning. A source-owned population change deletes the
   stale fixture record. Independent completed benchmark updates survive
   another case's incomplete measurement without hiding that failure.
+
+- **Issue scratch retention is derived.** Open issue state and committed-main
+  record citations keep issue-named scratch without per-task keeper edits.
+  Missing observations keep it by name; closed uncited folders are reported,
+  with deletion held for the user
+  ([log](records/notebooks/decisions-log.md#issue-scratch-retention-is-derived-11-15)).

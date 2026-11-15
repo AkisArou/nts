@@ -41,6 +41,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
+import {dataDirectory} from "../gate/reader-inputs/main.ts";
+
+const RECORD_DIRECTORY=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
 
 type FolderStat = (path: string) => { isDirectory(): boolean; isSymbolicLink(): boolean; mtimeMs: number };
 
@@ -73,6 +76,8 @@ export type CountInput = {
   pulls: Pull[] | Unavailable;
   /** The numbers of GitHub's open issues, or why they could not be read. */
   issues: number[] | Unavailable;
+  /** Issue scratch paths cited by committed records on the selected main. */
+  recordCitations: string[] | Unavailable;
   worktrees: Worktree[];
   /** The shared checkout, ~/Projects/nts. */
   shared: string;
@@ -207,23 +212,27 @@ export type Keep =
   | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
   | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
   | { kind: "scratch"; writer: string; days?: number }
-  | { kind: "folders"; why: string; folders: Record<string, Keep> };
+  | { kind: "folders" | "issue-scratch"; why: string; folders: Record<string, Keep> };
 
 export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
 
 export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, Keep>;
   const check = (name: string, keep: Keep) => {
-    if (!["kept", "pool", "pins", "runs", "logs", "scratch", "folders"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
+    if (!["kept", "pool", "pins", "runs", "logs", "scratch", "folders", "issue-scratch"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
     if (keep.kind === "scratch" && !keep.writer) throw new Error(`${file}: the scratch root ${name} names no writer`);
     if (keep.kind !== "scratch" && !keep.why) throw new Error(`${file}: ${name} does not say why it is kept`);
-    if (keep.kind === "folders") for (const [child, inner] of Object.entries(keep.folders)) check(`${name}/${child}`, inner);
+    if (keep.kind === "folders" || keep.kind === "issue-scratch") for (const [child, inner] of Object.entries(keep.folders)) {
+      if(keep.kind==='issue-scratch'&&/^[0-9]+$/.test(child))throw Error(`${file}: ${name}/${child} is kept by issue state or committed record citation, not a keep.json row`);
+      check(`${name}/${child}`, inner);
+    }
   };
   for (const [name, keep] of Object.entries(value)) check(name, keep);
   return value;
 }
 
-export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string; folderStat?: FolderStat };
+export type Context = { cache: string; main: string | null; verified: string | null; held: readonly string[]; now: number; root: string; plan: string; folderStat?: FolderStat;
+  issues:CountInput['issues'];recordCitations:CountInput['recordCitations'] };
 const days = (ms: number) => (ms / DAY).toFixed(1);
 const display = (path: string, context: Context) => `~/.cache/${relative(context.cache, path)}`;
 /** "3 folders, 1.5 to 9.0 days old (a, b, c)": a group of leftovers as one line, its first names shown. */
@@ -263,7 +272,7 @@ function fullCheckPin(path: string): boolean {
   catch { return false; }
 }
 
-function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Removable[]): string[] {
+function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Removable[],notes:string[]): string[] {
   const at = relative(context.cache, entry.path);
   const lines: string[] = [];
   if ("writer" in keep && keep.writer && !writerNames(context.root, keep.writer, at)) {
@@ -313,10 +322,14 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Remo
       break;
     }
     case "folders":
+    case "issue-scratch":
       for (const child of children) {
+        if(keep.kind==='issue-scratch'&&/^[1-9][0-9]*$/.test(child.name)){
+          issueScratch(child,Number(child.name),context,lines,notes);continue;
+        }
         const inner = keep.folders[child.name];
         if (!inner) lines.push(`${display(child.path, context)}: kept by no entry of keep.json under ${entry.name}/`);
-        else lines.push(...judgeFolder(child, inner, context, removable));
+        else lines.push(...judgeFolder(child, inner, context, removable,notes));
       }
       break;
   }
@@ -345,12 +358,30 @@ function nodeTestRoots(input: CountInput, context: Context): string[] {
   return left.length ? [`~/.cache/n<pid>: ${aged(left, context)}, NODE_TEST_DIR roots left by tooling/conformance/node-environment.ts; a runner removes its own`] : [];
 }
 
-function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[]): void {
-  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat };
+/** Closed issue folders are reported only. They never enter the sweep's
+ * removal list: deleting this kind awaits the user's decision. */
+function issueScratch(entry:Entry,issue:number,context:Context,red:string[],notes:string[]):void{
+  const name=relative(context.cache,entry.path);
+  if(!unavailable(context.recordCitations)&&context.recordCitations.includes(name))return;
+  if(!unavailable(context.issues)&&context.issues.includes(issue))return;
+  if(unavailable(context.issues)||unavailable(context.recordCitations)){
+    const reasons=[...(unavailable(context.issues)?['issue state: '+context.issues.error]:[]),
+      ...(unavailable(context.recordCitations)?['committed record citations: '+context.recordCitations.error]:[])];
+    notes.push(`kept ${display(entry.path,context)}: retention not counted (${reasons.join('; ')})`);return;
+  }
+  if(context.now-entry.mtimeMs<=DAY)return;
+  red.push(`${display(entry.path,context)}: issue #${issue} is not open and no committed record cites it; ${days(context.now-entry.mtimeMs)} days old; deletion awaits the user's decision`);
+}
+
+function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[],notes:string[]): void {
+  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, held: input.held ?? [], now: input.now, root: input.root, plan: input.plan, folderStat: input.folderStat,
+    issues:input.issues,recordCitations:input.recordCitations };
   for (const entry of folders(input.cache, input.folderStat).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
+    const legacy=/^nts-([1-9][0-9]*)-scratch$/.exec(entry.name);
+    if(legacy){issueScratch(entry,Number(legacy[1]),context,red,notes);continue;}
     const rule = keep[entry.name];
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
-    else red.push(...judgeFolder(entry, rule, context, removable));
+    else red.push(...judgeFolder(entry, rule, context, removable,notes));
   }
   red.push(...nodeTestRoots(input, context));
 }
@@ -396,7 +427,7 @@ export function count(input: CountInput, keep: Record<string, Keep> = readKeep()
   const red: string[] = [], notes: string[] = [], removable: Removable[] = [], stoppable: Stoppable[] = [];
   branchLines(input, red, notes);
   worktreeLines(input, red);
-  cacheLines(input, keep, red, removable);
+  cacheLines(input, keep, red, removable,notes);
   sliceLines(input, red, notes, stoppable);
   return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, removable, stoppable };
 }
@@ -494,6 +525,29 @@ export function stopSlices(stoppable: readonly Stoppable[]): string[] {
 // ---------------------------------------------------------------------------
 // What the machine holds, read without changing anything.
 // ---------------------------------------------------------------------------
+/** Literal record citations have a path boundary, so issue 7610 cannot keep
+ * 761. A relative path names an input inside the folder; absolute and home
+ * spellings may also name the folder itself. */
+export function scratchRecordCitations(text:string,cache:string):string[]{
+  const found=new Set<string>(),prefixes=[resolve(cache)+'/', '~/.cache/'];
+  for(const match of text.matchAll(/nts-scratch\/[1-9][0-9]*|nts-[1-9][0-9]*-scratch/g)){
+    const path=match[0],at=match.index,next=text[at+path.length];
+    const folder=prefixes.some(prefix=>at>=prefix.length&&text.startsWith(prefix,at-prefix.length));
+    if(next==='/'||folder&&(next===undefined||/[\s`"'<>),;:\]}.]/.test(next)))found.add(path);
+  }
+  return [...found].sort();
+}
+
+/** One Git grep over immutable main blobs; working edits cannot manufacture
+ * retention. Unknown Git state keeps issue folders through the decision API. */
+export function readScratchRecordCitations(repo:string,cache:string,revision:string):string[]|Unavailable{
+  const result=spawnSync('git',gitArguments(['grep','--no-color','--no-textconv','-I','-h','-E',
+    'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch',revision,'--',RECORD_DIRECTORY]),
+    {cwd:repo,encoding:'utf8',maxBuffer:1<<26,env:{...process.env,GIT_OPTIONAL_LOCKS:'0'}});
+  if(result.error||result.status!==0&&result.status!==1)return {error:(result.error?.message??result.stderr.trim())||'git grep exit '+result.status};
+  return scratchRecordCitations(result.stdout,cache);
+}
+
 function read(command: string, args: string[], cwd: string): { ok: true; out: string } | { ok: false; error: string } {
   const r = spawnSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
   if (r.error || r.status !== 0) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };
@@ -548,17 +602,19 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   const slices = readSlices(repo);
+  const main=sha('main');
   return {
     plan: git(["show", "main:"+relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../docs/plan.md',import.meta.url)))]),
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),
     remote: remote.ok ? remote.out.split("\n").filter(Boolean).map(line => line.split("\t")[1]!.slice("refs/heads/".length)) : { error: remote.error },
     pulls: pulls.ok ? JSON.parse(pulls.out) as Pull[] : { error: pulls.error },
     issues: issues.ok ? (JSON.parse(issues.out) as { number: number }[]).map(issue => issue.number) : { error: issues.error },
+    recordCitations:main?readScratchRecordCitations(repo,cache,main):{error:'main revision unavailable'},
     worktrees: parseWorktrees(git(["worktree", "list", "--porcelain"])),
     shared: dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim()),
     cache,
     root: git(["rev-parse", "--show-toplevel"]).trim(),
-    main: sha("main"),
+    main,
     verified: sha("verified"),
     slices: unavailable(slices) ? slices : slices.slices,
     activeUnits: unavailable(slices) ? [] : slices.activeUnits,

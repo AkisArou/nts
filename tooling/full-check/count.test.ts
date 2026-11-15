@@ -8,8 +8,10 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import {fileURLToPath} from 'node:url';
 import { test, type TestContext } from "node:test";
-import { count, parseWorktrees, planNames, readKeep, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import { count, parseWorktrees, planNames, readKeep, readScratchRecordCitations, scratchRecordCitations, stopSlices, sweep, writerNames, type CountInput, type Keep, type Slice } from "./count.ts";
+import {scratchRepo} from '../landing/scratch-repo.ts';
 import { spawnTest, waitFor } from "../gate/test-wait.ts";
 import { bindsToProperties } from "../gate/scopes/bound-slice.ts";
 import { spawn } from "node:child_process";
@@ -128,6 +130,7 @@ function input(t: TestContext, overrides: Partial<CountInput> = {}): CountInput 
       { number: 316, headRefName: "chatgpt/also-stacked", baseRefName: "chatgpt/unnamed-base", isCrossRepository: false },
     ],
     issues: [512],
+    recordCitations: [],
     worktrees: [
       { path: "/home/u/Projects/nts", branch: "refs/heads/main" },
       { path: join(cache, "nts-pool/1"), branch: "refs/heads/compiler/a-task" },
@@ -390,6 +393,67 @@ test("keep.json is well formed, and a writer is matched by any of the ways the t
   assert.throws(() => readKeep(bad), /names no writer/);
   writeFileSync(bad, JSON.stringify({ "nts-x": { kind: "folders", why: "w", folders: { y: { kind: "tidy", why: "z" } } } }));
   assert.throws(() => readKeep(bad), /nts-x\/y has an unknown kind tidy/);
+  writeFileSync(bad, JSON.stringify({"nts-scratch":{kind:'issue-scratch',why:'issues',folders:{'788':{kind:'kept',why:'task'}}}}));
+  assert.throws(()=>readKeep(bad),/nts-scratch\/788 is kept by issue state or committed record citation/);
+});
+
+const ISSUE_KEEP:Record<string,Keep>={'nts-scratch':{kind:'issue-scratch',why:'issues',folders:{agent:{kind:'kept',why:'non-issue exception'}}}};
+function issueFixture(t:TestContext){
+  const cache=mkdtempSync(join(tmpdir(),'count-issues-'));t.after(()=>rmSync(cache,{recursive:true,force:true}));
+  const folder=(name:string,age=2)=>{const path=join(cache,name);mkdirSync(path,{recursive:true});const when=new Date(NOW-age*DAY);utimesSync(path,when,when);return path;};
+  const value=input(t,{cache,local:['main'],remote:['main'],pulls:[],issues:[],recordCitations:[],worktrees:[],slices:[],activeUnits:[]});
+  return {cache,folder,value};
+}
+
+test('issue scratch keeps open issues and cited closed issues, and reports closed uncited folders without deleting them',t=>{
+  const f=issueFixture(t);for(const name of ['nts-scratch/42','nts-scratch/43','nts-scratch/44','nts-scratch/agent','nts-618-scratch'])f.folder(name);
+  const result=count({...f.value,issues:[42],recordCitations:['nts-scratch/43']},ISSUE_KEEP);
+  assert.equal(result.red.length,2,result.red.join('\n'));
+  assert.ok(result.red.some(line=>line.includes('nts-scratch/44: issue #44 is not open')));
+  assert.ok(result.red.some(line=>line.includes('nts-618-scratch: issue #618 is not open')));
+  assert.deepEqual(result.removable,[],'closed-issue deletion is not authorized');
+  assert.deepEqual(sweep(result.removable,f.cache),[]);
+  for(const name of ['nts-scratch/42','nts-scratch/43','nts-scratch/44','nts-618-scratch'])assert.ok(existsSync(join(f.cache,name)));
+  assert.equal(count({...f.value,issues:[42,43,44,618]},ISSUE_KEEP).verdict,'PASS','two new tasks need no keeper edit');
+  assert.equal(count({...f.value,recordCitations:['nts-scratch/42','nts-scratch/43','nts-scratch/44','nts-618-scratch']},ISSUE_KEEP).verdict,'PASS');
+});
+
+test('unknown issue or record state keeps issue scratch by name, and the grace period is observation-only',t=>{
+  const f=issueFixture(t),path=f.folder('nts-scratch/45');
+  for(const missing of [{issues:{error:'gh offline'}},{recordCitations:{error:'main unreadable'}}]){
+    const result=count({...f.value,...missing},ISSUE_KEEP);
+    assert.equal(result.red.length,0);assert.deepEqual(result.removable,[]);assert.equal(result.verdict,'INSTRUMENT');
+    assert.ok(result.notes.some(line=>line.includes('kept ~/.cache/nts-scratch/45')&&/gh offline|main unreadable/.test(line)),result.notes.join('\n'));
+  }
+  const when=new Date(NOW-DAY);utimesSync(path,when,when);
+  assert.equal(count(f.value,ISSUE_KEEP).verdict,'PASS','one-day grace retains a newly closed folder');
+  assert.equal(count({...f.value,now:NOW+1},ISSUE_KEEP).red.length,1);
+});
+
+test('record citation paths retain exact issue boundaries and both issue folder layouts',()=>{
+  const cache='/home/owner/.cache';
+  const text=['nts-scratch/12/raw.json','nts-scratch/120/raw.json',cache+'/nts-scratch/13`','~/.cache/nts-scratch/14)',
+    cache+'/nts-15-scratch`','nts-16-scratch/file','nts-scratch/17junk/file','nts-scratch/018/file','nts-scratch/19'].join('\n');
+  assert.deepEqual(scratchRecordCitations(text,cache),['nts-15-scratch','nts-16-scratch','nts-scratch/12','nts-scratch/120','nts-scratch/13','nts-scratch/14']);
+});
+
+test('record retention reads immutable main blobs, independently of working edits and another committed branch',t=>{
+  const s=scratchRepo(t,'count-record-citations'),cache=join(s.dir,'cache');
+  s.commit({'docs/records/receipt.md':'evidence nts-scratch/42/raw.json\n'},'main record');
+  const main=s.git(['rev-parse','main']).trim();
+  writeFileSync(join(s.root,'docs/records/receipt.md'),'dirty nts-scratch/43/raw.json\n');
+  assert.deepEqual(readScratchRecordCitations(s.root,cache,main),['nts-scratch/42']);
+  s.git(['switch','-qc','candidate']);s.commit({'docs/records/receipt.md':'candidate nts-scratch/44/raw.json\n'},'candidate record');
+  assert.deepEqual(readScratchRecordCitations(s.root,cache,s.git(['rev-parse','main']).trim()),['nts-scratch/42']);
+  const missing=readScratchRecordCitations(s.root,cache,'f'.repeat(40));assert.ok(!Array.isArray(missing)&&missing.error.includes('unable to resolve revision'));
+});
+
+test('the live keeper rows name their current writers without per-issue scratch entries',()=>{
+  const keep=readKeep(),root=fileURLToPath(new URL('../..',import.meta.url)),scratch=keep['nts-scratch'];
+  assert.ok(scratch?.kind==='issue-scratch');assert.ok(Object.keys(scratch.folders).every(name=>!/^[0-9]+$/.test(name)));
+  for(const name of ['nts-full-check','nts-pinned-inputs','nts-inner','nts-chromium-bus']){
+    const row=keep[name];assert.ok(row&&'writer' in row&&row.writer,name);assert.ok(writerNames(root,row.writer,name),name+' writer must own its current path');
+  }
 });
 
 test("the count lists the kinds of folder leftover the full check removes itself, and only those", t => {
