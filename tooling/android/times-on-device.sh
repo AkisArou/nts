@@ -70,6 +70,10 @@ sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 # passes as absolute paths into the checkout for exactly this reason, and it
 # was missed because those two are named in the note and this one is not.
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
+# The selected reference source must match the one committed corpus pin.
+if [ -d "$awfy" ]; then
+  node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+fi
 
 command -v adb > /dev/null 2>&1 || { echo "SKIP: no adb" >&2; exit 0; }
 adb get-state > /dev/null 2>&1 || { echo "SKIP: no device" >&2; exit 0; }

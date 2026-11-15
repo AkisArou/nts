@@ -67,6 +67,10 @@ work=${NTS_AOT_WORK:-$HOME/.cache/nts-android}/aot.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 package=org.nts.benchprobe
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
+# The selected reference source must match the one committed corpus pin.
+if [ -d "$awfy" ]; then
+  node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+fi
 
 [ -n "$sdk" ] || { echo "SKIP: no ANDROID_HOME" >&2; exit 0; }
 plat=$sdk/platforms/android-29/android.jar

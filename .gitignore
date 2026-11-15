@@ -51,14 +51,10 @@ node_modules
 #   git -C third_party/typescript checkout --detach FETCH_HEAD
 /third_party/typescript
 
-# Are We Fast Yet, cloned sparsely. Not vendored, for the same reason: it is
-# somebody else's repository, and the TypeScript port in `benchmarks/awfy` is ours.
-# What the clone is for is the *fidelity gate* -- running their `.js` and our
-# `.ts` on node and comparing -- and the reference C++ column.
-#   git clone --depth 1 --filter=blob:none --sparse \
-#     https://github.com/smarr/are-we-fast-yet third_party/are-we-fast-yet
-#   cd third_party/are-we-fast-yet && git sparse-checkout set \
-#     benchmarks/JavaScript 'benchmarks/C++' docs
+# Are We Fast Yet's C++ and Java references, at tooling/bootstrap/awfy.pin.
+# Prepared and verified by: node tooling/bootstrap/awfy.ts --acquire
+# Existing checkouts are verified without moving them; each tree's linker
+# checks the shared checkout against that tree's own pin before linking it.
 /third_party/are-we-fast-yet
 
 # Node.js, cloned sparsely for the Node compatibility profile. Not vendored,

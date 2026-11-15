@@ -106,6 +106,10 @@ JAVA
 # which is the same shape as fixing one of two drivers in one heredoc, earlier
 # the same night. A fix belongs to the family, not to the file it was found in.
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
+# The selected reference source must match the one committed corpus pin.
+if [ -d "$awfy" ]; then
+  node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+fi
 
 # **The fourth cell.** `bytes-on-device.sh` gives ours on HotSpot and ours on
 # ART; this gave the reference on ART and nothing on HotSpot, so the table had

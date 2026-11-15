@@ -578,6 +578,15 @@ test('URL-host provenance owes offline freshness instead of executing its backen
     assert.ok(gateSteps(owed([{path,added:false}])).includes('unicode-freshness'),path);
 });
 
+test('the AWFY data pin owes its benchmark reference readers',()=>{
+  for(const added of [false,true]){
+    const rules=owed([{path:'tooling/bootstrap/awfy.pin',added}]);
+    assert.ok(!rules.some(rule=>rule.full),'the declared pin is data, not an unplaced driver');
+    superset(gateSteps(rules),['benches'],'the Rust reference reader embeds the same pin');
+  }
+  assert.ok([...covering(stepInputs(),'tooling/bootstrap/awfy.pin')].includes('tooling'),'real acquisition/link controls read the pin');
+});
+
 test("bundled native dependencies owe their executed ELF and algorithm guards", () => {
   for (const path of ["build/node-deps/recipes.json", "tooling/bootstrap/node.ts", "tooling/bootstrap/node_recipe.py", "runtime/node/crypto/dh.c", "tooling/conformance/c-tests.sh"]) {
     const rules = owed([{path,added:true}]);

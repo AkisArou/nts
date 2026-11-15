@@ -5,6 +5,30 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 
 const SOURCES: [&str; 2] = ["ref.cpp", "ref.java"];
+const AWFY_PIN: &str = include_str!("../../bootstrap/awfy.pin");
+
+/// The same data pin used by bootstrap and the candidate's linker. This runs
+/// once in build setup, outside measured cells and per-row build stages.
+pub(super) fn verify_awfy(root: &Utf8Path) -> Result<()> {
+    let corpus = root.join("third_party/are-we-fast-yet");
+    if !corpus.exists() {
+        return Ok(());
+    }
+    let output = std::process::Command::new("node")
+        .arg(root.join("tooling/bootstrap/awfy.ts"))
+        .arg("--verify")
+        .arg(corpus.as_str())
+        .args(["--expected-pin", AWFY_PIN.trim()])
+        .output()
+        .context("verifying the Are We Fast Yet corpus")?;
+    if !output.status.success() {
+        return Err(crate::build::NotMeasured(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
+    }
+    Ok(())
+}
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum Origin {
@@ -27,6 +51,16 @@ impl Origin {
                     "reference upstream must be an HTTPS URL"
                 );
                 ensure!(seen.insert(url), "duplicate reference upstream");
+                if let Some(path) = url
+                    .strip_prefix("https://github.com/smarr/are-we-fast-yet")
+                    .filter(|path| path.is_empty() || path.starts_with('/'))
+                {
+                    ensure!(
+                        path.starts_with(&format!("/blob/{}/", AWFY_PIN.trim())),
+                        "Are We Fast Yet reference upstream must name corpus pin {}: {url}",
+                        AWFY_PIN.trim()
+                    );
+                }
             }
         }
         Ok(())
@@ -181,6 +215,20 @@ mod tests {
             ] {
                 declare(root, origin);
                 assert!(validate(root).is_err());
+            }
+        });
+    }
+    #[test]
+    fn awfy_provenance_uses_the_acquired_corpus_pin() {
+        fixture(|root| {
+            for (revision, valid) in [(AWFY_PIN.trim(), true), ("main", false)] {
+                declare(
+                    root,
+                    &format!(
+                        "{{\"kind\":\"third-party\",\"upstream\":[\"https://github.com/smarr/are-we-fast-yet/blob/{revision}/benchmarks/C++/src/bounce.h\"]}}"
+                    ),
+                );
+                assert_eq!(validate(root).is_ok(), valid);
             }
         });
     }

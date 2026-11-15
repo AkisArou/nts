@@ -191,7 +191,6 @@ node tooling/bootstrap/typescript.ts
 # inlined into the cases that use them. The two reference columns are what this
 # clone is for.
 say "third_party/are-we-fast-yet"
-clone_sparse third_party/are-we-fast-yet https://github.com/smarr/are-we-fast-yet "" \
-  'benchmarks/C++' benchmarks/Java docs
+node tooling/bootstrap/awfy.ts --acquire
 
 say "done"

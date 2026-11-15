@@ -3098,3 +3098,10 @@ checker CPU. One explicit per-row recorder carries optional versioned details
 through success, failure and journal recovery. Old immutable records and
 throughput verdicts stay unchanged.
 
+## AWFY reference corpus is pinned (11-15)
+
+The reference corpus uses one revision data file beside acquisition. Rust reads
+it through `include_str!`, TypeScript reads it directly, and bootstrap/linking
+and Android/JVM reference routes use the same verifier. Existing shared clones
+are never moved. The provenance audit requires AWFY URLs to name the same pin,
+so the corpus and recorded reference origins cannot drift independently.

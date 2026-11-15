@@ -1137,6 +1137,14 @@ the first node task.
 
 ## Decisions
 
+- **AWFY reference inputs have one corpus pin.** Bootstrap, linking and reference
+  readers consume `tooling/bootstrap/awfy.pin`. Acquisition checks out that exact
+  revision; an existing shared checkout is verified without moving it, and a
+  mismatch or dirty checkout refuses by name. Rust embeds the data pin and asks
+  the same verifier during build setup. AWFY provenance URLs must name the pin.
+  A pin edit reaches its benchmark readers through their data declarations
+  ([log](records/notebooks/decisions-log.md#awfy-reference-corpus-is-pinned-11-15)).
+
 - **Load diagnosis uses the real test owners.** An on-demand tooling round
   shares one owner-bound quota between ready load and the real collector and
   CLI harness. It adds no gate step or elapsed-time verdict. Failures are

@@ -15,6 +15,7 @@ pub(super) struct Session {
 }
 impl Session {
     pub(super) fn new(root: &Utf8Path) -> Result<Self> {
+        crate::references::verify_awfy(root)?;
         let directory = crate::scratch::ScratchDir::path_in_target("bench-build-usage");
         std::fs::create_dir(&directory)?;
         let output = Command::new("node")

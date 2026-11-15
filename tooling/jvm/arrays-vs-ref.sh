@@ -45,6 +45,10 @@ nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 nts=${NTS_BIN:-$root/target-jvm/release/nts}
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
+# The selected reference source must match the one committed corpus pin.
+if [ -d "$awfy" ]; then
+  node "$root/tooling/bootstrap/awfy.ts" --verify-java "$awfy" || exit $?
+fi
 work=${NTS_WORK:-$HOME/.cache/nts-arrays}/$$
 mkdir -p "$work/stub"
 trap 'rm -rf "$work"' EXIT INT TERM

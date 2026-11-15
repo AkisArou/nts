@@ -23,6 +23,12 @@ case $mode in
   *) echo "link.sh: the use is gate or work, not $mode" >&2; exit 2 ;;
 esac
 
+# Verify with the candidate's pin before creating any corpus link. Acquisition
+# never moves a shared checkout beneath another reader.
+if [ -e "$root/third_party/are-we-fast-yet" ]; then
+  node "$tree/tooling/bootstrap/awfy.ts" --verify "$root/third_party/are-we-fast-yet"
+fi
+
 # The candidate's own pin selects an already acquired immutable Node pair.
 # Its catalog belongs to that tree too, including either endpoint of a range.
 # Neither a gate tree nor a work tree may borrow the caller's other release.
