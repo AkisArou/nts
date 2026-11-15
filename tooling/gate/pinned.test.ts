@@ -32,10 +32,10 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     });
     const git = (...args: string[]) => execFileSync("git", gitArguments(args), { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
-    copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/inputs/linker.ts"], root);
+    copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/inputs/linker.ts","tooling/gate/affinity/main.ts"], root);
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
-    writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
+    writeFileSync(join(root, "tooling/gate/affinity/main.ts"), "");
     writeFileSync(join(root, "tooling/inputs/link.sh"), 'printf owner > "' + join(directory, "marker") + '"\n');
     git("init", "-q");
     git("add", ".");
@@ -66,12 +66,9 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   const directory = testScratch(t, "pinned-admission"), root = join(directory, "repo"), tree = join(directory, "tree");
   const target = join(directory, "target"), bin = join(directory, "bin");
   mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/cargo.ts"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/cargo.ts","tooling/gate/affinity/main.ts"], root);
   writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
-  const affinity=join(root,"tooling/gate/affinity.ts"), originalAffinity=readFileSync(affinity,"utf8");
-  const entry='if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)';
-  assert.equal(originalAffinity.split(entry).length,2);
-  writeFileSync(affinity,originalAffinity.replace(entry,'if (false)'));
+  writeFileSync(join(root,'tooling/gate/affinity/main.ts'),'');
   writeFileSync(join(root, "tooling/inputs/link.sh"), "exit 0\n");
   const owned = ownMemory(join(directory, "machine"));
   // Model the actual tooling parent even in a standalone focused invocation.

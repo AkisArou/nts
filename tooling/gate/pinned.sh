@@ -45,19 +45,19 @@ pinned_launcher=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # A physical P-core (both threads, 4-5) belongs to timed measurements.
 # Intersect with our inherited affinity: an E-core-only caller stays there.
 # Pin this shell before any build, so every descendant inherits the mask.
-gate_cpus=$(node "$(dirname -- "$0")/affinity.ts" --gate-cpus "$$")
+gate_cpus=$(node "$(dirname -- "$0")/affinity/main.ts" --gate-cpus "$$")
 if [ -n "$gate_cpus" ]; then
   # An environment marker can only demand verification, never supply proof.
   # If re-entry did not get the actual ceiling, refuse instead of recursing.
   if [ -n "${NTS_GATE_SCOPE_EXPECTED:-}" ]; then
-    node "$(dirname -- "$0")/affinity.ts" --verify-ceiling "$NTS_GATE_SCOPE_EXPECTED" "$$"
+    node "$(dirname -- "$0")/affinity/main.ts" --verify-ceiling "$NTS_GATE_SCOPE_EXPECTED" "$$"
   fi
-  gate_scope=$(node "$(dirname -- "$0")/affinity.ts" --scope-mechanism "$gate_cpus" "$$")
+  gate_scope=$(node "$(dirname -- "$0")/affinity/main.ts" --scope-mechanism "$gate_cpus" "$$")
   case "$gate_scope" in
     scope:*)
       echo "gate: cpuset scope $gate_cpus; $gate_scope"
       export NTS_GATE_SCOPE_EXPECTED="$gate_cpus"
-      exec node "$(dirname -- "$0")/affinity.ts" --launch-scope "$gate_cpus" sh "$0" "$@"
+      exec node "$(dirname -- "$0")/affinity/main.ts" --launch-scope "$gate_cpus" sh "$0" "$@"
       ;;
   esac
   taskset -pc "$gate_cpus" "$$" >/dev/null

@@ -39,7 +39,7 @@ test("counted.sh's default perf child inherits the restriction, with an explicit
     copyFileSync(new URL("../../runtime/jvm/test-vm-flags.txt", import.meta.url), join(dir, "runtime/jvm/test-vm-flags.txt"));
     const counted = join(dir, "tooling/bench/counted.sh");
     copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
-    copyModuleClosure(["tooling/gate/affinity.ts"],dir);
+    copyModuleClosure(["tooling/gate/affinity/main.ts"],dir);
     writeFileSync(join(dir, "target/bench/probe.jvm/Case.java"), "return nts.gen.Program.work(in0);\nprivate static volatile double in0 = 1;\n");
     writeFileSync(join(dir, "bin/javac"), "#!/bin/sh\nexit 0\n");
     writeFileSync(join(dir, "bin/perf"), `#!/bin/sh
@@ -135,7 +135,7 @@ test("a failed actual scope launch is returned once, never retried as a taskset 
     const fake = join(dir, "systemd-run");
     writeFileSync(fake, '#!/bin/sh\necho attempt >> "$TEST_SCOPE_CALLS"\nexit 19\n');
     chmodSync(fake, 0o755);
-    const result = spawnSync(process.execPath, [new URL("./affinity.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
+    const result = spawnSync(process.execPath, [new URL("./affinity/main.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
       env: { ...testEnvironment(), PATH: `${dir}:${process.env.PATH}`, TEST_SCOPE_CALLS: calls }, encoding: "utf8",
     });
     assert.equal(result.status, 19, result.stderr);
@@ -187,4 +187,14 @@ test("pinned.sh restricts its own entry before invoking git or a build", { skip:
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the affinity command retains CPU selection, scope reporting and ceiling exit codes', {skip:process.platform!=='linux'},t=>{
+  const entry=new URL('./affinity/main.ts',import.meta.url).pathname,pid=process.pid,cpus=gateCpus(inheritedCpus(pid));
+  const run=(args:string[])=>spawnSync(process.execPath,[entry,...args],{env:fixtureEnvironment(t),encoding:'utf8'});
+  const selected=run(['--gate-cpus',String(pid)]);assert.equal(selected.status,0,selected.stderr);assert.equal(selected.stdout,cpus+'\n');
+  const preferred=run(['--default-cpus',cpus,String(pid)]);assert.equal(preferred.status,0,preferred.stderr);assert.equal(preferred.stdout,defaultCpus(cpus,inheritedCpus(pid))+'\n');
+  const scope=run(['--scope-mechanism',cpus,String(pid)]);assert.equal(scope.status,0,scope.stderr);assert.match(scope.stdout,/^(scope|inherited-cpuset|best-effort):.+\n$/);
+  const verified=run(['--verify-ceiling',cpus,String(pid)]);assert.equal(verified.status,verifyCeiling(cpus,pid)?0:75,verified.stderr);
+  if(verified.status===75)assert.match(verified.stderr,/requested cpuset ceiling is absent/);else assert.equal(verified.stderr,'');
 });

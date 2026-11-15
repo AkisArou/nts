@@ -3348,3 +3348,10 @@ omitted from reproduction; explicit population entries and reproductive roles
 retain their bytes, regardless of visit order. Compiler and Node observations
 remain reproductive. The copier validates full source facts before applying its
 staging projection. Fixtures complete staging before private mutations.
+
+## Affinity library and command ownership (11-15)
+
+Affinity CPU/scope policy stays in its library. The shell argv entry lives in
+its own runAsCommand module, so private setup-command stand-ins preserve the
+real runner's library exports. Flag output, exit codes and lock forwarding keep
+the same owners. Fixtures stage before changing only their command entry.

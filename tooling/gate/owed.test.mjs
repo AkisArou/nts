@@ -1370,3 +1370,9 @@ console.log(JSON.stringify({edit:choose([{path:'docs/projects/ordinary.md',sameM
   assert.ok(value.metadata.observations.some((/** @type {{observation:{kind:string,path:string,value:unknown}}} */ row)=>row.observation.kind==='fileExists'&&row.observation.path.endsWith('/docs/projects/ordinary.md/tsconfig.json')&&row.observation.value===false));
 
 });
+
+test('the affinity command is placed while an undeclared neighbour remains conservative',()=>{
+  const command=owed([{path:'tooling/gate/affinity/main.ts',added:false}]);
+  assert.ok(command.some(rule=>rule.name==='the gate affinity command'));assert.ok(!command.some(rule=>rule.full));
+  assert.ok(owed([{path:'tooling/gate/affinity/undeclared.ts',added:true}]).some(rule=>rule.full));
+});

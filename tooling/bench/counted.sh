@@ -52,7 +52,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # escape it. NTS_CORES is an explicit override for an intentional measurement.
 counted_cpus=${NTS_CORES:-}
 if [ -z "$counted_cpus" ]; then
-  counted_cpus=$(node "$root/tooling/gate/affinity.ts" --default-cpus 8-15 "$$")
+  counted_cpus=$(node "$root/tooling/gate/affinity/main.ts" --default-cpus 8-15 "$$")
 fi
 work=${TMPDIR:-/tmp}/nts-counted.$$
 trap 'rm -rf "$work"' EXIT

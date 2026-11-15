@@ -1256,6 +1256,12 @@ the first node task.
   confer no production exception
   ([log](records/notebooks/decisions-log.md#rust-publication-owns-each-writers-staging-11-15)).
 
+- **Affinity commands have their own entry.** Runner code imports the affinity
+  library; shell launchers execute `tooling/gate/affinity/main.ts`. Fixtures
+  stage both through their actual command roots, then may replace the command
+  without changing library exports or inventing a second module layout.
+
+
 - **Pinned corpora coexist by revision.** AWFY, TypeScript and test262 have
   plain revision data files under tooling/bootstrap. Rust includes those same
   files as constants; TypeScript's definition verifies its native-checker
@@ -1281,6 +1287,7 @@ the first node task.
   before either reference compiler starts. Present corpus cells are unchanged.
   A pin edit reaches its benchmark readers through their data declarations
   ([log](records/notebooks/decisions-log.md#awfy-reference-corpus-is-pinned-11-15)).
+
 
 - **One graph owns three file roles.** Selection retains all input `files`;
   producer identity hashes `placingFiles`; fixture reproduction copies

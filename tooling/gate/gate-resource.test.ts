@@ -35,7 +35,7 @@ test("cpuset scope re-entry preserves the tree-lock descriptor",t=>{
   const held=GateResource.tryAcquire(join(directory,"tree.lock"))!;
   const script=join(directory,"systemd-run");
   writeFileSync(script,`#!${process.execPath}\nrequire('node:fs').fstatSync(8);process.stdout.write('lock descriptor retained');\n`,{mode:0o755});
-  const child=spawnSync(process.execPath,[new URL("../gate/affinity.ts",import.meta.url).pathname,"--launch-scope","0-3,6-31","true"],
+  const child=spawnSync(process.execPath,[new URL("../gate/affinity/main.ts",import.meta.url).pathname,"--launch-scope","0-3,6-31","true"],
     {env:{...held.env(),PATH:`${directory}:${process.env.PATH}`},stdio:held.stdio("pipe")});
   held.close();assert.equal(child.status,0,child.stderr?.toString());assert.match(child.stdout!.toString(),/lock descriptor retained/);
 });

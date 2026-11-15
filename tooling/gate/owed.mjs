@@ -1090,6 +1090,12 @@ export const RULES = [
     arms: [{kind:"valid",asks:"read-only inferred-edge provenance, classification and lossless reproduction",run:"node tooling/gate/reader-census.ts reproduce <output directory>"}],
   },
   {
+    name: "the gate affinity command",
+    when: (/** @type {string} */ p) => p === "tooling/gate/affinity/main.ts",
+    steps: ["tooling"],
+    arms: [{kind:"valid",asks:"the affinity entry preserves its CPU, scope and descriptor handoff contract",run:"node --test tooling/gate/measurement-cpus.test.ts tooling/gate/gate-resource.test.ts"}],
+  },
+  {
     name: "reader input declaration ownership",
     when: (/** @type {string} */ p) => /^tooling\/gate\/reader-inputs\/(?:main\.ts|tsconfig\.json)$/.test(p),
     steps: ["tooling"],
