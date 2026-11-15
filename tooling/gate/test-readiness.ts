@@ -30,14 +30,14 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
       }
       return undefined;
     };
-    const jsonValue=(input:Node,steps=0):boolean=>{
+    const jsonValue=(input:Node,steps=0,allowLiteral=true):boolean=>{
       if(steps>10)return false;const node=resolved(input);
       if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')return true;
       if(ast.isStringLiteralLikeNode(node)){
-        if(!/^\s*[\[{]/.test(node.text))return false;
+        if(!allowLiteral||!/^\s*[\[{]/.test(node.text))return false;
         try{JSON.parse(node.text);return true;}catch{return false;}
       }
-      return ast.isBinaryExpression(node)&&code(node.operatorToken)==='+'&&(jsonValue(node.left,steps+1)||jsonValue(node.right,steps+1));
+      return ast.isBinaryExpression(node)&&code(node.operatorToken)==='+'&&(jsonValue(node.left,steps+1,allowLiteral)||jsonValue(node.right,steps+1,allowLiteral));
     };
     const pathKind=(input:Node,pattern:RegExp,steps=0):boolean=>{
       if(steps>10)return false;const node=resolved(input);
@@ -101,9 +101,11 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     };
     function visit(node:Node):void{
       if(ast.isCallExpression(node)){
+        const target=node.arguments[0],packet=target&&/(?:^|\.)NTS_GATE_STEP_RESULT$/.test(name(target));
+        const destination=target&&render(target),knownDestination=destination!==undefined&&!/__fixture_expression|__generated_fragment/.test(destination);
         if(generated&&node.arguments[0]&&!sealedWrites.has(node)&&
-          (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&!pathKind(node.arguments[0],/\.jsonl$/)&&
-            (jsonValue(node.arguments[1])||pathKind(node.arguments[0],/\.json(?:\.|$)/))||
+          (/^(?:fs|fs\/promises)(?:\.promises)?\.(?:writeFile|write)(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&(packet||!pathKind(node.arguments[0],/\.jsonl$/))&&
+            (packet||pathKind(node.arguments[0],/\.json(?:\.|$)/)||jsonValue(node.arguments[1],0,!knownDestination))||
            (/^(?:fs|fs\/promises)\.createWriteStream$/.test(name(node.expression))||/^(?:fs|fs\/promises)\.open(?:Sync)?$/.test(name(node.expression))&&node.arguments[1]&&render(node.arguments[1])!=='r')&&pathKind(node.arguments[0],/\.json(?:\.|$)/))){
           const line=offset+facts.line(node.pos),source=code(node).replace(/\s+/g,' '),key=line+':'+source;
           if(!seen.has(key)){seen.add(key);found.push({file,line,source});}

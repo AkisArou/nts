@@ -18,8 +18,11 @@ const inspect=(source:string)=>inspectRecordPublications('tooling/fixture.test.t
 test('generated TOML is not JSON while valid JSON bodies and JSON paths remain publications',()=>{
  const staged=(body:string)=>`import {writeFileSync} from 'node:fs';writeFileSync('child.mjs',${JSON.stringify(body)});`;
  assert.deepEqual(inspect(staged(`const fs=require('node:fs');fs.writeFileSync(process.argv[2],'[env]\\nPROBE="poison"\\n');`)),[]);
+ assert.deepEqual(inspect(staged(`const fs=require('node:fs');fs.writeFileSync('config.toml','[1]');`)),[]);
+ assert.deepEqual(inspect(staged(`const fs=require('node:fs');fs.writeFileSync('marker.txt','[]');`)),[]);
  assert.equal(inspect(staged(`const fs=require('node:fs');fs.writeFileSync(process.argv[2],'[{"ready":true}]');`)).length,1);
  assert.equal(inspect(staged(`const fs=require('node:fs');fs.writeFileSync('ready.json','{unfinished');`)).length,1);
+ assert.equal(inspect(staged(`const fs=require('node:fs');fs.writeFileSync(process.env.NTS_GATE_STEP_RESULT,'{unfinished');`)).length,1);
 });
 
 test('script files, inline invocations, aliases and local source helpers reach the publication check',()=>{
