@@ -38,6 +38,7 @@ test('Git fence descriptors follow their indexed owners and retain control-file 
   const installed=describe('installation');
   for(const path of ['packages/one/package.json','packages/one/command.js','packages/one/.gitignore'])assert.ok(installed.runtimeFiles!.includes(path),path);
   assert.ok(!installed.files.includes('packages/one/value.txt'),'workspace code is a consumer input, not an installation input');
+  assert.ok(installed.optionalFiles.some(row=>row.path==='packages/one/.npmrc'&&!row.present),'an importer retains its absent installation configuration');
   assert.ok(!installed.directories.some(row=>row.directory==='packages/one'&&row.kind==='inspection'));
   put('tooling/next.ts','export const value=2;');put('packages/two/package.json','{"name":"two"}');git('add','.');
   assert.ok(describe('producer').runtimeFiles!.includes('tooling/next.ts'));

@@ -19,8 +19,10 @@ export function installationBinPaths(manifestPath:string,text:string):string[]{
  * targets. Importer directories themselves never become status pathspecs. */
 export function installationStatusCandidates(tracked:readonly string[],readManifest:(path:string)=>string):string[]{
   const metadata=tracked.filter(installationSelectionPath);
-  const bins=metadata.filter(path=>path==='package.json'||path.endsWith('/package.json')).flatMap(path=>installationBinPaths(path,readManifest(path)));
-  return [...new Set([...DEPENDENCY_ROOT_INPUTS,...metadata,...bins])].sort();
+  const manifests=metadata.filter(path=>path==='package.json'||path.endsWith('/package.json'));
+  const bins=manifests.flatMap(path=>installationBinPaths(path,readManifest(path)));
+  const configuration=manifests.map(path=>posix.join(posix.dirname(path),'.npmrc'));
+  return [...new Set([...DEPENDENCY_ROOT_INPUTS,...metadata,...configuration,...bins])].sort();
 }
 export function installationStatusPaths(identity:{inputs:readonly {path:string}[];importers:readonly string[]},selectionPaths:readonly string[]=[]):string[]{
   return [...new Set([...identity.inputs.map(row=>row.path),...selectionPaths])].sort();
