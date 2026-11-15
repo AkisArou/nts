@@ -22,6 +22,7 @@ import {gitArguments} from '../gate/git-arguments/main.ts';
 import {assertSealedOracleRun,dependencySealReady} from './oracle-seal/main.ts';
 
 const GATE_LIST=fileInput(new URL('../gate/all.sh',import.meta.url));
+const GATE_RUN=new URL('../gate/run.mjs',import.meta.url);
 const source=resolve(fileURLToPath(new URL('../..',import.meta.url)));
 const mode=process.argv[2];
 if(mode==='--consume'){
@@ -73,7 +74,7 @@ fi
     // run.mjs owns the cold preparation in its reservation, before this step
     // sees the intentionally empty host. The step consumes that exact seal.
     const planned=gateEnvironment(base,{run,standalone:true,oracleRoot:source,owned:{NTS_GATE_RUN_DIR:run,NTS_GATE_STEPS:'tests',...memory,NTS_BIN:fake,NTS_SUITE_BIN:fake,NTS_CHECKERS:'1'}});
-    const result=spawnTest('systemd-run',['--user','--scope','--unit='+unit,'--collect','--quiet','prlimit','--core=0',process.execPath,join(source,'tooling/gate/run.mjs')],{cwd:source,env:planned.env,encoding:'utf8',maxBuffer:16*2**20},'owned producer preparation before a zero-memory consuming test');
+    const result=spawnTest('systemd-run',['--user','--scope','--unit='+unit,'--collect','--quiet','prlimit','--core=0',process.execPath,fileURLToPath(GATE_RUN)],{cwd:source,env:planned.env,encoding:'utf8',maxBuffer:16*2**20},'owned producer preparation before a zero-memory consuming test');
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(result.signal,null,result.stdout+result.stderr);
     const summary=JSON.parse(readFileSync(join(run,'summary.json'),'utf8'));

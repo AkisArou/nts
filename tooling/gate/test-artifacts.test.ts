@@ -73,7 +73,7 @@ test("the gate tests helper replays Cargo's environment from incremental nts-dev
     // incomplete observations must keep their named instrument diagnostic.
     const observer=join(root,'tooling/gate/file-input-observer.c'),before=readFileSync(observer,'utf8');
     const broken=before.replace('bool complete = drained && !errors && !output_failed;',
-      'bool complete = drained && !errors && !output_failed && strstr(argv[3], "/deps/") == NULL;');
+      'bool complete = drained && !errors && !output_failed && strstr(argv[command_index], "/deps/") == NULL;');
     assert.notEqual(broken,before);writeFileSync(observer,broken);
     const stepResult=join(root,'step-result.json');
     const unmeasured=spawnSync(process.execPath,[join(root,'tooling/gate/tests.mjs')],{cwd:root,encoding:'utf8',env:testEnvironment({
