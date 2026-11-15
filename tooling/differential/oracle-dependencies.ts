@@ -19,7 +19,7 @@ import {hostObservations} from '../gate/host-observations.ts';
 import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
-import {moduleClosure} from '../gate/module-closure.ts';
+import {moduleGraph} from '../gate/module-closure.ts';
 import {installationStatusInputs} from '../gate/reader-inputs/main.ts';
 import {installationSelectionPath,installationStatusCandidates,installationStatusPaths} from '../inputs/dependency-input-names.ts';
 export const INSTALLATION_STATUS_INPUTS=installationStatusInputs(new URL('../../',import.meta.url));
@@ -48,7 +48,16 @@ export function dependencyCleanupFailure(primary:{error:unknown}|undefined,clean
 }
 // The capability's tree owns its layout, including trees older or newer than
 // this launcher. Walk its declarations afresh before authenticating the bytes.
-function producerIdentity(source:string){return hash(JSON.stringify(moduleClosure(['tooling/differential/oracle-dependencies.ts'],{sourceRoot:source}).map(file=>[file,hash(readFileSync(join(source,file)))])));}
+function producerIdentity(source:string){
+  const graph=moduleGraph({sourceRoot:source});
+  try{
+    // Status observations are runtime inputs of the fence, not producer
+    // implementation. Keep executable modules and their placed recipe assets;
+    // installation metadata and command bytes have their own input identity.
+    const recipe=graph.describe(['tooling/differential/oracle-dependencies.ts']).placingFiles;
+    return hash(JSON.stringify(recipe.map(file=>[file,hash(readFileSync(join(source,file)))])));
+  }finally{graph.close();}
+}
 export function dependencyCapability(source:string,directory:string,admission:TemporaryAdmissionContext={kind:'standalone'},ownerStep:string|null=null,env:NodeJS.ProcessEnv=process.env):DependencyCapability{
   source=realpathSync(source);
   // sourceRevision is the committed revision anchor. Only the async install-input

@@ -45,9 +45,9 @@ if(mode==='--consume'){
     assert.equal(await captureDependencies(cap,undefined,accounting.env),first);count();
     await assert.rejects(captureDependencies({...cap,helperSha256:'0'.repeat(64)},undefined,accounting.env),/provisioner source mismatch/);count();
     assert.deepEqual(counts,[1,2,2]);
-    const acquisitions=readFileSync(ledger,'utf8').trim().split('\n').map(line=>JSON.parse(line) as {mode:string;wallMs:number;peakBytes:number;sealed?:boolean;helperProcess?:boolean});
+    const acquisitions=readFileSync(ledger,'utf8').trim().split('\n').map(line=>JSON.parse(line) as {mode:string;wallMs:number;sealed?:boolean;helperProcess?:boolean});
     assert.deepEqual(acquisitions.map(row=>row.mode),['cold','hit']);
-    const cold=acquisitions[0];assert.ok(cold);assert.ok(cold.wallMs>0);assert.ok(cold.peakBytes>0);
+    const cold=acquisitions[0],image=JSON.parse(readFileSync(first,'utf8'));assert.ok(cold);assert.ok(cold.wallMs>0);assert.ok(image.cost.peakBytes>0);
     console.log(JSON.stringify({producerSource:source,counts,modes:acquisitions.map(row=>row.mode)}));
     accountingPassed=true;
   }finally{finishRunTemporary(accounting.temporary,accounting.env.HOME!,accountingPassed);}

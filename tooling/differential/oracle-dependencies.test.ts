@@ -179,6 +179,7 @@ test('workspace execution stays live while the image binds metadata and declared
   f.write('packages/one/unread.ts','export const unread=97;\n');f.git('add','packages/one/unread.ts');f.git('commit','-qm','Change code no consumer reads');
   assert.equal(await captureDependencies(initial),ready);assert.deepEqual(readFileSync(ready),imageBytes);
   f.write('packages/one/command.js','#!/usr/bin/env node\nconsole.log(2);\n');f.git('add','packages/one/command.js');f.git('commit','-qm','Change the installed command target');
+  assert.equal(f.cap('bin-input-only').producerSha256,initial.producerSha256,'installation command bytes do not impersonate the producer recipe');
   await assert.rejects(captureDependencies(initial),/install inputs changed/);
   const next=await captureDependencies(f.cap('workspace-bin-changed')),after=JSON.parse(readFileSync(next,'utf8'));
   assert.notEqual(after.inputSet.identity.key,image.inputSet.identity.key);
