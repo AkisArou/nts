@@ -10,6 +10,7 @@ import type {OracleIdentity,EmitGroup,OwnerImportRoute} from './oracle-emit.ts';
 const EXECUTION_INPUTS=[
   new URL('./oracle-node-harness.ts',import.meta.url),
   new URL('./oracle-execution.ts',import.meta.url),
+  new URL('./oracle-budget.ts',import.meta.url),
   new URL('./oracle-execution-policy.ts',import.meta.url),
   new URL('./oracle-batch.ts',import.meta.url),
   new URL('./command-entry/main.ts',import.meta.url),
@@ -19,6 +20,8 @@ const EXECUTION_INPUTS=[
 ] as const;
 const RECIPE_INPUTS={
   emitter:new URL('./oracle-emit.ts',import.meta.url),
+  services:new URL('./oracle-services.ts',import.meta.url),
+  snapshot:new URL('./oracle-snapshot.ts',import.meta.url),
   toolchainCapture:new URL('./oracle-toolchain.ts',import.meta.url),
   loader:new URL('./oracle-loader.ts',import.meta.url),
   filesystem:new URL('./oracle-filesystem.ts',import.meta.url),
@@ -34,6 +37,7 @@ const assetName=(input:URL)=>relative(fileURLToPath(new URL('./',import.meta.url
 export const ORACLE_EXECUTION_FILES:readonly string[]=EXECUTION_INPUTS.map(assetName);
 /** One declared asset inventory serves recipe hashing and portable bundles. */
 export const ORACLE_RUNTIME_FILES:readonly string[]=[...ORACLE_EXECUTION_FILES,...Object.values(RECIPE_INPUTS).map(assetName)];
+export const RECIPE_SOURCES=[...ORACLE_RUNTIME_FILES,'oracle-results.ts','oracle-result-bootstrap.ts'];
 // The phase a case's oracle stopped in: planning its population, preparing its
 // program, or executing it. Only a planned population has a driver.
 export type OracleBudget={phase:'plan'|'prepare'|'execute';outcome:'timeout'|'memory-cap';bound:number;signal:string|null;reason:string};

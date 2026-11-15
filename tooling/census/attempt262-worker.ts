@@ -32,6 +32,7 @@ import type { TypeScriptOracleCapture } from './typescript-oracle-capture.ts';
 import { oracleResultHash,openTypeScriptOracleResults } from './typescript-oracle-results.ts';
 import { typescriptOracleIdentity } from './suites/typescript.ts';
 import {censusPhaseCosts} from './phase-costs.ts';
+import {requireSealedOracleRun} from '../gate/host-environment.ts';
 
 const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend, fresh, language, referenceInputs] = process.argv.slice(2);
 const tools = {
@@ -44,6 +45,7 @@ const tools = {
   language: language === "ts" || language === 'oracle' ? ("ts" as const) : ("js" as const),
 };
 if (!inResidentWorker()) throw new Error("resident cap: census worker was started without its bounded scope");
+requireSealedOracleRun(process.env);
 const dir = workspace(scratch, tools.language);
 
 if(language==='ts'&&['typescript-c','typescript-llvm','typescript-jvm'].includes(process.env.NTS_GATE_STEP??'')&&!process.env.NTS_TYPESCRIPT_ORACLE)

@@ -676,6 +676,17 @@ belong to the tooling producer fixture, which executes from its own staged
 Git source. Staging and production fences never become Rust-test reads of the
 real repository. Git-fence descriptors consume their owner's indexed candidate
 population and its ignore/attribute controls, without executable placement.
+Standalone oracle command entries use `withPreparedOracle` at their boundary.
+It takes their admission, creates the canonical run and uses the same sealing
+owner as the gate. A valid inherited seal is consumed directly. Commands that
+read ambient environment values re-enter once with the complete sealed
+environment; callbacks can instead receive it explicitly. The command lifetime
+drains children and newly acquired resolution services before releasing its
+admission and temporary. Internal workers remain consume-only and validate
+their sealed-parent handoff. The host audit inventories command entries and
+shell Node invocations and refuses consumer reach without one of those owners.
+Report decoding and identity readers import pure leaves, independently of
+execution and command entries. Pure metadata and error modes do not prepare.
 The dependency image archives installation metadata and named workspace command
 targets, together with the installed third-party packages. Importer directories
 are not installation inputs. Workspace aliases retain their verified installed
@@ -1961,3 +1972,11 @@ the first node task.
   workspace implementations come from each consumer's live captured closure,
   while metadata and named command targets own the installation identity
   ([log](records/notebooks/decisions-log.md#oracle-consumers-require-prepared-images-11-15)).
+
+- **Standalone oracle preparation belongs to the command entry.** Entries
+  share the gate parent's preparation and sealing owner, reuse valid inherited
+  seals and hold admission through complete child and infrastructure drain.
+  Internal commands accept only a sealed-parent handoff. The source audit
+  inventories entries and shell Node programs; report-only imports stay in
+  pure leaves rather than acquiring preparation or an audit exception
+  ([log](records/notebooks/decisions-log.md#standalone-oracle-entry-ownership-11-15)).

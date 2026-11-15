@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {cacheLocation} from '../gate/cache-capabilities.ts';
@@ -168,6 +169,7 @@ import {ownTemporary} from '../gate/host-environment.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const argvEarly = process.argv.slice(2);
 // Which suite: test262, upstream and unedited, or the TypeScript cases. The
 // suite's root is what every path is relative to.

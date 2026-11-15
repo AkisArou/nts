@@ -86,7 +86,7 @@ fi
 # construction, so including it would make the diff pass for a reason that has
 # nothing to do with the backends.
 for backend in c jvm; do
-  NTS_BACKEND=$backend NTS_CHECKERS=1 node "$root/tooling/differential/check-report.ts" \
+  NTS_BACKEND=$backend NTS_CHECKERS=1 node "$root/tooling/differential/check-report/main.ts" \
     project compiled-answers "$nts" "$config" > "$work/$backend.out"
   sort "$work/$backend.out" > "$work/$backend.answers"
 done

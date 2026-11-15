@@ -1,4 +1,6 @@
+import {OracleBudgetError} from './oracle-budget.ts';
 import {runAsCommand} from "./command-entry/main.ts";
+import {assertSealedOracleRun} from './oracle-seal/main.ts';
 // The recorder and the native differential execute the same population under
 // one CPU allowance and the census's resident-memory owner. Virtual address
 // reservations are not memory consumption, and a signal alone proves no cap.
@@ -33,10 +35,7 @@ export function oracleExecutionLimits(source:string):OracleLimits{
   const benchmark=source.replaceAll('\\','/').startsWith('benchmarks/cases/');
   return {cpuSeconds:benchmark?policy.benchmarkCpuSeconds:policy.cpuSeconds,residentBytes:policy.residentBytes};
 }
-export class OracleBudgetError extends CaseBudgetError{
-  readonly budget:OracleBudget;
-  constructor(budget:OracleBudget){super(budget.reason);this.name='OracleBudgetError';this.budget=budget;}
-}
+
 export type OracleCommandResult={stdoutHex:string;stderrHex:string;run:Omit<ActiveResult,'error'|'stdoutRaw'|'stderrRaw'>&{error?:string};limits:OracleLimits;residentPeakBytes:number;budget?:OracleBudget};
 let ordinal=0;
 
@@ -157,6 +156,7 @@ export async function runOraclePlanner(planner:string,args:readonly string[],opt
 runAsCommand(import.meta.url,async()=>{
   try{
     const mode=process.argv[2],request=JSON.parse(process.argv[3]!);
+    assertSealedOracleRun(process.env);
     if(mode==='--prepare'){
       const toolchain=process.env.NTS_ORACLE_TYPESCRIPT;
       if(!toolchain)throw new ToolingInstrumentError('tooling-setup','oracle TypeScript capability NTS_ORACLE_TYPESCRIPT is missing');

@@ -337,7 +337,7 @@ fi
 if [ "$unmeasured" -gt 0 ]; then
   echo "$unmeasured target(s) could not be measured, so this run says nothing about them" >&2
   finished=0
-  node "$root/tooling/differential/check-report.ts" finish "$((refused + declined + timedout))" || finished=$?
+  node "$root/tooling/differential/check-report/main.ts" finish "$((refused + declined + timedout))" || finished=$?
   exit "$finished"
 fi
 # A timeout is a defect, as a decline is: named above, and red -- unless it is

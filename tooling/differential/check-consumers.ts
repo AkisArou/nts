@@ -1,4 +1,5 @@
 import {CaseBudgetError} from '../gate/step-result.ts';
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Batch owners count completed comparisons before publishing incomplete work.
 import {existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {availableParallelism, homedir} from "node:os";
@@ -7,10 +8,11 @@ import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import assert from "node:assert/strict";
 import {openProgramOracleResults} from './oracle-results.ts';
-import {oracleRecipeIdentity} from './oracle-emit.ts';
+import {oracleRecipeIdentity} from './oracle-runtime.ts';
 import {withToken} from "../gate/tokens.mjs";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
-import {checkFailurePolicy, reportCheckFailure, runConsumer} from "./check-report.ts";
+import {checkFailurePolicy,reportCheckFailure} from "./check-report.ts";
+import {runConsumer} from "./check-command.ts";
 import type {CheckConsumer, DecodedCheck} from "./check-report-types.ts";
 import {pendingContradiction, recordPath} from "./oracle-records.ts";
 import {pendingLine} from "../records/pending.ts";
@@ -172,5 +174,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const selected = (["programs", "rc", "benchmarks", "compiled-web"] as const).find(candidate => candidate === mode);
   if (!selected || extra.length || (recordPending && only)) {
     process.exitCode = reportCheckFailure(new Error("usage: check-consumers.ts programs|rc|compiled-web [fixture] | benchmarks [--record-pending | fixture]"));
-  } else process.exitCode = await runBatch(selected, only, recordPending);
+  } else {
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
+    process.exitCode = await runBatch(selected, only, recordPending);
+  }
 }

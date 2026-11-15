@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 
 /** A census owns its scratch through worker drain and all process exits. */

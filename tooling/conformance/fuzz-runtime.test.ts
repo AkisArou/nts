@@ -3,7 +3,7 @@ import { mkdtempSync,readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 

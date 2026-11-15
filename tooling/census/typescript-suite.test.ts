@@ -17,7 +17,8 @@ import {isEnumDeclaration, isImportEqualsDeclaration, SyntaxKind} from 'typescri
 import {oracle, selectTypescript, materialiseTypeScriptOracleProject} from "./suites/typescript.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {workspace} from "./project.ts";
-import {OracleWorker, removeOracleSnapshot} from "../differential/oracle-emit.ts";
+import {OracleWorker} from "../differential/oracle-emit.ts";
+import {removeOracleSnapshot} from "../differential/oracle-snapshot.ts";
 import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {createTypeScriptOracleResults, openTypeScriptOracleResults, typeScriptOracleHandoff, oracleResultHash} from "./typescript-oracle-results.ts";
 import type { TypeScriptOracleCapture } from './typescript-oracle-capture.ts';

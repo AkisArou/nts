@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Our compiled *statement* semantics against node's.
 //
 //   node tooling/conformance/fuzz-statements.mjs [cases] [seed]
@@ -57,6 +58,7 @@ import {
 } from "./fuzz-runtime.mjs";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const CASES = Number(process.argv[2] ?? 200);
 const SEED = Number(process.argv[3] ?? 1);
 const BATCH = 20;

@@ -15,7 +15,9 @@ import { rmSync, mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, 
 import { join, relative } from "node:path";
 
 import { bodyOf, featuresOf, flagsOf, harnessFor, harnessHashOf, harnessObservations } from "../project.ts";
-import { REPOSITORY,OracleWorker,removeOracleSnapshot,oracleExecution,oracleLoaderReady,closeOracleExecution,oracleIdentity,finishOracleSnapshot } from "../../differential/oracle-emit.ts";
+import {REPOSITORY,oracleIdentity} from "../../differential/oracle-services.ts";
+import {OracleWorker,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot} from "../../differential/oracle-emit.ts";
+import {removeOracleSnapshot} from "../../differential/oracle-snapshot.ts";
 import {ToolingInstrumentError} from '../../gate/step-result.ts';
 import {captureTypeScriptOracle,type TypeScriptOracleCapture} from '../typescript-oracle-capture.ts';
 

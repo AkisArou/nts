@@ -1,6 +1,9 @@
+import {REPOSITORY,ORACLE_LOADER,verifyToolchain,oracleIdentity} from './oracle-services.ts';
+import {removeOracleSnapshot} from './oracle-snapshot.ts';
 import {captureToolchain,type Capture,type TypeScriptIdentity} from './oracle-toolchain.ts';
 export type {TypeScriptIdentity} from './oracle-toolchain.ts';
 import {runAsCommand} from "./command-entry/main.ts";
+import {assertSealedOracleRun} from './oracle-seal/main.ts';
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
 import {compileRuntimeModules,type RuntimeParser,type RuntimeModules} from './oracle-runtime-modules.ts';
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
@@ -13,11 +16,9 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,oracleTranspileFileName,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_RUNTIME_FILES,ORACLE_EXECUTION_FILES,oracleIdentityFor,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,oracleTranspileFileName,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
-export const REPOSITORY=resolve(HERE,'../..');
-export const ORACLE_LOADER=new URL('./oracle-loader.ts',import.meta.url).href;
 const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 
 export type OracleIdentity={toolchainCaptureSha256:string;publisherSha256:string;runtimeModulesSha256:string;childBootstrapSha256:string;executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
@@ -142,36 +143,6 @@ export function oracleRuntimeFiles(prepared:OraclePrepared,sources:string[]):str
 }
 export function oracleRuntimeFile(prepared:OraclePrepared,source:string):string{return oracleRuntimeFiles(prepared,[source])[0]!;}
 
-function packageFiles(root:string){
-  const digest=createHash('sha256');
-  function walk(dir:string):void{
-    for(const name of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en'))){
-      const path=join(dir,name.name);
-      if(name.isDirectory())walk(path);
-      else if(name.isFile()){
-        const bytes=readFileSync(path),key=relative(root,path).split(sep).join('/');
-        digest.update(JSON.stringify([key,bytes.length])+'\n');digest.update(bytes);
-      }else throw Error('oracle TypeScript package contains an unsupported entry: '+path);
-    }
-  }
-  walk(root);
-  return digest;
-}
-export function packageRootHash(root:string):string{return packageFiles(root).digest('hex');}
-
-/** Sorted relative paths, byte lengths and file bytes, then the native hash. */
-export function packageIdentity(root:string,executable:string,nativeRoot=dirname(executable)):TypeScriptIdentity{
-  const digest=packageFiles(root),rootPackageSha256=digest.copy().digest('hex');
-  const nativeSha256=hash(readFileSync(executable));
-  digest.update(JSON.stringify(['native-executable',nativeSha256]));
-  return {version:JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version,
-    rootPackageSha256,packageSha256:digest.digest('hex'),nativeSha256,nativePackageSha256:packageRootHash(nativeRoot)};
-}
-export function verifyToolchain(location=process.env.NTS_ORACLE_TYPESCRIPT){
-  const {root,compiler,identity}=captureToolchain(location);return {root,compiler,identity};
-}
-export function oracleIdentity(location?:string):OracleIdentity{return oracleIdentityFor(verifyToolchain(location).identity);}
-export {oracleRecipeIdentity};
 
 async function invoke(compiler:string,args:string[],cwd:string):Promise<CompilerResult>{
   // The existing request owner supervises the whole process tree. Drain both
@@ -552,14 +523,7 @@ function protect(dir:string):void{
 }
 /** Cleanup only for a caller-owned snapshot tree, after parent finalization.
  * Never chmod or traverse a symlink into another capture or source tree. */
-export function removeOracleSnapshot(dir:string):void{
-  let root;try{root=lstatSync(dir);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
-  if(root.isDirectory()){
-    const writable=(path:string)=>{chmodSync(path,0o755);for(const item of readdirSync(path,{withFileTypes:true}))if(item.isDirectory()&&!item.isSymbolicLink())writable(join(path,item.name));};
-    writable(dir);
-  }
-  rmSync(dir,{recursive:true,force:true});
-}
+
 const removeSnapshot=removeOracleSnapshot;
 type DependencyHandle={record:string;sha256:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;inputSet:{identity:{importers:string[]}};entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
 const dependencyImages=new Map<string,DependencyHandle>();
@@ -1641,6 +1605,7 @@ export async function prepareOracle(request:OracleOptions,resolutionOwnerPid=pro
 }
 
 runAsCommand(import.meta.url,async()=>{
+  if(['--prepare','--run'].includes(process.argv[2]??''))assertSealedOracleRun(process.env);
   if(process.argv[2]==='--read-program-reference'&&process.argv[3]){
     const {readProgramOracleReference}=await import('./oracle-results.ts');
     const request=JSON.parse(process.argv[3]);

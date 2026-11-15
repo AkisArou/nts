@@ -21,6 +21,9 @@ import {ownMemory} from "../gate/test-memory.ts";
 import {spawnTest} from "../gate/test-wait.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {provenanceOf,publishPin} from "../conformance/pin.ts";
+import {recordPending as fullCheckRecordPending,RECORDER_LOG} from '../full-check/service.ts';
+import {partOf} from './record-pending.ts';
+import {writeFileSync} from 'node:fs';
 
 const SOURCE=fileURLToPath(new URL("../..",import.meta.url));
 const binary=resolve(SOURCE,process.env.NTS_BIN??"target/release/nts");
@@ -89,9 +92,32 @@ function recordsRun(t:{after(fn:()=>void):void}){
   const planned=gateEnvironment({...hostEnvironment(process.env),HOME:home},{run:join(home,".cache/records-run"),oracleRoot:root,owned:{
     ...ownMemory(join(scratch,"memory")),NTS_BIN:pin,NTS_CENSUS_OBJECT_CACHE:join(homedir(),".cache/nts/c-objects"),
     ...(process.env.NTS_TOOLING_SLICE?{NTS_TOOLING_SLICE:process.env.NTS_TOOLING_SLICE}:{})}});
-  return {root,planned,record:(env:NodeJS.ProcessEnv)=>spawnTest(process.execPath,[join(root,"tooling/records/record-pending.ts"),"outcomes"],
+  return {root,planned,scratch,pin,record:(env:NodeJS.ProcessEnv)=>spawnTest(process.execPath,[join(root,"tooling/records/record-pending.ts"),"outcomes"],
     {cwd:root,env,encoding:"utf8",maxBuffer:64*2**20},"record-pending outcomes")};
 }
+
+test('the real full-check recordPending candidate route enters a sealed recorder child',t=>{
+  const {root,planned,scratch,pin}=recordsRun(t),run=join(scratch,'full-check-run'),observed=join(scratch,'sealed-recorder.json');
+  mkdirSync(run);
+  assert.equal(JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!).seal,undefined,'the records unit starts with an unsealed capability');
+  // Keep the real production CLI through its owned preparation boundary. Its
+  // private record body observes the handoff; the adjacent outcome case proves
+  // actual record writing. Stage first, then mutate and commit this private tree.
+  const entry=join(root,'tooling/records/record-pending.ts'),boundary='await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});';
+  const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
+  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\n"+source.replace(boundary,boundary+`
+      assertSealedOracleRun(process.env);
+      const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
+      writeFileSync(${JSON.stringify(observed)},JSON.stringify({sealed:Boolean(capability.seal),canonical:context.report.canonical,tmp:process.env.TMPDIR,registered:context.temporary.path,argv:process.argv.slice(2)})+'\\n');
+      return;
+  `));
+  git(root,'add','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
+  const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env});
+  assert.equal(result.status,0,readFileSync(join(run,RECORDER_LOG),'utf8'));
+  const value=JSON.parse(readFileSync(observed,'utf8'));
+  assert.equal(value.sealed,true);assert.equal(value.canonical,true);
+  assert.equal(value.tmp,value.registered);assert.deepEqual(value.argv,['--after',part,run]);
+});
 
 test("the records run records a pending outcome, its oracle captured inside the outcome check's registered temporary",t=>{
   const {root,planned,record}=recordsRun(t);

@@ -34,6 +34,8 @@ const PREPARATION_FILES: &[(&str, &str)] = &[
         include_str!("../oracle-child-bootstrap.ts"),
     ),
     ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
+    ("oracle-services.ts", include_str!("../oracle-services.ts")),
+    ("oracle-snapshot.ts", include_str!("../oracle-snapshot.ts")),
     (
         "oracle-toolchain.ts",
         include_str!("../oracle-toolchain.ts"),

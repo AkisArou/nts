@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { OracleFilesystem } from '../differential/oracle-filesystem.ts';
 import { nodeExecutableIdentity,nodeProcessBirth,type NodeResolutionSession } from '../differential/oracle-runtime.ts';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import { publishTypeScriptOracleResults,openTypeScriptOracleResults,typeScriptOracleHandoff,oracleResultHash,type TypeScriptOracleResult } from './typescript-oracle-results.ts';
 import { captureOracleDependencies } from './typescript-oracle-capture.ts';
 

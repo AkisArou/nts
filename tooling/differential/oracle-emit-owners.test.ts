@@ -17,7 +17,9 @@ import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,symlink
 import {tmpdir} from "node:os";
 import {dirname,join,relative} from "node:path";
 import {test} from "node:test";
-import {OracleWorker,REPOSITORY,removeOracleSnapshot,verifyToolchain,oracleLoaderReady,type OraclePrepared,type OracleRuntimeRoute,type OwnerImportRoute} from "./oracle-emit.ts";
+import {OracleWorker,oracleLoaderReady,type OraclePrepared,type OracleRuntimeRoute,type OwnerImportRoute} from "./oracle-emit.ts";
+import {REPOSITORY,verifyToolchain} from "./oracle-services.ts";
+import {removeOracleSnapshot} from "./oracle-snapshot.ts";
 import {OUTCOME_ORACLE_PRELOADS,outcomeSourceAssets} from "../conformance/outcomes-project.ts";
 import {type HostObservation} from './oracle-filesystem.ts';
 import {type EmittedFile,toolchain,oracleExecution,prepareOracle,workspace,execute,prepare,changedSnapshot,boundedCompiler} from './oracle-emit-fixture.ts';

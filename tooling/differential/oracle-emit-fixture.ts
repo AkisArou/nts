@@ -17,7 +17,9 @@ import {chmodSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync} from "node:f
 import {tmpdir} from "node:os";
 import {dirname,join,relative,resolve} from "node:path";
 import {before,afterEach,type TestContext} from "node:test";
-import {OracleWorker,REPOSITORY,removeOracleSnapshot,prepareOracle as prepareOracleTemplate,oracleExecution as newOracleExecution,oracleLoaderReady,type OracleOptions,type OraclePrepared} from "./oracle-emit.ts";
+import {OracleWorker,prepareOracle as prepareOracleTemplate,oracleExecution as newOracleExecution,oracleLoaderReady,type OracleOptions,type OraclePrepared} from "./oracle-emit.ts";
+import {REPOSITORY} from "./oracle-services.ts";
+import {removeOracleSnapshot} from "./oracle-snapshot.ts";
 import {readOracleSnapshotIndex,writeOracleSnapshotIndex,type HostObservation,type DirectoryEntries} from './oracle-filesystem.ts';
 import {type SnapshotSlotIndex} from './oracle-runtime.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';

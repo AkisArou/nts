@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 import {dataDirectory} from "../gate/reader-inputs/main.ts";
 import {createHash} from "node:crypto";
 import {homedir} from "node:os";
-import type {OracleBudget} from "./oracle-execution.ts";
+import type {OracleBudget} from "./oracle-runtime.ts";
 import { execFileSync } from "node:child_process";
 
 export const RECORDS = "results/oracle-counts";

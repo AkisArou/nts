@@ -40,7 +40,7 @@ done |
     n=$(basename "$d" .tsconfig.json)
     [ "$n" = tsconfig.json ] && n=$(basename "$(dirname "$d")")
     # Backend-stage fields exclude runtime declines without reading sentences.
-    hit=$(NTS_CHECKERS=1 NTS_BACKEND=jvm node "$root/tooling/differential/check-report.ts" project backend-refusals "$bin" "$d") || exit $?
+    hit=$(NTS_CHECKERS=1 NTS_BACKEND=jvm node "$root/tooling/differential/check-report/main.ts" project backend-refusals "$bin" "$d") || exit $?
     if [ -n "$hit" ]; then
       printf "%-26s %s\n" "$n" "$(printf "%s\n" "$hit" | head -n 1)"
     fi

@@ -6,7 +6,9 @@ import {existsSync,mkdtempSync,readFileSync,readdirSync,symlinkSync,writeFileSyn
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {test} from "node:test";
-import {OracleWorker,REPOSITORY,removeOracleSnapshot} from "./oracle-emit.ts";
+import {OracleWorker} from "./oracle-emit.ts";
+import {REPOSITORY} from "./oracle-services.ts";
+import {removeOracleSnapshot} from "./oracle-snapshot.ts";
 import {toolchain,oracleExecution,workspace,execute,ordinaryProject,diagnostics,boundedCompiler} from './oracle-emit-fixture.ts';
 
 test("oracle diagnostics match captured tsgo in the original project context",async t=>{

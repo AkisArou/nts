@@ -7,7 +7,7 @@ import test from "node:test";
 import type {TestContext} from "node:test";
 import type {ActiveResult} from "./active-command.ts";
 import type {CheckRunner, CheckCommandResult} from "../differential/check-report-types.ts";
-import {runConsumer} from "../differential/check-report.ts";
+import {runConsumer} from "../differential/check-command.ts";
 import {CaseBudgetError, readStepInstrument, ToolingInstrumentError} from "./step-result.ts";
 import {testScratch} from "./test-scratch.ts";
 

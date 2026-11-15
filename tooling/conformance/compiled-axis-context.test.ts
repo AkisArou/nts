@@ -62,7 +62,7 @@ NAPI_MODULE(subject, init)
   write("tooling/conformance/build.sh", `#!/bin/sh\nset -eu\ncommand cp ${shell(join(root, "subject.node"))} "$NTS_ADDON_OUT/$1.node"\n`);
   const runner = join(root, "tooling/conformance/run.mjs"), observation = join(root, "contexts.jsonl");
   let text = readFileSync(runner, "utf8");
-  text = text.replace("{gateEnvironment,sealOracleRun}", "{gateEnvironment,sealOracleRun,ownedCacheEnvironment}");
+  text = "import {ownedCacheEnvironment} from '../gate/host-environment.ts';\n" + text;
   const start = "planned=await sealOracleRun(planned);environment=planned.env;";
   assert.ok(text.includes(start));
   text = text.replace(start, start + `

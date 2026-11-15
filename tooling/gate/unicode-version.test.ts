@@ -1,4 +1,5 @@
-import { runCheck, Outcome } from "../differential/check-report.ts";
+import {runCheck} from "../differential/check-command.ts";
+import {Outcome} from "../differential/check-report.ts";
 import { test, type TestContext } from "node:test";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

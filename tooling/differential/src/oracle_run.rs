@@ -62,6 +62,7 @@ pub(super) const EXECUTION_FILES: &[(&str, &[u8])] = &[
         "oracle-execution.ts",
         include_bytes!("../oracle-execution.ts"),
     ),
+    ("oracle-budget.ts", include_bytes!("../oracle-budget.ts")),
     (
         "oracle-execution-policy.ts",
         include_bytes!("../oracle-execution-policy.ts"),

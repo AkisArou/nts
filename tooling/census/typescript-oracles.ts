@@ -1,4 +1,5 @@
 import {runAsCommand} from "../differential/command-entry/main.ts";
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {dataDirectory} from '../gate/reader-inputs/main.ts';
 // A run's three backend steps share one measured Node answer per case. Only
 // original inputs and authenticated evidence survive each admitted attempt;
@@ -7,7 +8,7 @@ import { mkdirSync,readFileSync } from 'node:fs';
 import {join,relative} from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availableParallelism } from 'node:os';
-import { REPOSITORY } from '../differential/oracle-emit.ts';
+import {REPOSITORY} from '../differential/oracle-services.ts';
 import { acquireToken } from '../gate/tokens.mjs';
 import { ToolingInstrumentError,publishToolingFailure } from '../gate/step-result.ts';
 import { populationOf } from './project.ts';
@@ -75,6 +76,7 @@ export async function produceTypeScriptOracles({sample=0,jobs=Math.min(8,availab
 }
 
 runAsCommand(import.meta.url,async()=>{
+  await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
   const value=(name:string,fallback:number)=>{const at=process.argv.indexOf(name);return at<0?fallback:Number(process.argv[at+1]);};
   try{await produceTypeScriptOracles({sample:value('--sample',0),jobs:value('--jobs',Math.min(8,availableParallelism()))});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}

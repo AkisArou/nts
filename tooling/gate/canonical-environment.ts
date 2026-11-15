@@ -1,8 +1,8 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
 import { createHash } from "node:crypto";
-import { existsSync,readFileSync,realpathSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync } from "node:fs";
+import { spawn,spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
@@ -11,7 +11,11 @@ import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary} from "./run-
 import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
-import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
+import {startNodeResolutionSession,closeNodeResolutionSession} from '../differential/oracle-resolution.ts';
+import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
+import {exitCommand,registerCommandCloser} from '../differential/command-entry/main.ts';
+import type {NodeResolutionSession} from '../differential/oracle-runtime.ts';
+import type {JobRequest} from './memory-ledger.ts';
 import {HOST_CAPABILITIES,FIXED_AMBIENT,UNSET_AMBIENT,ownedCacheEnvironment,hostEnvironment,declaredOracleToolchain} from './host-environment.ts';
 import type {Context,EnvironmentReport,GateEnvironment} from './environment-types.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-environment.ts';
@@ -208,7 +212,7 @@ export function gateEnvironment(
 }
 
 /** Validate once in the run parent, then forward its exact pinned seal. */
-export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal):Promise<GateEnvironment>{
+export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal,onSession?:(session:NodeResolutionSession,closed:Promise<void>)=>void):Promise<GateEnvironment>{
   const raw=planned.env.NTS_ORACLE_DEPENDENCIES;if(!raw)return planned;
   const context:Context=JSON.parse(planned.env[ENVIRONMENT_CONTEXT]??'null');
   if(context?.report?.version!==1||context.owned?.NTS_ORACLE_DEPENDENCIES!==raw||context.report.host.NTS_ORACLE_DEPENDENCIES!==raw)throw new Error('invalid owned oracle dependency run');
@@ -220,13 +224,75 @@ export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal)
       if(!nodeProcessAlive(context.resolutionOwner))throw new Error('oracle resolution run owner changed');
       const execution=JSON.parse(readFileSync(new URL('../differential/oracle-toolchain.json',import.meta.url),'utf8')).execution.args as string[];
       const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
-      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),context.resolutionOwner.pid);
+      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),context.resolutionOwner.pid,onSession);
     }
   }catch(error){if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
   const next=JSON.stringify(cap);
   const report={...planned.report,host:{...planned.report.host,NTS_ORACLE_DEPENDENCIES:next}};
   const owned={...context.owned,NTS_ORACLE_DEPENDENCIES:next};
   return {...planned,report,env:{...planned.env,NTS_ORACLE_DEPENDENCIES:next,[ENVIRONMENT_CONTEXT]:JSON.stringify({...context,report,owned})}};
+}
+
+/** Standalone commands acquire the same services as the gate parent. Library
+ * consumers never prepare. Ambient entries re-enter once so every import and
+ * descendant sees the exact sealed environment, without rewriting process.env.
+ * A no-op callback at the start of a legacy entry admits the remainder only in
+ * that sealed child; the preparing parent transfers its child's exit status. */
+export async function withPreparedOracle(
+  main:(env:NodeJS.ProcessEnv)=>void|number|Promise<void|number>,
+  options:{entry:string;ambient?:boolean;admission?:JobRequest},
+):Promise<void|number>{
+  const entry=process.argv[1];
+  if(!entry||pathToFileURL(resolve(entry)).href!==options.entry)throw new ToolingInstrumentError('tooling-setup','oracle preparation must run at its command entry: '+options.entry);
+  const source=realpathSync(resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
+  const base=process.env,raw=base.NTS_ORACLE_DEPENDENCIES;
+  let inherited:{source?:string;seal?:unknown}|undefined;
+  if(raw)try{inherited=JSON.parse(raw);}catch{throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}
+  if(inherited?.seal){
+    assertSealedOracleRun(base);
+    if(inherited.source!==source)throw new ToolingInstrumentError('tooling-setup','oracle entry seal belongs to another source: '+inherited.source);
+    return main(base);
+  }
+  const abort=new AbortController();
+  let finishSetup!:()=>void;
+  const setupClosed=new Promise<void>(done=>{finishSetup=done;});
+  // Waiting is cancellable before reserveJob can register an acquired handle.
+  // Replace this waiter only after the complete owner is registered, so a
+  // shutdown cannot finish while acquisition is still adding resources.
+  const unbindWaiting=registerCommandCloser('oracle entry admission '+options.entry,{cancel:()=>abort.abort(),close:()=>setupClosed});
+  try{
+    const {reserveJob}=await import('./memory-ledger.ts');
+    const key='oracle-entry-'+relative(source,fileURLToPath(options.entry)).replace(/\.[^.]+$/,'').replace(/[^a-z0-9]+/g,'-');
+    const admission=await reserveJob(options.admission??{key,what:'standalone oracle entry '+options.entry},{signal:abort.signal});
+    let planned:GateEnvironment|undefined,session:NodeResolutionSession|undefined,sessionClosed:Promise<void>|undefined,childClosed:Promise<void>|undefined;
+    registerCommandCloser('standalone oracle entry '+options.entry,{cancel:()=>abort.abort(),close:async({code})=>{
+      await setupClosed;
+      try{
+        try{await childClosed;}
+        finally{if(session){await closeNodeResolutionSession(session);await sessionClosed;}}
+      }finally{
+        try{admission.release();await admission.closed;}
+        finally{if(planned)finishRunTemporary(planned.temporary,planned.env.HOME!,code===0,{host:hostObservations(planned.env)});}
+      }
+    }});
+    unbindWaiting();
+    const home=base.HOME||userInfo().homedir,parent=join(home,'.cache/nts/oracle-entries');
+    mkdirSync(parent,{recursive:true});
+    planned=gateEnvironment(base,{run:mkdtempSync(join(parent,'entry-')),standalone:!base[ENVIRONMENT_CONTEXT],oracleRoot:source});
+    planned=await sealOracleRun(planned,abort.signal,(acquired,closed)=>{session=acquired;sessionClosed=closed;});
+    abort.signal.throwIfAborted();assertSealedOracleRun(planned.env);
+    if(!options.ambient){finishSetup();return main(planned.env);}
+    const child=spawn(process.execPath,[...process.execArgv,...process.argv.slice(1)],{cwd:process.cwd(),env:planned.env,stdio:'inherit',signal:abort.signal});
+    const completed=new Promise<{status:number|null;signal:NodeJS.Signals|null;error?:Error}>(done=>{
+      let error:Error|undefined;
+      child.once('error',value=>{error=value;});
+      child.once('close',(status,signal)=>done({status,signal,...(error?{error}:{})}));
+    });
+    childClosed=completed.then(()=>{});finishSetup();
+    const result=await completed;
+    if(result.error||result.signal||result.status===null)throw new ToolingInstrumentError('tooling-setup','standalone oracle child did not finish: '+(result.error??result.signal??'missing status'));
+    exitCommand(result.status);
+  }finally{finishSetup();}
 }
 
 export function reportEnvironment(report: EnvironmentReport, write: (text: string) => void = text => process.stderr.write(text)): void {

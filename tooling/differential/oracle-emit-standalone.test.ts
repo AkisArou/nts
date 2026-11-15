@@ -12,7 +12,8 @@ import {chmodSync,appendFileSync,existsSync,mkdirSync,readFileSync,writeFileSync
 import {dirname,join} from "node:path";
 import {test} from "node:test";
 import {pathToFileURL} from "node:url";
-import {OracleWorker,TypeScriptDiagnosticError,REPOSITORY,verifyToolchain,oracleLoaderReady,oracleRuntimeFile} from "./oracle-emit.ts";
+import {OracleWorker,TypeScriptDiagnosticError,oracleLoaderReady,oracleRuntimeFile} from "./oracle-emit.ts";
+import {REPOSITORY,verifyToolchain} from "./oracle-services.ts";
 import {type HostObservation} from './oracle-filesystem.ts';
 import {toolchain,oracleExecution,prepareOracle,workspace,execute,prepare,changedSnapshot} from './oracle-emit-fixture.ts';
 

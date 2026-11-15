@@ -4,7 +4,9 @@ import {readFileSync,readdirSync,existsSync,renameSync,writeFileSync} from 'node
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
-import {shellCommands} from './shell-commands.ts';
+import {shellCommands,shellNodeInvocations} from './shell-commands.ts';
+import {generatedScriptText,movedEnvironmentImportProblems} from './environment-imports.ts';
+import {oracleEntryFacts,auditOracleEntries,type OracleEntryFacts} from './oracle-entry-audit.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
 import {inspectCommandSignals} from './command-signals.ts';
@@ -88,7 +90,7 @@ export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
-export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts):{reads:HostRead[];references:string[]} {
+export function inspectHostSource(file:string,source:string,shared?:import('typescript/sync').API,inspectRoot?:(file:string,source:string,root:SourceFacts,generated:GeneratedSourceFacts)=>void,rootFacts?:SourceFacts,inspectGenerated?:(facts:SourceFacts,offset:number,argv?:readonly string[])=>void):{reads:HostRead[];references:string[]} {
   const require=createRequire(import.meta.url);
   const {API}=require('typescript/sync') as typeof import('typescript/sync');
   const ast=sourceSyntax();
@@ -103,7 +105,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       if(/^\/(?:proc(?:\/|$)|sys\/fs\/cgroup)/.test(value))add('kernel',node);
       if(/^(?:\.\.?\/|tooling\/|runtime\/)/.test(value)&&/\.(?:[cm]?[jt]s|sh)$/.test(value))references.add(value);
       // Parse code strings, not arbitrary prose mentioning an API.
-      if(depth<3&&/(?:\b(?:process|performance|Date)\.|\brequire\s*\(|\bfrom\s*['"]node:|\bstatfs|\/proc\/|\/sys\/fs\/cgroup)/.test(value)&&/[;{}=()]|\n/.test(value))parse(value,offset+facts.line(node.pos)-1,true,depth+1);
+      if(depth<3&&/(?:\b(?:import|export)\b|\b(?:process|performance|Date)\.|\brequire\s*\(|\bfrom\s*['"]node:|\bstatfs|\/proc\/|\/sys\/fs\/cgroup)/.test(value)&&/[;{}=()]|\n/.test(value))parse(value,offset+facts.line(node.pos)-1,true,depth+1);
     };
     const candidates=facts.ofKinds(ast.SyntaxKind.CallExpression,ast.SyntaxKind.SpreadAssignment,ast.SyntaxKind.PropertyAssignment,
       ast.SyntaxKind.StringLiteral,ast.SyntaxKind.NoSubstitutionTemplateLiteral,ast.SyntaxKind.TemplateExpression);
@@ -119,7 +121,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       if(ast.isSpreadAssignment(node)&&name(node.expression)==='process.env')add('environment',node);
       if(ast.isPropertyAssignment(node)&&code(node.name)==='env'&&name(node.initializer)==='process.env')add('environment',node);
       if(ast.isStringLiteralLikeNode(node))literal(node.text,node);
-      if(ast.isTemplateExpression(node))literal(node.head.text+node.templateSpans.map(span=>'__fixture_expression'+span.literal.text).join(''),node);
+      if(ast.isTemplateExpression(node))literal(generatedScriptText(facts,node),node);
     };
     try{if(!generated)inspectRoot?.(file,text,facts,generatedSources);for(const node of candidates)visit(node);}finally{lease?.dispose();}
   }
@@ -137,6 +139,10 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       }
       // Shell heredocs and node -e payloads are code, including their aliases.
       parse(source,0,true,0,rootFacts);
+      for(const invocation of shellNodeInvocations(shell,source))if(invocation.code){
+        const code=invocation.code;
+        inspectGenerated?.(generatedSources.get(code.value),source.slice(0,code.start).split('\n').length-1,invocation.arguments.map(word=>word.value));
+      }
     } else if(file.endsWith('.rs')) {
       // Rust test fixtures must ask the TypeScript fixture owner for the packet.
       for(const [index,line] of source.split('\n').entries())if(/\.env\s*\(\s*"NTS_(?:MEMINFO|VMSTAT|HOST_OBSERVATIONS)"/.test(line))reads.push({file,line:index+1,kind:'fixture-constructor',source:line.trim(),generated:false});
@@ -176,19 +182,22 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
   const declarations=new Map<string,ModuleDeclarations>();
   const api=new API(),sources=new Map<string,{reads:HostRead[];references:string[]}>(),moduleFacts=new Map<string,ModuleAsyncFacts>(),publications:RecordPublication[]=[],copies:FixtureCopy[]=[],testProfiles:string[]=[];
   const gitInvocations:GitInvocation[]=[],python:{file:string;source:string}[]=[],signals:string[]=[];
+  const oracleEntries=new Map<string,OracleEntryFacts>(),oracleShells:{file:string;source:string;shell:ReturnType<typeof shellCommands>}[]=[];
   const inspect=(file:string,source:string,node:SourceFacts,generated:GeneratedSourceFacts)=>{if(file.startsWith('tooling/')&&/\.[cm]?[jt]s$/.test(file)){
+    oracleEntries.set(file,oracleEntryFacts(node));
     declarations.set(file,node.moduleDeclarations());
     signals.push(...inspectCommandSignals(node));
     signals.push(...inspectCommandForwarders(node));
     signals.push(...unitOwnershipScopeProblems(node));
     signals.push(...acceptedRevisionDataProblems(node));
+    signals.push(...movedEnvironmentImportProblems(node));
     gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     testProfiles.push(...inspectCargoCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node,
-      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset),...inspectCargoCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));signals.push(...inspectCommandForwarders(tree,offset));},generated));
+      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset),...inspectCargoCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));signals.push(...inspectCommandForwarders(tree,offset),...movedEnvironmentImportProblems(tree,[],offset));},generated));
     gitInvocations.push(...inspectGeneratedGitShells(generated.shells));
   }};
   try {
@@ -206,7 +215,11 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
   function *sourceInputs():Iterable<SourceInput>{for(const file of inputs)yield {file,source:readFileSync(join(root,file),'utf8'),...(file.endsWith('.sh')?{parseFile:file+'.generated.ts'}:{})};}
-  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh')){testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell),...inspectShellCargoCalls(facts.file,facts.source,facts.shell));gitInvocations.push(...inspectShellGit(facts.file,facts.source,facts.shell));}sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts));});
+  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh')){oracleShells.push({file:facts.file,source:facts.source,shell:facts.shell});testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell),...inspectShellCargoCalls(facts.file,facts.source,facts.shell));gitInvocations.push(...inspectShellGit(facts.file,facts.source,facts.shell));}sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts,(generated,offset,argv)=>{
+    signals.push(...movedEnvironmentImportProblems(generated,argv,offset));
+    const file=facts.file+'#node-'+offset,row=oracleEntryFacts(generated);oracleEntries.set(file,{...row,file,entry:true});
+  }));});
+  signals.push(...auditOracleEntries(oracleEntries,oracleShells).problems);
   gitInvocations.push(...inspectPythonGit(python));
   const reach=(file:string,seen:Set<string>):void=>{
     if(seen.has(file))return;seen.add(file);

@@ -5,7 +5,7 @@ import {activeCommand,COMPILE_CPU_BOUND_SECONDS} from '../gate/active-command.ts
 import {reserveJob} from '../gate/memory-ledger.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {memoryRun,memoryCause,memoryDisposition} from '../census/worker-memory.ts';
-import type {OracleBudget} from './oracle-execution.ts';
+import type {OracleBudget} from './oracle-runtime.ts';
 import {OracleWorker,TypeScriptDiagnosticError,type OracleOptions,type OraclePrepared} from './oracle-emit.ts';
 
 export type OracleRequest={key:string;options:OracleOptions};

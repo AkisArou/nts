@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {spawnTest} from "../gate/test-wait.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
-import {removeOracleSnapshot} from "../differential/oracle-emit.ts";
+import {removeOracleSnapshot} from "../differential/oracle-snapshot.ts";
 
 import {setupOracleTestEnvironment} from "../differential/oracle-test-fixture.ts";
 await setupOracleTestEnvironment();

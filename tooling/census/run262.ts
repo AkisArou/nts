@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {cargoOutput} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // Build a Test262 file, run it, and report what happened. A conformance run.
@@ -95,6 +96,7 @@ function cannotMeasure(why) {
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
 await serialRun({ memoryCapKb: Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000) });
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 
 // Copied, and every `attempt` runs the copy: a run measures one binary even
 // though `target/release/nts` is the path everyone builds into. `pinCompiler`

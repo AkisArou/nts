@@ -51,9 +51,9 @@ mkdir -p "$D/src"
 }
 J
 { cat "$HERE/probe-harness.ts"; printf '%s\n' "$body"; } > "$D/src/main.ts"
-NTS_ORACLE_TYPESCRIPT=$(node --input-type=module -e 'const {oracleToolchainLocation}=await import(process.argv[1]); process.stdout.write(oracleToolchainLocation());' "$root/tooling/gate/canonical-environment.ts")
+NTS_ORACLE_TYPESCRIPT=$(node --input-type=module -e 'const {oracleToolchainLocation}=await import(process.argv[1]); process.stdout.write(oracleToolchainLocation());' "$root/tooling/gate/host-environment.ts")
 export NTS_ORACLE_TYPESCRIPT
-node "$root/tooling/differential/oracle-emit.ts" --run "$D/src/main.ts" "$D/oracle-emit" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
+node "$root/tooling/gate/oracle-entry.ts" "$root/tooling/differential/oracle-emit.ts" --run "$D/src/main.ts" "$D/oracle-emit" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
 nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
 "$compiler" emit-c "$D/tsconfig.json" \

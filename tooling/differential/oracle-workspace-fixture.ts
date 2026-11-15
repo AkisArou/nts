@@ -8,7 +8,7 @@ import {dirname,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencyCache,dependencyRecipeModules,installationCatalogTrust} from '../inputs/dependency-inputs.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
-import {RECIPE_SOURCES} from './oracle-result-publisher.ts';
+import {RECIPE_SOURCES} from './oracle-runtime.ts';
 import {installationInputs} from '../gate/reader-inputs/main.ts';
 
 const pins=installationInputs(new URL('../..',import.meta.url));

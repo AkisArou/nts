@@ -5,7 +5,7 @@ import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
 import {spawnTest} from "../gate/test-wait.ts";
 import {copyModuleClosure} from "../gate/module-closure-fixture.ts";
-import {removeOracleSnapshot} from "../differential/oracle-emit.ts";
+import {removeOracleSnapshot} from "../differential/oracle-snapshot.ts";
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
 import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";

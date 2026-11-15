@@ -3,6 +3,7 @@
 import {createRequire} from 'node:module';
 import type {Node} from 'typescript/ast';
 import {SourceFacts,GeneratedSourceFacts,sourceSyntax} from './source-facts.ts';
+import {generatedScriptText} from './environment-imports.ts';
 
 export type RecordPublication={file:string;line:number;source:string};
 
@@ -50,12 +51,7 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     const render=(input:Node,steps=0):string|undefined=>{
       if(steps>10)return undefined;const node=resolved(input);
       if(ast.isStringLiteralLikeNode(node))return node.text;
-      if(ast.isTemplateExpression(node))return node.head.text+node.templateSpans.map(span=>{
-        const expression=unwrap(span.expression);
-        const hole=ast.isCallExpression(expression)&&name(expression.expression)==='JSON.stringify'&&expression.arguments[0]
-          ?JSON.stringify(render(expression.arguments[0],steps+1)??'__fixture_expression'):'__fixture_expression';
-        return hole+span.literal.text;
-      }).join('');
+      if(ast.isTemplateExpression(node))return generatedScriptText(facts,node);
       if(ast.isBinaryExpression(node)&&code(node.operatorToken)==='+'){
         const left=render(node.left,steps+1),right=render(node.right,steps+1);
         // A cross-module source factory is audited at its branded definition.

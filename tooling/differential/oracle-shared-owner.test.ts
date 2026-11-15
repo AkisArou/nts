@@ -9,7 +9,8 @@ import {dirname,join} from 'node:path';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {oracleToolchainLocation} from '../gate/host-environment.ts';
-import {prepareOracle,removeOracleSnapshot} from './oracle-emit.ts';
+import {prepareOracle} from './oracle-emit.ts';
+import {removeOracleSnapshot} from './oracle-snapshot.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 
 const REPOSITORY=fileURLToPath(new URL('../..',import.meta.url));

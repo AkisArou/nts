@@ -20,5 +20,5 @@ else
   node "$root/tooling/sweep/sweep.mjs" > "$work/src/main.ts"
   project="$work/tsconfig.json"
 fi
-exec node "$root/tooling/differential/check-report.ts" consume program \
+exec node "$root/tooling/differential/check-report/main.ts" consume program \
   "${NTS_BIN:-$root/target/release/nts}" "$project"

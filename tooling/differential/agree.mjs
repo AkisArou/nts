@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // Does this change alter any answer? The examples differential, without the gate.
@@ -93,7 +94,8 @@ import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
 import { candidateAddedProjects, fullyMeasuredAgreement } from "./new-projects.ts";
-import { runCheck, reportCheckFailure, checkFailurePolicy, decodeCheck, Outcome } from "./check-report.ts";
+import {runCheck} from "./check-command.ts";
+import {reportCheckFailure,checkFailurePolicy,decodeCheck,Outcome} from "./check-report.ts";
 export { Outcome } from "./check-report.ts";
 import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
 import { pendingContradiction, recordPath } from "./oracle-records.ts";
@@ -409,6 +411,7 @@ if (examples.length === 0) {
 // phase, the one it was started in).
 const JOBS = Number(process.env.NTS_AGREE_JOBS ?? Math.min(8, availableParallelism()));
 await reserveJob({ key: "agree", units: JOBS, what: `agree.mjs: ${examples.length} example(s), ${JOBS} at a time` });
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 
 // Every temporary file under `~/.cache`, never `/tmp`: `/tmp` here is a tmpfs
 // that fills, and runs out of inodes before it runs out of bytes. Inside a

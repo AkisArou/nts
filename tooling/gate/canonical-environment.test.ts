@@ -489,7 +489,7 @@ import { reserve, RESERVATION_ENV } from ${JSON.stringify(new URL("./memory-ledg
 import { acquireToken } from ${JSON.stringify(new URL("./tokens.mjs",import.meta.url).href)};
 import { createProgramOracleResults } from ${JSON.stringify(new URL("../differential/oracle-result-publisher.ts",import.meta.url).href)};
 import { programOracleDirectory } from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};
-import { oracleRecipeIdentity } from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};
+import { oracleRecipeIdentity } from ${JSON.stringify(new URL("../differential/oracle-runtime.ts",import.meta.url).href)};
 const child=await reserve({bytes:128*2**20,what:"oracle fixture"},{report:console.log});
 const release=await acquireToken({project:"oracle-progress"},undefined,2*2**30);
 console.log("oracle case entered");

@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 import {oracleToolchainLocation,ownTemporary} from '../gate/host-environment.ts';
 // Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
@@ -156,7 +157,9 @@ import {oracleToolchainLocation,ownTemporary} from '../gate/host-environment.ts'
 
 import { spawnSync } from "node:child_process";
 
-import { prepareOracle,oracleRecipeIdentity,removeOracleSnapshot } from "../differential/oracle-emit.ts";
+import {prepareOracle} from "../differential/oracle-emit.ts";
+import {oracleRecipeIdentity} from "../differential/oracle-runtime.ts";
+import {removeOracleSnapshot} from "../differential/oracle-snapshot.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -164,7 +167,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runConsumer as supervisedCheck, checkOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
+import {runConsumer as supervisedCheck} from "../differential/check-command.ts";
+import {checkOutcome,validateStoredCheckOutcome,reportCheckFailure} from "../differential/check-report.ts";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
 import { compileSync, compileActive, serialRun, closeMemoryRun } from "../census/worker-memory.ts";
@@ -211,6 +215,7 @@ if (recordingPending) {
   }
 }
 await serialRun(TOOLS);
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
 mkdirSync(SCRATCH, { recursive: true });
 ownTemporary(SCRATCH);

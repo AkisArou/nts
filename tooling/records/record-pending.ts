@@ -1,5 +1,6 @@
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // The full check's recorder (docs/workflow.md, Records: "The full check writes
 // them. Nobody records by hand."). A case whose source exists and whose record
 // has no row yet is pending: every record check lists it and does not fail on
@@ -967,6 +968,7 @@ runAsCommand(import.meta.url,async()=>{
         + `${badAfter ? `; --after needs core or wide and an existing run folder` : ""}${badDelta ? "; --delta needs a file" : ""}`);
       process.exitCode = 2;
     } else {
+      await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
       const kinds = (named.length ? named as Kind[] : KINDS).filter(kind => !after || partOf(kind) === after.part);
       const accepted = after ? acceptedIn(root, after.run!) : { byKind: new Map<Kind, Pending[]>(), pendingByKind: new Map<Kind, Pending[]>(), unowned: [] };
       for (const record of accepted.unowned) console.log(`an accepted change names ${record}, which no kind records; skipped`);

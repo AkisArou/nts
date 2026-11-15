@@ -1,6 +1,7 @@
 import {oracleToolchainLocation} from '../gate/host-environment.ts';
 import {bundledDependencies} from './node-deps.mjs';
-import {OracleWorker,oracleLoaderReady,oracleExecution,closeOracleExecution,finishOracleSnapshot,removeOracleSnapshot} from '../differential/oracle-emit.ts';
+import {OracleWorker,oracleLoaderReady,oracleExecution,closeOracleExecution,finishOracleSnapshot} from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import {ToolingInstrumentError} from '../gate/step-result.ts';
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
 // The machinery a generative differential needs, minus the grammar.

@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Hand every recovered package to the real compiler and record what it says.
 //
 // Read the results with `README.md`'s third caveat in hand: each package is
@@ -6,10 +7,12 @@
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import {gateEnvironment} from "../gate/canonical-environment.ts";
 import type { Vendored } from "./vendor.ts";
-import {runCheck, Outcome as CheckOutcome} from "../differential/check-report.ts";
+import {runCheck} from "../differential/check-command.ts";
+import {Outcome as CheckOutcome} from "../differential/check-report.ts";
 
 const HERE = new URL("./", import.meta.url).pathname;
 const REPO = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const NTS = process.env["NTS_BIN"] ?? REPO + "/target/release/nts";
 
 type Outcome = "no-entry" | "typecheck-failed" | "refused" | "no-refusal";

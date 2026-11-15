@@ -3,13 +3,13 @@
 import {mkdirSync,readFileSync,writeFileSync,renameSync,realpathSync} from 'node:fs';
 import {dirname,isAbsolute,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ORACLE_RUNTIME_FILES,checkNodeResolutionSession,type NodeResolutionSession} from './oracle-runtime.ts';
+import {RECIPE_SOURCES,checkNodeResolutionSession,type NodeResolutionSession} from './oracle-runtime.ts';
 import {writeOracleSnapshotIndex,validateHostObservations,type HostObservation} from './oracle-filesystem.ts';
 import {resultHash,readerSourceHash,invalid,measured,type ProgramAnswer,type ProgramCapture,type ProgramOracleRoot,type ReaderRuntime} from './oracle-results.ts';
-import {OracleWorker,removeOracleSnapshot,type OracleIdentity} from './oracle-emit.ts';
+import {OracleWorker,type OracleIdentity} from './oracle-emit.ts';
+import {removeOracleSnapshot} from './oracle-snapshot.ts';
 import type {RuntimeModules} from './oracle-runtime-modules.ts';
 
-export const RECIPE_SOURCES=[...ORACLE_RUNTIME_FILES,'oracle-results.ts','oracle-result-bootstrap.ts'];
 function publishReaderRuntime(directory:string,identity:OracleIdentity,toolchain?:string):ReaderRuntime{
   const here=dirname(fileURLToPath(import.meta.url)),runtime=join(directory,'reader');mkdirSync(runtime,{recursive:true});
   for(const name of RECIPE_SOURCES){

@@ -16,7 +16,7 @@ import { selectTypescript,typescriptOracleIdentity } from './suites/typescript.t
 import { serializeTypeScriptRecord,TYPESCRIPT_OBSERVATIONS_VERSION,type TypeScriptObservation } from './typescript-record.ts';
 import { OUTPUT_PREFIX_VERSION } from '../conformance/output-prefix.ts';
 import { provenanceOf } from '../conformance/pin.ts';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import { ownMemoryEnv } from '../gate/test-memory.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';

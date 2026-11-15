@@ -13,7 +13,8 @@ import {cpSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync,writeFileSyn
 import {dirname,join,resolve} from "node:path";
 import {test} from "node:test";
 import {pathToFileURL} from "node:url";
-import {OracleWorker,TypeScriptDiagnosticError,ORACLE_LOADER,REPOSITORY,oracleIdentity,packageIdentity,verifyToolchain,oracleLoaderReady,type OraclePrepared,type OracleRuntimeRoute,type OracleRuntimeNode,type OracleRuntimeDescriptor} from "./oracle-emit.ts";
+import {OracleWorker,TypeScriptDiagnosticError,oracleLoaderReady,type OraclePrepared,type OracleRuntimeRoute,type OracleRuntimeNode,type OracleRuntimeDescriptor} from "./oracle-emit.ts";
+import {ORACLE_LOADER,REPOSITORY,oracleIdentity,packageIdentity,verifyToolchain} from "./oracle-services.ts";
 import {nativeOutput} from "../conformance/outcomes-project.ts";
 import {prepareOracles} from "./oracle-batch.ts";
 import {type HostObservation} from './oracle-filesystem.ts';

@@ -3365,3 +3365,15 @@ source-validation facts, separately from selection and fixture staging roles.
 Normal module/data visits promote a member in either order. Installation status
 still selects manifests and bin targets, and installation consumers also select
 the catalog's target recipes. The committed-source owner refuses dirty trees.
+
+## Standalone oracle entry ownership (11-15)
+
+Consume-only oracles exposed standalone entry gaps, including the full check's
+post-landing recorder. One withPreparedOracle owner at command boundaries uses
+canonical preparation and sealing under the entry's admission. Ambient entries
+re-enter in a sealed child; explicit callbacks receive the environment. Valid
+parent seals are consumed directly. Children, newly started resolution services
+and admission drain in ownership order. Internal workers require their parent
+seal. The entry audit and shared shell observer cover imports, command entries,
+prefixed Node commands and inline programs. Report/identity readers use pure
+leaves; moved-name checks include executable generated and shell Node programs.

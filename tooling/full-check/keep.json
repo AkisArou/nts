@@ -38,6 +38,7 @@
     "case-roots": { "kind": "kept", "writer": "tooling/census/project.ts", "why": "the census's case roots, which it expires itself" },
     "c-objects": { "kind": "kept", "writer": "tooling/census/conformance262.ts", "why": "compiled runtime objects, by content" },
     "conformance262": { "kind": "scratch", "writer": "tooling/census/census-scratch.ts" },
+    "oracle-entries": { "kind": "scratch", "writer": "tooling/gate/canonical-environment.ts" },
     "differential-objects": { "kind": "kept", "writer": "tooling/differential/src/objects.rs", "why": "the differential's objects, by content" },
     "expect-ir": { "kind": "scratch", "writer": "tooling/conformance/expect-ir.ts" },
     "gate-scope-entries": { "kind": "scratch", "writer": "tooling/gate/scopes/step-scope.ts" },

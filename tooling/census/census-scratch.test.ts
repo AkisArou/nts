@@ -6,7 +6,7 @@ import { existsSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 import { toolingSliceArgs,toolingSlicePrefix } from '../gate/tooling-slice.ts';
 import { spawnTest,waitFor } from '../gate/test-wait.ts';
 

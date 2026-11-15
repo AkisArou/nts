@@ -1,3 +1,4 @@
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // Our compiled expression semantics against node's, over random expressions.
 //
 //   node tooling/conformance/fuzz-expressions.mjs [cases] [seed]
@@ -61,6 +62,7 @@ import {
   scratch,
 } from "./fuzz-runtime.mjs";
 
+await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
 const CASES = Number(process.argv[2] ?? 400);
 const SEED = Number(process.argv[3] ?? 1);
 const BATCH = 40;

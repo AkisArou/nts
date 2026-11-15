@@ -3,12 +3,12 @@
 export type ShellWord={value:string;dynamic:boolean;start:number;end:number};
 export type ShellCommand={name:string;start:number;end:number;args:ShellWord[]};
 export type ShellRedirection={operator:string;target:string;dynamic:boolean;start:number;end:number};
-export type ShellCommands={commands:ShellCommand[];data:{start:number;end:number}[];redirections:ShellRedirection[]};
+export type ShellCommands={commands:ShellCommand[];data:{start:number;end:number}[];redirections:ShellRedirection[];heredocs:{command:ShellCommand|undefined;start:number;end:number;quoted:boolean}[]};
 
 export function shellCommands(source:string):ShellCommands {
-  const commands:ShellCommand[]=[],data:ShellCommands['data']=[],redirections:ShellRedirection[]=[];
+  const commands:ShellCommand[]=[],data:ShellCommands['data']=[],redirections:ShellRedirection[]=[],heredocs:ShellCommands['heredocs']=[];
   const prefixes=new Set(['if','then','elif','else','while','until','do','!','time','command','exec','builtin']);
-  type Here={delimiter:string;quoted:boolean;tabs:boolean};
+  type Here={delimiter:string;quoted:boolean;tabs:boolean;command:ShellCommand|undefined};
   function arithmetic(start:number,end:number):number {
     let i=start,depth=0;
     while(i<end){
@@ -86,7 +86,7 @@ export function shellCommands(source:string):ShellCommands {
             }else if(q==='\\'){quoted=true;i++;delimiter+=source[i++]??'';}
             else delimiter+=source[i++]!;
           }
-          pending.push({delimiter,quoted,tabs});
+          pending.push({delimiter,quoted,tabs,command:current});
         }else {const operatorStart=i;i++;while(i<end&&source[i]===c)i++;redirectOperator=descriptor+source.slice(operatorStart,i);redirect=true;}
         continue;
       }
@@ -100,13 +100,17 @@ export function shellCommands(source:string):ShellCommands {
             if(value===here.delimiter){bodyEnd=i;i=lineEnd+(lineEnd<end?1:0);break;}
             i=lineEnd+(lineEnd<end?1:0);
           }
+          heredocs.push({command:here.command,start:body,end:bodyEnd,quoted:here.quoted});
           if(here.quoted)data.push({start:body,end:bodyEnd});
           else substitutions(body,bodyEnd);
         }
         continue;
       }
       if(/\s/.test(c)){finish();i++;continue;}
-      if(!redirect&&/[;&|(){}]/.test(c)){
+      // A redirection's operand ends at a shell operator too. In particular,
+      // `$(tr -d '\\n' < roots.json)` must finish at ')', or its scan consumes
+      // every later command in the script. Only >&fd / <&fd keep the '&'.
+      if(/[;&|(){}]/.test(c)&&!(redirect&&c==='&'&&!word)){
         finish();
         if(c===')'&&stop===')'&&depth===0)return i+1;
         if(c==='(')depth++;else if(c===')')depth--;
@@ -117,5 +121,48 @@ export function shellCommands(source:string):ShellCommands {
     finish();return i;
   }
   scan(0,source.length);
-  return {commands:commands.sort((a,b)=>a.start-b.start),data,redirections};
+  return {commands:commands.sort((a,b)=>a.start-b.start),data,redirections,heredocs};
+}
+
+export type ShellNodeInvocation={command:ShellCommand;script?:ShellWord;code?:ShellWord;arguments:ShellWord[]};
+/** Node entries and inline programs use the same shell tokens as host reads.
+ * Prefixes consume only their own options; their operands never become code. */
+export function shellNodeInvocations(shell:ShellCommands,source:string):ShellNodeInvocation[]{
+  const result:ShellNodeInvocation[]=[];
+  for(const command of shell.commands){
+    const words:ShellWord[]=[{value:command.name,dynamic:false,start:command.start,end:command.start+command.name.length},...command.args];
+    let at=0;
+    while(at<words.length){
+      const name=words[at]!.value.split('/').at(-1);at++;
+      if(name==='env'){
+        while(at<words.length){const word=words[at]!.value;if(/^[A-Za-z_]\w*=/.test(word)||['-i','--ignore-environment','--'].includes(word)){at++;continue;}
+          if(['-u','--unset','-C','--chdir'].includes(word)){at+=2;continue;}break;}
+      }else if(name==='timeout'){
+        while(words[at]?.value.startsWith('-')){const flag=words[at++]!.value;if(['-s','--signal','-k','--kill-after'].includes(flag))at++;}
+        at++; // duration
+      }else if(name==='nice'){
+        if(words[at]?.value==='-n'||words[at]?.value==='--adjustment')at+=2;
+        else if(words[at]?.value.startsWith('-'))at++;
+      }else if(name==='taskset'){
+        while(words[at]?.value.startsWith('-')){if(words[at++]!.value==='--')break;}
+        at++; // mask (or CPU list after -c)
+      }else if(name==='time'){
+        while(words[at]?.value.startsWith('-')){const flag=words[at++]!.value;if(['-f','--format','-o','--output'].includes(flag))at++;}
+      }else if(name&&/^node(?:$|[-0-9.])/.test(name)){
+        let script:ShellWord|undefined,code:ShellWord|undefined;
+        while(at<words.length){
+          const word=words[at++]!;
+          if(['-e','--eval','-p','--print'].includes(word.value)){code=words[at++];break;}
+          if(word.value==='--'){script=words[at++];break;}
+          if(['--import','--require','-r','--loader','--experimental-loader','--input-type'].includes(word.value)){at++;continue;}
+          if(word.value.startsWith('-')&&word.value!=='-')continue;
+          script=word;break;
+        }
+        const here=shell.heredocs.find(row=>row.command===command);
+        if(!code&&here&&(!script||script.value==='-'))code={value:source.slice(here.start,here.end),dynamic:!here.quoted,start:here.start,end:here.end};
+        result.push({command,...(script?{script}:{}),...(code?{code}:{}),arguments:words.slice(at)});break;
+      }else break;
+    }
+  }
+  return result;
 }

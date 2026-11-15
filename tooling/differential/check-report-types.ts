@@ -1,4 +1,4 @@
-import type {OracleBudget} from "./oracle-execution.ts";
+import type {OracleBudget} from "./oracle-runtime.ts";
 import type { activeCommand, ActiveResult } from "../gate/active-command.ts";
 
 export const CHECK_STATUSES = ["pending", "nothing", "agrees", "partial", "all_unavailable", "all_declined",

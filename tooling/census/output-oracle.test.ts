@@ -8,7 +8,7 @@ import {materialise, workspace} from "./project.ts";
 import {outputOracle} from "./output-oracle.ts";
 import {waitFor} from "../gate/test-wait.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
-import {removeOracleSnapshot} from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 

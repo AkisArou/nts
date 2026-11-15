@@ -14,7 +14,9 @@ import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {test} from "node:test";
 import {pathToFileURL} from "node:url";
-import {OracleWorker,TypeScriptDiagnosticError,REPOSITORY,removeOracleSnapshot,verifyToolchain,oracleLoaderReady,oracleRuntimeFile,type OraclePrepared,type OracleRuntimeRoute} from "./oracle-emit.ts";
+import {OracleWorker,TypeScriptDiagnosticError,oracleLoaderReady,oracleRuntimeFile,type OraclePrepared,type OracleRuntimeRoute} from "./oracle-emit.ts";
+import {REPOSITORY,verifyToolchain} from "./oracle-services.ts";
+import {removeOracleSnapshot} from "./oracle-snapshot.ts";
 import {toolchain,closeOracleExecution,oracleExecution,prepareOracle,workspace,execute,prepare,witnessOwner,ordinaryProject,authoredExecution,ownerObservationInvalidation} from './oracle-emit-fixture.ts';
 
 test('a module declaration that appears after preparation invalidates resolution',async t=>{

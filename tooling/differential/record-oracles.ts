@@ -11,9 +11,13 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
-import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
+import {oracleIdentity} from "./oracle-services.ts";
+import {oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot} from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
-import {runOracleCommand,runOraclePlanner,oracleExecutionLimits,OracleBudgetError,type OracleBudget,type OracleLimits,type OraclePlannerLimits} from "./oracle-execution.ts";
+import {runOracleCommand,runOraclePlanner,oracleExecutionLimits,type OracleLimits,type OraclePlannerLimits} from "./oracle-execution.ts";
+import {OracleBudgetError} from "./oracle-budget.ts";
+import {type OracleBudget} from "./oracle-runtime.ts";
 import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
@@ -582,6 +586,7 @@ async function main() {
   if (named || ["plan", "plan-rc", "record"].includes(mode!)) {
     await reserveJob({ key: "record-oracles", what: `record-oracles ${named ? `${arguments_.length} fixture(s)` : mode}` },
       { report: line => console.error(line) });
+    await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
   }
   if (named) await recordNamed(arguments_);
   else if (["plan", "plan-rc"].includes(mode!) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));

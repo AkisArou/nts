@@ -1,10 +1,14 @@
+import {requireSealedOracleRun} from '../gate/host-environment.ts';
 // The pool owns admission, tokens and this process's complete resident group.
 import {writeFileSync,mkdirSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {createInterface} from 'node:readline';
-import {OracleWorker,REPOSITORY,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot,type OraclePrepared} from './oracle-emit.ts';
+import {OracleWorker,finishOracleSnapshot,oracleSnapshotReady,type OraclePrepared} from './oracle-emit.ts';
+import {REPOSITORY} from './oracle-services.ts';
+import {removeOracleSnapshot} from './oracle-snapshot.ts';
 import {requestOracleImprovement} from './oracle-records.ts';
-import {runOraclePlanner,type OracleBudget} from './oracle-execution.ts';
+import {runOraclePlanner} from './oracle-execution.ts';
+import {type OracleBudget} from './oracle-runtime.ts';
 import {resultHash,type ProgramAnswer} from './oracle-results.ts';
 import {OracleFilesystem} from './oracle-filesystem.ts';
 import type {ProgramMemory,ProgramOracleTask} from './program-oracles.ts';
@@ -19,6 +23,7 @@ import {OUTCOME_ORACLE_PRELOADS,outcomeSourceAssets} from '../conformance/outcom
 const scratch=process.argv[2],executables=process.argv[3];
 if(!scratch||!executables)throw Error('program oracle worker has no owned scratch');
 if(!inResidentWorker())throw Error('program oracle worker requires its bounded scope');
+requireSealedOracleRun(process.env);
 mkdirSync(scratch,{recursive:true});mkdirSync(executables,{recursive:true});
 // The run builds and pins siblings together, in its chosen Cargo profile.
 const planner=join(dirname(resolve(process.env.NTS_BIN??join(process.env.CARGO_TARGET_DIR??join(REPOSITORY,'target'),'release/nts'))),'oracle-plan');

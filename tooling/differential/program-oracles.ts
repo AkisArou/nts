@@ -1,4 +1,5 @@
 import {runAsCommand} from "./command-entry/main.ts";
+import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // One producer owns the SDK; consumers read authenticated answers after it
 // exits. A bounded warm pool amortizes SDK startup without retaining its heaps.
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -6,7 +7,8 @@ import {spawnSync} from 'node:child_process';
 import {dirname,isAbsolute,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {availableParallelism} from 'node:os';
-import {REPOSITORY,oracleRecipeIdentity} from './oracle-emit.ts';
+import {REPOSITORY} from './oracle-services.ts';
+import {oracleRecipeIdentity} from './oracle-runtime.ts';
 import {OracleFilesystem,type HostObservation} from './oracle-filesystem.ts';
 import {readRecords,fixtureOf,type OracleTable} from './oracle-records.ts';
 import {createProgramOracleResults} from './oracle-result-publisher.ts';
@@ -146,6 +148,7 @@ export async function produceProgramOracles({directory,jobs=Math.min(2,available
 }
 
 runAsCommand(import.meta.url,async()=>{
+  await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});
   try{const at=process.argv.indexOf('--jobs');await produceProgramOracles({directory:programOracleDirectory(),jobs:at<0?undefined:Number(process.argv[at+1])});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}
 });

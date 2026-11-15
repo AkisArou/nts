@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { typeScriptOraclePopulation } from './typescript-oracles.ts';
 import { selectTypescript } from './suites/typescript.ts';
 import { populationOf } from './project.ts';
-import { removeOracleSnapshot } from '../differential/oracle-emit.ts';
+import {removeOracleSnapshot} from '../differential/oracle-snapshot.ts';
 
 test('shared reference selection is exactly the union of backend populations',t=>{
   const root=mkdtempSync(join(tmpdir(),'nts-oracle-population-'));t.after(()=>removeOracleSnapshot(root));

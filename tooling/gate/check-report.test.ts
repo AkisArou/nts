@@ -65,7 +65,8 @@ test("a missing population, malformed schema or incomplete oracle fails closed",
 });
 
 test("version two liveness is explicit and complete results retain their record identity", async () => {
-  const {runCheck, runConsumer, checkOutcome} = await import('../differential/check-report.ts');
+  const {runCheck,runConsumer}=await import('../differential/check-command.ts');
+  const {checkOutcome}=await import('../differential/check-report.ts');
   const complete = report();
   assert.deepEqual(checkOutcome('json-v1', 0, JSON.stringify({...complete,version:2,incomplete:[]})),
     checkOutcome('json-v1', 0, JSON.stringify(complete)));
@@ -148,7 +149,7 @@ test("only an old compiler capability chooses legacy text decoding", () => {
 });
 
 test("the decoder CLI rejects an unknown consumer before invoking a compiler", () => {
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL("../differential/check-report.ts", import.meta.url)),
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("../differential/check-report/main.ts", import.meta.url)),
     "consume", "unknown", "/no/compiler/should/be/invoked", "/unused/project"], { encoding: "utf8", env: {...testEnvironment(), NTS_GATE_STEP_RESULT: ""} });
   assert.equal(result.status, 124);
   assert.match(result.stderr, /check NOT MEASURED: unknown check consumer/);

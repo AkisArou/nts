@@ -62,7 +62,7 @@ function readyFile(directory:string):Promise<NodeResolutionSession>{
 /** Async initialization is safe in a parent draining other children's pipes.
  * Other platforms retain the existing bounded live path, without using an
  * executable identity that they cannot authenticate through Linux /proc. */
-export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid):Promise<NodeResolutionSession|null>{
+export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void):Promise<NodeResolutionSession|null>{
   if(process.platform!=='linux')return null;
   mkdirSync(directory,{recursive:true,mode:0o700});
   const permissions=lstatSync(directory);
@@ -73,7 +73,7 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
     checkNodeResolutionSession(session,options);return session;
   }
-  const waiting=readyFile(directory),claim=join(directory,'starting.json');let starter=false;
+  const waiting=readyFile(directory),claim=join(directory,'starting.json');let starter=false,closed:Promise<void>|undefined;
   try{writeFileSync(claim,JSON.stringify({pid:process.pid})+'\n',{flag:'wx',mode:0o600});starter=true;}
   catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
   if(starter){
@@ -85,11 +85,14 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     // systemd cgroup. Finishing one supervised preparation must not kill it.
     const child=spawn(process.execPath,[...options.flags,helper,'--serve',directory],{env:process.env,detached:true,stdio:['ignore','ignore',log]});closeSync(log);child.unref();
     if(!child.pid)throw Error('oracle Node resolution service launch failed');
+    if(onStarted){closed=new Promise<void>((done,fail)=>{child.once('error',fail);child.once('close',(code,signal)=>code===0&&!signal?done():fail(Error('oracle Node resolution holder stopped: '+(signal??code))));});void closed.catch(()=>{});}
     child.once('error',()=>{/* The readiness timeout retains the startup log. */});
   }
   const session=await waiting;
   if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
-  checkNodeResolutionSession(session,options);return session;
+  checkNodeResolutionSession(session,options);
+  if(starter&&closed)onStarted?.(session,closed);
+  return session;
 }
 async function exchange(session:NodeResolutionSession,action:Batch['action'],queries:NodeResolutionQuery[]):Promise<Response>{
   const request:Batch={version:1,token:session.token,action,queries},bytes=Buffer.from(JSON.stringify(request)+'\n'),sha256=digest(bytes),address=socketAddress(session.directory);
