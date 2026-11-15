@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { COLUMNS, COMPARATORS, POLICY, type RunRecord } from "./run-record.ts";
+import { COLUMNS, COMPARATORS, POLICY, type RunRecord, type Cell } from "./run-record.ts";
 import { fromComparator, fromNts, workloadIdentity, type Metadata } from "./run-producers.ts";
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -68,7 +68,7 @@ test('missing AWFY input gives both references one unavailable reason and preser
   const absent={...original,measured:original.measured.map(row=>({...row,absences:{...row.absences,cpp:why,java:why}}))};
   const row=fromNts(meta(),absent).rows[0];assert.ok(row);
   for(const column of ['C++','Java'] as const){
-    const cell=row.cells[column];assert.ok(cell.status==='NOT_PROVIDED');assert.equal(cell.reason,why);
+    const cell:Cell|undefined=row.cells[column];assert.ok(cell);assert.ok(cell.status==='NOT_PROVIDED');assert.equal(cell.reason,why);
   }
   const present={...original,measured:original.measured.map(row=>({...row,results:[measurement,null,measurement,measurement,null,measurement],absences:{...row.absences,cpp:null,java:null}}))};
   const withOptionalField=fromNts(meta(),present);
