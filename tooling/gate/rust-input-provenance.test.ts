@@ -53,7 +53,7 @@ test('Cargo v2 binds the build namespace, while exact artifacts and build-script
   assert.equal(classify(pathname('/build/absent',missing),content)?.kind,'build-namespace','captured absences belong to the recorded build namespace too');
   assert.equal(classify(pathname('/build/unbound'),content),undefined,'a spelling alone still grants nothing');
   writeFileSync(path,JSON.stringify({...value,version:1}));const historical=read();assert.equal(historical.buildNamespace,undefined);assert.deepEqual(historical.outputDirectories,[]);
-  assert.equal(runtimeProvenanceClassifier({...facts(),...historical}).classify(descriptor('/build/owned-out/generated'),content),undefined);
+  assert.equal(runtimeProvenanceClassifier({...facts(),buildNamespace:undefined,...historical}).classify(descriptor('/build/owned-out/generated'),content),undefined);
   writeFileSync(path,JSON.stringify({...value,buildScripts:[{reason:'build-script-executed',package_id:'crate',out_dir:'/unowned'}]}));
   assert.throws(read,/OUT_DIR/);
 });
