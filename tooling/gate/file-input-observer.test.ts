@@ -11,6 +11,7 @@ import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexO
 import {authenticateRustInputTrace} from './rust-input-authentication.ts';
 import {runtimeSubjectValidator,validateRustInputCapture} from './rust-input-validation.ts';
 import {runtimeInputRequirement} from './rust-input-operations.ts';
+import {runtimeProvenanceClassifier} from './rust-input-provenance.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {newTestScratch} from './test-scratch.ts';
 import {spawnTest,waitFor} from './test-wait.ts';
@@ -157,12 +158,56 @@ int main(int argc,char **argv) {
     assert.ok(value.kind==='path'&&value.resolution&&value.resolution.state!=='unavailable'&&value.resolution.components.some(part=>part.path===alias&&part.kind==='symlink'));}
   const find=(name:string)=>rows.flatMap(row=>row.subjects).find(value=>value.kind==='path'&&value.name===name);
   const absent=find(missing),file=find(blocked);assert.equal(absent?.kind==='path'&&absent.resolution?.state,'missing');assert.equal(file?.kind==='path'&&file.resolution?.state,'not-directory');
+  assert.equal(absent?.kind==='path'&&absent.resolution?.state!=='unavailable'&&absent.resolution?.finalComponent,false,'missing intermediate is not an exact endpoint');
   const magicRaw=join(root,'magic.raw.gz'),magicRan=spawnTest(prepared.executable,fileObserverArguments(magicRaw,prepared.executable,['--self-image-probe']),{env,encoding:'utf8'});
   assert.equal(magicRan.status,0,magicRan.stderr);const magic:InputAttempt[]=[];
   await readFileObservation(magicRaw,row=>{if(row.kind==='attempt'&&row.syscall==='readlink')magic.push(row);});
   assert.equal(magic.length,1);assert.equal(magic[0]!.paths[0]!.resolution?.state,'unavailable','procfs magic links cannot certify the observer identity');
   rmSync(outside,{recursive:true});
   assert.equal(opens[0]!.kind==='path'&&opens[0]!.resolution?.state==='resolved'&&opens[0]!.resolution.path,first,'no analysis-time filesystem lookup');
+});
+
+test('procfs task anchors retain their namespace and root fence while magic links stay unavailable',async t=>{
+  const root=newTestScratch('file-input-procfs');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
+  writeFileSync(input,`#include <fcntl.h>
+#include <pthread.h>
+#include <unistd.h>
+static void *thread(void *unused){(void)unused;int fd=open("/proc/thread-self/comm",O_RDONLY);if(fd<0)return (void *)1;char c;int bad=read(fd,&c,1)!=1;close(fd);return (void *)(long)bad;}
+int main(void){int fd=open("/proc/self/limits",O_RDONLY);if(fd<0)return 1;char c;if(read(fd,&c,1)!=1)return 2;close(fd);
+pthread_t tid;if(pthread_create(&tid,0,thread,0))return 3;void *result;if(pthread_join(tid,&result)||result)return 4;
+char link[4096];return readlink("/proc/self/exe",link,sizeof(link))>0?0:5;}\n`);
+  const built=spawnTest('cc',['-O1','-pthread',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
+  const raw=join(root,'raw.gz'),index=join(root,'index.gz'),ran=spawnTest(prepared.executable,fileObserverArguments(raw,program,[]),{env,encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);
+  await publishInputTrace({raw,output:index,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'procfs',kind:['test'],source:'fixture.rs'}});
+  const rows:InputIndexObservation[]=[];await readInputTraceIndex(index,row=>{if(row.kind==='observation')rows.push(row);});
+  const provenance=runtimeProvenanceClassifier({sourceRoot:root,buildNamespace:join(root,'target'),artifacts:[],outputDirectories:[],roots:[]});
+  for(const name of ['/proc/self/limits','/proc/thread-self/comm']){
+    const row=rows.find(row=>row.subjects.some(part=>part.kind==='path'&&part.name===name));assert.ok(row);
+    const part=row.subjects.find(part=>part.kind==='path'&&part.name===name);assert.ok(part?.kind==='path'&&part.resolution?.state==='resolved');
+    const proof=part.resolution,anchor=proof.components.find(part=>part.taskAnchor);assert.ok(anchor?.taskAnchor);
+    assert.equal(anchor.filesystem,'procfs');assert.equal(anchor.link,undefined);assert.equal(anchor.taskAnchor.tid,row.attempt.tid);assert.equal(anchor.taskAnchor.tgid,row.attempt.tgid);
+    assert.deepEqual(anchor.taskAnchor.taskPidNamespace,anchor.taskAnchor.observerPidNamespace);
+    assert.equal(proof.components.at(-1)?.kind,'file');assert.equal(proof.components.at(-1)?.filesystem,'procfs');assert.equal(proof.finalComponent,true);
+    assert.equal(provenance.classify(part,{kind:'content',following:'follow'})?.kind,'host-environment');
+    if(name.includes('thread-self'))assert.notEqual(row.attempt.tid,row.attempt.tgid);
+  }
+  const magic=rows.flatMap(row=>row.subjects).find(part=>part.kind==='path'&&part.name==='/proc/self/exe');
+  assert.equal(magic?.kind==='path'&&magic.resolution?.state,'unavailable');
+  assert.ok(magic);assert.equal(provenance.classify(magic,{kind:'readlink',following:'no-follow'}),undefined);
+});
+
+test('native procfs anchor identity rejects a different PID namespace or proc root',t=>{
+  const root=newTestScratch('procfs-anchor-predicate');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const input=join(root,'predicate.c'),binary=join(root,'predicate'),env=fixtureEnvironment(t);
+  writeFileSync(input,'#define main observer_main\n#include '+JSON.stringify(source)+'\n#undef main\n#include <assert.h>\n'+
+    'int main(void){struct stat pid={.st_dev=1,.st_ino=2},root={.st_dev=3,.st_ino=4},changed=pid;'+
+    'assert(proc_anchor_identity(&pid,&pid,&root,&root));changed.st_ino++;assert(!proc_anchor_identity(&changed,&pid,&root,&root));'+
+    'changed=pid;changed.st_dev++;assert(!proc_anchor_identity(&changed,&pid,&root,&root));changed=root;changed.st_ino++;'+
+    'assert(!proc_anchor_identity(&pid,&pid,&changed,&root));changed=root;changed.st_dev++;assert(!proc_anchor_identity(&pid,&pid,&changed,&root));return 0;}\n');
+  const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror',input,'-lz','-o',binary],{env,encoding:'utf8'});
+  assert.equal(built.status,0,built.stderr);assert.equal(spawnTest(binary,[],{env,encoding:'utf8'}).status,0);
 });
 
 test('exec requests retain syscall argv and cwd without inventing successful or readable invocations',async t=>{

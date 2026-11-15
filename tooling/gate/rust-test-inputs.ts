@@ -8,7 +8,7 @@ import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
 import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
 import type {CapturedPathResolution} from './rust-input-provenance.ts';
-import {canonicalCapturedPath} from './captured-path.ts';
+import {canonicalCapturedPath,validProcfsTaskAnchor,validProcfsTaskComponent} from './captured-path.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -180,7 +180,7 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:5|6|7;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexStart={kind:'index-start';version:5|6|7|8;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
 export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
 export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number;execRequests:number};
@@ -197,7 +197,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
-  await emit({kind:'index-start',version:7,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  await emit({kind:'index-start',version:8,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
   const capture=await readFileObservation(options.raw,async row=>{
     if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
     if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
@@ -264,7 +264,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
       subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor,...(resolution?{resolution}:{})});
     }
     if(!row.paths.length)for(const fd of row.dirfds)descriptor(fd);
-    for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args,row,observer);
+    for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args,row,observer,row);
     for(const value of probes)readProbe(value);
     counts.observations+=subjects.length;counts.probes+=probes.length;
     const {id,tid,tgid,ppid,birth,parentBirth}=row;
@@ -309,7 +309,7 @@ const phaseValid=(row:Record<string,unknown>)=>['cargo-setup','rustdoc-setup','d
 const absolute=(value:unknown):value is string=>typeof value==='string'&&isAbsolute(value)&&!value.includes('\0');
 const digestValid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value);
 const position=(value:unknown):value is number=>integer(value)&&value>=0&&value<6;
-function readSubject(value:unknown,cwd:string,args:readonly string[],request:{syscall:string;operation:string},observer:FileObserverReceipt|null):InputSubject{
+function readSubject(value:unknown,cwd:string,args:readonly string[],request:{syscall:string;operation:string},observer:FileObserverReceipt|null,task:{tid:number;tgid:number}):InputSubject{
   const row=indexObject(value);
   const descriptor=(position:number)=>Number(BigInt.asIntN(32,BigInt('0x'+args[position]!)));
   if(!position(row.arg)||!hex(row.raw))fail('malformed input subject');
@@ -322,9 +322,17 @@ function readSubject(value:unknown,cwd:string,args:readonly string[],request:{sy
       else{
         const decimal=(value:unknown)=>typeof value==='string'&&/^\d+$/.test(value),namespace=indexObject(proof.namespace);
         if(!['resolved','missing','not-directory'].includes(String(proof.state))||!canonicalCapturedPath(proof.path)||typeof proof.finalLink!=='boolean'
+          ||proof.finalComponent!==undefined&&typeof proof.finalComponent!=='boolean'
           ||!['dev','ino','rootDev','rootIno'].every(key=>decimal(namespace[key]))||!Array.isArray(proof.components)||!proof.components.length||proof.components.length>128
           ||proof.components.some(item=>{const part=indexObject(item);return !canonicalCapturedPath(part.path)||!['directory','file','symlink','other','missing'].includes(String(part.kind))
-            ||!decimal(part.dev)||!decimal(part.ino)||part.link!==undefined&&(part.kind!=='symlink'||typeof part.link!=='string');}))fail('malformed capture-time resolution');
+            ||!decimal(part.dev)||!decimal(part.ino)||part.link!==undefined&&(part.kind!=='symlink'||typeof part.link!=='string')
+            ||part.filesystem!==undefined&&part.filesystem!=='procfs'&&part.filesystem!=='sysfs'
+            ||part.taskAnchor!==undefined&&(part.kind!=='symlink'||part.filesystem!=='procfs'||part.link!==undefined||!validProcfsTaskAnchor(part.taskAnchor,task));}))fail('malformed capture-time resolution');
+        for(const [index,item]of proof.components.entries()){
+          const part=indexObject(item);
+          if(part.taskAnchor!==undefined&&!validProcfsTaskComponent(part,index?indexObject(proof.components[index-1]):undefined,
+            index+1<proof.components.length?indexObject(proof.components[index+1]):undefined,task))fail('derived procfs anchor differs from its captured task or root');
+        }
       }
     }
     const anchor=indexObject(row.anchor);
@@ -373,7 +381,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==5&&row.version!==6&&row.version!==7)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(row.version!==5&&row.version!==6&&row.version!==7&&row.version!==8)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -430,7 +438,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       const context=tasks.get(key(attempt.tgid,attempt.birth));
       if(!context||context.id!==row.image||context.cwd!==row.cwd||context.phase!==row.phase||context.source!==row.source)
         fail('input attempt differs from its current execution context');
-      for(const value of row.subjects)readSubject(value,row.cwd,row.args,{syscall:row.syscall,operation:row.operation},header.observer);
+      for(const value of row.subjects)readSubject(value,row.cwd,row.args,{syscall:row.syscall,operation:row.operation},header.observer,{tid:attempt.tid,tgid:attempt.tgid});
       for(const value of row.probes)readProbe(value);
       counts.attempts++;counts.observations+=row.subjects.length;counts.probes+=row.probes.length;
     }else if(row.kind==='inherited'){

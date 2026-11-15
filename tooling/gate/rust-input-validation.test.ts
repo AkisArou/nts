@@ -101,6 +101,26 @@ test('conservative component checks refuse introduced aliases and captured file 
   assert.equal(directory.endpoint?.kind,'claimed');assert.equal(directory.state,'uncovered','generic ancestor/directory claims do not bypass the captured kind');
 });
 
+test('a captured final negative through an alias differs from an intermediate or historical stop',t=>{
+  const root=testScratch(t,'captured-final-negative');mkdirSync(join(root,'data'));symlinkSync('data',join(root,'alias'));
+  const inputs=snapshot([]);inputs.optionalFiles=[{reader:'reader.rs',path:'data/missing',present:false,context:{entry:'<entry>',dataNamespaces:{}}}];
+  const validator=runtimeSubjectValidator(root,inputs,{capturedIdentities:true}),row=request(root);
+  const part:InputSubject={kind:'path',arg:1,dirfdArg:0,name:'alias/missing',raw:Buffer.from('alias/missing').toString('hex'),anchor:{kind:'cwd',path:root},
+    resolution:{state:'missing',path:join(root,'data/missing'),finalLink:false,finalComponent:true,components:[
+      {path:root,kind:'directory',dev:'1',ino:'1'},
+      {path:join(root,'alias'),kind:'symlink',dev:'1',ino:'2',link:'data'},
+      {path:join(root,'data'),kind:'directory',dev:'1',ino:'3'},
+      {path:join(root,'data/missing'),kind:'missing',dev:'0',ino:'0'},
+    ]}};
+  const final=validator.assess(row,part,basis);assert.equal(final.identity?.path,join(root,'data/missing'));assert.equal(final.endpoint?.kind,'claimed');
+  assert.equal(final.state,'uncovered','the alias still needs its independent declaration');
+  for(const finalComponent of [false,undefined]){
+    const changed=structuredClone(part);assert.ok(changed.kind==='path'&&changed.resolution&&changed.resolution.state!=='unavailable');changed.resolution.finalComponent=finalComponent;
+    const result=validator.assess(row,changed,basis);assert.equal(result.endpoint?.kind,'uncovered');
+    assert.match(result.endpoint?.kind==='uncovered'?result.endpoint.reason:'',/before its final component/);
+  }
+});
+
 test('outside aliases resolve before classification while every external component stays explicit',t=>{
   const base=testScratch(t,'runtime-validator-outside'),root=join(base,'source'),outside=join(base,'outside');mkdirSync(root);mkdirSync(outside);
   writeFileSync(join(root,'target'),'owned');symlinkSync(join(root,'target'),join(outside,'alias'));

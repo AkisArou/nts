@@ -69,7 +69,7 @@ export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot,optio
           for(const observation of observations)components.push({observation,answer:inside(root,observation.path)?claims.matchComponent(observation):anchor.component(observation)});
         }
         const final=proof.components.at(-1);
-        identity=proof.state==='resolved'?{state:'resolved',path:proof.path}:{state:proof.state,path:spelling,component:proof.path,kind:final?.kind==='missing'?null:final?.kind??null};
+        identity=proof.state==='resolved'?{state:'resolved',path:proof.path}:{state:proof.state,path:proof.finalComponent===true?proof.path:spelling,component:proof.path,kind:final?.kind==='missing'?null:final?.kind??null};
       }
       const endpoint=claims.match(requirement,identity),complete=endpoint.kind==='claimed'&&components.every(row=>row.answer.kind==='claimed');
       return {...base,state:complete?'claimed':'uncovered',spelling,identity,endpoint};

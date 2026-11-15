@@ -9,11 +9,11 @@ import type {InputRequirement} from './rust-input-operations.ts';
 import type {TestScratchReceipt} from './test-scratch.ts';
 import type {InputSnapshot} from './module-closure.ts';
 import {projectDependencies,type InstalledProjectDependency} from './project-dependencies.ts';
-import {canonicalCapturedPath,capturedPathBoundary,type CapturedBoundaryFactory} from './captured-path.ts';
+import {canonicalCapturedPath,capturedPathBoundary,type CapturedBoundaryFactory,type CapturedKernelFilesystem,type ProcfsTaskAnchor} from './captured-path.ts';
 
-export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
+export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;finalComponent?:boolean;
   namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
-  components:{path:string;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string;link?:string}[]};
+  components:{path:string;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string;link?:string;filesystem?:CapturedKernelFilesystem;taskAnchor?:ProcfsTaskAnchor}[]};
 export type FreshRootReceipt=TestScratchReceipt;
 export type RuntimeProvenanceFacts={sourceRoot:string;buildNamespace?:string;artifacts:string[];
   outputDirectories:{package:string;path:string}[];roots:FreshRootReceipt[];window?:{start:number;end:number}};

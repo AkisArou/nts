@@ -405,20 +405,60 @@ static Bytes exec_target(const struct seccomp_notif *request, const Call *call,
 enum { RESOLUTION_COMPONENTS = 128, RESOLUTION_PATH_BYTES = 16384 };
 typedef struct {
   char path[PATH_BYTES], link[PATH_BYTES];
-  const char *kind;
+  const char *kind, *filesystem;
+  bool task_anchor;
   unsigned long long dev, ino;
 } ResolutionComponent;
 typedef struct {
   int error;
   const char *state;
-  bool final_link;
+  bool final_link, final_component, task_anchored;
+  pid_t tid;
+  unsigned long tgid;
   unsigned count, path_bytes;
   char path[PATH_BYTES];
-  struct stat mount, root;
+  struct stat mount, root, task_pid_namespace, observer_pid_namespace, proc_root;
   ResolutionComponent components[RESOLUTION_COMPONENTS];
 } PathResolution;
 static PathResolution resolution_rows[2];
 static unsigned long resolution_walks, resolution_stats;
+static bool same_identity(const struct stat *left, const struct stat *right) {
+  return left->st_dev == right->st_dev && left->st_ino == right->st_ino;
+}
+static bool proc_anchor_identity(const struct stat *task_pid,
+                                const struct stat *observer_pid,
+                                const struct stat *walked_root,
+                                const struct stat *observer_root) {
+  return same_identity(task_pid, observer_pid) &&
+         same_identity(walked_root, observer_root);
+}
+static bool proc_anchor_fence(PathResolution *value, const char *parent,
+                              bool acquire) {
+  char path[96];
+  struct stat task_pid, observer_pid, walked_root, observer_root;
+  snprintf(path, sizeof(path), "/proc/%d/ns/pid", value->tid);
+  if (stat(path, &task_pid) || stat("/proc/self/ns/pid", &observer_pid) ||
+      lstat(parent, &walked_root) || lstat("/proc", &observer_root)) {
+    value->error = errno;
+    return false;
+  }
+  if (!S_ISDIR(walked_root.st_mode) || !S_ISDIR(observer_root.st_mode) ||
+      !proc_anchor_identity(&task_pid, &observer_pid, &walked_root,
+                            &observer_root) ||
+      (!acquire &&
+       (!same_identity(&task_pid, &value->task_pid_namespace) ||
+        !same_identity(&observer_pid, &value->observer_pid_namespace) ||
+        !same_identity(&walked_root, &value->proc_root)))) {
+    value->error = EXDEV;
+    return false;
+  }
+  if (acquire) {
+    value->task_pid_namespace = task_pid;
+    value->observer_pid_namespace = observer_pid;
+    value->proc_root = walked_root;
+  }
+  return true;
+}
 static bool resolution_namespace(pid_t tid, struct stat *mount,
                                  struct stat *root) {
   char path[96];
@@ -444,6 +484,8 @@ static bool resolution_component(PathResolution *value, const char *path,
   ResolutionComponent *part = &value->components[value->count++];
   memcpy(part->path, path, size + 1);
   part->link[0] = 0;
+  part->filesystem = NULL;
+  part->task_anchor = false;
   value->path_bytes += (unsigned)size;
   resolution_stats++;
   if (lstat(path, info)) {
@@ -462,6 +504,21 @@ static bool resolution_component(PathResolution *value, const char *path,
                : S_ISREG(info->st_mode) ? "file"
                : S_ISLNK(info->st_mode) ? "symlink"
                                         : "other";
+  const ResolutionComponent *previous =
+      value->count > 1 ? &value->components[value->count - 2] : NULL;
+  if (previous && previous->dev == part->dev)
+    part->filesystem = previous->filesystem;
+  else if (!S_ISLNK(info->st_mode) && info->st_dev != value->root.st_dev) {
+    struct statfs filesystem;
+    if (statfs(path, &filesystem)) {
+      value->error = errno;
+      return false;
+    }
+    if (filesystem.f_type == PROC_SUPER_MAGIC)
+      part->filesystem = "procfs";
+    else if (filesystem.f_type == SYSFS_MAGIC)
+      part->filesystem = "sysfs";
+  }
   return true;
 }
 static void resolution_parent(char *path) {
@@ -471,12 +528,15 @@ static void resolution_parent(char *path) {
   else if (slash)
     *slash = 0;
 }
-static void resolve_attempt_path(pid_t tid, const Bytes *path,
+static void resolve_attempt_path(pid_t tid, unsigned long tgid, const Bytes *path,
                                  const Bytes *anchor, PathResolution *value) {
   value->error = EINVAL;
   value->state = "unavailable";
   value->count = value->path_bytes = 0;
   value->final_link = false;
+  value->final_component = value->task_anchored = false;
+  value->tid = tid;
+  value->tgid = tgid;
   value->path[0] = 0;
   if (!good(path) || path->null || !path->size || path->size >= PATH_BYTES)
     return;
@@ -524,6 +584,7 @@ static void resolve_attempt_path(pid_t tid, const Bytes *path,
     while (*tail == '/')
       tail++;
     bool final = !*tail;
+    value->final_component = final;
     if (!strcmp(part, "."))
       continue;
     if (!strcmp(part, ".."))
@@ -541,8 +602,6 @@ static void resolve_attempt_path(pid_t tid, const Bytes *path,
     if (!resolution_component(value, value->path, &info))
       break;
     if (S_ISLNK(info.st_mode)) {
-      // procfs magic links resolve in the calling process, even in a shared
-      // mount/root namespace. Never certify the observer's /proc/self identity.
       char parent[PATH_BYTES];
       strcpy(parent, value->path);
       resolution_parent(parent);
@@ -552,8 +611,40 @@ static void resolve_attempt_path(pid_t tid, const Bytes *path,
         break;
       }
       if (filesystem.f_type == PROC_SUPER_MAGIC) {
-        value->error = EOPNOTSUPP;
-        break;
+        // self/thread-self are task-directory anchors only with a tail.
+        // Their numeric meaning is fenced by both PID namespace and procfs
+        // root identity. Other magic links never borrow observer identity.
+        if (final || !tgid ||
+            (strcmp(part, "self") && strcmp(part, "thread-self"))) {
+          value->error = EOPNOTSUPP;
+          break;
+        }
+        if (!proc_anchor_fence(value, parent, !value->task_anchored))
+          break;
+        if (++links > 40) {
+          value->error = ELOOP;
+          break;
+        }
+        ResolutionComponent *component = &value->components[value->count - 1];
+        component->task_anchor = true;
+        component->filesystem = "procfs";
+        value->task_anchored = true;
+        int written = !strcmp(part, "self")
+                          ? snprintf(value->path, sizeof(value->path),
+                                     "%s/%lu", parent, tgid)
+                          : snprintf(value->path, sizeof(value->path),
+                                     "%s/%lu/task/%d", parent, tgid, tid);
+        if (written < 0 || written >= PATH_BYTES) {
+          value->error = ENAMETOOLONG;
+          break;
+        }
+        if (!resolution_component(value, value->path, &info))
+          break;
+        if (!S_ISDIR(info.st_mode)) {
+          value->state = "not-directory";
+          break;
+        }
+        continue;
       }
       ResolutionComponent *component = &value->components[value->count - 1];
       ssize_t count = readlink(value->path, component->link, PATH_BYTES - 1);
@@ -593,6 +684,8 @@ static void resolve_attempt_path(pid_t tid, const Bytes *path,
   }
   if (!value->error && !strcmp(value->state, "unavailable"))
     value->state = "resolved";
+  if (!value->error && !*pending)
+    value->final_component = true;
 done:;
   struct stat mount, root;
   if (!resolution_namespace(tid, &mount, &root) ||
@@ -600,6 +693,15 @@ done:;
       mount.st_ino != value->mount.st_ino ||
       root.st_dev != value->root.st_dev || root.st_ino != value->root.st_ino)
     value->error = EXDEV;
+  if (value->task_anchored)
+    for (unsigned i = 0; i < value->count; i++)
+      if (value->components[i].task_anchor) {
+        char parent[PATH_BYTES];
+        strcpy(parent, value->components[i].path);
+        resolution_parent(parent);
+        if (!proc_anchor_fence(value, parent, false))
+          break;
+      }
 }
 static void resolution_text(const char *text) {
   Bytes value = {.data = (unsigned char *)text, .size = strlen(text)};
@@ -612,9 +714,10 @@ static void resolution_json(const PathResolution *value) {
   }
   fprintf(
       output,
-      "{\"state\":\"%s\",\"finalLink\":%s,\"namespace\":{\"dev\":\"%llu\","
+      "{\"state\":\"%s\",\"finalLink\":%s,\"finalComponent\":%s,\"namespace\":{\"dev\":\"%llu\","
       "\"ino\":\"%llu\",\"rootDev\":\"%llu\",\"rootIno\":\"%llu\"},\"path\":",
       value->state, value->final_link ? "true" : "false",
+      value->final_component ? "true" : "false",
       (unsigned long long)value->mount.st_dev,
       (unsigned long long)value->mount.st_ino,
       (unsigned long long)value->root.st_dev,
@@ -629,6 +732,21 @@ static void resolution_json(const PathResolution *value) {
     resolution_text(part->path);
     fprintf(output, ",\"kind\":\"%s\",\"dev\":\"%llu\",\"ino\":\"%llu\"",
             part->kind, part->dev, part->ino);
+    if (part->filesystem)
+      fprintf(output, ",\"filesystem\":\"%s\"", part->filesystem);
+    if (part->task_anchor)
+      fprintf(output,
+              ",\"taskAnchor\":{\"kind\":\"procfs-task\",\"tid\":%d,\"tgid\":%lu,"
+              "\"taskPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
+              "\"observerPidNamespace\":{\"dev\":\"%llu\",\"ino\":\"%llu\"},"
+              "\"procRoot\":{\"dev\":\"%llu\",\"ino\":\"%llu\"}}",
+              value->tid, value->tgid,
+              (unsigned long long)value->task_pid_namespace.st_dev,
+              (unsigned long long)value->task_pid_namespace.st_ino,
+              (unsigned long long)value->observer_pid_namespace.st_dev,
+              (unsigned long long)value->observer_pid_namespace.st_ino,
+              (unsigned long long)value->proc_root.st_dev,
+              (unsigned long long)value->proc_root.st_ino);
     if (*part->link) {
       fputs(",\"link\":", output);
       resolution_text(part->link);
@@ -840,7 +958,7 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
                 (int)request->data.args[call->dirfds[i]] == AT_FDCWD
             ? &cwd
             : &descriptors[i];
-    resolve_attempt_path(request->pid, &paths[i], anchor, &resolution_rows[i]);
+    resolve_attempt_path(request->pid, tgid, &paths[i], anchor, &resolution_rows[i]);
     fputs(",\"resolution\":", output);
     resolution_json(&resolution_rows[i]);
     fputc('}', output);
@@ -979,7 +1097,7 @@ int main(int argc, char **argv) {
   static char buffer[65536];
   if (setvbuf(output, buffer, _IOFBF, sizeof(buffer)))
     fatal("observation buffer");
-  fputs("{\"kind\":\"start\",\"version\":4,\"mechanism\":\"seccomp-user-"
+  fputs("{\"kind\":\"start\",\"version\":5,\"mechanism\":\"seccomp-user-"
         "notification\",\"noNewPrivileges\":true}\n",
         output);
   inherited_descriptors();
