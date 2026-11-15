@@ -17,12 +17,12 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // three files by subject that run beside each other.
 import {type TestContext} from "node:test";
 import {execFileSync} from "node:child_process";
-import {chmodSync,copyFileSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from "node:fs";
+import {chmodSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
-import {moduleClosure} from "../gate/module-closure-fixture.ts";
+import {copyModuleClosure} from "../gate/module-closure-fixture.ts";
 import {PROFILE,removeRun,type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {ownMemory} from "../gate/test-memory.ts";
@@ -36,12 +36,7 @@ export function fixture(t: TestContext) {
   const tree = join(own, "tree"), gate = join(tree, "tooling/gate"), controls = join(own, "controls"), home = join(own, "home");
   const target = join(home, ".cache/target"), run = join(home, ".cache/runs/one");
   for (const dir of [gate, controls, target]) mkdirSync(dir, { recursive: true });
-  for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
-    const target = join(tree, name), original = join(GATE, "../..", name);
-    mkdirSync(dirname(target), {recursive: true});
-    if (name === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
-    else copyFileSync(original, target);
-  }
+  copyModuleClosure(["tooling/gate/run.mjs"],tree);
   oracleWorkspaceFixture(t,tree);
   writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
   symlinkSync(fileURLToPath(new URL("../gate/times.tsv", import.meta.url)), join(gate, "times.tsv"));

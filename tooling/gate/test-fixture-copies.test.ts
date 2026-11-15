@@ -71,3 +71,16 @@ test('a helper outside the fixture naming convention obeys the same staging rule
 test('literal indexed copy methods obey the same owner rule',()=>{
  assert.equal(inspect(`import * as fs from 'node:fs';fs['copyFileSync']('/owned/tooling/gate/helper.ts','/fixture/helper.ts');`).length,1);
 });
+
+for(const copy of [
+ "copyFileSync(original,join('/fixture',file));",
+ "symlinkSync(original,join('/fixture',file));",
+ "const bytes=readFileSync(original,'utf8');writeFileSync(join('/fixture',file),bytes.replace('one','two'));",
+])test('the audit refuses observation-bearing closure inventories in raw '+copy.split('(')[0],()=>{
+ const source=imports+"import {moduleClosure as inventory} from './module-closure-fixture.ts';const files=inventory(['tooling/gate/run.mjs']);for(const file of files){const original=join(ROOT,file);"+copy+"}";
+ const rows=inspect(source);assert.equal(rows.length,1);assert.match(rows[0]!.input,/moduleClosure observation files/);
+ assert.match(fixtureCopyProblems('/owned',rows)[0]!,/outside copyModuleClosure/);
+});
+test('staging first permits a private mutation without copying observations',()=>{
+ assert.deepEqual(inspect(imports+"const staged=copyModuleClosure(['tooling/gate/run.mjs'],'/fixture');for(const file of staged){const original=join('/fixture',file);const text=readFileSync(original,'utf8');writeFileSync(original,text.replace('one','two'));}"),[]);
+});

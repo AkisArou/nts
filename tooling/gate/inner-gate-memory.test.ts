@@ -20,15 +20,15 @@ import assert from "node:assert/strict";
 import {spawn, spawnSync} from "node:child_process";
 import {once} from "node:events";
 import {randomUUID} from "node:crypto";
-import {copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
-import {join, dirname} from "node:path";
+import {existsSync,mkdirSync,readFileSync,symlinkSync,writeFileSync,rmSync} from "node:fs";
+import {join} from "node:path";
 
 import {createInterface} from "node:readline";
 import {test, type TestContext} from "node:test";
 import {fileURLToPath} from "node:url";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
-import {moduleClosure} from "./module-closure-fixture.ts";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
@@ -46,12 +46,7 @@ function fixture(t: TestContext) {
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), started = join(own, "case-started");
   // The gate's own files, with the runner copied so that it takes the fixture for its tree.
   mkdirSync(gate, { recursive: true });
-  for (const file of moduleClosure(["tooling/gate/run.mjs"])) {
-    const target = join(root, file), original = join(GATE, "../..", file);
-    mkdirSync(dirname(target), {recursive: true});
-    if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
-    else copyFileSync(original, target);
-  }
+  copyModuleClosure(["tooling/gate/run.mjs"],root);
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
   // The stand-in shell executes this declared runtime asset.

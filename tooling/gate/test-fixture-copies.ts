@@ -66,10 +66,32 @@ export function inspectFixtureCopies(rootDirectory:string,file:string,text:strin
   else found=[...facts.childrenOf(node)].flatMap(child=>reads(child,depth+1));
   cache.set(node,found);return found;
  };
+ // Closure files include observations as well as placed modules. A raw copy
+ // cannot turn that inventory into a staging grant, even when loop bindings
+ // make its path spelling unknown to the literal-path analysis above.
+ const closureFiles=(input:Node,seen=new Set<Node>()):boolean=>{
+  const node=unwrap(input);if(seen.has(node))return false;seen.add(node);
+  if(ast.isIdentifier(node)){const value=binding(node);return !!value&&value.kind!=='parameter'&&closureFiles(value.value,seen);}
+  if(ast.isCallExpression(node)){
+   const called=name(node.expression);
+   if(called==='JSON.stringify')return false;
+   const owner=/^(\.{1,2}\/.*)\.moduleClosure$/.exec(called);
+   if(owner&&['tooling/gate/module-closure.ts','tooling/gate/module-closure-fixture.ts'].includes(
+    relative('.',join(dirname(file),owner[1]!)).split(sep).join('/')))return true;
+  }
+  return [...facts.childrenOf(node)].some(child=>closureFiles(child,seen));
+ };
  const found:FixtureCopy[]=[],seen=new Set<string>();
  for(const call of calls){
   if(!ast.isCallExpression(call))continue;
   const called=name(call.expression),args=call.arguments;
+  const copied=/^(?:fs|fs\/promises)(?:\.promises)?\.(?:cp|copyFile|symlink)(?:Sync)?$/.test(called)?args[0]:
+   /^(?:fs|fs\/promises)(?:\.promises)?\.writeFile(?:Sync)?$/.test(called)?args[1]:undefined;
+  if(copied&&closureFiles(copied)){
+   found.push({file,line:facts.line(call.pos),source:code(call).replace(/\s+/g,' ').slice(0,240),input:'moduleClosure observation files'});
+   continue;
+  }
+
   const inputs=/^(?:fs|fs\/promises)(?:\.promises)?\.(?:cp|copyFile|symlink)(?:Sync)?$/.test(called)&&args[0]?paths(args[0]):
    /^(?:fs|fs\/promises)(?:\.promises)?\.writeFile(?:Sync)?$/.test(called)&&args[1]?reads(args[1]):[];
   for(const input of inputs){

@@ -18,7 +18,7 @@ import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
-import { moduleClosure } from "./module-closure-fixture.ts";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import { removable } from "./run-temporary.ts";
 import { ownMemory } from "./test-memory.ts";
 
@@ -111,17 +111,16 @@ function runFixture(t: { after: (fn: () => void) => void }, steps: string, bound
   mkdirSync(gate, { recursive: true });
   mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
-  for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
+  for (const name of copyModuleClosure(["tooling/gate/run.mjs"],root)) {
     const destination = join(root, name), original = join(source, "../..", name);
     mkdirSync(dirname(destination), { recursive: true });
-    if (name === "tooling/gate/run.mjs") writeFileSync(destination, readFileSync(original));
-    else if (name === "tooling/gate/step-table.mjs") {
+    if (name === "tooling/gate/step-table.mjs") {
       writeFileSync(destination, `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(original).href)};
 const bounds = ${JSON.stringify(bounds)};
 export const STEPS = REAL.map(row => Object.hasOwn(bounds, row.name) ? { ...row, bound: bounds[row.name] } : row);
 export { stepTableProblem };
 `);
-    } else symlinkSync(original, destination);
+    }
   }
   symlinkSync(join(source, "token.sh"), join(gate, "token.sh"));
   writeFileSync(join(gate, "times.tsv"), "format\t1\t1\t1\nrecords\t1\t1\t1\n");

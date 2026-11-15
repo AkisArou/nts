@@ -1,12 +1,12 @@
 import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {copyFileSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {fixture} from '../landing/run-fixture.ts';
-import {moduleClosure} from './module-closure-fixture.ts';
+import {copyModuleClosure} from './module-closure-fixture.ts';
 import {gateEnvironment} from './canonical-environment.ts';
 import {ownMemory} from './test-memory.ts';
 import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts';
@@ -19,9 +19,7 @@ type Summary={verdict:string;memory:{growths:number};steps:{name:string;verdict:
 
 function runFixture(t:TestContext,{payload,known=[],knownPeak=1.25*GiB,live=true}:{payload:string;known?:string[];knownPeak?:number;live?:boolean}){
   const f=fixture(t),gate=join(f.tree,'tooling/gate');
-  for(const path of moduleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts'])){
-    const destination=join(f.tree,path);mkdirSync(dirname(destination),{recursive:true});copyFileSync(join(ROOT,path),destination);
-  }
+  copyModuleClosure(['tooling/gate/tokens.mjs','tooling/census/worker-memory.ts','tooling/gate/token-command.ts','tooling/gate/case-spawn.ts'],f.tree);
   const memory=ownMemory(join(f.own,'memory'),{availableKiB:4*2**20,totalKiB:4*2**20,
     resident:live?{kind:'live'}:{kind:'fixed',defaultBytes:0},scopePeak:{kind:'live'}});
   const table=join(gate,'step-table.mjs');

@@ -11,7 +11,7 @@ import {fileURLToPath} from "node:url";
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
 import {STEPS, stepTableProblem} from "./step-table.mjs";
-import {moduleClosure} from "./module-closure-fixture.ts";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
@@ -39,17 +39,16 @@ test("the runner refuses a table whose steps wait for one another, before any st
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), run = join(own, "home/.cache/gate-run"), started = join(own, "started");
   const source = fileURLToPath(new URL("./", import.meta.url));
   mkdirSync(gate, { recursive: true });
-  for (const file of moduleClosure(["tooling/gate/run.mjs"])) {
+  for (const file of copyModuleClosure(["tooling/gate/run.mjs"],root)) {
     const target = join(root, file);
     mkdirSync(dirname(target), {recursive: true});
     const original = join(source, "../..", file);
-    if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
-    else if (file === "tooling/gate/step-table.mjs") {
+    if (file === "tooling/gate/step-table.mjs") {
       // clippy needs tests, and tests waits for clippy as well as the build.
       const text = readFileSync(original, "utf8").replace('{ name: "clippy", slots: 6,', '{ name: "clippy", needs: ["tests"], slots: 6,').replace('after: ["build"], doc: "cargo test --workspace"', 'after: ["build", "clippy"], doc: "cargo test --workspace"');
       assert.notEqual(text, readFileSync(original, "utf8"));
       writeFileSync(target, text);
-    } else symlinkSync(original, target);
+    }
   }
   symlinkSync(join(source, "times.tsv"), join(gate, "times.tsv"));
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });

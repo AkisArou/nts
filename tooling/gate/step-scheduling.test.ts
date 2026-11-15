@@ -1,10 +1,10 @@
 import {STEP_CPU_MEASURE,GNU_CPU_MEASURE} from './step-time.ts';
 import {fixtureEnvironment} from "./test-environment.ts";
 import assert from "node:assert/strict";
-import {moduleClosure} from "./module-closure-fixture.ts";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {test} from "node:test";
-import {copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {existsSync,mkdirSync,readFileSync,symlinkSync,writeFileSync,rmSync} from "node:fs";
 import {join, dirname} from "node:path";
 
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -137,12 +137,7 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "gate-run");
   mkdirSync(gate, { recursive: true }); mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
-  for(const file of moduleClosure(["tooling/gate/run.mjs"])){
-    const destination=join(root,file),original=join(source,"../..",file);
-    mkdirSync(dirname(destination),{recursive:true});
-    if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));
-    else copyFileSync(original,destination);
-  }
+  copyModuleClosure(["tooling/gate/run.mjs"],root);
   oracleWorkspaceFixture(t,root);
   const baseline = fixtureBaseline("tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n");
   writeFileSync(join(gate, "times.tsv"), baseline);
@@ -261,7 +256,7 @@ function memoryRun(t: { after: (fn: () => void) => void }, { steps, rows, times,
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
   mkdirSync(gate, { recursive: true }); mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
-  for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
+  for (const name of copyModuleClosure(["tooling/gate/run.mjs"],root)) {
     const destination = join(root, name), original = join(source, "../..", name);
     mkdirSync(dirname(destination), { recursive: true });
     if (name === "tooling/gate/run.mjs") {
@@ -333,7 +328,7 @@ const rows = ${JSON.stringify(Object.fromEntries(Object.entries(rows).map(([name
 export const STEPS = REAL.map(row => Object.hasOwn(rows, row.name) ? { name: row.name, ...rows[row.name] } : row);
 export { stepTableProblem };
 `);
-    } else symlinkSync(original, destination);
+    }
   }
   symlinkSync(join(source, "token.sh"), join(gate, "token.sh"));
   writeFileSync(join(gate, "times.tsv"), fixtureBaseline(times));

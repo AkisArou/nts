@@ -5,8 +5,8 @@ import {testEnvironmentHandoff,fixtureEnvironment} from "./test-environment.ts";
 import {removable} from "./run-temporary.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync, symlinkSync, utimesSync, chmodSync, rmSync} from "node:fs";
-import {copyModuleClosure,moduleClosure} from "./module-closure-fixture.ts";
+import {mkdirSync,existsSync,readFileSync,writeFileSync,symlinkSync,utimesSync,rmSync} from "node:fs";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {homedir,userInfo} from "node:os";
 import {dirname, join} from "node:path";
 import {pathToFileURL} from "node:url";
@@ -356,12 +356,7 @@ test("the real runner records the environment and distinguishes verdict failures
   const nodeCommand="'"+process.execPath.replaceAll("'","'\\''")+"'";
   mkdirSync(gate,{recursive:true});
   const source=new URL("./",import.meta.url).pathname;
-  for (const file of moduleClosure(["tooling/gate/run.mjs"])) {
-    const target=join(root,file),original=join(source,"../..",file);
-    mkdirSync(dirname(target),{recursive:true});
-    if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
-    else copyFileSync(original,target);
-  }
+  copyModuleClosure(["tooling/gate/run.mjs"],root);
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
@@ -431,13 +426,7 @@ test('the real runner preserves typed parent capture failures before launching a
   const {run,base}=fixture(t),memory=ownMemory(join(run,'memory')),source=new URL('./',import.meta.url).pathname;
   for(const kind of ['tooling-setup','case-budget']){
     const root=join(run,kind),gate=join(root,'tooling/gate');mkdirSync(gate,{recursive:true});
-    for(const file of moduleClosure(["tooling/gate/run.mjs"])){
-      if(file==="tooling/gate/canonical-environment.ts")continue;
-      const target=join(root,file),original=join(source,"../..",file);
-      mkdirSync(dirname(target),{recursive:true});
-      if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
-      else copyFileSync(original,target);
-    }
+  copyModuleClosure(["tooling/gate/run.mjs"],root);
     symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
     const canonical=new URL('./canonical-environment.ts',import.meta.url).href;
     writeFileSync(join(gate,'canonical-environment.ts'),`export * from ${JSON.stringify(canonical)};import {CaseBudgetError,ToolingInstrumentError} from './step-result.ts';export async function sealOracleRun(){throw ${kind==='case-budget'?"new CaseBudgetError('parent capture budget control')":"new ToolingInstrumentError('tooling-setup','oracle dependency seal changed: parent control')"};}\n`);
@@ -472,15 +461,13 @@ function startupRunner(t:{after(fn:()=>void):void},availableKiB:number,oracle?:"
   mkdirSync(gate,{recursive:true});
   const source=new URL('./',import.meta.url).pathname;
   const looked=join(run,'schedule-looked');
-  for(const file of moduleClosure(['tooling/gate/run.mjs'])){
-    const target=join(root,file),original=join(source,'../..',file);
-    mkdirSync(dirname(target),{recursive:true});
-    if(file==='tooling/gate/run.mjs'&&oracle==='priority'){
+  copyModuleClosure(['tooling/gate/run.mjs'],root);
+  if(oracle==='priority'){
+    const target=join(root,'tooling/gate/run.mjs'),original=join(source,'run.mjs');
       const text=readFileSync(original,'utf8'),callback='outrankedLook = null; schedule();';
       assert.ok(text.includes(callback));
       // Observe the real priority timer reaching schedule, while capture waits.
       writeFileSync(target,text.replace(callback,callback+` writeFileSync(${JSON.stringify(looked)}, "looked");`));
-    }else copyFileSync(original,target);
   }
   oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,'times.tsv'),join(gate,'times.tsv'));
