@@ -56,6 +56,7 @@ export class SourceFacts {
     const factory=match&&READER_FACTORIES[match[2]!];
     if(factory&&posix.normalize(posix.join(posix.dirname(this.file),match![1]!))===factory.owner)
       return {name:match![2]!,kind:factory.kind};
+    return undefined;
   }
 
   constructor(file:string,source:string,root:Node){
