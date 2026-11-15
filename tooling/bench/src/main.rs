@@ -1819,7 +1819,7 @@ fn jvm_case(
     } else {
         Some(workload.numeric()?)
     };
-    let emitted = builds.thread("nts JVM", "capture/prepare/emit", || {
+    let (program, emitted) = builds.thread("nts JVM", "capture/prepare/emit", || {
         let program = prepared_program(
             tsconfig,
             &workload.roots,
@@ -1839,7 +1839,7 @@ fn jvm_case(
         if !emitted.is_complete() {
             bail!("{DECLINED}{} function(s)", emitted.diagnostics.len());
         }
-        Ok(emitted)
+        Ok((program, emitted))
     })?;
     let dir = out.join(format!("{name}.jvm"));
     std::fs::create_dir_all(&dir)?;
