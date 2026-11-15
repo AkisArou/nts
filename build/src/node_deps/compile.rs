@@ -62,7 +62,7 @@ fn object(
     let id = hash(input.as_bytes());
     let object = directory.join(format!("{id}.o"));
     let deps = directory.join(format!("{id}.d"));
-    let mut command = identity.compiler();
+    let mut command = identity.compiler_for_object(Path::new(input));
     command.args(&target.cflags);
     for include in &target.includes {
         command.arg(format!("-I{}", source.join(include).display()));

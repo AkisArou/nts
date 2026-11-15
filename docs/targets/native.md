@@ -89,9 +89,16 @@ installs a host of its own (`nts_host_install`).
 `build/src/node_deps` builds the selected libraries from the embedded Node
 source bundle. Its invocation owner maps that bundle's extraction directory
 to `/nts/node-deps/<bundle SHA>` for file macros and debug information. A
-compiler support probe checks the mapping before objects are compiled;
+compiler support probe compiles one tiny debug object in exclusive owned
+scratch outside the bundle. It checks tagged file macros and refuses physical
+bundle or probe paths in the object before library objects are compiled;
 caller prefix maps are refused in flags, leading arguments and configuration.
 Shipped assertion strings therefore name the virtual bundle path.
+COFF object commands also suppress CodeView's physical command-line record
+and set a virtual compilation directory and object name. Object names derive
+from bundle-relative source paths. Other object formats do not receive those
+COFF flags. Compiler search observations exclude the exact primary input from
+the first numeric linemarker, while retaining forced-header parents.
 
 The archive key includes a versioned mapping policy, source content, recipe,
 tools and flags. Bundle observations are relative to the bundle and validated

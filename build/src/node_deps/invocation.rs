@@ -3,13 +3,7 @@ use super::{
     paths::{MAPPING_POLICY, SourcePaths},
 };
 use anyhow::{Context as _, Result, bail};
-use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    io::Write as _,
-    path::Path,
-    process::{Command, Stdio},
-};
+use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Command};
 
 pub(super) struct Context {
     pub key: String,
@@ -61,7 +55,7 @@ impl Context {
         let archiver_inputs = context.tool_inputs(&context.archiver)?;
         let flag_inputs = context.tool_inputs(&context.flags)?;
         let search = super::search::fingerprint(&context)?;
-        context.verify_mapping()?;
+        context.verify_mapping(&request.cache)?;
         let environment: BTreeMap<_, _> = context
             .environment
             .iter()
@@ -105,6 +99,24 @@ impl Context {
         command.args(self.source.mappings());
         command
     }
+    pub(super) fn compiler_for_object(&self, input: &Path) -> Command {
+        let mut command = self.compiler();
+        if self.format == ObjectFormat::Coff {
+            command.args([
+                format!(
+                    "-fdebug-compilation-dir={}",
+                    self.source.virtual_root().display()
+                ),
+                "-gno-codeview-command-line".to_owned(),
+                format!(
+                    "-object-file-name={}/objects/{}.o",
+                    self.source.virtual_root().display(),
+                    input.display()
+                ),
+            ]);
+        }
+        command
+    }
     pub(super) fn archiver(&self) -> Command {
         let mut command = self.command(&self.archiver);
         if self.format == ObjectFormat::Macho {
@@ -124,54 +136,80 @@ impl Context {
         ))
     }
 
-    fn verify_mapping(&self) -> Result<()> {
-        let physical = self.source.root().join("nts-prefix-map-probe.c");
-        let expected = self.source.virtual_root().join("nts-prefix-map-probe.c");
-        let input = format!("#line 1 {}\n__FILE__\n", serde_json::to_string(&physical)?);
-        let mut child = self
-            .compiler()
-            .args(&self.flags)
-            .args(["-E", "-P", "-x", "c", "-"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("probing bundled dependency source mapping")?;
-        let wrote = child.stdin.take().map_or_else(
-            || {
-                Err(std::io::Error::other(
-                    "source mapping probe has no input pipe",
-                ))
-            },
-            |mut pipe| pipe.write_all(input.as_bytes()),
+    fn verify_mapping(&self, cache: &Path) -> Result<()> {
+        // The verified bundle must stay byte-exact. This claim is outside it,
+        // and the scratch owner keeps cleanup beside the operation's failure.
+        nts_publication::scratch(cache, |directory| {
+            self.probe_object(directory).map_err(std::io::Error::other)
+        })?;
+        Ok(())
+    }
+
+    fn probe_object(&self, directory: &Path) -> Result<()> {
+        let probe = SourcePaths::new(directory)?;
+        let name = Path::new("nts-prefix-map-probe.c");
+        let physical = self.source.root().join(name);
+        let input = format!(
+            "#line 1 {}\nconst char nts_file_probe[] = \"nts-file-probe:\" __FILE__;\nconst char nts_base_probe[] = \"nts-base-probe:\" __BASE_FILE__;\n",
+            serde_json::to_string(&physical)?
         );
-        // Even a failed input write must join the acquired compiler process.
-        let output = child.wait_with_output()?;
-        wrote.context("writing bundled dependency source mapping probe")?;
-        let expected = serde_json::to_string(&expected)?;
-        // A Windows target may spell its file macro with target separators,
-        // while preprocessing still reads physical POSIX paths on this host.
-        let coff = if self.format == ObjectFormat::Coff {
-            Some(serde_json::to_string(
-                &self
-                    .source
-                    .virtual_root()
-                    .join("nts-prefix-map-probe.c")
-                    .to_string_lossy()
-                    .replace('/', "\\"),
-            )?)
-        } else {
-            None
-        };
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let observed = stdout.lines().last();
-        let mapped = observed == Some(expected.as_str())
-            || coff.as_deref().is_some_and(|value| observed == Some(value));
-        if !output.status.success() || !mapped {
+        let source = probe.root().join(name);
+        std::fs::write(&source, input)?;
+        let object = probe.root().join("probe.o");
+        let output = self
+            .compiler_for_object(name)
+            .args(probe.mappings())
+            .args(&self.flags)
+            .arg("-g")
+            .arg("-c")
+            .arg(source)
+            .arg("-o")
+            .arg(&object)
+            .output()
+            .context("probing bundled dependency object source mapping")?;
+        if !output.status.success() {
             bail!(
-                "bundled dependency compiler cannot map source paths with -ffile-prefix-map and -fdebug-prefix-map; observed {observed:?}, expected {expected}: {}",
+                "bundled dependency compiler cannot map source paths in a debug object: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
+        }
+        self.check_probe_object(&std::fs::read(object)?, &probe, name)
+    }
+
+    fn check_probe_object(&self, bytes: &[u8], probe: &SourcePaths, name: &Path) -> Result<()> {
+        let expected = self
+            .source
+            .virtual_root()
+            .join(name)
+            .to_string_lossy()
+            .into_owned();
+        for tag in ["nts-file-probe:", "nts-base-probe:"] {
+            let mapped = contains_bytes(bytes, format!("{tag}{expected}\0").as_bytes())
+                || self.format == ObjectFormat::Coff
+                    && contains_bytes(
+                        bytes,
+                        format!("{tag}{}\0", expected.replace('/', "\\")).as_bytes(),
+                    );
+            if !mapped {
+                bail!(
+                    "bundled dependency compiler cannot map source paths in a debug object: missing {tag}{expected}"
+                );
+            }
+        }
+        for root in [self.source.root(), probe.root()] {
+            let spelling = root.to_str().context("probe path is not UTF-8")?;
+            for spelling in [spelling.to_owned(), spelling.replace('/', "\\")] {
+                let utf16 = spelling
+                    .encode_utf16()
+                    .flat_map(u16::to_le_bytes)
+                    .collect::<Vec<_>>();
+                if contains_bytes(bytes, spelling.as_bytes()) || contains_bytes(bytes, &utf16) {
+                    bail!(
+                        "bundled dependency compiler cannot map source paths in a debug object: physical namespace remains: {}",
+                        root.display()
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -245,6 +283,10 @@ impl Context {
         };
         Ok(Some(bytes))
     }
+}
+
+fn contains_bytes(bytes: &[u8], needle: &[u8]) -> bool {
+    bytes.windows(needle.len()).any(|part| part == needle)
 }
 
 const PATH_LISTS: &[&str] = &[

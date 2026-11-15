@@ -285,6 +285,15 @@ pub fn write(target: &Path, bytes: impl AsRef<[u8]>) -> Result<()> {
     publish(target, |path| fs::write(path, bytes))
 }
 
+/// Run an operation inside an exclusive scratch directory, then remove only
+/// that claim. No target is published or renamed. The operation must join its
+/// children before returning; cleanup failures retain the claim's recovery path.
+pub fn scratch<T>(parent: &Path, operation: impl FnOnce(&Path) -> io::Result<T>) -> Result<T> {
+    let staged = Staged::new(&parent.join("scratch"))?;
+    let result = fs::create_dir(&staged.payload).and_then(|()| operation(&staged.payload));
+    staged.finish(result, "using scratch in")
+}
+
 /// A complete existing immutable target is reused rather than overwritten.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectoryPublication {

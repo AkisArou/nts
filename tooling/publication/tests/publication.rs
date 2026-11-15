@@ -6,6 +6,34 @@ use std::fs;
 use std::sync::{Arc, Barrier};
 
 #[test]
+fn scratch_cleans_success_and_failure_without_publishing_or_removing_foreign_entries() {
+    let root = scratch::StdScratchDir::in_std_target("publication-scratch");
+    let foreign = root.join("scratch");
+    fs::write(&foreign, "foreign target").expect("foreign target");
+    let value = nts_publication::scratch(&root, |path| {
+        assert!(path.is_dir());
+        fs::write(path.join("object"), "completed")?;
+        Ok(path.to_owned())
+    })
+    .expect("successful scratch operation");
+    assert!(!value.exists());
+    let mut failed_path = None;
+    let failure = nts_publication::scratch(&root, |path| {
+        failed_path = Some(path.to_owned());
+        fs::write(path.join("partial"), "unfinished")?;
+        Err::<(), _>(std::io::Error::other("probe failed"))
+    })
+    .expect_err("failed scratch operation");
+    assert!(failure.to_string().contains("probe failed"));
+    assert!(!failed_path.expect("operation started").exists());
+    assert_eq!(
+        fs::read(foreign).expect("foreign target retained"),
+        b"foreign target"
+    );
+    assert_eq!(fs::read_dir(&root).expect("scratch parent").count(), 1);
+}
+
+#[test]
 fn changing_target_names_keeps_only_one_parent_lock_file() {
     let root = scratch::StdScratchDir::in_std_target("publication-parent-lock");
     for name in ["old-version", "current-version", "next-version"] {

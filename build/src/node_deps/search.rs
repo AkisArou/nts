@@ -64,6 +64,7 @@ pub(super) fn fingerprint(context: &invocation::Context) -> Result<String> {
 
 fn forced_header_parents(text: &str) -> Result<Vec<PathBuf>> {
     let mut parents = Vec::new();
+    let mut primary = None;
     for line in text.lines() {
         let Some((number, quoted)) = line
             .strip_prefix("# ")
@@ -78,11 +79,16 @@ fn forced_header_parents(text: &str) -> Result<Vec<PathBuf>> {
             continue;
         }
         let path = quoted_filename(quoted)?;
+        // Zig materializes stdin as a file. Only the exact primary input from
+        // the first numeric marker is excluded, including return markers.
+        // Its temporary directory is not a compiler header-search input.
+        let primary = primary.get_or_insert_with(|| path.clone());
         // GCC -g emits a working-directory marker whose filename ends //.
         // It names a directory, not a header: taking its parent would add the
         // cache's sources namespace and make unrelated cache entries key inputs.
         if !path.starts_with('<')
             && !path.ends_with("//")
+            && path != *primary
             && let Some(parent) = std::path::Path::new(&path).parent()
         {
             parents.push(parent.to_owned());
@@ -301,6 +307,19 @@ mod tests {
             r#"# 1 "/bad/\x.h""#,
         ] {
             assert!(forced_header_parents(text).is_err());
+        }
+    }
+
+    #[test]
+    fn exact_primary_input_is_not_a_header_but_its_sibling_forced_header_is() {
+        for primary in ["/compiler/tmp/first-stdin.c", "/other/tmp/second-stdin.c"] {
+            let text = format!(
+                "# 1 \"{primary}\"\n# 1 \"<built-in>\"\n# 1 \"/compiler/tmp/forced.h\" 1\n# 7 \"{primary}\" 2\n"
+            );
+            assert_eq!(
+                forced_header_parents(&text).expect("primary versus forced header"),
+                [PathBuf::from("/compiler/tmp")]
+            );
         }
     }
 }

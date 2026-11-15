@@ -433,11 +433,20 @@ fn unrelated_cached_source_generation_does_not_change_gcc_search_identity() {
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn an_unmapped_file_macro_refuses_at_the_owner_support_probe() {
     let own = scratch::StdScratchDir::in_std_target("native-map-probe");
-    let mut request = request(own.join("cache"), &["clang"]);
-    request.flags.push("-D__FILE__=\"unmapped\"".into());
-    let error = node_deps::ensure(&request)
-        .expect_err("the actual macro fails the mapping contract")
-        .to_string();
-    assert!(error.contains("cannot map source paths"), "{error}");
-    assert!(!request.cache.join("archives").exists());
+    for name in ["__FILE__", "__BASE_FILE__"] {
+        let mut request = request(own.join(name), &["clang"]);
+        request.flags.push(format!("-D{name}=\"unmapped\""));
+        let error = node_deps::ensure(&request)
+            .expect_err("the actual macro fails the mapping contract")
+            .to_string();
+        assert!(error.contains("cannot map source paths"), "{error}");
+        assert!(!request.cache.join("archives").exists());
+        assert!(
+            std::fs::read_dir(&request.cache)
+                .expect("probe parent")
+                .all(|entry| {
+                    !nts_publication::private_name(&entry.expect("probe parent entry").file_name())
+                })
+        );
+    }
 }

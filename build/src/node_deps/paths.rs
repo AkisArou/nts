@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
-pub(super) const MAPPING_POLICY: &str = "bundled-source-paths-v1";
+pub(super) const MAPPING_POLICY: &str = "bundled-source-paths-v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "path", rename_all = "kebab-case")]
