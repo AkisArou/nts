@@ -6,6 +6,7 @@ export const HOST_READ_OWNERS: Readonly<Record<string,{reason:string;kinds:reado
   'tooling/gate/active-process.ts':{reason:'Command observations and process-group birth identity; fixture observations replace the entire sampler.',kinds:['kernel']},
   'tooling/landing/tree-users.ts':{reason:'Read-only tree ownership by process UID, birth, cgroup, cwd, executable and open descriptors. Controls supply a complete proc tree or explicitly select live kernel ownership; no signalling authority.',kinds:['kernel']},
   'tooling/gate/scopes/memory-limits.ts':{reason:'Only memory.max, memory.high, memory.swap.max, memory.events and memory.events.local of created or named worker scopes and their enclosing limits, for physical verification and kill attribution; never admission or unrelated host state.',kinds:['kernel']},
+  'tooling/gate/scopes/cpu-limits.ts':{reason:'Identity-fenced cpu.max and cpu.stat of one acquired experiment scope; a complete supplied observation replaces both reads and identity, with no fallback. Never gate admission or verdict policy.',kinds:['kernel']},
   'tooling/gate/measurement.ts':{reason:'MeasurementIO owns CPU quietness observations; controls supply the complete IO.',kinds:['kernel','clock']},
   'tooling/gate/canonical-environment.ts':{reason:'Canonical environment construction and named production capabilities.',kinds:['environment','clock']},
   'tooling/differential/oracle-seal/main.ts':{reason:'Immutable run-seal authentication and its hit telemetry; no clock value decides a seal verdict.',kinds:['clock']},

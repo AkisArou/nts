@@ -998,6 +998,22 @@ the tooling strict checker owns the source's type checking.
   clock. A missing observation is a named failure; no field falls back to the
   host. Pure decisions use supplied observations. A kernel wiring control
   explicitly selects live sampling and waits for readiness in its own unit.
+- **Tooling contention is checked on demand.** Run
+  `node tooling/gate/tooling-load.ts --out <fresh kept-scratch directory>`
+  from a named agent unit. Each invocation admits one complete round, prepares
+  a fresh compiler and CLI test artifact through the existing Cargo and test
+  profile owners, and runs the complete tooling inventory and CLI integration
+  harness beside ready-signalled CPU load. One fresh owner-bound experiment
+  slice holds the load and collector workers under the same quota; this is
+  an experiment condition, never gate policy. Independent fixture units keep
+  their own ownership and are identified in the retained test output.
+  Completed test results decide the outcome. The tool retains full failure
+  output, resource and pressure samples, quota and throttling counters, and
+  waits for worker, scope and sampler drain before releasing admission or
+  publishing its terminal report. Inspect the first round before requesting
+  stability repeats. A loaded failure needs its actual output and resource
+  evidence before it is attributed to timing assumptions or resource limits.
+  Each round releases admission, so a waiting landing can go first.
 - **The gate checks test host ownership.** The `test-host` step audits every
   tooling tests and each entry's dependency and launch closure, including
   generated scripts, shell payloads and Rust fixture constructors. Only named
@@ -1106,6 +1122,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- **Load diagnosis uses the real test owners.** An on-demand tooling round
+  shares one owner-bound quota between ready load and the real collector and
+  CLI harness. It adds no gate step or elapsed-time verdict. Failures are
+  inspected before stability repeats
+  ([log](records/notebooks/decisions-log.md#tooling-contention-is-an-on-demand-round-11-15)).
 
 - Tooling and measurement slices use the shared transient creator and bind to
   their actual user-manager owner unit. They retain an empty start until members

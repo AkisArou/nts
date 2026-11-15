@@ -3073,3 +3073,8 @@ pair; a lone comparator outlier remains a visible observation. The nightly
 reader consumes the shared backend marker. The benchmark
 summary contract takes version 2 while conformance retains version 1. Immutable
 run records and the standing within-run bar keep their existing contracts.
+
+
+## Tooling contention is an on-demand round (11-15)
+
+For #669, reuse the complete tooling collector and the Rust test-profile and per-binary scratch owners. Admit one round at a time, wait for load readiness, and keep load and collector under one fresh owner-bound experiment quota. The first round supplies actual failure output and resource readings; inspect and fix or file those causes before stability repeats. Release admission between rounds so a waiting landing goes first. The harness is an on-demand tool, not a gate step, and no wall-time comparison decides a test.
