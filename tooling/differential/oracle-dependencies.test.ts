@@ -173,7 +173,7 @@ test('workspace execution stays live while the image binds metadata and declared
   }finally{keys.forEach((key,index)=>{if(previous[index]===undefined)delete process.env[key];else process.env[key]=previous[index];});}
   const graph=moduleGraph({sourceRoot:f.root});
   try{
-    const snapshot=graph.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')))]),claims=runtimeRepositoryClaims(f.root,snapshot);
+    const snapshot=graph.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')),'compiled-program')]),claims=runtimeRepositoryClaims(f.root,snapshot);
     assert.equal(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'packages/one/value.ts')}).kind,'claimed');
     assert.notEqual(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'packages/one/unread.ts')}).kind,'claimed');
   }finally{graph.close();}

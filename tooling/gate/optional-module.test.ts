@@ -40,7 +40,7 @@ test('optional modules preserve compiled-only host roles and later promotion in 
   const declarations=new Map([['compiled.ts',{imports:[],assets:[{kind:'optional-module' as const,path:'./driver.mjs'}]}]]);
   const graph=moduleGraph({sourceRoot:source,declarations,nodeMajor:26});
   try{
-    const project=projectConfig(pathToFileURL(join(source,'tsconfig.json')));
+    const project=projectConfig(pathToFileURL(join(source,'tsconfig.json')),'compiled-program');
     const compiled=graph.describe([project]);assert.deepEqual(compiled.hostFiles,[]);assert.ok(compiled.files.includes('helper.mjs'));
     for(const entries of [[project,'driver.mjs'],['driver.mjs',project]]){
       const promoted=graph.describe(entries);assert.ok(promoted.hostFiles.includes('driver.mjs'));assert.ok(promoted.hostFiles.includes('helper.mjs'));

@@ -15,7 +15,7 @@ test('batch snapshots and byte reports equal separate canonical visitors with ta
   const declarations=new Map<string,ModuleDeclarations>();
   for(const name of ['first.rs','second.rs']){
     writeFileSync(join(root,name),'');
-    declarations.set(name,{imports:[],assets:[{kind:'project-config',path:'./tsconfig.json'},{kind:'optional-file',path:'./later.json'}]});
+    declarations.set(name,{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'./tsconfig.json'},{kind:'optional-file',path:'./later.json'}]});
   }
   const requests=['first.rs','second.rs'].map(name=>({entries:[name]})),separate=moduleGraph({sourceRoot:root,declarations});
   let expected;
@@ -49,7 +49,7 @@ test('batch refuses mutations between identical requests and clears failed disco
     put('entry.ts',"import './src/missing.js';import {value} from 'self';export {value};");
     put('tsconfig.json','{"compilerOptions":{"module":"nodenext","moduleResolution":"nodenext","types":[]},"include":["*.ts"]}');
     put('reader.rs','');
-    const declarations=new Map<string,ModuleDeclarations>([['reader.rs',{imports:[],assets:[{kind:'project-config',path:'./tsconfig.json'}]}]]);
+    const declarations=new Map<string,ModuleDeclarations>([['reader.rs',{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'./tsconfig.json'}]}]]);
     const owner=moduleGraph({sourceRoot:root,declarations});
     let changed=false,returned=false;
     const request:ModuleDescriptionRequest={get entries(){
@@ -80,8 +80,8 @@ test('generated batch discoveries key the full recipe and namespace and retain p
   writeFileSync(join(root,'base.json'),'{"compilerOptions":{"types":[]}}');
   writeFileSync(join(root,'reader.rs'),'');writeFileSync(join(root,'tree.rs'),'');
   const declarations=new Map<string,ModuleDeclarations>([
-    ['reader.rs',{imports:[],assets:[{kind:'generated-project',path:'./base.json',directory:'./case/',include:'directory'}]}],
-    ['tree.rs',{imports:[],assets:[{kind:'generated-project',path:'./base.json',directory:'./case/',include:'typescript-tree'}]}],
+    ['reader.rs',{imports:[],assets:[{kind:'generated-project',role:'compiled-program',path:'./base.json',directory:'./case/',include:'directory'}]}],
+    ['tree.rs',{imports:[],assets:[{kind:'generated-project',role:'compiled-program',path:'./base.json',directory:'./case/',include:'typescript-tree'}]}],
   ]);
   const owner=moduleGraph({sourceRoot:root,declarations,generatedTemporaryParent:parent});
   const privateEntry=fixtureInput(pathToFileURL(join(root,'reader.rs')),{dataNamespaces:{}});

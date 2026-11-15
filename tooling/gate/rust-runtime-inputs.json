@@ -1200,6 +1200,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json"
           }
         ]
@@ -1632,6 +1633,7 @@
         "assets": [
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-capturing-literal-dispatched-through-another-interface/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-capturing-literal-dispatched-through-another-interface/tsconfig.json"
@@ -1639,6 +1641,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-class-nothing-makes-keeps-no-printer/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-class-nothing-makes-keeps-no-printer/tsconfig.json"
@@ -1646,6 +1649,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-class-nothing-makes-keeps-no-printer-control/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-class-nothing-makes-keeps-no-printer-control/tsconfig.json"
@@ -1653,6 +1657,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-field-read-tests-an-unallocated-record/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-field-read-tests-an-unallocated-record/tsconfig.json"
@@ -1660,6 +1665,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-literal-method-result-discarded-through-a-void-interface/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-literal-method-result-discarded-through-a-void-interface/tsconfig.json"
@@ -1667,6 +1673,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-pattern-parameter-before-scalars/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-pattern-parameter-before-scalars/tsconfig.json"
@@ -1674,6 +1681,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-throw-behind-a-check-that-folds/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-throw-behind-a-check-that-folds/tsconfig.json"
@@ -1681,6 +1689,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-throw-behind-a-check-that-folds-control/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/a-throw-behind-a-check-that-folds-control/tsconfig.json"
@@ -1688,6 +1697,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-error-the-runtime-raises-keeps-its-printer/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/an-error-the-runtime-raises-keeps-its-printer/tsconfig.json"
@@ -1695,6 +1705,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/arith/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/arith/tsconfig.json"
@@ -1702,6 +1713,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/arrays/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/arrays/tsconfig.json"
@@ -1709,6 +1721,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/bitwise/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/bitwise/tsconfig.json"
@@ -1716,6 +1729,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/calls2/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/calls2/tsconfig.json"
@@ -1723,6 +1737,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/closures/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/closures/tsconfig.json"
@@ -1730,6 +1745,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/conditionals/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/conditionals/tsconfig.json"
@@ -1737,6 +1753,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/control/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/control/tsconfig.json"
@@ -1744,6 +1761,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/cycles/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/cycles/tsconfig.json"
@@ -1751,6 +1769,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/globals/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/globals/tsconfig.json"
@@ -1758,6 +1777,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/growable/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/growable/tsconfig.json"
@@ -1765,6 +1785,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/idioms/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/idioms/tsconfig.json"
@@ -1772,6 +1793,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/inheritance/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/inheritance/tsconfig.json"
@@ -1779,6 +1801,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/instances/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/instances/tsconfig.json"
@@ -1786,6 +1809,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/interface-field-view-lifetime/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/interface-field-view-lifetime/tsconfig.json"
@@ -1793,6 +1817,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/interprocedural/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/interprocedural/tsconfig.json"
@@ -1800,6 +1825,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/literals/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/literals/tsconfig.json"
@@ -1807,6 +1833,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/loops/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/loops/tsconfig.json"
@@ -1814,6 +1841,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/mathops/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/mathops/tsconfig.json"
@@ -1821,6 +1849,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/nested/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/nested/tsconfig.json"
@@ -1828,6 +1857,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/nullable/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/nullable/tsconfig.json"
@@ -1835,6 +1865,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/objects/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/objects/tsconfig.json"
@@ -1842,6 +1873,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/references/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/references/tsconfig.json"
@@ -1849,6 +1881,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/standalone/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/standalone/tsconfig.json"
@@ -1856,6 +1889,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/strings/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/strings/tsconfig.json"
@@ -1863,6 +1897,7 @@
           },
           {
             "kind": "project-choice",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/timers/tsconfig.json",
             "alternatives": [
               "../../../compiler/core/tests/programs/timers/tsconfig.json"
@@ -3029,6 +3064,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "accumulators/tsconfig.json"
           },
           {
@@ -3395,10 +3431,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "empty-face/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "empty-face-store-out/tsconfig.json"
           }
         ]
@@ -3464,14 +3502,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/arith/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/loops/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-set-walked-by-its-cursor/tsconfig.json"
           }
         ]
@@ -3484,6 +3525,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "field-rows/tsconfig.json"
           }
         ]
@@ -3496,6 +3538,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/interface-field-view/tsconfig.json"
           }
         ]
@@ -3508,26 +3551,32 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/objects/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/classes/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/inheritance/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/instances/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-optional-property/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/optional-unassigned/tsconfig.json"
           }
         ]
@@ -3552,6 +3601,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-array-element-read-from-the-end-as-a-number/tsconfig.json"
           }
         ]
@@ -3642,10 +3692,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-identifier-part-keeps-its-c-spelling/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-identifier-part-keeps-its-c-spelling-control/tsconfig.json"
           }
         ]
@@ -3670,6 +3722,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "inherited-faces/tsconfig.json"
           }
         ]
@@ -3682,6 +3735,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "./intrinsics/tsconfig.json"
           },
           {
@@ -3706,6 +3760,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/interop/ts-from-java/tsconfig.json"
           }
         ]
@@ -3792,6 +3847,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "method-split/tsconfig.json"
           }
         ]
@@ -3878,14 +3934,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../runtime/node/stream/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-inherited-optional-tail-keeps-its-interface-contract-control/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/an-inherited-optional-tail-keeps-its-interface-contract/tsconfig.json"
           }
         ]
@@ -3922,6 +3981,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-view-read-guarded-by-its-length-across-a-detaching-call/tsconfig.json"
           }
         ]
@@ -3941,6 +4001,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "refusals/tsconfig.json"
           }
         ]
@@ -4102,6 +4163,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "string_chains/tsconfig.json"
           },
           {
@@ -4129,6 +4191,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-record-keyed-by-strings-built-at-run-time/tsconfig.json"
           }
         ]
@@ -4141,14 +4204,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/structural-absence/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/structural-inherited-absence/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-method-adapted-to-a-structural-interface/tsconfig.json"
           }
         ]
@@ -4217,6 +4283,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "unsigned-const/tsconfig.json"
           }
         ]
@@ -4356,6 +4423,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-view-written-through-a-wide-cursor/tsconfig.json"
           }
         ]
@@ -4953,10 +5021,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/refusals/a-closure-exported-as-a-value-with-no-typescript-caller-is-an-empty-shell/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/refusals/a-private-unused-closure-has-no-outside-caller/tsconfig.json"
           }
         ]
@@ -5736,10 +5806,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/class-export-identities/tsconfig.json"
           }
         ]
@@ -5879,10 +5951,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/class-export-keyword-identities/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../core/tests/programs/class-export-keyword-control/tsconfig.json"
           }
         ]
@@ -6154,6 +6228,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/outcomes/stale-sparse-flow-out-of-bounds-c/tsconfig.json"
           }
         ]
@@ -6236,6 +6311,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessor-layout-proof/tsconfig.json"
           }
         ]
@@ -6318,10 +6394,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../../runtime/node/process/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessor-families/tsconfig.json"
           }
         ]
@@ -6730,6 +6808,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessor-initialization/tsconfig.json"
           }
         ]
@@ -6833,6 +6912,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../../tests/programs/a-var-holding-a-closure/tsconfig.json"
           }
         ]
@@ -7062,6 +7142,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/native-query-depth/tsconfig.json"
           }
         ]
@@ -7172,6 +7253,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/captured-parameter-defaults/tsconfig.json"
           }
         ]
@@ -7303,6 +7385,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../../tests/programs/a-generic-overload-pins-only-its-result/tsconfig.json"
           }
         ]
@@ -7406,10 +7489,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessor-schema-supplier/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessor-schema-order/tsconfig.json"
           }
         ]
@@ -7478,6 +7563,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../../tests/programs/a-typed-array-subclass-is-made-as-the-class-its-new-names/tsconfig.json"
           },
           {
@@ -7640,10 +7726,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/refusals/a-promise-settler-captured-by-a-closure/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../tests/programs/caught-await-reasons/tsconfig.json"
           }
         ]
@@ -7880,18 +7968,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/exact-keys-through-member-reads/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-symbol-cast-keeps-the-supplier-layout/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../tests/programs/field-read-contracts/tsconfig.routes.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../tests/programs/field-read-contracts/tsconfig.eager.json"
           }
         ]
@@ -8065,6 +8157,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-throwing-sort-comparator-inside-a-try/tsconfig.json"
           }
         ]
@@ -8077,10 +8170,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/abstract-methods/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -8153,6 +8248,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-allocation-that-does-not-escape/tsconfig.json"
           }
         ]
@@ -8165,6 +8261,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-throwing-accessor-inside-a-try/tsconfig.json"
           }
         ]
@@ -8177,6 +8274,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-string-parameter-appended-onto-is-taken-over/tsconfig.json"
           }
         ]
@@ -8189,14 +8287,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-array-allocation-keeps-its-type-past-a-choice/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-choice-does-not-reinterpret-an-erased-array/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-choice-keeps-the-holes-check-through-a-generic/tsconfig.json"
           }
         ]
@@ -8209,6 +8310,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-buffer/tsconfig.json"
           }
         ]
@@ -8221,6 +8323,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-constructor-overloads/tsconfig.json"
           }
         ]
@@ -8233,10 +8336,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from-unsupported/tsconfig.json"
           }
         ]
@@ -8249,6 +8354,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from-set-bounds/tsconfig.json"
           }
         ]
@@ -8261,10 +8367,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/typeof-an-unwritten-slot-survives-a-bounds-proof/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/typeof-an-unwritten-slot-passed-to-a-function/tsconfig.json"
           }
         ]
@@ -8277,14 +8385,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async-catch/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async-finally/tsconfig.json"
           }
         ]
@@ -8297,6 +8408,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async-methods/tsconfig.json"
           }
         ]
@@ -8309,6 +8421,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/bigint-literal-guards/tsconfig.json"
           }
         ]
@@ -8321,10 +8434,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/bigint-range-last-arrival/subject/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/bigint-range-last-arrival/control/tsconfig.json"
           }
         ]
@@ -8337,6 +8452,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/arrays/tsconfig.json"
           }
         ]
@@ -8349,6 +8465,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/builtin-numeric-arguments/tsconfig.json"
           }
         ]
@@ -8361,6 +8478,7 @@
         "assets": [
           {
             "kind": "project-catalogue",
+            "role": "compiled-program",
             "path": "../../../results/builtin-study/probes.tsv",
             "directory": "../../tests/refusals/"
           }
@@ -8374,10 +8492,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/callbacks/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -8390,6 +8510,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-owner-returns-a-carried-iteration-contract/tsconfig.json"
           }
         ]
@@ -8402,6 +8523,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-string-chain-made-with-room/tsconfig.json"
           }
         ]
@@ -8414,6 +8536,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/checked-read-facts/tsconfig.json"
           }
         ]
@@ -8426,10 +8549,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/class-export-identities/tsconfig.json"
           }
         ]
@@ -8442,10 +8567,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/class-values/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-closure-calling-an-imported-function-that-throws/tsconfig.json"
           }
         ]
@@ -8458,6 +8585,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/closure-results/tsconfig.json"
           }
         ]
@@ -8477,6 +8605,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/constructor-refusal/tsconfig.json"
           }
         ]
@@ -8489,6 +8618,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/count-free-sort/tsconfig.json"
           }
         ]
@@ -8501,18 +8631,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/borrowed-call/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/tuple-cycle/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/a-field-behind-an-assertion/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/pile-shuffle/tsconfig.json"
           }
         ]
@@ -8525,18 +8659,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/dates/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/dates-unsupported/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-clock-read-through-date-now/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-clock-read-through-the-date-constructor/tsconfig.json"
           }
         ]
@@ -8549,6 +8687,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/dead-code-is-removed/tsconfig.json"
           }
         ]
@@ -8561,10 +8700,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/delete/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -8577,6 +8718,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-string-built-where-it-is-appended/tsconfig.json"
           }
         ]
@@ -8589,6 +8731,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-nested-pattern-missing-a-reference-element/tsconfig.json"
           }
         ]
@@ -8601,18 +8744,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/a-generator-into-an-empty-array-pattern-on-jvm/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-mixed-reference-default-keeps-its-typed-call/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/callback-fields/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-interface-field-holding-one-closure/tsconfig.json"
           }
         ]
@@ -8625,6 +8772,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/entry-surface/tsconfig.json"
           }
         ]
@@ -8637,6 +8785,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/erase-absence/tsconfig.json"
           }
         ]
@@ -8649,50 +8798,59 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unknown/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unknown-references/tsconfig.json"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./benchmarks/cases/erasure-stored-unknown",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./compiler/core/tests/programs/erased-mixed",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./tests/programs/an-erased-array-read-keeps-missing-elements",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./tests/programs/unknown",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./tests/programs/unknown-returns",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./tests/programs/a-recovered-erased-value-keeps-its-absence",
             "include": "typescript-tree"
           },
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./tests/programs/a-recovered-callable-keeps-its-function-tag",
             "include": "typescript-tree"
@@ -8707,14 +8865,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-closed-call-recovers-an-erased-parameter/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/erased-copies-boundaries/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json"
           }
         ]
@@ -8727,6 +8888,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/erased-null-slots/tsconfig.json"
           }
         ]
@@ -8739,6 +8901,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/erasure/tsconfig.json"
           }
         ]
@@ -8751,6 +8914,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/errors/tsconfig.json"
           }
         ]
@@ -8763,6 +8927,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-wrapping-add-compared-with-its-operand/tsconfig.json"
           }
         ]
@@ -8775,6 +8940,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/field-widths/tsconfig.json"
           }
         ]
@@ -8787,6 +8953,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "flow_merge_bounds/tsconfig.json"
           }
         ]
@@ -8799,6 +8966,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/function-names/tsconfig.json"
           }
         ]
@@ -8811,6 +8979,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/function-value-this/tsconfig.json"
           }
         ]
@@ -8823,10 +8992,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/generators/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/generator-unsupported/tsconfig.json"
           }
         ]
@@ -8839,10 +9010,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/generic-classes/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/generic-classes-unsupported/tsconfig.json"
           }
         ]
@@ -8855,10 +9028,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-function-value-keeps-one-erased-root/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-function-value-uses-the-erased-root-after-eight-copies/tsconfig.json"
           }
         ]
@@ -8878,6 +9053,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/module-numbers/tsconfig.json"
           }
         ]
@@ -8950,6 +9126,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-string-appended-by-a-runtime-helper/tsconfig.json"
           }
         ]
@@ -8962,82 +9139,102 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-loop-condition-keeps-its-writes/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-enum-across-a-module/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/arith/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async-unsupported/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls2/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/computed-members/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/control/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/cross-file-class/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/destructuring/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/enums/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/exceptions/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/instances/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/iteration/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/logical-assignment/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/loops/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/mathops-unsupported/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/nested/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/optional-access/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/promise-constructor/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -9050,18 +9247,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/objects/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-var-holding-a-closure/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-async-generator/tsconfig.json"
           }
         ]
@@ -9074,6 +9275,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/identity-forwarding/tsconfig.json"
           }
         ]
@@ -9093,18 +9295,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/in-operator/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-optional-property/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/in-on-an-object-a-native-answers-for/tsconfig.json"
           }
         ]
@@ -9117,14 +9323,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/inferred-implements/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/inferred-implements-narrowed-parameter/positive.tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/inferred-implements-narrowed-parameter/tsconfig.json"
           }
         ]
@@ -9137,26 +9346,32 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/captured-initialization/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/captured-var-observations/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/module-initializer-tdz/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-binding-read-before-its-declaration/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-lexical-assignment-before-initialization/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-module-block-closure-writes-before-initialization/tsconfig.json"
           }
         ]
@@ -9169,6 +9384,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/int32-images/tsconfig.json"
           }
         ]
@@ -9181,6 +9397,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/integer-extrema/tsconfig.json"
           }
         ]
@@ -9193,6 +9410,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/integer-same-value/tsconfig.json"
           }
         ]
@@ -9205,82 +9423,102 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-preserved-layout/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/interface-fields/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-schema-supplier/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/interface-field-view-lifetime/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-layout-proof/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/interface-field-view/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-default-record/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-default-row/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-narrowed-read/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-private-template/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-families/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-narrowed-family/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-default-sharing/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-schema-order-reversed/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-stored-result/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-spread-boundary/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-schema-order/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-refusal-chain/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-source-flow/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-known-storage/tsconfig.json"
           }
         ]
@@ -9293,6 +9531,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/interface-identities/tsconfig.json"
           }
         ]
@@ -9305,6 +9544,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/interface-parents/tsconfig.json"
           }
         ]
@@ -9317,6 +9557,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-intrinsic-helper-passed-as-a-function/tsconfig.json"
           }
         ]
@@ -9329,6 +9570,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-json-string-quoted-onto-a-string/tsconfig.json"
           }
         ]
@@ -9413,30 +9655,37 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-capturing-literal-dispatched-through-another-interface/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-literal-method-call-through-two-faces-loses-absence/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/an-erased-alias-can-write-a-literal-method/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-literal-method-replacement-proved-through-a-private-helper/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-literal-method-helper-has-a-narrowing-caller/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-literal-method-identity-preserved-through-another-interface/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path/tsconfig.json"
           }
         ]
@@ -9449,14 +9698,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/computed-names/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/computed-members/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/accessors/tsconfig.json"
           }
         ]
@@ -9469,18 +9721,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/traversal/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/shared-tail/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/memory/no-escape/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
           }
         ]
@@ -9493,10 +9749,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-region-container-never-consumes-a-borrowed-reference/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-escape-fact-crosses-a-long-call-chain/tsconfig.json"
           }
         ]
@@ -9509,6 +9767,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/method-value-this/tsconfig.json"
           }
         ]
@@ -9521,6 +9780,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/module-evaluation/tsconfig.json"
           }
         ]
@@ -9533,10 +9793,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-native-assertion-checks-its-representation/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json"
           }
         ]
@@ -9756,6 +10018,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/nested-function-raising/tsconfig.json"
           }
         ]
@@ -9768,6 +10031,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-one-unit-string-compared-as-a-unit-read/tsconfig.json"
           }
         ]
@@ -9780,10 +10044,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-optional-interface-call-uses-its-dispatch-contract/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/an-absent-optional-interface-method/tsconfig.json"
           }
         ]
@@ -9796,6 +10062,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/optional-method-receiver-absence/tsconfig.json"
           }
         ]
@@ -9808,10 +10075,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/overloads/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -9824,6 +10093,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/owned-view-kinds/tsconfig.json"
           }
         ]
@@ -9836,6 +10106,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/parameter-shapes/tsconfig.json"
           }
         ]
@@ -9848,22 +10119,27 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-declared-value-is-not-an-arrival-proof/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
           }
         ]
@@ -9876,6 +10152,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/parameter-defaults/tsconfig.json"
           }
         ]
@@ -9888,6 +10165,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-pattern-parameter-before-scalars/tsconfig.json"
           }
         ]
@@ -9900,6 +10178,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/parse-int-radix/tsconfig.json"
           }
         ]
@@ -9912,6 +10191,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
           }
         ]
@@ -9924,6 +10204,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/prefix-receivers/tsconfig.json"
           }
         ]
@@ -9936,22 +10217,27 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/printed-raises-entries/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/printed-raises-no-try/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/printed/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-printer-failure-arm-keeps-success-bindings/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-refused-printer-keeps-unrelated-conversions/tsconfig.json"
           }
         ]
@@ -9964,6 +10250,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/two-private-names-that-collide/tsconfig.json"
           }
         ]
@@ -9976,26 +10263,32 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-class-field-needs-define-semantics/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-class-field-uses-define-semantics/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-fieldless-class-needs-no-define-option/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-legacy-decorator-needs-runtime-semantics/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-decorator-option-needs-a-decorator/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/a-standard-decorator-keeps-the-class/tsconfig.json"
           }
         ]
@@ -10008,6 +10301,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/async-catch/tsconfig.json"
           }
         ]
@@ -10020,6 +10314,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-module-const-that-asks-what-is-provided/tsconfig.json"
           }
         ]
@@ -10032,6 +10327,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-intrinsic-guarded-by-its-typeof/tsconfig.json"
           }
         ]
@@ -10051,6 +10347,7 @@
         "assets": [
           {
             "kind": "project-members",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/",
             "prefix": "builtin-study-"
           }
@@ -10064,14 +10361,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-try-around-a-helper-that-calls-an-interface-method/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-throwing-literal-interface-method-one-helper-below-a-try/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off/tsconfig.json"
           }
         ]
@@ -10091,14 +10391,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/reachable-closure-controls/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/interprocedural/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-structural-function-carrying-a-throw/tsconfig.json"
           }
         ]
@@ -10111,6 +10414,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/readonly-names/tsconfig.json"
           }
         ]
@@ -10123,6 +10427,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/receivers/tsconfig.json"
           }
         ]
@@ -10135,18 +10440,22 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-computed-numeric-accessor-keeps-its-canonical-key/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-static-private-getter-keeps-its-body/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-static-private-accessor-keeps-its-update-order/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-private-member-keeps-its-anonymous-class-receiver/tsconfig.json"
           }
         ]
@@ -10159,6 +10468,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/record-parents/tsconfig.json"
           }
         ]
@@ -10171,10 +10481,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/accessor-refusal-chain/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-literal-method-helper-has-a-narrowing-caller/tsconfig.json"
           }
         ]
@@ -10187,10 +10499,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/refused-virtual-slot-arity/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/refused-virtual-slots/tsconfig.json"
           }
         ]
@@ -10203,6 +10517,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
           }
         ]
@@ -10215,6 +10530,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/strings/tsconfig.json"
           }
         ]
@@ -10255,6 +10571,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-module-constant-read-through-calls/tsconfig.json"
           }
         ]
@@ -10267,10 +10584,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/shadowed-refusal/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/copy-phantom/tsconfig.json"
           }
         ]
@@ -10283,6 +10602,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/signature-faces/tsconfig.json"
           }
         ]
@@ -10295,10 +10615,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/function-values/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/closures/tsconfig.json"
           }
         ]
@@ -10311,6 +10633,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-specialized-function-carrying-a-throw/tsconfig.json"
           }
         ]
@@ -10323,6 +10646,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/standard-stream-writes-share-console-order/tsconfig.json"
           }
         ]
@@ -10335,10 +10659,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/stores-in-range/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/stores-in-range-control/tsconfig.json"
           }
         ]
@@ -10358,6 +10684,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/string-enum/tsconfig.json"
           }
         ]
@@ -10370,14 +10697,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/string-position-arguments/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/string-needle-claims/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/builtin-absence-admission/tsconfig.json"
           }
         ]
@@ -10390,38 +10720,47 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-method-adapted-to-a-structural-interface/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/structural-bridge-absence/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/structural-incompatible/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/structural-absence/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/structural-literal-gap/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-optional-callable-property-supplied-by-a-method/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-callable-view-at-its-supplier-budget/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/a-callable-view-beyond-its-supplier-budget/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/refusals/an-accessor-cannot-supply-a-callable-projection/tsconfig.json"
           }
         ]
@@ -10441,10 +10780,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/symbol-values/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/symbol-keys/tsconfig.json"
           }
         ]
@@ -10457,6 +10798,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-table-key-updated-in-place/tsconfig.json"
           }
         ]
@@ -10469,10 +10811,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/map-and-set/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unsupported/tsconfig.json"
           }
         ]
@@ -10485,6 +10829,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/outcomes/a-typed-table-seen-with-wider-keys/tsconfig.json"
           }
         ]
@@ -10509,10 +10854,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-template-object-keeps-its-identity/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/tagged-template-boundaries/tsconfig.json"
           }
         ]
@@ -10532,6 +10879,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-throw-that-stays-in-its-function/tsconfig.json"
           }
         ]
@@ -10544,10 +10892,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/typed-signature-calls/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/typed-signature-narrowed/tsconfig.json"
           }
         ]
@@ -10560,6 +10910,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-unchosen-table-takes-its-type-from-where-it-goes/tsconfig.json"
           }
         ]
@@ -10572,6 +10923,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/keyed-closures/tsconfig.json"
           }
         ]
@@ -10584,6 +10936,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/upcast/tsconfig.json"
           }
         ]
@@ -10596,6 +10949,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-void-argument-takes-its-default/tsconfig.json"
           }
         ]
@@ -10608,6 +10962,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from-widened-map-values/tsconfig.json"
           }
         ]
@@ -10620,6 +10975,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "programs/written-storage/tsconfig.json"
           }
         ]
@@ -10768,6 +11124,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../tests/programs/abi-payload-query-budget/tsconfig.json"
           }
         ]
@@ -10815,58 +11172,72 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/workspace/phase-import-capture/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/workspace/diagnostic-audit-inputs/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/workspace/diagnostic-audit-inputs/control.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/workspace/apps/node/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-field-whose-name-starts-with-two-underscores/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/two-private-names-that-collide/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/hello/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/open-typed-values/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/invalid/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../runtime/web-platform/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../runtime/react/packages/react-reconciler/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../tests/programs/recursive-array-flat/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../tests/programs/a-generic-recursive-return-is-only-expanded-when-called/tsconfig.json"
           },
           {
             "kind": "project-members",
+            "role": "compiled-program",
             "path": "../../../../runtime/node/",
             "prefix": "",
             "optional": true
@@ -11019,6 +11390,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/advanced/tsconfig.json"
           }
         ]
@@ -11038,14 +11410,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-tagged-template/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-dynamic-import/tsconfig.json"
           }
         ]
@@ -11072,6 +11447,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/classes/tsconfig.json"
           }
         ]
@@ -11091,14 +11467,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/types/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/signatures/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/classes/tsconfig.json"
           }
         ]
@@ -11118,10 +11497,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/invalid/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/types/tsconfig.json"
           }
         ]
@@ -11167,10 +11548,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/imports/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/module-bindings/tsconfig.json"
           }
         ]
@@ -11183,6 +11566,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/jsx/tsconfig.json"
           }
         ]
@@ -11202,6 +11586,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "fixtures/libraries/tsconfig.json"
           }
         ]
@@ -11214,6 +11599,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/classes/tsconfig.json"
           }
         ]
@@ -11226,6 +11612,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/hello/tsconfig.json"
           }
         ]
@@ -11245,42 +11632,52 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/awfy-dictionary-hole-slots/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-deep-base-keeps-its-physical-storage/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-closure-default-captures-its-parameter/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-bound-function/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from-a-set-a-mapper-adds-to/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-pinned-only-through-a-callback/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-fixed-arity-rest-is-positional/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-call-materializes-its-callers-composite-types/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-generic-owner-returns-a-carried-iteration-contract/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/an-implicit-iterator-call-preserves-its-throw/tsconfig.json"
           }
         ]
@@ -11293,6 +11690,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/readonly/tsconfig.json"
           }
         ]
@@ -11319,10 +11717,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/jsx/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/classes/tsconfig.json"
           }
         ]
@@ -11342,6 +11742,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/types/tsconfig.json"
           }
         ]
@@ -11452,10 +11853,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/workspace/apps/node/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/workspace/tsconfig.solution.json"
           }
         ]
@@ -11888,10 +12291,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../native/probe/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../../../tests/programs/jsx/tsconfig.json"
           }
         ]
@@ -11904,6 +12309,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../fixtures/jsx-lowering/tsconfig.json"
           }
         ]
@@ -11916,14 +12322,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../fixtures/jsx-lowering/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../native/compiled/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../fixtures/host-components/tsconfig.json"
           }
         ]
@@ -12118,6 +12527,7 @@
         "assets": [
           {
             "kind": "generated-project",
+            "role": "compiled-program",
             "path": "../../../tsconfig.fixtures.json",
             "directory": "./benchmarks/cases/fib",
             "include": "directory"
@@ -12407,22 +12817,27 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-cache-entry-array-keeps-a-shared-layout/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-closure-over-a-module-scope-loop-head/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-bigint-compared-with-an-erased-value/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-base-typed-slot-narrowed-by-instanceof/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/array-from/tsconfig.json"
           }
         ]
@@ -12529,6 +12944,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
           }
         ]
@@ -12750,14 +13166,17 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-cast-reads-a-field-another-layout-holds/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-cast-result-alias-keeps-its-tag/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/a-record-membership-test-through-an-erased-cast/tsconfig.json"
           }
         ]
@@ -12853,10 +13272,12 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/container-content-facts/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/invalid/tsconfig.json"
           }
         ]
@@ -12950,6 +13371,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/objects/tsconfig.json"
           }
         ]
@@ -13034,6 +13456,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json"
           },
           {
@@ -13050,6 +13473,7 @@
         "assets": [
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/calls-a-region-could-serve/tsconfig.json"
           }
         ]
@@ -13583,10 +14007,12 @@
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/bitwise/tsconfig.json"
           },
           {
             "kind": "project-config",
+            "role": "compiled-program",
             "path": "../../../tests/programs/unions/tsconfig.json"
           }
         ]

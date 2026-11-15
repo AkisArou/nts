@@ -23,12 +23,12 @@ test('generated project declarations retain literal include recipes through lexi
   const api=new API();
   try{
     for(const include of ['directory','typescript-tree']){
-      const source="import {generatedProject as generated} from './reader-inputs/main.ts';generated(new URL('./base.json',import.meta.url),'./case/',"+JSON.stringify(include)+");";
+      const source="import {generatedProject as generated} from './reader-inputs/main.ts';generated(new URL('./base.json',import.meta.url),'./case/',"+JSON.stringify(include)+",'compiled-program');";
       const lease=api.createSourceFile('tooling/gate/reader.ts',source);
-      try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,[{kind:'generated-project',path:'./base.json',directory:'./case/',include}]);}finally{lease.dispose();}
+      try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,[{kind:'generated-project',role:'compiled-program',path:'./base.json',directory:'./case/',include}]);}finally{lease.dispose();}
     }
     for(const argumentsText of ["new URL('./base.json',import.meta.url),'./case/'","new URL('./base.json',import.meta.url),directory,'directory'","new URL('./base.json',import.meta.url),'./case/','unknown'","new URL('./',import.meta.url),'./case/','directory'"]){
-      const source="import {generatedProject} from './reader-inputs/main.ts';generatedProject("+argumentsText+");",lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      const source="import {generatedProject} from './reader-inputs/main.ts';generatedProject("+argumentsText+",'compiled-program');",lease=api.createSourceFile('tooling/gate/reader.ts',source);
       try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations(),/generated[Pp]roject|generated project/);}finally{lease.dispose();}
     }
   }finally{api.close();}
@@ -210,13 +210,13 @@ test('compiled project configs keep lexical factory ownership',()=>{
   const api=new API(),source=`import {projectConfig as project} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';
 const alias=project;const {projectConfig:destructured}=inputs;
-project(new URL('./direct.json',import.meta.url));alias(new URL('./alias.json',import.meta.url));
-inputs.projectConfig(new URL('./namespace.json',import.meta.url));destructured(new URL('./destructured.json',import.meta.url));
+project(new URL('./direct.json',import.meta.url),'compiled-program');alias(new URL('./alias.json',import.meta.url),'compiled-program');
+inputs.projectConfig(new URL('./namespace.json',import.meta.url),'compiled-program');destructured(new URL('./destructured.json',import.meta.url),'compiled-program');
 function shadow(project:Function){project(new URL('./shadow.json',import.meta.url));}`;
   const lease=api.createSourceFile('tooling/gate/reader.ts',source);
   try{
     assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
-      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.json',kind:'project-config'})),{path:'./shadow.json',kind:'module'}]);
+      [...['direct','alias','namespace','destructured'].map(name=>({path:'./'+name+'.json',kind:'project-config',role:'compiled-program'})),{path:'./shadow.json',kind:'module'}]);
   }finally{lease.dispose();api.close();}
 });
 
@@ -282,7 +282,7 @@ test('module members require their lexical owner and a literal basename',()=>{
 test('explicit config and mixed data roles are literal declarations of the same owner',()=>{
   const api=new API();
   try{
-    const source="import {projectConfig,moduleMembers} from './reader-inputs/main.ts';projectConfig(new URL('./solution.json',import.meta.url));moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',{data:true});";
+    const source="import {projectConfig,moduleMembers} from './reader-inputs/main.ts';projectConfig(new URL('./solution.json',import.meta.url),'compiled-program');moduleMembers(new URL('./population/',import.meta.url),'nts.config.ts',{data:true});";
     const lease=api.createSourceFile('tooling/gate/reader.ts',source);
     try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
       [{path:'./solution.json',kind:'project-config'},{path:'./population/',kind:'members',member:'nts.config.ts',data:true}]);}finally{lease.dispose();}
@@ -298,11 +298,11 @@ test('explicit config and mixed data roles are literal declarations of the same 
 test('project collection factories use literal lexical selections and preserve root arity refusals',()=>{
   const api=new API();
   try{
-    const source="import {projectCatalogue as catalogue,projectMembers as members} from './reader-inputs/main.ts';catalogue(new URL('./projects.tsv',import.meta.url),'./cases/');members(new URL('./',import.meta.url),'chosen-');members(new URL('./projects/',import.meta.url),'',{optional:true});";
+    const source="import {projectCatalogue as catalogue,projectMembers as members} from './reader-inputs/main.ts';catalogue(new URL('./projects.tsv',import.meta.url),'./cases/','compiled-program');members(new URL('./',import.meta.url),'chosen-','compiled-program');members(new URL('./projects/',import.meta.url),'','compiled-program',{optional:true});";
     const lease=api.createSourceFile('tooling/gate/reader.ts',source);
     try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
-      [{kind:'project-catalogue',path:'./projects.tsv',directory:'./cases/'},{kind:'project-members',path:'./',prefix:'chosen-'},{kind:'project-members',path:'./projects/',prefix:'',optional:true}]);}finally{lease.dispose();}
-    for(const call of ["projectMembers(new URL('./',import.meta.url))","projectMembers(new URL('./',import.meta.url),prefix)","projectMembers(new URL('./',import.meta.url),'../escape')","projectCatalogue(new URL('./projects.tsv',import.meta.url),directory)","projectMembers(new URL('./',import.meta.url),'',options)","projectMembers(new URL('./',import.meta.url),'',{optional:false})","projectMembers(new URL('./',import.meta.url),'',{optional:true,extra:true})"]){
+      [{kind:'project-catalogue',role:'compiled-program',path:'./projects.tsv',directory:'./cases/'},{kind:'project-members',role:'compiled-program',path:'./',prefix:'chosen-'},{kind:'project-members',role:'compiled-program',path:'./projects/',prefix:'',optional:true}]);}finally{lease.dispose();}
+    for(const call of ["projectMembers(new URL('./',import.meta.url),'compiled-program')","projectMembers(new URL('./',import.meta.url),prefix,'compiled-program')","projectMembers(new URL('./',import.meta.url),'../escape','compiled-program')","projectCatalogue(new URL('./projects.tsv',import.meta.url),directory,'compiled-program')","projectMembers(new URL('./',import.meta.url),'','compiled-program',options)","projectMembers(new URL('./',import.meta.url),'','compiled-program',{optional:false})","projectMembers(new URL('./',import.meta.url),'','compiled-program',{optional:true,extra:true})"]){
       const text="import {projectCatalogue,projectMembers} from './reader-inputs/main.ts';"+call;
       const lease=api.createSourceFile('tooling/gate/reader.ts',text);
       try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
@@ -350,14 +350,33 @@ test('conservative directory factories retain explicit root ownership and refuse
 test('ordered project alternatives are literal declarations of the same reader owner',()=>{
   const api=new API();
   try{
-    const source="import {projectChoice as choose} from './reader-inputs/main.ts';choose(new URL('./first.json',import.meta.url),['../fallback.json']);";
+    const source="import {projectChoice as choose} from './reader-inputs/main.ts';choose(new URL('./first.json',import.meta.url),['../fallback.json'],'compiled-program');";
     const lease=api.createSourceFile('tooling/gate/reader.ts',source);
     try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
-      [{kind:'project-choice',path:'./first.json',alternatives:['../fallback.json']}]);}finally{lease.dispose();}
+      [{kind:'project-choice',role:'compiled-program',path:'./first.json',alternatives:['../fallback.json']}]);}finally{lease.dispose();}
     for(const values of ['choices','[...choices]','[choice]',"['file:///outside.json']"]){
-      const text="import {projectChoice} from './reader-inputs/main.ts';projectChoice(new URL('./first.json',import.meta.url),"+values+");";
+      const text="import {projectChoice} from './reader-inputs/main.ts';projectChoice(new URL('./first.json',import.meta.url),"+values+",'compiled-program');";
       const lease=api.createSourceFile('tooling/gate/reader.ts',text);
       try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',text,lease.sourceFile).moduleDeclarations(),/literal/);}finally{lease.dispose();}
+    }
+  }finally{api.close();}
+});
+
+
+test('every project factory requires its literal execution role without a default',()=>{
+  const api=new API();
+  try{
+    for(const [factory,args]of [
+      ['projectConfig',"new URL('./tsconfig.json',import.meta.url)"],
+      ['projectChoice',"new URL('./tsconfig.json',import.meta.url),[]"],
+      ['projectCatalogue',"new URL('./cases.tsv',import.meta.url),'./cases/'"],
+      ['projectMembers',"new URL('./cases/',import.meta.url),''"],
+      ['generatedProject',"new URL('./base.json',import.meta.url),'./case/','directory'"],
+    ])for(const suffix of ['',',undefined',",'unowned-role'"]){
+      const source=`import {${factory}} from './reader-inputs/main.ts';${factory}(${args}${suffix});`;
+      const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+      try{assert.throws(()=>new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations(),/role|literal|needs/);}
+      finally{lease.dispose();}
     }
   }finally{api.close();}
 });

@@ -79,7 +79,7 @@ test('shallow candidate declarations retain distinct existence and byte roles',(
 });
 
 test('shared choosing readers use the same rows and cannot duplicate Cargo source ownership',()=>{
-  const supplied={...value(),readers:[{source:'compiler/control/tests/case.rs',declarations:{imports:[],assets:[{kind:'project-config',path:'../../../fixture/tsconfig.json'}]}}]};
+  const supplied={...value(),readers:[{source:'compiler/control/tests/case.rs',declarations:{imports:[],assets:[{kind:'project-config',role:'compiled-program',path:'../../../fixture/tsconfig.json'}]}}]};
   supplied.targets[0]!.declarations.imports=['./case.rs'];
   const manifest=parseRustRuntimeManifest(supplied),bound=bindRustRuntimeDeclarations(manifest,[identity]);
   assert.equal(bound.size,2);assert.deepEqual(bound.get(supplied.readers[0]!.source),supplied.readers[0]!.declarations);
@@ -92,7 +92,7 @@ test('shared choosing readers use the same rows and cannot duplicate Cargo sourc
 
 
 test('optional project member selection is literal and retains an empty all-member prefix',()=>{
-  const supplied={...value(),readers:[{source:'compiler/control/case.rs',declarations:{imports:[],assets:[{kind:'project-members',path:'./projects/',prefix:'',optional:true}]}}]};
+  const supplied={...value(),readers:[{source:'compiler/control/case.rs',declarations:{imports:[],assets:[{kind:'project-members',role:'compiled-program',path:'./projects/',prefix:'',optional:true}]}}]};
   assert.deepEqual(parseRustRuntimeManifest(supplied).readers![0]!.declarations.assets,supplied.readers[0]!.declarations.assets);
   for(const options of [{prefix:'../escape',optional:true},{prefix:'',optional:false},{prefix:'',optional:'true'}]){
     const invalid=structuredClone(supplied) as unknown as {readers:{declarations:{assets:Record<string,unknown>[]}}[]};

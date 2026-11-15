@@ -1,7 +1,7 @@
 import {runAsCommand} from "./command-entry/main.ts";
 // Parent-only Node resolution service. It never evaluates a subject module.
 import {createHash,randomBytes} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,type ChildProcess} from 'node:child_process';
 import {registerHooks,createRequire} from 'node:module';
 import {createConnection,createServer,type Socket} from 'node:net';
 import {closeSync,constants,createReadStream,existsSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,statSync,unlinkSync,watch,writeFileSync} from 'node:fs';
@@ -50,19 +50,22 @@ function receive(socket:Socket):Promise<Buffer>{
     socket.once('close',()=>{if(!complete)error(Error('oracle Node resolution connection closed before its response'));});
   });
 }
-function readyFile(directory:string):Promise<NodeResolutionSession>{
-  const file=join(directory,'holder.json');
-  return new Promise((done,fail)=>{
-    const finish=(error?:unknown,value?:NodeResolutionSession)=>{clearTimeout(timer);watcher.close();if(error)fail(error);else done(value!);};
+function readyFile(directory:string):{ready:Promise<NodeResolutionSession>;cancel:()=>void}{
+  const file=join(directory,'holder.json');let cancel!:()=>void;
+  const ready=new Promise<NodeResolutionSession>((done,fail)=>{
+    let complete=false;
+    const finish=(error?:unknown,value?:NodeResolutionSession)=>{if(complete)return;complete=true;clearTimeout(timer);watcher.close();if(error)fail(error);else done(value!);};
     const check=()=>{try{if(existsSync(file))finish(undefined,JSON.parse(readFileSync(file,'utf8')));}catch(error){finish(error);}};
     const watcher=watch(directory,check),timer=setTimeout(()=>finish(Error('oracle Node resolution service did not start')),30_000);
+    cancel=()=>finish(Error('oracle Node resolution service acquisition cancelled'));
     watcher.once('error',finish);check();
   });
+  void ready.catch(()=>{});return {ready,cancel};
 }
 /** Async initialization is safe in a parent draining other children's pipes.
  * Other platforms retain the existing bounded live path, without using an
  * executable identity that they cannot authenticate through Linux /proc. */
-export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void):Promise<NodeResolutionSession|null>{
+export async function startNodeResolutionSession(directory:string,options:NodeResolutionOptions,ownerPid=process.pid,onStarted?:(session:NodeResolutionSession,closed:Promise<void>)=>void,readiness?:(waiting:Promise<NodeResolutionSession>)=>Promise<NodeResolutionSession>):Promise<NodeResolutionSession|null>{
   if(process.platform!=='linux')return null;
   mkdirSync(directory,{recursive:true,mode:0o700});
   const permissions=lstatSync(directory);
@@ -73,27 +76,53 @@ export async function startNodeResolutionSession(directory:string,options:NodeRe
     if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
     checkNodeResolutionSession(session,options);return session;
   }
-  const waiting=readyFile(directory),claim=join(directory,'starting.json');let starter=false,closed:Promise<void>|undefined;
-  try{writeFileSync(claim,JSON.stringify({pid:process.pid})+'\n',{flag:'wx',mode:0o600});starter=true;}
-  catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
-  if(starter){
-    const owner={pid:ownerPid,birth:nodeProcessBirth(ownerPid)},expected=nodeExecutableIdentity(process.pid);
-    const init={version:1,directory,token:randomBytes(24).toString('hex'),nodeVersion:process.versions.node,nodeSha256:await executableHash(),executable:expected,owner,options,helperSha256};
-    atomic(join(directory,'start.json'),init);
-    const log=openSync(join(directory,'holder.stderr'),'ax',0o600);
-    // Trusted run infrastructure has its own group, retained in the owning
-    // systemd cgroup. Finishing one supervised preparation must not kill it.
-    const child=spawn(process.execPath,[...options.flags,helper,'--serve',directory],{env:process.env,detached:true,stdio:['ignore','ignore',log]});closeSync(log);child.unref();
-    if(!child.pid)throw Error('oracle Node resolution service launch failed');
-    if(onStarted){closed=new Promise<void>((done,fail)=>{child.once('error',fail);child.once('close',(code,signal)=>code===0&&!signal?done():fail(Error('oracle Node resolution holder stopped: '+(signal??code))));});void closed.catch(()=>{});}
-    child.once('error',()=>{/* The readiness timeout retains the startup log. */});
-  }
-  const session=await waiting;
-  if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
-  checkNodeResolutionSession(session,options);
-  if(starter&&closed)onStarted?.(session,closed);
-  return session;
+  const waiting=readyFile(directory),claim=join(directory,'starting.json');
+  let starter=false,child:ChildProcess|undefined,closed:Promise<void>|undefined;
+  let exited:Promise<{code:number|null;signal:NodeJS.Signals|null;error?:Error}>|undefined;
+  try{
+    try{writeFileSync(claim,JSON.stringify({pid:process.pid})+'\n',{flag:'wx',mode:0o600});starter=true;}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+    if(starter){
+      const owner={pid:ownerPid,birth:nodeProcessBirth(ownerPid)},expected=nodeExecutableIdentity(process.pid);
+      const init={version:1,directory,token:randomBytes(24).toString('hex'),nodeVersion:process.versions.node,nodeSha256:await executableHash(),executable:expected,owner,options,helperSha256};
+      atomic(join(directory,'start.json'),init);
+      const log=openSync(join(directory,'holder.stderr'),'ax',0o600);
+      // This starter owns completion immediately, before readiness or validation
+      // can fail. A successful handoff may outlive the preparing process group.
+      try{child=spawn(process.execPath,[...options.flags,helper,'--serve',directory],{env:process.env,detached:true,stdio:['ignore','ignore',log]});}
+      finally{closeSync(log);}
+      const acquired=child;
+      exited=new Promise(done=>{
+        let error:Error|undefined;
+        acquired.once('error',value=>{error=value;});
+        acquired.once('close',(code,signal)=>done({code,signal,...(error?{error}:{})}));
+      });
+      closed=exited.then(result=>{if(result.error||result.code!==0||result.signal)throw result.error??Error('oracle Node resolution holder stopped: '+(result.signal??result.code));});
+      void closed.catch(()=>{});child.unref();
+      if(!child.pid)throw Error('oracle Node resolution service launch failed');
+    }
+    const pending=readiness?readiness(waiting.ready):waiting.ready;
+    const early=exited?.then(result=>{throw result.error??Error('oracle Node resolution holder stopped before readiness: '+(result.signal??result.code));});
+    const session=await (early?Promise.race([pending,early]):pending);
+    if(session.directory!==directory||session.helperSha256!==helperSha256)throw Error('oracle Node resolution service identity changed');
+    checkNodeResolutionSession(session,options);
+    if(starter&&closed)onStarted?.(session,closed);
+    return session;
+  }catch(primary){
+    // Never signal a reused holder or discover a PID to stop. Only this call's
+    // actual ChildProcess is acquired, and close is joined before throwing.
+    if(child&&exited){
+      child.ref();
+      const errors:unknown[]=[primary];
+      try{if(child.exitCode===null&&child.signalCode===null&&!child.kill('SIGTERM'))throw Error('oracle Node resolution holder termination failed');}
+      catch(error){errors.push(error);}
+      const result=await exited;if(result.error)errors.push(result.error);
+      if(errors.length>1)throw new AggregateError(errors,'oracle Node resolution acquisition and cleanup failed',{cause:primary});
+    }
+    throw primary;
+  }finally{waiting.cancel();}
 }
+
 async function exchange(session:NodeResolutionSession,action:Batch['action'],queries:NodeResolutionQuery[]):Promise<Response>{
   const request:Batch={version:1,token:session.token,action,queries},bytes=Buffer.from(JSON.stringify(request)+'\n'),sha256=digest(bytes),address=socketAddress(session.directory);
   const socket=createConnection(address.path),response=receive(socket);

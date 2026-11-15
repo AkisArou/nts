@@ -1992,3 +1992,18 @@ the first node task.
   inventories entries and shell Node programs; report-only imports stay in
   pure leaves rather than acquiring preparation or an audit exception
   ([log](records/notebooks/decisions-log.md#standalone-oracle-entry-ownership-11-15)).
+
+- **Compiler project readers name their execution role.** Each project
+  descriptor requires `type-check` or `compiled-program`. Type checking owns
+  exactly the pinned Program's captured files and observations; runtime URL
+  assets and descriptors in checked sources do not execute. A compiled program
+  keeps those runtime assets as well as its Program inputs. Distinct role and
+  project contexts preserve both visits independently of discovery order.
+- **Resolution helper acquisition owns failure cleanup from spawn.** The
+  starter joins only its newly spawned helper on failed readiness or session
+  validation before releasing output or admission. Successful callers may
+  transfer that ownership; reused parent helpers remain owned by their parent.
+  A foreign standalone entry with gate admission allocates its entry subtree
+  inside the authenticated gate temporary and removes only that subtree after
+  child, helper and admission drain. A cold image follows the same lifetime as
+  a parent-image hit.

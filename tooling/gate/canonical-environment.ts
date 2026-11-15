@@ -7,7 +7,7 @@ import { userInfo } from "node:os";
 import { delimiter,dirname,join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath,pathToFileURL } from "node:url";
 import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
-import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable} from "./run-temporary.ts";
+import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,discardRunTemporary,removable,assertRunTemporary} from "./run-temporary.ts";
 import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
 
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
@@ -288,7 +288,11 @@ export async function withPreparedOracle(
       }
     }});
     unbindWaiting();
-    const home=base.HOME||userInfo().homedir,parent=join(home,'.cache/nts/oracle-entries');
+    const home=base.HOME||userInfo().homedir;
+    const capability=raw?JSON.parse(raw):undefined;
+    const enclosing=capability?.admission?.kind==='gate'?capability.admission.temporary:undefined;
+    if(enclosing)assertRunTemporary(enclosing,home);
+    const parent=enclosing?join(enclosing.path,'oracle-entries'):join(home,'.cache/nts/oracle-entries');
     mkdirSync(parent,{recursive:true});
     const path=mkdtempSync(join(parent,'entry-')),identity=lstatSync(path);
     run={path,dev:identity.dev,ino:identity.ino,uid:identity.uid};

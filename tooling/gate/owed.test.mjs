@@ -269,8 +269,8 @@ step "tooling" node tooling/empty.test.ts
 `);
   put('tooling/gate/run.mjs','if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = "output";');
   put('tooling/gate/tooling-test-exclusions.json','[]');put('tooling/empty.test.ts','');put('tooling/private/receiver.ts','');
-  put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",url});');
-  put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url));projectConfig(new URL('../census/data/tsconfig.json',import.meta.url));");
+  put('tooling/gate/reader-inputs/main.ts','export const projectConfig=url=>({kind:"project-config",role:"compiled-program",url});');
+  put('tooling/private/reader.ts',"import {projectConfig} from '../gate/reader-inputs/main.ts';projectConfig(new URL('../../docs/data/tsconfig.json',import.meta.url),'compiled-program');projectConfig(new URL('../census/data/tsconfig.json',import.meta.url),'compiled-program');");
   for(const prefix of ['docs/data','tooling/census/data']){
     put(prefix+'/tsconfig.json','{"include":["src/**/*.ts"]}');put(prefix+'/src/main.ts','export const value=1;');
     put(prefix+'/src/notes.md','old prose');put(prefix+'/src/unexecuted.mjs','export const value=1;');
@@ -1355,8 +1355,8 @@ if [ "$1" = --list ]; then printf '%s\\n' profile tooling; exit; fi
 step "profile" node tooling/private/reader.ts
 step "tooling" node tooling/empty.test.ts
 `);
-  put('tooling/gate/reader-inputs/main.ts','export const projectMembers=(url,prefix,options)=>({kind:"project-members",url,prefix,...options});');
-  put('tooling/private/reader.ts',"import {projectMembers} from '../gate/reader-inputs/main.ts';projectMembers(new URL('../../docs/projects/',import.meta.url),'',{optional:true});");
+  put('tooling/gate/reader-inputs/main.ts','export const projectMembers=(url,prefix,options)=>({kind:"project-members",role:"compiled-program",url,prefix,...options});');
+  put('tooling/private/reader.ts',"import {projectMembers} from '../gate/reader-inputs/main.ts';projectMembers(new URL('../../docs/projects/',import.meta.url),'','compiled-program',{optional:true});");
   put('docs/projects/ordinary.md','before');put('docs/projects/present/tsconfig.json','{"compilerOptions":{"types":[]},"files":["main.ts"]}');put('docs/projects/present/main.ts','export {};');
   const env=fixtureEnvironment(t);
   for(const args of [['init','--quiet'],['add','.']]){const result=spawnTest('git',gitArguments(args),{cwd:root,env,encoding:'utf8'});assert.equal(result.status,0,result.stderr);}

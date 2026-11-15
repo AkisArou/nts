@@ -40,7 +40,7 @@ function fixture(t:Parameters<typeof testScratch>[0]){
 test('declared Program package reads retain finite identity and only repository pin reach',t=>{
   const f=fixture(t),owner=moduleGraph({sourceRoot:f.root,dependencyCatalog:f.trust});
   try{
-    const snapshot=owner.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')))]);
+    const snapshot=owner.describe([projectConfig(pathToFileURL(join(f.root,'tsconfig.json')),'compiled-program')]);
     const installed=snapshot.observations.filter(row=>row.dependency);
     assert.ok(installed.some(row=>row.observation.kind==='file'&&row.dependency?.package?.name==='fixture-package'&&row.dependency.package.version==='1.0.0'));
     assert.ok(installed.every(row=>readerObservationDependency(f.root,row)===undefined));

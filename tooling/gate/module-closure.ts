@@ -12,7 +12,7 @@ import {SourceFacts} from './source-facts.ts';
 import {captureToolchain,type Capture,type InstalledTypeScript} from '../differential/oracle-toolchain.ts';
 import type {BuildModuleInputs} from './rust-modules.ts';
 import {projectInputOwner,type ProjectInputs,type ProjectRequest} from './project-inputs.ts';
-import {executableModuleSource,fixtureNamespaces,moduleMemberName,projectMemberPrefix,relativeProjectInput,matchesModuleMember,directoryCandidates,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext,type ReaderProtocol} from './reader-inputs/main.ts';
+import {projectRole,executableModuleSource,fixtureNamespaces,moduleMemberName,projectMemberPrefix,relativeProjectInput,matchesModuleMember,directoryCandidates,type DataNamespaces,type DirectoryDeclaration,type ModuleDeclarations,type ReaderInput,type InputEntry,type OptionalFileDeclaration,type MembershipDeclaration,type ReaderContext,type ReaderProtocol} from './reader-inputs/main.ts';
 import {directoryEntries,metadataParents,membershipIndex} from './reader-metadata.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservation} from '../differential/oracle-runtime.ts';
@@ -145,7 +145,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const observations:ReaderObservation[]=[];
     const unavailableInputs:UnavailableInput[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
-      compiledImports?:ReadonlyMap<string,readonly string[]>};
+      projectRole?:import('./reader-inputs/main.ts').ProjectRole;compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
     const nameOf=(path:string)=>relative(root,path).split(sep).join('/');
     const observe=(context:Context,reader:string,protocol:ReaderObservation['protocol'],rows:HostObservation[])=>{
@@ -173,6 +173,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(['installation-inputs','cargo-inputs','dependency-source-inputs','installation-status-inputs'].includes(input.kind))path=resolve(path);
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
+      if(['project-config','project-choice','project-catalogue','project-members','generated-project'].includes(kind))projectRole(input.role);
       // Accepted main blobs have no candidate filesystem or staging role.
       if(kind==='accepted-revision')return;
       if(kind==='installation-inputs'||kind==='cargo-inputs'||kind==='dependency-source-inputs'||kind==='installation-status-inputs'){
@@ -252,7 +253,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const candidates=[path,...input.alternatives.map(value=>fileURLToPath(new URL(relativeProjectInput(value),pathToFileURL(path))))];
         if(candidates.some(candidate=>!inside(root,candidate)))throw Error('project choice escapes source root: '+reader);
         for(const candidate of candidates)if(optionalPresence(context,reader,candidate)){
-          asset(context,reader,candidate,{kind:'project-config',path:''},false);return;
+          asset(context,reader,candidate,{kind:'project-config',path:'',role:input.role},false);return;
         }
         throw Error('project choice has no present config: '+reader);
       }
@@ -270,7 +271,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           if(fields.length!==5)throw Error('project catalogue needs five columns: '+nameOf(path)+':'+(index+1));
           const name=moduleMemberName(fields[0]);
           if(names.has(name))throw Error('project catalogue repeats a project: '+name);names.add(name);
-          asset(context,reader,join(directory,name,'tsconfig.json'),{kind:'project-config',path:''},false);
+          asset(context,reader,join(directory,name,'tsconfig.json'),{kind:'project-config',path:'',role:input.role},false);
         }
         if(readFileSync(path,'utf8')!==text)throw Error('project catalogue changed during discovery: '+nameOf(path));
         return;
@@ -281,7 +282,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         const entries=directoryEntries(path),filesystem=new OracleFilesystem();
         for(const entry of entries)if(entry.name.startsWith(prefix)){
           const config=join(path,entry.name,'tsconfig.json');
-          if(!input.optional||filesystem.fileExists(config))asset(context,reader,config,{kind:'project-config',path:''},false);
+          if(!input.optional||filesystem.fileExists(config))asset(context,reader,config,{kind:'project-config',path:'',role:input.role},false);
         }
         if(input.optional)observe(context,reader,'project',filesystem.captured());
         if(JSON.stringify(directoryEntries(path))!==JSON.stringify(entries))throw Error('project member population changed during discovery: '+nameOf(path));
@@ -314,7 +315,8 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       }
       if(kind==='project-config'||kind==='generated-project'){
         const entry=nameOf(path);
-        const key=JSON.stringify([kind,entry,input.directory,input.include]);
+        const role=projectRole(input.role);
+        const key=JSON.stringify([kind,entry,input.directory,input.include,role]);
         if(context.projects.has(key))return;
         context.projects.add(key);
         let request:import('./project-inputs.ts').ProjectRequest={kind:'config',path:entry};
@@ -344,7 +346,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
         // A compiler project has its own resolution and visit state. Literal
         // host imports and another project's options cannot replace its edges.
         const compiled:Context={entry:context.entry,namespaces:context.namespaces,entered:new Set(),host:new Set(),owned:new Set(),projects:context.projects,data:context.data,
-          compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
+          projectRole:role,compiledImports:new Map(project.modules.map(row=>[row.path,row.imports]))};
         for(const entry of new Set([...project.roots,...project.modules.map(row=>row.path)]))visit(compiled,resolve(root,entry),true,true,false);
         return;
       }
@@ -403,6 +405,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       // Aggregate ownership never suppresses another namespace context. A
       // later production import must still restore its real data membership.
       if(!executableModuleSource(path)&&!options.declarations?.has(name))return;
+      if(context.projectRole==='type-check')return;
       for(const target of buildModules?.imports.get(name)??[])visit(context,resolve(root,target),true,true,false,true);
       const {imports,assets}=parsed(path);
       const compiled=context.compiledImports?.get(name);
@@ -414,6 +417,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     for(const entry of entries){
       if(typeof entry!=='string'){
         asset(production,'<entry>',fileURLToPath(entry.url),{path:entry.url.href,kind:entry.kind,
+          ...('role' in entry?{role:entry.role}:{}),
           ...(entry.kind==='fixture'?{dataNamespaces:entry.dataNamespaces}:entry.kind==='members'?{member:entry.member,...(entry.data?{data:true}:{})}:entry.kind==='project-choice'?{alternatives:[...entry.alternatives]}:entry.kind==='project-catalogue'?{directory:entry.directory}:entry.kind==='project-members'?{prefix:entry.prefix,...(entry.optional?{optional:true}:{})}:entry.kind==='generated-project'?{directory:entry.directory,include:entry.include}:entry.kind==='directory-candidates'?{candidates:entry.candidates}:{})});
         continue;
       }

@@ -1,3 +1,6 @@
+import {gitArguments} from './git-arguments/main.ts';
+import {fixtureEnvironment} from './test-environment.ts';
+import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {chmodSync,mkdirSync,writeFileSync,statSync,symlinkSync,utimesSync} from 'node:fs';
 import {captureToolchain} from '../differential/oracle-toolchain.ts';
@@ -17,7 +20,7 @@ test('declared real Programs retain ancestor package absences as host provenance
   const root=fileURLToPath(new URL('../..',import.meta.url)),owner=moduleGraph({sourceRoot:root});
   try{
     for(const path of ['tests/workspace/apps/node/tsconfig.json','tests/workspace/tsconfig.solution.json','runtime/react/packages/react-reconciler/tsconfig.json']){
-      const result=owner.describe([projectConfig(pathToFileURL(join(root,path)))]);
+      const result=owner.describe([projectConfig(pathToFileURL(join(root,path)),'compiled-program')]);
       const host=result.observations.filter(row=>row.environment);
       assert.ok(host.length>0,path);
       const hostSnapshot={...result,observations:host};validateReaderSourceObservations(hostSnapshot,root);
@@ -36,13 +39,13 @@ test('an ancestor package path becoming an ordinary file invalidates an otherwis
   writeFileSync(join(root,'main.ts'),"import 'missing-project-host-package';");
   const owner=moduleGraph({sourceRoot:root});
   try{
-    const snapshot=owner.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')))]);
+    const snapshot=owner.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')]);
     assert.ok(snapshot.observations.some(row=>row.environment&&row.observation.path===external&&row.observation.kind==='directoryExists'));
     const hostSnapshot={...snapshot,observations:snapshot.observations.filter(row=>row.environment)};
     validateReaderSourceObservations(hostSnapshot,root);
     writeFileSync(external,'ordinary file');
     assert.throws(()=>validateReaderSourceObservations(hostSnapshot,root),/project host absence is now present/);
-    assert.throws(()=>owner.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')))]),/declared project external package path is present/);
+    assert.throws(()=>owner.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')]),/declared project external package path is present/);
   }finally{owner.close();}
 });
 
@@ -130,7 +133,7 @@ test('compiled project imports use the pinned resolver rather than literal host 
   assert.deepEqual(actual.modules.find(row=>row.path==='src/provider.ts')?.imports,['outside/value.ts']);
   assert.ok(actual.observations.some(row=>row.kind==='file'&&row.path===join(root,'outside/value.ts')));
   {
-    const entry=projectConfig(pathToFileURL(join(root,'tsconfig.json')));
+    const entry=projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program');
     const graph=moduleGraph({sourceRoot:root,nodeMajor:26});
     try{
       const snapshot=graph.describe([entry]);
@@ -147,7 +150,7 @@ test('different compiler projects retain both resolutions and host promotion in 
     writeFileSync(join(root,name+'.ts'),'export const value=1;');
     writeFileSync(join(root,name+'.json'),JSON.stringify({compilerOptions:{module:'esnext',moduleResolution:'bundler',types:[],paths:{'@value':['./'+name+'.ts']}},files:['main.ts']}));
   }
-  const first=projectConfig(pathToFileURL(join(root,'first.json'))),second=projectConfig(pathToFileURL(join(root,'second.json')));
+  const first=projectConfig(pathToFileURL(join(root,'first.json')),'compiled-program'),second=projectConfig(pathToFileURL(join(root,'second.json')),'compiled-program');
   for(const entries of [[first,second,'main.ts'],['main.ts',second,first],[second,first]]){
     const graph=moduleGraph({sourceRoot:root,nodeMajor:26});
     try{
@@ -178,7 +181,7 @@ test('the pinned Program retains per-usage NodeNext conditions and explicit type
   assert.ok(result.installedObservations.some(row=>row.observation.kind==='file'&&row.capability.kind==='typescript-sdk'));
   assert.ok(result.modules.every(row=>!row.path.includes('node_modules')));
   const destination=testScratch(t,'project-usage-copy');
-  const staged=copyModuleClosure([projectConfig(pathToFileURL(join(root,'tsconfig.json')))],destination,{sourceRoot:root});
+  const staged=copyModuleClosure([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')],destination,{sourceRoot:root});
   assert.ok(staged.includes('import.mts'));assert.ok(staged.includes('require.cts'));
   assert.ok(staged.every(path=>!path.includes('node_modules')));
 });
@@ -205,7 +208,7 @@ test('installed SDK facts retain exact authenticated membership and no repositor
   writeFileSync(join(root,'entry.ts'),'export {};');writeFileSync(join(root,'tsconfig.json'),'{"files":["entry.ts"],"compilerOptions":{"types":[]}}');
   const graph=moduleGraph({sourceRoot:root});
   try{
-    const snapshot=graph.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')))]),row=snapshot.observations.find(row=>row.capability&&row.observation.kind==='file');
+    const snapshot=graph.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')]),row=snapshot.observations.find(row=>row.capability&&row.observation.kind==='file');
     assert.ok(row?.capability);assert.equal(readerObservationDependency(root,row),undefined);
     assert.ok(!snapshot.ownedFiles.some(path=>path.includes('node_modules')));
     validateReaderSourceObservations(snapshot,root);
@@ -224,7 +227,7 @@ test('a project package search outside its source retains facts and refuses impl
   writeFileSync(join(root,'entry.ts'),'export {};');writeFileSync(join(root,'tsconfig.json'),'{"files":["entry.ts"]}');
   const result=projectInputs([{kind:'config',path:'tsconfig.json'}],root);
   assert.ok(result.observations.some(row=>row.kind==='fileExists'&&!row.path.startsWith(root+'/')));
-  assert.throws(()=>copyModuleClosure([projectConfig(pathToFileURL(join(root,'tsconfig.json')))],destination,{sourceRoot:root}),/needs an external capability/);
+  assert.throws(()=>copyModuleClosure([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')],destination,{sourceRoot:root}),/needs an external capability/);
 });
 
 
@@ -265,7 +268,7 @@ test('one project API keeps fresh transactions after changed inputs and failures
 test('a closed canonical graph refuses traversal and closes its lazy project owner',t=>{
   const root=testScratch(t,'closed-project-graph');writeFileSync(join(root,'entry.ts'),'export {};');
   writeFileSync(join(root,'tsconfig.json'),' {"compilerOptions":{"types":[]},"files":["entry.ts"]}');writeFileSync(join(root,'package.json'),'{}');
-  const graph=moduleGraph({sourceRoot:root});graph.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')))]);graph.close();graph.close();
+  const graph=moduleGraph({sourceRoot:root});graph.describe([projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program')]);graph.close();graph.close();
   assert.throws(()=>graph.describe(['entry.ts']),/module graph is closed/);assert.throws(()=>graph.membershipIndex(),/module graph is closed/);
 });
 
@@ -281,4 +284,35 @@ test('graph closure attempts both acquired APIs and retains both named failures'
     assert.match(error.errors[0].message,/project API/);assert.match(error.errors[1].message,/parser API/);return true;
   });
   assert.deepEqual(closed,['project','parser']);assert.doesNotThrow(()=>closeModuleGraphOwners([undefined,undefined]));
+});
+
+
+test('project roles retain Program reads and add runtime assets only for compiled programs in either order',t=>{
+  const root=testScratch(t,'project-role-assets');
+  mkdirSync(join(root,'tooling/gate/reader-inputs'),{recursive:true});
+  writeFileSync(join(root,'tooling/gate/reader-inputs/main.ts'),'export const dataDirectory=(url:URL)=>url;');
+  writeFileSync(join(root,'tsconfig.json'),JSON.stringify({compilerOptions:{module:'esnext',moduleResolution:'bundler',types:[]},files:['main.ts']}));
+  writeFileSync(join(root,'main.ts'),"import {dataDirectory} from './tooling/gate/reader-inputs/main.ts';export const asset=new URL('./generated.bin',import.meta.url);dataDirectory(new URL('./runtime-data/',import.meta.url));");
+  const typecheck=projectConfig(pathToFileURL(join(root,'tsconfig.json')),'type-check');
+  const executable=projectConfig(pathToFileURL(join(root,'tsconfig.json')),'compiled-program');
+  const graph=moduleGraph({sourceRoot:root});
+  try{
+    const checked=graph.describe([typecheck]);
+    assert.ok(checked.files.includes('main.ts'));assert.ok(checked.files.includes('tooling/gate/reader-inputs/main.ts'));
+    assert.ok(!checked.files.includes('generated.bin'));
+    assert.ok(!checked.directories.some(row=>row.directory==='runtime-data'));
+    assert.ok(!checked.observations.some(row=>row.observation.path===join(root,'generated.bin')));
+    for(const entries of [[executable],[typecheck,executable],[executable,typecheck]])
+      assert.throws(()=>graph.describe(entries),/ENOENT.*generated.bin/);
+    writeFileSync(join(root,'generated.bin'),'runtime bytes');
+    assert.throws(()=>graph.describe([executable]),/ENOENT.*runtime-data/);
+    mkdirSync(join(root,'runtime-data'));writeFileSync(join(root,'runtime-data/value.txt'),'runtime data');
+    // dataDirectory populations are tracked: the private repository supplies
+    // that population through its own independent Git inventory.
+    for(const args of [['init','-q'],['add','.']])execFileSync('git',gitArguments(args),{cwd:root,env:fixtureEnvironment(t)});
+    for(const entries of [[typecheck,executable],[executable,typecheck]]){
+      const both=graph.describe(entries);
+      assert.ok(both.files.includes('generated.bin'));assert.ok(both.files.includes('runtime-data/value.txt'));
+    }
+  }finally{graph.close();}
 });

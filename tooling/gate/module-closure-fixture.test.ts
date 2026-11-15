@@ -394,14 +394,14 @@ test("declared-project staging preserves inherited configs and follows newly dec
   f.write("project/package.json", '{"type":"module"}');
   f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts"]}');
   f.write("project/src/entry.ts", "export const value: number = 19; console.log(value);");
-  const first = copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"project/tsconfig.json")))], f.destination, {sourceRoot: f.source});
+  const first = copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"project/tsconfig.json")),'compiled-program')], f.destination, {sourceRoot: f.source});
   assert.deepEqual(first, ["base.json", "project/package.json", "project/src/entry.ts", "project/tsconfig.json"]);
   for (const file of first) assert.deepEqual(readFileSync(join(f.destination, file)), readFileSync(join(f.source, file)));
   f.write("project/tsconfig.json", '{"extends":"../base.json","files":["src/entry.ts","src/registered.ts"]}');
   f.write("project/src/registered.ts", "import {value} from './dependency.ts'; console.log(value);");
   f.write("project/src/dependency.ts", "export const value: number = 23;");
   const destination = join(f.destination, "new-root");
-  const second = copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"project/tsconfig.json")))], destination, {sourceRoot: f.source});
+  const second = copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"project/tsconfig.json")),'compiled-program')], destination, {sourceRoot: f.source});
   assert.deepEqual(second, ["base.json", "project/package.json", "project/src/dependency.ts", "project/src/entry.ts", "project/src/registered.ts", "project/tsconfig.json"]);
   assert.equal(readFileSync(join(destination, "project/tsconfig.json"), "utf8"), readFileSync(join(f.source, "project/tsconfig.json"), "utf8"));
   const result = spawnTest(process.execPath, [join(destination, "project/src/registered.ts")], {encoding: "utf8"});
@@ -411,13 +411,13 @@ test("declared-project staging preserves inherited configs and follows newly dec
 test('project declarations promote ordinary, byte and data reach in both orders',t=>{
   const f=dataFixture(t);
   f.write('package.json','{"type":"module"}');
-  f.write('tooling/gate/reader-inputs/main.ts',"export const fileInput=url=>url;export const dataDirectory=url=>url;export const projectConfig=url=>({kind:'project-config',url});");
+  f.write('tooling/gate/reader-inputs/main.ts',"export const fileInput=url=>url;export const dataDirectory=url=>url;export const projectConfig=url=>({kind:'project-config',role:'compiled-program',url});");
   f.write('data/tsconfig.json','{"files":["case.ts","registered.ts"]}');
   f.write('data/case.ts','export const answer=19;');
   f.write('data/registered.ts',"import './dependency.ts';");f.write('data/dependency.ts','export const answer=23;');
   f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.ts',import.meta.url));");
-  f.write('compiled.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./data/tsconfig.json',import.meta.url));");
-  const compiled=projectConfig(pathToFileURL(join(f.source,'data/tsconfig.json')));
+  f.write('compiled.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./data/tsconfig.json',import.meta.url),'compiled-program');");
+  const compiled=projectConfig(pathToFileURL(join(f.source,'data/tsconfig.json')),'compiled-program');
   for(const first of ['data/case.ts','bytes.ts','entry.ts'])for(const entries of [[first,compiled],[compiled,first]]){
     const graph=moduleGraph({sourceRoot:f.source});
     try{
@@ -445,7 +445,7 @@ test('project references retain their own config bytes and declared roots',t=>{
   f.write('referenced/root.ts','export const answer=23;');
   const graph=moduleGraph({sourceRoot:f.source});
   try{
-    const result=graph.describe([projectConfig(pathToFileURL(join(f.source,'project/tsconfig.json')))]);
+    const result=graph.describe([projectConfig(pathToFileURL(join(f.source,'project/tsconfig.json')),'compiled-program')]);
     for(const file of ['project/tsconfig.json','referenced/tsconfig.json'])assert.ok(result.ownedFiles.includes(file)&&!result.moduleFiles.includes(file));
     assert.ok(result.moduleFiles.includes('referenced/root.ts'));
   }finally{graph.close();}
@@ -454,11 +454,11 @@ test('project references retain their own config bytes and declared roots',t=>{
 test("declared-project staging refuses missing and escaping projects before copying", t => {
   const f = fixture(t); f.write("entry.ts", "export const value = 19;");
   assert.deepEqual(moduleClosure(['entry.ts'],{sourceRoot:f.source}),['entry.ts'],'ordinary module discovery never asks for a project');
-  assert.throws(() => copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"tsconfig.json")))], f.destination, {sourceRoot: f.source}), /ENOENT|cannot be parsed/);
+  assert.throws(() => copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"tsconfig.json")),'compiled-program')], f.destination, {sourceRoot: f.source}), /ENOENT|cannot be parsed/);
   assert.equal(existsSync(f.destination), false);
   f.write("tsconfig.json", '{"extends":"../outside.json","files":["entry.ts"]}');
   writeFileSync(join(f.source, "../outside.json"), '{"compilerOptions":{"noEmit":true}}');
-  assert.throws(() => copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"tsconfig.json")))], f.destination, {sourceRoot: f.source}), /escapes source root/);
+  assert.throws(() => copyModuleClosure([projectConfig(pathToFileURL(join(f.source,"tsconfig.json")),'compiled-program')], f.destination, {sourceRoot: f.source}), /escapes source root/);
   assert.equal(existsSync(f.destination), false);
 });
 
@@ -666,8 +666,8 @@ test('a mixed data/member population keeps private metadata and immutable execut
 test('an explicit project config uses the same parser without nearest-entry discovery',t=>{
   const f=fixture(t);
   f.write('package.json','{"type":"module"}');
-  f.write('tooling/gate/reader-inputs/main.ts',"export const projectConfig=url=>({kind:'project-config',url});");
-  f.write('reader.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./project/tsconfig.solution.json',import.meta.url));");
+  f.write('tooling/gate/reader-inputs/main.ts',"export const projectConfig=url=>({kind:'project-config',role:'compiled-program',url});");
+  f.write('reader.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./project/tsconfig.solution.json',import.meta.url),'compiled-program');");
   f.write('base.json','{"compilerOptions":{"strict":true}}');
   f.write('project/tsconfig.json','{"files":["unrelated.ts"]}');f.write('project/unrelated.ts',"import './must-not-enter.ts';");
   f.write('project/tsconfig.solution.json','{"files":[],"references":[{"path":"./sub"}]}');
@@ -675,14 +675,14 @@ test('an explicit project config uses the same parser without nearest-entry disc
   f.write('project/sub/entry.ts',"import './dependency.ts';");f.write('project/sub/dependency.ts','export const value=42;');
   const graph=moduleGraph({sourceRoot:f.source});
   try{
-    const descriptor=projectConfig(pathToFileURL(join(f.source,'project/tsconfig.solution.json'))),snapshot=graph.describe([descriptor]);
+    const descriptor=projectConfig(pathToFileURL(join(f.source,'project/tsconfig.solution.json')),'compiled-program'),snapshot=graph.describe([descriptor]);
     assert.deepEqual(snapshot.files,['base.json','package.json','project/sub/dependency.ts','project/sub/entry.ts','project/sub/tsconfig.json','project/tsconfig.solution.json']);
     assert.ok(!snapshot.moduleFiles.includes('project/tsconfig.solution.json'));
     assert.ok(!snapshot.moduleFiles.includes('project/sub/tsconfig.json'));
     const parsed=graph.describe(['reader.ts']);
     assert.deepEqual(parsed.files.filter(file=>file!=='reader.ts'&&file!=='tooling/gate/reader-inputs/main.ts'),snapshot.files);
     assert.deepEqual(copyModuleClosure([descriptor],f.destination,{sourceRoot:f.source}),snapshot.files);
-    assert.throws(()=>graph.describe([projectConfig(pathToFileURL(join(f.source,'project/missing.json')))]),/ENOENT/);
+    assert.throws(()=>graph.describe([projectConfig(pathToFileURL(join(f.source,'project/missing.json')),'compiled-program')]),/ENOENT/);
   }finally{graph.close();}
 });
 
@@ -728,7 +728,7 @@ test('inspection membership stages immutable code and metadata without placing e
 
 test('inspection never suppresses real module, file, data or project placement in either order',t=>{
   const f=dataFixture(t);
-  f.write('tooling/gate/reader-inputs/main.ts','export const inspectionDirectory=url=>url;export const dataDirectory=url=>url;export const fileInput=url=>url;export const projectConfig=url=>({kind:"project-config",url});');
+  f.write('tooling/gate/reader-inputs/main.ts','export const inspectionDirectory=url=>url;export const dataDirectory=url=>url;export const fileInput=url=>url;export const projectConfig=url=>({kind:"project-config",role:"compiled-program",url});');
   f.write('inspect.ts',"import {inspectionDirectory} from './tooling/gate/reader-inputs/main.ts';inspectionDirectory(new URL('./data/',import.meta.url));");
   f.write('data/case.ts',"import '../dependency.ts';export const answer=19;");
   f.write('dependency.ts','export const answer=23;');
@@ -736,7 +736,7 @@ test('inspection never suppresses real module, file, data or project placement i
   f.write('data/tsconfig.json','{"extends":"./base.json","files":["case.ts"]}');
   f.write('importer.ts',"import './data/case.ts';");
   f.write('bytes.ts',"import {fileInput} from './tooling/gate/reader-inputs/main.ts';fileInput(new URL('./data/case.ts',import.meta.url));");
-  f.write('configured.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./data/tsconfig.json',import.meta.url));");
+  f.write('configured.ts',"import {projectConfig} from './tooling/gate/reader-inputs/main.ts';projectConfig(new URL('./data/tsconfig.json',import.meta.url),'compiled-program');");
   const added=spawnTest('git',gitArguments(['add','.']),{cwd:f.source,encoding:'utf8'});assert.equal(added.status,0,added.stderr);
   for(const real of ['entry.ts','importer.ts','bytes.ts','configured.ts'])for(const entries of [['inspect.ts',real],[real,'inspect.ts']]){
     const graph=moduleGraph({sourceRoot:f.source});

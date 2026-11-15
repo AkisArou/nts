@@ -24,7 +24,7 @@ import { withWorkspaceProject } from "./workspace-project.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
 const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
-const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url));
+const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url),'type-check');
 const workspaceMembers=moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true});
 /** @type {import('../gate/reader-inputs/main.ts').InputEntry[]} */
 const workspaceInputs=[workspaceMembers,

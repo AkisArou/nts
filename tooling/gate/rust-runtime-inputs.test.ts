@@ -22,7 +22,7 @@ test('runtime and selector snapshots use the same graph and shared project/file/
   writeFileSync(join(root,'project/tsconfig.json'),'{"files":["main.ts"]}');
   const target:RustRuntimeTarget={source:'crate/lib.rs',name:'crate',kind:['lib'],unitTests:false,doctests:true};
   const manifest:RustRuntimeManifest={version:1,targets:[{target,declarations:{imports:['../tool.ts'],assets:[
-    {kind:'file',path:'../data.txt'},{kind:'project-config',path:'../project/tsconfig.json'},
+    {kind:'file',path:'../data.txt'},{kind:'project-config',role:'compiled-program',path:'../project/tsconfig.json'},
   ]}}]};
   const owner=rustRuntimeInputGraph({sourceRoot:root,manifest,inventory:[target],linkage:{packages:[{directory:'',name:'supplied',targets:[target],dependencies:[]}]},nodeMajor:26});
   const direct=moduleGraph({sourceRoot:root,declarations:bindRustRuntimeDeclarations(manifest,[target]),nodeMajor:26});
@@ -74,7 +74,7 @@ test('project catalogues and shallow enumerators share fresh compiled snapshots 
     writeFileSync(join(root,'projects',name,'tsconfig.json'),'{"compilerOptions":{"types":[]},"files":["main.ts"]}');};
   add('chosen-one');add('other');
   const catalogue=join(root,'projects.tsv');writeFileSync(catalogue,'# header\nchosen-one\tcontrol\tsubject\tlowers\tNTS1\n');
-  const graph=moduleGraph({sourceRoot:root,nodeMajor:26}),catalogueEntry=projectCatalogue(pathToFileURL(catalogue),'./projects/'),membersEntry=projectMembers(pathToFileURL(join(root,'projects/')),'chosen-');
+  const graph=moduleGraph({sourceRoot:root,nodeMajor:26}),catalogueEntry=projectCatalogue(pathToFileURL(catalogue),'./projects/','compiled-program'),membersEntry=projectMembers(pathToFileURL(join(root,'projects/')),'chosen-','compiled-program');
   try{
     const first=graph.describe([catalogueEntry]),members=graph.describe([membersEntry]);
     for(const snapshot of [first,members]){
@@ -105,7 +105,7 @@ test('ordered project choices retain checked absence and switch to a newly prese
   const add=(directory:string)=>{mkdirSync(join(root,directory));writeFileSync(join(root,directory,'main.ts'),'export const value=1;');
     writeFileSync(join(root,directory,'tsconfig.json'),'{"compilerOptions":{"types":[]},"files":["main.ts"]}');};
   add('fallback');
-  const entry=projectChoice(pathToFileURL(join(root,'primary/tsconfig.json')),['..//fallback/tsconfig.json','../unvisited/tsconfig.json']);
+  const entry=projectChoice(pathToFileURL(join(root,'primary/tsconfig.json')),['..//fallback/tsconfig.json','../unvisited/tsconfig.json'],'compiled-program');
   const graph=moduleGraph({sourceRoot:root});
   try{
     const snapshot=graph.describe([entry]);assert.ok(snapshot.files.includes('fallback/main.ts'));assert.ok(!snapshot.files.includes('primary/main.ts'));
@@ -114,9 +114,9 @@ test('ordered project choices retain checked absence and switch to a newly prese
     const destination=testScratch(t,'runtime-project-choice-copy');assert.deepEqual(copyModuleClosure([entry],destination,{sourceRoot:root}),snapshot.files);
     add('primary');const preferred=graph.describe([entry]);assert.ok(preferred.files.includes('primary/main.ts'));
     assert.ok(!preferred.files.includes('fallback/main.ts'));assert.deepEqual(preferred.optionalFiles.map(row=>row.path),['primary/tsconfig.json']);
-    assert.throws(()=>graph.describe([projectChoice(entry.url,['../../../outside.json'])]),/escapes source root/);
-    assert.throws(()=>graph.describe([projectChoice(pathToFileURL(join(root,'absent.json')),[])]),/no present config/);
-    assert.throws(()=>projectChoice(entry.url,['file:///outside.json']),/literal relative/);
+    assert.throws(()=>graph.describe([projectChoice(entry.url,['../../../outside.json'],'compiled-program')]),/escapes source root/);
+    assert.throws(()=>graph.describe([projectChoice(pathToFileURL(join(root,'absent.json')),[],'compiled-program')]),/no present config/);
+    assert.throws(()=>projectChoice(entry.url,['file:///outside.json'],'compiled-program'),/literal relative/);
   }finally{graph.close();}
 });
 
@@ -128,7 +128,7 @@ test('optional project members preserve shallow enumeration and actual ENOTDIR c
   const add=(name:string)=>{mkdirSync(join(root,'projects',name),{recursive:true});writeFileSync(join(root,'projects',name,'main.ts'),'export const value=1;');
     writeFileSync(join(root,'projects',name,'tsconfig.json'),'{"compilerOptions":{"types":[]},"files":["main.ts"]}');};
   add('present');
-  const entry=projectMembers(pathToFileURL(join(root,'projects/')),'',{optional:true}),graph=moduleGraph({sourceRoot:root});
+  const entry=projectMembers(pathToFileURL(join(root,'projects/')),'','compiled-program',{optional:true}),graph=moduleGraph({sourceRoot:root});
   try{
     const snapshot=graph.describe([entry]),negative=snapshot.observations.filter(row=>row.observation.kind==='fileExists'&&row.observation.value===false);
     assert.deepEqual(negative.map(row=>row.observation.path).filter(path=>path.endsWith('/tsconfig.json')).sort(),[join(root,'projects/empty/tsconfig.json'),join(root,'projects/ordinary.txt/tsconfig.json')]);
@@ -138,6 +138,6 @@ test('optional project members preserve shallow enumeration and actual ENOTDIR c
     assert.equal(index.affected([{path:'projects/ordinary.txt',sameMode:true}]).size,0,'ordinary-file bytes cannot alter ENOTDIR');
     assert.ok(index.affected([{path:'projects/empty/tsconfig.json',added:true}]).size>0,'a missing config becomes a present project');
     add('empty');assert.ok(graph.describe([entry]).moduleFiles.includes('projects/empty/main.ts'));
-    assert.throws(()=>graph.describe([projectMembers(entry.url,'')]),/not a file|missing|ENOENT|ENOTDIR/,'required-member mode still refuses the ordinary child');
+    assert.throws(()=>graph.describe([projectMembers(entry.url,'','compiled-program')]),/not a file|missing|ENOENT|ENOTDIR/,'required-member mode still refuses the ordinary child');
   }finally{graph.close();}
 });

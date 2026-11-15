@@ -28,7 +28,7 @@ function fixture(root:string,broken=false){
   }
   const inputs:InputEntry[]=[moduleMembers(pathToFileURL(join(root,'tests/workspace/')),'nts.config.ts',{data:true}),
     {kind:'file',url:fileInput(pathToFileURL(join(root,'support/external.d.ts')))}];
-  return {project:projectConfig(pathToFileURL(join(root,'tests/workspace/tsconfig.solution.json'))),inputs};
+  return {project:projectConfig(pathToFileURL(join(root,'tests/workspace/tsconfig.solution.json')),'compiled-program'),inputs};
 }
 function snapshot(root:string):[string,string][]{
   const rows:[string,string][]=[];

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration,BindingName} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import {fixtureNamespaces,moduleMemberName,projectCatalogue,relativeProjectInput,projectMemberPrefix,directoryCandidates,type DirectoryCandidate,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,projectCatalogue,projectRole,relativeProjectInput,projectMemberPrefix,directoryCandidates,type DirectoryCandidate,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
 
 const INPUT_OWNER='tooling/gate/reader-inputs/main.ts';
 const READER_FACTORIES:Readonly<Record<string,{owner:string;kind:InputKind}>>={
@@ -257,7 +257,15 @@ export class SourceFacts {
         if(owner&&['optionalFile','optionalModule','directoryMembership','conservativeDirectory','acceptedRevisionData','installationInputs','cargoInputs','dependencySourceInputs','installationStatusInputs'].includes(factory!.name)
           &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
           throw Error(factory!.name+' needs exactly one URL input: '+this.file);
-        if(owner&&factory!.name==='directoryCandidates'){
+        const role=(index:number)=>{
+          const value=parent&&ast.isCallExpression(parent)?parent.arguments[index]:undefined;
+          if(!value||!ast.isStringLiteral(value))throw Error('project input needs a literal type-check or compiled-program role: '+this.file);
+          return projectRole(value.text);
+        };
+        if(owner&&factory!.name==='projectConfig'){
+          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('projectConfig needs a URL and literal role: '+this.file);
+          assets.push({path:literal.text,kind:'project-config',role:role(1)});
+        }else if(owner&&factory!.name==='directoryCandidates'){
           const values=parent&&ast.isCallExpression(parent)&&parent.arguments.length===2?parent.arguments[1]:undefined;
           if(!values||!ast.isArrayLiteralExpression(values))throw Error('directoryCandidates needs one URL and literal candidates: '+this.file);
           const rows=values.elements.map(value=>{
@@ -275,32 +283,32 @@ export class SourceFacts {
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
         }else if(owner&&factory!.name==='projectChoice'){
-          const alternatives=parent&&ast.isCallExpression(parent)&&parent.arguments.length===2?parent.arguments[1]:undefined;
+          const alternatives=parent&&ast.isCallExpression(parent)&&parent.arguments.length===3?parent.arguments[1]:undefined;
           if(!alternatives||!ast.isArrayLiteralExpression(alternatives)||alternatives.elements.some(node=>!ast.isStringLiteral(node)))
             throw Error('projectChoice needs one URL and literal relative alternatives: '+this.file);
-          assets.push({path:literal.text,kind:'project-choice',alternatives:alternatives.elements.map(node=>relativeProjectInput((node as import('typescript/ast').StringLiteral).text))});
+          assets.push({path:literal.text,kind:'project-choice',role:role(2),alternatives:alternatives.elements.map(node=>relativeProjectInput((node as import('typescript/ast').StringLiteral).text))});
         }else if(owner&&factory!.name==='generatedProject'){
-          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==3||!parent.arguments[1]||!parent.arguments[2]
+          if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==4||!parent.arguments[1]||!parent.arguments[2]
             ||!ast.isStringLiteral(parent.arguments[1])||!ast.isStringLiteral(parent.arguments[2]))throw Error('generatedProject needs a config URL, literal directory and include recipe: '+this.file);
           const include=parent.arguments[2].text;if(include!=='directory'&&include!=='typescript-tree')throw Error('unsupported generated project include recipe: '+this.file);
-          assets.push({path:literal.text,kind:'generated-project',directory:relativeProjectInput(parent.arguments[1].text),include});
+          assets.push({path:literal.text,kind:'generated-project',role:role(3),directory:relativeProjectInput(parent.arguments[1].text),include});
         }else if(owner&&['projectCatalogue','projectMembers'].includes(factory!.name)){
-          if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
+          if(!parent||!ast.isCallExpression(parent)||![3,4].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
             throw Error(factory!.name+' needs one URL and a literal selection: '+this.file);
           const selection=parent.arguments[1].text;
           if(factory!.name==='projectMembers'){
             let optional:true|undefined;
-            if(parent.arguments.length===3){
-              const options=parent.arguments[2],property=options&&ast.isObjectLiteralExpression(options)&&options.properties.length===1?options.properties[0]:undefined;
+            if(parent.arguments.length===4){
+              const options=parent.arguments[3],property=options&&ast.isObjectLiteralExpression(options)&&options.properties.length===1?options.properties[0]:undefined;
               if(!property||!ast.isPropertyAssignment(property)||!(ast.isIdentifier(property.name)||ast.isStringLiteral(property.name))||property.name.text!=='optional'||property.initializer.kind!==ast.SyntaxKind.TrueKeyword)
                 throw Error('projectMembers optional mode must be literal {optional:true}: '+this.file);
               optional=true;
             }
-            assets.push({path:literal.text,kind:'project-members',prefix:projectMemberPrefix(selection),...(optional?{optional}:{})});
+            assets.push({path:literal.text,kind:'project-members',role:role(2),prefix:projectMemberPrefix(selection),...(optional?{optional}:{})});
           }else{
-            if(parent.arguments.length!==2)throw Error('projectCatalogue needs exactly two inputs: '+this.file);
-            projectCatalogue(new URL('file:///catalogue.tsv'),selection);
-            assets.push({path:literal.text,kind:'project-catalogue',directory:selection});
+            if(parent.arguments.length!==3)throw Error('projectCatalogue needs a URL, selection and literal role: '+this.file);
+            projectCatalogue(new URL('file:///catalogue.tsv'),selection,role(2));
+            assets.push({path:literal.text,kind:'project-catalogue',role:role(2),directory:selection});
           }
         }else if(owner&&factory!.name==='moduleMembers'){
           if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))

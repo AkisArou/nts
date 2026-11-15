@@ -3385,3 +3385,14 @@ and admission drain in ownership order. Internal workers require their parent
 seal. The entry audit and shared shell observer cover imports, command entries,
 prefixed Node commands and inline programs. Report/identity readers use pure
 leaves; moved-name checks include executable generated and shell Node programs.
+
+
+## Project execution roles and failed oracle acquisition (11-15)
+
+Project descriptors require an explicit type-check or compiled-program role.
+Only executing compiled programs acquire runtime URL/data obligations from
+Program source. Existing native project declarations retain their compiled
+program role. Resolution helpers become owned at spawn, including failed
+readiness and invalid session paths; cleanup joins them before releasing their
+namespace. Gate-owned foreign command entries keep both cold captures and
+reused-image handoffs inside their enclosing gate temporary's lifetime.

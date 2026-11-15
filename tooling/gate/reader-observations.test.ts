@@ -65,7 +65,7 @@ test('explicit Node capture retains nearer package candidates without entering t
 });
 
 test('compiled roots and later host imports retain both roles in either discovery order',t=>{
-  const f=fixture(t),project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json')));
+  const f=fixture(t),project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json')),'compiled-program');
   const compiled=snapshot(f.source,[project],true);
   assert.deepEqual(compiled.hostFiles,[]);assert.ok(compiled.moduleFiles.includes('src/helper.ts'));
   assert.ok(compiled.observations.some(row=>row.protocol==='project'));
@@ -136,7 +136,7 @@ test('nested fixture contexts inherit compiled/type-only roles and promote on a 
     ['compiled.ts',{imports:[],assets:[{kind:'fixture',path:'./child.ts',dataNamespaces:{}}]}],
     ['child.ts',{imports:[],assets:[{kind:'fixture',path:'./grandchild.ts',dataNamespaces:{}}]}],
   ]);
-  const project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json'))),graph=moduleGraph({sourceRoot:f.source,nodeMajor:26,declarations});
+  const project=projectConfig(pathToFileURL(join(f.source,'tsconfig.json')),'compiled-program'),graph=moduleGraph({sourceRoot:f.source,nodeMajor:26,declarations});
   try{
     const compiled=graph.describe([project]);assert.deepEqual(compiled.hostFiles,[]);
     assert.ok(compiled.observations.every(row=>row.protocol!=='node26'));

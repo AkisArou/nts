@@ -115,3 +115,21 @@ test('replacing a held executable by rename gives the child a different identity
     const changed=spawnSync(binary,['--input-type=module','-e',check],{env:fixtureEnvironment(t),encoding:'utf8'});assert.equal(changed.status,1,changed.stderr);assert.match(changed.stdout,/oracle Node executable holder changed/);
   }finally{await close(session);}
 });
+
+
+for(const failure of ['readiness','invalid-session'] as const)test('failed '+failure+' drains its newly spawned resolution helper before output removal',async t=>{
+  if(process.platform!=='linux'){t.skip('Linux executable lifetime binding');return;}
+  const root=fixture(t),directory=join(root,'service');
+  let holder:NodeResolutionSession|undefined,published=false;
+  await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},async waiting=>{
+    holder=await waiting;
+    assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),false,'the actual acquired helper is live before the failure');
+    if(failure==='readiness')throw Error('supplied resolution readiness failure');
+    const invalid={...holder,helperSha256:'0'.repeat(64)};
+    writeFileSync(join(directory,'holder.json'),JSON.stringify(invalid));return invalid;
+  }),failure==='readiness'?/supplied resolution readiness failure/:/oracle Node resolution service identity changed/);
+  assert.ok(holder);assert.equal(published,false,'an invalid acquisition never publishes successful ownership');
+  assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),true,'the owned child has closed before acquisition rejects');
+  rmSync(directory,{recursive:true});
+  assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),true,'no helper can read or publish into removed output');
+});

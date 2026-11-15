@@ -2,6 +2,7 @@
 // the graph, SDK, selector or trace validator through this module.
 import {readFileSync} from 'node:fs';
 import {dirname,isAbsolute,posix,relative,sep} from 'node:path';
+import {projectRole} from './reader-inputs/main.ts';
 import type {InputKind,ModuleDeclarations,ReaderInput,DirectoryCandidate} from './reader-inputs/main.ts';
 
 export type RustInputTarget={source:string;name:string;kind:string[]};
@@ -46,7 +47,9 @@ function input(value:unknown,source:string):ReaderInput{
   const row=object(value,'input in '+source),path=specifier(row.path,'input path in '+source),kind=text(row.kind,'input kind') as InputKind;
   if(!kinds.has(kind))fail('unknown input kind '+kind+' in '+source);
   const extra=kind==='fixture'?['dataNamespaces']:kind==='members'?['member','data']:kind==='project-choice'?['alternatives']:kind==='project-catalogue'?['directory']:kind==='project-members'?['prefix','optional']:kind==='generated-project'?['directory','include']:kind==='directory-candidates'?['candidates']:[];
-  keys(row,['kind','path',...extra],'input in '+source);
+  const project=['project-config','project-choice','project-catalogue','project-members','generated-project'].includes(kind);
+  const role=project?projectRole(row.role):undefined;
+  keys(row,['kind','path',...(project?['role']:[]),...extra],'input in '+source);
   if(kind==='directory-candidates'){
     if(!Array.isArray(row.candidates))fail('directory candidates are not an array in '+source);
     const seen=new Set<string>();
@@ -61,15 +64,15 @@ function input(value:unknown,source:string):ReaderInput{
   }
   if(kind==='generated-project'){
     if(row.include!=='directory'&&row.include!=='typescript-tree')fail('unsupported generated project include recipe in '+source);
-    return {kind,path,directory:specifier(row.directory,'generated project directory'),include:row.include};
+    return {kind,path,role,directory:specifier(row.directory,'generated project directory'),include:row.include};
   }
-  if(kind==='project-choice')return {kind,path,alternatives:strings(row.alternatives,'project alternatives in '+source).map(value=>specifier(value,'project alternative'))};
-  if(kind==='project-catalogue')return {kind,path,directory:specifier(row.directory,'project catalogue directory in '+source)};
+  if(kind==='project-choice')return {kind,path,role,alternatives:strings(row.alternatives,'project alternatives in '+source).map(value=>specifier(value,'project alternative'))};
+  if(kind==='project-catalogue')return {kind,path,role,directory:specifier(row.directory,'project catalogue directory in '+source)};
   if(kind==='project-members'){
     const prefix=row.prefix===''?'':sourcePath(row.prefix,'project member prefix');
     if(prefix.includes('/')||/[*?\[\]]/.test(prefix))fail('project member prefix is not literal in '+source);
     if(row.optional!==undefined&&row.optional!==true)fail('project member optional mode is not true in '+source);
-    return {kind,path,prefix,...(row.optional?{optional:true}:{})};
+    return {kind,path,role,prefix,...(row.optional?{optional:true}:{})};
   }
   if(kind==='fixture'){
     const namespaces=object(row.dataNamespaces,'fixture namespaces in '+source),dataNamespaces:Record<string,string>={};
@@ -85,7 +88,7 @@ function input(value:unknown,source:string):ReaderInput{
     if(row.data!==undefined&&row.data!==true)fail('module member data role is not true in '+source);
     return {kind,path,member,...(row.data?{data:true}:{})};
   }
-  return {kind,path};
+  return {kind,path,...(role?{role}:{})};
 }
 
 export function parseRustRuntimeManifest(value:unknown):RustRuntimeManifest{

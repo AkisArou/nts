@@ -1,3 +1,4 @@
+import {projectConfig} from './reader-inputs/main.ts';
 // One strict project owns tooling. Only its legacy diagnostic counts may fall;
 // imported compiler/runtime sources keep the settings of their own projects.
 import {readFileSync,readdirSync,existsSync,mkdirSync,renameSync,writeFileSync} from 'node:fs';
@@ -7,7 +8,7 @@ import {createRequire} from 'node:module';
 import type {API as CheckerAPI} from 'typescript/sync';
 import {toolingModuleName as moduleName} from './tooling-module-name.ts';
 
-export const TOOLING_PROJECT=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../tsconfig.json',import.meta.url))).split(sep).join('/');
+export const TOOLING_PROJECT=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(projectConfig(new URL('../tsconfig.json',import.meta.url),'type-check').url)).split(sep).join('/');
 export const TOOLING_DIAGNOSTICS=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../results/tooling-types/diagnostics.json',import.meta.url))).split(sep).join('/');
 export type DiagnosticCounts=Record<string,number>;
 export type DiagnosticRecord={version:1;modules:DiagnosticCounts};

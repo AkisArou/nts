@@ -146,3 +146,36 @@ test("a records run whose launcher changes TMPDIR without registering it is refu
   assert.equal(result.stdout,'','the entry boundary refuses before recorder dispatch');
   assert.equal(existsSync(join(root,RECORD)),false,"a refused run records nothing");
 });
+
+
+test('a gate-owned foreign record entry takes a real cold fallback inside its enclosing temporary',t=>{
+  const {root,scratch,pin}=recordsRun(t),run=join(scratch,'gate-record-run'),observed=join(scratch,'cold-gate-recorder.json');
+  mkdirSync(run);
+  const parent=gateEnvironment(testEnvironment(),{run:join(scratch,'parent-gate'),oracleAdmissionContext:'gate',owned:{...ownMemory(join(scratch,'gate-memory')),NTS_BIN:pin}});
+  const parentCapability=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!);
+  assert.ok(parentCapability.seal,'the real gate parent supplies its already prepared image');
+  assert.equal(parentCapability.admission.kind,'gate');
+  const enclosing=parentCapability.admission.temporary.path,parentReady=readFileSync(parentCapability.seal.record);
+  const manifest=join(root,'package.json');
+  writeFileSync(manifest,JSON.stringify({...JSON.parse(readFileSync(manifest,'utf8')),description:'gate-context cold-fallback control'}));
+  const entry=join(root,'tooling/records/record-pending.ts'),boundary='await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});';
+  const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
+  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
+      assertSealedOracleRun(process.env);
+      const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
+      durableRecord(${JSON.stringify(observed)},{capability,temporary:context.temporary});
+      return;
+  `));
+  git(root,'add','-f','package.json','tooling/records/record-pending.ts');git(root,'commit','-qm','require a cold image in the foreign gate entry');
+  const result=fullCheckRecordPending(root,pin,run,partOf('outcomes'),{env:parent.env});
+  assert.equal(result.status,0,readFileSync(join(run,RECORDER_LOG),'utf8'));
+  const value=JSON.parse(readFileSync(observed,'utf8'));
+  assert.equal(value.capability.source,root);assert.equal(value.capability.seal.source,root);
+  assert.notEqual(value.capability.seal.record,parentCapability.seal.record,'changed metadata cannot reuse the parent image');
+  assert.ok(value.capability.directory.startsWith(enclosing+'/oracle-entries/'));
+  assert.equal(value.capability.admission.temporary.path,enclosing);
+  assert.ok(value.temporary.path.startsWith(enclosing+'/oracle-entries/'));
+  assert.equal(existsSync(dirname(value.temporary.path)),false,'the entry subtree is removed after helper and admission drain');
+  assert.equal(existsSync(enclosing),true,'the enclosing gate temporary remains owned by its parent');
+  assert.deepEqual(readFileSync(parentCapability.seal.record),parentReady,'the cold fallback never rewrites the parent image');
+});
