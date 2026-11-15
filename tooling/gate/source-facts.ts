@@ -218,11 +218,11 @@ export class SourceFacts {
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)){
         const parent=this.parents.get(node);
         const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|inspectionDirectory|fileInput|optionalFile|directoryMembership|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
+        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|acceptedRevisionData|inspectionDirectory|fileInput|optionalFile|directoryMembership|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
         const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
         if(!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')
           &&!(owner&&owned![2]==='directoryMembership'))continue;
-        if(owner&&['optionalFile','directoryMembership'].includes(owned![2]!)
+        if(owner&&['optionalFile','directoryMembership','acceptedRevisionData'].includes(owned![2]!)
           &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
           throw Error(owned![2]+' needs exactly one URL input: '+this.file);
         if(owner&&owned![2]==='fixtureInput'){
@@ -242,7 +242,7 @@ export class SourceFacts {
           }
           assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text),...(data?{data}:{})});
         }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
-          ?(owned![2]==='dataDirectory'?'data':owned![2]==='inspectionDirectory'?'inspection':owned![2]==='fileInput'?'file':owned![2]==='optionalFile'?'optional-file':owned![2]==='directoryMembership'?'membership':owned![2]==='projectConfig'?'project-config':'project'):'module'});
+          ?(owned![2]==='dataDirectory'?'data':owned![2]==='acceptedRevisionData'?'accepted-revision':owned![2]==='inspectionDirectory'?'inspection':owned![2]==='fileInput'?'file':owned![2]==='optionalFile'?'optional-file':owned![2]==='directoryMembership'?'membership':owned![2]==='projectConfig'?'project-config':'project'):'module'});
       }
     }
     return {imports,assets};

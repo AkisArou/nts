@@ -3014,3 +3014,14 @@ folders are reported after the existing grace period; deleting them remains held
 for the user. Non-issue exceptions stay explicit. The same change corrects the
 full-check and pinned-input writers and declares inner logs and Chromium bus
 scratch through their existing retention kinds.
+
+## Accepted revision data is not candidate data (11-15)
+
+Count reads its plan and record citations from captured main Git blobs, so a
+working-tree data declaration falsely owed ordinary tests for candidate edits.
+The acceptedRevisionData kind instead carries an opaque descriptor to one
+show/grep owner, which always supplies the captured commit. The audit refuses
+other uses, including conversion to a working-tree path. The selector and copier
+create no candidate obligations for this kind; independent working-tree data
+readers remain authoritative for the same paths. Count and service keep their
+existing module boundaries.

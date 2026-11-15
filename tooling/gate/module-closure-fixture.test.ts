@@ -42,6 +42,26 @@ test('a declared data directory copies all tracked data without parsing it as ho
   assert.equal(existsSync(join(f.destination,FIXTURE_INPUT_MANIFEST)),false);
 });
 
+test('accepted revision data supplies no candidate bytes while a working data reader still owns the same paths',t=>{
+  const f=dataFixture(t);
+  f.write('tooling/gate/reader-inputs/main.ts','export const acceptedRevisionData=url=>({});export const dataDirectory=url=>url;');
+  f.write('accepted.ts',"import {acceptedRevisionData} from './tooling/gate/reader-inputs/main.ts';acceptedRevisionData(new URL('./data/',import.meta.url));acceptedRevisionData(new URL('./missing/',import.meta.url));");
+  const graph=moduleGraph({sourceRoot:f.source});
+  try{
+    const snapshot=graph.describe(['accepted.ts']);
+    assert.deepEqual(snapshot.files,['accepted.ts','tooling/gate/reader-inputs/main.ts']);
+    assert.deepEqual(snapshot.directories,[]);
+    assert.deepEqual(copyModuleClosure(['accepted.ts'],f.destination,{sourceRoot:f.source}),snapshot.files);
+    assert.equal(existsSync(join(f.destination,'data')),false);
+    for(const entries of [['accepted.ts','entry.ts'],['entry.ts','accepted.ts']]){
+      const both=graph.describe(entries);
+      assert.ok(both.files.includes('data/case.ts'));
+      assert.ok(both.placingFiles.includes('data/case.ts'));
+      assert.equal(both.directories.find(row=>row.directory==='data')?.reader,'entry.ts');
+    }
+  }finally{graph.close();}
+});
+
 test('directory snapshots remain independent and a fresh graph observes new tracked members',t=>{
   const f=dataFixture(t),graph=moduleGraph({sourceRoot:f.source});
   try{

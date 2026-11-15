@@ -41,9 +41,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
-import {dataDirectory} from "../gate/reader-inputs/main.ts";
+import {acceptedRevisionData} from "../gate/reader-inputs/main.ts";
+import {acceptedRevision} from "../gate/accepted-revision-data.ts";
 
-const RECORD_DIRECTORY=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(dataDirectory(new URL('../../docs/records/',import.meta.url))));
+const RECORD_DIRECTORY=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
+const PLAN=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));
 
 type FolderStat = (path: string) => { isDirectory(): boolean; isSymbolicLink(): boolean; mtimeMs: number };
 
@@ -541,14 +543,13 @@ export function scratchRecordCitations(text:string,cache:string):string[]{
 /** One Git grep over immutable main blobs; working edits cannot manufacture
  * retention. Unknown Git state keeps issue folders through the decision API. */
 export function readScratchRecordCitations(repo:string,cache:string,revision:string):string[]|Unavailable{
-  const result=read('git',gitArguments(['grep','--no-color','--no-textconv','-I','-h','-E',
-    'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch',revision,'--',RECORD_DIRECTORY]),repo,[0,1]);
-  return result.ok?scratchRecordCitations(result.out,cache):{error:result.error};
+  const result=acceptedRevision(repo,revision).grep(RECORD_DIRECTORY,'nts-scratch/[1-9][0-9]*|nts-[1-9][0-9]*-scratch');
+  return typeof result==='string'?scratchRecordCitations(result,cache):result;
 }
 
-function read(command: string, args: string[], cwd: string,acceptedExitCodes:readonly number[]=[0]): { ok: true; out: string } | { ok: false; error: string } {
+function read(command: string, args: string[], cwd: string): { ok: true; out: string } | { ok: false; error: string } {
   const r = spawnSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
-  if (r.error || r.status===null || !acceptedExitCodes.includes(r.status)) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };
+  if (r.error || r.status!==0) return { ok: false, error: (r.error?.message ?? r.stderr.trim()) || `exit ${r.status}` };
   return { ok: true, out: r.stdout };
 }
 
@@ -601,8 +602,10 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   const slices = readSlices(repo);
   const main=sha('main');
+  const plan=main?acceptedRevision(repo,main).show(PLAN):{error:'main revision unavailable'};
+  if(typeof plan!=='string')throw Error('accepted main plan: '+plan.error);
   return {
-    plan: git(["show", "main:"+relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(new URL('../../docs/plan.md',import.meta.url)))]),
+    plan,
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),
     remote: remote.ok ? remote.out.split("\n").filter(Boolean).map(line => line.split("\t")[1]!.slice("refs/heads/".length)) : { error: remote.error },
     pulls: pulls.ok ? JSON.parse(pulls.out) as Pull[] : { error: pulls.error },

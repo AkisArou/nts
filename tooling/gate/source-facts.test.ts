@@ -101,6 +101,19 @@ function local(){function data(url:URL){return url;}data(new URL('./function/',i
   }finally{lease.dispose();api.close();}
 });
 
+test('accepted revision declarations have their own lexical input kind',()=>{
+  const api=new API(),source=`import {acceptedRevisionData as data} from './reader-inputs/main.ts';
+import * as inputs from './reader-inputs/main.ts';
+const alias=data;data(new URL('../../docs/records/',import.meta.url));
+alias(new URL('../../docs/plan.md',import.meta.url));inputs.acceptedRevisionData(new URL('./absent/',import.meta.url));
+function shadow(data){data(new URL('./working/',import.meta.url));}`;
+  const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+  try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,
+    [{path:'../../docs/records/',kind:'accepted-revision'},{path:'../../docs/plan.md',kind:'accepted-revision'},
+      {path:'./absent/',kind:'accepted-revision'},{path:'./working/',kind:'module'}]);}
+  finally{lease.dispose();api.close();}
+});
+
 test('inspection directories are recognized by their lexical owner, including aliases but not shadows',()=>{
   const api=new API(),source=`import {inspectionDirectory as data} from './reader-inputs/main.ts';
 import * as inputs from './reader-inputs/main.ts';

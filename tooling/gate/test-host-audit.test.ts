@@ -3,7 +3,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {test} from 'node:test';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectHostSource,hostReadProblems,auditTestHost,recordHostDebt,unitOwnershipScopeProblems} from './test-host-audit.ts';
+import {inspectHostSource,hostReadProblems,auditTestHost,recordHostDebt,unitOwnershipScopeProblems,acceptedRevisionDataProblems} from './test-host-audit.ts';
 import {ownMemory} from './test-memory.ts';
 import {testScratch} from './test-scratch.ts';
 import {fixtureEnvironment} from './test-environment.ts';
@@ -17,6 +17,21 @@ test('every tooling test dependency closure obeys module ownership',()=>{
   const result=auditTestHost(fileURLToPath(new URL('../..',import.meta.url)));
   assert.deepEqual(result.problems,[],result.problems.join('\n'));
   assert.ok(result.closures.length>200);
+});
+
+test('accepted revision data cannot escape its captured-revision reader',()=>{
+  const inspect=(tail:string)=>{
+    const problems:string[]=[];
+    inspectHostSource('tooling/gate/reader.ts',`import {acceptedRevisionData as data} from './reader-inputs/main.ts';
+import {acceptedRevision as revision} from './accepted-revision-data.ts';
+const input=data(new URL('../../docs/records/',import.meta.url));${tail}`,
+      undefined,(_file,_source,facts)=>problems.push(...acceptedRevisionDataProblems(facts)));
+    return problems;
+  };
+  for(const source of ['revision(repo,main).show(input);','const alias=input;const blobs=revision(repo,main);blobs.grep(alias,"pattern");'])assert.deepEqual(inspect(source),[],source);
+  for(const source of ['fileURLToPath(input);','new URL(input);','readFileSync(input);','consume(input);','export {input};',
+    'const bad={input};','function f(){return input;}','lookalike(repo,main).show(input);','revision(repo).show(input);'])
+    assert.match(inspect(source).join('\n'),/acceptedRevisionData may only be consumed/,source);
 });
 
 test('the unit population filter belongs only to private controls',()=>{

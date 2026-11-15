@@ -40,6 +40,45 @@ export function unitOwnershipScopeProblems(facts:SourceFacts):string[]{
   }).map(call=>`${facts.file}:${facts.line(call.pos)}: production unit ownership must inspect every non-inactive unit`);
 }
 
+/** Accepted-main descriptors are opaque. A const alias preserves that fact;
+ * the only consuming expressions are this owner's show/grep methods. */
+export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
+  const ast=facts.ast,problems:string[]=[];
+  const owner=(node:Node,member:string)=>{
+    const match=/^(\.{1,2}\/.*)\.([^.]*)$/.exec(facts.name(node));
+    if(!match||match[2]!==member)return false;
+    const path=relative('.',join(dirname(facts.file),match[1]!)).split(sep).join('/');
+    return path==='tooling/gate/accepted-revision-data.ts'||member==='acceptedRevisionData'&&path==='tooling/gate/reader-inputs/main.ts';
+  };
+  const descriptors=new Set(facts.calls.filter(call=>owner(call.expression,'acceptedRevisionData')));
+  const constant=(node:Node)=>{
+    const list=facts.parents.get(node),statement=list&&facts.parents.get(list);
+    return !!list&&ast.isVariableDeclarationList(list)&&(list.flags&ast.NodeFlags.Const)!==0
+      &&!(statement&&ast.isVariableStatement(statement)&&statement.modifiers?.some(mod=>mod.kind===ast.SyntaxKind.ExportKeyword));
+  };
+  for(const node of facts.nodes){
+    if(!ast.isIdentifier(node)&&!ast.isCallExpression(node))continue;
+    const value=facts.resolve(node);
+    if(!ast.isCallExpression(value)||!descriptors.has(value))continue;
+    const parent=facts.parents.get(node);
+    if(parent&&ast.isVariableDeclaration(parent)&&parent.name===node)continue;
+    if(parent&&ast.isVariableDeclaration(parent)&&parent.initializer===node&&constant(parent))continue;
+    // Parentheses and type assertions retain the same value; inspect their
+    // enclosing use rather than treating the wrapper as an escape.
+    let use:Node=node,consumer=parent;
+    while(consumer&&(ast.isParenthesizedExpression(consumer)||ast.isAsExpression(consumer)||ast.isNonNullExpression(consumer)||ast.isSatisfiesExpression(consumer))){
+      use=consumer;consumer=facts.parents.get(consumer);
+    }
+    if(consumer&&ast.isCallExpression(consumer)&&consumer.arguments[0]===use&&ast.isPropertyAccessExpression(consumer.expression)
+      &&['show','grep'].includes(consumer.expression.name.text)){
+      const receiver=facts.resolve(consumer.expression.expression);
+      if(ast.isCallExpression(receiver)&&owner(receiver.expression,'acceptedRevision')&&receiver.arguments.length===2)continue;
+    }
+    problems.push(`${facts.file}:${facts.line(node.pos)}: acceptedRevisionData may only be consumed by acceptedRevision(repo, mainSha).show/grep: ${facts.code(node)}`);
+  }
+  return problems;
+}
+
 /** Resolve aliases before classifying calls, including require/destructuring.
  * Embedded scripts are parsed as code too, with interpolation holes retained.
  * A path literal is conservatively a kernel read even when it is only data. */
@@ -136,6 +175,7 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     signals.push(...inspectCommandSignals(node));
     signals.push(...inspectCommandForwarders(node));
     signals.push(...unitOwnershipScopeProblems(node));
+    signals.push(...acceptedRevisionDataProblems(node));
     gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));

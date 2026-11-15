@@ -166,6 +166,13 @@ imports or launches. Only entered modules take part in host-reference traversal;
 data members and exact file inputs keep their input obligations without making
 their strings or imports into readers. A later real import enters a file even
 if an earlier reader reached it as data or exact bytes.
+`acceptedRevisionData(new URL("path", import.meta.url))` declares data read only
+from captured accepted-main blobs. Its opaque value can be consumed only by
+`acceptedRevision(repo, mainSha).show` or `.grep`; that owner always passes the
+captured commit to Git and returns content or a named unavailable observation.
+The source audit refuses every other use of the descriptor. These reads create
+no candidate-tree byte, membership, placement or staging obligation. Independent
+working-tree readers of the same path retain all their own obligations.
 `inspectionDirectory(new URL("population/", import.meta.url))` declares immutable
 bytes that a guard inspects. It retains byte-reader obligations for current,
 added and deleted members, but inspection alone never places a member or
@@ -1255,6 +1262,10 @@ the first node task.
   declarations. Repository-wide JVM member checks belong to their declared
   tooling step, with synthetic controls of the same operation
   ([log](records/notebooks/decisions-log.md#inspection-does-not-place-inputs-11-13)).
+- **Accepted revision data stays outside candidate reach:** opaque descriptors
+  name only captured accepted-main blob reads through the shared Git owner.
+  Working-tree readers of those paths keep their independent obligations
+  ([log](records/notebooks/decisions-log.md#accepted-revision-data-is-not-candidate-data-11-15)).
 - **Negative candidates and membership retain their own roles:** optional
   immutable bytes and immediate names/types share the canonical reader graph
   and fixture context without granting placement. Structural changes remain

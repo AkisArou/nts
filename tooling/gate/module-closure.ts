@@ -114,6 +114,9 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
+      // This reader names immutable main blobs, never candidate filesystem
+      // facts, placement, directory membership or fixture staging bytes.
+      if(kind==='accepted-revision')return;
       if(kind==='optional-file'){
         metadataParents(root,path,'optional file');
         let stat:ReturnType<typeof lstatSync>|undefined;
