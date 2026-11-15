@@ -25,6 +25,7 @@ export function oracleWorkspaceFixture(t:{after(fn:()=>void):void},tree:string,s
   // declaration supplies the same recipe files to copied synthetic runners.
   copyModuleClosure(RECIPE_SOURCES.map(name=>'tooling/differential/'+name),tree,{sourceRoot:source,dependencyCatalog});
   const producer=dependencyRecipeModules(source);
+  copyModuleClosure(producer,tree,{sourceRoot:source,dependencyCatalog});
   writeFileSync(join(tree,'.gitignore'),'tooling/\nnode_modules/\n');
   git(tree,'init','-q','-b','main');git(tree,'add','-f','.gitignore',...metadata,...producer);git(tree,'commit','-qm','owned oracle workspace');
   const cache=dependencyCache(tree);

@@ -454,6 +454,7 @@ fi
 `);
     const directory=join(run,'home/.cache',kind),planned=gateEnvironment({...base,HOME:join(run,'home')},{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',...memory,CARGO_TARGET_DIR:join(run,'target')}});
     const actual=spawnTest(process.execPath,[join(gate,'run.mjs')],{cwd:root,env:planned.env,encoding:'utf8'});assert.equal(actual.status,1,actual.stdout+actual.stderr);
+    assert.ok(existsSync(join(directory,'summary.json')),actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,'summary.json'),'utf8')),row=summary.steps[0];
     assert.equal(existsSync(join(root,'step-launched')),false,'parent failure must precede step launch');
     assert.equal(row.instrument.kind,kind);assert.equal(row.verdict,kind==='case-budget'?'FAIL':'INSTRUMENT');assert.equal(instrumentPolicy(row.instrument?.kind)?.disposition === "operator-hold",kind==='tooling-setup');
