@@ -18,6 +18,7 @@ test("a frozen candidate gets its new registry dev dependency before main has it
   const prepared = await prepare(fixture);
   assert.equal(treeIdentity(fixture.main), fixture.mainIdentity, "preparation changed main");
   assert.equal(prepared.status, 0, prepared.stdout + prepared.stderr);
+  assert.equal(realpathSync(join(fixture.frozen,'third_party/are-we-fast-yet')),fixture.awfy);
   const probe = await command(process.execPath, [join(fixture.frozen, "test/new-importer/probe.mjs")], fixture.frozen);
   assert.equal(probe.status, 0, `${REGISTRY_FIXTURE_PACKAGE} was not materialized offline:\n${probe.stderr}`);
   assert.equal(probe.stdout.trim(), REGISTRY_FIXTURE_MARKER);

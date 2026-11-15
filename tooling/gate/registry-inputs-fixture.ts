@@ -7,8 +7,8 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { chmodSync,copyFileSync,mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, lstatSync,writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync,mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, lstatSync,writeFileSync } from "node:fs";
+import { join,relative } from "node:path";
 import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
 import {withPackageManager} from "../inputs/package-manager.ts";
@@ -17,6 +17,8 @@ import {acquire as acquireNodeInputs} from "../inputs/node-inputs.ts";
 import {nodePin} from "../bootstrap/node.ts";
 import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
+import {LINKER_INPUTS} from '../inputs/linker.ts';
+import {awfyFixture} from '../bootstrap/awfy-test-fixture.ts';
 
 export const REGISTRY_FIXTURE_PACKAGE = "nts-registry-input-fixture";
 export const REGISTRY_FIXTURE_MARKER = "candidate-registry-input-v1";
@@ -68,7 +70,7 @@ export function treeIdentity(root: string): string {
 
 export type RegistryInputsFixture = {
   root: string; main: string; candidate: string; frozen: string; store: string;
-  integrity: string; mainIdentity: string; registryRequests: string[]; inputs:string; nodeInputs:string;
+  integrity: string; mainIdentity: string; registryRequests: string[]; inputs:string; nodeInputs:string; awfy:string;
 };
 
 /** The optional hook is the submission cache-population seam for the fix. */
@@ -84,14 +86,15 @@ export async function registryInputsFixture(t: TestContext,
   } });
   const toolingRoot=fileURLToPath(new URL("../../",import.meta.url));
   // Stage production before the fixture creates its private recipe bytes.
-  const nodeFiles=copyModuleClosure(["tooling/inputs/node-inputs.ts"],main);
+  const entries=LINKER_INPUTS.map(url=>relative(toolingRoot,fileURLToPath(url)));
+  const linkerFiles=copyModuleClosure(entries,main);
   const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),linkerDir=join(consumer,"tooling/inputs");
   const privateRecipe=JSON.parse(readFileSync(join(main,"build/node-deps/recipes.json"),"utf8"));
   assert.equal(privateRecipe.node,nodePin(toolingRoot),"the registry fixture owns the selected recipe version");
   assert.deepEqual(Object.keys(privateRecipe.files),["deps/uv/source.c"],"the registry fixture uses only its private source bytes");
   const nodeInputs=join(root,"node-inputs");acquireNodeInputs(main,nodeInputs,table);
-  copyModuleClosure(["tooling/inputs/dependency-inputs.ts"],consumer);
-  copyFileSync(join(toolingRoot,"tooling/inputs/link.sh"),join(linkerDir,"link.sh"));
+  copyModuleClosure(entries,consumer);
+  const awfy=awfyFixture(join(root,'awfy'),main,[main,consumer],testEnvironment());
   // A frozen destination executes its own Node provisioner and catalog.
   // Commit that real import closure so both clones retain the same authority.
   writeFileSync(join(main,"tooling/inputs/node-inputs.json"),JSON.stringify(table));
@@ -137,13 +140,13 @@ export async function registryInputsFixture(t: TestContext,
   writeFileSync(join(main, "package.json"), JSON.stringify({ name: "inputs-main-fixture", private: true,
     packageManager: "pnpm@10.15.0" }));
   writeFileSync(join(main, "pnpm-workspace.yaml"), "packages:\n  - test/*\n");
-  writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n");
+  writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n/third_party/are-we-fast-yet.d/\n");
   writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\ncache-dir=${join(root,"metadata-cache")}\nstate-dir=${join(root,"state")}\nverify-store-integrity=true\n`);
   const git = (cwd: string, args: string[]) => checked("git", gitArguments(["-c", "commit.gpgsign=false",
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",
     "-c", "user.email=fixture@example.invalid", ...args]), cwd);
   await git(main, ["init", "--initial-branch=main"]);
-  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json", ...nodeFiles, "tooling/inputs/node-inputs.json"]);
+  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json", ...linkerFiles, "tooling/inputs/node-inputs.json"]);
   await git(main, ["commit", "-m", "fixture main has no registry dependency or test importer"]);
   mkdirSync(join(main, "node_modules"));
   const mainIdentity = treeIdentity(main);
@@ -158,7 +161,7 @@ export async function registryInputsFixture(t: TestContext,
   await git(candidate, ["add", "pnpm-lock.yaml", "test/new-importer"]);
   await git(candidate, ["commit", "-m", "candidate adds a registry dev dependency in a new importer"]);
   const fixture: RegistryInputsFixture = { root, main, candidate, frozen, store, integrity,
-    mainIdentity, registryRequests, inputs, nodeInputs };
+    mainIdentity, registryRequests, inputs, nodeInputs,awfy };
   // Seed acquisition is allowed here; preparation below cannot contact even
   // this isolated registry once the submission cache has been populated.
   await populateCache?.(fixture);

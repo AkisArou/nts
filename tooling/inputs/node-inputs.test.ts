@@ -3,13 +3,16 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,readlinkSync,realpathSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {dirname,join,relative} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {acquire,inventory,link,pairPath,type Records} from './node-inputs.ts';
 import {fixtureInputs} from './node-inputs-test-fixture.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {nodePin} from '../bootstrap/node.ts';
+import {fileURLToPath} from 'node:url';
+import {LINKER_INPUTS} from './linker.ts';
+import {awfyFixture} from '../bootstrap/awfy-test-fixture.ts';
 
 function scratch(t:TestContext){
   const root=newTestScratch('node-inputs');
@@ -31,23 +34,25 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   const {root,old,next,table}=scratch(t),home=join(root,'home'),cache=join(home,'.cache/nts-node-inputs');
   acquire(old,cache,table);acquire(next,cache,table);
   const trees=[join(root,'catalog-old'),join(root,'catalog-next')],oldVersion=nodePin(old),nextVersion=nodePin(next);
+  const sourceRoot=fileURLToPath(new URL('../../',import.meta.url));
   for(const [source,tree,release] of [[old,trees[0]!,oldVersion],[next,trees[1]!,nextVersion]] as const){
-    copyModuleClosure(['tooling/inputs/node-inputs.ts'],tree);
+    copyModuleClosure(LINKER_INPUTS.map(url=>relative(sourceRoot,fileURLToPath(url))),tree);
     // Stage production bytes first; this tree's catalog and recipe are the
     // explicit private mutation exercised by the two-version control.
     candidate(source,tree);
     writeFileSync(join(tree,'tooling/inputs/node-inputs.json'),JSON.stringify({version:1,releases:{[release]:table.releases[release]}}));
-    writeFileSync(join(tree,'tooling/inputs/link.sh'),readFileSync(new URL('./link.sh',import.meta.url)));
     // This guard exercises Node provisioning; registry installation has its
     // own tests and must not touch any real package cache in this fixture.
     writeFileSync(join(tree,'tooling/inputs/dependency-inputs.ts'),"import {writeFileSync} from 'node:fs';writeFileSync(process.argv[4]+'/dependency-provisioned','yes');\n");
   }
   const shared=join(root,'shared');mkdirSync(shared);
+  const awfy=awfyFixture(join(root,'awfy'),shared,trees,fixtureEnvironment(t));
   for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
     const result=spawnSync('sh',[join(from,'tooling/inputs/link.sh'),'work',shared,to],{encoding:'utf8',
       env:{...fixtureEnvironment(t),HOME:home,NTS_NODE_INPUTS_CACHE:cache,PATH:dirname(process.execPath)+':'+process.env.PATH}});
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(realpathSync(join(to,'third_party/node-inputs')),pairPath(release,table.releases[release]!,cache));
+    assert.equal(realpathSync(join(to,'third_party/are-we-fast-yet')),awfy);
     assert.equal(readFileSync(join(to,'dependency-provisioned'),'utf8'),'yes');
   });
 });
