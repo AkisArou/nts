@@ -9,7 +9,7 @@ import {removeOracleSnapshot} from "../differential/oracle-emit.ts";
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
 import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
-import {join, dirname} from "node:path";
+import {join} from "node:path";
 
 import {test} from "node:test";
 import {fullPlan, fullEnvironment} from "./full-plan.ts";
