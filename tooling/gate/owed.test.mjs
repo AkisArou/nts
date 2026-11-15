@@ -19,6 +19,7 @@ import * as policy from "./owed.mjs";
 import {preciseChange} from "./precise-changes.ts";
 import {auditTestHost} from "./test-host-audit.ts";
 import {spawnTest} from './test-wait.ts';
+import {testScratch} from './test-scratch.ts';
 
 test('unknown or incomplete CLI requests fail before the first Git call',t=>{
   const root=mkdtempSync(join(tmpdir(),'owed-arguments-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -1210,7 +1211,10 @@ test("an example's nts.config.ts owes config, new or changed, interop's too", ()
     assert.ok(!inputs.declaresMember(path),path+' is outside executable member discovery, though its population retains data-byte reach');
 });
 
-test("an unavailable Cargo toolchain grants no scope for compiled inputs or documentation", () => {
+test("an unavailable Cargo metadata prerequisite grants no scope for compiled inputs or documentation", t => {
+  const bin=testScratch(t,'owed-metadata-unavailable');
+  writeFileSync(join(bin,'cargo'),'#!/bin/sh\nprintf \'metadata control stderr: toolchain unavailable\\n\' >&2\nexit 73\n',{mode:0o755});
+  writeFileSync(join(bin,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
   const script = `
     const { owed } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
     const { selectionInfrastructure } = await import(${JSON.stringify(new URL("./owed-range.ts", import.meta.url).href)});
@@ -1221,14 +1225,14 @@ test("an unavailable Cargo toolchain grants no scope for compiled inputs or docu
     })));`;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
     encoding: "utf8",
-    env: { ...testEnvironment(), RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
+    env: fixtureEnvironment(t,{PATH:bin+':'+fixtureEnvironment(t).PATH}),
   });
   assert.equal(r.status, 0, r.stderr);
   const got = JSON.parse(r.stdout);
   for (const row of got) {
     assert.equal(row.infrastructure, true, JSON.stringify(row));
     assert.match(row.message, /cargo metadata --format-version 1 --no-deps --offline/);
-    assert.match(row.message, /no-such-toolchain-for-this-test/);
+    assert.match(row.message, /metadata control stderr: toolchain unavailable/);
     assert.equal(row.rules, undefined, "no scope is granted without the dependency graph");
   }
 });

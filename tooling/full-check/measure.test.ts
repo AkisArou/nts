@@ -146,7 +146,7 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   // The repository starts with a committed private linker; stage before restoring it.
   const linker=join(repo.root,'tooling/inputs/link.sh'),privateLinker=readFileSync(linker);
   rmSync(linker);
-  copyModuleClosure(['tooling/inputs/linker.ts','tooling/gate/admit.ts'],repo.root);
+  copyModuleClosure(['tooling/inputs/linker.ts','tooling/gate/admit.ts','tooling/gate/cargo.ts'],repo.root);
   writeFileSync(linker,privateLinker);
   assert.deepEqual(readFileSync(linker),privateLinker,"the pinned-wrapper fixture owns its no-op linker");
   const affinity=join(repo.root,'tooling/gate/affinity.ts'),originalAffinity=readFileSync(affinity,'utf8');
@@ -155,6 +155,7 @@ test('the real pinned wrapper preserves the tree lock across candidate environme
   writeFileSync(affinity,originalAffinity.replace(affinityEntry,'if (false)'));
   const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session'),bin=join(repo.dir,'bin');mkdirSync(bin);
   const cargo=join(bin,'cargo');writeFileSync(cargo,'#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release"\nprintf "#!/bin/sh\\n" > "$CARGO_TARGET_DIR/release/nts"\n');chmodSync(cargo,0o755);
+  writeFileSync(join(bin,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
   nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
   const subject=resolutionSubject(observed,session,1)+generatedJavaScript(`import assert from 'node:assert/strict';assert.equal(process.env.NTS_GATE_LOCK_FD,undefined);\nimport {GateResource} from ${JSON.stringify(new URL('../gate/gate-resource.ts',import.meta.url).href)};assert.equal(GateResource.tryAcquire(process.env.NTS_GATE_TREE+'.lock'),null);\nimport {durableRecord as publishSummary} from ${JSON.stringify(new URL('../gate/durable-record.ts',import.meta.url).href)};publishSummary(process.env.NTS_GATE_RUN_DIR+'/summary.json',{identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL'}]});\n`);
   repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private candidate inputs']);
