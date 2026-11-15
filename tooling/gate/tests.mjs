@@ -171,7 +171,9 @@ const runOne = (key) =>
     if(artifactTargets&&!target)throw traceFailure('Cargo named no target for '+r.argv[0]);
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
-    const replayCargoGuard=cargoConfiguration([ROOT,r.cwd,scratch.path],r.env);
+    // Cargo's recorded environment can include rustup's selected toolchain.
+    // The incoming caller environment owns the override check.
+    const replayCargoGuard=cargoConfiguration([ROOT,r.cwd,scratch.path],process.env);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
     const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";

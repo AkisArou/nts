@@ -1,4 +1,5 @@
 import {cargoOutput} from './cargo.ts';
+import {ToolingInstrumentError} from './step-result.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
@@ -1381,6 +1382,7 @@ function cargoCrates(execute = execFileSync) {
     for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
     return out;
   } catch (error) {
+    if(error instanceof ToolingInstrumentError)throw error;
     const stderr = error.stderr?.toString().trim();
     throw new SelectionInfrastructureError(`selector cargo ${args.join(" ")} in ${TREE} failed: ${String(error)}${stderr ? `\nstderr: ${stderr}` : ""}`, { cause: error });
   }

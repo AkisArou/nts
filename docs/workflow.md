@@ -638,6 +638,11 @@ configuration or an unreadable observation is a named tooling-setup refusal.
 Caller `--config` and working-directory overrides are refused. The complete
 Cargo home remains a shared content cache, including its existing registry,
 download, lock and garbage-collection state. Nothing is copied or relocated.
+The same owner asks `rustup override list`, with the declared `RUSTUP_HOME`,
+before and after the call. An override on a guarded cwd or any ancestor,
+an incoming `RUSTUP_TOOLCHAIN`, or a caller `+toolchain` refuses. Unknown or
+unreadable rustup output also refuses. Cargo-produced replay environment is
+retained; the toolchain-override check uses the incoming caller environment.
 The Rust test replay retains this guard through completion, including each
 binary's supplied scratch root; Rust Cargo children must use a checked root.
 The shared source audit rejects direct Cargo test calls in other tooling,

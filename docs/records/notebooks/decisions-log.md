@@ -3051,3 +3051,6 @@ garbage-collection state. The owner does not split, copy or relocate it. Rust
 Cargo children keep the checked cwd contract instead of implementing a second
 configuration scanner. A file appearing during an invocation refuses its result;
 an edit followed by an identical restoration between observations is not detected.
+The same guard asks rustup to parse its directory overrides under the declared
+Rustup home, refusing applicable ancestor overrides, incoming toolchain variables
+and command-line toolchain shorthand. Both complete caches remain shared.

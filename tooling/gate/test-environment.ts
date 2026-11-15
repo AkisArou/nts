@@ -36,7 +36,7 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   for(const name of HOST_CAPABILITIES)if(name!=='HOME'&&source[name]!==undefined)env[name]=source[name];
   const account=userInfo().homedir;
   if(source[FIXTURE_ENVIRONMENT]===undefined)env.CARGO_HOME??=join(account,'.cargo');
-  env.RUSTUP_HOME??=join(account,'.rustup');
+  if(source[FIXTURE_ENVIRONMENT]===undefined)env.RUSTUP_HOME??=join(account,'.rustup');
   let context:GateEnvironmentContext|undefined;
   if(source[ENVIRONMENT_CONTEXT]){
     context=JSON.parse(source[ENVIRONMENT_CONTEXT]) as GateEnvironmentContext;

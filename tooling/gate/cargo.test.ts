@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {delimiter,dirname,join} from 'node:path';
 import {createRequire} from 'node:module';
 import {cargoConfiguration,cargoHome,cargoOutput,withCargoConfigurationSync,CARGO_OWNER} from './cargo.ts';
 import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
@@ -26,14 +26,14 @@ for(const name of ['config','config.toml'])for(const place of ['home','parent','
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'started');\n`,{mode:0o755});
   const directory=place==='home'?home:join(place==='tree'?cwd:dirname(cwd),'.cargo');mkdirSync(directory,{recursive:true});
   const path=join(directory,name);writeFileSync(path,'[env]\nNTS_AMBIENT_CARGO_PROBE="poison"\n');
-  const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata','--offline'],{cwd,env:{...env,PATH:bin},encoding:'utf8'});
+  const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata','--offline'],{cwd,env:{...env,PATH:bin+delimiter+env.PATH},encoding:'utf8'});
   assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(path),ran.stderr);
   assert.equal(existsSync(marker),false,'configuration refuses before the executable starts');
 });
 test('a configuration published by the child refuses only after its completed drain',t=>{
   const {root,cwd,home,env}=privateTree(t),bin=join(root,'bin'),marker=join(root,'completed'),config=join(home,'config.toml');mkdirSync(bin);
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(config)},'[env]\\nNTS_AMBIENT_CARGO_PROBE="poison"\\n');fs.writeFileSync(${JSON.stringify(marker)},'completed');\n`,{mode:0o755});
-  const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata'],{cwd,env:{...env,PATH:bin},encoding:'utf8'});
+  const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata'],{cwd,env:{...env,PATH:bin+delimiter+env.PATH},encoding:'utf8'});
   assert.equal(readFileSync(marker,'utf8'),'completed');assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(config),ran.stderr);
 });
 test('body and final-observation failures preserve both causes and the configuration path',t=>{
@@ -63,11 +63,30 @@ test('Cargo receives the same complete cache root and cannot override configurat
     calls++;assert.equal(command,'cargo');assert.deepEqual(args,['metadata']);assert.equal(options.env.CARGO_HOME,home);return 'same-cache';
   }) as typeof import('node:child_process').execFileSync;
   assert.equal(cargoOutput(['metadata'],{cwd,env,encoding:'utf8'},execute),'same-cache');
-  for(const args of [['--config','env.PROBE="poison"'],['--config=build.rustflags=["poison"]'],['-C',cwd],['-C'+cwd]]){
+  for(const args of [['--config','env.PROBE="poison"'],['--config=build.rustflags=["poison"]'],['-C',cwd],['-C'+cwd],['+nightly','metadata']]){
     assert.throws(()=>cargoOutput(args,{cwd,env,encoding:'utf8'},execute),ToolingInstrumentError);
   }
   assert.equal(calls,1);
   assert.throws(()=>cargoHome({NTS_TEST_ENVIRONMENT:'1'}),ToolingInstrumentError);
+});
+test('the incoming rustup environment cannot override the source toolchain',t=>{
+  const {cwd,env}=privateTree(t);
+  assert.throws(()=>cargoConfiguration([cwd],{...env,RUSTUP_TOOLCHAIN:'nightly'}),error=>refusal(error,'RUSTUP_TOOLCHAIN'));
+});
+test('rustup itself parses directory overrides before and after the guarded call',t=>{
+  const {root,cwd,env}=privateTree(t),home=join(root,'rustup'),settings=join(home,'settings.toml');mkdirSync(home);
+  const owned={...env,RUSTUP_HOME:home};
+  const put=(path:string)=>writeFileSync(settings,'version = "12"\n\n[overrides]\n'+JSON.stringify(path)+' = "nightly"\n');
+  const guard=cargoConfiguration([cwd],owned);
+  put(dirname(cwd));assert.throws(()=>guard.verify(),error=>refusal(error,settings));
+  assert.throws(()=>cargoConfiguration([cwd],owned),error=>refusal(error,settings));
+  put(join(root,'unrelated'));assert.doesNotThrow(()=>cargoConfiguration([cwd],owned));
+});
+test('an unavailable rustup or unrecognized override output refuses by name',t=>{
+  const {root,cwd,env}=privateTree(t),bin=join(root,'bin');mkdirSync(bin);
+  assert.throws(()=>cargoConfiguration([cwd],{...env,PATH:bin}),error=>refusal(error,'settings.toml'));
+  writeFileSync(join(bin,'rustup'),`#!${process.execPath}\nprocess.stdout.write('unrecognized override output\\n');\n`,{mode:0o755});
+  assert.throws(()=>cargoConfiguration([cwd],{...env,PATH:bin}),error=>refusal(error,'unrecognized rustup override list row'));
 });
 test('the real test-profile clean arm uses the shared registry offline without relocating it',t=>{
   const root=testScratch(t,'cargo-real-profile'),tree=join(root,'tree');copyModuleClosure(['tooling/gate/test-profile.ts'],tree);mkdirSync(join(tree,'src'));
