@@ -5,7 +5,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {fileInput} from './reader-inputs/main.ts';
-import {TYPE_PROJECTS,typeProjectName,readTypeRecord,type TypeProject} from './tooling-type-projects.ts';
+import {TYPE_PROJECTS,typeProjectName,readTypeRecord,absentTypeModules,type TypeProject} from './tooling-type-projects.ts';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import {pendingLine,improvedLine} from '../records/pending.ts';
 import {TOOLING_DIAGNOSTICS,projectTypeChanges,serializeDiagnosticRecord,
@@ -81,7 +81,7 @@ export function checkTypeProject(root:string,definition:TypeProject):ToolingType
         if(file&&ownedNames.has(file)&&!invalidProject.has(identity(diagnostic)))counts[file]=(counts[file]??0)+1;else problems.push(`strict project TS${diagnostic.code}: ${diagnostic.text}`);}
       for(const input of reads.values())if(hash(readFileSync(input.path,'utf8'))!==input.sha)problems.push('type input changed during checking: '+input.path);
       if(JSON.stringify(populationModules(root,definition.population))!==JSON.stringify(expected))problems.push('type project population changed during checking: '+config);
-      const options=JSON.parse(JSON.stringify(project.options,(_key,value:unknown)=>{return typeof value==='string'&&value.startsWith(root+sep)?inputName(value):value;})) as unknown;
+      const options=JSON.parse(JSON.stringify(project.options,(_key,value:unknown)=>{return typeof value==='string'&&(value===root||value.startsWith(root+sep))?inputName(value):value;})) as unknown;
       const recipe=RECIPE_INPUTS.map(url=>[named(ROOT,fileURLToPath(url)),hash(readFileSync(url,'utf8'))]);
       const source='sha256:'+hash(JSON.stringify({config,options,modules,reads:[...reads].sort(([a],[b])=>a.localeCompare(b)).map(([path,input])=>[path,input.sha]),recipe}));
       return {modules,counts,diagnostics:unique,problems,source};
@@ -89,19 +89,19 @@ export function checkTypeProject(root:string,definition:TypeProject):ToolingType
   }finally{api.close();}
 }
 export function checkToolingTypes(root:string):ToolingTypeResult{return checkTypeProject(root,TYPE_PROJECTS[0]!);}
-export type TypeCheckResult={projects:Record<string,ToolingTypeResult>;problems:string[]};
+export type TypeCheckResult={root:string;projects:Record<string,ToolingTypeResult>;problems:string[]};
 export function checkTypeProjects(root:string,definitions:readonly TypeProject[]=TYPE_PROJECTS):TypeCheckResult {
   const projects:Record<string,ToolingTypeResult>={},problems:string[]=[];
   for(const definition of definitions){const name=typeProjectName(definition);try{const result=checkTypeProject(root,definition);projects[name]=result;problems.push(...result.problems.map(problem=>name+': '+problem));}
     catch(error){problems.push(name+': '+String(error));}}
-  return {projects,problems};
+  return {root,projects,problems};
 }
 export const typeRow=(result:ToolingTypeResult):ProjectTypeRecord=>({modules:result.modules,counts:result.counts,source:result.source});
 export function typeRecordChanges(result:TypeCheckResult,record:DiagnosticRecord):{problems:string[];pending:string[];improved:string[];stale:string[]}{
   const problems=[...result.problems],pending:string[]=[],improved:string[]=[],stale:string[]=[];
   for(const name of Object.keys(record.projects))if(!result.projects[name])problems.push('recorded type project was dropped: '+name);
   for(const [name,actual]of Object.entries(result.projects)){const previous=record.projects[name];if(!previous){pending.push(name);continue;}
-    const changed=projectTypeChanges(typeRow(actual),previous);problems.push(...changed.problems.map(problem=>name+': '+problem));
+    const changed=projectTypeChanges(typeRow(actual),previous,absentTypeModules(result.root,actual.modules,previous.modules));problems.push(...changed.problems.map(problem=>name+': '+problem));
     if(changed.improved.length)improved.push(name);if(previous.source!==actual.source)stale.push(name);}
   return {problems,pending,improved,stale};
 }
@@ -109,20 +109,24 @@ export function typeProjectSourceKey(root:string,name:string):string|null {
   const definition=TYPE_PROJECTS.find(row=>typeProjectName(row)===name);if(!definition||!existsSync(join(root,name)))return null;
   const checked=checkTypeProject(root,definition);if(checked.problems.length)throw Error(checked.problems.join('\n'));return checked.source;
 }
-export function writeTypeProjectRecord(path:string,result:TypeCheckResult,previous:DiagnosticRecord):void {
+export function writeTypeProjectRecord(path:string,result:TypeCheckResult,previous:DiagnosticRecord,pending=false):void {
   const changes=typeRecordChanges(result,previous);if(changes.problems.length)throw Error(changes.problems.join('\n'));
-  const next:DiagnosticRecord={version:2,projects:Object.fromEntries(Object.entries(result.projects).map(([name,row])=>[name,typeRow(row)]))};
+  const next:DiagnosticRecord={version:2,projects:Object.fromEntries(Object.entries(result.projects).filter(([name])=>pending||previous.projects[name]!==undefined).map(([name,row])=>[name,typeRow(row)]))};
   mkdirSync(dirname(path),{recursive:true});const temporary=path+'.'+process.pid;writeFileSync(temporary,serializeDiagnosticRecord(next));renameSync(temporary,path);
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
   try{
-    const args=process.argv.slice(2);if(args.some(arg=>!['--record','--initialize','--json'].includes(arg)))throw Error('usage: tooling-types.ts [--record [--initialize]] [--json]');
+    const args=process.argv.slice(2);if(args.some(arg=>!['--record','--record-pending','--initialize','--json'].includes(arg)))throw Error('usage: tooling-types.ts [--record | --record-pending] [--json]');
     if(args.includes('--initialize')&&(!args.includes('--record')||existsSync(join(ROOT,TOOLING_DIAGNOSTICS))))throw Error('--initialize requires --record and an absent tooling diagnostic record');
     if(!args.includes('--initialize')&&!existsSync(join(ROOT,TOOLING_DIAGNOSTICS)))throw Error('tooling diagnostic record is missing');
     const root=ROOT,result=checkTypeProjects(root),previous=readTypeRecord(root),changes=typeRecordChanges(result,previous);
-    if(changes.problems.length){console.error(changes.problems.join('\n'));process.exitCode=1;}else{
-      if(args.includes('--record'))writeTypeProjectRecord(join(root,TOOLING_DIAGNOSTICS),result,previous);
+    if(changes.problems.length){console.error(changes.problems.join('\n'));
+      for(const [name,row]of Object.entries(result.projects))for(const diagnostic of row.diagnostics){
+        const file=diagnostic.fileName?named(root,diagnostic.fileName):undefined;
+        if(file&&previous.projects[name]&&(row.counts[file]??0)>(previous.projects[name]?.counts[file]??0))console.error(`${name}: ${file}:${(diagnostic.startPosition?.line??0)+1}:${(diagnostic.startPosition?.character??0)+1} TS${diagnostic.code}: ${diagnostic.text}`);
+      }process.exitCode=1;}else{
+      if(args.includes('--record')||args.includes('--record-pending'))writeTypeProjectRecord(join(root,TOOLING_DIAGNOSTICS),result,previous,args.includes('--record-pending')||args.includes('--initialize'));
       for(const name of changes.pending)console.log(pendingLine(name,TOOLING_DIAGNOSTICS));
       for(const name of new Set([...changes.improved,...changes.stale]))console.log(improvedLine(name,TOOLING_DIAGNOSTICS,'previous measurement','rechecked current inputs without a diagnostic increase'));
       if(args.includes('--json'))console.log(JSON.stringify(result,null,2));

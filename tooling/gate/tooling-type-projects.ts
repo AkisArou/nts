@@ -1,5 +1,5 @@
 // Project declarations and pending discovery have no checker execution dependency.
-import {existsSync,readFileSync} from 'node:fs';
+import {existsSync,readFileSync,lstatSync} from 'node:fs';
 import {join,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {projectConfig,moduleMembers,type ProjectConfig} from './reader-inputs/main.ts';
@@ -17,6 +17,12 @@ export const TYPE_PROJECTS:readonly TypeProject[]=[
 ];
 
 export const typeProjectName=(definition:TypeProject)=>relative(ROOT,fileURLToPath(definition.project.url)).split(sep).join('/');
+/** Only the owner observing no directory entry can discharge a lost inventory member. */
+export function absentTypeModules(root:string,actual:readonly string[],previous:readonly string[]):ReadonlySet<string>{
+  const present=new Set(actual),absent=new Set<string>();
+  for(const file of previous)if(!present.has(file)&&lstatSync(join(root,file),{throwIfNoEntry:false})===undefined)absent.add(file);
+  return absent;
+}
 export function readTypeRecord(root:string):DiagnosticRecord {
   const path=join(root,TOOLING_DIAGNOSTICS);return existsSync(path)?parseDiagnosticRecord(JSON.parse(readFileSync(path,'utf8'))):{version:2,projects:{}};
 }

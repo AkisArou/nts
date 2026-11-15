@@ -3506,3 +3506,8 @@ pending; the normal green core records cycle writes their first measurements.
 The checker recipe and actual project input graph identify each measurement,
 so a stale delta cannot apply after a product input changes. Real product type
 defects remain debt for their owners rather than behavior changes in tooling.
+The checker and record audit accept a removed inventory member only when the
+shared owner observes no directory entry for its source. Existing omitted files
+remain coverage refusals. Renaming a file with diagnostics deletes one module
+and creates another whose initial limit is zero, so it refuses until those
+errors are fixed, as under the existing tooling policy.

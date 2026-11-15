@@ -3,6 +3,7 @@
   "include": [
     "src/c.ts",
     "handle-types.d.ts",
-    "../../../../runtime/ecmascript/providers/icu/c/bindings.d.ts"
+    "../../../../runtime/ecmascript/providers/icu/c/bindings.d.ts",
+    "../../../../runtime/ecmascript/providers/icu/c/**/*.ts"
   ]
 }

@@ -838,9 +838,11 @@ The JVM generation entry has its own project. The registry and read-only pending
 discovery have no checker or oracle execution dependency.
 
 The checker validates each project's settings, complete owned population and
-Program membership. A removed project, an omitted module or a disabled JS
-owner refuses before diagnostic counts can fall. New modules in recorded
-projects start without diagnostics. Records include zero-count inventories and
+Program membership. A removed project, an existing omitted module or a disabled JS
+owner refuses before diagnostic counts can fall. Only the owner's no-entry
+observation permits a deleted source to leave its inventory. New modules in recorded
+projects start without diagnostics, so renaming a module with diagnostics
+requires fixing those diagnostics. Records include zero-count inventories and
 are keyed by project and module in `results/tooling-types/diagnostics.json`;
 diagnostic limits may only fall. A newly registered project without a row is
 pending and does not fail landing. After the green core run, the full check's
@@ -1396,7 +1398,10 @@ the first node task.
   per-module limits and a complete inventory. New projects follow the ordinary
   pending-record rule; the green core records cycle measures their first rows.
   A recorded project's limits never rise, including after a source edit, and a
-  records delta applies only to the complete input identity it measured
+  records delta applies only to the complete input identity it measured.
+  Genuine source deletions require the owner's no-entry observation; an existing
+  source omitted from its Program refuses. A rename is a deletion plus a new
+  module, whose diagnostic limit starts at zero
   ([log](records/notebooks/decisions-log.md#product-projects-share-the-type-ratchet-11-15)).
 
 - **Pinned corpora coexist by revision.** AWFY, TypeScript and test262 have
