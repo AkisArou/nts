@@ -6377,20 +6377,20 @@ fn package_runnable_jar(
     // executable at that path would have `jar` writing its own input. The
     // unpack above happens first and it would work today, which is exactly the
     // kind of ordering that survives until somebody reorders two lines.
-    let assembled = staged.join("executable.jar");
-    let mut package = create_jar();
-    package
-        .arg("--file")
-        .arg(assembled.as_str())
-        .arg("--main-class")
-        .arg("NtsMain")
-        .arg("-C")
-        .arg(built.as_str())
-        .arg(".");
-    run_tool(package, "jar", "package the executable jar")?;
     let artifact = out.join(format!("{name}.jar"));
-    std::fs::rename(&assembled, &artifact)
-        .with_context(|| format!("moving the executable jar to {artifact}"))?;
+    nts_publication::publish(artifact.as_std_path(), |assembled| {
+        let mut package = create_jar();
+        package
+            .arg("--file")
+            .arg(assembled)
+            .arg("--main-class")
+            .arg("NtsMain")
+            .arg("-C")
+            .arg(built.as_str())
+            .arg(".");
+        run_tool(package, "jar", "package the executable jar").map_err(std::io::Error::other)
+    })
+    .with_context(|| format!("publishing the executable jar to {artifact}"))?;
     Ok(artifact)
 }
 

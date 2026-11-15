@@ -312,15 +312,13 @@ fn dump_with(
     } else {
         let value = evaluate(tool, package)?;
         // Written whole, then renamed into place: a reader never sees half.
-        if let Some(file) = &file {
-            let partial = file.with_extension(format!("{}.partial", std::process::id()));
-            if file
-                .parent()
-                .is_some_and(|dir| std::fs::create_dir_all(dir).is_ok())
-                && std::fs::write(&partial, serde_json::to_vec(&value).unwrap_or_default()).is_ok()
-            {
-                let _ = std::fs::rename(&partial, file);
-            }
+        if let Some(file) = &file
+            && let Err(error) = nts_publication::write(
+                file.as_std_path(),
+                serde_json::to_vec(&value).unwrap_or_default(),
+            )
+        {
+            eprintln!("SwiftPM manifest cache: {error}");
         }
         value
     };

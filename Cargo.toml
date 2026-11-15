@@ -19,6 +19,7 @@ members = [
     "tooling/bench",
     "tooling/differential",
     "tooling/surfaces",
+    "tooling/publication",
     "tooling/suite",
     "runtime/react/compiler/nts-react",
 ]
@@ -46,6 +47,7 @@ nts-core = { path = "compiler/core" }
 nts-deps = { path = "tooling/deps" }
 nts-differential = { path = "tooling/differential" }
 nts-surfaces = { path = "tooling/surfaces" }
+nts-publication = { path = "tooling/publication" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }
 nts-frontend-tsrs = { path = "compiler/frontend-tsrs" }

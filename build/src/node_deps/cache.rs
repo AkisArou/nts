@@ -47,35 +47,34 @@ pub(super) fn ensure(
     }
     let start = Instant::now();
     let objects = compile::objects(request, identity, source, target, &directory)?;
-    let staged_archive = directory.join(format!("lib{}.next.a", target.name));
-    if staged_archive.exists() {
-        std::fs::remove_file(&staged_archive)?;
-    }
-    let output = identity
-        .archiver()
-        .arg("rcsD")
-        .arg(&staged_archive)
-        .args(&objects)
-        .output()?;
-    std::fs::write(directory.join("archive.stderr"), &output.stderr)?;
-    if !output.status.success() {
-        bail!(
-            "archiving {} failed: {}",
-            target.name,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    let entry = Entry {
-        identity: identity.key.clone(),
-        archive: hash(&std::fs::read(&staged_archive)?),
-        inputs: compile::observations(source, target, &directory)?,
-        wall_seconds: start.elapsed().as_secs_f64(),
-        objects: objects.len(),
-    };
-    let staged = directory.join("complete.next.json");
-    std::fs::write(&staged, serde_json::to_vec_pretty(&entry)?)?;
-    std::fs::rename(staged_archive, &archive)?;
-    std::fs::rename(staged, &manifest)?;
+    let manifest_bytes = nts_publication::publish(&archive, |staged_archive| {
+        let assemble = || -> Result<Vec<u8>> {
+            let output = identity
+                .archiver()
+                .arg("rcsD")
+                .arg(staged_archive)
+                .args(&objects)
+                .output()?;
+            std::fs::write(directory.join("archive.stderr"), &output.stderr)?;
+            if !output.status.success() {
+                bail!(
+                    "archiving {} failed: {}",
+                    target.name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            let entry = Entry {
+                identity: identity.key.clone(),
+                archive: hash(&std::fs::read(staged_archive)?),
+                inputs: compile::observations(source, target, &directory)?,
+                wall_seconds: start.elapsed().as_secs_f64(),
+                objects: objects.len(),
+            };
+            Ok(serde_json::to_vec_pretty(&entry)?)
+        };
+        assemble().map_err(std::io::Error::other)
+    })?;
+    nts_publication::write(&manifest, manifest_bytes)?;
     Ok(archive)
 }
 

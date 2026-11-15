@@ -163,14 +163,12 @@ pub(super) fn improvement(entry: &Utf8Path, coverage: &Coverage) -> Result<()> {
         "{}.json",
         super::oracle_emit::digest(fixture.as_bytes())
     ));
-    let temporary = file.with_extension(format!("{}.partial", std::process::id()));
-    std::fs::write(
-        &temporary,
+    nts_publication::write(
+        file.as_std_path(),
         serde_json::to_vec(
             &serde_json::json!({"fixture":fixture,"recordSha256":super::oracle_emit::digest(&std::fs::read(record)?)}),
         )?,
     )?;
-    std::fs::rename(temporary, file)?;
     eprintln!(
         "ORACLE IMPROVED: {source}: budget -> measured {}; fresh recording requested",
         coverage.count

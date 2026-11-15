@@ -50,7 +50,6 @@
 //! own directory, which is the arm to run when this module is the suspect.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -60,8 +59,6 @@ use xxhash_rust::xxh3::Xxh3;
 /// about a megabyte, and every runtime edit makes a new set.
 const KEEP: usize = 512;
 const WEEK: std::time::Duration = std::time::Duration::from_hours(7 * 24);
-/// Names each partial object this process writes apart from the others.
-static PARTIALS: AtomicU64 = AtomicU64::new(0);
 
 /// Compile `source` with `flags` (each `-I` directory as its own `-I`, `dir`
 /// pair) and return the object file: the cached one when an identical compile
@@ -91,15 +88,12 @@ pub(crate) fn object(
         return Ok(object);
     }
     std::fs::create_dir_all(&cache).with_context(|| format!("creating {cache}"))?;
-    let partial = cache.join(format!(
-        "{}.{}.{}.partial.o",
-        object.file_stem().unwrap_or("object"),
-        std::process::id(),
-        PARTIALS.fetch_add(1, Ordering::Relaxed)
-    ));
-    compile(source, flags, includes, &partial)?;
-    std::fs::rename(&partial, &object)
-        .with_context(|| format!("renaming {partial} to {object}"))?;
+    nts_publication::publish(object.as_std_path(), |path| {
+        let partial = Utf8Path::from_path(path)
+            .ok_or_else(|| std::io::Error::other("object staging path is not UTF-8"))?;
+        compile(source, flags, includes, partial).map_err(std::io::Error::other)
+    })
+    .with_context(|| format!("publishing {object}"))?;
     prune(&cache);
     Ok(object)
 }
@@ -238,6 +232,9 @@ fn prune(cache: &Utf8Path) {
     }
     let now = std::time::SystemTime::now();
     for entry in entries {
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+            continue;
+        }
         let stale = entry
             .metadata()
             .and_then(|data| data.modified())

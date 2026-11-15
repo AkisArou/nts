@@ -1137,6 +1137,22 @@ the first node task.
 
 ## Decisions
 
+- **Rust publication belongs to one owner.** `nts-publication` stages files,
+  links and immutable directories in an exclusively acquired sibling claim
+  named by process ID and a process-wide serial. Collisions are retried without
+  removing an existing claim. The producer creates the initially absent payload.
+  Files and links publish by one rename; a host refusing replacement reports an
+  error without removing the target as a fallback, including on Windows.
+  Directory replacement and legacy directory-to-link conversion use a portable
+  target lock, quarantine and restore. A failed restore retains and names the
+  recovery path. Surface staging, publication and pruning share an identity
+  lock; pruning skips private namespaces and recognizes committed entries.
+  Cleanup touches only the acquired claim and retains errors beside the primary
+  failure. This provides atomic visibility, not fsync durability. The Rust token
+  audit rejects filesystem renames outside that owner; test-only declarations
+  confer no production exception
+  ([log](records/notebooks/decisions-log.md#rust-publication-owns-each-writers-staging-11-15)).
+
 - **Pinned corpora coexist by revision.** AWFY, TypeScript and test262 have
   plain revision data files under tooling/bootstrap. Rust includes those same
   files as constants; TypeScript's definition verifies its native-checker

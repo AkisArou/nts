@@ -3119,3 +3119,19 @@ directories or another tree's checkout. Bootstrap fills fresh slots while
 retaining existing legacy directories. Private linker fixtures pre-acquire
 that same registry and change only their own pin/native metadata. Node's
 authenticated release/identity pair owner stays unchanged.
+
+## Rust publication owns each writer's staging (11-15)
+
+Production Rust file, link and directory publication share the std-only
+nts-publication leaf. Each producer exclusively creates a sibling claim named
+by process ID plus one process-wide serial, retries collisions without deleting
+them, and creates its own initially absent payload. File/link commit uses one
+rename and refuses unsupported host replacement without a destructive fallback.
+Portable target locks protect immutable-directory reuse and invalid-target
+quarantine; failed publication restores the old target or retains and names its
+recovery directory. The same mechanism converts legacy directory copies to
+links without a remove-before-write race. Surface staging and pruning share
+the identity lock and exclude private namespaces. Existing Node archive locks
+and archive-before-completion ordering remain. The source audit follows Rust
+tokens and test-only module ownership, with no caller allowance list. Atomic
+visibility here makes no fsync durability claim.

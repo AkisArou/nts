@@ -382,6 +382,7 @@ dependencies = [
  "miniz_oxide",
  "nts-codegen-c",
  "nts-diagnostics",
+ "nts-publication",
  "nts-semantic-schema",
  "rustc-hash",
  "serde",
@@ -407,6 +408,7 @@ dependencies = [
  "nts-frontend-ts",
  "nts-frontend-tsrs",
  "nts-jvm-emitter",
+ "nts-publication",
  "nts-react",
  "nts-semantic-schema",
  "nts-surfaces",
@@ -540,6 +542,7 @@ dependencies = [
  "nts-core",
  "nts-diagnostics",
  "nts-frontend-ts",
+ "nts-publication",
  "nts-semantic-schema",
  "serde",
  "serde_json",
@@ -589,6 +592,13 @@ dependencies = [
  "nts-diagnostics",
  "nts-semantic-schema",
  "rustc-hash",
+]
+
+[[package]]
+name = "nts-publication"
+version = "0.0.0"
+dependencies = [
+ "camino",
 ]
 
 [[package]]
@@ -648,6 +658,7 @@ dependencies = [
  "anyhow",
  "camino",
  "nts-frontend-ts",
+ "nts-publication",
  "serde_json",
 ]
 

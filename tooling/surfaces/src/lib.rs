@@ -164,22 +164,43 @@ impl Store {
         let version = identity.join(entry(&binder.version()));
         let directory = version.join(fingerprint(&binder.inputs()));
         let manifest = directory.join("manifest.json");
+        // Generation can be expensive. No staging exists before taking the
+        // identity lock shared by publication and both levels of pruning.
+        let generated = if read_manifest(&manifest, &directory).is_ok() {
+            None
+        } else {
+            Some(binder.generate()?)
+        };
+        let _identity = nts_publication::lock(identity.as_std_path())?;
         let installed = if let Ok(installed) = read_manifest(&manifest, &directory) {
             installed
         } else {
-            let packages = binder.generate()?;
+            let packages = match generated {
+                Some(packages) => packages,
+                None => binder.generate()?,
+            };
             // Written beside, then moved into place: a store is complete or
             // absent, never half of one a build then reads.
-            let partial = directory.with_extension(format!("partial-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&partial);
-            write_packages(&partial, &packages)?;
-            let _ = std::fs::remove_dir_all(&directory);
-            std::fs::rename(&partial, &directory)
-                .with_context(|| format!("moving {partial} to {directory}"))?;
+            nts_publication::directory(
+                directory.as_std_path(),
+                |path| {
+                    let partial = Utf8Path::from_path(path).ok_or_else(|| {
+                        std::io::Error::other("surface staging path is not UTF-8")
+                    })?;
+                    write_packages(partial, &packages).map_err(std::io::Error::other)
+                },
+                |path| {
+                    let path = Utf8Path::from_path(path)
+                        .ok_or_else(|| std::io::Error::other("surface target path is not UTF-8"))?;
+                    Ok(read_manifest(&path.join("manifest.json"), path).is_ok())
+                },
+            )?;
             // This version's entry for inputs that have since changed: nothing
             // of this version asks for it again, and a project still linked
             // to it relinks on its next build.
-            prune(&version, |entry| entry != directory.as_std_path());
+            prune(&version, |entry| {
+                committed_store(entry) && entry != directory.as_std_path()
+            });
             read_manifest(&manifest, &directory)?
         };
         touch(&version);
@@ -189,6 +210,11 @@ impl Store {
                 && std::fs::metadata(entry)
                     .and_then(|meta| meta.modified())
                     .is_ok_and(|used| now.duration_since(used).is_ok_and(|idle| idle > RETAIN))
+                && std::fs::read_dir(entry).is_ok_and(|children| {
+                    children
+                        .flatten()
+                        .any(|child| committed_store(&child.path()))
+                })
         });
         Ok(installed)
     }
@@ -198,11 +224,21 @@ impl Store {
 /// a worktree's `nts` idle for a week has been rebuilt or removed.
 pub const RETAIN: std::time::Duration = std::time::Duration::from_hours(7 * 24);
 
+fn committed_store(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|name| name.len() == 16 && name.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        && path.join("manifest.json").is_file()
+}
+
 /// Remove each entry of `directory` that `stale` names; a directory that
 /// cannot be read has nothing to remove.
 fn prune(directory: &Utf8Path, stale: impl Fn(&std::path::Path) -> bool) {
     for entry in std::fs::read_dir(directory).into_iter().flatten().flatten() {
-        if stale(&entry.path()) {
+        if !nts_publication::private_name(&entry.file_name())
+            && entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && stale(&entry.path())
+        {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
@@ -237,16 +273,8 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
             std::fs::create_dir_all(parent)?;
         }
         let existed = at.symlink_metadata();
-        // A directory where the link belongs is a copy from before links were
-        // made, and a rename cannot replace one: it goes first.
-        if existed.as_ref().is_ok_and(std::fs::Metadata::is_dir) {
-            match std::fs::remove_dir_all(&at) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(error).with_context(|| format!("replacing {at}"));
-                }
-                _ => {}
-            }
-        }
+        // Legacy directory copies are replaced by the publication owner under
+        // its target lock; a concurrent caller cannot remove our new link.
         if existed.is_err() {
             new.push(name.clone());
         }
@@ -272,16 +300,10 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
 /// whichever rename lands last leaves the link every one of them wanted.
 #[cfg(unix)]
 fn replace_link(dir: &Utf8Path, at: &Utf8Path) -> Result<()> {
-    static STAGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let staged = format!(
-        "{at}.{}-{}.link",
-        std::process::id(),
-        STAGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    );
-    let _ = std::fs::remove_file(&staged);
-    std::os::unix::fs::symlink(dir, &staged)
-        .with_context(|| format!("linking {staged} to {dir}"))?;
-    std::fs::rename(&staged, at).with_context(|| format!("replacing {at}"))
+    nts_publication::publish_over_directory(at.as_std_path(), |path| {
+        std::os::unix::fs::symlink(dir, path)
+    })
+    .with_context(|| format!("replacing {at}"))
 }
 
 fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {

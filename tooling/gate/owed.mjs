@@ -1030,6 +1030,12 @@ export const RULES = [
     arms: [],
   },
   {
+    name: "shared atomic publication",
+    when: (p) => /^tooling\/publication\//.test(p),
+    steps: ["build", "tests", "config", "examples"],
+    arms: [],
+  },
+  {
     name: "the dependency installer, the surfaces and the React compiler",
     when: (p) => /^(tooling\/deps|tooling\/surfaces|runtime\/react\/compiler)\//.test(p),
     steps: ["interop", "config", "react-sources", "examples"],

@@ -12,6 +12,7 @@ name = "nts"
 path = "src/main.rs"
 
 [dependencies]
+nts-publication.workspace = true
 nts-build.workspace = true
 nts-codegen-common.workspace = true
 nts-codegen-c.workspace = true

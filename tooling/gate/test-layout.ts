@@ -9,6 +9,7 @@ import{basename,dirname,join,relative,resolve}from'node:path';
 import{fileURLToPath,pathToFileURL}from'node:url';
 import{inspectRustPidPaths}from'./rust-test-paths.ts';
 import {inspectRustCargoCalls} from './rust-cargo.ts';
+import {inspectRustPublication,publicationTestFiles} from './rust-publication.ts';
 
 export const CORE_TEST_TOPICS=['scalars','numbers','strings','arrays','collections','erasure','interfaces','classes',
   'signatures','dispatch','control','memory','ranges','providers','lowering','modules'] as const;
@@ -97,9 +98,12 @@ export function assertTestLayout(root:string,packages:readonly CargoPackage[]=ca
   const listed=spawnSync('git',gitArguments(['ls-files','-z','--','*.rs']),{cwd:root,encoding:'utf8'});
   if(listed.error||listed.status!==0)throw Error('Rust test resource inventory: '+(listed.stderr||listed.error?.message||listed.status));
   const owned=packages.map(pkg=>normalize(relative(root,dirname(pkg.manifest_path)))+'/');
+  const sources=new Map(listed.stdout.split('\0').filter(file=>file&&owned.some(directory=>file.startsWith(directory))).map(file=>[file,readFileSync(join(root,file),'utf8')]));
+  const tests=publicationTestFiles(sources,new Set(layout.harnesses.flatMap(harness=>[harness.file,...harness.cases.map(row=>row.file),...harness.helpers.map(row=>row.file)])));
   for(const file of listed.stdout.split('\0').filter(Boolean)){
     if(['compiler/test-support/scratch.rs','compiler/test-support/self_test.rs'].includes(file)||(!file.includes('/test-support/')&&!owned.some(directory=>file.startsWith(directory))))continue;
     const source=readFileSync(join(root,file),'utf8');
+    layout.problems.push(...inspectRustPublication(file,source,tests.has(file)));
     const pkg=packages.filter(pkg=>file.startsWith(normalize(relative(root,dirname(pkg.manifest_path)))+'/')).sort((a,b)=>b.manifest_path.length-a.manifest_path.length)[0];
     if(pkg)layout.problems.push(...inspectRustCargoCalls(file,source,dirname(pkg.manifest_path),root));
     if(!/process\s*::\s*id|getpid|\{pid|current_exe|--exact/.test(source))continue;

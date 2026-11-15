@@ -144,9 +144,7 @@ pub(super) fn notices(source: &Path, names: &[String]) -> Result<BTreeMap<String
             .context("dependency notice")?;
         let path = directory.join(component);
         if std::fs::read(&path).ok().as_deref() != Some(text.as_bytes()) {
-            let staged = directory.join(format!("{component}.next"));
-            std::fs::write(&staged, text)?;
-            std::fs::rename(staged, &path)?;
+            nts_publication::write(&path, text)?;
         }
         result.insert(format!("node-deps/{component}/LICENSE"), path);
     }

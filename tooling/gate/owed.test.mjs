@@ -1310,3 +1310,9 @@ test("every compile-time subject owes the independent RC arm, while docs do not"
   owes("tests/compile-time/scalar-replacement-scaling/tsconfig.json", ["compile-time", "compile-time-rc"], { not: ["examples"] });
   owes("docs/architecture.md", [], { not: ["compile-time", "compile-time-rc"] });
 });
+
+test('the shared publication crate has an explicit directory rule',()=>{
+  const rules=owed([{path:'tooling/publication/src/lib.rs',added:true}]);
+  assert.ok(rules.some(rule=>rule.name==='shared atomic publication'));
+  superset(gateSteps(rules),['build','tests','config','examples'],'publication reaches its production consumers');
+});
