@@ -6,6 +6,21 @@ use std::fs;
 use std::sync::{Arc, Barrier};
 
 #[test]
+fn changing_target_names_keeps_only_one_parent_lock_file() {
+    let root = scratch::StdScratchDir::in_std_target("publication-parent-lock");
+    for name in ["old-version", "current-version", "next-version"] {
+        let held = nts_publication::lock(&root.join(name)).expect("parent lock");
+        drop(held);
+    }
+    let entries: Vec<_> = fs::read_dir(&root)
+        .expect("parent entries")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(entries.len(), 1);
+    assert!(nts_publication::private_name(&entries[0]));
+}
+
+#[test]
 fn two_writers_publish_whole_files_and_leave_foreign_staging_alone() {
     let root = scratch::StdScratchDir::in_std_target("publication-files");
     let target = root.join("target");

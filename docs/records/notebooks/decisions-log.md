@@ -3127,7 +3127,7 @@ nts-publication leaf. Each producer exclusively creates a sibling claim named
 by process ID plus one process-wide serial, retries collisions without deleting
 them, and creates its own initially absent payload. File/link commit uses one
 rename and refuses unsupported host replacement without a destructive fallback.
-Portable target locks protect immutable-directory reuse and invalid-target
+Portable parent-directory locks protect immutable-directory reuse and invalid-target
 quarantine; failed publication restores the old target or retains and names its
 recovery directory. The same mechanism converts legacy directory copies to
 links without a remove-before-write race. Surface staging and pruning share
@@ -3135,3 +3135,6 @@ the identity lock and exclude private namespaces. Existing Node archive locks
 and archive-before-completion ordering remain. The source audit follows Rust
 tokens and test-only module ownership, with no caller allowance list. Atomic
 visibility here makes no fsync durability claim.
+One permanent lock file per parent bounds lock metadata; versioned targets do
+not leave one persistent lock per old key. Directory publications in that
+parent serialize, which is appropriate for these uncommon operations.

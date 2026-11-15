@@ -92,27 +92,19 @@ pub struct Lock {
     _file: File,
 }
 
-/// Lock the identity of a target (which need not exist). Different spellings
-/// of the same parent and basename reach the same lock. A hash collision only
-/// serializes unrelated targets; it grants no identity or publication facts.
+/// Lock the parent directory of a target (which need not exist). One permanent
+/// lock file per parent bounds metadata as versioned targets come and go.
+/// Directory publication is rare; unrelated targets in that parent serialize.
 pub fn lock(target: &Path) -> Result<Lock> {
     let open = || -> io::Result<File> {
         let directory = parent(target)?;
         fs::create_dir_all(directory)?;
-        let key = target
-            .file_name()
-            .ok_or_else(|| io::Error::other("missing target name"))?
-            .as_encoded_bytes()
-            .iter()
-            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
-                (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
-            });
         let file = File::options()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open(directory.join(format!("{PRIVATE}lock-{key:016x}")))?;
+            .open(directory.join(format!("{PRIVATE}lock")))?;
         file.lock()?;
         Ok(file)
     };

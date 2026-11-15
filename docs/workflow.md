@@ -1144,7 +1144,8 @@ the first node task.
   Files and links publish by one rename; a host refusing replacement reports an
   error without removing the target as a fallback, including on Windows.
   Directory replacement and legacy directory-to-link conversion use a portable
-  target lock, quarantine and restore. A failed restore retains and names the
+  parent-directory lock, quarantine and restore. One retained lock file per
+  parent bounds lock metadata as target versions change. A failed restore retains and names the
   recovery path. Surface staging, publication and pruning share an identity
   lock; pruning skips private namespaces and recognizes committed entries.
   Cleanup touches only the acquired claim and retains errors beside the primary
