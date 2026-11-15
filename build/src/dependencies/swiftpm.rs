@@ -314,7 +314,7 @@ fn dump_with(
         // Written whole, then renamed into place: a reader never sees half.
         if let Some(file) = &file
             && let Err(error) = nts_publication::write(
-                file.as_std_path(),
+                file.as_path(),
                 serde_json::to_vec(&value).unwrap_or_default(),
             )
         {
