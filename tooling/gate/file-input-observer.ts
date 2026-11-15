@@ -51,7 +51,7 @@ export function prepareFileObserver(directory:string,env:NodeJS.ProcessEnv):{exe
   if(!isAbsolute(directory))throw Error('file input observer: preparation directory must be absolute');
   mkdirSync(directory,{recursive:true});const binary=join(directory,'file-input-observer'),source=fileURLToPath(new URL('./file-input-observer.c',import.meta.url)),sourceSha256=digest(readFileSync(source));
   const built=infrastructureProbe({purpose:'build the filesystem input observer',command:'cc',
-    args:['-O2','-std=c11','-Wall','-Wextra','-Werror',source,'-lz','-o',binary],env});
+    args:['-O2','-std=c11','-Wall','-Wextra','-Werror','-pthread',source,'-lz','-o',binary],env});
   if(built.status!==0)throw Error('file input observer: build failed: '+built.stderr);
   if(digest(readFileSync(source))!==sourceSha256)throw Error('file input observer: source changed during preparation');
   return {executable:binary,receipt:retainedFileObserverReceipt({observedPath:realpathSync(binary),artifactPath:binary,sha256:digest(readFileSync(binary)),sourceSha256})};

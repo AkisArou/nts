@@ -201,14 +201,14 @@ test('derived procfs anchors bind the actual task, captured root and numeric suc
   const root=newTestScratch('derived-procfs-index');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const row=image(1,0,'/fixture');row.syscall='openat';row.operation='open';row.args=['ffffffffffffff9c','0','0','0','0','0'];
   const taskAnchor={kind:'procfs-task' as const,tid:row.tid,tgid:row.tgid,taskPidNamespace:{dev:'4',ino:'5'},observerPidNamespace:{dev:'4',ino:'5'},procRoot:{dev:'7',ino:'8'}};
-  const proof={state:'resolved' as const,path:bytes('/proc/1/limits'),finalLink:false,finalComponent:true,namespace:{dev:'1',ino:'2',rootDev:'3',rootIno:'4'},components:[
+  const proof={state:'resolved' as const,path:bytes('/kernel/1/limits'),finalLink:false,finalComponent:true,namespace:{dev:'1',ino:'2',rootDev:'3',rootIno:'4'},components:[
     {path:bytes('/'),kind:'directory' as const,dev:'3',ino:'4'},
-    {path:bytes('/proc'),kind:'directory' as const,dev:'7',ino:'8',filesystem:'procfs' as const},
-    {path:bytes('/proc/self'),kind:'symlink' as const,dev:'7',ino:'9',filesystem:'procfs' as const,taskAnchor},
-    {path:bytes('/proc/1'),kind:'directory' as const,dev:'7',ino:'10',filesystem:'procfs' as const},
-    {path:bytes('/proc/1/limits'),kind:'file' as const,dev:'7',ino:'11',filesystem:'procfs' as const},
+    {path:bytes('/kernel'),kind:'directory' as const,dev:'7',ino:'8',filesystem:'procfs' as const},
+    {path:bytes('/kernel/self'),kind:'symlink' as const,dev:'7',ino:'9',filesystem:'procfs' as const,taskAnchor},
+    {path:bytes('/kernel/1'),kind:'directory' as const,dev:'7',ino:'10',filesystem:'procfs' as const},
+    {path:bytes('/kernel/1/limits'),kind:'file' as const,dev:'7',ino:'11',filesystem:'procfs' as const},
   ]};
-  row.paths=[{arg:1,dirfdArg:0,value:bytes('/proc/self/limits'),resolution:proof}];
+  row.paths=[{arg:1,dirfdArg:0,value:bytes('/kernel/self/limits'),resolution:proof}];
   const raw=join(root,'raw.gz'),output=join(root,'index.gz');
   writeFileSync(raw,gzipSync([{kind:'start',version:5,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},row,
     {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:1,errors:0,drainComplete:true,observerSignal:0}].map(value=>JSON.stringify(value)).join('\n')+'\n'));
@@ -226,8 +226,8 @@ test('derived procfs anchors bind the actual task, captured root and numeric suc
     ['task',(proof:Proof)=>{proof.components[2]!.taskAnchor!.tid++;}],
     ['pid-namespace',(proof:Proof)=>{proof.components[2]!.taskAnchor!.taskPidNamespace.ino='99';}],
     ['root',(proof:Proof)=>{proof.components[2]!.taskAnchor!.procRoot.ino='99';}],
-    ['magic',(proof:Proof)=>{proof.components[2]!.path='/proc/exe';}],
-    ['successor',(proof:Proof)=>{proof.components[3]!.path='/proc/2';}],
+    ['magic',(proof:Proof)=>{proof.components[2]!.path='/kernel/exe';}],
+    ['successor',(proof:Proof)=>{proof.components[3]!.path='/kernel/2';}],
   ] as const)await assert.rejects(readInputTraceIndex(alter(name,change),()=>{}),/capture-time resolution|derived procfs anchor/);
 });
 

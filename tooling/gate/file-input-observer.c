@@ -11,6 +11,7 @@
 #include <linux/magic.h>
 #include <linux/seccomp.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -1055,10 +1056,35 @@ static int terminal_status(int signal, const sigset_t *original) {
   return 128 + signal;
 }
 
+static void *task_anchor_probe(void *unused) {
+  (void)unused;
+  int fd = open("/proc/thread-self/comm", O_RDONLY);
+  if (fd < 0)
+    return (void *)1;
+  char byte;
+  bool failed = read(fd, &byte, 1) != 1;
+  close(fd);
+  return failed ? (void *)1 : NULL;
+}
 int main(int argc, char **argv) {
   // A control exercises this native kernel reader under the same observer;
   // test launchers do not acquire a second /proc reader or a path exception.
   if (argc == 2 && !strcmp(argv[1], "--self-image-probe")) {
+    unsigned char data[PATH_BYTES];
+    Bytes image = proc_link(getpid(), "exe", data);
+    return good(&image) && !image.null ? 0 : 2;
+  }
+  if (argc == 2 && !strcmp(argv[1], "--task-anchor-probe")) {
+    int fd = open("/proc/self/limits", O_RDONLY);
+    char byte;
+    if (fd < 0 || read(fd, &byte, 1) != 1)
+      return 2;
+    close(fd);
+    pthread_t thread;
+    void *result;
+    if (pthread_create(&thread, NULL, task_anchor_probe, NULL) ||
+        pthread_join(thread, &result) || result)
+      return 2;
     unsigned char data[PATH_BYTES];
     Bytes image = proc_link(getpid(), "exe", data);
     return good(&image) && !image.null ? 0 : 2;

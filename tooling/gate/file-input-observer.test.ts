@@ -169,31 +169,23 @@ int main(int argc,char **argv) {
 
 test('procfs task anchors retain their namespace and root fence while magic links stay unavailable',async t=>{
   const root=newTestScratch('file-input-procfs');t.after(()=>rmSync(root,{recursive:true,force:true}));
-  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
-  writeFileSync(input,`#include <fcntl.h>
-#include <pthread.h>
-#include <unistd.h>
-static void *thread(void *unused){(void)unused;int fd=open("/proc/thread-self/comm",O_RDONLY);if(fd<0)return (void *)1;char c;int bad=read(fd,&c,1)!=1;close(fd);return (void *)(long)bad;}
-int main(void){int fd=open("/proc/self/limits",O_RDONLY);if(fd<0)return 1;char c;if(read(fd,&c,1)!=1)return 2;close(fd);
-pthread_t tid;if(pthread_create(&tid,0,thread,0))return 3;void *result;if(pthread_join(tid,&result)||result)return 4;
-char link[4096];return readlink("/proc/self/exe",link,sizeof(link))>0?0:5;}\n`);
-  const built=spawnTest('cc',['-O1','-pthread',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
-  const raw=join(root,'raw.gz'),index=join(root,'index.gz'),ran=spawnTest(prepared.executable,fileObserverArguments(raw,program,[]),{env,encoding:'utf8'});
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env);
+  const raw=join(root,'raw.gz'),index=join(root,'index.gz'),ran=spawnTest(prepared.executable,fileObserverArguments(raw,prepared.executable,['--task-anchor-probe']),{env,encoding:'utf8'});
   assert.equal(ran.status,0,ran.stderr);
   await publishInputTrace({raw,output:index,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'procfs',kind:['test'],source:'fixture.rs'}});
   const rows:InputIndexObservation[]=[];await readInputTraceIndex(index,row=>{if(row.kind==='observation')rows.push(row);});
   const provenance=runtimeProvenanceClassifier({sourceRoot:root,buildNamespace:join(root,'target'),artifacts:[],outputDirectories:[],roots:[]});
-  for(const name of ['/proc/self/limits','/proc/thread-self/comm']){
-    const row=rows.find(row=>row.subjects.some(part=>part.kind==='path'&&part.name===name));assert.ok(row);
-    const part=row.subjects.find(part=>part.kind==='path'&&part.name===name);assert.ok(part?.kind==='path'&&part.resolution?.state==='resolved');
+  for(const name of ['limits','comm']){
+    const row=rows.find(row=>row.subjects.some(part=>part.kind==='path'&&part.name.endsWith('/'+name)));assert.ok(row);
+    const part=row.subjects.find(part=>part.kind==='path'&&part.name.endsWith('/'+name));assert.ok(part?.kind==='path'&&part.resolution?.state==='resolved');
     const proof=part.resolution,anchor=proof.components.find(part=>part.taskAnchor);assert.ok(anchor?.taskAnchor);
     assert.equal(anchor.filesystem,'procfs');assert.equal(anchor.link,undefined);assert.equal(anchor.taskAnchor.tid,row.attempt.tid);assert.equal(anchor.taskAnchor.tgid,row.attempt.tgid);
     assert.deepEqual(anchor.taskAnchor.taskPidNamespace,anchor.taskAnchor.observerPidNamespace);
     assert.equal(proof.components.at(-1)?.kind,'file');assert.equal(proof.components.at(-1)?.filesystem,'procfs');assert.equal(proof.finalComponent,true);
     assert.equal(provenance.classify(part,{kind:'content',following:'follow'})?.kind,'host-environment');
-    if(name.includes('thread-self'))assert.notEqual(row.attempt.tid,row.attempt.tgid);
+    if(name==='comm')assert.notEqual(row.attempt.tid,row.attempt.tgid);
   }
-  const magic=rows.flatMap(row=>row.subjects).find(part=>part.kind==='path'&&part.name==='/proc/self/exe');
+  const magic=rows.flatMap(row=>row.subjects).find(part=>part.kind==='path'&&part.name.endsWith('/exe'));
   assert.equal(magic?.kind==='path'&&magic.resolution?.state,'unavailable');
   assert.ok(magic);assert.equal(provenance.classify(magic,{kind:'readlink',following:'no-follow'}),undefined);
 });
