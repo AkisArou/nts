@@ -53,8 +53,9 @@ node_modules
 
 # Are We Fast Yet's C++ and Java references, at tooling/bootstrap/awfy.pin.
 # Prepared and verified by: node tooling/bootstrap/awfy.ts --acquire
-# Existing checkouts are verified without moving them; each tree's linker
-# checks the shared checkout against that tree's own pin before linking it.
+# Pin-addressed sparse checkouts live under are-we-fast-yet.d/<pin>. Each
+# tree's linker acquires and selects its own pin. The legacy directory stays
+# in place for older trees and running benchmarks; no existing clone moves.
 /third_party/are-we-fast-yet
 /third_party/are-we-fast-yet.d
 
