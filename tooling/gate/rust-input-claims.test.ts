@@ -19,7 +19,8 @@ function observed(path:string,kind:ReaderObservation['observation']['kind'],valu
 }
 
 test('the pure claim index keys complete requests and owns deeply frozen detached graph answers',()=>{
-  const snapshot=empty();snapshot.files=['data/bytes'];snapshot.observations=[observed('/source/link','readlink','first')];
+  const snapshot=empty(),namespaces:Record<string,string>={};snapshot.files=['data/bytes'];
+  snapshot.observations=[{...observed('/source/link','readlink','first'),context:{...context,dataNamespaces:namespaces}}];
   const indexed=compileRuntimeRepositoryClaims('/source',snapshot),plain=compileRuntimeRepositoryClaims('/source',snapshot,{memoize:false});
   const file=identity('/source/data/bytes'),first=indexed.match(content,file);
   assert.equal(first.kind,'claimed');if(first.kind!=='claimed')throw Error('expected content claim');
@@ -33,7 +34,7 @@ test('the pure claim index keys complete requests and owns deeply frozen detache
   assert.ok(Object.isFrozen(observedFirst.claims[0]!.context!.dataNamespaces));
   assert.equal(indexed.matchComponent({...link}),observedFirst);
   assert.equal(indexed.matchComponent({...link,value:'second'}).kind,'uncovered','observation values are in the key');
-  snapshot.observations[0]!.context.dataNamespaces.changed='caller mutation';snapshot.files.push('not-in-generation');
+  namespaces.changed='caller mutation';snapshot.files.push('not-in-generation');
   assert.equal(indexed.match(content,identity('/source/not-in-generation')).kind,'uncovered');
   assert.equal(observedFirst.claims[0]!.context!.dataNamespaces.changed,undefined);
   const requests=[

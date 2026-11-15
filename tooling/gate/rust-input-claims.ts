@@ -11,6 +11,7 @@ export type RuntimeInputClaim={role:'bytes'|'ancestor'|'optional-file'|'director
   reader:string;path:string;via?:string;context?:ReaderContext;observation?:string;anchor?:{root:string;dev:string;ino:string}};
 export type RuntimeClaimAnswer={kind:'claimed';claims:RuntimeInputClaim[]}|{kind:'uncovered';reason:string};
 const production=(context:ReaderContext)=>context.entry==='<entry>';
+const requestKey=(value:unknown):string=>JSON.stringify(value);
 function freeze<T>(value:T,seen=new WeakSet<object>()):T{
   if(value&&typeof value==='object'&&!seen.has(value)){
     seen.add(value);for(const child of Object.values(value))freeze(child,seen);Object.freeze(value);
@@ -138,10 +139,10 @@ export function compileRuntimeRepositoryClaims(root:string,snapshot:InputSnapsho
   const matches=new Map<string,RuntimeClaimAnswer>(),components=new Map<string,RuntimeClaimAnswer>();
   const counts={matchHits:0,matchMisses:0,componentHits:0,componentMisses:0};
   const match=(requirement:InputRequirement,identity:InputIdentity):RuntimeClaimAnswer=>{
-    const key=JSON.stringify([requirement,identity]),cached=options.memoize===false?undefined:matches.get(key);
+    const key=options.memoize===false?undefined:requestKey([requirement,identity]),cached=key===undefined?undefined:matches.get(key);
     if(cached){counts.matchHits++;return cached;}
     counts.matchMisses++;const answer=freeze(matchUncached(requirement,identity));
-    if(options.memoize!==false)matches.set(key,answer);return answer;
+    if(key!==undefined)matches.set(key,answer);return answer;
   };
   const componentUncached=(observation:HostObservation):RuntimeClaimAnswer=>{
     const path=name(observation.path),facts=path===undefined?[]:observations.get(path)??[];
@@ -165,10 +166,10 @@ export function compileRuntimeRepositoryClaims(root:string,snapshot:InputSnapsho
     return claims.length?{kind:'claimed',claims}:{kind:'uncovered',reason:'current component differs from its canonical fact: '+observation.path};
   };
   return Object.freeze({match,matchComponent(observation:HostObservation):RuntimeClaimAnswer{
-    const key=JSON.stringify(observation),cached=options.memoize===false?undefined:components.get(key);
+    const key=options.memoize===false?undefined:requestKey(observation),cached=key===undefined?undefined:components.get(key);
     if(cached){counts.componentHits++;return cached;}
     counts.componentMisses++;const answer=freeze(componentUncached(observation));
-    if(options.memoize!==false)components.set(key,answer);return answer;
+    if(key!==undefined)components.set(key,answer);return answer;
   },statistics:()=>({...counts,matchEntries:matches.size,componentEntries:components.size})});
 }
 
