@@ -26,11 +26,13 @@ test("the native checker rejects adding an instrument kind without its dispositi
   assert.ok(existsSync(binary),`compiler missing: ${binary}; set NTS_BIN`);
   const dir=testScratch(t, "step-result-typed");
   const source=readFileSync(new URL("./step-result.ts",import.meta.url),"utf8");
-  const policy=source.slice(source.indexOf("export type InstrumentResult"),source.indexOf("export function instrumentPolicy"));
+  const protocol=readFileSync(new URL('../differential/command-entry/instrument.ts',import.meta.url),'utf8');
+  const result=protocol.slice(protocol.indexOf('export type InstrumentResult'),protocol.indexOf('export class ToolingInstrumentError'));
+  const policy=result+source.slice(source.indexOf('type Disposition'),source.indexOf("export function instrumentPolicy"));
   writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{strict:true,target:"ES2022",module:"ESNext",moduleResolution:"bundler",types:[]},files:["main.ts"]}));
   const check=text=>{writeFileSync(join(dir,"main.ts"),text);return spawnTest(binary,["frontend",dir,"--checkers","1","--no-acquire"],{cwd:root,encoding:"utf8",env:fixtureEnvironment(t)});};
   const good=check(policy);assert.equal(good.status,0,good.stdout+good.stderr);
-  const changed=policy.replace('"selector-setup"; step:','"selector-setup" | "unclassified-control"; step:');assert.notEqual(changed,policy);
+  const changed=policy.replace(/(\bkind\s*:\s*)([^;]+)(;)/,'$1$2 | "unclassified-control"$3');assert.notEqual(changed,policy);
   const bad=check(changed);assert.equal(bad.status,2,bad.stdout+bad.stderr);assert.match(bad.stdout+bad.stderr,/unclassified-control/);
 });
 test("an aggregate kill is a budget verdict only when the case is exclusive", () => {
