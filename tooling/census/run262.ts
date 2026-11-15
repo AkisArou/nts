@@ -1,3 +1,4 @@
+import {cargoOutput} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // Build a Test262 file, run it, and report what happened. A conformance run.
 //
@@ -108,8 +109,7 @@ ownTemporary(SCRATCH);
 
 function selection() {
   if (selectionFile) return readFileSync(selectionFile, "utf8");
-  return execFileSync(
-    "cargo",
+  return cargoOutput(
     [
       "run", "-q", "-p", "nts-suite", "--no-default-features",
       "--bin", "nts-test262-protocol", "--", "select", SUITE, under,

@@ -1,3 +1,4 @@
+import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {childTemporary,oracleToolchainLocation} from "../gate/canonical-environment.ts";
 // Explicit recording only. Plans come from the checker's actual population;
@@ -529,7 +530,7 @@ async function recordNamed(names: string[]) {
     // The build's temporary is its own: inside a canonical context, in the
     // run's registered temporary and registered there (childTemporary).
     const temporary = childTemporary({ ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "4" }, join(cache, "tmp"), "plan-build-");
-    const build = spawnSync("sh", ["-c", "ulimit -c 0; exec nice -n 19 taskset -c 0-3,6-31 cargo build --profile nts-dev -p nts-differential --bin oracle-plan"], {
+    const build = spawnSync("sh", ["-c", 'ulimit -c 0; exec nice -n 19 taskset -c 0-3,6-31 "$1" "$2" build --profile nts-dev -p nts-differential --bin oracle-plan',"oracle-plan-build",process.execPath,CARGO_OWNER], {
       cwd: root, stdio: "inherit", env: temporary.env,
     });
     rmSync(temporary.dir, { recursive: true, force: true });

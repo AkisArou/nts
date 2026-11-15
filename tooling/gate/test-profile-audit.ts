@@ -6,6 +6,8 @@ import {SourceFacts} from './source-facts.ts';
 
 export const CARGO_TEST_SOURCE_OWNERS={
   'tooling/gate/test-profile.ts':'constructs and executes every production test build',
+  'tooling/gate/cargo.ts':'executes the invocation selected by the profile owner, without selecting a test profile',
+  'tooling/gate/cargo.test.ts':'private configuration-refusal arms never select an alternative production test profile',
   'tooling/gate/test-artifacts.test.ts':'isolated Cargo cache-pruning controls must manufacture obsolete profiles and incremental variants',
 } as const;
 
@@ -16,8 +18,9 @@ export function inspectCargoTestCalls(file:string,source:string,root:Node|Source
   const literal=(node:Node|undefined):string|undefined=>{const item=value(node);return item&&ast.isStringLiteralLikeNode(item)?item.text:undefined;};
   const add=(node:Node)=>problems.push(file+':'+(offset+facts.line(node.pos))+': cargo test must run through test-profile.ts');
   for(const node of facts.calls){
-    if(ast.isCallExpression(node)&&literal(node.arguments[0])==='cargo'){
-      const args=value(node.arguments[1]),first=args&&ast.isArrayLiteralExpression(args)?literal(args.elements[0]):undefined;
+    const guarded=/(?:^|\/)cargo\.ts\.(?:cargoSync|cargoOutput)$/.test(facts.name(node.expression));
+    if(ast.isCallExpression(node)&&(literal(node.arguments[0])==='cargo'||guarded)){
+      const args=value(node.arguments[guarded?0:1]),first=args&&ast.isArrayLiteralExpression(args)?literal(args.elements[0]):undefined;
       // Unknown command arrays cannot certify that the helper excludes tests.
       if(first===undefined||first==='test')add(node);
     }

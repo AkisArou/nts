@@ -1,3 +1,4 @@
+import {CARGO_OWNER} from '../gate/cargo.ts';
 // Every feature classification, checked against the suite and the ledger.
 //
 //   node tooling/census/audit.ts [--selection <jsonl>] [--under <prefix>]
@@ -125,8 +126,8 @@ function selection() {
   if (selectionFile) return readFileSync(selectionFile, "utf8");
   const protocol = process.env.NTS_TEST262_PROTOCOL;
   return execFileSync(
-    protocol ?? "cargo",
-    protocol ? ["select", SUITE, under] : [
+    protocol ?? process.execPath,
+    protocol ? ["select", SUITE, under] : [CARGO_OWNER,
       "run", "-q", "-p", "nts-suite", "--no-default-features",
       "--bin", "nts-test262-protocol", "--", "select", SUITE, under,
     ],

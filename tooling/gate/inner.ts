@@ -1,3 +1,4 @@
+import {CARGO_OWNER,cargoSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
@@ -104,12 +105,12 @@ export function cpusOffMeasurement(count: number = availableParallelism()): stri
 }
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
-  const result = spawnSync(command, args, { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } });
+  const result = (command==="cargo"?cargoSync(args,{cwd:ROOT,stdio:"inherit",env:{...launchEnvironment,...env}}):spawnSync(command, args, { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } }));
   return result.status ?? 1;
 }
 
 function text(command: string, args: readonly string[]): string {
-  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8" });
+  const result = command==="cargo"?cargoSync(args,{cwd:ROOT,encoding:"utf8",env:launchEnvironment}):spawnSync(command, args, { cwd: ROOT, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")}: ${result.stderr.trim()}`);
   }
@@ -133,7 +134,8 @@ const CARGO_WORKERS = defaultSlots(hostObservations().availableWidth());
  */
 function heavy(phase: Phase, command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
   const most = Math.min(parseBytes(phase.memoryMax), machineMemory().totalBytes - SYSTEM_FLOOR_BYTES);
-  const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), command, ...args];
+  const invocation=command==="cargo"?[process.execPath,CARGO_OWNER,...args]:[command,...args];
+  const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), ...invocation];
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
     ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${phase.memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;

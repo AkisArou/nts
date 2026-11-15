@@ -140,7 +140,7 @@ done
 # `NTS_SKIP_CLIPPY=1` for a commit that has to happen anyway, which is a
 # decision worth having to type.
 if [ -z "${NTS_SKIP_CLIPPY-}" ] && command -v cargo > /dev/null 2>&1; then
-  if ! cargo clippy --workspace --all-targets > /tmp/nts-commit-clippy.$$ 2>&1; then
+  if ! node tooling/gate/cargo.ts clippy --workspace --all-targets > /tmp/nts-commit-clippy.$$ 2>&1; then
     # A *build* failure is not a lint failure, and with three sessions in one
     # checkout it is often somebody else's edit landing mid-run. Still a
     # refusal -- committing against a workspace that does not build means the

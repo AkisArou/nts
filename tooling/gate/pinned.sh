@@ -144,9 +144,9 @@ cd "$tree"
 # carry into run.mjs, whose admission discards the exited build owner.
 if [ -x /usr/bin/time ] && [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
   CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- \
-    /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" cargo build --release -q
+    /usr/bin/time -f '%e %U %S' -o "$NTS_GATE_RUN_DIR/prepare.cpu" node "$pinned_launcher/tooling/gate/cargo.ts" build --release -q
 else
-  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- cargo build --release -q
+  CARGO_TARGET_DIR="$target" node "$pinned_launcher/tooling/gate/admit.ts" --key pinned-build --what "pinned release preparation $sha" -- node "$pinned_launcher/tooling/gate/cargo.ts" build --release -q
 fi
 NTS_CHECKERS=1 \
 NTS_BIN="$target/release/nts" \

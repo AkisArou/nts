@@ -1,3 +1,4 @@
+import {withCargoConfigurationSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Portable identity of the canonical environment in which a step was checked.
 // Run allocations belong in the original report, while this identity survives
@@ -87,7 +88,8 @@ export function verdictContract(report: EnvironmentReport, facts: Pick<VerdictCo
 }
 
 function command(program: string, args: string[], tree: string, env: NodeJS.ProcessEnv, probe:InfrastructureProbe): string {
-  const result = probe({purpose:"read landing verdict identity",command:program,args,cwd:tree,env,maxBuffer:64<<20});
+  const read=()=>probe({purpose:"read landing verdict identity",command:program,args,cwd:tree,env,maxBuffer:64<<20});
+  const result=program==="cargo"?withCargoConfigurationSync([tree],env,read):read();
   return (result.stdout + result.stderr).trim();
 }
 

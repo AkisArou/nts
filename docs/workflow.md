@@ -631,6 +631,15 @@ conflicting arguments or environment, fixes one checker per test process,
 and keeps `--no-fail-fast`. Cargo's actual compiler-artifact reports must name
 files below the selected profile and test artifacts must have no debug info.
 A successful command without artifact evidence is an instrument failure.
+Every Cargo invocation goes through `tooling/gate/cargo.ts`. Both `config` and
+`config.toml` must be absent from Cargo's working-directory ancestor chain and
+its declared `CARGO_HOME`, before launch and after the child drains. A present
+configuration or an unreadable observation is a named tooling-setup refusal.
+Caller `--config` and working-directory overrides are refused. The complete
+Cargo home remains a shared content cache, including its existing registry,
+download, lock and garbage-collection state. Nothing is copied or relocated.
+The Rust test replay retains this guard through completion, including each
+binary's supplied scratch root; Rust Cargo children must use a checked root.
 The shared source audit rejects direct Cargo test calls in other tooling,
 including shell calls; isolated cache-pruning controls are classified separately
 because they manufacture obsolete artifacts intentionally.
@@ -1657,3 +1666,9 @@ the first node task.
   Missing observations keep it by name; closed uncited folders are reported,
   with deletion held for the user
   ([log](records/notebooks/decisions-log.md#issue-scratch-retention-is-derived-11-15)).
+
+- **Cargo configuration is empty and checked.** The shared Cargo home keeps
+  its complete cache protocol. Cargo's two configuration spellings must be
+  absent throughout every checked cwd chain before launch and after drain;
+  an outside file refuses the run by name rather than changing the build
+  ([log](records/notebooks/decisions-log.md#cargo-configuration-is-checked-11-15)).

@@ -1,8 +1,9 @@
+import {CARGO_OWNER,cargoSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Measure the complete cold inner build set, without running its test cases.
 // Only declared Cargo output roots enter the record; target scratch/evidence
 // never does. --cold explicitly discards these idle build caches through Cargo.
-import {spawn,spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -33,7 +34,7 @@ export async function measureColdBuild(root:string,target:string,env:NodeJS.Proc
   const host=hostObservations(env),outputs=innerBuildOutputs(target);
   assertColdBuildOutputsUnused(outputs);
   const checked=(options:string[])=>{
-    const ran=spawnSync('cargo',['clean',...options],{cwd:root,env,stdio:'inherit'});
+    const ran=cargoSync(['clean',...options],{cwd:root,env,stdio:'inherit'});
     if(ran.error||ran.status!==0)throw Error('cold build cache preparation: '+(ran.error?.message??ran.signal??ran.status));
   };
   // Whole Cargo profiles only: no retained fingerprint may name deleted output.
@@ -47,7 +48,7 @@ export async function measureColdBuild(root:string,target:string,env:NodeJS.Proc
   const clippyOwner=fileURLToPath(new URL('./clippy.ts',import.meta.url));
   const steps=[
     {command:process.execPath,args:[clippyOwner],shown:['node','tooling/gate/clippy.ts']},
-    {command:'cargo',args:['build','--profile',TEST_PROFILE,'-p','nts-cli'],shown:['cargo','build','--profile',TEST_PROFILE,'-p','nts-cli']},
+    {command:process.execPath,args:[CARGO_OWNER,'build','--profile',TEST_PROFILE,'-p','nts-cli'],shown:['cargo','build','--profile',TEST_PROFILE,'-p','nts-cli']},
     {command:process.execPath,args:[testOwner,'workspace','--no-run'],shown:['node','tooling/gate/test-profile.ts','workspace','--no-run']},
   ];
   try{

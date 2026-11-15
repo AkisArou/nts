@@ -1,3 +1,4 @@
+import {CARGO_OWNER} from './cargo.ts';
 // Every Rust test build uses this owner, including rustdoc and shell callers.
 // Cargo's JSON reports prove the files came from the selected profile; the
 // manifest and environment checks also cover settings absent from that report.
@@ -92,7 +93,7 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   assertTestInvocation(invocation);
   const release=new DiskCapacity({env:invocation.env}).beginBuild({root:cwd,target:resolve(invocation.profileDirectory,'..'),outputs:['nts-dev']});
   try{
-  const child=spawn('cargo',invocation.args,{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
+  const child=spawn(process.execPath,[CARGO_OWNER,...invocation.args],{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
   let pending='',artifacts=0,buildFinished=false,problem:unknown;
   const artifactRows:unknown[]=[];
   const line=(text:string)=>{

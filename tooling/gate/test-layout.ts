@@ -1,3 +1,4 @@
+import {cargoSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Cargo targets own harnesses; each harness owns its case files. Test bodies
 // stay at their paths. The compiled --list inventory proves a layout change
@@ -7,6 +8,7 @@ import{existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync}from'node:fs'
 import{basename,dirname,join,relative,resolve}from'node:path';
 import{fileURLToPath,pathToFileURL}from'node:url';
 import{inspectRustPidPaths}from'./rust-test-paths.ts';
+import {inspectRustCargoCalls} from './rust-cargo.ts';
 
 export const CORE_TEST_TOPICS=['scalars','numbers','strings','arrays','collections','erasure','interfaces','classes',
   'signatures','dispatch','control','memory','ranges','providers','lowering','modules'] as const;
@@ -23,7 +25,7 @@ const sections=(text:string)=>text.split(/(?=^\[)/m);
 const modulePattern=/#\[path\s*=\s*"([^"\n]+)"\]\s*mod\s+([A-Za-z_]\w*)\s*;/g;
 
 export function cargoPackages(root:string):CargoPackage[]{
-  const ran=spawnSync('cargo',['metadata','--no-deps','--offline','--locked','--format-version','1'],{cwd:root,encoding:'utf8'});
+  const ran=cargoSync(['metadata','--no-deps','--offline','--locked','--format-version','1'],{cwd:root,encoding:'utf8'});
   if(ran.error||ran.status!==0)throw Error('test layout cargo metadata: '+(ran.stderr||ran.error?.message||ran.status));
   const value=JSON.parse(ran.stdout) as {packages?:CargoPackage[]};
   if(!Array.isArray(value.packages)||value.packages.some(pkg=>typeof pkg.id!=='string'||typeof pkg.name!=='string'||typeof pkg.manifest_path!=='string'||!Array.isArray(pkg.targets)))throw Error('invalid test layout package metadata');
@@ -97,7 +99,10 @@ export function assertTestLayout(root:string,packages:readonly CargoPackage[]=ca
   const owned=packages.map(pkg=>normalize(relative(root,dirname(pkg.manifest_path)))+'/');
   for(const file of listed.stdout.split('\0').filter(Boolean)){
     if(['compiler/test-support/scratch.rs','compiler/test-support/self_test.rs'].includes(file)||(!file.includes('/test-support/')&&!owned.some(directory=>file.startsWith(directory))))continue;
-    const source=readFileSync(join(root,file),'utf8');if(!/process\s*::\s*id|getpid|\{pid|current_exe|--exact/.test(source))continue;
+    const source=readFileSync(join(root,file),'utf8');
+    const pkg=packages.filter(pkg=>file.startsWith(normalize(relative(root,dirname(pkg.manifest_path)))+'/')).sort((a,b)=>b.manifest_path.length-a.manifest_path.length)[0];
+    if(pkg)layout.problems.push(...inspectRustCargoCalls(file,source,dirname(pkg.manifest_path),root));
+    if(!/process\s*::\s*id|getpid|\{pid|current_exe|--exact/.test(source))continue;
     for(const site of inspectRustPidPaths(file,source).selfSpawns)if(site.test)layout.problems.push(file+':'+site.line+': use the self_test owner for an exact self-spawn and its libtest count');
     for(const site of inspectRustPidPaths(file,source).paths)if(site.test)layout.problems.push(file+':'+site.line+': test resource is keyed by a process ID; use a per-test scratch owner');
   }

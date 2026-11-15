@@ -3039,3 +3039,15 @@ Missing or invalid end facts use the start rule alone.
 Start-based gap and moved-verified eligibility stay
 with the existing scheduler. Benchmark eligibility remains independent, so it
 can proceed after the completed wide run without another identical attempt.
+
+## Cargo configuration is checked (11-15)
+
+Gate and test Cargo invocations refuse either configuration spelling in their
+working-directory ancestor chain or declared Cargo home, before start and after
+drain. Stable Cargo merges explicit configuration with that search, so an empty
+override cannot remove arbitrary environment or array settings. The complete
+shared Cargo home remains the content cache, including Cargo's own locks and
+garbage-collection state. The owner does not split, copy or relocate it. Rust
+Cargo children keep the checked cwd contract instead of implementing a second
+configuration scanner. A file appearing during an invocation refuses its result;
+an edit followed by an identical restoration between observations is not detected.

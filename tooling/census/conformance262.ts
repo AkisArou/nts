@@ -1,3 +1,4 @@
+import {CARGO_OWNER} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {cacheLocation} from '../gate/cache-capabilities.ts';
 // Every Test262 case under a directory, each given one of five outcomes, with
@@ -339,8 +340,8 @@ if (TYPESCRIPT) {
   try {
     const protocol = process.env.NTS_TEST262_PROTOCOL;
     records = execFileSync(
-      protocol ?? "cargo",
-      protocol ? ["select", SUITE, under] : [
+      protocol ?? process.execPath,
+      protocol ? ["select", SUITE, under] : [CARGO_OWNER,
         "run", "-q", "-p", "nts-suite", "--no-default-features",
         "--bin", "nts-test262-protocol", "--", "select", SUITE, under,
       ],

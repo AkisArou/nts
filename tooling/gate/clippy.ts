@@ -1,5 +1,5 @@
+import {cargoSync} from './cargo.ts';
 // The same Cargo command and cache for contributors, inner and the gate.
-import {spawnSync} from 'node:child_process';
 import {dirname,join} from 'node:path';
 import {runAsCommand} from '../differential/command-entry/main.ts';
 import {assertClippyTarget,clippyTarget} from './build-targets.ts';
@@ -19,7 +19,7 @@ runAsCommand(import.meta.url,()=>{
   const env=clippyEnvironment(args[0]==='--cache'?'cache':'root',process.env,process.cwd());
   const release=new DiskCapacity({env}).beginBuild({root:process.cwd(),target:dirname(env.CARGO_TARGET_DIR!),outputs:['clippy']});
   try{
-  const ran=spawnSync('cargo',CLIPPY_ARGUMENTS,{env,stdio:'inherit'});
+  const ran=cargoSync(CLIPPY_ARGUMENTS,{env,stdio:'inherit'});
   if(ran.error||ran.signal)throw Error('Clippy command: '+(ran.error?.message??'killed by '+ran.signal));
   if(ran.status===0)completeBuild(process.cwd(),'clippy',env.CARGO_TARGET_DIR!);
   return ran.status??2;

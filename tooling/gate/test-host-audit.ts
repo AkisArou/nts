@@ -6,6 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {shellCommands} from './shell-commands.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
+import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
 import {inspectCommandSignals} from './command-signals.ts';
 import type {Node} from 'typescript/ast';
 import {SourceFacts,GeneratedSourceFacts,inspectSourceBatches,sourceSyntax,type SourceInput} from './source-facts.ts';
@@ -183,10 +184,11 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     signals.push(...acceptedRevisionDataProblems(node));
     gitInvocations.push(...inspectGitInvocations(node));
     testProfiles.push(...inspectCargoTestCalls(file,source,node));
+    testProfiles.push(...inspectCargoCalls(file,source,node));
     moduleFacts.set(file,inspectModuleAsync(root,file,source,node));
     copies.push(...inspectFixtureCopies(root,file,source,node));
     publications.push(...inspectRecordPublications(file,source,api,node,
-      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));signals.push(...inspectCommandForwarders(tree,offset));},generated));
+      (text,tree,offset)=>{testProfiles.push(...inspectCargoTestCalls(file,text,tree,offset),...inspectCargoCalls(file,text,tree,offset));gitInvocations.push(...inspectGitInvocations(tree,offset));signals.push(...inspectCommandForwarders(tree,offset));},generated));
     gitInvocations.push(...inspectGeneratedGitShells(generated.shells));
   }};
   try {
@@ -204,7 +206,7 @@ export function auditTestHost(root:string,debt?:HostDebt,gitDebt?:GitDebt){
     }
   };visit('tooling');visit('compiler',true);visit('runtime',true);
   function *sourceInputs():Iterable<SourceInput>{for(const file of inputs)yield {file,source:readFileSync(join(root,file),'utf8'),...(file.endsWith('.sh')?{parseFile:file+'.generated.ts'}:{})};}
-  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh')){testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell));gitInvocations.push(...inspectShellGit(facts.file,facts.source,facts.shell));}sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts));});
+  inspectSourceBatches(api,sourceInputs(),facts=>{if(facts.file.endsWith('.sh')){testProfiles.push(...inspectShellCargoTests(facts.file,facts.source,facts.shell),...inspectShellCargoCalls(facts.file,facts.source,facts.shell));gitInvocations.push(...inspectShellGit(facts.file,facts.source,facts.shell));}sources.set(facts.file,inspectHostSource(facts.file,facts.source,api,inspect,facts));});
   gitInvocations.push(...inspectPythonGit(python));
   const reach=(file:string,seen:Set<string>):void=>{
     if(seen.has(file))return;seen.add(file);

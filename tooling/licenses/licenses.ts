@@ -1,3 +1,4 @@
+import {cargoOutput} from '../gate/cargo.ts';
 // Generate attributions from the compiler's locked closure plus the declared
 // vendored-data inputs; check Cargo.lock without network access, Cargo, or a
 // populated registry cache.
@@ -127,7 +128,7 @@ const vendorPackages = [...visited.values()].filter((p) => !p.source && !ownPack
 const licenceNames = (path: string) => readdirSync(path).filter((name) => /^(?:LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)/i.test(name)).sort();
 
 if (args[0] === "--update") {
-  const metadata = JSON.parse(execFileSync("cargo", ["metadata", "--locked", "--offline", "--format-version", "1"], { cwd: root, maxBuffer: 32 << 20 }).toString());
+  const metadata = JSON.parse(cargoOutput(["metadata", "--locked", "--offline", "--format-version", "1"], { cwd: root, maxBuffer: 32 << 20 }).toString());
   const inventory: Attribution[] = [];
   mkdirSync(join(destination, "texts"), { recursive: true });
   const copy = (source: string, names: string[]): Text[] => [...new Set(names)].sort().map((name) => {

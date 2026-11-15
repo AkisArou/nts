@@ -64,6 +64,10 @@ test('a fixture retains canonical compiler and resource capabilities with a nest
   assert.equal(child.NTS_BIN,'/fixture/compiler');assert.equal(child.NTS_HOST_OBSERVATIONS,memory.NTS_HOST_OBSERVATIONS);
   assert.equal(child.NTS_MEMORY_RESERVATION,'parent');assert.equal(child.NTS_MEMORY_PRIORITY,'landing');assert.equal(child.NTS_GATE_SLOTS,undefined);
   assert.equal(context.owned.NTS_GATE_SLOTS,undefined);assert.equal(context.temporary.path,child.TMPDIR);
+  const cargo=join(root,'private-cargo');
+  const withCargo=testEnvironment({CARGO_HOME:cargo},parent),cargoContext=JSON.parse(withCargo[ENVIRONMENT_CONTEXT]!);
+  assert.equal(cargoContext.owned.CARGO_HOME,cargo);
+  assert.equal(gateEnvironment(withCargo,{run:join(withCargo.TMPDIR!,'nested-run')}).env.CARGO_HOME,cargo);
   assert.ok(child.TMPDIR!.startsWith(parent.TMPDIR!+'/'));assert.equal(context.report.host.HOME,child.HOME);
   const independent=ownMemoryEnv(join(root,'independent'),child),handoff=JSON.parse(independent[ENVIRONMENT_CONTEXT]!);
   assert.equal(independent.NTS_MEMORY_RESERVATION,undefined);assert.equal(handoff.owned.NTS_MEMORY_RESERVATION,undefined);

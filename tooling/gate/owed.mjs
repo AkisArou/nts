@@ -1,3 +1,4 @@
+import {cargoOutput} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 // Which checks does this change owe? Takes the change, not the author's
 // reading of it, and prints the checklist.
@@ -1370,7 +1371,7 @@ export { STEP_SUCCESSORS };
 function cargoCrates(execute = execFileSync) {
   const args = ["metadata", "--format-version", "1", "--no-deps", "--offline"];
   try {
-    const meta = JSON.parse(execute("cargo", args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 }));
+    const meta = JSON.parse(cargoOutput(args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 }, execute));
     const byName = new Map(meta.packages.map((p) => [p.name, rel(dirname(p.manifest_path))]));
     const out = new Map();
     for (const p of meta.packages) {

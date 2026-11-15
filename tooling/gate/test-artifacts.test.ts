@@ -1,3 +1,4 @@
+import {cargoSync} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {testEnvironment} from "./test-environment.ts";
@@ -104,7 +105,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
     writeFileSync(join(root, "build.rs"), 'fn main() { std::fs::write(std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("private.rs"), "pub const VALUE: u8 = 7;").unwrap(); }\n');
     writeFileSync(join(root, "src/lib.rs"), 'include!(concat!(env!("OUT_DIR"), "/private.rs"));\n#[test] fn generated_value() { assert_eq!(VALUE, 7); assert!(format!("{}", std::backtrace::Backtrace::force_capture()).contains("src/lib.rs:")); }\n');
     const cargo = (args: string[], env: Record<string, string> = {}) => {
-      const result = spawnSync("cargo", args, {
+      const result = cargoSync(args, {
         cwd: root, encoding: "utf8",
         env: { ...testEnvironment(), CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: "line-tables-only", CARGO_PROFILE_DEV_OPT_LEVEL: "1", CARGO_TERM_COLOR: "never", ...env },
       });

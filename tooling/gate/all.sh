@@ -247,7 +247,7 @@ reformatted() {
 # pushed past clippy's 100 lines carries `#[expect(clippy::too_many_lines)]`,
 # which goes unfulfilled -- and so red -- the day it is split.
 rust_formatted() {
-  out=$(cargo fmt --check 2>&1) && return 0
+  out=$(node tooling/gate/cargo.ts fmt --check 2>&1) && return 0
   echo "  not formatted:"
   echo "$out" | sed -n -E "s#^Diff in $PWD/(.*):[0-9]+:\$#    \\1#p" | sort -u
   echo "  run: cargo fmt"
@@ -1772,7 +1772,7 @@ test262() {
   if [ -n "${NTS_TEST262_PROTOCOL:-}" ]; then
     out=$("$NTS_TEST262_PROTOCOL" inventory third_party/test262 2>&1)
   else
-    out=$(cargo run -q -p nts-suite --no-default-features \
+    out=$(node tooling/gate/cargo.ts run -q -p nts-suite --no-default-features \
       --bin nts-test262-protocol -- inventory third_party/test262 2>&1)
   fi
   if [ $? -ne 0 ]; then
@@ -2236,7 +2236,7 @@ compile_time_rc() {
   return $status
 }
 
-step "build"   cargo build --release
+step "build"   node tooling/gate/cargo.ts build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
 #

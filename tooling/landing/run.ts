@@ -249,7 +249,7 @@ function buildCompilerAdmitted(options: RunOptions, node: string, launcher: Node
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const slots = machineBudget(cpus().length).slots;
-  const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(slots)];
+  const command = options.build ?? [node, join(options.tree,"tooling/gate/cargo.ts"), "build", "--profile", PROFILE, "--jobs", String(slots)];
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1));
   const r = candidateCommand(node, { tree: options.tree, run: options.run, owned, command: [launch.command, ...launch.args] }, launcher);

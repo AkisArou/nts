@@ -183,7 +183,9 @@ export function hostEnvironment(launcher: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   const host: NodeJS.ProcessEnv = {};
   for (const name of HOST_CAPABILITIES) if (launcher[name] !== undefined) host[name] = launcher[name];
   host.HOME ||= userInfo().homedir;
-  host.CARGO_HOME ||= join(host.HOME, ".cargo");
+  // This is the complete content cache, not configuration authority. cargo.ts
+  // refuses both configuration spellings before and after every invocation.
+  if(launcher[FIXTURE_ENVIRONMENT]===undefined)host.CARGO_HOME ||= join(host.HOME, ".cargo");
   host.RUSTUP_HOME ||= join(host.HOME, ".rustup");
   return host;
 }

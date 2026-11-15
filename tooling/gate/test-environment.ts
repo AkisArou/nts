@@ -35,7 +35,8 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
   const env:NodeJS.ProcessEnv={...FIXED_AMBIENT,NTS_CHECKERS:'1'};
   for(const name of HOST_CAPABILITIES)if(name!=='HOME'&&source[name]!==undefined)env[name]=source[name];
   const account=userInfo().homedir;
-  env.CARGO_HOME??=join(account,'.cargo');env.RUSTUP_HOME??=join(account,'.rustup');
+  if(source[FIXTURE_ENVIRONMENT]===undefined)env.CARGO_HOME??=join(account,'.cargo');
+  env.RUSTUP_HOME??=join(account,'.rustup');
   let context:GateEnvironmentContext|undefined;
   if(source[ENVIRONMENT_CONTEXT]){
     context=JSON.parse(source[ENVIRONMENT_CONTEXT]) as GateEnvironmentContext;
@@ -102,7 +103,7 @@ export function assignTestValues(env:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv):
   const context=JSON.parse(env[ENVIRONMENT_CONTEXT]) as GateEnvironmentContext;
   for(const [name,value] of Object.entries(owned)){
     if(value===undefined)delete context.owned[name];
-    else if(!HOST.has(name)||name==='NTS_ORACLE_TYPESCRIPT'||name==='NTS_ORACLE_DEPENDENCIES')context.owned[name]=value;
+    else if(!HOST.has(name)||(CONTENT_CACHE_ENVIRONMENT as readonly string[]).includes(name)||name==='NTS_ORACLE_TYPESCRIPT'||name==='NTS_ORACLE_DEPENDENCIES')context.owned[name]=value;
   }
   env[ENVIRONMENT_CONTEXT]=JSON.stringify(context);
 }

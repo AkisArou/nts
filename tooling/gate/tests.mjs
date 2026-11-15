@@ -40,12 +40,15 @@ import {assertTestLayout} from './test-layout.ts';
 import {fileObserverArguments,prepareFileObserver} from './file-input-observer.ts';
 import {publishInputTrace,readTestArtifactTargets,readTestBuildStatus,readDoctestCalls} from './rust-test-inputs.ts';
 import {testInvocation} from './test-profile.ts';
+import {cargoConfiguration} from './cargo.ts';
 import {ToolingInstrumentError,publishToolingFailure} from './step-result.ts';
 
 /** @param {unknown} error */
 function traceFailure(error){return new ToolingInstrumentError('tooling-setup','Rust test inputs: '+String(error),{cause:error});}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const cargoGuard=cargoConfiguration([ROOT],process.env);
+registerCommandCloser('Cargo configuration through Rust test replay',{close:()=>cargoGuard.verify()});
 const traceDirectory=process.env.NTS_RUST_INPUT_TRACE;
 /** @type {ReturnType<typeof prepareFileObserver>|undefined} */
 let fileObserver;
@@ -168,6 +171,7 @@ const runOne = (key) =>
     if(artifactTargets&&!target)throw traceFailure('Cargo named no target for '+r.argv[0]);
     const began = Date.now();
     const scratch = new TestScratch(join(work, "scratch"), r.argv[0]);
+    const replayCargoGuard=cargoConfiguration([ROOT,r.cwd,scratch.path],r.env);
     const trace=traceDirectory?join(traceDirectory,'binary-'+recorded.indexOf(r)+'.raw.gz'):undefined;
     const child = spawn(fileObserver?.executable??r.argv[0], trace?fileObserverArguments(trace,r.argv[0],r.argv.slice(1)):r.argv.slice(1), { cwd: r.cwd, env: scratch.environment(r.env), stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
@@ -180,6 +184,11 @@ const runOne = (key) =>
         catch(error){if(isCommandExit(error))throw error;const failure=traceFailure(error);traceFailures.push(failure.message);out+='NOT MEASURED: '+failure.message+'\n';status=2;}
       }
       cost[key] = (Date.now() - began) / 1000;
+      try{replayCargoGuard.verify();}catch(error){
+        if(isCommandExit(error))throw error;
+        const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error),{cause:error});
+        traceFailures.push(failure.message);out+='NOT MEASURED: '+failure.message+'\n';status=2;
+      }
       const leftovers = scratch.finish();
       if (leftovers.length) out += `error: test scratch leaked by ${key} (removed):\n${leftovers.join(", ")}\n`;
       results.set(key, { status: leftovers.length ? 1 : status, signal, out, seconds: cost[key] });

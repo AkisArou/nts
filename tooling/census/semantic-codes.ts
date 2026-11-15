@@ -1,3 +1,4 @@
+import {CARGO_OWNER} from '../gate/cargo.ts';
 import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 // Which checker codes does valid test262 JavaScript draw once the checker
 // type-checks it (`checkJs: true`)? The measurement that decides which of
@@ -56,7 +57,7 @@ let instrument, expectedChecker;
 /** The census's own population: planned records, through the protocol command conformance262 uses. */
 function population(under) {
   const protocol = process.env.NTS_TEST262_PROTOCOL;
-  return execFileSync(protocol ?? "cargo", protocol ? ["select", SUITE, under] : ["run", "-q", "-p", "nts-suite", "--no-default-features", "--bin", "nts-test262-protocol", "--", "select", SUITE, under], {
+  return execFileSync(protocol ?? process.execPath, protocol ? ["select", SUITE, under] : [CARGO_OWNER,"run", "-q", "-p", "nts-suite", "--no-default-features", "--bin", "nts-test262-protocol", "--", "select", SUITE, under], {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,

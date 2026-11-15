@@ -1,3 +1,4 @@
+import {cargoSync} from '../gate/cargo.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 // A compiler binary that says where it came from.
 //
@@ -269,7 +270,7 @@ function build(sha, diff, applied, dir) {
   const state = () => `${git(["rev-parse", "HEAD"], TREE).trim()} ${sha256(git(["diff", "--binary", "--ignore-submodules=all", sha], TREE))}`;
   const before = state();
 
-  const cargo = spawnSync("cargo", ["build", "--release", "-q", "-p", "nts-cli"], {
+  const cargo = cargoSync(["build", "--release", "-q", "-p", "nts-cli"], {
     cwd: TREE,
     stdio: ["ignore", "inherit", "inherit"],
     env: { ...process.env, CARGO_TARGET_DIR: TARGET },

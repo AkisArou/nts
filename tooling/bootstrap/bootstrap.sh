@@ -110,7 +110,7 @@ say "pinned Unicode generator source"
 node tooling/inputs/pinned-inputs.ts --acquire unicode-idna-17
 
 say "cargo build"
-cargo build --release
+node tooling/gate/cargo.ts build --release
 
 if [ "$all" = false ]; then
   say "done"
