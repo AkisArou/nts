@@ -61,6 +61,12 @@ test('declared Program package reads retain finite identity and only repository 
     assert.equal(runtime.classify(descriptor(path),{kind:'mutation',role:'open',readsContent:false,following:'follow'}),undefined);
     const alias={kind:'path' as const,arg:1,dirfdArg:0,name:join(f.root,'undeclared-alias'),raw:'00',anchor:{kind:'absolute' as const},resolution:{state:'resolved' as const,path,components:[{path:join(f.root,'undeclared-alias'),kind:'symlink' as const,dev:'1',ino:'2',link:path}]}};
     assert.equal(runtime.classify(alias,requirement),undefined,'an undeclared source alias stays commit-changeable');
+    const installedAlias={...alias,name:join(f.root,'node_modules/fixture-package/index.d.ts'),resolution:{...alias.resolution,components:[{
+      ...alias.resolution.components[0]!,path:join(f.root,'node_modules/fixture-package'),link:'.pnpm/fixture-package@1.0.0/node_modules/fixture-package',
+    }]}};
+    assert.equal(runtime.classify(installedAlias,requirement)?.kind,'installed-dependency','the verified catalog owns its alias layout even without a Program readlink callback');
+    installedAlias.resolution.components[0]!.link='.pnpm/other';
+    assert.throws(()=>runtime.classify(installedAlias,requirement),/not in the authenticated installation catalog/);
     assert.throws(()=>replayFixtureReaderObservations({...snapshot,observations:installed},f.root,join(f.root,'copy'),new Set(['<entry>'])),/fixture requires its own authenticated installation/);
     const claims=runtimeRepositoryClaims(f.root,snapshot);
     assert.equal(claims.match({kind:'content',following:'follow'},{state:'resolved',path:join(f.root,'pnpm-lock.yaml')}).kind,'uncovered');

@@ -8,7 +8,7 @@ import type {InputSubject} from './rust-test-inputs.ts';
 import type {InputRequirement} from './rust-input-operations.ts';
 import type {TestScratchReceipt} from './test-scratch.ts';
 import type {InputSnapshot} from './module-closure.ts';
-import type {InstalledProjectDependency} from './project-dependencies.ts';
+import {projectDependencies,type InstalledProjectDependency} from './project-dependencies.ts';
 
 export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
   namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
@@ -88,6 +88,7 @@ export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts){
  * only its exact file facts qualify, never an installed-directory prefix. */
 export function runtimeInstalledInputClassifier(root:string,snapshot:InputSnapshot){
   const files=new Map<string,InstalledProjectDependency>(),links=new Map<string,string|null>();
+  const catalogs=new Map<string,ReturnType<typeof projectDependencies>>();
   for(const row of snapshot.observations){
     if(!row.dependency||row.context.entry!=='<entry>'||row.protocol!=='project'||row.dependency.source!==root)continue;
     const {observation,dependency}=row;
@@ -103,8 +104,13 @@ export function runtimeInstalledInputClassifier(root:string,snapshot:InputSnapsh
     const path=subject.kind==='descriptor'?subject.target:resolved?.path;
     if(!path)return;
     const dependency=files.get(path);if(!dependency)return;
-    for(const part of resolved?.components??[])if(part.kind==='symlink'&&inside(root,part.path)
-      &&(part.link===undefined||links.get(part.path)!==part.link))return;
+    for(const part of resolved?.components??[])if(part.kind==='symlink'&&inside(root,part.path)&&(part.link===undefined||links.get(part.path)!==part.link)){
+      if(part.link===undefined)return;
+      const key=JSON.stringify(dependency.catalog);
+      let catalog=catalogs.get(key);if(!catalog){catalog=projectDependencies(root,dependency.catalog);catalogs.set(key,catalog);}
+      if(catalog.state!=='current')throw Error('runtime installed dependency catalog is pending: '+catalog.reason);
+      if(!catalog.match({kind:'readlink',path:part.path,value:part.link}))return;
+    }
     return {kind:'installed-dependency',path,dependency:structuredClone(dependency)};
   }};
 }
