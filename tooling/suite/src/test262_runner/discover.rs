@@ -308,7 +308,7 @@ for path in sorted(paths):
 "#;
 
         let mut child = Command::new("python3")
-            .args(["-c", script])
+            .args(["-B", "-c", script])
             .arg(&root)
             .stdout(Stdio::piped())
             .spawn()
