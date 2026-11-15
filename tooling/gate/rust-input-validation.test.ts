@@ -115,7 +115,7 @@ test('a captured final negative through an alias differs from an intermediate or
   const final=validator.assess(row,part,basis);assert.equal(final.identity?.path,join(root,'data/missing'));assert.equal(final.endpoint?.kind,'claimed');
   assert.equal(final.state,'uncovered','the alias still needs its independent declaration');
   for(const finalComponent of [false,undefined]){
-    const changed=structuredClone(part);assert.ok(changed.kind==='path'&&changed.resolution&&changed.resolution.state!=='unavailable');changed.resolution.finalComponent=finalComponent;
+    const changed:InputSubject=structuredClone(part);assert.ok(changed.kind==='path'&&changed.resolution&&changed.resolution.state!=='unavailable');changed.resolution.finalComponent=finalComponent;
     const result=validator.assess(row,changed,basis);assert.equal(result.endpoint?.kind,'uncovered');
     assert.match(result.endpoint?.kind==='uncovered'?result.endpoint.reason:'',/before its final component/);
   }
