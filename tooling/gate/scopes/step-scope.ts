@@ -8,7 +8,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { checkedUnitName, childSlice, newToolingSlice, unitComponent } from "../tooling-slice.ts";
 import { gateCpus, gateScope, inheritedCpus } from "../affinity.ts";
 import { readStepEntry, type StepEntry } from "./step-entry.ts";
-import { bindsToProperties, ownUnit, stepWorkersSlice } from "./bound-slice.ts";
+import { requireOwnUnit, startBoundSlice, stepWorkersSlice } from "./bound-slice.ts";
 import { claimRunOwner, reapRunOwner, type RunOwner, type RootIdentity } from "./run-owner.ts";
 
 import {CgroupDeparted,HostObservationError,hostObservations,type HostObservations,type CgroupCpu,type PressureReading} from '../host-observations.ts';
@@ -32,28 +32,6 @@ const control = (...args: string[]) => checked("systemctl", ["--user", ...args])
  * used.
  */
 export type StepLimits = { max: number };
-
-function startSlice(slice: string, boundTo: string, limits?: StepLimits): string {
-  let created = false;
-  const memory = limits ? ["MemoryMax", "t", String(limits.max), "MemorySwapMax", "t", "0"] : [];
-  const binds = bindsToProperties(boundTo);
-  try {
-    checked("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
-      "StartTransientUnit", "ssa(sv)a(sa(sv))", slice, "fail", String(3 + memory.length / 3 + binds.length / 4), "Description", "s", "nts owned gate step",
-      "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", ...binds, ...memory, "0"]);
-    created = true;
-    control("start", slice); // Join StartTransientUnit's queued job.
-    const group = control("show", slice, "--property=ControlGroup", "--value");
-    if (!group.startsWith("/") || !group.endsWith(`/${slice}`) || group.split("/").includes("..")) throw new Error("step slice has no exact cgroup identity");
-    return group;
-  } catch (error) {
-    if (created) {
-      try { control("stop", slice); }
-      catch (cleanup) { throw new AggregateError([error, cleanup], `step slice setup and cleanup failed: ${slice}`); }
-    }
-    throw error;
-  }
-}
 
 export function populated(group: string): 0 | 1 {
   const value = /^populated ([01])$/m.exec(readFileSync(`${CGROUP}${group}/cgroup.events`, "utf8"))?.[1];
@@ -158,11 +136,11 @@ export class StepScope {
     this.unit = checkedUnitName(`nts-${unitComponent("s")}.scope`);
     this.supervisorSlice = childSlice(this.slice, "s");
     this.workerSlice = stepWorkersSlice(this.slice);
-    this.group = startSlice(this.slice, root.slice);
+    this.group = startBoundSlice(this.slice, root.slice);
     this.entryPath = join(root.directory, `step-entry-${this.nonce}.json`);
     try {
-      this.supervisorGroup = startSlice(this.supervisorSlice, this.slice, limits);
-      this.workerGroup = startSlice(this.workerSlice, this.slice, limits);
+      this.supervisorGroup = startBoundSlice(this.supervisorSlice, this.slice, limits);
+      this.workerGroup = startBoundSlice(this.workerSlice, this.slice, limits);
       if (!this.group.startsWith(`${root.group}/`) ||
           !this.supervisorGroup.startsWith(`${this.group}/`) || !this.workerGroup.startsWith(`${this.group}/`)) {
         throw new Error("step boundaries escaped their accounting subtree");
@@ -282,9 +260,8 @@ export class GateScopes {
     mkdirSync(this.directory, { recursive: true });
     this.slice = newToolingSlice(false, env);
     this.owner = ownerFile ? claimRunOwner(ownerFile, this.slice, reapPreviousRoot) : undefined;
-    const owner = ownUnit();
-    if (!owner) throw new Error("gate lacks a named systemd owner");
-    this.group = startSlice(this.slice, owner);
+    const owner = requireOwnUnit();
+    this.group = startBoundSlice(this.slice, owner);
     const identity = statSync(`${CGROUP}${this.group}`, { bigint: true });
     this.identity={group:this.group,device:String(identity.dev),inode:String(identity.ino)};
     this.owner?.complete(this.identity);

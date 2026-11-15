@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-import { ownUnit } from "../gate/scopes/bound-slice.ts";
+import { requireOwnUnit, startBoundSlice } from "../gate/scopes/bound-slice.ts";
 import { populated, waitForEmptyCgroup } from "../gate/scopes/step-scope.ts";
 import { stopToolingSlice, toolingSlice } from "../gate/tooling-slice.ts";
 
@@ -22,15 +22,8 @@ async function measure(seconds: number, run: string, slice: string, command: str
     throw new Error("a full-check measurement needs a run, its own slice and a positive wall ceiling");
   }
   const unit = `nts-full-check-measure-${randomUUID()}`;
-  const owner = ownUnit();
+  const owner = requireOwnUnit();
   const deadline = performance.now() + seconds * 1000;
-  const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
-    `--unit=${unit}`, `--slice=${slice}`, `--property=RuntimeMaxSec=${seconds}s`, "--property=TimeoutStopSec=5s",
-    ...(owner ? [`--property=BindsTo=${owner}`, `--property=After=${owner}`] : []),
-    "--", ...command], {
-    // Preserve the candidate's receipt and its open description of the tree lock.
-    stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit", "inherit", "inherit", 3, null, null, null, null, 8] : "inherit",
-  });
   const hold = (reason: string) => {
     console.error(reason);
     try { writeFileSync(join(run, MEASUREMENT_HOLD), reason + "\n"); }
@@ -44,10 +37,19 @@ async function measure(seconds: number, run: string, slice: string, command: str
     try { stopToolingSlice(slice); }
     catch (error) { console.error("full check wall ceiling could not stop its slice:", error); }
   };
-  const timer = setTimeout(expire, seconds * 1000);
+  let timer:NodeJS.Timeout|undefined,acquired=false;
   let status = 124;
   let cleanupFailed = false;
   try {
+    startBoundSlice(slice,owner);acquired=true;
+    const child = spawn("systemd-run", ["--user", "--scope", "--collect", "--quiet", "--expand-environment=no",
+      `--unit=${unit}`, `--slice=${slice}`, `--property=RuntimeMaxSec=${seconds}s`, "--property=TimeoutStopSec=5s",
+      `--property=BindsTo=${owner}`, `--property=After=${owner}`,
+      "--", ...command], {
+      // Preserve the candidate's receipt and its open description of the tree lock.
+      stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit", "inherit", "inherit", 3, null, null, null, null, 8] : "inherit",
+    });
+    timer = setTimeout(expire, seconds * 1000);
     status = await new Promise<number>((resolve, reject) => {
       child.once("error", reject);
       child.once("close", code => resolve(code ?? 1));
@@ -65,7 +67,7 @@ async function measure(seconds: number, run: string, slice: string, command: str
     if (!expired) hold(`full check measurement scope: ${String(error)}`);
   } finally {
     clearTimeout(timer);
-    try { stopToolingSlice(slice); }
+    try { if(acquired)stopToolingSlice(slice); }
     catch (error) {
       cleanupFailed = true;
       if (!expired) hold(`full check measurement cleanup: ${String(error)}`);

@@ -12,6 +12,7 @@ import {join,relative} from "node:path";
 import {randomUUID} from "node:crypto";
 import {publishHung,publishPressure,publishToolingFailure,PressureError,ToolingInstrumentError} from "./step-result.ts";
 import {checkedUnitName,newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
+import {requireOwnUnit,startBoundSlice} from './scopes/bound-slice.ts';
 import {gateCommand} from "./affinity.ts";
 import {memoryEvents,supervisorWorkerBoundary} from "../census/worker-memory.ts";
 import {CommandLiveness} from './command-liveness.ts';
@@ -287,12 +288,16 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   const before=boundary?memoryEvents(boundary.group,true).oom:0;
   const parent=boundary?{...process.env,NTS_TOOLING_SLICE:boundary.slice}:process.env;
   const slice=newToolingSlice(options.fixture,parent),unit=checkedUnitName(`${slice.slice(0,-6)}-f.scope`).slice(0,-6);
+  const owner=requireOwnUnit();
   const temporary=process.env.TMPDIR??join(homedir(),".cache/nts-tooling");mkdirSync(temporary,{recursive:true});
   const directory=mkdtempSync(join(temporary,"tooling-report-")),complete=join(directory,"complete.json"),nonce=randomUUID();
   const request=readToolingRequest({files,idleMs:options.idleMs,execArgv:options.execArgv,complete,nonce});
   const command=gateCommand(process.execPath,[fileURLToPath(import.meta.url),"--worker",JSON.stringify(request)]);
   const env:NodeJS.ProcessEnv={...process.env,NTS_TOOLING_SLICE:slice};
   for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
+  let acquired=false,closed:Promise<number>|undefined,unregister:(()=>void)|undefined,failed=false,primary:unknown;
+  try {
+  startBoundSlice(slice,owner);acquired=true;
   const child=spawn("systemd-run",["--user","--scope","--collect","--quiet",`--unit=${unit}`,`--slice=${slice}`,"--property=OOMPolicy=kill",command.command,...command.args],{
     env,stdio:["ignore","pipe","pipe"],
   });
@@ -301,14 +306,13 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
   process.stderr.write(`tooling scope: ${unit}.scope in ${slice}\n`);
   const stop=()=>stopToolingSlice(slice);
   let ended:string|undefined;
-  const closed=new Promise<number>((resolve,reject)=>{
+  closed=new Promise<number>((resolve,reject)=>{
     child.once("error",error=>{ended=String(error);reject(error);});
     child.once("close",code=>{ended=`tooling file scope closed with status ${code}`;resolve(code??2);});
   });
   // Cancellation stops the owned hierarchy. Its report namespace stays owned
   // until the launcher and all output streams have actually closed.
-  const unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});
-  try {
+  unregister=registerCommandCloser(`tooling workers ${slice}`,{cancel:stop,close:stop,closed:async()=>{await closed;}});
     const [status]=await Promise.all([closed,options.onScope?.(slice,`${unit}.scope`,()=>ended)]);
     let report;
     try { report=JSON.parse(readFileSync(complete,"utf8")); }
@@ -320,8 +324,13 @@ export async function runScopedTooling(files:string[],options:{idleMs?:number;ex
     const result=readToolingCompletion(report,nonce,status);
     if(status===0)rmSync(directory,{recursive:true,force:true});
     return {...result,slice};
-  } finally {
-    try{stop();}finally{await closed;unregister();}
+  } catch(error){failed=true;primary=error;throw error;}
+  finally {
+    const errors:unknown[]=[];
+    try{if(acquired)stopToolingSlice(slice);}catch(error){errors.push(error);}
+    try{if(closed)await closed;}catch(error){errors.push(error);}
+    try{unregister?.();}catch(error){errors.push(error);}
+    if(errors.length)throw new ToolingInstrumentError('tooling-cleanup','tooling slice cleanup failed: '+[...(failed?[primary]:[]),...errors].map(String).join('; '),{cause:new AggregateError([...(failed?[primary]:[]),...errors])});
   }
 }
 /** The run's file times, after its tests' own report: a command line's run, never a fixture's. */
