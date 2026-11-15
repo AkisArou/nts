@@ -26,7 +26,7 @@ export function prepareObserverImageReader(){
   const recipe={sha256:sha(JSON.stringify(files)),files};
   return {recipe,verify(){for(const row of files)if(sha(readFileSync(row.path))!==row.sha256)throw Error('image-reader source changed: '+row.path);}};
 }
-export function observerImageSession(prepared:ReturnType<typeof prepareObserverImageReader>,receipt:FileObserverReceipt,log:string,env:NodeJS.ProcessEnv){
+export function observerImageSession(prepared:ReturnType<typeof prepareObserverImageReader>,receipt:FileObserverReceipt,log:string,env:NodeJS.ProcessEnv,options:{execArgv?:readonly string[]}={}){
   prepared.verify();
   const cleanups:(()=>void)[]=[],cleanup=(primary?:unknown)=>{
     const errors:unknown[]=[];
@@ -45,7 +45,7 @@ export function observerImageSession(prepared:ReturnType<typeof prepareObserverI
     const input=openSync(toReader,constants.O_RDWR);cleanups.push(()=>closeSync(input));
     const output=openSync(fromReader,constants.O_RDWR);cleanups.push(()=>closeSync(output));
     const descriptor=openSync(log,'wx');cleanups.push(()=>closeSync(descriptor));
-    const child=spawn(process.execPath,[fileURLToPath(ENTRY)],{env,stdio:[input,output,descriptor]});
+    const child=spawn(process.execPath,[...(options.execArgv??[]),fileURLToPath(ENTRY)],{env,stdio:[input,output,descriptor]});
     const ended=new Promise<{status:number|null;signal:NodeJS.Signals|null}>((done,reject)=>{
       child.once('error',reject);child.once('close',(status,signal)=>done({status,signal}));
     });
