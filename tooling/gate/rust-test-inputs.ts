@@ -17,7 +17,7 @@ function fail(message:string):never{throw Error('Rust test inputs: '+message);}
 export function testBuildStatus(value:unknown):number{
   if(!value||typeof value!=='object')fail('missing Cargo artifact evidence');
   const row=value as {version?:unknown;status?:unknown;buildFinished?:unknown;artifacts?:unknown};
-  if(row.version!==1||typeof row.status!=='number'||!Number.isInteger(row.status)||row.status<0||row.status>255
+  if(row.version!==1&&row.version!==2||typeof row.status!=='number'||!Number.isInteger(row.status)||row.status<0||row.status>255
     ||typeof row.buildFinished!=='boolean'||!Array.isArray(row.artifacts))fail('invalid Cargo completion evidence');
   return row.status;
 }
@@ -27,7 +27,7 @@ export function testArtifactTargets(value:unknown,root:string):Map<string,RustTa
   if(!value||typeof value!=='object')fail('missing Cargo artifact evidence');
   const evidence=value as {version?:unknown;status?:unknown;buildFinished?:unknown;artifacts?:unknown};
   testBuildStatus(value);
-  if(evidence.version!==1||evidence.status!==0||evidence.buildFinished!==true||!Array.isArray(evidence.artifacts))fail('incomplete Cargo artifact evidence');
+  if(evidence.version!==1&&evidence.version!==2||evidence.status!==0||evidence.buildFinished!==true||!Array.isArray(evidence.artifacts))fail('incomplete Cargo artifact evidence');
   const targets=new Map<string,RustTarget>();
   for(const row of evidence.artifacts){
     if(!row||typeof row!=='object')fail('invalid Cargo artifact');

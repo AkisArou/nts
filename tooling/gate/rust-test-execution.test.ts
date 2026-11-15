@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {durableRecord} from './durable-record.ts';
-import {testScratch} from './test-scratch.ts';
+import {testScratch,TestScratch} from './test-scratch.ts';
 import {testEnvironment} from './test-environment.ts';
 import {loaderSearch,prepareRustTestExecution,readRustTestExecution,rustTestExecutionClassifier} from './rust-test-execution.ts';
 import {runtimeSubjectValidator} from './rust-input-validation.ts';
@@ -20,7 +20,7 @@ function fixture(t:Parameters<typeof testScratch>[0]){
   const path=join(root,'target','emitted'),source=join(root,'src','lib.rs'),artifacts=join(root,'artifacts.json');
   writeFileSync(source,'');writeFileSync(join(root,'main.c'),'int main(void) { return 0; }\n');
   execFileSync('clang',[join(root,'main.c'),'-o',path],{env,stdio:['ignore','pipe','pipe']});
-  durableRecord(artifacts,{version:1,status:0,buildFinished:true,artifacts:[{package_id:'owned-control',executable:path,profile:{test:true},
+  durableRecord(artifacts,{version:1,status:0,buildFinished:true,artifacts:[{reason:'compiler-artifact',filenames:[path],package_id:'owned-control',executable:path,profile:{test:true},
     target:{name:'control',kind:['test'],src_path:source}}]});
   const cwd=root,argv=[path,'--supplied-call'],environment={...env,LD_LIBRARY_PATH:join(root,'loader')};
   const prepared=prepareRustTestExecution({artifacts,root,cwd,argv,env:environment});
@@ -90,4 +90,14 @@ test('loader directory derivation excludes supported but unsearched capabilities
   assert.ok(search.directories.every(row=>!row.path.includes('owned-disabled')));
   assert.throws(()=>loaderSearch({...loader,libraryPath:'$ORIGIN/unknown'},f.cwd),/token expansion/);
   assert.throws(()=>loaderSearch({...loader,elf:loader.elf+'\n (RUNPATH) [unmodeled]\n'},f.cwd),/RPATH\/RUNPATH/);
+});
+
+test('capture binds creator-owned scratch identities and leaves historical receipt reuse independent of cleanup',t=>{
+  const f=fixture(t),scratch=new TestScratch(join(f.root,'..'),'execution-owned');
+  const prepared=prepareRustTestExecution({artifacts:f.artifacts,root:f.root,cwd:f.cwd,argv:f.argv,env:f.env,roots:[scratch.receipt],runStart:scratch.startedAt});
+  const receipt=prepared.finish(f.receipt.raw,42);assert.equal(receipt.version,2);assert.ok(receipt.provenance);
+  assert.deepEqual(receipt.provenance.roots,[scratch.receipt]);assert.ok(receipt.provenance.window.start<=scratch.receipt.createdAt&&receipt.provenance.window.end>=scratch.receipt.createdAt);
+  const file=join(f.root,'owned-execution.json');durableRecord(file,receipt);const bytes=readFileSync(file),reference={path:file,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+  assert.deepEqual(scratch.finish(),[]);assert.deepEqual(readRustTestExecution(reference),receipt);
+  assert.throws(()=>prepared.finish(f.receipt.raw,42),/ENOENT|replaced/,'a capture-time replacement or disappearance cannot publish');
 });

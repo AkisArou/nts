@@ -3,7 +3,7 @@ import {CARGO_OWNER} from './cargo.ts';
 // Cargo's JSON reports prove the files came from the selected profile; the
 // manifest and environment checks also cover settings absent from that report.
 import {spawn} from 'node:child_process';
-import {accessSync,constants,readFileSync,statSync} from 'node:fs';
+import {accessSync,constants,readFileSync,realpathSync,statSync} from 'node:fs';
 import {isAbsolute,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {ToolingInstrumentError} from './step-result.ts';
@@ -17,7 +17,7 @@ export const TEST_INCREMENTAL='1';
 export const TEST_PROFILE_MANIFEST=fileURLToPath(new URL('../../Cargo.toml',import.meta.url));
 export const TEST_ROUTES=['workspace','inner','frontend','doctests'] as const;
 export type TestRoute=typeof TEST_ROUTES[number];
-export type TestInvocation={route:TestRoute;args:string[];env:NodeJS.ProcessEnv;cwd:string;profileDirectory:string};
+export type TestInvocation={route:TestRoute;args:string[];env:NodeJS.ProcessEnv;cwd:string;profileDirectory:string;targetDirectory:string};
 function fail(why:string):never {throw new ToolingInstrumentError('tooling-setup','Rust test profile: '+why);}
 const fields={inherits:'"release"',debug:'0',incremental:'true',lto:'false','codegen-units':'16','overflow-checks':'true','debug-assertions':'true'} as const;
 
@@ -64,7 +64,8 @@ export function testInvocation(route:TestRoute,selection:readonly string[]=[],en
   }else chosen=[...selection];
   const args=['test','--profile',TEST_PROFILE,'--no-fail-fast','--message-format=json',...chosen];
   const targetAt=args.indexOf('--target'),target=targetAt<0?env.CARGO_BUILD_TARGET:args[targetAt+1];
-  const invocation={route,args,env,cwd,profileDirectory:resolve(cwd,env.CARGO_TARGET_DIR??'target',target??'',TEST_PROFILE)};
+  const targetDirectory=resolve(cwd,env.CARGO_TARGET_DIR??'target');
+  const invocation={route,args,env,cwd,targetDirectory,profileDirectory:resolve(targetDirectory,target??'',TEST_PROFILE)};
   assertTestInvocation(invocation);
   return invocation;
 }
@@ -95,13 +96,19 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
   try{
   const child=spawn(process.execPath,[CARGO_OWNER,...invocation.args],{cwd,env:invocation.env,stdio:['inherit','pipe','inherit']});
   let pending='',artifacts=0,buildFinished=false,problem:unknown;
-  const artifactRows:unknown[]=[];
+  const artifactRows:unknown[]=[],buildScripts:unknown[]=[];
   const line=(text:string)=>{
     let value:unknown;
     try{value=JSON.parse(text);}catch{process.stdout.write(text+'\n');return;}
     const event=value as {reason?:unknown;message?:{rendered?:unknown}};
     if(!buildFinished&&event&&typeof event==='object'&&['compiler-artifact','compiler-message','build-script-executed','build-finished'].includes(String(event.reason))){
       try{if(assertTestArtifact(invocation,event)){artifacts++;if(evidence)artifactRows.push(event);}}catch(error){problem??=error;}
+      if(event.reason==='build-script-executed'){
+        const script=event as {package_id?:unknown;out_dir?:unknown};
+        if(typeof script.package_id!=='string'||!script.package_id||typeof script.out_dir!=='string'||!isAbsolute(script.out_dir)
+          ||relative(invocation.profileDirectory,script.out_dir).split(sep).includes('..'))problem??=new ToolingInstrumentError('tooling-setup','Rust test profile: invalid build-script OUT_DIR');
+        else if(evidence)buildScripts.push(event);
+      }
       if(event.reason==='compiler-message'&&typeof event.message?.rendered==='string')process.stdout.write(event.message.rendered);
       if(event.reason==='build-finished'){
         buildFinished=true;
@@ -117,7 +124,8 @@ export async function runTestProfile(route:TestRoute,selection:readonly string[]
     child.once('close',(code,signal)=>{if(signal)reject(new ToolingInstrumentError('tooling-setup','Rust test profile: cargo killed by '+signal));else done(code??2);});
   });
   if(pending)line(pending);
-  if(evidence)durableRecord(evidence.artifacts,{version:1,status,buildFinished,artifacts:artifactRows});
+  if(evidence)durableRecord(evidence.artifacts,{version:2,status,buildFinished,artifacts:artifactRows,buildScripts,
+    buildNamespace:status===0&&artifacts&&buildFinished?realpathSync(invocation.targetDirectory):invocation.targetDirectory});
   if(problem)throw problem;
   if(status===0&&!artifacts)fail(route+' produced no compiler-artifact evidence');
   if(status===0&&!buildFinished)fail(route+' produced no build-finished evidence');

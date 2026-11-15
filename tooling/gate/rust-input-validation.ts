@@ -76,9 +76,11 @@ export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot
 export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string}}){
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
-  const build=options.build?readRustBuildProvenance(options.build):{artifacts:[],outputDirectories:[]};
-  const provenance=runtimeProvenanceClassifier({sourceRoot:capture.root,...build,roots:[]});
-  if(execution&&options.build&&(options.build.sha256!==execution.cargo.sha256||options.build.bytes!==execution.cargo.bytes))
+  const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
+  const build=buildReference?readRustBuildProvenance(buildReference):{artifacts:[],outputDirectories:[]};
+  if(execution?.provenance&&execution.provenance.sourceRoot!==capture.root)throw Error('Rust input validation: capture provenance has a different source root');
+  const provenance=runtimeProvenanceClassifier({sourceRoot:capture.root,...build,roots:execution?.provenance?.roots??[],...(execution?.provenance?{window:execution.provenance.window}:{})});
+  if(execution&&buildReference&&(buildReference.sha256!==execution.cargo.sha256||buildReference.bytes!==execution.cargo.bytes))
     throw Error('Rust input validation: Cargo provenance differs from replay receipt');
   if(execution&&JSON.stringify(execution.target)!==JSON.stringify(capture.target))throw Error('Rust input validation: replay receipt has a different Cargo target');
   const counts={runtimeAttempts:0,subjects:0,reportedSubjects:0,claimed:0,literals:0,gaps:0,probes:0,setupAttempts:0,terminalFacts:0,
@@ -98,7 +100,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     };
     const pool=rustInputReportPool(emit);
     await emit({kind:'validation-start',version:5,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'current-source',
-      provenance:{build:options.build??null,execution:options.execution??null}});
+      provenance:{build:buildReference??null,execution:options.execution??null}});
     receipt=await authenticateRustInputTrace(capture,async row=>{
       if(row.kind==='execution'){images.set(row.id,row);return;}
       if(row.kind==='terminal-fact'){counts.terminalFacts++;return;}

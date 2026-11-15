@@ -8,6 +8,7 @@
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/fs.h>
+#include <linux/magic.h>
 #include <linux/seccomp.h>
 #include <poll.h>
 #include <signal.h>
@@ -24,6 +25,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -539,6 +541,20 @@ static void resolve_attempt_path(pid_t tid, const Bytes *path,
     if (!resolution_component(value, value->path, &info))
       break;
     if (S_ISLNK(info.st_mode)) {
+      // procfs magic links resolve in the calling process, even in a shared
+      // mount/root namespace. Never certify the observer's /proc/self identity.
+      char parent[PATH_BYTES];
+      strcpy(parent, value->path);
+      resolution_parent(parent);
+      struct statfs filesystem;
+      if (statfs(parent, &filesystem)) {
+        value->error = errno;
+        break;
+      }
+      if (filesystem.f_type == PROC_SUPER_MAGIC) {
+        value->error = EOPNOTSUPP;
+        break;
+      }
       ResolutionComponent *component = &value->components[value->count - 1];
       ssize_t count = readlink(value->path, component->link, PATH_BYTES - 1);
       if (count < 0) {

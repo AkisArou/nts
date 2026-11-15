@@ -6,11 +6,12 @@ import {isAbsolute,relative,resolve,sep} from 'node:path';
 import type {CaptureArtifact} from './file-input-observer.ts';
 import type {InputSubject} from './rust-test-inputs.ts';
 import type {InputRequirement} from './rust-input-operations.ts';
+import type {TestScratchReceipt} from './test-scratch.ts';
 
 export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
   namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
   components:{path:string;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string;link?:string}[]};
-export type FreshRootReceipt={path:string;dev:string;ino:string;uid:string;createdAt:number;empty:true};
+export type FreshRootReceipt=TestScratchReceipt;
 export type RuntimeProvenanceFacts={sourceRoot:string;buildNamespace?:string;artifacts:string[];
   outputDirectories:{package:string;path:string}[];roots:FreshRootReceipt[];window?:{start:number;end:number}};
 export type RuntimeProvenanceClass={kind:'owned-output';path:string;root:FreshRootReceipt}

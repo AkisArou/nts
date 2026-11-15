@@ -8,9 +8,25 @@
 // goes with the run. A test run by hand without one uses ~/.cache/nts/tests,
 // never /tmp's tmpfs (AGENTS.md, The machine), and the hourly count names
 // what a stopped test left there.
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import {hostObservations} from './host-observations.ts';
+
+export type TestScratchReceipt={path:string;dev:string;ino:string;uid:string;createdAt:number;empty:true};
+/** The creator witnesses emptiness before handing the namespace to any test. */
+export function createTestScratchRoot(parent:string,prefix:string){
+  const startedAt=hostObservations().wallNow();mkdirSync(parent,{recursive:true});
+  const path=realpathSync(mkdtempSync(join(parent,prefix))),info=lstatSync(path,{bigint:true});
+  if(!info.isDirectory()||info.isSymbolicLink()||readdirSync(path).length)throw Error('test scratch root was not created empty: '+path);
+  const receipt:TestScratchReceipt={path,dev:String(info.dev),ino:String(info.ino),uid:String(info.uid),createdAt:hostObservations().wallNow(),empty:true};
+  return {path,startedAt,receipt};
+}
+export function verifyTestScratchRoot(receipt:TestScratchReceipt):void{
+  const info=lstatSync(receipt.path,{bigint:true});
+  if(!info.isDirectory()||info.isSymbolicLink()||String(info.dev)!==receipt.dev||String(info.ino)!==receipt.ino||String(info.uid)!==receipt.uid||realpathSync(receipt.path)!==receipt.path)
+    throw Error('test scratch root was replaced: '+receipt.path);
+}
 
 export const TEST_SCRATCH_ROOT = join(homedir(), ".cache/nts/tests");
 
@@ -42,14 +58,17 @@ export function testScratch(t: { after(fn: () => void): void }, name: string): s
 
 export class TestScratch {
   readonly path:string;
+  readonly receipt:TestScratchReceipt;
+  readonly startedAt:number;
   constructor(parent:string,binary:string) {
-    mkdirSync(parent,{recursive:true});
-    this.path=mkdtempSync(join(parent,`${basename(binary).replace(/[^a-zA-Z0-9_-]/g,'_')}-`));
+    const root=createTestScratchRoot(parent,`${basename(binary).replace(/[^a-zA-Z0-9_-]/g,'_')}-`);
+    this.path=root.path;this.receipt=root.receipt;this.startedAt=root.startedAt;
   }
   environment(env:NodeJS.ProcessEnv):NodeJS.ProcessEnv {
     return {...env,NTS_TEST_SCRATCH_ROOT:this.path};
   }
   finish():string[] {
+    verifyTestScratchRoot(this.receipt);
     try {
       return readdirSync(this.path).sort().map(name=>join(this.path,name));
     } finally {

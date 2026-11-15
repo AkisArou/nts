@@ -28,13 +28,13 @@ import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/c
 // incremental nts-dev build for this route and every other test route.
 
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts } from "./test-artifacts.ts";
-import { TestScratch } from "./test-scratch.ts";
+import { TestScratch,createTestScratchRoot,verifyTestScratchRoot } from "./test-scratch.ts";
 import { exitAfterOutput } from "../differential/command-entry/main.ts";
 import {assertTestLayout} from './test-layout.ts';
 import {fileObserverArguments,prepareFileObserver} from './file-input-observer.ts';
@@ -70,8 +70,8 @@ try {
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
 const TEST_OWNER = fileURLToPath(new URL("./test-profile.ts", import.meta.url));
 const profileDirectory=testInvocation('workspace',[],process.env,ROOT).profileDirectory;
-const work = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "nts-tests-"));
-registerCommandCloser('scratch gate/tests.mjs',{close:()=>rmSync(work,{recursive:true,force:true})});
+const workRoot=createTestScratchRoot(process.env.TMPDIR??tmpdir(),'nts-tests-'),work=workRoot.path;
+registerCommandCloser('scratch gate/tests.mjs',{close:()=>{verifyTestScratchRoot(workRoot.receipt);rmSync(work,{recursive:true,force:true});}});
 
 const host = /^host: (.+)$/m.exec(spawnSync("rustc", ["-vV"], { encoding: "utf8" }).stdout ?? "")?.[1];
 if (!host) {
@@ -187,7 +187,8 @@ const runOne = (key) =>
     const replayEnvironment=scratch.environment(r.env);
     /** @type {ReturnType<typeof prepareRustTestExecution>|undefined} */
     let execution;
-    try{execution=trace&&artifactFile?prepareRustTestExecution({artifacts:artifactFile,root:ROOT,cwd:r.cwd,argv:r.argv,env:replayEnvironment}):undefined;}
+    try{execution=trace&&artifactFile?prepareRustTestExecution({artifacts:artifactFile,root:ROOT,cwd:r.cwd,argv:r.argv,env:replayEnvironment,
+      roots:[workRoot.receipt,scratch.receipt],runStart:workRoot.startedAt}):undefined;}
     catch(error){
       if(isCommandExit(error))throw error;
       const failure=traceFailure(error);traceFailures.push(failure.message);

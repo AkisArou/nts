@@ -68,7 +68,7 @@ process.exit(7);
   const actual=JSON.parse(readFileSync(capture,'utf8'));
   assert.deepEqual(actual,{args:testInvocation(route,selection,{}).args,incremental:'1',checkers:'1'});
   const reported=JSON.parse(readFileSync(artifacts,'utf8'));
-  assert.equal(reported.version,1);assert.equal(reported.status,7);assert.equal(reported.buildFinished,false);assert.equal(reported.artifacts.length,1);
+  assert.equal(reported.version,2);assert.equal(reported.status,7);assert.equal(reported.buildFinished,false);assert.equal(reported.artifacts.length,1);assert.deepEqual(reported.buildScripts,[]);
   rmSync(capture);
   const refused=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,route],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,CARGO_INCREMENTAL:'0'}});
   assert.equal(refused.status,2,refused.stdout+refused.stderr);
@@ -102,12 +102,16 @@ test('real Cargo artifact reports end before a test can print its own JSON',t=>{
   mkdirSync(join(root,'src'));
   const profile=manifest.split(/(?=^\[)/m).find(part=>part.startsWith('[profile.nts-dev]'));
   writeFileSync(join(root,'Cargo.toml'),'[package]\nname="profile-output"\nversion="0.0.0"\nedition="2024"\n'+profile);
+  writeFileSync(join(root,'build.rs'),'fn main() { std::fs::write(std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).join("owned-input"), "generated").unwrap(); }\n');
   const output='{"reason":"compiler-artifact","filenames":["/subject-output"],"profile":{"debuginfo":2}}';
   writeFileSync(join(root,'src/lib.rs'),'#[test] fn prints_json() { println!("\\n{}", r#"'+output+'"#); }\n');
-  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'workspace','--','--nocapture'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined}});
+  const artifacts=join(root,'artifacts.json');
+  const ran=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,'workspace','--','--nocapture'],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),CARGO_TARGET_DIR:join(root,'target'),CARGO_BUILD_JOBS:'1',CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE:undefined}});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);
   assert.ok(ran.stdout.includes(output),ran.stdout);
   assert.equal(existsSync(join(root,'target/debug')),false);
+  const reported=JSON.parse(readFileSync(artifacts,'utf8'));assert.equal(reported.version,2);assert.equal(reported.buildNamespace,join(root,'target'));
+  assert.ok(reported.buildScripts.some((row:{reason:string;package_id:string;out_dir:string})=>row.reason==='build-script-executed'&&row.package_id.includes('profile-output')&&existsSync(join(row.out_dir,'owned-input'))));
 });
 
 test('an unprepared inner differential invocation names its setup before Cargo or disk admission',t=>{

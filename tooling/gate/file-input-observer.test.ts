@@ -140,6 +140,7 @@ int main(int argc,char **argv) {
   if(unlink(argv[1])||symlink(argv[2],argv[1]))return 2;
   fd=open(argv[1],O_RDONLY);if(fd<0)return 3;close(fd);
   struct stat info; (void)stat(argv[3],&info);(void)stat(argv[4],&info);
+  char link[4096];(void)readlink("/proc/self/exe",link,sizeof(link));
   (void)fstatat(AT_FDCWD,argv[1],&info,AT_SYMLINK_NOFOLLOW);return 0;
 }\n`);
   const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
@@ -157,6 +158,7 @@ int main(int argc,char **argv) {
     assert.ok(value.kind==='path'&&value.resolution&&value.resolution.state!=='unavailable'&&value.resolution.components.some(part=>part.path===alias&&part.kind==='symlink'));}
   const find=(name:string)=>rows.flatMap(row=>row.subjects).find(value=>value.kind==='path'&&value.name===name);
   const absent=find(missing),file=find(blocked);assert.equal(absent?.kind==='path'&&absent.resolution?.state,'missing');assert.equal(file?.kind==='path'&&file.resolution?.state,'not-directory');
+  const magic=find('/proc/self/exe');assert.equal(magic?.kind==='path'&&magic.resolution?.state,'unavailable','procfs magic links cannot certify the observer identity');
   rmSync(outside,{recursive:true});
   assert.equal(opens[0]!.kind==='path'&&opens[0]!.resolution?.state==='resolved'&&opens[0]!.resolution.path,first,'no analysis-time filesystem lookup');
 });
