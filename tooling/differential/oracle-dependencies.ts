@@ -254,14 +254,7 @@ export async function captureDependencies(capability:DependencyCapability,signal
       throw error;
     }finally{
       try{diskLease?.release();}
-      catch(cleanup){
-        const combined=dependencyCleanupFailure(captureFailure,cleanup);
-        // This marker precedes future ready-image reuse, including when the
-        // body published ready successfully before its release was refused.
-        try{publish(failed,{kind:combined instanceof CaseBudgetError?'case-budget':combined instanceof ToolingInstrumentError?combined.kind:'tooling-setup',reason:String(combined),finished:new Date().toISOString()});}
-        catch(publicationError){throw dependencyCleanupFailure({error:combined},publicationError);}
-        throw combined;
-      }
+      catch(cleanup){throw dependencyCleanupFailure(captureFailure,cleanup);}
     }
   }catch(error){recordCall('held');throw error;}finally{lock.close();}
 }

@@ -147,13 +147,17 @@ for(const failedProducer of [false,true])test((failedProducer?'failed producer':
   let observed:unknown;
   try{await captureDependencies(cap,undefined,env);assert.fail('release refusal must not return a successful lifetime');}catch(error){observed=error;}
   assert.match(String(observed),/oracle dependency cleanup failed/);assert.match(String(observed),/version/);
-  const failed=JSON.parse(readFileSync(join(directory,'failed.json'),'utf8'));
   assert.equal(existsSync(join(directory,'ready.json')),!failedProducer);
-  assert.match(failed.reason,/oracle dependency cleanup failed/);assert.match(failed.reason,/version/);
-  if(failedProducer){assert.ok(observed instanceof AggregateError);assert.equal(observed.errors.length,2);assert.match(String(observed.errors[0]),/capture not measured|install|lockfile/);assert.equal(failed.kind,'tooling-setup');}
-  else{assert.ok(observed instanceof ToolingInstrumentError);assert.equal(observed.kind,'tooling-cleanup');assert.equal(failed.kind,'tooling-cleanup');}
   assert.throws(()=>capacity.snapshot(f.parent),/version/,'release did not overwrite incompatible state');
-  await assert.rejects(captureDependencies(cap,undefined,env),error=>error instanceof ToolingInstrumentError&&error.kind===(failedProducer?'tooling-setup':'tooling-cleanup')&&/cleanup failed/.test(error.message));
+  if(failedProducer){
+    assert.ok(observed instanceof AggregateError);assert.equal(observed.errors.length,2);assert.match(String(observed.errors[0]),/capture not measured|install|lockfile/);
+    const failed=JSON.parse(readFileSync(join(directory,'failed.json'),'utf8'));assert.equal(failed.kind,'tooling-setup');assert.doesNotMatch(failed.reason,/cleanup failed/);
+    await assert.rejects(captureDependencies(cap,undefined,env),error=>error instanceof ToolingInstrumentError&&error.kind==='tooling-setup'&&/capture failed/.test(error.message));
+  }else{
+    assert.ok(observed instanceof ToolingInstrumentError);assert.equal(observed.kind,'tooling-cleanup');
+    assert.equal(existsSync(join(directory,'failed.json')),false,'capacity cleanup does not poison a valid image');
+    assert.equal(await captureDependencies(cap,undefined,env),join(directory,'ready.json'),'the next call reuses the ready image without acquiring capacity again');
+  }
 });
 test('canceling an admission wait never owns or leaks temporary bytes',async t=>{
   const f=installFixture(t),cap=f.cap('canceled-disk-wait');
