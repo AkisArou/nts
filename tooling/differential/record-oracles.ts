@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import {reserveJob} from "../gate/memory-ledger.ts";
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
+import {isCommandExit} from './command-entry/main.ts';
 import {oracleIdentity} from "./oracle-services.ts";
 import {oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot} from "./oracle-emit.ts";
 import {COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
@@ -603,5 +604,5 @@ async function main() {
   else throw new Error("usage: record-oracles.ts plan|plan-rc <oracle-plan binary> <fixture root> <evidence dir> [--only=<config>] | record <evidence dir> <count table> | no-oracle <evidence dir> <table> <source> <reason>");
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { if(error instanceof ToolingInstrumentError)publishToolingFailure(error);else publishPressure(error);console.error(error);process.exitCode=1; });
+  main().catch(error => { if(isCommandExit(error))throw error;if(error instanceof ToolingInstrumentError)publishToolingFailure(error);else publishPressure(error);console.error(error);process.exitCode=1; });
 }

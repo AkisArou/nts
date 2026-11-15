@@ -17,6 +17,7 @@ import {ORACLE_HEAP_FLAGS} from '../differential/oracle-execution.ts';
 import {ORACLE_EXECUTION_POLICY} from '../differential/oracle-execution-policy.ts';
 import {gateEnvironment} from './canonical-environment.ts';
 import {hostEnvironment} from './host-environment.ts';
+import {discardRunTemporary} from './run-temporary.ts';
 import {ownMemory} from './test-memory.ts';
 import {spawnTest} from './test-wait.ts';
 import {toolingSlice,toolingSliceArgs} from './tooling-slice.ts';
@@ -325,10 +326,13 @@ process.exit(1);
   const planned=gateEnvironment({...hostEnvironment(fixtureEnvironment(t)),HOME:home},{run:join(home,".cache/gate-run"),owned:{...ownMemory(join(dir,"memory")),PATH:`${bin}:${process.env.PATH}`}});
   const repository=fileURLToPath(new URL("../../",import.meta.url));
   const fixture=readdirSync(join(repository,"tests/programs")).sort().find(name=>existsSync(join(repository,"tests/programs",name,"tsconfig.json")))!;
-  const result=spawnTest(process.execPath,[join(repository,"tooling/differential/record-oracles.ts"),`tests/programs/${fixture}`],{cwd:repository,env:planned.env,encoding:"utf8"});
-  assert.notEqual(result.status,0,result.stdout+result.stderr);
-  assert.match(result.stderr,/building the fixture planner failed/);
-  assert.equal(readFileSync(log,"utf8"),"held\n");
+  try{
+    const result=spawnTest(process.execPath,[join(repository,"tooling/differential/record-oracles.ts"),`tests/programs/${fixture}`],{cwd:repository,env:planned.env,encoding:"utf8"});
+    assert.notEqual(result.status,0,result.stdout+result.stderr);
+    assert.match(result.stderr,/building the fixture planner failed/);
+    assert.equal(readFileSync(log,"utf8"),"held\n");
+  }finally{discardRunTemporary(planned.temporary,planned.env.HOME!);}
+  assert.equal(existsSync(planned.temporary.path),false,'the run owner releases its image before scratch removal');
 });
 
 test("runs past half their CPU bound are a margin row naming what each used, with no count; just under half is measured",async t=>{

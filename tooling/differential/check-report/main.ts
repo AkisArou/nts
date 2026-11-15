@@ -1,4 +1,4 @@
-import {runAsCommand} from '../command-entry/main.ts';
+import {isCommandExit,runAsCommand} from '../command-entry/main.ts';
 import assert from 'node:assert/strict';
 import {withPreparedOracle} from '../../gate/canonical-environment.ts';
 import {runCheck,runConsumer} from '../check-command.ts';
@@ -20,5 +20,5 @@ runAsCommand(import.meta.url,async()=>{
       const {result,exitCode}=await runConsumer(binary,project,requested as 'program'|'benchmark'|'refusal');
       process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exitCode=exitCode;
     }
-  }catch(error){console.error('check NOT MEASURED:',error instanceof Error?error.message:String(error));process.exitCode=reportCheckFailure(error);}
+  }catch(error){if(isCommandExit(error))throw error;console.error('check NOT MEASURED:',error instanceof Error?error.message:String(error));process.exitCode=reportCheckFailure(error);}
 });

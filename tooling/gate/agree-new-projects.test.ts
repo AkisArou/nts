@@ -23,8 +23,9 @@ function fixture(t:{after(fn:()=>void):void}) {
   const memory=ownMemory(join(directory,"memory"));
   Object.assign(env,memory,{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,
     GIT_AUTHOR_NAME:"fixture",GIT_AUTHOR_EMAIL:"fixture@example.invalid",GIT_COMMITTER_NAME:"fixture",GIT_COMMITTER_EMAIL:"fixture@example.invalid"});
+  const gitEnvironment=env;
   const git=(...args:string[])=>{
-    const result=spawnTest("git",gitArguments(args),{cwd:root,env,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();
+    const result=spawnTest("git",gitArguments(args),{cwd:root,env:gitEnvironment,encoding:"utf8"});assert.equal(result.status,0,result.stderr);return result.stdout.trim();
   };
   const put=(path:string,text:string)=>{const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);};
   const header={version:1,generator_version:1,generator_digest:"a".repeat(32),seed:null} as const;
@@ -77,7 +78,7 @@ console.log(JSON.stringify(value));
   });
   const [before,after]=binaries;
   writeFileSync(join(dirname(before),"provenance.json"),JSON.stringify({sha:base,clean:true,applied:null,binary_sha256:createHash("sha256").update(readFileSync(before)).digest("hex")}));
-  env=gateEnvironment({...fixtureEnvironment(t),...env},{run:join(home,'.cache/agree-fixture'),owned:{NTS_AGREE_JOBS:'1',...memory}}).env;
+  env=gateEnvironment(fixtureEnvironment(t),{run:join(home,'.cache/agree-fixture'),owned:{NTS_AGREE_JOBS:'1',...memory}}).env;
   const run=(extra:NodeJS.ProcessEnv={},comparisonBase=base)=>{const child={...env};assignTestValues(child,extra);return spawnTest(process.execPath,[join(root,"tooling/differential/agree.mjs"),before,after,"--only=new-fixture,existing",`--base=${comparisonBase}`],{cwd:root,env:child,encoding:"utf8"});};
   return {root,directory,base,before,after,run,put,git,env};
 }
