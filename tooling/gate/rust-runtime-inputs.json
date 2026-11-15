@@ -12972,6 +12972,8 @@
       "declarations": {
         "imports": [
           "./fixtures/node-loop-driver.cjs",
+          "./fixtures/node-loop-blocked.cjs",
+          "../../gate/case-bound.ts",
           "../../gate/node-deps-elf.ts",
           "../../config/src/index.ts"
         ],

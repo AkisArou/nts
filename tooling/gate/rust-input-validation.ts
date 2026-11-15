@@ -5,12 +5,12 @@ import {OracleFilesystem,type InputIdentity} from '../differential/oracle-filesy
 import type {HostObservation} from '../differential/oracle-runtime.ts';
 import type {InputSnapshot} from './module-closure.ts';
 import type {FileObserverReceipt} from './file-input-observer.ts';
-import type {InputIndexExecution,InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
+import type {InputIndexExecution,InputIndexRow,InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
 import {runtimeInputRequirement,type InputRequirement} from './rust-input-operations.ts';
 import {compileRuntimeRepositoryClaims,type RuntimeClaimAnswer} from './rust-input-claims.ts';
 import {authenticateRustInputTrace,type RustInputCapture} from './rust-input-authentication.ts';
 import {durableRecordStream} from './durable-record.ts';
-import {MAX_OBSERVATION_ROW_BYTES} from './file-input-observer.ts';
+import {MAX_OBSERVATION_ROW_BYTES,type ByteFact} from './file-input-observer.ts';
 import {validateReaderSourceObservations} from './reader-observations.ts';
 import type {RustRuntimeTarget} from './rust-runtime-declarations.ts';
 import {runtimeSourceAnchor} from './rust-source-anchor.ts';
@@ -90,12 +90,41 @@ export function runtimeSubjectValidator(root:string,snapshot:InputSnapshot,optio
 }
 
 export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot};
+/** Diagnostics of authenticated facts only. Continuing in the request's image
+ * proves neither a failed exec nor a successful same-path re-exec. */
+function runtimeExecutionDiagnostics(){
+  const vector=()=>({present:0,missing:0,truncated:0,unreadable:0,null:0,maxBytes:0});
+  const argv=vector(),environment=vector(),requests=new Map<string,{image:number;canceled:boolean;bound:boolean;continued:boolean}>();
+  const pending=new Map<string,string>(),task=(pid:number,birth:string)=>pid+':'+birth;
+  const count=(counts:ReturnType<typeof vector>,fact:ByteFact|undefined)=>{
+    if(!fact){counts.missing++;return;}counts.present++;counts.maxBytes=Math.max(counts.maxBytes,fact.hex.length/2);
+    if(fact.truncated)counts.truncated++;if(fact.error)counts.unreadable++;if(fact.null)counts.null++;
+  };
+  return {observe(row:InputIndexRow){
+    if(row.kind==='exec-request'){
+      count(argv,row.entry.argv);count(environment,row.entry.environment);
+      requests.set(row.attempt,{image:row.image,canceled:row.canceled,bound:false,continued:false});
+      const key=task(row.pid,row.birth);pending.delete(key);if(!row.canceled)pending.set(key,row.attempt);
+    }else if(row.kind==='execution'&&row.argvSource?.kind==='request'){
+      const request=requests.get(row.argvSource.attempt);if(request)request.bound=true;
+    }else if(row.kind==='observation'){
+      const attempt=pending.get(task(row.attempt.tgid,row.attempt.birth)),request=attempt?requests.get(attempt):undefined;
+      if(request&&row.attempt.id!==attempt&&row.image===request.image)request.continued=true;
+    }
+  },summary(){
+    const rows=[...requests.values()],bound=rows.filter(row=>row.bound).length,unbound=rows.filter(row=>!row.bound);
+    return {requests:rows.length,bound,unbound:unbound.length,canceled:rows.filter(row=>row.canceled).length,
+      unboundContinuedSameImage:unbound.filter(row=>row.continued).length,unboundWithoutObservedContinuation:unbound.filter(row=>!row.continued).length,
+      argv:{...argv},environment:{...environment}};
+  }};
+}
 /** Matching is provisional during the exact index pass being authenticated.
  * Atomic publication waits for native/derived equality and terminal drain.
  * There is no second index read whose changed rows could inherit authority.
  * Product status and setup work remain separate from runtime coverage. */
 export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string};memoizeClaims?:boolean;provenanceBoundary?:CapturedBoundaryFactory}){
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>(),installed=new Map<string,ReturnType<typeof runtimeInstalledInputClassifier>>();
+  const executions=runtimeExecutionDiagnostics();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=rustTestExecutionClassifier(execution,capture.root),images=new Map<number,InputIndexExecution>();
   const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
   const build=buildReference?readRustBuildProvenance(buildReference):{artifacts:[],outputDirectories:[]};
@@ -123,6 +152,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
     await emit({kind:'validation-start',version:6,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'capture-identity-or-labelled-history',
       provenance:{build:buildReference??null,execution:options.execution??null}});
     receipt=await authenticateRustInputTrace(capture,async row=>{
+      executions.observe(row);
       if(row.kind==='execution'){images.set(row.id,row);return;}
       if(row.kind==='terminal-fact'){counts.terminalFacts++;return;}
       if(row.kind!=='observation')return;
@@ -195,5 +225,6 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
   },{gzip:true});
   if(!receipt)throw Error('Rust input validation: authentication did not complete');
   return {counts,unresolvedByKind,coverage:counts.gaps||counts.probes?'incomplete' as const:'complete' as const,repositoryCoverage:repositoryCoverage(),indexRowsSha256:receipt.indexRowsSha256,
+    executions:executions.summary(),
     matching:[...validators].map(([source,validator])=>({source,...validator.matchingStatistics()}))};
 }

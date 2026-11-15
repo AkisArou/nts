@@ -235,6 +235,30 @@ test('decision reports count discharged and setup attempts while retaining every
   await readRustInputValidation(setupOutput,row=>{assert.notEqual(row.kind,'setup-attempt');assert.notEqual(row.kind,'runtime-subject');});
 });
 
+test('authenticated execution diagnostics distinguish bindings, continued images and unavailable vectors',async t=>{
+  const root=testScratch(t,'runtime-exec-diagnostics'),raw=join(root,'raw.gz'),index=join(root,'index.gz');
+  const bytes=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
+  const attempt=(id:number,image:string,exec?:{target:string;argv?:ReturnType<typeof bytes>;environment?:ReturnType<typeof bytes>})=>({
+    kind:'attempt',id:String(id),tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0',syscall:exec?'execve':'openat',operation:exec?'exec':'open',
+    outcome:'unknown',canceled:false,factsComplete:true,args:['0','0','0','0','0','0'],cwd:bytes(root),image:bytes(image),argvRead:false,argv:bytes(''),paths:[],dirfds:[],
+    ...(exec?{exec:{source:'syscall-entry',target:bytes(exec.target),argv:exec.argv??bytes(exec.target+'\0'),...(exec.environment?{environment:exec.environment}:{})}}:{})});
+  const rows=[attempt(1,'/first',{target:'/second',environment:bytes('K=V\0')}),attempt(2,'/second'),
+    attempt(3,'/second',{target:'/second',environment:{...bytes('K=V'),truncated:true}}),attempt(4,'/second'),
+    attempt(5,'/second',{target:'/absent',argv:{...bytes(''),error:14}}),attempt(6,'/second'),
+    {...attempt(7,'/second',{target:'/third',environment:{...bytes(''),null:true}}),canceled:true}];
+  const native=[{kind:'start',version:3,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},...rows,
+    {kind:'root-exit',root:1,exit:0,signal:0},
+    {kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:rows.length,errors:0,drainComplete:true,observerSignal:0}];
+  writeFileSync(raw,gzipSync(native.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  const target={source:'crate/src/lib.rs',name:'unit',kind:['test']},capture={raw,index,cwd:root,root,target:{package:'fixture',...target},observer:null};
+  await publishInputTrace({...capture,output:index,observer:undefined});
+  const result=await validateRustInputCapture({capture,output:join(root,'report.gz'),
+    targets:new Map([[target.source,{target:{...target,unitTests:true,doctests:false},snapshot:snapshot([])}]])});
+  assert.deepEqual(result.executions,{requests:4,bound:1,unbound:3,canceled:1,unboundContinuedSameImage:2,unboundWithoutObservedContinuation:1,
+    argv:{present:4,missing:0,truncated:0,unreadable:1,null:0,maxBytes:8},
+    environment:{present:3,missing:1,truncated:1,unreadable:0,null:1,maxBytes:4}});
+});
+
 test('one normalized report preserves every claim and component while repeated syscalls reference it once',async t=>{
   const root=testScratch(t,'runtime-report-pool'),path=join(root,'report.gz'),rows:Record<string,unknown>[]=[];
   const claims:RuntimeInputClaim[]=Array.from({length:100},(_,index)=>({role:'bytes',reader:'reader-'+index,path:'input-'+index}));
