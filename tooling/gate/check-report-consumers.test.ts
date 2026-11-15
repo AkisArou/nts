@@ -114,6 +114,7 @@ if ((process.env.CHECK_MUTATION === 'hang-after-output' && name === 'control') |
 }
 process.exit(status);
 `, { mode: 0o755 });
+  t.diagnostic(JSON.stringify({kind:'oracle-fixture-source',test:t.name,source:root}));
   return { root, compiler };
 }
 
