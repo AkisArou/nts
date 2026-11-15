@@ -111,6 +111,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     cases.set(target, before);
     const result = invoke(serializeTypeScriptRecord({ metadata: recorded.metadata, cases }), row(after));
     assert.equal(result.status, status, result.stdout + result.stderr);
+    assert.ok(existsSync(json),result.stdout+result.stderr);
     const report = JSON.parse(readFileSync(json, "utf8"));
     assert.equal(report.record_version, TYPESCRIPT_OBSERVATIONS_VERSION);
     assert.deepEqual(report.oracleIdentity, sourceOracle);
