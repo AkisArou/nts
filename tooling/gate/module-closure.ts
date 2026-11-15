@@ -29,7 +29,9 @@ export type ReaderObservation={reader:string;context:ReaderContext;protocol:Read
   capability?:InstalledTypeScript|GeneratedProjectCapability;causes:{kind:HostObservation['kind'];path:string}[]};
 /** The canonical graph owns derived facts; the declaration leaf has no parser
  * or oracle dependency in either import direction. */
+export type UnavailableInput={kind:'installation-inputs';reader:string;context:ReaderContext;reason:string};
 export type InputSnapshot={files:string[];runtimeFiles?:string[];ownedFiles:string[];moduleFiles:string[];hostFiles:string[];placingFiles:string[];directories:DirectoryDeclaration[];
+  unavailableInputs?:UnavailableInput[];
   optionalFiles:OptionalFileDeclaration[];memberships:MembershipDeclaration[];observations:ReaderObservation[]};
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -38,6 +40,9 @@ export type ModuleDescriptionRequest={entries:readonly InputEntry[];buildModules
 export type ModuleDescription={snapshot:InputSnapshot;byteInputs:ByteInputDeclaration[]};
 export type ModuleClosureOptions = {sourceRoot?: string; directory?: (declaration: DirectoryDeclaration) => void;
   dependencyCatalog?:DependencyCatalogTrust|null;
+  /** A selector retains an explicit any-change obligation. Every materializing
+   * consumer instead refuses inputs whose population it cannot authenticate. */
+  unavailableInputs?:'conservative'|'refuse';
   generatedTemporaryParent?:string;
   byteInput?:(declaration:ByteInputDeclaration)=>void;
   /** Only an actual Node invocation owner selects this versioned protocol. */
@@ -134,6 +139,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     const files=new Set<string>(),owned=new Set<string>(),moduleFiles=new Set<string>(),hostFiles=new Set<string>(),placing=new Set<string>(),directories:DirectoryDeclaration[]=[];
     const optionalFiles:OptionalFileDeclaration[]=[],memberships:MembershipDeclaration[]=[];
     const observations:ReaderObservation[]=[];
+    const unavailableInputs:UnavailableInput[]=[];
     type Context={entry:string;namespaces:DataNamespaces;entered:Set<string>;host:Set<string>;owned:Set<string>;projects:Set<string>;data:Set<string>;
       compiledImports?:ReadonlyMap<string,readonly string[]>};
     const contexts=new Map<string,Context>();
@@ -171,7 +177,10 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
           for(const name of cargoInputNames(sourceFiles().map(path=>({path}))))visit(context,resolve(root,name),false,false,false);
         }else{
           const installed=readDependencyCatalog(options.dependencyCatalog??null,root);
-          if(installed.state!=='current')throw Error('installation input population is unavailable: '+installed.reason);
+          if(installed.state!=='current'){
+            if(options.unavailableInputs!=='conservative')throw Error('installation input population is unavailable: '+installed.reason);
+            unavailableInputs.push({kind,reader,context:{entry:context.entry,dataNamespaces:{...context.namespaces}},reason:installed.reason});return;
+          }
           for(const pin of installed.catalog.identity.inputs)optionalPresence(context,reader,resolve(root,pin.path));
         }
         return;
@@ -396,7 +405,7 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       if(lstatSync(path).isDirectory())asset(production,'<entry>',path,{path:entry,kind:'module'});
       else visit(production,path,true,true,!buildModules?.files.has(nameOf(path)),buildModules?.files.has(nameOf(path))??false);
     }
-    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations};
+    return {files:[...files].sort(),runtimeFiles:[...runtimeFiles].sort(),ownedFiles:[...owned].sort(),moduleFiles:[...moduleFiles].sort(),hostFiles:[...hostFiles].sort(),placingFiles:[...placing].sort(),directories,optionalFiles,memberships,observations,...(unavailableInputs.length?{unavailableInputs}:{})};
   }
   /** A batch is one transaction, not a graph-lifetime result cache. Compiler
    * requests include their complete recipe and namespace context. Each first

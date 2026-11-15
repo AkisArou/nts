@@ -180,7 +180,7 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
   }
   const dataNamespaces=fixtureNamespaces(grants);
   const dependencyCatalog=options.dependencyCatalog===undefined?sourceCatalog(source):options.dependencyCatalog;
-  const graph = moduleGraph({...options, sourceRoot: source,dependencyCatalog});
+  const graph = moduleGraph({...options, sourceRoot: source,dependencyCatalog,unavailableInputs:'refuse'});
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe(entries);}
   catch(error){throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});}

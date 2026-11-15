@@ -11,7 +11,8 @@ export type FullGateRecord={version:1;files:string[]}|{version:2;files:string[];
 export type InputDirectory={reader:string;directory:string;kind:'module'|'data'|'inspection'|'conservative';files:number;steps:string[];member?:string;fixture?:{entry:string;owner:string}};
 export type ConservativePath={path:string;readers:string[];steps:string[]};
 export type FullGateCensus={version:2;tracked:number;full:FullPath[];unplaced:FullPath[];policy:FullPath[];directories:InputDirectory[];conservative:ConservativePath[];
-  rustSelection?:{allTargets:boolean;decision:RustRecordDecision}};
+  rustSelection?:{allTargets:boolean;decision:RustRecordDecision};
+  unavailableInputs?:(import('./module-closure.ts').UnavailableInput&{steps:string[]})[]};
 
 export function collectFullGateCensus(paths:readonly string[],inspect:(path:string)=>{full:boolean;reasons:string[];policyReasons?:string[]},directories:InputDirectory[]):FullGateCensus {
   const full:FullPath[]=[],unplaced:FullPath[]=[],policy:FullPath[]=[],conservative:ConservativePath[]=[];

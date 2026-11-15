@@ -1692,7 +1692,9 @@ function stepInputGraph(options) {
     const observations=new Map();
     /** @type {Map<string,import('./rust-selector-record.ts').RustSelectorRoles['typedDependencies'][number]&{steps:Set<string>}>} */
     const projectedDependencies=new Map();
-    const modules = moduleGraph({sourceRoot:TREE});
+    /** @type {Map<string,import('./module-closure.ts').UnavailableInput&{steps:Set<string>}>} */
+    const unavailableInputs=new Map();
+    const modules = moduleGraph({sourceRoot:TREE,dependencyCatalog:trust.dependencyCatalog??null,unavailableInputs:'conservative'});
     const directory = (/** @type {import('./module-closure.ts').DirectoryDeclaration|import('./rust-selector-record.ts').RustSelectorRoles['directories'][number]} */ row,/** @type {string} */ step) => {
       const reader=row.reader==="<entry>"?"tooling/gate/all.sh":row.reader;
       const key=[reader,row.directory,row.kind,row.member??"",row.fixture?.entry??"",row.fixture?.owner??"",JSON.stringify(row.context??null)].join("\0");
@@ -1703,7 +1705,11 @@ function stepInputGraph(options) {
       const declaration=directories.get(key)??{...row,reader,steps:new Set()};
       declaration.steps.add(step);directories.set(key,declaration);
     };
-    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'>} */ snapshot,/** @type {string} */ step)=>{
+    const metadata=(/** @type {Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>} */ snapshot,/** @type {string} */ step)=>{
+      for(const row of snapshot.unavailableInputs??[]){
+        const key=JSON.stringify(row),fact=unavailableInputs.get(key)??{...structuredClone(row),steps:new Set()};
+        fact.steps.add(step);unavailableInputs.set(key,fact);
+      }
       for(const row of snapshot.optionalFiles){
         const key=JSON.stringify([row.reader,row.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=optionalFiles.get(key)??{...row,steps:new Set()};fact.steps.add(step);optionalFiles.set(key,fact);
@@ -1726,7 +1732,7 @@ function stepInputGraph(options) {
         if(dependency?.bytes){map.add(dependency.path,step);byteReaders.add(dependency.path,step);}
       }
     };
-    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'>}>} */
+    /** @type {Map<string,{named:string[],other:string[],data?:string[],directories?:import('./module-closure.ts').DirectoryDeclaration[],bytes?:import('./module-closure.ts').ByteInputDeclaration[],metadata?:Pick<import('./module-closure.ts').InputSnapshot,'optionalFiles'|'memberships'|'observations'|'unavailableInputs'>}>} */
     const inferred = new Map();
     const add = (/** @type {string} */ input, /** @type {string} */ step) => { map.add(input, step); };
     try {for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
@@ -1871,9 +1877,9 @@ function stepInputGraph(options) {
       const [, taker, giver] = m;
       if(!taker||!giver)throw new Error("gate input handover has no step name");
       for(const inputs of [map,byteReaders])for(const steps of inputs.values())if(steps.has(giver))steps.add(taker);
-      for(const facts of [directories,optionalFiles,memberships,observations,projectedDependencies])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
+      for(const facts of [directories,optionalFiles,memberships,observations,projectedDependencies,unavailableInputs])for(const row of facts.values())if(row.steps.has(giver))row.steps.add(taker);
     }
-    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,projectedDependencies,rustRecord,allRustSteps,
+    return { reach: map, byteReaders, declared, directories, membership, optionalFiles,memberships,observations,projectedDependencies,unavailableInputs,rustRecord,allRustSteps,
       observationIndex:observations.size?readerObservationIndex(TREE,observations.values(),trackedFiles(),modules.membershipIndex()):undefined,
       projectedIndex:projectedDependencies.size?readerDependencyIndex(projectedDependencies.values(),row=>row.dependency,trackedFiles(),modules.membershipIndex()):undefined,
       membershipIndex:memberships.size?modules.membershipIndex():undefined,tracked:new Set(trackedFiles()) };
@@ -1914,7 +1920,8 @@ export function inputMetadataDeclarations(options){
   return {optionalFiles:[...graph.optionalFiles.values()].map(row=>({...row,context:context(row.context),steps:[...row.steps].sort()})),
     memberships:[...graph.memberships.values()].map(row=>({...row,context:context(row.context),entries:row.entries.map((/** @type {import('./reader-inputs/main.ts').DirectoryEntry} */ entry)=>({...entry})),steps:[...row.steps].sort()})),
     observations:[...graph.observations.values()].map(row=>({...row,context:context(row.context),observation:structuredClone(row.observation),causes:structuredClone(row.causes),steps:[...row.steps].sort()})),
-    dependencies:[...graph.projectedDependencies.values()].map(row=>({...structuredClone(row),steps:[...row.steps].sort()}))};
+    dependencies:[...graph.projectedDependencies.values()].map(row=>({...structuredClone(row),steps:[...row.steps].sort()})),
+    unavailableInputs:[...graph.unavailableInputs.values()].map(row=>({...structuredClone(row),steps:[...row.steps].sort()}))};
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
@@ -2082,6 +2089,8 @@ export function owed(changes,options) {
   // Structural reads precede prose and record precision: a new Markdown child
   // can change an enumeration even though editing its prose cannot.
   const metadataGraph=stepInputGraph(trust);
+  if(changes.length)for(const row of metadataGraph.unavailableInputs.values())
+    add('installation inputs unknown: '+row.reason+' (read by '+row.reader+')',changes[0].path,[...row.steps],{precise:false,wide:true});
   if(changes.length&&metadataGraph.allRustSteps.size)add('Rust installation catalog requires all targets',changes[0].path,[...metadataGraph.allRustSteps],{precise:false,wide:true});
   for(const [row,subjects]of metadataGraph.observationIndex?.affected(changes)??[])
     for(const path of subjects)add(row.observation.kind+' read by '+row.reader,path,[...row.steps],{precise:false,wide:true});
@@ -2312,7 +2321,8 @@ export function selfTest(options) {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(checkedOwed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  const forced=stepInputGraph(trust).allRustSteps;
+  const graph=stepInputGraph(trust),forced=new Set(graph.allRustSteps);
+  for(const row of graph.unavailableInputs.values())for(const step of row.steps)forced.add(step);
   const ordinaryOrder=order.filter(step=>!forced.has(step)||ALWAYS.steps.includes(step));
   if (ordinaryOrder.slice(0, 13).join(" ") !== "build clippy tests rustfmt old-paths test-host tooling-types gate-inputs program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
@@ -2341,6 +2351,7 @@ function main() {
       },inputDirectoryDeclarations(trust));
       const graph=stepInputGraph(trust);
       if(graph.rustRecord)census.rustSelection={allTargets:graph.allRustSteps.size>0,decision:structuredClone(graph.rustRecord)};
+      if(graph.unavailableInputs.size)census.unavailableInputs=inputMetadataDeclarations(trust).unavailableInputs;
       return census;
     },{record:argv.includes("--record"),initialize:argv.includes("--initialize")});
     const {census,problems}=readsRustInputs(allSteps())
