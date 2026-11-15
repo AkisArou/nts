@@ -21,6 +21,8 @@ import type {ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
 import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {cargoInputNames} from './cargo-input-population.ts';
+import {dependencySourceCandidates} from '../inputs/dependency-source-state.ts';
+import {gitStatusInputPopulation,installationStatusCandidates} from '../inputs/dependency-input-names.ts';
 import type {GeneratedProjectCapability} from './generated-project.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 export type ReaderObservation={reader:string;context:ReaderContext;protocol:ReaderProtocol;observation:HostObservation;
@@ -166,14 +168,27 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     function asset(context:Context,reader:string,path:string,input:ReaderInput,host=true):void {
       // Directory URLs may carry a trailing separator. These root descriptors
       // have one lexical representation before containment or equality checks.
-      if(input.kind==='installation-inputs'||input.kind==='cargo-inputs')path=resolve(path);
+      if(['installation-inputs','cargo-inputs','dependency-source-inputs','installation-status-inputs'].includes(input.kind))path=resolve(path);
       if (!inside(root, path)) throw new Error("asset escapes source root: " + path);
       const kind=input.kind;
       // Accepted main blobs have no candidate filesystem or staging role.
       if(kind==='accepted-revision')return;
-      if(kind==='installation-inputs'||kind==='cargo-inputs'){
+      if(kind==='installation-inputs'||kind==='cargo-inputs'||kind==='dependency-source-inputs'||kind==='installation-status-inputs'){
         if(path!==root)throw Error(kind+' must name the canonical source root: '+reader);
-        if(kind==='cargo-inputs'){
+        const statusPopulation=(paths:readonly string[])=>{
+          const population=gitStatusInputPopulation(paths,sourceFiles());
+          for(const name of population.files)optionalPresence(context,reader,resolve(root,name));
+          for(const name of population.controls)optionalPresence(context,reader,resolve(root,name));
+          for(const directory of population.directories){
+            const row:DirectoryDeclaration={reader,directory,kind:'inspection',files:population.files.filter(file=>file.startsWith(directory+'/')),context:{entry:context.entry,dataNamespaces:{...context.namespaces}}};
+            directories.push(row);reportDirectory?.(row);
+          }
+        };
+        if(kind==='dependency-source-inputs'){
+          statusPopulation(dependencySourceCandidates(root));
+        }else if(kind==='installation-status-inputs'){
+          statusPopulation(installationStatusCandidates(sourceFiles()));
+        }else if(kind==='cargo-inputs'){
           for(const name of cargoInputNames(sourceFiles().map(path=>({path}))))visit(context,resolve(root,name),false,false,false);
         }else{
           const installed=readDependencyCatalog(options.dependencyCatalog??null,root);

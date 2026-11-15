@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {spawnSync,execFileSync} from 'node:child_process';
 import {chmodSync,cpSync,copyFileSync,existsSync,readdirSync,renameSync,linkSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,rmSync,utimesSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {dirname,join} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {before,test} from 'node:test';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {dependencyCapability,captureDependencies,dependencyPackageInventory,dependencyInventory,protectDependencyImage,dependencyCleanupFailure,CaseBudgetError,ToolingInstrumentError} from './oracle-dependencies.ts';
@@ -18,6 +18,15 @@ import {waitFor} from '../gate/test-wait.ts';
 
 const key=(root:string)=>createHash('sha256').update(JSON.stringify(dependencyPackageInventory(dependencyInventory(root)))).digest('hex');
 before(setupOracleTestEnvironment);
+test('owned producer fixture retains cold/hit accounting and prepares before a zero-memory consumer',()=>{
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('./oracle-reservation-fixture.ts',import.meta.url))],
+    {env:testEnvironment(),encoding:'utf8',maxBuffer:16*2**20});
+  assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.signal,null);
+  const rows=result.stdout.trim().split('\n').map(line=>JSON.parse(line) as {counts?:number[];modes?:string[];step?:string;zeroMemoryConsumed?:boolean;producerSource:string});
+  assert.ok(rows.some(row=>JSON.stringify(row.counts)==='[1,2,2]'&&JSON.stringify(row.modes)==='["cold","hit"]'));
+  assert.ok(rows.some(row=>row.step==='PASS'&&row.zeroMemoryConsumed===true));
+  assert.ok(rows.every(row=>row.producerSource!==resolve(fileURLToPath(new URL('../..',import.meta.url)))),'the installer executes from its fixture source');
+});
 test('dependency cleanup preserves the original budget or instrument classification and both causes',()=>{
   const cleanup=Error('release refused'),budget=new CaseBudgetError('actual preparation budget'),instrument=new ToolingInstrumentError('tooling-setup','actual missing observation');
   for(const primary of [budget,instrument]){

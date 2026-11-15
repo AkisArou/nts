@@ -3316,3 +3316,13 @@ complete source-population control runs under the existing wide integrity step,
 using the exact tooling-test ownership table and scoped runner. Discovery counts
 that file under its named owner, and edits to it owe integrity. This separates
 selection soundness from the cost of repeatedly discovering the whole graph.
+
+## Oracle consumers require prepared images (11-15)
+
+Rust tests and TypeScript oracle consumers use the canonical parent's sealed
+dependency image and refuse when it is unprepared. They do not invoke an
+installer fallback. Provider selection consumes the inherited seal; acquisition
+and resource proofs belong to one tooling producer fixture executing from its
+own staged Git source. The Git-fence populations and their ignore/attribute
+controls are declared at those execution owners, rather than making every
+Rust test depend on all tooling source through an incidental cold install.

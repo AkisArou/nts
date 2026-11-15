@@ -21,6 +21,20 @@ import {OUTCOME_ORACLE_PRELOADS,outcomeSourceAssets} from "../conformance/outcom
 import {type HostObservation} from './oracle-filesystem.ts';
 import {type EmittedFile,toolchain,oracleExecution,prepareOracle,workspace,execute,prepare,changedSnapshot,boundedCompiler} from './oracle-emit-fixture.ts';
 
+test('an unsealed image refuses before publishing a consumer directory or starting a producer',t=>{
+  const root=workspace(t,{'src/main.ts':'console.log(19);'}),directory=join(root,'unprepared');
+  const raw=process.env.NTS_ORACLE_DEPENDENCIES!;
+  try{
+    const cap=JSON.parse(raw);delete cap.seal;process.env.NTS_ORACLE_DEPENDENCIES=JSON.stringify(cap);
+    assert.throws(()=>new OracleWorker(directory,toolchain),/image is unprepared; run node tooling\/gate\/inner.ts --no-agree or the gate route/);
+    assert.equal(existsSync(directory),false);
+    delete process.env.NTS_ORACLE_DEPENDENCIES;
+    assert.throws(()=>new OracleWorker(directory,toolchain),/image is unprepared; run node tooling\/gate\/inner.ts --no-agree or the gate route/);
+    assert.equal(existsSync(directory),false);
+  }finally{process.env.NTS_ORACLE_DEPENDENCIES=raw;}
+  const prepared=new OracleWorker(directory,toolchain);prepared.close();
+});
+
 test('owner runtime capture follows imports without visiting unrelated package trees',async t=>{
   const root=workspace(t,{
     'src/main.ts':"import {value} from './dependency.mjs';console.log(value);const request=process.argv[2];if(request){try{await import(request);}catch{console.log('caught');}}\n",

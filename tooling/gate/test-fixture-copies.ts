@@ -14,7 +14,6 @@ export const FIXTURE_COPY_EXCLUSIONS:Readonly<Record<string,string>>={
  'tooling/census/typescript-record-cli.test.ts':'Mirrors the entire tooling namespace.',
  'tooling/bench/build-records.test.ts':'Discovers every tooling directory; no selected dependency list.',
  'tooling/records/record-pending-outcomes.test.ts':'Mirrors the entire tooling namespace.',
- 'tooling/differential/oracle-reservation-fixture.ts':'Mirrors the entire tooling namespace.',
  'tooling/differential/oracle-dependencies.test.ts':'Mirrors the entire tooling namespace.',
 };
 // Single entry scripts are checked, not assumed, to have no relative imports

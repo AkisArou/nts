@@ -562,93 +562,30 @@ fn record_sealed_acquisition(capability: &Value, ready: &Utf8Path, wall_ms: f64)
     }
 }
 
-// Capturing installed inputs is run preparation, not the application. The
-// shared helper admits and owns its separately bounded resident build; only
-// completed ready inputs may reach the unchanged two-GiB application command.
-fn prepare_dependencies() -> Result<()> {
-    let Ok(raw) = std::env::var("NTS_ORACLE_DEPENDENCIES") else {
-        return Ok(());
+// The canonical parent prepares and seals installed inputs before tests.
+// A test process only consumes that image; it never starts an installer.
+fn require_prepared_dependencies(
+    raw: Option<&str>,
+    context: Option<&str>,
+) -> Result<(Value, Utf8PathBuf)> {
+    let unprepared = || {
+        anyhow::anyhow!(
+            "oracle dependency image is unprepared; run node tooling/gate/inner.ts --no-agree or the gate route"
+        )
     };
+    let raw = raw.ok_or_else(unprepared)?;
     let capability: Value =
-        serde_json::from_str(&raw).context("invalid oracle dependency capability")?;
-    let source = Utf8Path::new(
-        capability["source"]
-            .as_str()
-            .context("missing oracle dependency source")?,
-    );
-    let directory = Utf8Path::new(
-        capability["directory"]
-            .as_str()
-            .context("missing oracle dependency directory")?,
-    );
-    let helper = source.join("tooling/differential/oracle-dependencies.ts");
-    let expected = digest(include_bytes!("../oracle-dependencies.ts"));
-    if capability["version"] != 1
-        || !source.is_absolute()
-        || !directory.is_absolute()
-        || capability["helperSha256"].as_str() != Some(expected.as_str())
-    {
-        bail!("oracle dependency preparation helper identity mismatch");
-    }
+        serde_json::from_str(raw).context("invalid oracle dependency capability")?;
+    let ready = sealed_dependency_ready(&capability, raw, context)?.ok_or_else(unprepared)?;
+    Ok((capability, ready))
+}
+fn prepare_dependencies() -> Result<()> {
     let began = std::time::Instant::now();
-    if let Some(ready) = sealed_dependency_ready(
-        &capability,
-        &raw,
+    let (capability, ready) = require_prepared_dependencies(
+        std::env::var("NTS_ORACLE_DEPENDENCIES").ok().as_deref(),
         std::env::var("NTS_GATE_ENV_CONTEXT").ok().as_deref(),
-    )? {
-        record_sealed_acquisition(&capability, &ready, began.elapsed().as_secs_f64() * 1000.0);
-        return Ok(());
-    }
-    if digest(&std::fs::read(&helper)?) != expected {
-        bail!("oracle dependency preparation helper identity mismatch")
-    }
-    let mut command = std::process::Command::new("prlimit");
-    command.current_dir(source).args([
-        "--core=0",
-        "--cpu=300:301",
-        "node",
-        helper.as_str(),
-        "--capture",
-        &raw,
-    ]);
-    let mut incomplete = None;
-    let output = super::case_costs::child("oracle.dependencies", || {
-        let finished = super::call_activity::command(
-            super::without_colour(command),
-            super::call_activity::Limits {
-                cpu_seconds: 300.0,
-                // Admission may legitimately wait. The shared capture helper
-                // applies the 120-second idle guard to its admitted build.
-                idle: std::time::Duration::MAX,
-            },
-        )?;
-        incomplete = finished.incomplete;
-        Ok::<_, anyhow::Error>(finished.output)
-    })?;
-    if !output.status.success() || incomplete.is_some() {
-        bail!(
-            "oracle dependency preparation held: {}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    let returned = String::from_utf8_lossy(&output.stdout);
-    let ready = Utf8Path::new(returned.trim());
-    let node_version = ready
-        .parent()
-        .and_then(Utf8Path::file_name)
-        .and_then(|name| name.strip_prefix("node-"))
-        .context("oracle dependency preparation omitted its Node version")?;
-    let image_directory = dependency_node_directory(directory, node_version)?;
-    if ready != image_directory.join("ready.json") {
-        bail!("oracle dependency preparation returned an unowned ready path");
-    }
-    let semantic = std::fs::read(image_directory.join("semantic.json"))?;
-    verify_dependencies(
-        Some(&serde_json::json!({"semanticSha256":digest(&semantic),"nodeVersion":node_version})),
-        Some(&raw),
     )?;
-    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    record_sealed_acquisition(&capability, &ready, began.elapsed().as_secs_f64() * 1000.0);
     Ok(())
 }
 
@@ -1461,6 +1398,19 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn unsealed_dependency_images_refuse_without_a_producer_fallback() {
+        for raw in [
+            None,
+            Some(r#"{"version":1,"source":"/missing-producer","directory":"/missing-image"}"#),
+        ] {
+            let error = require_prepared_dependencies(raw, None).unwrap_err();
+            assert!(error.to_string().contains(
+                "image is unprepared; run node tooling/gate/inner.ts --no-agree or the gate route"
+            ));
+        }
+    }
 
     #[test]
     fn runtime_module_keys_are_canonical_and_bound_to_the_required_entry() {

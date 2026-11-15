@@ -26,6 +26,8 @@ const READER_FACTORIES:Readonly<Record<string,{owner:string;kind:InputKind}>>={
   moduleMembers:{owner:INPUT_OWNER,kind:'members'},
   installationInputs:{owner:INPUT_OWNER,kind:'installation-inputs'},
   cargoInputs:{owner:INPUT_OWNER,kind:'cargo-inputs'},
+  dependencySourceInputs:{owner:INPUT_OWNER,kind:'dependency-source-inputs'},
+  installationStatusInputs:{owner:INPUT_OWNER,kind:'installation-status-inputs'},
   acceptedRevisionData:{owner:'tooling/gate/accepted-revision-data.ts',kind:'accepted-revision'},
 };
 
@@ -251,8 +253,8 @@ export class SourceFacts {
         const owner=!!factory;
         if(owner&&['generatedProject','optionalModule'].includes(factory!.name)&&!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..'))throw Error(factory!.name+' needs a file URL: '+this.file);
         if(!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')
-          &&!(owner&&['directoryMembership','projectMembers','directoryCandidates','conservativeDirectory','installationInputs','cargoInputs'].includes(factory!.name)))continue;
-        if(owner&&['optionalFile','optionalModule','directoryMembership','conservativeDirectory','acceptedRevisionData','installationInputs','cargoInputs'].includes(factory!.name)
+          &&!(owner&&['directoryMembership','projectMembers','directoryCandidates','conservativeDirectory','installationInputs','cargoInputs','dependencySourceInputs','installationStatusInputs'].includes(factory!.name)))continue;
+        if(owner&&['optionalFile','optionalModule','directoryMembership','conservativeDirectory','acceptedRevisionData','installationInputs','cargoInputs','dependencySourceInputs','installationStatusInputs'].includes(factory!.name)
           &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
           throw Error(factory!.name+' needs exactly one URL input: '+this.file);
         if(owner&&factory!.name==='directoryCandidates'){

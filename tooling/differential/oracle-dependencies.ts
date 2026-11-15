@@ -20,6 +20,9 @@ import {reserveJob} from '../gate/memory-ledger.ts';
 import {MemoryRun} from '../census/worker-memory.ts';
 import {CaseBudgetError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {moduleClosure} from '../gate/module-closure.ts';
+import {installationStatusInputs} from '../gate/reader-inputs/main.ts';
+import {installationSelectionPath,installationStatusCandidates,installationStatusPaths} from '../inputs/dependency-input-names.ts';
+export const INSTALLATION_STATUS_INPUTS=installationStatusInputs(new URL('../../',import.meta.url));
 export {CaseBudgetError,ToolingInstrumentError};
 
 const hash=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
@@ -75,12 +78,15 @@ function checked(capability:DependencyCapability){
 }
 
 function cleanInputs(source:string,paths:readonly string[]){
+  void INSTALLATION_STATUS_INPUTS;
+  const candidates=new Set(installationStatusCandidates(git(source,'ls-files','-z','--cached').split('\0').filter(Boolean)));
+  for(const path of paths)if(!candidates.has(path))throw Error('oracle dependency status input was not in its selection population: '+path);
   if(git(source,'status','--porcelain','--untracked-files=all','--',...paths))throw Error('oracle dependency install input is dirty');
 }
 function selectionRows(capability:DependencyCapability,revision:string):string[]{
   return git(capability.source,'ls-tree','-rz','--full-tree',revision).split('\0').filter(row=>{
     const path=row.slice(row.indexOf('\t')+1);
-    return (DEPENDENCY_ROOT_INPUTS as readonly string[]).includes(path)||path.endsWith('/package.json')||path.endsWith('/.npmrc');
+    return installationSelectionPath(path);
   });
 }
 function inputRows(capability:DependencyCapability,paths:string[],metadata=selectionRows(capability,capability.sourceRevision)){
@@ -105,7 +111,7 @@ async function installInputs(capability:DependencyCapability,counts:{pnpmSelecti
     git(capability.source,'archive','--format=tar','--output='+archive,capability.sourceRevision,'--',...selectionPaths);
     execFileSync('tar',['-xf',archive,'-C',tree]);rmSync(archive);
     const selected=await withPackageManager(tree,{workers:1},manager=>identity(tree,{pin:manager.pin,run:args=>{counts.pnpmSelectionCommands++;return manager.run(args);}}));
-    const paths=[...new Set([...selected.inputs.map(input=>input.path),...selected.importers.filter(path=>path!=='.')])].sort();
+    const paths=installationStatusPaths(selected);
     if(paths.some(path=>!path||path==='.'||isAbsolute(path)||!inside(capability.source,resolve(capability.source,path))))throw Error('oracle dependency install input escapes its source');
     const treeRows=inputRows(capability,[...new Set([...paths,...selectionPaths])].sort(),metadata);
     return {version:1,identity:selected,paths,selectionPaths,treeRows,treeSha256:hash(JSON.stringify({paths,selectionPaths,treeRows}))};

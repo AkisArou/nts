@@ -9,7 +9,7 @@ const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('
 
 test('owned installation and Cargo populations share the factory table and retain root URLs',()=>{
   const api=new API();
-  try{for(const [factory,kind]of [['installationInputs','installation-inputs'],['cargoInputs','cargo-inputs']]){
+  try{for(const [factory,kind]of [['installationInputs','installation-inputs'],['cargoInputs','cargo-inputs'],['dependencySourceInputs','dependency-source-inputs'],['installationStatusInputs','installation-status-inputs']]){
     const source=`import {${factory} as own} from './reader-inputs/main.ts';own(new URL('../..',import.meta.url));`;
     const lease=api.createSourceFile('tooling/gate/reader.ts',source);
     try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,[{kind,path:'../..'}]);}finally{lease.dispose();}

@@ -667,6 +667,13 @@ capabilities refuses before Cargo starts and names the contributor command.
 Compile-only `--no-run` invocations need no runtime preparation.
 The complete seal verifier is a node-only leaf, `differential/oracle-seal/main.ts`,
 so checking preparation adds no launcher dependencies to the Rust test steps.
+Rust and TypeScript oracle consumers require that inherited sealed image;
+neither launches a dependency producer when it is absent. A missing seal names
+`inner.ts --no-agree` or the gate route. Acquisition and resource controls
+belong to the tooling producer fixture, which executes from its own staged
+Git source. Staging and production fences never become Rust-test reads of the
+real repository. Git-fence descriptors consume their owner's indexed candidate
+population and its ignore/attribute controls, without executable placement.
 
 The profile is `nts-dev`: no debug info, incremental compilation, overflow
 checks and debug assertions. The owner validates the manifest, refuses
@@ -1901,3 +1908,9 @@ the first node task.
   sampled own CPU. Optional versioned row details survive failures and
   journal recovery without changing old records or throughput verdicts
   ([log](records/notebooks/decisions-log.md#benchmark-build-cpu-has-an-explicit-basis-11-15)).
+
+- **Oracle consumers never produce dependency images.** The canonical parent
+  prepares and seals them before tests. Missing preparation refuses with the
+  owned command; cold/hit and resource proofs execute only in the tooling
+  group's staged producer fixture
+  ([log](records/notebooks/decisions-log.md#oracle-consumers-require-prepared-images-11-15)).

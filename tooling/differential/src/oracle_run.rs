@@ -261,35 +261,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preparation_inside_the_tests_step_asks_the_host_for_no_memory() {
-        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize_utf8()
-            .unwrap();
-        let output = crate::self_test::run_through(
-            "source_contracts::tests::unavailable_bindings_do_not_compare_unexecuted_module_output",
-            |test| {
-                let argv: Vec<_> = std::iter::once(test.get_program())
-                    .chain(test.get_args())
-                    .map(|arg| arg.to_str().expect("UTF-8 test argv"))
-                    .collect();
-                let mut command = Command::new("node");
-                command
-                    .arg(root.join("tooling/differential/oracle-reservation-fixture.ts"))
-                    .arg(serde_json::to_string(&argv).unwrap());
-                command
-            },
-        );
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("\"step\":\"PASS\""));
-    }
-
-    #[test]
     fn the_native_launch_uses_the_shared_population_policy_and_resident_scope() {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")

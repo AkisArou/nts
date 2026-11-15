@@ -788,6 +788,10 @@
                 "kind": "optional-file"
               }
             ]
+          },
+          {
+            "kind": "cargo-inputs",
+            "path": "../../../"
           }
         ]
       }
@@ -12521,9 +12525,7 @@
     {
       "source": "tooling/cli/tests/arguments.rs",
       "declarations": {
-        "imports": [
-          "../../gate/test-memory.ts"
-        ],
+        "imports": [],
         "assets": [
           {
             "kind": "project-config",
@@ -13426,8 +13428,7 @@
       "source": "tooling/differential/src/oracle_run.rs",
       "declarations": {
         "imports": [
-          "../oracle-execution.ts",
-          "../oracle-reservation-fixture.ts"
+          "../oracle-execution.ts"
         ],
         "assets": []
       }

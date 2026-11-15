@@ -9,7 +9,7 @@ export type RustRuntimeTarget=RustInputTarget&{unitTests:boolean;doctests:boolea
 export type RustRuntimeDeclaration={target:RustInputTarget;declarations:ModuleDeclarations};
 export type RustRuntimeReader={source:string;declarations:ModuleDeclarations};
 export type RustRuntimeManifest={version:1;targets:RustRuntimeDeclaration[];readers?:RustRuntimeReader[]};
-const kinds=new Set<InputKind>(['module','data','inspection','conservative','file','optional-file','optional-module','membership','directory-candidates','project-config','project-choice','project-catalogue','project-members','generated-project','fixture','members','installation-inputs','cargo-inputs']);
+const kinds=new Set<InputKind>(['module','data','inspection','conservative','file','optional-file','optional-module','membership','directory-candidates','project-config','project-choice','project-catalogue','project-members','generated-project','fixture','members','installation-inputs','cargo-inputs','dependency-source-inputs','installation-status-inputs']);
 function fail(message:string):never{throw Error('Rust runtime declarations: '+message);}
 function object(value:unknown,purpose:string):Record<string,unknown>{
   if(!value||typeof value!=='object'||Array.isArray(value))fail(purpose+' is not an object');

@@ -563,20 +563,14 @@ export function removeOracleSnapshot(dir:string):void{
 const removeSnapshot=removeOracleSnapshot;
 type DependencyHandle={record:string;sha256:string;image:{source:string;sourceRevision:string;lockfileSha256:string;treeSha256:string;entries:({path:string;kind:string;sha256?:string;target?:string})[]}};
 const dependencyImages=new Map<string,DependencyHandle>();
+const UNPREPARED_ORACLE_IMAGE='oracle dependency image is unprepared; run node tooling/gate/inner.ts --no-agree or the gate route';
 function dependencies():DependencyHandle{
-  const raw=process.env.NTS_ORACLE_DEPENDENCIES;if(!raw)throw Error('oracle dependency capability NTS_ORACLE_DEPENDENCIES is missing');
+  const raw=process.env.NTS_ORACLE_DEPENDENCIES;if(!raw)throw Error(UNPREPARED_ORACLE_IMAGE);
   const cap=JSON.parse(raw);if(cap?.version!==1)throw Error('invalid oracle dependency capability version');
   const sealed=dependencySealReady(cap),key=JSON.stringify([cap.source,cap.sourceRevision,cap.lockfileSha256,cap.helperSha256,cap.directory,process.versions.node,cap.seal??null]);
   const previous=dependencyImages.get(key);if(previous)return previous;
-  let record=sealed;
-  if(!record){
-    const helper=join(cap.source,'tooling/differential',basename(fileURLToPath(new URL('./oracle-dependencies.ts',import.meta.url))));
-    if(hash(readFileSync(helper))!==cap.helperSha256)throw Error('oracle dependency provisioner source mismatch');
-    const run=spawnSync(process.execPath,[helper,'--capture',raw],{encoding:'utf8',maxBuffer:32*2**20});
-    if(run.status!==0||run.signal||run.error)throw Error('oracle dependency capture not measured: '+run.stdout+run.stderr);
-    record=run.stdout.trim();if(record!==join(cap.directory,'node-'+process.versions.node,'ready.json'))throw Error('oracle dependency capture returned an unowned ready path');
-    if(run.stderr)process.stderr.write(run.stderr);
-  }
+  if(!sealed)throw Error(UNPREPARED_ORACLE_IMAGE);
+  const record=sealed;
   const bytes=readFileSync(record),semantic=readFileSync(join(dirname(record),'semantic.json'));
   if(sealed&&(hash(bytes)!==cap.seal.readySha256||hash(semantic)!==cap.seal.semanticSha256))throw dependencySealError(record);
   const image=JSON.parse(bytes.toString('utf8')),packageInventory=JSON.parse(semantic.toString('utf8'));
@@ -850,13 +844,15 @@ export class OracleWorker{
   // A command's snapshot can outlive its helper. A canonical run still wins.
   private readonly resolutionOwnerPid:number;
   constructor(directory:string,toolchain=process.env.NTS_ORACLE_TYPESCRIPT,outputRoots:Iterable<string>=[],resolutionOwnerPid=process.pid){
+    const raw=process.env.NTS_ORACLE_DEPENDENCIES,cap=raw?JSON.parse(raw):null;
+    if(!cap||!dependencySealReady(cap))throw Error(UNPREPARED_ORACLE_IMAGE);
     this.resolutionOwnerPid=resolutionOwnerPid;
     this.outputRoots=new OraclePathPrefixes(outputRoots);
     this.binding=captureToolchain(toolchain);
     // No directory is published before the capability is verified.
     this.identity=oracleIdentityFor(this.binding.identity);
     mkdirSync(directory,{recursive:true});
-    const raw=process.env.NTS_ORACLE_DEPENDENCIES,cap=raw?JSON.parse(raw):null,scope=cap&&ownerRunScope(cap);
+    const scope=ownerRunScope(cap);
     this.privateCache=!scope;
     this.ownerCache=scope?join(scope.directory,'oracle-owners','node-'+process.versions.node,hash(JSON.stringify(this.identity))):mkdtempSync(join(resolve(directory),'owners-'));
     mkdirSync(this.ownerCache,{recursive:true});this.snapshot=join(this.ownerCache,'toolchain');

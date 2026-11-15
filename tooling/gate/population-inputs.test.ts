@@ -3,7 +3,7 @@ import {existsSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test} from 'node:test';
-import {cargoInputs,installationInputs} from './reader-inputs/main.ts';
+import {cargoInputs,installationInputs,dependencySourceInputs,installationStatusInputs} from './reader-inputs/main.ts';
 import {moduleGraph} from './module-closure.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {testScratch} from './test-scratch.ts';
@@ -14,6 +14,38 @@ import {dependencyCache,installDependencies,installationCatalogTrust} from '../i
 import {runtimeRepositoryClaims} from './rust-input-claims.ts';
 import {readDependencyCatalog} from '../inputs/dependency-catalog.ts';
 import {oracleWorkspaceFixture} from '../differential/oracle-workspace-fixture.ts';
+import {dependencySourceCandidates} from '../inputs/dependency-source-state.ts';
+import {installationSelectionPath,installationStatusCandidates,gitStatusInputPopulation} from '../inputs/dependency-input-names.ts';
+
+test('Git fence descriptors follow their indexed owners and retain control-file absences',t=>{
+  const root=testScratch(t,'git-fence-populations');
+  const put=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
+  const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};
+  put('tooling/first.ts','export const value=1;');put('tests/programs/not-tooling.ts','corpus');
+  put('.gitattributes','*.ts text\n');put('package.json','{"private":true}');
+  put('packages/one/package.json','{"name":"one"}');put('packages/one/value.txt','workspace bytes');
+  put('packages/one/.gitignore','ignored\n');git('init','-q');git('add','.');
+  const describe=(kind:'producer'|'installation')=>{
+    const graph=moduleGraph({sourceRoot:root});
+    try{return graph.describe([kind==='producer'?dependencySourceInputs(pathToFileURL(root+'/')):installationStatusInputs(pathToFileURL(root+'/'))]);}
+    finally{graph.close();}
+  };
+  const producer=describe('producer');
+  assert.deepEqual(producer.runtimeFiles!.filter(path=>path.endsWith('.ts')),dependencySourceCandidates(root));
+  assert.ok(producer.runtimeFiles!.includes('.gitattributes'));assert.ok(!producer.files.includes('tests/programs/not-tooling.ts'));
+  assert.ok(producer.optionalFiles.some(row=>row.path==='tooling/.gitignore'&&!row.present));
+  assert.ok(!producer.placingFiles.includes('tooling/first.ts'),'a Git content read never places that module for execution');
+  const installed=describe('installation');
+  for(const path of ['packages/one/package.json','packages/one/value.txt','packages/one/.gitignore'])assert.ok(installed.runtimeFiles!.includes(path),path);
+  assert.ok(installed.directories.some(row=>row.directory==='packages/one'&&row.kind==='inspection'));
+  put('tooling/next.ts','export const value=2;');put('packages/two/package.json','{"name":"two"}');git('add','.');
+  assert.ok(describe('producer').runtimeFiles!.includes('tooling/next.ts'));
+  assert.ok(describe('installation').runtimeFiles!.includes('packages/two/package.json'));
+  const names=['package.json','packages/one/package.json','packages/two/package.json'];
+  assert.ok(names.filter(installationSelectionPath).every(path=>installationStatusCandidates(names).includes(path)));
+  const literal=gitStatusInputPopulation(['space/glob[1]*?.ts'],['space/glob[1]*?.ts','space/glob1ZZ.ts']);
+  assert.deepEqual(literal.files,['space/glob[1]*?.ts']);assert.ok(literal.controls.includes('space/.gitattributes'));
+});
 
 test('oracle workspace staging consumes verified installer pins without unrelated manifests',t=>{
   const source=fileURLToPath(new URL('../..',import.meta.url)),tree=testScratch(t,'oracle-workspace-pins');
