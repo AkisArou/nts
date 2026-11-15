@@ -377,13 +377,13 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
     }
     function visit(context:Context,path:string,enter=true,place=true,host=enter,compileOnly=false,stage=true,select=true):void {
       if (!inside(root, path)) throw new Error("module escapes source root: " + path);
-      const name=nameOf(path);if(!compileOnly)runtimeFiles.add(name);if(stage)staging.add(name);if(select)files.add(name);
+      const name=nameOf(path);if(!compileOnly)runtimeFiles.add(name);if(stage){staging.add(name);owned.add(name);}if(select)files.add(name);
       if(enter?context.entered.has(name)&&(!host||context.host.has(name)):context.owned.has(name)){if(place)placing.add(name);return;}
       if(!ownedSources.has(path)){
         if (!lstatSync(path).isFile() || !inside(root, realpathSync(path))) throw new Error("module is not an owned source file: " + name);
         ownedSources.add(path);
       }
-      context.owned.add(name);owned.add(name);if(place)placing.add(name);
+      context.owned.add(name);if(place)placing.add(name);
       if(!enter)return;
       context.entered.add(name);moduleFiles.add(name);
       if(host){

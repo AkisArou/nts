@@ -222,3 +222,25 @@ test('fixture staging separates fence inspection from reproductive facts with or
   assert.ok(describe([direct]).stagingFiles.includes('tooling/unrelated.ts'));copyModuleClosure([direct],explicit,{sourceRoot:root});
   assert.equal(readFileSync(join(explicit,'.gitignore'),'utf8'),'ignored\n');assert.ok(existsSync(join(explicit,'tooling/unrelated.ts')));
 });
+
+test('data reproduction cannot revive an inspection-only immutable owner inside a private population',t=>{
+  const root=testScratch(t,'inspection-data-owner'),put=(path:string,text:string)=>{mkdirSync(dirname(join(root,path)),{recursive:true});writeFileSync(join(root,path),text);};
+  put('tooling/gate/reader-inputs/main.ts','export const installationStatusInputs=url=>({url});export const dataDirectory=url=>url;export const fileInput=url=>url;');
+  put('tooling/reader.ts',"import {installationStatusInputs,dataDirectory} from './gate/reader-inputs/main.ts';installationStatusInputs(new URL('../',import.meta.url));dataDirectory(new URL('../packages/',import.meta.url));");
+  put('tooling/immutable.ts',"import {fileInput} from './gate/reader-inputs/main.ts';fileInput(new URL('../packages/one/package.json',import.meta.url));");
+  put('packages/one/package.json','{"name":"private-metadata-control"}');
+  const git=(...args:string[])=>{const result=spawnTest('git',gitArguments(args),{cwd:root,encoding:'utf8'});assert.equal(result.status,0,result.stderr);};git('init','-q');git('add','.');
+  const describe=(entries:string[])=>{const graph=moduleGraph({sourceRoot:root});try{return graph.describe(entries);}finally{graph.close();}};
+  const inspected=describe(['tooling/reader.ts']),path='packages/one/package.json';
+  assert.ok(inspected.files.includes(path));assert.ok(inspected.runtimeFiles!.includes(path));assert.ok(inspected.stagingFiles.includes(path));
+  assert.ok(!inspected.ownedFiles.includes(path),'only the data population reproduces this inspection fact');
+  assert.ok(inspected.optionalFiles.some(row=>row.path===path&&row.inspectionOnly),'source validation retains the full inspection fact');
+  const destination=testScratch(t,'inspection-private-copy');
+  copyModuleClosure(['tooling/reader.ts'],destination,{sourceRoot:root,dataNamespaces:{packages:'owned empty package population'}});
+  assert.equal(existsSync(join(destination,path)),false,'private data substitution keeps the population empty');
+  for(const entries of [['tooling/reader.ts','tooling/immutable.ts'],['tooling/immutable.ts','tooling/reader.ts']]){
+    assert.ok(describe(entries).ownedFiles.includes(path),'an actual immutable visit promotes ownership in either order');
+    const promoted=testScratch(t,'inspection-immutable-copy');copyModuleClosure(entries,promoted,{sourceRoot:root,dataNamespaces:{packages:'owned empty package population'}});
+    assert.equal(readFileSync(join(promoted,path),'utf8'),'{"name":"private-metadata-control"}');
+  }
+});

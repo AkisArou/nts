@@ -1306,6 +1306,8 @@ the first node task.
   or Node observations. Nested source/status fence populations are inspection
   only; an explicit population entry stages itself, and any reproductive visit
   promotes a shared path. Source validation keeps the complete observations.
+  Immutable fixture ownership also requires a reproductive owned visit: a data
+  population cannot revive an inspection-only file's immutable ownership.
   Fixture staging finishes before private mutations.
 
 
