@@ -67,23 +67,77 @@ fn loop_guard_distinguishes_kills_from_native_crashes() {
     }
 }
 
-fn loop_control(driver: &Path, addons: &[PathBuf]) -> std::process::Output {
-    // This bounds a wedged instrument, not the amount of time healthy work
-    // must take beside another build. Completion and the checksums decide it.
-    let output = Command::new("timeout")
-        .args(["--signal=KILL", "300", "node"])
+fn loop_command(driver: &Path, addons: &[PathBuf], packet: &Path, bound: &[&str]) -> Command {
+    let mut command = Command::new("node");
+    command
+        .arg(root().join("tooling/gate/case-bound.ts"))
+        .args(bound)
+        .args(["--", "node"])
         .arg(driver)
         .args(addons)
+        .env("NTS_GATE_STEP", "node-loop-control")
+        .env("NTS_GATE_STEP_ATTEMPT", "private")
+        .env("NTS_GATE_STEP_RESULT", packet);
+    command
+}
+
+fn loop_control(driver: &Path, addons: &[PathBuf]) -> std::process::Output {
+    // The shared owner observes CPU and activity until the command drains.
+    // Completion and checksums decide healthy work, with no wall-time window.
+    let dir = directory("node-loop-command");
+    let packet = dir.join("instrument.json");
+    let output = loop_command(driver, addons, &packet, &[])
         .output()
         .expect("start Node loop instrument");
+    let instrument = match std::fs::read_to_string(&packet) {
+        Ok(body) => Some(body),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => panic!(
+            "read private Node loop instrument {}: {error}",
+            packet.display()
+        ),
+    };
     assert!(
-        !loop_instrument_failure(output.status),
-        "INSTRUMENT: Node loop control did not complete within its five-minute wedged guard, or was killed: {}\n{}\n{}",
+        instrument.is_none() && !loop_instrument_failure(output.status),
+        "INSTRUMENT: Node loop control did not complete under the shared CPU/activity supervisor, or was killed: {}\n{}\n{}\n{}",
         output.status,
+        instrument
+            .as_deref()
+            .unwrap_or("no instrumentation receipt"),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
     output
+}
+
+#[test]
+fn a_blocked_loop_driver_is_unmeasured_in_its_private_packet() {
+    let dir = directory("node-loop-blocked");
+    let packet = dir.join("instrument.json");
+    let ready = dir.join("ready");
+    // A short private inactivity policy exercises the actual kernel reader;
+    // no elapsed-time comparison decides this control.
+    let output = loop_command(
+        &root().join("tooling/cli/tests/fixtures/node-loop-blocked.cjs"),
+        &[ready.clone()],
+        &packet,
+        &["--idle", "1"],
+    )
+    .output()
+    .expect("run blocked loop control");
+    assert_eq!(
+        std::fs::read_to_string(&ready).expect("driver entered"),
+        "ready"
+    );
+    assert_eq!(output.status.code(), Some(124), "{output:?}");
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(packet).expect("private instrumentation receipt"))
+            .expect("instrumentation JSON");
+    assert_eq!(receipt["step"], "node-loop-control");
+    assert_eq!(receipt["attempt"], "private");
+    assert_eq!(receipt["kind"], "hung");
+    assert_eq!(receipt["verdict"], "NOT RUN");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not measured: "));
 }
 
 #[test]
