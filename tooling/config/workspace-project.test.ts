@@ -13,11 +13,11 @@ const SOURCE=fileURLToPath(new URL('../../',import.meta.url)),tsc=join(SOURCE,'n
 function fixture(root:string,broken=false){
   const put=(name:string,value:string|object)=>{const file=join(root,name);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,typeof value==='string'?value:JSON.stringify(value));};
   put('tests/workspace/tsconfig.solution.json',{files:[],references:[{path:'lib'},{path:'app'}]});
-  put('tests/workspace/tsconfig.base.json',{compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'bundler',strict:true,types:[]}});
+  put('tests/workspace/tsconfig.base.json',{compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'bundler',strict:true,allowImportingTsExtensions:true,types:[]}});
   put('tests/workspace/lib/tsconfig.json',{extends:'../tsconfig.base.json',compilerOptions:{composite:true,declaration:true,emitDeclarationOnly:true,outDir:'.types',rootDir:'src'},include:['src']});
   put('tests/workspace/lib/src/index.ts',broken?'import {native} from "c:binding"; export const answer:number="wrong";\n':'export const answer:number=42;\n');
   put('tests/workspace/app/tsconfig.json',{extends:'../tsconfig.base.json',compilerOptions:{composite:true,noEmit:true},references:[{path:'../lib'}],include:['src']});
-  put('tests/workspace/app/src/main.ts','import {answer} from "../../lib/src/index"; export const result=answer;\n');
+  put('tests/workspace/app/src/main.ts','import {answer} from "../../lib/src/index.ts"; export const result=answer;\n');
   return projectConfig(pathToFileURL(join(root,'tests/workspace/tsconfig.solution.json')));
 }
 function snapshot(root:string):[string,string][]{
