@@ -76,7 +76,7 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
   if(execution&&JSON.stringify(execution.target)!==JSON.stringify(capture.target))throw Error('Rust input validation: replay receipt has a different Cargo target');
-  const counts={runtimeAttempts:0,subjects:0,claimed:0,literals:0,gaps:0,probes:0,setupAttempts:0,terminalFacts:0,
+  const counts={runtimeAttempts:0,subjects:0,reportedSubjects:0,claimed:0,literals:0,gaps:0,probes:0,setupAttempts:0,terminalFacts:0,
     emittedExecutables:0,loaderProbes:0,repositorySubjects:0,externalSubjects:0,unresolvedSubjects:0,repositoryEndpointGaps:0,repositoryComponentGaps:0,externalEndpointGaps:0,externalComponentGaps:0};
   const repositoryCoverage=()=>counts.repositoryEndpointGaps||counts.repositoryComponentGaps?'incomplete' as const:
     counts.unresolvedSubjects||counts.probes?'unresolved' as const:'complete' as const;
@@ -90,13 +90,13 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
       batch.push(line);size+=bytes;if(size>=64*1024)await flush();
     };
     const pool=rustInputReportPool(emit);
-    await emit({kind:'validation-start',version:3,index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'current-source'});
+    await emit({kind:'validation-start',version:4,retention:'uncovered-and-probes',index:capture.index,raw:capture.raw,sourceRoot:capture.root,outcomes:'unknown',identityBasis:'current-source'});
     receipt=await authenticateRustInputTrace(capture,async row=>{
       if(row.kind==='execution'){images.set(row.id,row);return;}
       if(row.kind==='terminal-fact'){counts.terminalFacts++;return;}
       if(row.kind!=='observation')return;
       if(row.phase!=='test-runtime'&&row.phase!=='doctest-runtime'){
-        counts.setupAttempts++;await emit({kind:'setup-attempt',observation:row});return;
+        counts.setupAttempts++;return;
       }
       const source=row.source,inputs=source?options.targets.get(source):undefined;
       if(!source||!inputs||inputs.target.source!==source)throw Error('Rust input validation: runtime source has no Cargo declaration: '+String(source));
@@ -128,15 +128,21 @@ export async function validateRustInputCapture(options:{capture:RustInputCapture
           counts.repositoryEndpointGaps+=scope.repositoryEndpointGaps;counts.repositoryComponentGaps+=scope.repositoryComponentGaps;
           counts.externalEndpointGaps+=scope.externalEndpointGaps;counts.externalComponentGaps+=scope.externalComponentGaps;
         }
-        await emit({kind:'runtime-subject',source,phase:row.phase,attempt:row.attempt,image:row.image,syscall:row.syscall,args:row.args,
-          ...await pool.subject({...assessment,scope}),...(classification?{classification}:{})});
+        // The authenticated raw stream retains every attempt. The decision
+        // report counts discharged subjects and keeps full evidence only
+        // where a declaration or provenance obligation remains unresolved.
+        if(!classification&&assessment.state==='uncovered'){
+          counts.reportedSubjects++;
+          await emit({kind:'runtime-subject',source,phase:row.phase,attempt:row.attempt,image:row.image,syscall:row.syscall,args:row.args,
+            ...await pool.subject({...assessment,scope})});
+        }
       }
       if(row.probes.length)await emit({kind:'runtime-probes',source,phase:row.phase,attempt:row.attempt,probes:row.probes,outcome:'unknown'});
     });
     if(execution&&(receipt.complete.raw.path!==execution.raw.path||receipt.complete.raw.sha256!==execution.raw.sha256
       ||receipt.complete.raw.bytes!==execution.raw.bytes||receipt.complete.terminal.root!==execution.pid))
       throw Error('Rust input validation: replay receipt differs from authenticated raw capture');
-    await emit({kind:'validation-complete',version:3,complete:true,coverage:counts.gaps||counts.probes?'incomplete':'complete',repositoryCoverage:repositoryCoverage(),counts,
+    await emit({kind:'validation-complete',version:4,complete:true,coverage:counts.gaps||counts.probes?'incomplete':'complete',repositoryCoverage:repositoryCoverage(),counts,
       indexRowsSha256:receipt.indexRowsSha256,raw:receipt.complete.raw,terminal:receipt.complete.terminal});
     await flush();
   },{gzip:true});

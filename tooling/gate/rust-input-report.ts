@@ -1,5 +1,6 @@
-// One lossless wire format. Repeated claim arrays, answers, component sets and
-// scopes are content-addressed; syscall rows keep only their references.
+// One decision-report format. Discharged attempts are counted; unresolved
+// subjects keep content-addressed claim/component details. Raw streams retain
+// every attempt. The same reader accepts v3 as labelled historical evidence.
 import {createHash} from 'node:crypto';
 import {readCompressedRecords} from './file-input-observer.ts';
 import type {RuntimeClaimAnswer} from './rust-input-claims.ts';
@@ -53,7 +54,7 @@ export function decodeRustInputSubject(row:Row,resolve:Resolve):Row{
     scope:structuredClone(reference(row.scope,resolve))};
 }
 export async function readRustInputValidation(file:string,visit:(row:Row,resolve:Resolve)=>void|Promise<void>):Promise<void>{
-  const table=new Map<string,unknown>();let started=false,complete=false;
+  const table=new Map<string,unknown>();let version:number|undefined,complete=false,subjects=0,probes=0;
   const lookup:Resolve=key=>{
     if(!table.has(key))throw Error('Rust input report: missing table reference '+key);
     return table.get(key);
@@ -61,12 +62,18 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
   const resolve:Resolve=key=>structuredClone(lookup(key));
   await readCompressedRecords(file,async value=>{
     const row=object(value);if(complete)throw Error('Rust input report: row after completion');
-    if(!started){if(row.kind!=='validation-start'||row.version!==3)throw Error('Rust input report: unsupported report version');started=true;}
+    if(version===undefined){
+      if(row.kind!=='validation-start'||row.version!==3&&row.version!==4)throw Error('Rust input report: unsupported report version');
+      version=row.version;
+      if(version===4&&row.retention!=='uncovered-and-probes')throw Error('Rust input report: unsupported retention contract');
+    }
     if(row.kind==='validation-table'){
       if(typeof row.key!=='string'||digest(JSON.stringify(row.value))!==row.key||table.has(row.key))throw Error('Rust input report: invalid or duplicate table hash');
       table.set(row.key,structuredClone(row.value));return;
     }
     if(row.kind==='runtime-subject'){
+      subjects++;
+      if(version===4&&(row.state!=='uncovered'||row.classification!==undefined))throw Error('Rust input report: discharged subject retained as unresolved');
       const components=reference(row.components,lookup);reference(row.scope,lookup);
       if(!Array.isArray(components))throw Error('Rust input report: malformed component set');
       const check=(value:unknown)=>{
@@ -81,8 +88,24 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
       const state=components.every(value=>object(object(value).answer).kind==='claimed')?'claimed':'uncovered';
       if(object(row.components).state!==state)throw Error('Rust input report: component state differs from table');
     }
-    if(row.kind==='validation-complete'){if(row.version!==3||row.complete!==true)throw Error('Rust input report: incomplete footer');complete=true;}
+    if(row.kind==='runtime-probes'){
+      if(!Array.isArray(row.probes))throw Error('Rust input report: malformed runtime probes');
+      probes+=row.probes.length;
+    }
+    if(version===4&&row.kind==='setup-attempt')throw Error('Rust input report: setup attempts must be counted');
+    if(row.kind==='validation-complete'){
+      if(row.version!==version||row.complete!==true)throw Error('Rust input report: incomplete footer');
+      if(version===4){
+        const counts=object(row.counts);
+        for(const key of ['subjects','reportedSubjects','claimed','literals','gaps','probes','emittedExecutables','loaderProbes','setupAttempts'])
+          if(!Number.isSafeInteger(counts[key])||Number(counts[key])<0)throw Error('Rust input report: malformed count '+key);
+        const discharged=Number(counts.claimed)+Number(counts.literals)+Number(counts.emittedExecutables)+Number(counts.loaderProbes);
+        if(counts.reportedSubjects!==subjects||counts.gaps!==subjects||counts.subjects!==subjects+discharged||counts.probes!==probes)
+          throw Error('Rust input report: retained evidence and discharge counts differ');
+      }
+      complete=true;
+    }
     await visit(row,resolve);
   });
-  if(!started||!complete)throw Error('Rust input report: missing completion');
+  if(version===undefined||!complete)throw Error('Rust input report: missing completion');
 }

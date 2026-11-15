@@ -776,6 +776,13 @@ incomplete census. An observation failure is INSTRUMENT and cannot erase a
 completed failed Rust assertion or Cargo's failed compile or doctest outcome.
 The census keeps the existing product and step bounds.
 
+The decision report counts setup attempts and subjects discharged by a declared
+input, literal argument or authenticated execution fact. It retains full
+normalized details for every uncovered subject and unresolved probe. Its footer
+accounts for retained and discharged subjects separately; the reader rejects
+inconsistent totals. The independently authenticated raw stream retains every
+attempt, including those represented only by counts in the decision report.
+
 ## The machine
 
 Every `.ts` and `.mjs` module under `tooling/` belongs to the single strict

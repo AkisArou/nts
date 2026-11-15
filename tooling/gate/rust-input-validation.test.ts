@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,symlinkSync,unlinkSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {test} from 'node:test';
+import {createHash} from 'node:crypto';
 import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 import type {FileObserverReceipt} from './file-input-observer.ts';
 import {moduleGraph,type InputSnapshot} from './module-closure.ts';
@@ -129,7 +130,7 @@ test('coverage publication waits for raw authentication and preserves named unkn
   const report:Record<string,unknown>[]=[];await readRustInputValidation(output,(row,resolve)=>{report.push(decodeRustInputSubject(row,resolve));});
   const attempt=report.find(row=>row.kind==='runtime-subject');assert.ok(attempt);assert.equal(attempt.outcome,'unknown');
   assert.equal(attempt.reason,'missing authenticated capture ABI');assert.equal(report.at(-1)?.coverage,'incomplete');
-  assert.equal(report.at(-1)?.repositoryCoverage,'unresolved');assert.equal(report.at(-1)?.version,3);
+  assert.equal(report.at(-1)?.repositoryCoverage,'unresolved');assert.equal(report.at(-1)?.version,4);
   const mutant=gunzipSync(readFileSync(index)).toString().trim().split('\n').map(line=>JSON.parse(line) as InputIndexRow);
   const observation=mutant.find(row=>row.kind==='observation');assert.ok(observation?.kind==='observation');
   const input=observation.subjects[0];assert.ok(input?.kind==='path');input.name='replacement';input.raw=Buffer.from(input.name).toString('hex');
@@ -140,6 +141,39 @@ test('coverage publication waits for raw authentication and preserves named unkn
   await assert.rejects(validateRustInputCapture({capture,targets:new Map(),output:join(root,'missing-owner.gz')}),/runtime source has no Cargo declaration/);
   const wrongRoute=new Map([[target.source,{target:{...target,unitTests:false,doctests:true},snapshot:snapshot([])}]]);
   await assert.rejects(validateRustInputCapture({capture,targets:wrongRoute,output:join(root,'wrong-route.gz')}),/target does not own test-runtime/);
+});
+
+test('decision reports count discharged and setup attempts while retaining every unresolved subject',async t=>{
+  const root=testScratch(t,'runtime-validation-retention'),raw=join(root,'raw.gz'),index=join(root,'index.gz'),output=join(root,'report.gz');
+  writeFileSync(join(root,'declared'),'input');
+  const bytes=(text:string)=>({hex:Buffer.from(text).toString('hex'),error:0,truncated:false,null:false});
+  const observer:FileObserverReceipt={...basis,observedPath:process.execPath,artifactPath:process.execPath,
+    sha256:createHash('sha256').update(readFileSync(process.execPath)).digest('hex')};
+  const attempts=['declared','undeclared'].map((name,i)=>({kind:'attempt',id:String(i+1),tid:1,tgid:1,ppid:0,birth:'1',parentBirth:'0',
+    syscall:'openat',operation:'open',outcome:'unknown',canceled:false,factsComplete:true,args:['ffffffffffffff9c','0','0','0','0','0'],
+    cwd:bytes(root),image:bytes(process.execPath),argvRead:false,argv:bytes(''),paths:[{arg:1,dirfdArg:0,value:bytes(name)}],dirfds:[{arg:0,fd:-100,target:bytes(root)}]}));
+  const native=[{kind:'start',version:2,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},...attempts,
+    {kind:'root-exit',root:1,exit:0,signal:0},
+    {kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:2,errors:0,drainComplete:true,observerSignal:0}];
+  writeFileSync(raw,gzipSync(native.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  const target={source:'crate/src/lib.rs',name:'unit',kind:['test']},capture={raw,index,cwd:root,root,target:{package:'fixture',...target},observer};
+  const targets=new Map([[target.source,{target:{...target,unitTests:true,doctests:false},snapshot:snapshot(['declared'])}]]);
+  await publishInputTrace({...capture,output:index});
+  const result=await validateRustInputCapture({capture,targets,output});
+  assert.equal(result.counts.subjects,2);assert.equal(result.counts.claimed,1);assert.equal(result.counts.gaps,1);assert.equal(result.counts.reportedSubjects,1);
+  const rows:Record<string,unknown>[]=[];
+  await readRustInputValidation(output,(row,resolve)=>{rows.push(decodeRustInputSubject(row,resolve));});
+  const retained=rows.filter(row=>row.kind==='runtime-subject');assert.equal(retained.length,1);
+  assert.equal((retained[0]!.subject as InputSubject).kind,'path');
+  assert.equal((retained[0]!.subject as Extract<InputSubject,{kind:'path'}>).name,'undeclared');
+  const changed=gunzipSync(readFileSync(output)).toString().trim().split('\n').map(line=>JSON.parse(line));
+  changed.at(-1).counts.claimed=0;
+  const corrupt=join(root,'counts-mutant.gz');writeFileSync(corrupt,gzipSync(changed.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  await assert.rejects(readRustInputValidation(corrupt,()=>{}),/discharge counts differ/);
+  const setup={raw,index:join(root,'setup-index.gz'),cwd:root,root,observer};await publishInputTrace({...setup,output:setup.index});
+  const setupOutput=join(root,'setup-report.gz'),setupResult=await validateRustInputCapture({capture:setup,targets:new Map(),output:setupOutput});
+  assert.equal(setupResult.counts.setupAttempts,2);assert.equal(setupResult.counts.subjects,0);
+  await readRustInputValidation(setupOutput,row=>{assert.notEqual(row.kind,'setup-attempt');assert.notEqual(row.kind,'runtime-subject');});
 });
 
 test('one normalized report preserves every claim and component while repeated syscalls reference it once',async t=>{
