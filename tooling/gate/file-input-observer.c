@@ -938,6 +938,13 @@ static int terminal_status(int signal, const sigset_t *original) {
 }
 
 int main(int argc, char **argv) {
+  // A control exercises this native kernel reader under the same observer;
+  // test launchers do not acquire a second /proc reader or a path exception.
+  if (argc == 2 && !strcmp(argv[1], "--self-image-probe")) {
+    unsigned char data[PATH_BYTES];
+    Bytes image = proc_link(getpid(), "exe", data);
+    return good(&image) && !image.null ? 0 : 2;
+  }
   if (argc == 3 && !strcmp(argv[1], "--birth")) {
     char *end;
     unsigned long pid = strtoul(argv[2], &end, 10);
