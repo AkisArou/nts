@@ -1,6 +1,6 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
-export type InputKind='module'|'data'|'accepted-revision'|'inspection'|'conservative'|'file'|'optional-file'|'optional-module'|'membership'|'directory-candidates'|'project-config'|'project-choice'|'project-catalogue'|'project-members'|'generated-project'|'fixture'|'members';
+export type InputKind='module'|'data'|'accepted-revision'|'inspection'|'conservative'|'file'|'optional-file'|'optional-module'|'membership'|'directory-candidates'|'project-config'|'project-choice'|'project-catalogue'|'project-members'|'generated-project'|'fixture'|'members'|'installation-inputs'|'cargo-inputs';
 /** Source suffixes the module visitor parses as executable code. Imported
  * JSON remains immutable input data, with no executable producer role. */
 export const executableModuleSource=(path:string)=>/\.[cm]?[jt]sx?$/.test(path);
@@ -68,7 +68,13 @@ export type OptionalModule={readonly kind:'optional-module';readonly url:URL};
 export type FixtureInput={readonly kind:'fixture';readonly url:URL;readonly dataNamespaces:DataNamespaces};
 export type ModuleMembers={readonly kind:'members';readonly url:URL;readonly member:string;readonly data?:true};
 export type FileEntry={readonly kind:'file';readonly url:FileInput};
-export type InputEntry=string|ProjectConfig|ProjectChoice|ProjectCatalogue|ProjectMembers|GeneratedProject|DirectoryCandidates|OptionalModule|FixtureInput|ModuleMembers|FileEntry;
+export type InstallationInputs={readonly kind:'installation-inputs';readonly url:URL};
+export type CargoInputs={readonly kind:'cargo-inputs';readonly url:URL};
+export type InputEntry=string|ProjectConfig|ProjectChoice|ProjectCatalogue|ProjectMembers|GeneratedProject|DirectoryCandidates|OptionalModule|FixtureInput|ModuleMembers|FileEntry|InstallationInputs|CargoInputs;
+/** These populations come from their existing installation and Cargo owners.
+ * The URL names the repository, never an installation discovery route. */
+export function installationInputs(url:URL):InstallationInputs{return {kind:'installation-inputs',url};}
+export function cargoInputs(url:URL):CargoInputs{return {kind:'cargo-inputs',url};}
 /** A chooser may execute this exact optional entry. Absence stays structural;
  * presence enters its real closure under the enclosing host/context role. */
 export function optionalModule(url:URL):OptionalModule{return {kind:'optional-module',url};}

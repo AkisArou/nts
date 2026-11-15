@@ -19,7 +19,8 @@ import {oracleNodePackageScopes,ORACLE_NODE_RESOLUTION_RECIPE,type HostObservati
 import {captureReaderObservations,validateReaderBatchObservations} from './reader-observations.ts';
 import type {ProjectEnvironmentAbsence} from './project-environment.ts';
 import type {InstalledProjectDependency} from './project-dependencies.ts';
-import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
+import {readDependencyCatalog,type DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
+import {cargoInputNames} from './cargo-input-population.ts';
 import type {GeneratedProjectCapability} from './generated-project.ts';
 export type {DirectoryDeclaration,ModuleDeclarations} from './reader-inputs/main.ts';
 export type ReaderObservation={reader:string;context:ReaderContext;protocol:ReaderProtocol;observation:HostObservation;
@@ -161,6 +162,17 @@ export function moduleGraph(options: ModuleClosureOptions = {}) {
       const kind=input.kind;
       // Accepted main blobs have no candidate filesystem or staging role.
       if(kind==='accepted-revision')return;
+      if(kind==='installation-inputs'||kind==='cargo-inputs'){
+        if(path!==root)throw Error(kind+' must name the canonical source root: '+reader);
+        if(kind==='cargo-inputs'){
+          for(const name of cargoInputNames(sourceFiles().map(path=>({path}))))visit(context,resolve(root,name),false,false,false);
+        }else{
+          const installed=readDependencyCatalog(options.dependencyCatalog??null,root);
+          if(installed.state!=='current')throw Error('installation input population is unavailable: '+installed.reason);
+          for(const pin of installed.catalog.identity.inputs)optionalPresence(context,reader,resolve(root,pin.path));
+        }
+        return;
+      }
       if(kind==='conservative'){
         if(path!==root)metadataParents(root,path,'conservative directory');
         const filesystem=new OracleFilesystem(),members:string[]=[];

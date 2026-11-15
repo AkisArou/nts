@@ -4,12 +4,16 @@ import {fixtureEnvironment} from "../gate/test-environment.ts";
 // graph is committed locally; only acquired registry bytes are shared.
 import {execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
-import {dirname,join,resolve} from 'node:path';
+import {dirname,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {DEPENDENCY_ROOT_INPUTS,dependencyCache,dependencyRecipeModules} from '../inputs/dependency-inputs.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {RECIPE_SOURCES} from './oracle-result-publisher.ts';
+import {installationInputs} from '../gate/reader-inputs/main.ts';
 
-export function oracleWorkspaceFixture(t:{after(fn:()=>void):void},tree:string,source=resolve(import.meta.dirname,'../..')):void{
+const pins=installationInputs(new URL('../..',import.meta.url));
+
+export function oracleWorkspaceFixture(t:{after(fn:()=>void):void},tree:string,source=fileURLToPath(pins.url)):void{
   const git=(root:string,...args:string[])=>execFileSync('git',gitArguments(['-C',root,...args]),{encoding:'utf8',env:{...fixtureEnvironment(t),
     GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_NAME:'Oracle workspace fixture',GIT_AUTHOR_EMAIL:'oracle-fixture@invalid',
     GIT_COMMITTER_NAME:'Oracle workspace fixture',GIT_COMMITTER_EMAIL:'oracle-fixture@invalid'}}).trim();

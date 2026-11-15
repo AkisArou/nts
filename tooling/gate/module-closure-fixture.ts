@@ -10,6 +10,9 @@ import {durableRecord} from './durable-record.ts';
 import {assertStateVersion} from './state-version.ts';
 import {directoryEntries,memberType,metadataParents} from './reader-metadata.ts';
 import {validateReaderSourceObservations,replayFixtureReaderObservations} from './reader-observations.ts';
+import {installationCatalogTrust} from '../inputs/dependency-inputs.ts';
+import {infrastructureProbe} from './infrastructure-probe.ts';
+import {gitArguments} from './git-arguments/main.ts';
 export {moduleClosure} from "./module-closure.ts";
 
 const SOURCE = fileURLToPath(new URL("../..", import.meta.url));
@@ -17,6 +20,15 @@ const info = (path: string) => {
   try {return lstatSync(path);}
   catch (error) {if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error;}
 };
+
+/** This copier owns its default source's acquisition. Foreign sources supply
+ * their own trust explicitly; a missing catalog never triggers installation. */
+function sourceCatalog(source:string){
+  if(source!==realpathSync(SOURCE)||!info(join(source,'.git')))return null;
+  const common=infrastructureProbe({purpose:'fixture source installation owner',command:'git',
+    args:gitArguments(['rev-parse','--path-format=absolute','--git-common-dir']),cwd:source}).stdout.trim();
+  return installationCatalogTrust(dirname(common),source);
+}
 
 export type FixtureClosureOptions = ModuleClosureOptions & {link?: boolean;
   /** These already-populated directories belong to this fixture, at the same
@@ -167,9 +179,11 @@ export function copyModuleClosure(entries: readonly InputEntry[], root: string, 
     }
   }
   const dataNamespaces=fixtureNamespaces(grants);
-  const graph = moduleGraph({...options, sourceRoot: source});
+  const dependencyCatalog=options.dependencyCatalog===undefined?sourceCatalog(source):options.dependencyCatalog;
+  const graph = moduleGraph({...options, sourceRoot: source,dependencyCatalog});
   let snapshot:InputSnapshot;
   try {snapshot=graph.describe(entries);}
+  catch(error){throw Error('fixture closure '+JSON.stringify(entries)+' from '+source+': '+String(error),{cause:error});}
   finally {graph.close();}
   validateReaderSourceObservations(snapshot,source);
   const data=fixtureData(snapshot,destination,source,{...options,dataNamespaces},fixtureEntries),files=data.files;

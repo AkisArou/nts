@@ -7,6 +7,18 @@ import {OracleFilesystem} from '../differential/oracle-filesystem.ts';
 
 const {API}=createRequire(import.meta.url)('typescript/sync') as typeof import('typescript/sync');
 
+test('owned installation and Cargo populations share the factory table and retain root URLs',()=>{
+  const api=new API();
+  try{for(const [factory,kind]of [['installationInputs','installation-inputs'],['cargoInputs','cargo-inputs']]){
+    const source=`import {${factory} as own} from './reader-inputs/main.ts';own(new URL('../..',import.meta.url));`;
+    const lease=api.createSourceFile('tooling/gate/reader.ts',source);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',source,lease.sourceFile).moduleDeclarations().assets,[{kind,path:'../..'}]);}finally{lease.dispose();}
+    const wrong=`import {${factory} as own} from './foreign.ts';own(new URL('./source/',import.meta.url));`;
+    const foreign=api.createSourceFile('tooling/gate/reader.ts',wrong);
+    try{assert.deepEqual(new SourceFacts('tooling/gate/reader.ts',wrong,foreign.sourceFile).moduleDeclarations().assets,[{kind:'module',path:'./source/'}]);}finally{foreign.dispose();}
+  }}finally{api.close();}
+});
+
 test('generated project declarations retain literal include recipes through lexical factory bindings',()=>{
   const api=new API();
   try{

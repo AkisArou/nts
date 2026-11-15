@@ -4,6 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import type { Build, Comparator, Json } from "./run-record.ts";
+import {fileURLToPath} from 'node:url';
+import {fileInput} from '../gate/reader-inputs/main.ts';
+const pinInput=fileInput(new URL('./comparators.json',import.meta.url));
+const pinName=relative(fileURLToPath(new URL('../..',import.meta.url)),fileURLToPath(pinInput));
 export const sha256 = (path: string) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
 export type Pins = {
@@ -37,7 +41,7 @@ export function pinnedComparators(
   cache = process.env.NTS_BENCH_COMPARATOR_CACHE ?? join(homedir(), ".cache/nts-comparators"),
 ): Pins {
   const raw: unknown = JSON.parse(
-      readFileSync(join(root, "tooling/bench/comparators.json"), "utf8"),
+      readFileSync(join(root, pinName), "utf8"),
     ),
     p = object(raw, ["version", "node", "bun", "scriptc"]);
   assert.equal(p.version, 1);

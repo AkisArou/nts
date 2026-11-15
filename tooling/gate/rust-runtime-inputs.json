@@ -766,6 +766,14 @@
           {
             "kind": "conservative",
             "path": "../../../runtime/node_modules/"
+          },
+          {
+            "kind": "file",
+            "path": "../../../tsconfig.json"
+          },
+          {
+            "kind": "file",
+            "path": "../../../benchmarks/tsconfig.json"
           }
         ]
       }
@@ -905,7 +913,12 @@
       "source": "build/src/node_deps.rs",
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "installation-inputs",
+            "path": "../.."
+          }
+        ]
       }
     },
     {
@@ -3034,7 +3047,9 @@
     {
       "source": "compiler/codegen/jvm/tests/android_launcher_names.rs",
       "declarations": {
-        "imports": [],
+        "imports": [
+          "../../../../tooling/jvm/member-name.ts"
+        ],
         "assets": [
           {
             "kind": "file",
@@ -3087,6 +3102,10 @@
           {
             "kind": "conservative",
             "path": "../../../../runtime/node_modules/"
+          },
+          {
+            "kind": "file",
+            "path": "../../../../tooling/android/module-initializer.sh"
           }
         ]
       }
@@ -11101,7 +11120,12 @@
       "source": "compiler/frontend-ts/tests/frontend_stamp.rs",
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "cargo-inputs",
+            "path": "../../.."
+          }
+        ]
       }
     },
     {
@@ -12670,6 +12694,14 @@
           {
             "kind": "conservative",
             "path": "../../../tests/interop/native-uname"
+          },
+          {
+            "kind": "conservative",
+            "path": "../../../tests/workspace"
+          },
+          {
+            "kind": "file",
+            "path": "../src/main.rs"
           }
         ]
       }
@@ -13201,8 +13233,15 @@
     {
       "source": "tooling/differential/src/artifact_shadow.rs",
       "declarations": {
-        "imports": [],
-        "assets": []
+        "imports": [
+          "../../gate/artifact-shadow.ts"
+        ],
+        "assets": [
+          {
+            "kind": "cargo-inputs",
+            "path": "../../.."
+          }
+        ]
       }
     },
     {
@@ -13348,7 +13387,12 @@
       "source": "tooling/differential/src/oracle_records.rs",
       "declarations": {
         "imports": [],
-        "assets": []
+        "assets": [
+          {
+            "kind": "conservative",
+            "path": "../../../results/oracle-counts"
+          }
+        ]
       }
     },
     {
