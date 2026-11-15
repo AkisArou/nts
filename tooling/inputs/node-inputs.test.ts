@@ -12,7 +12,7 @@ import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {nodePin} from '../bootstrap/node.ts';
 import {fileURLToPath} from 'node:url';
 import {LINKER_INPUTS} from './linker.ts';
-import {awfyFixture} from '../bootstrap/awfy-test-fixture.ts';
+import {corporaFixture} from '../bootstrap/corpora-test-fixture.ts';
 
 function scratch(t:TestContext){
   const root=newTestScratch('node-inputs');
@@ -46,7 +46,7 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
     writeFileSync(join(tree,'tooling/inputs/dependency-inputs.ts'),"import {writeFileSync} from 'node:fs';writeFileSync(process.argv[4]+'/dependency-provisioned','yes');\n");
   }
   const shared=join(root,'shared');mkdirSync(shared);
-  const awfy=awfyFixture(join(root,'awfy'),shared,trees,fixtureEnvironment(t));
+  const {awfy}=corporaFixture(join(root,'awfy'),shared,trees,fixtureEnvironment(t));
   for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
     const result=spawnSync('sh',[join(from,'tooling/inputs/link.sh'),'work',shared,to],{encoding:'utf8',
       env:{...fixtureEnvironment(t),HOME:home,NTS_NODE_INPUTS_CACHE:cache,PATH:dirname(process.execPath)+':'+process.env.PATH}});

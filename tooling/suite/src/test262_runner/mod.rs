@@ -46,10 +46,10 @@ pub use verdict::judge_execution;
 /// Advancing rather than checking the vendored tree backwards: a pin that
 /// `bootstrap.sh` cannot produce holds only on machines that already have the
 /// tree, which is the state that produced this.
-pub const TEST262_PIN: &str = "14e8c908e54ae2e770e473bcacf536f8cb654929";
+pub const TEST262_PIN: &str = include_str!("../../../bootstrap/test262.pin").trim_ascii();
 
 /// The upstream TypeScript tests at the exact revision the native checker ports.
-pub const TYPESCRIPT_PIN: &str = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a";
+pub const TYPESCRIPT_PIN: &str = include_str!("../../../bootstrap/typescript.pin").trim_ascii();
 
 #[test]
 fn the_corpus_revision_is_the_native_checkers_typescript_revision() {

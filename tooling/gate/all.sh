@@ -1757,14 +1757,12 @@ test262() {
     echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
     return 77
   fi
-  pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
-    tooling/suite/src/test262_runner/mod.rs)
+  pin=$(node tooling/bootstrap/test262.ts --pin)
   at=$(git --no-optional-locks -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
   if [ "$at" != "$pin" ]; then
     echo "  the checkout is at $at and the pin is $pin"
     echo "  every test262 command refuses with WrongPin until those agree:"
-    echo "    git -C third_party/test262 fetch --depth 1 origin $pin &&"
-    echo "    git -C third_party/test262 checkout --detach $pin"
+    echo "    node tooling/bootstrap/test262.ts --link"
     return 1
   fi
   # The built protocol binary when the gate names one (see conformance262.ts):

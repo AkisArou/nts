@@ -1,15 +1,16 @@
 // Pin-addressed corpus acquisition, selection and linking share one owner.
 import {execFileSync} from 'node:child_process';
-import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,renameSync,rmSync,rmdirSync,symlinkSync,unlinkSync} from 'node:fs';
+import {existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,renameSync,rmSync,rmdirSync,symlinkSync,unlinkSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {gitArguments} from '../gate/git-arguments/main.ts';
 import {ToolingInstrumentError} from '../differential/command-entry/instrument.ts';
-export type Corpus={pinSource:URL;upstream:string;sparse:readonly string[];slot:string};
+export type Corpus={pinSource:URL;upstream:string;sparse:readonly string[];sparseMode?:'cone'|'no-cone';slot:string;verifyPin?:(pin:string,pinSource:URL)=>void};
 const failure=(message:string)=>new ToolingInstrumentError('tooling-setup',message);
 export function corpus(definition:Corpus){
   if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(definition.slot))throw failure('invalid corpus slot');
   const {slot,upstream}=definition,sparse=[...definition.sparse],pin=readFileSync(definition.pinSource,'utf8').trim();
   if(!/^[a-f0-9]{40}$/.test(pin))throw failure(`invalid ${slot} corpus pin at ${definition.pinSource.href}`);
+  definition.verifyPin?.(pin,definition.pinSource);
   const git=(cwd:string,args:string[],env:NodeJS.ProcessEnv):string=>{
     try{return execFileSync('git',gitArguments(args),{cwd,env,encoding:'utf8',maxBuffer:16*2**20,stdio:['ignore','pipe','pipe']}).trim();}
     catch(error){throw failure(`${slot} corpus Git operation at ${cwd}: ${String(error)}`+
@@ -31,7 +32,7 @@ export function corpus(definition:Corpus){
     const stage=mkdtempSync(join(dirname(destination),'.acquire-'));
     try{
       git(stage,['init','--quiet'],env);git(stage,['remote','add','origin',upstream],env);
-      if(sparse.length)git(stage,['sparse-checkout','set',...sparse],env);
+      if(sparse.length)git(stage,['sparse-checkout','set',...(definition.sparseMode==='no-cone'?['--no-cone']:[]),...sparse],env);
       git(stage,['fetch','--depth','1','--filter=blob:none','origin',pin],env);
       git(stage,['checkout','--detach','FETCH_HEAD'],env);verify(stage,env);
       if(existsSync(destination)){verify(destination,env);return destination;}
@@ -61,5 +62,12 @@ export function corpus(definition:Corpus){
     finally{if(existsSync(temporary))unlinkSync(temporary);rmdirSync(directory);}
     return source;
   };
-  return {pin,checkout,verify,acquire,sharedRoot,resolve:resolveCheckout,link};
+  /** Bootstrap fills empty slots while retaining a live legacy checkout. */
+  const prepare=(shared:string,tree:string,env:NodeJS.ProcessEnv):{path:string;legacy?:string}=>{
+    const source=acquire(shared,env),destination=join(tree,'third_party',slot);
+    let stat;try{stat=lstatSync(destination);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    if(stat?.isDirectory()&&!stat.isSymbolicLink()&&readdirSync(destination).length)return {path:source,legacy:destination};
+    link(shared,tree,env);return {path:source};
+  };
+  return {pin,checkout,verify,acquire,sharedRoot,resolve:resolveCheckout,link,prepare};
 }

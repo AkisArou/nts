@@ -1137,6 +1137,18 @@ the first node task.
 
 ## Decisions
 
+- **Pinned corpora coexist by revision.** AWFY, TypeScript and test262 have
+  plain revision data files under tooling/bootstrap. Rust includes those same
+  files as constants; TypeScript's definition verifies its native-checker
+  version before acquisition or reuse. One registry feeds bootstrap, linking
+  and private fixture preparation. The shared corpus owner publishes each
+  checkout under third_party/<slot>.d/<pin>, and each candidate links its own
+  selected pin before running suites. Fresh bootstrap fills empty slots while
+  retaining nonempty legacy directories. Existing shared checkouts never move;
+  a pin change needs no manual migration. Node retains its authenticated
+  immutable release/identity pair owner
+  ([log](records/notebooks/decisions-log.md#pinned-corpora-coexist-by-revision-11-15)).
+
 - **AWFY reference inputs have one corpus pin.** Bootstrap, linking and reference
   readers consume `tooling/bootstrap/awfy.pin`. The shared corpus owner takes a
   pin source, upstream URL, sparse set and slot. Acquisition publishes a fresh

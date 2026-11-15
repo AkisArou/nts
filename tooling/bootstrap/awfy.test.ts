@@ -11,6 +11,7 @@ import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {LINKER_INPUTS} from '../inputs/linker.ts';
 import {corpus} from '../inputs/corpus.ts';
 import {AWFY} from './awfy.ts';
+import {corporaFixture} from './corpora-test-fixture.ts';
 const SOURCE=fileURLToPath(new URL('../../',import.meta.url));
 function repository(parent:string,env:NodeJS.ProcessEnv){
   const root=join(parent,'upstream');mkdirSync(root);
@@ -42,6 +43,7 @@ test('the production linker keeps two candidate pins and the legacy checkout ind
   const first=f.owner(),source=first.acquire(shared,env),legacy=join(shared,'third_party/are-we-fast-yet');mkdirSync(legacy);writeFileSync(join(legacy,'owned'),'legacy\n');
   const stage=(name:string,pin:string)=>{
     const tree=join(own,name);mkdirSync(tree);copyModuleClosure(LINKER_INPUTS.map(url=>relative(SOURCE,fileURLToPath(url))),tree);
+    corporaFixture(join(own,name+'-corpora'),shared,[tree],env);
     // Private stand-ins for the linker's other acquisition owners.
     for(const path of ['tooling/inputs/node-inputs.ts','tooling/inputs/dependency-inputs.ts'])writeFileSync(join(tree,path),'process.exitCode=0;\n');
     writeFileSync(join(tree,'tooling/bootstrap/awfy.pin'),pin+'\n');return tree;

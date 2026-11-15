@@ -142,55 +142,10 @@ if [ -n "$running" ] && [ "$running" != "$node_pin" ]; then
   echo "  note: node in PATH is v$running but the pin is v$node_pin"
 fi
 
-# Cloned whole rather than sparsely, deliberately: `harness/` and
-# `INTERPRETING.md` matter as much as the tests, because the frontmatter is
-# what makes the suite filterable at all.
-#
-# **The pin is checked out, and it is read from the one place that decides it.**
-# This cloned master and checked nothing out, so a fresh bootstrap landed
-# off-pin by construction -- and `discover_suite` refuses a suite that is not at
-# `TEST262_PIN` before doing any work, so the whole protocol layer was
-# unrunnable on any machine that had not happened to clone it at the right
-# moment. It had never run against the corpus it was written for.
-#
-# Retyping the SHA here would make bootstrap a second derivation of the pin, and
-# the drift above was invisible precisely because the pin was spelled in three
-# places already.
-test262_pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
-  tooling/suite/src/test262_runner/mod.rs)
-say "third_party/test262  ${test262_pin}"
-if have third_party/test262/.git; then
-  # Reported rather than repaired, exactly as the node checkout above: moving it
-  # is a fetch, and doing that silently under someone mid-task is worse than
-  # telling them. What is new is that it is *checked* at all.
-  at=$(git --no-optional-locks -C third_party/test262 rev-parse HEAD 2>/dev/null || echo unknown)
-  if [ "$at" = "$test262_pin" ]; then
-    echo "  already cloned, at the pin"
-  else
-    echo "  note: checked out at ${at}, pin is ${test262_pin}"
-    echo "        git -C third_party/test262 fetch --depth 1 origin ${test262_pin} && \\"
-    echo "        git -C third_party/test262 checkout --detach ${test262_pin}"
-  fi
-else
-  git --no-optional-locks clone --filter=blob:none --no-checkout \
-    https://github.com/tc39/test262.git third_party/test262
-  git --no-optional-locks -C third_party/test262 checkout --detach "$test262_pin"
-fi
-
-say "third_party/typescript (tests only, at the native checker's TypeScript pin)"
-node tooling/bootstrap/typescript.ts
-
-# The `C++` and `Java` columns of the benchmark table: their own hand-written
-# implementations of the same programs, built and timed by our harness.
-#
-# `benchmarks/JavaScript` was cloned for a `fidelity.mjs` that ran their `.js`
-# beside our `.ts` on node, to check the *port* rather than the result. Nothing
-# ever ran it -- no gate step, no test, no CI -- and a check that does not run
-# is worse than one that does not exist, because it reads as coverage. It is
-# gone, and so is the directory it lived in: the ported benchmarks are now
-# inlined into the cases that use them. The two reference columns are what this
-# clone is for.
-say "third_party/are-we-fast-yet"
-node tooling/bootstrap/awfy.ts --acquire
+# One registry owns test262, the native checker's TypeScript tests and AWFY.
+# Current pins get independent stores; setup retains every nonempty legacy
+# checkout, while each worktree's linker selects its own pin before use.
+say "pinned test and reference corpora"
+node tooling/inputs/corpora.ts --prepare
 
 say "done"

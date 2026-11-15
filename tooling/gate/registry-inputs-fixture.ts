@@ -18,7 +18,7 @@ import {nodePin} from "../bootstrap/node.ts";
 import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {LINKER_INPUTS} from '../inputs/linker.ts';
-import {awfyFixture} from '../bootstrap/awfy-test-fixture.ts';
+import {corporaFixture,CORPUS_STORE_IGNORES} from '../bootstrap/corpora-test-fixture.ts';
 
 export const REGISTRY_FIXTURE_PACKAGE = "nts-registry-input-fixture";
 export const REGISTRY_FIXTURE_MARKER = "candidate-registry-input-v1";
@@ -94,7 +94,7 @@ export async function registryInputsFixture(t: TestContext,
   assert.deepEqual(Object.keys(privateRecipe.files),["deps/uv/source.c"],"the registry fixture uses only its private source bytes");
   const nodeInputs=join(root,"node-inputs");acquireNodeInputs(main,nodeInputs,table);
   copyModuleClosure(entries,consumer);
-  const awfy=awfyFixture(join(root,'awfy'),main,[main,consumer],testEnvironment());
+  const {awfy}=corporaFixture(join(root,'awfy'),main,[main,consumer],testEnvironment());
   // A frozen destination executes its own Node provisioner and catalog.
   // Commit that real import closure so both clones retain the same authority.
   writeFileSync(join(main,"tooling/inputs/node-inputs.json"),JSON.stringify(table));
@@ -140,7 +140,7 @@ export async function registryInputsFixture(t: TestContext,
   writeFileSync(join(main, "package.json"), JSON.stringify({ name: "inputs-main-fixture", private: true,
     packageManager: "pnpm@10.15.0" }));
   writeFileSync(join(main, "pnpm-workspace.yaml"), "packages:\n  - test/*\n");
-  writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n/third_party/are-we-fast-yet.d/\n");
+  writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n"+CORPUS_STORE_IGNORES.join('\n')+'\n');
   writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\ncache-dir=${join(root,"metadata-cache")}\nstate-dir=${join(root,"state")}\nverify-store-integrity=true\n`);
   const git = (cwd: string, args: string[]) => checked("git", gitArguments(["-c", "commit.gpgsign=false",
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",

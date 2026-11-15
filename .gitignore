@@ -29,27 +29,17 @@ node_modules
 /out
 /.nts
 
-# test262, cloned whole. Not vendored: it is somebody else's repository and
-# `nts-suite` skips gracefully without it.
-#   git clone --depth 1 --filter=blob:none \
-#     https://github.com/tc39/test262.git third_party/test262
-#
-# It used to be a sparse checkout of three directories, and that was the wrong
-# saving: 280MB against an answer to "can we test this?" that was too often
-# "the files are not here". `harness/` and `INTERPRETING.md` matter as much as
-# the tests -- the frontmatter is what makes the suite filterable at all. See
-# `docs/conformance/test262.md`.
+# The complete test262 corpus, including harness and metadata, is acquired at
+# tooling/bootstrap/test262.pin in test262.d/<pin>, then linked per tree.
+# Legacy directories remain in place for older trees; nothing shared moves.
 /third_party/test262
+/third_party/test262.d
 
-# Upstream tests only, at TYPESCRIPT_PIN beside TEST262_PIN, verified against
-# the native checker. Prepared by: node tooling/bootstrap/typescript.ts
-# Its shallow clone is the pinned equivalent of:
-#   git init third_party/typescript
-#   git -C third_party/typescript remote add origin https://github.com/microsoft/TypeScript
-#   git -C third_party/typescript sparse-checkout set --no-cone /tsc/testdata/tests/
-#   git -C third_party/typescript fetch --depth 1 --filter=blob:none origin <TYPESCRIPT_PIN>
-#   git -C third_party/typescript checkout --detach FETCH_HEAD
+# TypeScript's tests-only sparse population is acquired at typescript.pin in
+# typescript.d/<pin>, verified against the native checker and linked per tree.
+# Bootstrap uses the same corpus owner and retains nonempty legacy directories.
 /third_party/typescript
+/third_party/typescript.d
 
 # Are We Fast Yet's C++ and Java references, at tooling/bootstrap/awfy.pin.
 # Prepared and verified by: node tooling/bootstrap/awfy.ts --acquire

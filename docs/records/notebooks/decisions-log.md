@@ -3108,3 +3108,14 @@ coexist without moving the legacy shared directory or old links. A pin bump
 acquires its missing checkout automatically. Missing acquired corpus inputs give
 both AWFY reference cells one unavailable reason before compilation. The
 provenance audit binds recorded reference origins to the same pin.
+
+## Pinned corpora coexist by revision (11-15)
+
+TypeScript and test262 join AWFY's existing corpus acquisition owner and one
+production registry. Their pins are plain data included by Rust constants;
+the TypeScript/native checker equality remains an independent verification.
+Each candidate acquires and links its own revision without moving legacy
+directories or another tree's checkout. Bootstrap fills fresh slots while
+retaining existing legacy directories. Private linker fixtures pre-acquire
+that same registry and change only their own pin/native metadata. Node's
+authenticated release/identity pair owner stays unchanged.

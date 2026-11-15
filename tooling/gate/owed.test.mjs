@@ -587,6 +587,15 @@ test('the AWFY data pin owes its benchmark reference readers',()=>{
   assert.ok([...covering(stepInputs(),'tooling/bootstrap/awfy.pin')].includes('tooling'),'real acquisition/link controls read the pin');
 });
 
+test('the TypeScript and test262 data pins owe their suite readers',()=>{
+  for(const family of ['typescript','test262'])for(const added of [false,true]){
+    const path='tooling/bootstrap/'+family+'.pin',rules=owed([{path,added}]);
+    assert.ok(!rules.some(rule=>rule.full),path+' is declared data');
+    superset(gateSteps(rules),family==='typescript'?['corpus','typescript-c','typescript-llvm','typescript-jvm']:['test262','test262-cases','test262-builtins-cases','test262-rest-cases'],path);
+    assert.ok([...covering(stepInputs(),path)].includes('tooling'),'the real linker controls consume '+path);
+  }
+});
+
 test("bundled native dependencies owe their executed ELF and algorithm guards", () => {
   for (const path of ["build/node-deps/recipes.json", "tooling/bootstrap/node.ts", "tooling/bootstrap/node_recipe.py", "runtime/node/crypto/dh.c", "tooling/conformance/c-tests.sh"]) {
     const rules = owed([{path,added:true}]);

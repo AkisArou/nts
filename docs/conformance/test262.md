@@ -10,12 +10,13 @@ measurements are in [the census notebook](../records/notebooks/test262-census.md
 
 ## The pin
 
-The suite is `third_party/test262`, checked out at the commit that
-`TEST262_PIN` names in `tooling/suite/src/test262_runner/mod.rs`;
-`tooling/bootstrap/bootstrap.sh` clones it there. Every command refuses a
-checkout at another commit or with local changes. Moving the pin means
-changing that constant, then deriving the inventory's counts and every record
-again from runs at the new pin.
+The suite pin is `tooling/bootstrap/test262.pin`. Rust's `TEST262_PIN` constant
+includes that same data file. The corpus owner acquires the complete suite in
+`third_party/test262.d/<pin>`; each tree's linker selects its own checkout at
+`third_party/test262`. Different pins coexist, and existing legacy directories
+remain untouched. Every command refuses another commit or local changes.
+Changing the data pin owes fresh inventory and records at the new pin; the
+candidate's setup acquires it without moving an older tree's checkout.
 
 ## Scope at the pin
 

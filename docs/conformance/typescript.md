@@ -441,12 +441,15 @@ NTS_BIN=<main's pin> node tooling/census/conformance262.ts --suite typescript \
 ### What runs
 
 TypeScript's compiler test cases, `third_party/typescript/tsc/testdata/tests/cases`,
-at the commit `TYPESCRIPT_PIN` names in
-`tooling/suite/src/test262_runner/mod.rs`. That commit must be the one the
+at the commit in `tooling/bootstrap/typescript.pin`. Rust's `TYPESCRIPT_PIN`
+constant includes that same data file. That commit must be the one the
 native checker ports, the `typescript_commit` of
 `third_party/tsrs/UPSTREAM.json`: a unit test asserts it, and
-`tooling/bootstrap/typescript.ts` refuses a mismatch when it checks the tests
-out.
+the TypeScript corpus definition refuses a mismatch before acquiring or reusing
+the tests. The shared corpus owner keeps the tests-only sparse checkout at
+`third_party/typescript.d/<pin>`, and each tree's linker selects its own pin at
+`third_party/typescript`. Different pins coexist; no existing legacy checkout
+moves. A pin change is acquired by candidate setup without a manual migration.
 
 The landing population is the cases `tooling/suite/corpus-core.json` names.
 A multi-file case (one with `// @filename:` directives) is skipped: compiled

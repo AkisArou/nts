@@ -19,13 +19,13 @@ mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate|work) linked="third_party/typescript third_party/test262 third_party/deno" ;;
+  gate|work) linked="third_party/deno" ;;
   *) echo "link.sh: the use is gate or work, not $mode" >&2; exit 2 ;;
 esac
 
 # Each candidate selects its immutable pin-addressed corpus. Acquisition never
 # moves the shared legacy checkout or another revision's input.
-node "$tree/tooling/bootstrap/awfy.ts" --link "$root" "$tree"
+node "$tree/tooling/inputs/corpora.ts" --link "$root" "$tree"
 
 # The candidate's own pin selects an already acquired immutable Node pair.
 # Its catalog belongs to that tree too, including either endpoint of a range.

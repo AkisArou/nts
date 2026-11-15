@@ -19,7 +19,7 @@ import { fileURLToPath,pathToFileURL } from "node:url";
 export type Use = "gate" | "work";
 export type Linker = { script: string; args: [string] };
 /** The shell entry and its actual executable owners share the staging list. */
-export const LINKER_INPUTS = [new URL('./link.sh',import.meta.url),new URL('./node-inputs.ts',import.meta.url),new URL('./dependency-inputs.ts',import.meta.url),new URL('../bootstrap/awfy.ts',import.meta.url)] as const;
+export const LINKER_INPUTS = [new URL('./link.sh',import.meta.url),new URL('./node-inputs.ts',import.meta.url),new URL('./dependency-inputs.ts',import.meta.url),new URL('./corpora.ts',import.meta.url)] as const;
 
 /** `tree`'s own linker for `use`, as its commit names it; null when the tree has none. */
 export function linkerOf(tree: string, use: Use): Linker | null {
