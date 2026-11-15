@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
-pub(super) const MAPPING_POLICY: &str = "bundled-source-paths-v2";
+pub(super) const MAPPING_POLICY: &str = "bundled-source-paths-v3";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "path", rename_all = "kebab-case")]
@@ -49,14 +49,18 @@ impl SourcePaths {
 
     pub(super) fn mappings(&self) -> Vec<String> {
         ["-ffile-prefix-map", "-fdebug-prefix-map"]
-            .map(|flag| {
-                format!(
-                    "{flag}={}={}",
-                    self.root.display(),
-                    self.virtual_root.display()
-                )
+            .into_iter()
+            .flat_map(|flag| {
+                [
+                    format!(
+                        "{flag}={}={}",
+                        self.root.display(),
+                        self.virtual_root.display()
+                    ),
+                    format!("{flag}=./={}/", self.virtual_root.display()),
+                ]
             })
-            .to_vec()
+            .collect()
     }
 
     pub(super) fn input(&self, path: &Path) -> Result<InputPath> {

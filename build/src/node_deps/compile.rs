@@ -83,7 +83,9 @@ fn object(
         .arg("-MF")
         .arg(&deps)
         .arg("-c")
-        .arg(source.join(input))
+        // A relative operand also keeps LLVM bitcode's source_filename free
+        // of the extraction root; Context maps its file macros to virtual.
+        .arg(Path::new(".").join(input))
         .arg("-o")
         .arg(&object);
     std::fs::write(

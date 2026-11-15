@@ -3,7 +3,12 @@ use super::{
     paths::{MAPPING_POLICY, SourcePaths},
 };
 use anyhow::{Context as _, Result, bail};
-use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Command};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::Path,
+    process::{Command, Stdio},
+};
 
 pub(super) struct Context {
     pub key: String,
@@ -160,9 +165,10 @@ impl Context {
             .compiler_for_object(name)
             .args(probe.mappings())
             .args(&self.flags)
+            .current_dir(probe.root())
             .arg("-g")
             .arg("-c")
-            .arg(source)
+            .arg(Path::new(".").join(name))
             .arg("-o")
             .arg(&object)
             .output()
@@ -173,7 +179,32 @@ impl Context {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        self.check_probe_object(&std::fs::read(object)?, &probe, name)
+        let bytes = self.probe_bytes(&object)?;
+        self.check_probe_object(&bytes, &probe, name)
+    }
+
+    fn probe_bytes(&self, object: &Path) -> Result<Vec<u8>> {
+        let bytes = std::fs::read(object)?;
+        if !bytes.starts_with(b"BC\xc0\xde") && !bytes.starts_with(b"\xde\xc0\x17\x0b") {
+            return Ok(bytes);
+        }
+        // Inspect the representation the route actually emitted. The compile
+        // keeps all route flags, including LTO; this same driver decodes its
+        // bitcode. Stdin avoids a disassembler-created ModuleID path comment.
+        let output = self
+            .compiler()
+            .args(&self.flags)
+            .args(["-S", "-emit-llvm", "-x", "ir", "-", "-o", "-"])
+            .stdin(Stdio::from(std::fs::File::open(object)?))
+            .output()
+            .context("decoding bundled dependency bitcode source mapping probe")?;
+        if !output.status.success() {
+            bail!(
+                "bundled dependency compiler cannot decode its source mapping bitcode: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        llvm_quoted_bytes(&output.stdout)
     }
 
     fn check_probe_object(&self, bytes: &[u8], probe: &SourcePaths, name: &Path) -> Result<()> {
@@ -287,6 +318,50 @@ impl Context {
 
 fn contains_bytes(bytes: &[u8], needle: &[u8]) -> bool {
     bytes.windows(needle.len()).any(|part| part == needle)
+}
+
+/// LLVM's printer represents bytes in quoted strings with two-digit hex
+/// escapes. Inspect those bytes, including NULs, rather than searching the
+/// bitstream or mistaking textual escape spelling for an artifact path.
+fn llvm_quoted_bytes(text: &[u8]) -> Result<Vec<u8>> {
+    let mut result = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        if text[at] == b';' {
+            while at < text.len() && text[at] != b'\n' {
+                at += 1;
+            }
+            continue;
+        }
+        if text[at] != b'"' {
+            at += 1;
+            continue;
+        }
+        at += 1;
+        loop {
+            let byte = *text.get(at).context("unterminated LLVM probe string")?;
+            at += 1;
+            if byte == b'"' {
+                result.push(0);
+                break;
+            }
+            if byte == b'\\' {
+                let mut value = 0;
+                for _ in 0..2 {
+                    let digit = text
+                        .get(at)
+                        .and_then(|byte| char::from(*byte).to_digit(16))
+                        .context("invalid LLVM probe string byte escape")?;
+                    at += 1;
+                    value = value * 16 + u8::try_from(digit)?;
+                }
+                result.push(value);
+            } else {
+                result.push(byte);
+            }
+        }
+    }
+    Ok(result)
 }
 
 const PATH_LISTS: &[&str] = &[
@@ -601,4 +676,26 @@ fn environment(origin: &Path) -> Result<BTreeMap<String, Option<OsString>>> {
             Ok((name.to_owned(), value))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::llvm_quoted_bytes;
+
+    #[test]
+    fn llvm_probe_strings_decode_bytes_and_refuse_malformed_escapes() {
+        assert_eq!(
+            llvm_quoted_bytes(
+                br#"; "ignored comment"
+source_filename = "./probe.c"
+@tag = constant [10 x i8] c"tag:\2Froot\00"
+"#
+            )
+            .expect("LLVM represented bytes"),
+            b"./probe.c\0tag:/root\0\0"
+        );
+        for text in [br#""unfinished"#.as_slice(), br#""bad\0""#, br#""bad\GG""#] {
+            assert!(llvm_quoted_bytes(text).is_err());
+        }
+    }
 }

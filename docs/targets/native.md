@@ -94,6 +94,10 @@ scratch outside the bundle. It checks tagged file macros and refuses physical
 bundle or probe paths in the object before library objects are compiled;
 caller prefix maps are refused in flags, leading arguments and configuration.
 Shipped assertion strings therefore name the virtual bundle path.
+Source operands are bundle-relative and compiled from the bundle's directory,
+so LLVM bitcode's source filename is relative too. The owner maps their `./`
+file macros to the same virtual prefix. A bitcode probe keeps the route's LTO
+flags and is decoded by that same compiler for represented-string inspection.
 COFF object commands also suppress CodeView's physical command-line record
 and set a virtual compilation directory and object name. Object names derive
 from bundle-relative source paths. Other object formats do not receive those

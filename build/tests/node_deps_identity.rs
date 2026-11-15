@@ -243,6 +243,44 @@ fn assert_root_parity(first: &Artifacts, second: &Artifacts, compiler: &str) -> 
 }
 
 #[test]
+fn cli_thin_lto_libuv_bytes_and_identity_match_under_two_roots() {
+    let own = scratch::StdScratchDir::in_std_target("native-cli-thin-lto");
+    let mut first_request = request(own.join("a"), &["clang"]);
+    // The CLI's x86-64 default CPU and ThinLTO flags, without replacing LTO
+    // for the probe or for library compilation. libuv's recipe owns its -g.
+    first_request.flags = ["-falign-loops=32", "-march=x86-64-v3", "-flto=thin"]
+        .map(str::to_owned)
+        .to_vec();
+    let second_request = Request {
+        cache: own.join("a-deliberately-much-longer-extraction-root"),
+        ..first_request.clone()
+    };
+    let first = node_deps::ensure(&first_request).expect("first real CLI ThinLTO archive");
+    let second = node_deps::ensure(&second_request).expect("second real CLI ThinLTO archive");
+    let a = &first.archives[0];
+    let b = &second.archives[0];
+    let bytes = read(a);
+    assert!(
+        bytes == read(b),
+        "complete ThinLTO archive differs across roots"
+    );
+    assert_eq!(
+        json(a.parent().expect("first entry").join("invocation.json")),
+        json(b.parent().expect("second entry").join("invocation.json"))
+    );
+    for root in [source(&first), source(&second)] {
+        assert!(!contains(&bytes, root.as_os_str().as_encoded_bytes()));
+    }
+    let members = objects(a.parent().expect("first entry"));
+    assert_eq!(deterministic_members(&bytes).len(), members.len());
+    assert!(
+        members
+            .iter()
+            .all(|path| read(path).starts_with(b"BC\xc0\xde"))
+    );
+}
+
+#[test]
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn native_source_maps_refuse_caller_flags_leading_args_and_configs_before_compilation() {
     let own = scratch::StdScratchDir::in_std_target("native-map-authority");
