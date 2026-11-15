@@ -1938,7 +1938,7 @@ fn jvm_case(
 /// apart on the flags -- which would make one row's number mean something
 /// slightly different from the rest of the column.
 fn run_driver(
-    _root: &Utf8Path,
+    root: &Utf8Path,
     dir: &Utf8Path,
     jar: &Utf8Path,
     driver_path: &Utf8Path,
