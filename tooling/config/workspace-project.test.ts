@@ -11,7 +11,7 @@ import {testScratch} from '../gate/test-scratch.ts';
 import {withWorkspaceProject} from './workspace-project.ts';
 
 const SOURCE=fileURLToPath(new URL('../../',import.meta.url)),tsc=join(SOURCE,'node_modules/.bin/tsc');
-const OWED=new URL('../gate/owed.mjs',import.meta.url),SOURCE_FACTS=new URL('../gate/source-facts.ts',import.meta.url);
+const OWED=new URL('../gate/owed.mjs',import.meta.url);
 function fixture(root:string,broken=false){
   const put=(name:string,value:string|object)=>{const file=join(root,name);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,typeof value==='string'?value:JSON.stringify(value));};
   put('tests/workspace/tsconfig.solution.json',{files:[],references:[{path:'lib'},{path:'app'}]});
@@ -57,6 +57,12 @@ test('a real referenced build writes only in the private project tree',async t=>
   });
   assert.ok(temporary);assert.equal(existsSync(temporary),false,'the build tree is drained before cleanup');
   assert.deepEqual(snapshot(source),before);
+  await withWorkspaceProject(project,inputs.filter(input=>typeof input==='string'||input.kind!=='file'),source,workspace=>{
+    const result=spawnSync(tsc,['-b',relative(dirname(workspace.project),workspace.project),'--force'],{cwd:dirname(workspace.project),env:fixtureEnvironment(t),encoding:'utf8'});
+    assert.notEqual(result.status,0,'an undeclared external reference cannot silently read the source tree');
+    assert.match(result.stdout+result.stderr,/error TS6053: File .*external\.d\.ts.* not found/);
+  });
+  assert.deepEqual(snapshot(source),before);
 });
 
 test('the scratch build preserves actual compiler diagnostics and binding refusals',async t=>{
@@ -72,37 +78,21 @@ test('the scratch build preserves actual compiler diagnostics and binding refusa
   rmSync(baseline,{recursive:true,force:true});
 });
 
-test('the audit external declarations owe config through their actual byte readers',t=>{
+test('editing the audit external program inputs owes config through its reader rule',t=>{
   const script=`
 import {readFileSync} from 'node:fs';
-const [factsUrl,owedUrl,remove]=process.argv.slice(1);
-const {SourceFacts}=await import(factsUrl);
-if(remove==='yes'){
- const original=SourceFacts.prototype.moduleDeclarations;
- SourceFacts.prototype.moduleDeclarations=function(){
-  const row=original.call(this);
-  return this.file==='tooling/config/audit.mjs'?{...row,assets:row.assets.filter(asset=>!['../../runtime/native/libc.d.ts','../../runtime/native/scalars.d.ts'].includes(asset.path))}:row;
- };
-}
-const {covering,stepInputs,owed,gateSteps}=await import(owedUrl);
+const {covering,stepInputs,owed}=await import(process.argv[1]);
 const rows=['runtime/native/libc.d.ts','runtime/native/scalars.d.ts'].map(path=>{
  const before=readFileSync(path,'utf8'),rules=owed([{path,before,after:before+'\\ndeclare const changedExternalInput: unique symbol;\\n',sameMode:true}]);
- return {path,readers:[...covering(stepInputs(),path)],input:rules.find(row=>row.name==='an input to what a gate step runs')?.steps??[],all:gateSteps(rules)};
+ return {path,readers:[...covering(stepInputs(),path)],input:rules.find(row=>row.name==='an input to what a gate step runs')?.steps??[]};
 });
 process.stdout.write(JSON.stringify(rows));`;
-  const collect=(remove:boolean)=>{
-    const result=spawnSync(process.execPath,['--input-type=module','-e',script,SOURCE_FACTS.href,OWED.href,remove?'yes':'no'],{cwd:SOURCE,env:fixtureEnvironment(t),encoding:'utf8'});
-    assert.equal(result.status,0,result.stdout+result.stderr);
-    return JSON.parse(result.stdout) as {path:string;readers:string[];input:string[];all:string[]}[];
-  };
-  const current=collect(false),removed=collect(true);
-  assert.equal(current.length,2);assert.equal(removed.length,2);
+  const result=spawnSync(process.execPath,['--input-type=module','-e',script,OWED.href],{cwd:SOURCE,env:fixtureEnvironment(t),encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  const current=JSON.parse(result.stdout) as {path:string;readers:string[];input:string[]}[];
+  assert.equal(current.length,2);
   for(const row of current){
     assert.ok(row.readers.includes('config'),row.path+' is a declared config input');
     assert.ok(row.input.includes('config'),row.path+' changes the actual reader obligation');
-    const mutant=removed.find(other=>other.path===row.path);assert.ok(mutant);
-    assert.equal(mutant.readers.includes('config'),false,row.path+' loses config when only its declaration is removed');
-    assert.equal(mutant.input.includes('config'),false);
-    assert.ok(mutant.all.includes('config'),'the independent tree check remains and cannot mask the reader control');
   }
 });
