@@ -15,6 +15,13 @@ import {generatedJavaScript} from './generated-javascript.ts';
 const writer=`import {writeFileSync as publish} from 'node:fs';publish('ready.json',JSON.stringify({ready:true}));`;
 const inspect=(source:string)=>inspectRecordPublications('tooling/fixture.test.ts',source);
 
+test('generated TOML is not JSON while valid JSON bodies and JSON paths remain publications',()=>{
+ const staged=(body:string)=>`import {writeFileSync} from 'node:fs';writeFileSync('child.mjs',${JSON.stringify(body)});`;
+ assert.deepEqual(inspect(staged(`const fs=require('node:fs');fs.writeFileSync(process.argv[2],'[env]\\nPROBE="poison"\\n');`)),[]);
+ assert.equal(inspect(staged(`const fs=require('node:fs');fs.writeFileSync(process.argv[2],'[{"ready":true}]');`)).length,1);
+ assert.equal(inspect(staged(`const fs=require('node:fs');fs.writeFileSync('ready.json','{unfinished');`)).length,1);
+});
+
 test('script files, inline invocations, aliases and local source helpers reach the publication check',()=>{
   for(const source of [
     `import {writeFileSync} from 'node:fs';writeFileSync('child.mjs',${JSON.stringify(writer)});`,

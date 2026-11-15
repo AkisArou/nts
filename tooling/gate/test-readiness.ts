@@ -33,7 +33,10 @@ export function inspectRecordPublications(file:string,source:string,shared?:impo
     const jsonValue=(input:Node,steps=0):boolean=>{
       if(steps>10)return false;const node=resolved(input);
       if(ast.isCallExpression(node)&&name(node.expression)==='JSON.stringify')return true;
-      if(ast.isStringLiteralLikeNode(node))return /^\s*[\[{]/.test(node.text);
+      if(ast.isStringLiteralLikeNode(node)){
+        if(!/^\s*[\[{]/.test(node.text))return false;
+        try{JSON.parse(node.text);return true;}catch{return false;}
+      }
       return ast.isBinaryExpression(node)&&code(node.operatorToken)==='+'&&(jsonValue(node.left,steps+1)||jsonValue(node.right,steps+1));
     };
     const pathKind=(input:Node,pattern:RegExp,steps=0):boolean=>{

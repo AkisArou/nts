@@ -10,6 +10,7 @@ import {testEnvironment} from './test-environment.ts';
 import {CommandLifetime,COMMAND_CLOSE_MS} from '../differential/command-entry/main.ts';
 import {waitFor} from './test-wait.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
+import {readStepInstrument} from './step-result.ts';
 
 const helper=new URL('../differential/command-entry/main.ts',import.meta.url).href;
 function run(file:string){return spawnSync(process.execPath,[file],{env:testEnvironment(),encoding:'utf8'});}
@@ -29,6 +30,19 @@ test('the shared entry reports synchronous throws and rejected commands once wit
   const file=join(root,'error-'+async+'.mjs');
   writeFileSync(file,`import {runAsCommand} from ${JSON.stringify(helper)};runAsCommand(import.meta.url,${async?'async ':''}()=>{throw Error('command failed');});`);
   const result=run(file);assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr.match(/Error: command failed/g)?.length,1);
+ }
+});
+
+test('handled instrumentation retains its kind receipt for sync and rejected commands',t=>{
+ const root=testScratch(t,'command-entry-instrument');
+ for(const async of [false,true]){
+  const file=join(root,'instrument-'+async+'.mjs'),packet=join(root,'packet-'+async+'.json'),drained=join(root,'drained-'+async);
+  const instrument=new URL('../differential/command-entry/instrument.ts',import.meta.url).href;
+  writeFileSync(file,`import {writeFileSync} from 'node:fs';import {runAsCommand,registerCommandCloser} from ${JSON.stringify(helper)};import {ToolingInstrumentError} from ${JSON.stringify(instrument)};runAsCommand(import.meta.url,${async?'async ':''}()=>{registerCommandCloser('private drain',{close:()=>writeFileSync(${JSON.stringify(drained)},'drained')});throw new ToolingInstrumentError('tooling-setup','private instrument refused');});`);
+  const result=spawnSync(process.execPath,[file],{env:testEnvironment({NTS_GATE_STEP:'entry-control',NTS_GATE_STEP_ATTEMPT:'private',NTS_GATE_STEP_RESULT:packet}),encoding:'utf8'});
+  assert.equal(result.status,1,result.stderr);
+  assert.equal(readFileSync(drained,'utf8'),'drained');
+  assert.deepEqual(readStepInstrument(packet,'entry-control','private'),{version:1,verdict:'INSTRUMENT',kind:'tooling-setup',step:'entry-control',attempt:'private',reason:'private instrument refused'});
  }
 });
 

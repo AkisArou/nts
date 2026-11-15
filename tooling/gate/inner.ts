@@ -1,4 +1,4 @@
-import {CARGO_OWNER,cargoSync} from './cargo.ts';
+import {CARGO_OWNER} from './cargo.ts';
 import {gitArguments} from "./git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {hostObservations} from "./host-observations.ts";
@@ -105,12 +105,14 @@ export function cpusOffMeasurement(count: number = availableParallelism()): stri
 }
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
-  const result = (command==="cargo"?cargoSync(args,{cwd:ROOT,stdio:"inherit",env:{...launchEnvironment,...env}}):spawnSync(command, args, { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } }));
+  const invocation=command==='cargo'?[process.execPath,CARGO_OWNER,...args]:[command,...args];
+  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } });
   return result.status ?? 1;
 }
 
 function text(command: string, args: readonly string[]): string {
-  const result = command==="cargo"?cargoSync(args,{cwd:ROOT,encoding:"utf8",env:launchEnvironment}):spawnSync(command, args, { cwd: ROOT, encoding: "utf8" });
+  const invocation=command==='cargo'?[process.execPath,CARGO_OWNER,...args]:[command,...args];
+  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")}: ${result.stderr.trim()}`);
   }

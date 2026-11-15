@@ -1,7 +1,8 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import {ToolingInstrumentError,publishToolingFailure,publishInstrumentResult,type InstrumentResult} from '../differential/command-entry/instrument.ts';
+export {ToolingInstrumentError,publishToolingFailure,type InstrumentResult} from '../differential/command-entry/instrument.ts';
 export type {StepDiagnostics,DiagnosticsSummary} from './run-diagnostics.ts';
-export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "step-bound" | "selector-setup"; step: string; attempt: string; reason: string; completedFailures?: number };
 type Disposition={verdict:InstrumentResult["verdict"];disposition:"retry"|"operator-hold"|"verdict"};
 export const INSTRUMENT_DISPOSITIONS={
   "memory-pressure":{verdict:"INSTRUMENT",disposition:"retry"},
@@ -22,26 +23,19 @@ export function instrumentPolicy(kind:unknown,completedFailures:unknown=0):Dispo
   if(completedFailures>0&&(kind==="hung"||kind==="runaway"))return {verdict:"FAIL",disposition:"verdict"};
   return INSTRUMENT_DISPOSITIONS[kind as InstrumentResult["kind"]];
 }
-export class ToolingInstrumentError extends Error {
-  readonly kind: "tooling-setup" | "tooling-cleanup";
-  constructor(kind: ToolingInstrumentError["kind"], reason: string, options?: ErrorOptions) { super(reason, options); this.kind=kind; this.name="ToolingInstrumentError"; }
-}
 function publish(kind:InstrumentResult["kind"],reason:string,env:NodeJS.ProcessEnv,completedFailures=0):void {
   const policy=instrumentPolicy(kind,completedFailures);
   if(!policy)throw new Error("invalid completed-failure evidence");
   const path=env.NTS_GATE_STEP_RESULT,step=env.NTS_GATE_STEP,attempt=env.NTS_GATE_STEP_ATTEMPT;
   if(!path||!step||!attempt)return;
   const result:InstrumentResult={version:1,verdict:policy.verdict,kind,step,attempt,reason,...(completedFailures?{completedFailures}:{})};
-  const temporary=`${path}.${process.pid}`;writeFileSync(temporary,JSON.stringify(result)+"\n");renameSync(temporary,path);
+  publishInstrumentResult(result,env);
 }
 export function publishHung(reason:string,env:NodeJS.ProcessEnv=process.env,completedFailures=0):void {
   publish("hung",reason,env,completedFailures);
 }
 export function publishRunaway(reason:string,env:NodeJS.ProcessEnv=process.env,completedFailures=0):void {
   publish("runaway",reason,env,completedFailures);
-}
-export function publishToolingFailure(error:ToolingInstrumentError,env:NodeJS.ProcessEnv=process.env):void {
-  publish(error.kind,error.message,env);
 }
 export function publishSelectorFailure(error:unknown,env:NodeJS.ProcessEnv=process.env):void {
   if(error instanceof Error&&"code" in error&&error.code==="NTS_SELECTION_INFRASTRUCTURE")publish("selector-setup",error.message,env);

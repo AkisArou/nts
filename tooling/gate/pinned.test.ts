@@ -66,7 +66,7 @@ for (const status of [0, 23]) test(`pinned Cargo owns admission until its exit $
   const directory = testScratch(t, "pinned-admission"), root = join(directory, "repo"), tree = join(directory, "tree");
   const target = join(directory, "target"), bin = join(directory, "bin");
   mkdirSync(join(root, "tooling/gate"), {recursive:true});mkdirSync(bin);
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/gate/admit.ts", "tooling/inputs/linker.ts", "tooling/gate/cargo.ts"], root);
   writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
   const affinity=join(root,"tooling/gate/affinity.ts"), originalAffinity=readFileSync(affinity,"utf8");
   const entry='if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)';

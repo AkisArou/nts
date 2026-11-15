@@ -16,6 +16,7 @@ function doctests(env: Record<string, string | undefined>) {
     writeFileSync(join(root,"Cargo.toml"),"[workspace]\n"+profile);
     writeFileSync(cargo, `#!${process.execPath}\nconst {durableRecord}=require(${JSON.stringify(new URL("./durable-record.ts",import.meta.url).pathname)});durableRecord(process.env.DOC_CAPTURE,{args:process.argv.slice(2),checkers:process.env.NTS_CHECKERS,incremental:process.env.CARGO_INCREMENTAL}); process.exit(7);\n`);
     chmodSync(cargo, 0o755);
+    writeFileSync(join(root,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
     const run = spawnSync(process.execPath, [new URL("./doctests.ts", import.meta.url).pathname], { cwd:root,encoding: "utf8",
       env: { ...testEnvironment(), PATH: root, DOC_CAPTURE: capture, NTS_CHECKERS: "9", CARGO_INCREMENTAL:undefined,NTS_TEST_PROFILE: undefined, ...env } });
     let called: unknown = null;

@@ -61,6 +61,7 @@ const {durableRecord}=require(${JSON.stringify(new URL('./durable-record.ts',imp
 console.log(JSON.stringify({reason:'compiler-artifact',filenames:[${JSON.stringify(join(root,'target/nts-dev/deps/private'))}],profile:{test:true,debuginfo:0}}));
 process.exit(7);
 `,{mode:0o755});
+  writeFileSync(join(bin,'rustup'),'#!/bin/sh\nprintf \'no overrides\\n\'\n',{mode:0o755});
   const artifacts=join(root,'artifacts.json');
   const result=spawnSync(process.execPath,[new URL('./test-profile.ts',import.meta.url).pathname,'--artifacts',artifacts,route,...selection],{cwd:root,encoding:'utf8',env:{...fixtureEnvironment(t),PATH:bin,NTS_TEST_PROFILE:undefined,CARGO_INCREMENTAL:undefined,CARGO_TARGET_DIR:join(root,'target')}});
   assert.equal(result.status,7,result.stdout+result.stderr);

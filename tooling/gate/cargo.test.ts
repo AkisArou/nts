@@ -11,12 +11,12 @@ import {inspectCargoTestCalls} from './test-profile-audit.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
 import {fixtureEnvironment} from './test-environment.ts';
 import {testScratch} from './test-scratch.ts';
-import {ToolingInstrumentError} from './step-result.ts';
+import {ToolingInstrumentError,readStepInstrument} from './step-result.ts';
 
 function privateTree(t:Parameters<typeof testScratch>[0]):{root:string;cwd:string;home:string;env:NodeJS.ProcessEnv}{
   const root=testScratch(t,'cargo-configuration'),cwd=join(root,'parent/tree'),home=join(root,'cargo-home');
   mkdirSync(cwd,{recursive:true});mkdirSync(home);
-  return {root,cwd,home,env:fixtureEnvironment(t,{CARGO_HOME:home})};
+  return {root,cwd,home,env:fixtureEnvironment(t,{CARGO_HOME:home,NTS_GATE_STEP:'cargo-control',NTS_GATE_STEP_ATTEMPT:'private',NTS_GATE_STEP_RESULT:join(root,'instrument.json')})};
 }
 function refusal(error:unknown,path:string):boolean{
   assert.ok(error instanceof ToolingInstrumentError);assert.equal(error.kind,'tooling-setup');assert.ok(error.message.includes(path),error.message);return true;
@@ -27,14 +27,16 @@ for(const name of ['config','config.toml'])for(const place of ['home','parent','
   const directory=place==='home'?home:join(place==='tree'?cwd:dirname(cwd),'.cargo');mkdirSync(directory,{recursive:true});
   const path=join(directory,name);writeFileSync(path,'[env]\nNTS_AMBIENT_CARGO_PROBE="poison"\n');
   const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata','--offline'],{cwd,env:{...env,PATH:bin+delimiter+env.PATH},encoding:'utf8'});
-  assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(path),ran.stderr);
+  assert.notEqual(ran.status,0,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(path),ran.stderr);
+  const receipt=readStepInstrument(env.NTS_GATE_STEP_RESULT!,'cargo-control','private');assert.ok(receipt);assert.equal(receipt.verdict,'INSTRUMENT');assert.equal(receipt.kind,'tooling-setup');assert.ok(receipt.reason.includes(path));
   assert.equal(existsSync(marker),false,'configuration refuses before the executable starts');
 });
 test('a configuration published by the child refuses only after its completed drain',t=>{
   const {root,cwd,home,env}=privateTree(t),bin=join(root,'bin'),marker=join(root,'completed'),config=join(home,'config.toml');mkdirSync(bin);
   writeFileSync(join(bin,'cargo'),`#!${process.execPath}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(config)},'[env]\\nNTS_AMBIENT_CARGO_PROBE="poison"\\n');fs.writeFileSync(${JSON.stringify(marker)},'completed');\n`,{mode:0o755});
   const ran=spawnSync(process.execPath,[CARGO_OWNER,'metadata'],{cwd,env:{...env,PATH:bin+delimiter+env.PATH},encoding:'utf8'});
-  assert.equal(readFileSync(marker,'utf8'),'completed');assert.equal(ran.status,2,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(config),ran.stderr);
+  assert.equal(readFileSync(marker,'utf8'),'completed');assert.notEqual(ran.status,0,ran.stdout+ran.stderr);assert.ok(ran.stderr.includes(config),ran.stderr);
+  const receipt=readStepInstrument(env.NTS_GATE_STEP_RESULT!,'cargo-control','private');assert.ok(receipt);assert.equal(receipt.verdict,'INSTRUMENT');assert.equal(receipt.kind,'tooling-setup');assert.ok(receipt.reason.includes(config));
 });
 test('body and final-observation failures preserve both causes and the configuration path',t=>{
   const {cwd,home,env}=privateTree(t),config=join(home,'config'),primary=Error('primary Cargo control');

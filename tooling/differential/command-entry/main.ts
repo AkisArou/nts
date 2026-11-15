@@ -2,6 +2,13 @@
 import {realpathSync,writeSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {ToolingInstrumentError,publishToolingFailure} from './instrument.ts';
+
+function reportFailure(error:unknown):unknown{
+  if(error instanceof ToolingInstrumentError)try{publishToolingFailure(error);}
+  catch(publication){return new AggregateError([error,publication],'command instrumentation publication failed');}
+  return error;
+}
 
 type Command=()=>number|void|Promise<number|void>;
 export type CommandSignal='SIGINT'|'SIGTERM'|'SIGHUP';
@@ -100,6 +107,7 @@ function processOwner():ProcessOwner{
   const signals={SIGINT:()=>onSignal('SIGINT'),SIGTERM:()=>onSignal('SIGTERM'),SIGHUP:()=>onSignal('SIGHUP')};
   const failed=(error:unknown)=>{
     if(error instanceof CommandExit){exitAfterOutput(error.code);return;}
+    error=reportFailure(error);
     state.pendingMain=false;console.error(error);void state.finish(Number(process.exitCode)||1,{kind:'failure',error}).then(()=>process.exit(Number(process.exitCode)||1));
   };
   // An unsettled body can own unref'd resources. Drain those too, but only
@@ -165,6 +173,7 @@ export function runAsCommand(url:string,main:Command,{realpath=false}:{realpath?
   const failed=(error:unknown)=>{
     finished();state.pendingMain=false;
     if(error instanceof CommandExit){exitAfterOutput(error.code);return;}
+    error=reportFailure(error);
     console.error(error);return state.finish(1,{kind:'failure',error});
   };
   process.once('beforeExit',arm);
