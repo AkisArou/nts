@@ -987,6 +987,13 @@
       }
     },
     {
+      "source": "build/src/node_deps/paths.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
       "source": "build/src/node_deps/search.rs",
       "declarations": {
         "imports": [],
@@ -1009,6 +1016,13 @@
     },
     {
       "source": "build/tests/node_deps.rs",
+      "declarations": {
+        "imports": [],
+        "assets": []
+      }
+    },
+    {
+      "source": "build/tests/node_deps_identity.rs",
       "declarations": {
         "imports": [],
         "assets": []
