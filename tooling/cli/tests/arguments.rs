@@ -4,7 +4,7 @@
 #[path = "../src/arguments.rs"]
 mod command_table;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 fn args(values: &[&str]) -> Vec<String> {
