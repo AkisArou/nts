@@ -41,10 +41,10 @@ export function wideDecision(options: {
   const end=last?.ended_at?new Date(last.ended_at):undefined;
   const completed=end&&Number.isFinite(end.getTime())&&end.getTime()<=now.getTime()&&start&&end.getTime()>=start.getTime()
     &&(last?.verdict==='green'||last?.verdict==='red');
-  // Only this verified's completed run can answer by its end. Otherwise a
-  // moved verified retains its existing start/gap eligibility. Missing end
-  // evidence and held/interrupted work cannot answer a night on the same tip.
-  const answer=last?.commit===verified?(completed?end:undefined):start??new Date(options.since);
+  // Completion can answer a slot crossed by this verified's run. All other
+  // cases retain the start answer: a held straddling attempt leaves one rerun
+  // due, whose post-slot start answers the night even if it is held again.
+  const answer=last?.commit===verified&&completed?end:start??new Date(options.since);
   const nightly = dueNightly(schedule, answer, now);
   const due = nightly ? "nightly" : verified !== last?.commit ? "advanced" : null;
   if(options.hardBusy)return {due,waiting:options.hardBusy};

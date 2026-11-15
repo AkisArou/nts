@@ -936,7 +936,7 @@ test('a wide run crossing the nightly slot records its end and starts benchmarks
   assert.equal(units.specs.at(-1)!.name,BENCH_UNIT);
 });
 
-test('a held wide run crossing the slot records its end but leaves the nightly attempt owed',async t=>{
+test('a held straddling wide leaves one rerun owed and a held post-slot rerun then answers the night',async t=>{
   const repo=repository(t),gate=fakeGate(repo),units=stubUnits();
   const start=new Date(2026,10,6,2,48),end=new Date(2026,10,6,3,29);
   let now=start;
@@ -952,6 +952,9 @@ test('a held wide run crossing the slot records its end but leaves the nightly a
   assert.equal(await cycle(fx),'wide','held work cannot let benchmarks skip the nightly attempt');
   assert.equal(gate.measured.filter(row=>row.label==='wide').length,2);
   assert.equal(units.specs.length,0);
+  assert.equal(await cycle(fx),'benchmarks','the second held result cannot cause a third wide attempt');
+  assert.equal(gate.measured.filter(row=>row.label==='wide').length,2);
+  assert.equal(units.specs.at(-1)!.name,BENCH_UNIT);
 });
 
 const BEFORE = new Date(2026, 10, 6, 23, 0), NIGHT = new Date(2026, 10, 7, 3, 30), NEXT_NIGHT = new Date(2026, 10, 8, 3, 30);

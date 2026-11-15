@@ -3032,7 +3032,10 @@ existing module boundaries.
 Using a wide run's start to answer the nightly slot repeated a green run on the
 same verified when it straddled the slot. Wide records now retain the actual
 measurement end independently of the start. A green or red completion on that
-verified at or after the latest slot answers the night; held, interrupted or
-unknown completion does not. Start-based gap and moved-verified eligibility stay
+verified at or after the latest slot answers the night. Every verdict also
+retains the existing answer when its start is at or after the slot, so a held
+straddling run leaves at most one extra attempt owed instead of a repeat loop.
+Missing or invalid end facts use the start rule alone.
+Start-based gap and moved-verified eligibility stay
 with the existing scheduler. Benchmark eligibility remains independent, so it
 can proceed after the completed wide run without another identical attempt.

@@ -72,12 +72,21 @@ test('a same-verified green or red run straddling the nightly slot answers the n
   }
 });
 
-test('held, interrupted and missing or invalid completion facts leave the nightly run due',()=>{
-  const now=at(6,3,29),last={commit:'same',at:at(6,3,5).toISOString(),ended_at:now.toISOString(),verdict:'green' as const};
+test('held straddling or incomplete end evidence leaves one nightly rerun due',()=>{
+  const now=at(6,3,29),last={commit:'same',at:at(6,2,48).toISOString(),ended_at:now.toISOString(),verdict:'green' as const};
   for(const incomplete of [
     {...last,verdict:'held' as const},{...last,verdict:undefined},{...last,ended_at:undefined},
-    {...last,ended_at:'invalid'},{...last,ended_at:at(6,3,4).toISOString()},{...last,ended_at:at(6,3,30).toISOString()},
+    {...last,ended_at:'invalid'},{...last,ended_at:at(6,2,47).toISOString()},{...last,ended_at:at(6,3,30).toISOString()},
   ])assert.deepEqual(decision(incomplete,now,'same'),{due:'nightly',waiting:null});
+  const rerun={...last,at:at(6,3,5).toISOString(),verdict:'held' as const};
+  assert.deepEqual(decision(rerun,now,'same'),{due:null,waiting:null},'a held post-slot rerun answers the night');
+});
+
+test('a post-slot start answers the night for held and legacy records without valid end facts',()=>{
+  const now=at(6,3,29),last={commit:'same',at:at(6,3,5).toISOString()};
+  for(const record of [last,{...last,verdict:'held' as const},{...last,ended_at:'invalid',verdict:'green' as const}])
+    assert.deepEqual(decision(record,now,'same'),{due:null,waiting:null});
+  assert.deepEqual(decision({...last,at:at(6,2,48).toISOString()},now,'same'),{due:'nightly',waiting:null},'legacy records use their start alone');
 });
 
 test('a moved verified retains the start-based minimum gap and nightly eligibility',()=>{
