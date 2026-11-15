@@ -1,3 +1,4 @@
+import {nodeProcessAlive} from './oracle-runtime.ts';
 import {testEnvironmentHandoff,fixtureEnvironment} from "../gate/test-environment.ts";
 import assert from 'node:assert/strict';
 import {copyFileSync,chmodSync,constants,mkdirSync,mkdtempSync,readFileSync,renameSync,rmSync,statSync,writeFileSync,openSync,closeSync} from 'node:fs';
@@ -123,13 +124,13 @@ for(const failure of ['readiness','invalid-session'] as const)test('failed '+fai
   let holder:NodeResolutionSession|undefined,published=false;
   await assert.rejects(startNodeResolutionSession(directory,nodeResolutionOptions([]),process.pid,()=>{published=true;},async waiting=>{
     holder=await waiting;
-    assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),false,'the actual acquired helper is live before the failure');
+    assert.equal(nodeProcessAlive(holder.holder),true,'the actual acquired helper is live before the failure');
     if(failure==='readiness')throw Error('supplied resolution readiness failure');
     const invalid={...holder,helperSha256:'0'.repeat(64)};
     writeFileSync(join(directory,'holder.json'),JSON.stringify(invalid));return invalid;
   }),failure==='readiness'?/supplied resolution readiness failure/:/oracle Node resolution service identity changed/);
   assert.ok(holder);assert.equal(published,false,'an invalid acquisition never publishes successful ownership');
-  assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),true,'the owned child has closed before acquisition rejects');
+  assert.equal(nodeProcessAlive(holder.holder),false,'the owned child has closed before acquisition rejects');
   rmSync(directory,{recursive:true});
-  assert.equal(holderGone(()=>readFileSync('/proc/'+holder!.holder.pid+'/stat')),true,'no helper can read or publish into removed output');
+  assert.equal(nodeProcessAlive(holder.holder),false,'no helper can read or publish into removed output');
 });
