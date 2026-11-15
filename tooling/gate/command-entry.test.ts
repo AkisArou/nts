@@ -10,10 +10,22 @@ import {testEnvironment} from './test-environment.ts';
 import {CommandLifetime,COMMAND_CLOSE_MS} from '../differential/command-entry/main.ts';
 import {waitFor} from './test-wait.ts';
 import {copyModuleClosure} from './module-closure-fixture.ts';
+import {moduleClosure} from './module-closure.ts';
 import {readStepInstrument} from './step-result.ts';
+import {ORACLE_EXECUTION_FILES} from '../differential/oracle-runtime.ts';
 
 const helper=new URL('../differential/command-entry/main.ts',import.meta.url).href;
 function run(file:string){return spawnSync(process.execPath,[file],{env:testEnvironment(),encoding:'utf8'});}
+
+test('sealed execution owns the exact command-entry module closure',()=>{
+ const prefix='tooling/differential/';
+ const actual=moduleClosure(['tooling/differential/command-entry/main.ts']).map(file=>{
+  assert.ok(file.startsWith(prefix+'command-entry/'),'command entry must remain a Node-only leaf: '+file);
+  return file.slice(prefix.length);
+ }).sort();
+ const declared=ORACLE_EXECUTION_FILES.filter(file=>file.startsWith('command-entry/')).slice().sort();
+ assert.deepEqual(declared,actual,'every command-entry import must be a sealed execution asset');
+});
 
 test('the shared entry accepts sync and async statuses and preserves a command-owned status',t=>{
  const root=testScratch(t,'command-entry-status');
