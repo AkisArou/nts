@@ -178,7 +178,7 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:5|6;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexStart={kind:'index-start';version:5|6|7;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
 export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
 export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number;execRequests:number};
@@ -195,7 +195,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
-  await emit({kind:'index-start',version:6,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  await emit({kind:'index-start',version:7,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
   const capture=await readFileObservation(options.raw,async row=>{
     if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
     if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
@@ -249,7 +249,15 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
       }
       // Preserve spelling and its actual anchor. resolve()/join() here would
       // erase a symlink component before '..' could be interpreted by the kernel.
-      subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor});
+      let resolution:CapturedPathResolution|undefined;
+      if(path.resolution){
+        const fact=path.resolution;
+        if(fact.state==='unavailable')resolution={...fact};
+        else try{resolution={...fact,path:byteFactText(fact.path,'captured path identity'),components:fact.components.map(part=>({...part,
+          path:byteFactText(part.path,'captured component identity'),...(part.link?{link:byteFactText(part.link,'captured alias target')}:{})}))};}
+        catch{resolution={state:'unavailable',error:84};} // EILSEQ: raw bytes remain retained.
+      }
+      subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor,...(resolution?{resolution}:{})});
     }
     if(!row.paths.length)for(const fd of row.dirfds)descriptor(fd);
     for(const subject of subjects)readSubject(subject,byteFactText(row.cwd,'actual cwd'),row.args,row,observer);
@@ -304,6 +312,17 @@ function readSubject(value:unknown,cwd:string,args:readonly string[],request:{sy
   if(row.kind==='path'){
     if(!integer(row.dirfdArg)||row.dirfdArg< -1||row.dirfdArg>5||typeof row.name!=='string'||row.name.includes('\0')
       ||Buffer.from(row.name).toString('hex')!==row.raw)fail('malformed pathname subject');
+    if(row.resolution!==undefined){
+      const proof=indexObject(row.resolution);
+      if(proof.state==='unavailable'){if(!integer(proof.error)||proof.error<=0)fail('malformed unavailable resolution');}
+      else{
+        const decimal=(value:unknown)=>typeof value==='string'&&/^\d+$/.test(value),namespace=indexObject(proof.namespace);
+        if(!['resolved','missing','not-directory'].includes(String(proof.state))||!absolute(proof.path)||typeof proof.finalLink!=='boolean'
+          ||!['dev','ino','rootDev','rootIno'].every(key=>decimal(namespace[key]))||!Array.isArray(proof.components)||!proof.components.length||proof.components.length>128
+          ||proof.components.some(item=>{const part=indexObject(item);return !absolute(part.path)||!['directory','file','symlink','other','missing'].includes(String(part.kind))
+            ||!decimal(part.dev)||!decimal(part.ino)||part.link!==undefined&&(part.kind!=='symlink'||typeof part.link!=='string');}))fail('malformed capture-time resolution');
+      }
+    }
     const anchor=indexObject(row.anchor);
     if(anchor.kind==='absolute'){if(!isAbsolute(row.name))fail('relative path has an absolute anchor');}
     else{
@@ -350,7 +369,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==5&&row.version!==6)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(row.version!==5&&row.version!==6&&row.version!==7)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -367,7 +386,7 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       firstImage??={pid:row.pid,path:row.path};counts.images++;
       const phase=indexObject(row.phase);
       const identity=key(row.pid,row.birth),previous=tasks.get(identity);
-      if(header.version===6){
+      if(header.version>=6){
         const argv=indexObject(row.argvSource);
         if(argv.kind==='request'){
           if(typeof argv.attempt!=='string')fail('malformed exec argument reference');

@@ -9,7 +9,7 @@ import type {InputSubject} from './rust-test-inputs.ts';
 
 const descriptor=(target:string):InputSubject=>({kind:'descriptor',arg:0,fd:3,target,raw:Buffer.from(target).toString('hex')});
 const pathname=(name:string,resolution?:CapturedPathResolution):InputSubject=>({kind:'path',arg:1,dirfdArg:0,name,raw:Buffer.from(name).toString('hex'),anchor:{kind:'absolute'},...(resolution?{resolution}:{})});
-const resolution=(path:string):CapturedPathResolution=>({state:'resolved',path,components:[{path,kind:'file',dev:'1',ino:'2'}]});
+const resolution=(path:string):Extract<CapturedPathResolution,{path:string}>=>({state:'resolved',path,components:[{path,kind:'file',dev:'1',ino:'2'}]});
 const content={kind:'content',following:'follow'} as const;
 const facts=():RuntimeProvenanceFacts=>({sourceRoot:'/source',buildNamespace:'/build',artifacts:['/build/emitted'],outputDirectories:[{package:'crate',path:'/build/owned-out'}],roots:[]});
 

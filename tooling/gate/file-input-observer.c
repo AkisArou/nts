@@ -394,6 +394,233 @@ static Bytes exec_target(const struct seccomp_notif *request, const Call *call,
   free(physical);
   return result;
 }
+
+/* Capture resolution while the task is stopped. This is metadata evidence,
+ * never the notified syscall's return. Unshared mount/root namespaces and
+ * bounded-walk failures remain explicitly unavailable. No ABI flags are
+ * decoded: a final symlink is labelled, so a no-follow consumer can decline
+ * this proof. */
+enum { RESOLUTION_COMPONENTS = 128, RESOLUTION_PATH_BYTES = 16384 };
+typedef struct {
+  char path[PATH_BYTES], link[PATH_BYTES];
+  const char *kind;
+  unsigned long long dev, ino;
+} ResolutionComponent;
+typedef struct {
+  int error;
+  const char *state;
+  bool final_link;
+  unsigned count, path_bytes;
+  char path[PATH_BYTES];
+  struct stat mount, root;
+  ResolutionComponent components[RESOLUTION_COMPONENTS];
+} PathResolution;
+static PathResolution resolution_rows[2];
+static unsigned long resolution_walks, resolution_stats;
+static bool resolution_namespace(pid_t tid, struct stat *mount,
+                                 struct stat *root) {
+  char path[96];
+  struct stat own_mount, own_root;
+  snprintf(path, sizeof(path), "/proc/%d/ns/mnt", tid);
+  if (stat(path, mount) || stat("/proc/self/ns/mnt", &own_mount))
+    return false;
+  snprintf(path, sizeof(path), "/proc/%d/root", tid);
+  if (stat(path, root) || stat("/", &own_root))
+    return false;
+  return mount->st_dev == own_mount.st_dev &&
+         mount->st_ino == own_mount.st_ino && root->st_dev == own_root.st_dev &&
+         root->st_ino == own_root.st_ino;
+}
+static bool resolution_component(PathResolution *value, const char *path,
+                                 struct stat *info) {
+  size_t size = strlen(path);
+  if (value->count == RESOLUTION_COMPONENTS ||
+      value->path_bytes + size > RESOLUTION_PATH_BYTES) {
+    value->error = EOVERFLOW;
+    return false;
+  }
+  ResolutionComponent *part = &value->components[value->count++];
+  memcpy(part->path, path, size + 1);
+  part->link[0] = 0;
+  value->path_bytes += (unsigned)size;
+  resolution_stats++;
+  if (lstat(path, info)) {
+    value->error = errno;
+    part->kind = "missing";
+    part->dev = part->ino = 0;
+    if (errno == ENOENT) {
+      value->state = "missing";
+      value->error = 0;
+    }
+    return false;
+  }
+  part->dev = (unsigned long long)info->st_dev;
+  part->ino = (unsigned long long)info->st_ino;
+  part->kind = S_ISDIR(info->st_mode)   ? "directory"
+               : S_ISREG(info->st_mode) ? "file"
+               : S_ISLNK(info->st_mode) ? "symlink"
+                                        : "other";
+  return true;
+}
+static void resolution_parent(char *path) {
+  char *slash = strrchr(path, '/');
+  if (slash == path)
+    path[1] = 0;
+  else if (slash)
+    *slash = 0;
+}
+static void resolve_attempt_path(pid_t tid, const Bytes *path,
+                                 const Bytes *anchor, PathResolution *value) {
+  value->error = EINVAL;
+  value->state = "unavailable";
+  value->count = value->path_bytes = 0;
+  value->final_link = false;
+  value->path[0] = 0;
+  if (!good(path) || path->null || !path->size || path->size >= PATH_BYTES)
+    return;
+  resolution_walks++;
+  if (!resolution_namespace(tid, &value->mount, &value->root)) {
+    value->error = EXDEV;
+    return;
+  }
+  if (path->data[0] == '/')
+    strcpy(value->path, "/");
+  else {
+    if (!anchor || !good(anchor) || anchor->null || !anchor->size ||
+        anchor->size >= PATH_BYTES || anchor->data[0] != '/')
+      return;
+    memcpy(value->path, anchor->data, anchor->size);
+    value->path[anchor->size] = 0;
+  }
+  char pending[PATH_BYTES];
+  memcpy(pending, path->data, path->size);
+  pending[path->size] = 0;
+  bool directory_required = path->data[path->size - 1] == '/';
+  unsigned links = 0;
+  struct stat info;
+  value->error = 0;
+  if (!resolution_component(value, value->path, &info))
+    goto done;
+  if (!S_ISDIR(info.st_mode)) {
+    value->state = "not-directory";
+    goto done;
+  }
+  while (*pending) {
+    char part[PATH_BYTES];
+    char *start = pending;
+    while (*start == '/')
+      start++;
+    if (!*start)
+      break;
+    char *end = strchr(start, '/');
+    size_t size = end ? (size_t)(end - start) : strlen(start);
+    memcpy(part, start, size);
+    part[size] = 0;
+    memmove(pending, end ? end + 1 : start + size,
+            strlen(end ? end + 1 : start + size) + 1);
+    char *tail = pending;
+    while (*tail == '/')
+      tail++;
+    bool final = !*tail;
+    if (!strcmp(part, "."))
+      continue;
+    if (!strcmp(part, ".."))
+      resolution_parent(value->path);
+    else {
+      size_t before = strlen(value->path);
+      if (before + size + 2 >= PATH_BYTES) {
+        value->error = ENAMETOOLONG;
+        break;
+      }
+      if (before != 1)
+        strcat(value->path, "/");
+      strcat(value->path, part);
+    }
+    if (!resolution_component(value, value->path, &info))
+      break;
+    if (S_ISLNK(info.st_mode)) {
+      ResolutionComponent *component = &value->components[value->count - 1];
+      ssize_t count = readlink(value->path, component->link, PATH_BYTES - 1);
+      if (count < 0) {
+        value->error = errno;
+        break;
+      }
+      if (count == PATH_BYTES - 1 || ++links > 40) {
+        value->error = ELOOP;
+        break;
+      }
+      component->link[count] = 0;
+      value->path_bytes += (unsigned)count;
+      if (value->path_bytes > RESOLUTION_PATH_BYTES) {
+        value->error = EOVERFLOW;
+        break;
+      }
+      value->final_link = value->final_link || final;
+      if (final && count && component->link[count - 1] == '/')
+        directory_required = true;
+      char next[PATH_BYTES];
+      int written = snprintf(next, sizeof(next), "%s%s%s", component->link,
+                             *pending ? "/" : "", pending);
+      if (written < 0 || written >= PATH_BYTES) {
+        value->error = ENAMETOOLONG;
+        break;
+      }
+      if (component->link[0] == '/')
+        strcpy(value->path, "/");
+      else
+        resolution_parent(value->path);
+      strcpy(pending, next);
+    } else if ((!final || directory_required) && !S_ISDIR(info.st_mode)) {
+      value->state = "not-directory";
+      break;
+    }
+  }
+  if (!value->error && !strcmp(value->state, "unavailable"))
+    value->state = "resolved";
+done:;
+  struct stat mount, root;
+  if (!resolution_namespace(tid, &mount, &root) ||
+      mount.st_dev != value->mount.st_dev ||
+      mount.st_ino != value->mount.st_ino ||
+      root.st_dev != value->root.st_dev || root.st_ino != value->root.st_ino)
+    value->error = EXDEV;
+}
+static void resolution_text(const char *text) {
+  Bytes value = {.data = (unsigned char *)text, .size = strlen(text)};
+  bytes_json(&value);
+}
+static void resolution_json(const PathResolution *value) {
+  if (value->error) {
+    fprintf(output, "{\"state\":\"unavailable\",\"error\":%d}", value->error);
+    return;
+  }
+  fprintf(
+      output,
+      "{\"state\":\"%s\",\"finalLink\":%s,\"namespace\":{\"dev\":\"%llu\","
+      "\"ino\":\"%llu\",\"rootDev\":\"%llu\",\"rootIno\":\"%llu\"},\"path\":",
+      value->state, value->final_link ? "true" : "false",
+      (unsigned long long)value->mount.st_dev,
+      (unsigned long long)value->mount.st_ino,
+      (unsigned long long)value->root.st_dev,
+      (unsigned long long)value->root.st_ino);
+  resolution_text(value->path);
+  fputs(",\"components\":[", output);
+  for (unsigned i = 0; i < value->count; i++) {
+    const ResolutionComponent *part = &value->components[i];
+    if (i)
+      fputc(',', output);
+    fputs("{\"path\":", output);
+    resolution_text(part->path);
+    fprintf(output, ",\"kind\":\"%s\",\"dev\":\"%llu\",\"ino\":\"%llu\"",
+            part->kind, part->dev, part->ino);
+    if (*part->link) {
+      fputs(",\"link\":", output);
+      resolution_text(part->link);
+    }
+    fputc('}', output);
+  }
+  fputs("]}", output);
+}
 static void record_error(const char *message, int error) {
   errors++;
   fprintf(output, "{\"kind\":\"error\",\"message\":\"%s\",\"errno\":%d}\n",
@@ -592,6 +819,14 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
     fprintf(output, "{\"arg\":%d,\"dirfdArg\":%d,\"value\":", call->paths[i],
             call->dirfds[i]);
     bytes_json(&paths[i]);
+    const Bytes *anchor =
+        call->dirfds[i] < 0 ||
+                (int)request->data.args[call->dirfds[i]] == AT_FDCWD
+            ? &cwd
+            : &descriptors[i];
+    resolve_attempt_path(request->pid, &paths[i], anchor, &resolution_rows[i]);
+    fputs(",\"resolution\":", output);
+    resolution_json(&resolution_rows[i]);
     fputc('}', output);
   }
   fputs("],\"dirfds\":[", output);
@@ -721,7 +956,7 @@ int main(int argc, char **argv) {
   static char buffer[65536];
   if (setvbuf(output, buffer, _IOFBF, sizeof(buffer)))
     fatal("observation buffer");
-  fputs("{\"kind\":\"start\",\"version\":3,\"mechanism\":\"seccomp-user-"
+  fputs("{\"kind\":\"start\",\"version\":4,\"mechanism\":\"seccomp-user-"
         "notification\",\"noNewPrivileges\":true}\n",
         output);
   inherited_descriptors();
@@ -941,13 +1176,15 @@ int main(int argc, char **argv) {
   bool complete = drained && !errors && !output_failed;
   fprintf(output,
           "{\"kind\":\"complete\",\"complete\":%s,\"root\":%d,\"entered\":%s,"
-          "\"execErrno\":%d,\"exit\":%d,\"signal\":%d,\"attempts\":%lu,"
+          "\"execErrno\":%d,\"exit\":%d,\"signal\":%d,\"resolutionWalks\":%lu,"
+          "\"resolutionStats\":%lu,\"attempts\":%lu,"
           "\"errors\":%lu,\"drainComplete\":%s,\"observerSignal\":%d}\n",
           complete ? "true" : "false", root, entered ? "true" : "false",
           launch_error.error,
           WIFEXITED(root_status) ? WEXITSTATUS(root_status) : -1,
-          WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0, attempts,
-          errors, drained ? "true" : "false", terminal_signal);
+          WIFSIGNALED(root_status) ? WTERMSIG(root_status) : 0,
+          resolution_walks, resolution_stats, attempts, errors,
+          drained ? "true" : "false", terminal_signal);
   if (!publish_observation(argv[1]))
     complete = false;
   if ((!complete || launch_error.error) && !terminal_signal) {

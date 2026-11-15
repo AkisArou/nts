@@ -10,14 +10,16 @@ import {createHash} from 'node:crypto';
 import {infrastructureProbe} from './infrastructure-probe.ts';
 
 export type ByteFact={hex:string;error:number;truncated:boolean;null:boolean};
-export type PathFact={arg:number;dirfdArg:number;value:ByteFact};
+export type PathResolutionFact={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:ByteFact;finalLink:boolean;
+  namespace:{dev:string;ino:string;rootDev:string;rootIno:string};components:{path:ByteFact;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string;link?:ByteFact}[]};
+export type PathFact={arg:number;dirfdArg:number;value:ByteFact;resolution?:PathResolutionFact};
 export type DescriptorFact={arg:number;fd:number;target:ByteFact};
 export type ExecEntry={source:'syscall-entry';argv:ByteFact;target:ByteFact};
 export type InputAttempt={kind:'attempt';id:string;tid:number;tgid:number;ppid:number;birth:string;parentBirth:string;
   syscall:string;operation:string;outcome:'unknown';canceled:boolean;factsComplete:boolean;args:string[];
   cwd:ByteFact;image:ByteFact;argvRead:boolean;argv:ByteFact;exec?:ExecEntry;paths:PathFact[];dirfds:DescriptorFact[]};
-export type ObservationStart={kind:'start';version:2|3;mechanism:'seccomp-user-notification';noNewPrivileges:true};
-export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean;observerSignal:number};
+export type ObservationStart={kind:'start';version:2|3|4;mechanism:'seccomp-user-notification';noNewPrivileges:true};
+export type ObservationEnd={kind:'complete';complete:boolean;root:number;entered:boolean;execErrno:number;exit:number;signal:number;attempts:number;errors:number;drainComplete:boolean;observerSignal:number;resolutionWalks?:number;resolutionStats?:number};
 export type InheritedDescriptor={kind:'inherited';fd:number;flags:number;target:ByteFact};
 export type RootExit={kind:'root-exit';root:number;exit:number;signal:number};
 export type RootStart={kind:'root-start';root:number};
@@ -82,11 +84,21 @@ function exitStatus(exit:unknown,signal:unknown):boolean{
 export function byteFact(value:unknown):value is ByteFact{
   const row=object(value);return typeof row.hex==='string'&&/^(?:[0-9a-f]{2})*$/.test(row.hex)&&integer(row.error)&&row.error>=0&&typeof row.truncated==='boolean'&&typeof row.null==='boolean';
 }
+function pathResolution(value:unknown):boolean{
+  const row=object(value);
+  if(row.state==='unavailable')return natural(row.error)&&row.error!==0;
+  const namespace=object(row.namespace),decimal=(v:unknown)=>typeof v==='string'&&/^\d+$/.test(v);
+  return ['resolved','missing','not-directory'].includes(String(row.state))&&byteFact(row.path)&&typeof row.finalLink==='boolean'
+    &&['dev','ino','rootDev','rootIno'].every(key=>decimal(namespace[key]))&&Array.isArray(row.components)&&row.components.length>0&&row.components.length<=128
+    &&row.components.every(item=>{const part=object(item);return byteFact(part.path)&&['directory','file','symlink','other','missing'].includes(String(part.kind))
+      &&decimal(part.dev)&&decimal(part.ino)&&(part.link===undefined||part.kind==='symlink'&&byteFact(part.link));});
+}
 export function readObservationRow(value:unknown):ObservationRow{
   const row=object(value);let valid=false;
-  if(row.kind==='start')valid=(row.version===2||row.version===3)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true;
+  if(row.kind==='start')valid=(row.version===2||row.version===3||row.version===4)&&row.mechanism==='seccomp-user-notification'&&row.noNewPrivileges===true;
   else if(row.kind==='complete')valid=typeof row.complete==='boolean'&&typeof row.entered==='boolean'&&typeof row.drainComplete==='boolean'
     &&['root','execErrno','attempts','errors','observerSignal'].every(key=>natural(row[key]))&&row.root!==0
+    &&['resolutionWalks','resolutionStats'].every(key=>row[key]===undefined||natural(row[key]))
     &&exitStatus(row.exit,row.signal)&&!(row.entered&&row.execErrno!==0);
   else if(row.kind==='root-start')valid=integer(row.root)&&row.root>0;
   else if(row.kind==='root-exit')valid=natural(row.root)&&row.root>0&&exitStatus(row.exit,row.signal);
@@ -99,7 +111,7 @@ export function readObservationRow(value:unknown):ObservationRow{
     &&Array.isArray(row.args)&&row.args.length===6&&row.args.every(arg=>typeof arg==='string'&&/^[0-9a-f]{1,16}$/.test(arg))
     &&byteFact(row.cwd)&&byteFact(row.image)&&typeof row.argvRead==='boolean'&&byteFact(row.argv)
     &&(row.exec===undefined||(['execve','execveat'].includes(String(row.syscall))&&object(row.exec).source==='syscall-entry'&&byteFact(object(row.exec).argv)&&byteFact(object(row.exec).target)))
-    &&Array.isArray(row.paths)&&row.paths.every(value=>{const path=object(value);return integer(path.arg)&&integer(path.dirfdArg)&&byteFact(path.value);})
+    &&Array.isArray(row.paths)&&row.paths.every(value=>{const path=object(value);return integer(path.arg)&&integer(path.dirfdArg)&&byteFact(path.value)&&(path.resolution===undefined||pathResolution(path.resolution));})
     &&Array.isArray(row.dirfds)&&row.dirfds.every(value=>{const fd=object(value);return integer(fd.arg)&&integer(fd.fd)&&byteFact(fd.target);});
   if(!valid)throw Error('file input observer: malformed '+String(row.kind)+' record');
   return row as ObservationRow;
@@ -124,7 +136,8 @@ export async function readFileObservation(file:string,visit:(row:ObservationRow)
     }
     if(row.kind==='attempt'){
       attempts++;
-      if(version===3&&['execve','execveat'].includes(row.syscall)&&!row.exec)throw Error('file input observer: missing exec request arguments');
+      if(version!>=3&&['execve','execveat'].includes(row.syscall)&&!row.exec)throw Error('file input observer: missing exec request arguments');
+      if(version===4&&row.paths.some(path=>!path.resolution))throw Error('file input observer: missing capture-time resolution fact');
       if(!row.factsComplete&&!canceledLifetime(row))throw Error('file input observer: unreadable or truncated attempt facts');
     }
     if(row.kind==='complete'){

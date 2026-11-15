@@ -125,6 +125,42 @@ int main(int argc,char **argv){
 }
 `;
 
+test('pathname components are captured at the stopped attempt and survive later alias replacement',async t=>{
+  const root=newTestScratch('file-input-resolution');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
+  const repository=join(root,'source'),outside=join(root,'host');mkdirSync(repository);mkdirSync(outside);
+  const first=join(outside,'first'),second=join(outside,'second'),alias=join(repository,'alias');
+  writeFileSync(first,'first');writeFileSync(second,'second');symlinkSync(first,alias);
+  writeFileSync(input,`#define _GNU_SOURCE
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+int main(int argc,char **argv) {
+  (void)argc; int fd=open(argv[1],O_RDONLY);if(fd<0)return 1;close(fd);
+  if(unlink(argv[1])||symlink(argv[2],argv[1]))return 2;
+  fd=open(argv[1],O_RDONLY);if(fd<0)return 3;close(fd);
+  struct stat info; (void)stat(argv[3],&info);(void)stat(argv[4],&info);
+  (void)fstatat(AT_FDCWD,argv[1],&info,AT_SYMLINK_NOFOLLOW);return 0;
+}\n`);
+  const built=spawnTest('cc',['-O1',input,'-o',program],{env,encoding:'utf8'});assert.equal(built.status,0,built.stderr);
+  const raw=join(root,'raw.gz'),index=join(root,'index.gz'),missing=join(root,'missing/child'),blocked=first+'/child';
+  const ran=spawnTest(prepared.executable,fileObserverArguments(raw,program,[alias,second,missing,blocked]),{env,encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);
+  const captured=await readFileObservation(raw,()=>{});assert.ok(captured.terminal.resolutionWalks!>0);assert.ok(captured.terminal.resolutionStats!>captured.terminal.resolutionWalks!);
+  await publishInputTrace({raw,output:index,cwd:root,root:repository,observer:prepared.receipt,target:{package:'fixture',name:'resolution',kind:['test'],source:'fixture.rs'}});
+  const rows:InputIndexObservation[]=[];await readInputTraceIndex(index,row=>{if(row.kind==='observation')rows.push(row);});
+  const opens=rows.filter(row=>row.operation==='open').flatMap(row=>row.subjects).filter(value=>value.kind==='path'&&value.name===alias);
+  assert.equal(opens.length,2);
+  assert.equal(opens[0]!.kind==='path'&&opens[0]!.resolution?.state==='resolved'&&opens[0]!.resolution.path,first);
+  assert.equal(opens[1]!.kind==='path'&&opens[1]!.resolution?.state==='resolved'&&opens[1]!.resolution.path,second);
+  for(const value of opens){assert.ok(value.kind==='path'&&value.resolution?.state!=='unavailable');
+    assert.ok(value.kind==='path'&&value.resolution&&value.resolution.state!=='unavailable'&&value.resolution.components.some(part=>part.path===alias&&part.kind==='symlink'));}
+  const find=(name:string)=>rows.flatMap(row=>row.subjects).find(value=>value.kind==='path'&&value.name===name);
+  const absent=find(missing),file=find(blocked);assert.equal(absent?.kind==='path'&&absent.resolution?.state,'missing');assert.equal(file?.kind==='path'&&file.resolution?.state,'not-directory');
+  rmSync(outside,{recursive:true});
+  assert.equal(opens[0]!.kind==='path'&&opens[0]!.resolution?.state==='resolved'&&opens[0]!.resolution.path,first,'no analysis-time filesystem lookup');
+});
+
 test('exec requests retain syscall argv and cwd without inventing successful or readable invocations',async t=>{
   const root=newTestScratch('file-input-exec-argv');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');

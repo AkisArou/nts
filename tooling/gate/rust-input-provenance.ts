@@ -7,8 +7,9 @@ import type {CaptureArtifact} from './file-input-observer.ts';
 import type {InputSubject} from './rust-test-inputs.ts';
 import type {InputRequirement} from './rust-input-operations.ts';
 
-export type CapturedPathResolution={state:'resolved'|'missing'|'not-directory';path:string;
-  components:{path:string;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string}[]};
+export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
+  namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
+  components:{path:string;kind:'directory'|'file'|'symlink'|'other'|'missing';dev:string;ino:string;link?:string}[]};
 export type FreshRootReceipt={path:string;dev:string;ino:string;uid:string;createdAt:number;empty:true};
 export type RuntimeProvenanceFacts={sourceRoot:string;buildNamespace?:string;artifacts:string[];
   outputDirectories:{package:string;path:string}[];roots:FreshRootReceipt[];window?:{start:number;end:number}};
@@ -58,6 +59,7 @@ export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts){
   return {classify(subject:InputSubject,requirement:InputRequirement):RuntimeProvenanceClass|undefined{
     if(requirement.kind==='unknown'||requirement.kind==='literal')return;
     const resolution=subject.kind==='path'?subject.resolution:undefined;
+    if(resolution?.state==='unavailable'||resolution?.finalLink&&requirement.following==='no-follow')return;
     const path=subject.kind==='descriptor'?subject.target:resolution?.path;
     if(!canonical(path))return;
     const components=resolution?.components??[];
