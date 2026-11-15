@@ -167,10 +167,10 @@ test("the highest claim among waiting steps gets the freed token", async () => {
 
 test("tokens.mjs holds a token around fn and returns it", async () => {
   const p = await pool(2);
-  process.env.NTS_GATE_TOKENS = p.addr;
-  process.env.NTS_GATE_STEP = "integrity";
-  delete process.env.NTS_GATE_TOKEN_HELD;
+  assignOwnedValues(process.env,{NTS_GATE_TOKENS:p.addr,NTS_GATE_STEP:'integrity',NTS_GATE_TOKEN_HELD:undefined});
   const { withToken } = await import(`./tokens.mjs?callback-hold-test`);
+  const beforeGrant=await run('sh',['-c','printf "%s" "${NTS_GATE_TOKEN_HELD-unset}"'],{NTS_GATE_TOKEN_HELD:process.env.NTS_GATE_TOKEN_HELD});
+  assert.equal(beforeGrant.out,'unset','importing the token owner does not claim a grant');
   let inside = 0, most = 0;
   const release=Promise.withResolvers();
   const running=Promise.all(Array.from({ length: 6 }, () => withToken(async () => {
@@ -320,3 +320,4 @@ test("a malformed size is refused without a token, and a sized token is answered
     unit.close(); sized.close();
   } finally { q.close();await q.closed; }
 });
+import {assignOwnedValues} from './environment-values.ts';

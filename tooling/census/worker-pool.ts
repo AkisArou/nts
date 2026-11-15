@@ -76,9 +76,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         let before: MemoryCounters = bound.counters();
         let aggregateBefore = memory.aggregateOoms();
         const scope = bound.scope(command, args(index + indexOffset));
-        scope.env.NTS_CENSUS_POOL_WORKER = "1";
-        scope.env.NTS_CENSUS_CASE_CONCURRENCY = exclusive ? "exclusive" : "parallel";
-        scope.env.NTS_GATE_TOKEN_HELD = "1";
+        assignOwnedValues(scope.env,{NTS_CENSUS_POOL_WORKER:'1',
+          NTS_CENSUS_CASE_CONCURRENCY:exclusive?'exclusive':'parallel',NTS_GATE_TOKEN_HELD:'1'});
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
         const stopped = new AbortController();
         let exited = false;
@@ -287,3 +286,4 @@ async function rounds(options: ResidentPoolOptions, budgetBytes: number, reserva
   if (paths.length > 0 && summary.pressureRequeues / paths.length > 0.05) report("resident pressure advisory: over 5% of cases needed isolated replay; review the aggregate reservation");
   return summary;
 }
+import {assignOwnedValues} from '../gate/environment-values.ts';

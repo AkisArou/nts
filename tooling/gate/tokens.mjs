@@ -7,9 +7,9 @@
 // steps they belong to. Outside the gate (no NTS_GATE_TOKENS) `fn` simply
 // runs; inside one, a runner that cannot be reached is an error (below).
 //
-// **What this process spawns does not ask for tokens**: importing this module
-// sets NTS_GATE_TOKEN_HELD=1 in this process's environment, which every child
-// built from it inherits. The tool asks for one around each process it runs;
+// **What this process spawns after a grant does not ask for tokens**: a grant
+// sets NTS_GATE_TOKEN_HELD=1 in this process's owned environment, which every
+// child built from it inherits. The tool asks for one around each process it runs;
 // a child asking again while every token is held by such tools would deadlock
 // the run.
 //
@@ -21,6 +21,7 @@
 // function call -- a resident worker's case, answered later on its stdout --
 // so it hands back the release instead of running a callback.
 import { connect } from "node:net";
+import {assignOwnedValues} from './environment-values.ts';
 import {randomUUID} from 'node:crypto';
 import {runWithToken,closeCaseWorkers,releaseToken} from './case-context.ts';
 export {runWithToken,releaseToken} from './case-context.ts';
@@ -28,7 +29,6 @@ export {runWithToken,releaseToken} from './case-context.ts';
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
 const STEP = process.env.NTS_GATE_STEP ?? "?";
 const ENABLED = WHERE !== "" && !process.env.NTS_GATE_TOKEN_HELD;
-process.env.NTS_GATE_TOKEN_HELD = "1";
 
 /**
  * A client of the token pool at `where` (`host:port`) asking for `step`.
@@ -118,7 +118,10 @@ const gate = ENABLED ? tokenClient(WHERE, STEP) : null;
  * resolves at once to a release that does nothing.
  */
 export function acquireToken(context, signal, bytes) {
-  return gate ? gate.acquire(context, signal, bytes) : Promise.resolve(() => {});
+  return gate ? gate.acquire(context, signal, bytes).then(release=>{
+    if(release)assignOwnedValues(process.env,{NTS_GATE_TOKEN_HELD:'1'});
+    return release;
+  }) : Promise.resolve(() => {});
 }
 
 export async function withToken(fn, context) {

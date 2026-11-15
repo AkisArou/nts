@@ -124,6 +124,7 @@ import {fixedReservation} from "./reservation.ts";
 import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {finishRunTemporary} from "./run-temporary.ts";
 import {gateEnvironment,sealOracleRun,oracleStepEnvironment,reportEnvironment,nodeHeapOomReason} from './canonical-environment.ts';
+import {assignOwnedValues} from './environment-values.ts';
 import {ENVIRONMENT_CONTEXT} from '../differential/oracle-seal/main.ts';
 import {typeScriptOracleDirectory} from '../census/typescript-oracle-capture.ts';
 import {typeScriptOracleHandoff} from '../census/typescript-oracle-results.ts';
@@ -388,6 +389,7 @@ function stepEnv(step, slots, scope) {
     owned.NTS_PROGRAM_ORACLE=JSON.stringify(programOracleReference);
   }
   const e = gateEnvironment(env, { run: RUN_DIR, owned }).env;
+  const before={...e};
   // NTS_JOBS sets the run's budget here; inside a step all.sh would read it as
   // "every knob at once" and undo the slot split.
   delete e.NTS_JOBS;
@@ -445,6 +447,9 @@ function stepEnv(step, slots, scope) {
     "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS",
     "NTS_ASSEMBLES_JOBS", "NTS_TYPES_CHECK_JOBS", "NTS_JVM_VERIFIES_JOBS",
   ]) e[knob] = s;
+  // Bind this owner's changes and revocations after the step is complete.
+  assignOwnedValues(e,Object.fromEntries([...new Set([...Object.keys(before),...Object.keys(e)])]
+    .filter(name=>e[name]!==before[name]).map(name=>[name,e[name]])));
   return oracleStepEnvironment(e,step.name);
 }
 

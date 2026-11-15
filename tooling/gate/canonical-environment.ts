@@ -19,6 +19,7 @@ import type {JobRequest} from './memory-ledger.ts';
 import {HOST_CAPABILITIES,FIXED_AMBIENT,UNSET_AMBIENT,ownedCacheEnvironment,hostEnvironment,declaredOracleToolchain} from './host-environment.ts';
 import type {Context,EnvironmentReport,GateEnvironment} from './environment-types.ts';
 import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT} from './cache-environment.ts';
+import {assignOwnedValues} from './environment-values.ts';
 import {toolchainDirectories} from './toolchain.ts';
 
 const SYSTEM_TOOL_DIRECTORIES = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"];
@@ -257,12 +258,7 @@ export async function withPreparedOracle(
       !(CONSUMED as readonly string[]).includes(name)&&!(name in values)&&launcher[name]!==context.owned[name]);
     if(uncarried.length)throw new ToolingInstrumentError('tooling-setup','oracle entry command options were not carried by their owner: '+uncarried.join(', '));
   }
-  const base={...launcher,...values};
-  if(context){
-    const host={...context.report.host};
-    for(const [name,value]of Object.entries(values))if(HOST.has(name))host[name]=value;
-    base[ENVIRONMENT_CONTEXT]=JSON.stringify({...context,owned:{...context.owned,...values},report:{...context.report,host}});
-  }
+  const base={...launcher};assignOwnedValues(base,values);
   const raw=base.NTS_ORACLE_DEPENDENCIES;
   let inherited:{source?:string;seal?:unknown}|undefined;
   if(raw)try{inherited=JSON.parse(raw);}catch(error){if(isCommandExit(error))throw error;throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}

@@ -1,4 +1,5 @@
 import {registerCommandCloser} from '../differential/command-entry/main.ts';
+import {assignOwnedValues} from './environment-values.ts';
 // Test children get tool capabilities and named run handoffs, never the shell's
 // policy. Mutable state belongs to the fixture; declared content caches are shared.
 import {existsSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
@@ -16,7 +17,6 @@ import {CONTENT_CACHE_ENVIRONMENT,FIXTURE_ENVIRONMENT,contentCacheEnvironment} f
 const HANDOFF = ['NTS_BIN','NTS_SUITE_BIN','NTS_TOOLING_SLICE','NTS_ORACLE_TYPESCRIPT','NTS_ORACLE_DEPENDENCIES'] as const;
 const RUN_HANDOFF = ['NTS_TOOLING_SLICE','NTS_MEMORY_RESERVATION','NTS_MEMORY_PRIORITY','NTS_GATE_SCOPE_EXPECTED',
   'NTS_GATE_STEP','NTS_GATE_STEP_ATTEMPT','NTS_GATE_STEP_RESULT','NTS_GATE_STEP_MEMORY_BYTES','NTS_GATE_CASE_COSTS_DIR','NTS_CHECKERS'] as const;
-const HOST = new Set<string>(HOST_CAPABILITIES);
 const WRITABLE = ['HOME','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TMPDIR','NODE_COMPILE_CACHE',
   'GIT_CONFIG_GLOBAL','GIT_CONFIG_SYSTEM','GIT_CONFIG_NOSYSTEM','GIT_TERMINAL_PROMPT',
   'GIT_AUTHOR_NAME','GIT_AUTHOR_EMAIL','GIT_COMMITTER_NAME','GIT_COMMITTER_EMAIL'] as const;
@@ -74,7 +74,7 @@ export function testEnvironment(owned:NodeJS.ProcessEnv={},source:NodeJS.Process
     env[ENVIRONMENT_CONTEXT]=JSON.stringify(context);env.TMPDIR=context.temporary.path;
   }
   ownTemporary(root,env);
-  env.NTS_GATE_RUN_DIR=root;
+  assignTestValues(env,{NTS_GATE_RUN_DIR:root});
   assignTestValues(env,owned);
   if(owned.PATH===undefined)env.PATH=[...toolchainDirectories(process.execPath,env),...(env.PATH?[env.PATH]:[])].join(delimiter);
   if(context){
@@ -100,14 +100,7 @@ export function fixtureEnvironment(fixture:Fixture,owned:NodeJS.ProcessEnv={}):N
 /** Fixture overrides and revocations reach both the process and the canonical
  * handoff, so a later gateEnvironment cannot revive an ended reservation. */
 export function assignTestValues(env:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv):void {
-  Object.assign(env,owned);
-  if(!env[ENVIRONMENT_CONTEXT])return;
-  const context=JSON.parse(env[ENVIRONMENT_CONTEXT]) as GateEnvironmentContext;
-  for(const [name,value] of Object.entries(owned)){
-    if(value===undefined)delete context.owned[name];
-    else if(!HOST.has(name)||(CONTENT_CACHE_ENVIRONMENT as readonly string[]).includes(name)||name==='NTS_ORACLE_TYPESCRIPT'||name==='NTS_ORACLE_DEPENDENCIES')context.owned[name]=value;
-  }
-  env[ENVIRONMENT_CONTEXT]=JSON.stringify(context);
+  assignOwnedValues(env,owned);
 }
 
 /** A generated shim delegates inside an already owned fixture. Its named
