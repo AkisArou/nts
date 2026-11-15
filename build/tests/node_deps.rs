@@ -1,6 +1,5 @@
+use crate::scratch;
 use nts_build::node_deps::{self, Request};
-#[path = "../../compiler/test-support/scratch.rs"]
-mod scratch;
 
 use std::{path::PathBuf, process::Command};
 

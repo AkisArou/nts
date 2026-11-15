@@ -1,7 +1,6 @@
 //! Real compiler controls for the bundled native source location contract.
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[path = "../../compiler/test-support/scratch.rs"]
-mod scratch;
+use crate::scratch;
 
 use nts_build::node_deps::{self, Artifacts, Request};
 use serde_json::Value;
@@ -97,7 +96,7 @@ fn deterministic_members(bytes: &[u8]) -> Vec<String> {
     let mut ordered = members.clone();
     ordered.sort();
     assert_eq!(members, ordered);
-    assert!(!members.is_empty());
+    assert_ne!(members, [] as [String; 0]);
     members
 }
 
@@ -135,61 +134,8 @@ fn libuv_bytes_identity_and_observations_survive_two_roots_and_relocation() {
             &[compiler],
         );
         let second = node_deps::ensure(&second_request).expect("second root libuv");
-        let first_archive = &first.archives[0];
-        let second_archive = &second.archives[0];
-        let bytes = read(first_archive);
-        assert!(
-            bytes == read(second_archive),
-            "full archive parity with {compiler}"
-        );
-        let first_dir = first_archive.parent().expect("first entry");
-        let second_dir = second_archive.parent().expect("second entry");
-        let before = json(first_dir.join("invocation.json"));
-        let after = json(second_dir.join("invocation.json"));
-        let fields = before
-            .as_array()
-            .expect("invocation tuple")
-            .iter()
-            .zip(after.as_array().expect("invocation tuple"))
-            .enumerate()
-            .filter_map(|(index, (a, b))| (a != b).then_some(index))
-            .collect::<Vec<_>>();
-        assert!(
-            before == after,
-            "{compiler} invocation identity differs at fields {fields:?}"
-        );
-        assert_eq!(
-            deterministic_members(&bytes).len(),
-            objects(first_dir).len()
-        );
-        for root in [source(&first), source(&second)] {
-            assert!(
-                !contains(&bytes, root.as_os_str().as_encoded_bytes()),
-                "physical source root in archive"
-            );
-        }
-        let virtual_prefix = format!("/nts/node-deps/{}/", node_deps::SOURCE_BUNDLE);
-        assert!(
-            objects(first_dir)
-                .iter()
-                .any(|path| allocated_virtual_path(&read(path), virtual_prefix.as_bytes())),
-            "an assertion's runtime path has the virtual prefix"
-        );
-        assert!(
-            objects(first_dir)
-                .iter()
-                .any(|path| contains(&read(path), b".debug_info")),
-            "the parity comparison includes actual debug information"
-        );
-        let manifest = json(first_dir.join("complete.json"));
-        assert_eq!(manifest["version"], 2);
-        let inputs = manifest["inputs"].as_array().expect("typed observations");
-        assert!(inputs.iter().any(|row| row["path"]["kind"] == "bundle"));
-        assert!(inputs.iter().any(|row| row["path"]["kind"] == "external"));
-        assert!(!contains(
-            &read(first_dir.join("complete.json")),
-            source(&first).as_os_str().as_encoded_bytes()
-        ));
+        let bytes = assert_root_parity(&first, &second, compiler);
+        let first_dir = first.archives[0].parent().expect("first entry");
         // Relocate the complete private cache, then ask from its new extraction
         // root. An epoch stamp proves no object compilation ran on this hit.
         let object = objects(first_dir).remove(0);
@@ -235,6 +181,65 @@ fn libuv_bytes_identity_and_observations_survive_two_roots_and_relocation() {
             .contains("input changed")
         );
     }
+}
+
+fn assert_root_parity(first: &Artifacts, second: &Artifacts, compiler: &str) -> Vec<u8> {
+    let first_archive = &first.archives[0];
+    let second_archive = &second.archives[0];
+    let bytes = read(first_archive);
+    assert!(
+        bytes == read(second_archive),
+        "full archive parity with {compiler}"
+    );
+    let first_dir = first_archive.parent().expect("first entry");
+    let second_dir = second_archive.parent().expect("second entry");
+    let before = json(first_dir.join("invocation.json"));
+    let after = json(second_dir.join("invocation.json"));
+    let fields = before
+        .as_array()
+        .expect("invocation tuple")
+        .iter()
+        .zip(after.as_array().expect("invocation tuple"))
+        .enumerate()
+        .filter_map(|(index, (a, b))| (a != b).then_some(index))
+        .collect::<Vec<_>>();
+    assert!(
+        before == after,
+        "{compiler} invocation identity differs at fields {fields:?}"
+    );
+    assert_eq!(
+        deterministic_members(&bytes).len(),
+        objects(first_dir).len()
+    );
+    for root in [source(&first), source(&second)] {
+        assert!(
+            !contains(&bytes, root.as_os_str().as_encoded_bytes()),
+            "physical source root in archive"
+        );
+    }
+    let virtual_prefix = format!("/nts/node-deps/{}/", node_deps::SOURCE_BUNDLE);
+    assert!(
+        objects(first_dir)
+            .iter()
+            .any(|path| allocated_virtual_path(&read(path), virtual_prefix.as_bytes())),
+        "an assertion's runtime path has the virtual prefix"
+    );
+    assert!(
+        objects(first_dir)
+            .iter()
+            .any(|path| contains(&read(path), b".debug_info")),
+        "the parity comparison includes actual debug information"
+    );
+    let manifest = json(first_dir.join("complete.json"));
+    assert_eq!(manifest["version"], 2);
+    let inputs = manifest["inputs"].as_array().expect("typed observations");
+    assert!(inputs.iter().any(|row| row["path"]["kind"] == "bundle"));
+    assert!(inputs.iter().any(|row| row["path"]["kind"] == "external"));
+    assert!(!contains(
+        &read(first_dir.join("complete.json")),
+        source(&first).as_os_str().as_encoded_bytes()
+    ));
+    bytes
 }
 
 #[test]
@@ -292,7 +297,7 @@ fn all_zig_target_routes_accept_the_same_mapping_contract() {
         request.libraries.clear();
         let output = node_deps::ensure(&request)
             .unwrap_or_else(|error| panic!("{} cross mapping: {error}", plan.target));
-        assert!(output.archives.is_empty());
+        assert_eq!(output.archives, [] as [PathBuf; 0]);
     }
 }
 
@@ -391,7 +396,7 @@ fn future_manifest_is_read_only(request: &Request, archive: &Path) {
     assert!(error.contains("manifest version 3; expected 2"), "{error}");
     assert_eq!(read(manifest), future);
     assert_eq!(read(invocation), b"future invocation retained\n");
-    assert!(read(archive) == archive_bytes);
+    assert_eq!(read(archive).cmp(&archive_bytes), std::cmp::Ordering::Equal);
 }
 
 #[test]
