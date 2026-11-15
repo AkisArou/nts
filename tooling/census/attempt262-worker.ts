@@ -23,7 +23,7 @@ import { createInterface } from "node:readline";
 import { attempt } from "./attempt262.ts";
 import { inResidentWorker } from "./worker-memory.ts";
 import { workspace } from "./project.ts";
-import { oracle } from "./suites/typescript.ts";
+import {oracle} from "./suites/typescript-oracle.ts";
 import type { PrintedOutput } from "../conformance/output-prefix.ts";
 import { OracleWorker } from "../differential/oracle-emit.ts";
 import {oracleToolchainLocation} from '../gate/host-environment.ts';

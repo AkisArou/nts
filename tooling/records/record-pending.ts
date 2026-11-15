@@ -1,3 +1,4 @@
+import {findPending,BACKENDS,typescriptRecord,TEST262_SLICES,TEST262_RECORDS,benchmarkRecord,outcomesRecord} from './record-population.ts';
 import {gitArguments} from "../gate/git-arguments/main.ts";
 import {runAsCommand} from "../differential/command-entry/main.ts";
 import {withPreparedOracle} from '../gate/canonical-environment.ts';
@@ -73,39 +74,39 @@ import {withPreparedOracle} from '../gate/canonical-environment.ts';
 // merged what applies, 1 for a delta it cannot read or that names a record
 // no recorder writes (before writing anything), and it does not commit.
 import assert from "node:assert/strict";
-import {dataDirectory} from '../gate/reader-inputs/main.ts';
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+
+import {spawnSync} from "node:child_process";
+import {createHash} from "node:crypto";
+import {existsSync,mkdirSync,mkdtempSync,readdirSync,readFileSync,renameSync,rmSync,statSync,writeFileSync} from "node:fs";
+import {homedir} from "node:os";
+import {dirname,join,relative,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 
-import { benchmarkCases, benchmarkIdentities } from "../bench/build-records.ts";
-import { compileKey } from "../bench/compile-producer.ts";
-import { compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkOutcome, parseBenchmarkRecord } from "../bench/outcomes.ts";
-import { selectTypescript } from "../census/suites/typescript.ts";
-import { compareTypeScriptObservation, mergeTypeScriptRecord, parseObservation, parseTypeScriptRecord, pendingCases } from "../census/typescript-record.ts";
-import { acceptedChange, improves, type OutcomeTransition } from "../conformance/outcome-transition.ts";
-import { outcomeFixtures } from "../conformance/outcomes-project.ts";
-import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
-import { GENERATOR, pendingFixtures, recordPath, RECORDS, hintedOracleImprovements, parseShard, oracleImprovementPath, oracleBudgetFixtures, type OracleRow } from "../differential/oracle-records.ts";
-import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, mergeRunRecord, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
-import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets, written } from "../android/dex-record.ts";
+import {benchmarkIdentities} from "../bench/build-records.ts";
+import {compileKey} from "../bench/compile-producer.ts";
+import {compareBenchmarkOutcome,mergeBenchmarkRecord,parseBenchmarkOutcome} from "../bench/outcomes.ts";
+
+import {compareTypeScriptObservation,mergeTypeScriptRecord,parseObservation} from "../census/typescript-record.ts";
+import {acceptedChange,improves,type OutcomeTransition} from "../conformance/outcome-transition.ts";
+import {outcomeFixtures} from "../conformance/outcomes-project.ts";
+import {judge,RECORD} from "../conformance/outcomes-verdict.ts";
+import {GENERATOR,recordPath,RECORDS,hintedOracleImprovements,parseShard,oracleImprovementPath,oracleBudgetFixtures,type OracleRow} from "../differential/oracle-records.ts";
+import {BENCH_AGREE_BACKENDS,compareBenchmarkRun,mergeRunRecord,parseBenchmarkRun,runsRecord} from "../bench/run-outcomes.ts";
+import {compareDex,DEX_RECORD,dexOutcome,written} from "../android/dex-record.ts";
 import {oracleBudgetRevision,oracleUnplannedRevision} from "../differential/record-oracles.ts";
-import { WIDE } from "../gate/owed.mjs";
-import { mergeTest262Record, parseTest262Row } from "../census/test262-record.ts";
-import { ARMS, COMPILE_ARMS, calibrationEntries, compileTimeModules, readCounterTable, tableLines, withCalibrationEntries, withTableLines, type CompileArm } from "../gate/compile-counter.ts";
-import { appliedLine, DELTA_FILE, MalformedDelta, parseDelta, serializeDelta, type ApplyCounts, type Delta, type DeltaRow } from "./delta.ts";
-import { inventory, listedIn, pendingLine } from "./pending.ts";
-import {RUST_SELECTOR_CASE,rustSelectorPending,rustSelectorSourceKey} from '../gate/rust-selector-write.ts';
+import {WIDE} from "../gate/owed.mjs";
+import {mergeTest262Record,parseTest262Row} from "../census/test262-record.ts";
+import {ARMS,COMPILE_ARMS,calibrationEntries,tableLines,withCalibrationEntries,withTableLines,type CompileArm} from "../gate/compile-counter.ts";
+import {appliedLine,DELTA_FILE,MalformedDelta,parseDelta,serializeDelta,type ApplyCounts,type Delta,type DeltaRow} from "./delta.ts";
+import {inventory,listedIn,pendingLine} from "./pending.ts";
+import {RUST_SELECTOR_CASE,rustSelectorSourceKey} from '../gate/rust-selector-write.ts';
 import {RUST_SELECTOR_RECORD,parseRustSelectorRecord,MAX_RUST_SELECTOR_RECORD_BYTES} from '../gate/rust-selector-record.ts';
 
 export const KINDS = ["oracle-counts", "typescript", "test262", "benchmarks", "benchmark-runs", "outcomes", "dex", "compile-times", "rust-selector"] as const;
 export type Kind = typeof KINDS[number];
-const BACKENDS = ["c", "llvm", "jvm"] as const;
+
 const SOURCE_ROOT=fileURLToPath(new URL('../..',import.meta.url));
-const TYPESCRIPT_CASES=dataDirectory(new URL('../../tests/typescript/',import.meta.url));
+
 
 /**
  * The gate steps whose checks hold each kind's records: a kind is recorded
@@ -130,19 +131,19 @@ export const partOf = (kind: Kind): Part => KIND_STEPS[kind].some(step => WIDE.h
 /** A case with no row yet, and the record it lacks, relative to the root. */
 export interface Pending { kind: Kind; name: string; record: string }
 
-const typescriptRecord = (backend: string) => `results/typescript/${backend}/cases.tsv`;
+
 /** The test262 directories a record each, and the record of one on a backend. */
-export const TEST262_SLICES = { language: "test/language", builtins: "test/built-ins", annexb: "test/annexB", staging: "test/staging", harness: "test/harness" } as const;
-const test262Record = (backend: string, slice: string) => `results/test262/${backend}/${slice}.tsv`;
-const TEST262_RECORDS = BACKENDS.flatMap(backend => Object.keys(TEST262_SLICES).map(slice => test262Record(backend, slice)));
+
+
+
 /** The backend and directory a test262 record holds, or null for any other file. */
 function test262Slice(record: string): { backend: string; under: string } | null {
   const found = /^results\/test262\/([a-z]+)\/([a-z]+)\.tsv$/.exec(record);
   const under = found ? (TEST262_SLICES as Record<string, string>)[found[2]!] : undefined;
   return found && under && (BACKENDS as readonly string[]).includes(found[1]!) ? { backend: found[1]!, under } : null;
 }
-const benchmarkRecord = (backend: string) => `results/benchmarks/${backend}/outcomes.tsv`;
-const outcomesRecord = (name: string) => `tests/outcomes/${name}/${RECORD}`;
+
+
 const read = (root: string, file: string) => readFileSync(join(root, file), "utf8");
 
 /** The arm whose table or calibration evidence `record` is, or null for any other file. */
@@ -156,48 +157,7 @@ const COMPILE_TIME_RECORDS = ARMS.flatMap(arm => [COMPILE_ARMS[arm].table, COMPI
 const compileRows = (record: string, text: string) => isCompileTable(record) ? tableLines(text) : calibrationEntries(text);
 
 /** Every pending case of one kind on the tree at `root`, from its sources and records alone. */
-export function findPending(root: string, kind: Kind): Pending[] {
-  switch (kind) {
-    case 'rust-selector': return rustSelectorPending(root)?[{kind,name:RUST_SELECTOR_CASE,record:RUST_SELECTOR_RECORD}]:[];
-    case "oracle-counts":
-      return pendingFixtures(root).map(name => ({ kind, name, record: recordPath(name) }));
-    case "test262":
-      // Its record holds the cases that ran, so the tree cannot say which are
-      // new: they are what its census listed (acceptedIn's listed pending).
-      return [];
-    case "typescript": {
-      const sources = selectTypescript(root, relative(SOURCE_ROOT,fileURLToPath(TYPESCRIPT_CASES))).map(row => row.path);
-      return BACKENDS.flatMap(backend => pendingCases(parseTypeScriptRecord(read(root, typescriptRecord(backend))), sources)
-        .map(name => ({ kind, name, record: typescriptRecord(backend) })));
-    }
-    case "benchmarks":
-      return BACKENDS.flatMap(backend => {
-        const recorded = parseBenchmarkRecord(read(root, benchmarkRecord(backend))).rows.filter(row => row.scope === "compile").map(row => row.path);
-        return inventory(recorded, benchmarkCases(root)).pending.map(name => ({ kind, name, record: benchmarkRecord(backend) }));
-      });
-    case "benchmark-runs":
-      return BENCH_AGREE_BACKENDS.flatMap(backend => {
-        const file = runsRecord(backend), record = existsSync(join(root, file)) ? parseRunRecord(read(root, file)) : null;
-        return pendingRuns(record, benchmarkCases(root)).map(name => ({ kind, name, record: file }));
-      });
-    case "outcomes": {
-      const directory = join(root, "tests/outcomes");
-      return outcomeInventory(directory, outcomeFixtures(directory)).pending
-        .map(name => ({ kind, name: `tests/outcomes/${name}`, record: outcomesRecord(name) }));
-    }
-    case "dex": {
-      const recorded = existsSync(join(root, DEX_RECORD)) ? recordedTargets(read(root, DEX_RECORD)) : [];
-      return inventory(recorded, dexTargets(root)).pending.map(name => ({ kind, name, record: DEX_RECORD }));
-    }
-    case "compile-times":
-      // A module with no row in an arm's table lacks both of that arm's records.
-      return ARMS.flatMap(arm => {
-        const { table, calibration } = COMPILE_ARMS[arm], recorded = readCounterTable(read(root, table), arm).rows;
-        return compileTimeModules(root).filter(name => !recorded.has(name))
-          .flatMap(name => [{ kind, name, record: table }, { kind, name, record: calibration }]);
-      });
-  }
-}
+
 
 /** The kinds whose pending cases are the ones their checks listed, not ones the tree can find. */
 const LISTS_PENDING: ReadonlySet<Kind> = new Set<Kind>(["test262"]);

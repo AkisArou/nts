@@ -153,7 +153,7 @@ import { parseTest262Record } from "../census/test262-record.ts";
 import { parseTypeScriptRecord } from "../census/typescript-record.ts";
 import { CENSUS_OUTCOMES, censusReportPath, parseCensusReport, type CensusReport } from "../census/census-report.ts";
 import { layout, readState } from "../full-check/state.ts";
-import { findPending, TEST262_SLICES } from "./record-pending.ts";
+import {findPending,TEST262_SLICES} from "./record-population.ts";
 
 export const KINDS = ["benchmarks", "conformance"] as const;
 export type Kind = typeof KINDS[number];

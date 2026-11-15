@@ -6,7 +6,7 @@ import { readFileSync,writeFileSync,renameSync } from 'node:fs';
 import { readOracleSnapshotIndex,writeOracleSnapshotIndex,validateHostObservations,type HostObservation,type OracleSnapshotReference } from '../differential/oracle-filesystem.ts';
 import { checkNodeResolutionSession,type NodeResolutionSession } from '../differential/oracle-runtime.ts';
 import { ToolingInstrumentError } from '../gate/step-result.ts';
-import type { OracleVerdict } from './suites/typescript.ts';
+import type {OracleVerdict} from './suites/typescript-oracle.ts';
 import type { PrintedOutput } from '../conformance/output-prefix.ts';
 
 export const oracleResultHash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');

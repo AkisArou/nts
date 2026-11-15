@@ -13,7 +13,7 @@ import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differ
 import {hostObservations,HOST_OBSERVATION_ENVIRONMENT} from './host-observations.ts';
 import {startNodeResolutionSession,closeNodeResolutionSession} from '../differential/oracle-resolution.ts';
 import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
-import {exitCommand,registerCommandCloser} from '../differential/command-entry/main.ts';
+import {exitCommand,isCommandExit,registerCommandCloser} from '../differential/command-entry/main.ts';
 import type {NodeResolutionSession} from '../differential/oracle-runtime.ts';
 import type {JobRequest} from './memory-ledger.ts';
 import {HOST_CAPABILITIES,FIXED_AMBIENT,UNSET_AMBIENT,ownedCacheEnvironment,hostEnvironment,declaredOracleToolchain} from './host-environment.ts';
@@ -226,7 +226,7 @@ export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal,
       const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
       await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),context.resolutionOwner.pid,onSession);
     }
-  }catch(error){if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
+  }catch(error){if(isCommandExit(error))throw error;if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
   const next=JSON.stringify(cap);
   const report={...planned.report,host:{...planned.report.host,NTS_ORACLE_DEPENDENCIES:next}};
   const owned={...context.owned,NTS_ORACLE_DEPENDENCIES:next};
@@ -247,7 +247,7 @@ export async function withPreparedOracle(
   const source=realpathSync(resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
   const base=process.env,raw=base.NTS_ORACLE_DEPENDENCIES;
   let inherited:{source?:string;seal?:unknown}|undefined;
-  if(raw)try{inherited=JSON.parse(raw);}catch{throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}
+  if(raw)try{inherited=JSON.parse(raw);}catch(error){if(isCommandExit(error))throw error;throw new ToolingInstrumentError('tooling-setup','invalid oracle dependency command handoff');}
   if(inherited?.seal){
     assertSealedOracleRun(base);
     if(inherited.source!==source)throw new ToolingInstrumentError('tooling-setup','oracle entry seal belongs to another source: '+inherited.source);
@@ -346,5 +346,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     }
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
-  } catch (error) { console.error(`gate environment: ${(error as Error).message}`); process.exitCode = 2; }
+  } catch (error) { if(isCommandExit(error))throw error;console.error(`gate environment: ${(error as Error).message}`); process.exitCode = 2; }
 }

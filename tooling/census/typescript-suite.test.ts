@@ -14,7 +14,8 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 import {API} from 'typescript/sync';
 import {isEnumDeclaration, isImportEqualsDeclaration, SyntaxKind} from 'typescript/ast';
 
-import {oracle, selectTypescript, materialiseTypeScriptOracleProject} from "./suites/typescript.ts";
+import {oracle} from "./suites/typescript-oracle.ts";
+import {selectTypescript,materialiseTypeScriptOracleProject} from "./suites/typescript.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
 import {workspace} from "./project.ts";
 import {OracleWorker} from "../differential/oracle-emit.ts";

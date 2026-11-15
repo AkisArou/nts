@@ -5,7 +5,7 @@ import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {shellCommands,shellNodeInvocations} from './shell-commands.ts';
-import {generatedScriptText,movedEnvironmentImportProblems} from './environment-imports.ts';
+import {movedEnvironmentImportProblems} from './environment-imports.ts';
 import {oracleEntryFacts,auditOracleEntries,type OracleEntryFacts} from './oracle-entry-audit.ts';
 import {inspectCargoTestCalls,inspectShellCargoTests} from './test-profile-audit.ts';
 import {inspectCargoCalls,inspectShellCargoCalls} from './cargo-audit.ts';
@@ -121,7 +121,7 @@ export function inspectHostSource(file:string,source:string,shared?:import('type
       if(ast.isSpreadAssignment(node)&&name(node.expression)==='process.env')add('environment',node);
       if(ast.isPropertyAssignment(node)&&code(node.name)==='env'&&name(node.initializer)==='process.env')add('environment',node);
       if(ast.isStringLiteralLikeNode(node))literal(node.text,node);
-      if(ast.isTemplateExpression(node))literal(generatedScriptText(facts,node),node);
+      if(ast.isTemplateExpression(node))literal(node.head.text+node.templateSpans.map(span=>'__fixture_expression'+span.literal.text).join(''),node);
     };
     try{if(!generated)inspectRoot?.(file,text,facts,generatedSources);for(const node of candidates)visit(node);}finally{lease?.dispose();}
   }

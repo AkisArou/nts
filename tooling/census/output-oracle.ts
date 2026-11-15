@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname,join } from "node:path";
 import { flagsOf } from "./project.ts";
-import { oracle } from "./suites/typescript.ts";
+import {oracle} from "./suites/typescript-oracle.ts";
 import {prepareOracle,oracleExecution,oracleLoaderReady,oracleRuntimeFile,finishOracleSnapshot,closeOracleExecution,type OraclePrepared} from "../differential/oracle-emit.ts";
 import type { PrintedOutput } from "../conformance/output-prefix.ts";
 

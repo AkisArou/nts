@@ -3,7 +3,7 @@ import {mkdirSync,rmSync,writeFileSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {test,type TestContext} from "node:test";
 import {domainDeclaration,fixtureOf,readRecords,recordPath,writeRecords,type OracleIdentityInputs,type OracleRow} from "../differential/oracle-records.ts";
-import {findPending} from "../records/record-pending.ts";
+import {findPending} from "../records/record-population.ts";
 import {domainConstraints,oracleIdentityProblems,oracleIdentityScope,oracleSourceDigests} from "./oracle-record-identities.ts";
 import {testScratch} from "./test-scratch.ts";
 import {fixtureEnvironment} from "./test-environment.ts";
