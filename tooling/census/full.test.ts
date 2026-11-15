@@ -73,7 +73,7 @@ test("the default full run refuses a non-main pin and writes nothing", t => {
 });
 
 test("a plain full run canonically accepts exactly the landing's standing skips",t=>{
-  const f=fixture(t),source=dirname(new URL("../gate/run.mjs",import.meta.url).pathname),gate=join(f.root,"tooling/gate");
+  const f=fixture(t),gate=join(f.root,"tooling/gate");
   copyModuleClosure(["tooling/gate/run.mjs"],f.root);
   symlinkSync(new URL("../gate/times.tsv",import.meta.url),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[new URL("../gate/all.sh",import.meta.url).pathname,"--list"],{encoding:"utf8"});

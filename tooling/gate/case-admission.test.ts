@@ -2,7 +2,6 @@ import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {fixture} from '../landing/run-fixture.ts';
@@ -13,7 +12,7 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from './tooling-slice.ts'
 import {caseMemoryKey,caseHistoryFile,readCaseHistory,writeCaseHistory,writeCostHistory,peakReservation} from './step-scheduling.ts';
 import {tokenCommand} from './token-command.ts';
 
-const ROOT=fileURLToPath(new URL('../../',import.meta.url)),GiB=2**30,MiB=2**20;
+const GiB=2**30,MiB=2**20;
 type QueueEvent={event:string;request?:number;context?:string;memory?:{reserved_bytes:number;used_bytes:number}};
 type Summary={verdict:string;memory:{growths:number};steps:{name:string;verdict:string;reason?:string;instrument?:{kind:string}}[]};
 
