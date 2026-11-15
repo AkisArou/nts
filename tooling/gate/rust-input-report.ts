@@ -63,9 +63,9 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
   await readCompressedRecords(file,async value=>{
     const row=object(value);if(complete)throw Error('Rust input report: row after completion');
     if(version===undefined){
-      if(row.kind!=='validation-start'||row.version!==3&&row.version!==4)throw Error('Rust input report: unsupported report version');
+      if(row.kind!=='validation-start'||row.version!==3&&row.version!==4&&row.version!==5)throw Error('Rust input report: unsupported report version');
       version=row.version;
-      if(version===4&&row.retention!=='uncovered-and-probes')throw Error('Rust input report: unsupported retention contract');
+      if(version>=4&&row.retention!=='uncovered-and-probes')throw Error('Rust input report: unsupported retention contract');
     }
     if(row.kind==='validation-table'){
       if(typeof row.key!=='string'||digest(JSON.stringify(row.value))!==row.key||table.has(row.key))throw Error('Rust input report: invalid or duplicate table hash');
@@ -73,7 +73,7 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
     }
     if(row.kind==='runtime-subject'){
       subjects++;
-      if(version===4&&(row.state!=='uncovered'||row.classification!==undefined))throw Error('Rust input report: discharged subject retained as unresolved');
+      if(version>=4&&(row.state!=='uncovered'||row.classification!==undefined))throw Error('Rust input report: discharged subject retained as unresolved');
       const components=reference(row.components,lookup);reference(row.scope,lookup);
       if(!Array.isArray(components))throw Error('Rust input report: malformed component set');
       const check=(value:unknown)=>{
@@ -92,14 +92,15 @@ export async function readRustInputValidation(file:string,visit:(row:Row,resolve
       if(!Array.isArray(row.probes))throw Error('Rust input report: malformed runtime probes');
       probes+=row.probes.length;
     }
-    if(version===4&&row.kind==='setup-attempt')throw Error('Rust input report: setup attempts must be counted');
+    if(version!>=4&&row.kind==='setup-attempt')throw Error('Rust input report: setup attempts must be counted');
     if(row.kind==='validation-complete'){
       if(row.version!==version||row.complete!==true)throw Error('Rust input report: incomplete footer');
-      if(version===4){
+      if(version!>=4){
         const counts=object(row.counts);
-        for(const key of ['subjects','reportedSubjects','claimed','literals','gaps','probes','emittedExecutables','loaderProbes','setupAttempts'])
+        const provenance=version===5?['ownedOutputs','buildArtifacts','buildScriptOutputs','hostEnvironment']:[];
+        for(const key of ['subjects','reportedSubjects','claimed','literals','gaps','probes','emittedExecutables','loaderProbes','setupAttempts',...provenance])
           if(!Number.isSafeInteger(counts[key])||Number(counts[key])<0)throw Error('Rust input report: malformed count '+key);
-        const discharged=Number(counts.claimed)+Number(counts.literals)+Number(counts.emittedExecutables)+Number(counts.loaderProbes);
+        const discharged=Number(counts.claimed)+Number(counts.literals)+Number(counts.emittedExecutables)+Number(counts.loaderProbes)+provenance.reduce((sum,key)=>sum+Number(counts[key]),0);
         if(counts.reportedSubjects!==subjects||counts.gaps!==subjects||counts.subjects!==subjects+discharged||counts.probes!==probes)
           throw Error('Rust input report: retained evidence and discharge counts differ');
       }

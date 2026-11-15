@@ -130,7 +130,7 @@ test('coverage publication waits for raw authentication and preserves named unkn
   const report:Record<string,unknown>[]=[];await readRustInputValidation(output,(row,resolve)=>{report.push(decodeRustInputSubject(row,resolve));});
   const attempt=report.find(row=>row.kind==='runtime-subject');assert.ok(attempt);assert.equal(attempt.outcome,'unknown');
   assert.equal(attempt.reason,'missing authenticated capture ABI');assert.equal(report.at(-1)?.coverage,'incomplete');
-  assert.equal(report.at(-1)?.repositoryCoverage,'unresolved');assert.equal(report.at(-1)?.version,4);
+  assert.equal(report.at(-1)?.repositoryCoverage,'unresolved');assert.equal(report.at(-1)?.version,5);
   const mutant=gunzipSync(readFileSync(index)).toString().trim().split('\n').map(line=>JSON.parse(line) as InputIndexRow);
   const observation=mutant.find(row=>row.kind==='observation');assert.ok(observation?.kind==='observation');
   const input=observation.subjects[0];assert.ok(input?.kind==='path');input.name='replacement';input.raw=Buffer.from(input.name).toString('hex');

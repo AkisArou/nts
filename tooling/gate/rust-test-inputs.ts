@@ -7,6 +7,7 @@ import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
 import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
+import type {CapturedPathResolution} from './rust-input-provenance.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -69,7 +70,7 @@ function argvStrings(value:ByteFact):string[]{
   try{const text=byteFactText(value,'exec request argv');return text?text.slice(0,-1).split('\0'):[];}catch{return [];}
 }
 export type InputPathAnchor={kind:'absolute'}|{kind:'cwd';path:string}|{kind:'dirfd';fd:number;path:string;raw:string};
-export type InputSubject={kind:'path';arg:number;dirfdArg:number;name:string;raw:string;anchor:InputPathAnchor}
+export type InputSubject={kind:'path';arg:number;dirfdArg:number;name:string;raw:string;anchor:InputPathAnchor;resolution?:CapturedPathResolution}
   |{kind:'descriptor';arg:number;fd:number;target:string;raw:string;pathArgument?:{arg:number;dirfdArg:number;value:ByteFact}};
 export type InputIndexProbe={probeKind:string;fd?:number;raw:string;rawPath?:string;error:number};
 export type RuntimeObservation=TracePhase&{attempt:Pick<InputAttempt,'id'|'tid'|'tgid'|'ppid'|'birth'|'parentBirth'>;
