@@ -113,7 +113,7 @@ test('the real full-check recordPending candidate route seals and removes finish
       process.exitCode=${status};
       return;
   `));
-  git(root,'add','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
+  git(root,'add','-f','tooling/records/record-pending.ts');git(root,'commit','-qm','observe only the sealed recorder handoff');
   const part=partOf('outcomes'),result=fullCheckRecordPending(root,pin,run,part,{env:planned.env});
   assert.equal(result.status,status,readFileSync(join(run,RECORDER_LOG),'utf8'));
   const value=JSON.parse(readFileSync(observed,'utf8'));
@@ -143,6 +143,6 @@ test("a records run whose launcher changes TMPDIR without registering it is refu
   const result=record({...planned.env,TMPDIR:elsewhere}),output=result.stdout+result.stderr;
   assert.notEqual(result.status,0,output);
   assert.match(output,/owned Node cache temporary: canonical TMPDIR differs from its registered temporary/);
-  assert.match(output,/^  outcomes: the recorder exited [1-9]\d*$/m);
+  assert.equal(result.stdout,'','the entry boundary refuses before recorder dispatch');
   assert.equal(existsSync(join(root,RECORD)),false,"a refused run records nothing");
 });
