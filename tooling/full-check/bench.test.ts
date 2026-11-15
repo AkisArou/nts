@@ -85,7 +85,8 @@ test('the nightly reader consumes the real ratio model without absolute-time loa
   });
   const old=make(1,1),uniform=make(2,3),changed=make(2,3,1.5);
   assert.deepEqual(slowerRows(renderFull([old,uniform])),[]);
-  const nodeOnly=make(2,3);nodeOnly.rows[0].cells.node.nanoseconds!/=2;
+  const nodeOnly=make(2,3),nodeRow=nodeOnly.rows[0];assert.ok(nodeRow);
+  const nodeCell=nodeRow.cells.node;assert.ok(nodeCell);nodeCell.nanoseconds!/=2;
   const outlier=renderFull([old,sealRun(nodeOnly)]);assert.ok(outlier.includes('**SLOWER THAN BEST**'));
   assert.deepEqual(slowerRows(outlier),[],'a per-comparator detail marker cannot create a nightly row alarm');
   const page=renderFull([old,changed]);assert.deepEqual(slowerRows(page),['ratio-case']);assert.match(page,/node: .*\*\*SLOWER THAN BEST\*\*/);

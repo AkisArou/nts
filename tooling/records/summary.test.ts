@@ -103,6 +103,8 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual(summary.columns, { c: "nts C", llvm: "nts LLVM", jvm: "nts JVM" });
   assert.deepEqual(summary.rows.map(one => one.name), ["fast", "gaps", "legacy"]);
   const [fast, gaps, old] = summary.rows as [typeof summary.rows[0], typeof summary.rows[0], typeof summary.rows[0]];
+  assert.ok(fast.backends.c&&fast.backends.llvm&&fast.backends.jvm);
+  assert.ok(gaps.backends.c&&gaps.backends.llvm&&gaps.backends.jvm);
 
   assert.deepEqual(fast.cells["nts C"], { status: "OK", nanoseconds: 80, spread: 1, verified: true, reason: null });
   assert.deepEqual(fast.backends.c.versus, {
@@ -165,7 +167,7 @@ test("the page and the summary say the same thing: every count, verdict and rati
     assert.equal(cells[COLUMNS.length + verdicts.length], versusC === null ? "unavailable"
       : `${versusC.ratio.toFixed(3)}×${versusC.trailing === null ? "" : flag[versusC.trailing]}`, one.name);
     for (const [index, backend] of (["c", "llvm", "jvm"] as const).entries()) {
-      const best = one.backends[backend], shown = cells[COLUMNS.length + verdicts.length + 1 + index]!;
+      const best = one.backends[backend], shown = cells[COLUMNS.length + verdicts.length + 1 + index]!;assert.ok(best);
       assert.equal(shown === "not established", Object.values(best.ownBest).every(value=>value===null), `${one.name} ${backend}`);
       assert.equal(shown.includes(OWN_BEST_REGRESSION), best.slowerThanBest, `${one.name} ${backend}`);
     }
