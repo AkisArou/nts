@@ -1256,6 +1256,17 @@ the first node task.
   confer no production exception
   ([log](records/notebooks/decisions-log.md#rust-publication-owns-each-writers-staging-11-15)).
 
+- **A superset race guard is an observation, not a selection input.** Landing,
+  pinned and full-check source trees are committed and clean. A guard that
+  snapshots a candidate superset but compares only the eventual recipe members
+  cannot depend on a non-member's content or status. `dependency-source-inputs`
+  retains those reads in `runtimeFiles` and observation-only metadata for trace
+  claims and full source validation; ordinary module or data visits promote
+  actual members to selection `files` in either order. Installation-status
+  inputs remain selection inputs, as do the installed catalog's target recipes.
+  A dirty source is refused by the committed-source owner.
+
+
 - **Affinity commands have their own entry.** Runner code imports the affinity
   library; shell launchers execute `tooling/gate/affinity/main.ts`. Fixtures
   stage both through their actual command roots, then may replace the command

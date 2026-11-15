@@ -14,6 +14,7 @@ import type {HostObservation} from '../differential/oracle-runtime.ts';
 import {readHostObservation} from '../differential/oracle-filesystem.ts';
 import {metadataParents} from './reader-metadata.ts';
 import {generatedProjectFact} from './generated-project.ts';
+import {selectionInput} from './reader-inputs/main.ts';
 import type {DependencyCatalogTrust} from '../inputs/dependency-catalog.ts';
 import {durableRecord} from './durable-record.ts';
 import {encodeRustSelectorRecord} from './rust-selector-record.ts';
@@ -82,7 +83,7 @@ export function buildRustSelectorMaterial(options:{sourceRoot:string;manifest:Ru
           if(!generatedProjectFact(row.capability,row.observation))throw Error('generated project recipe fact changed: '+row.observation.path);
         }else fact(row.observation);
       }
-      for(const row of snapshot.optionalFiles){
+      for(const row of snapshot.optionalFiles.filter(selectionInput)){
         const path=join(root,row.path);parents(path);fact({kind:'runtimeKind',path,value:row.present?'file':null});
       }
       for(const row of snapshot.memberships){

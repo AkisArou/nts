@@ -93,7 +93,7 @@ import {rustSelectorInputs,rustSelectorTrust} from './rust-selector-selection.ts
 import {withRustSelectorSource} from './rust-selector-write.ts';
 import {reportRustRecordDecisions} from './rust-selector-decision.ts';
 import {sameOracleObservation} from '../differential/oracle-runtime.ts';
-import {matchesModuleMember} from "./reader-inputs/main.ts";
+import {matchesModuleMember,selectionInput} from "./reader-inputs/main.ts";
 import {collectFullGateCensus,runFullGateCensus} from "./full-gate-census.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
@@ -1716,7 +1716,7 @@ function stepInputGraph(options) {
         const key=JSON.stringify(row),fact=unavailableInputs.get(key)??{...structuredClone(row),steps:new Set()};
         fact.steps.add(step);unavailableInputs.set(key,fact);
       }
-      for(const row of snapshot.optionalFiles){
+      for(const row of snapshot.optionalFiles.filter(selectionInput)){
         const key=JSON.stringify([row.reader,row.path,row.context.entry,Object.entries(row.context.dataNamespaces).sort()]);
         const fact=optionalFiles.get(key)??{...row,steps:new Set()};fact.steps.add(step);optionalFiles.set(key,fact);
         map.add(row.path,step);byteReaders.add(row.path,step);

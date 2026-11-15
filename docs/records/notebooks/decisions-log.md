@@ -3355,3 +3355,13 @@ Affinity CPU/scope policy stays in its library. The shell argv entry lives in
 its own runAsCommand module, so private setup-command stand-ins preserve the
 real runner's library exports. Flag output, exit codes and lock forwarding keep
 the same owners. Fixtures stage before changing only their command entry.
+
+## Superset race-guard observation roles (11-15)
+
+On committed, clean source trees, a race guard which snapshots a superset and
+compares only eventual recipe members selects only those members. The source
+candidate descriptor retains its wider reads as runtime claims and complete
+source-validation facts, separately from selection and fixture staging roles.
+Normal module/data visits promote a member in either order. Installation status
+still selects manifests and bin targets, and installation consumers also select
+the catalog's target recipes. The committed-source owner refuses dirty trees.

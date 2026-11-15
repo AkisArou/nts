@@ -16,7 +16,10 @@ export type DirectoryDeclaration={reader:string;directory:string;files:readonly 
   /** Private fixture reach records the declaration without claiming its production members. */
   fixture?:{entry:string;owner:string}};
 export type ReaderContext={entry:string;dataNamespaces:DataNamespaces};
-export type OptionalFileDeclaration={reader:string;path:string;present:boolean;context:ReaderContext;inspectionOnly?:true};
+export type OptionalFileDeclaration={reader:string;path:string;present:boolean;context:ReaderContext;inspectionOnly?:true;observationOnly?:true};
+/** A superset race guard accounts for runtime reads without making unrelated
+ * candidates dependencies of a committed, clean tree's result. */
+export const selectionInput=(row:{observationOnly?:true})=>row.observationOnly!==true;
 export type MemberType='file'|'directory'|'symlink';
 export type DirectoryEntry={name:string;type:MemberType};
 export type MembershipDeclaration={reader:string;directory:string;entries:DirectoryEntry[];context:ReaderContext};
@@ -77,8 +80,9 @@ export type InputEntry=string|ProjectConfig|ProjectChoice|ProjectCatalogue|Proje
  * The URL names the repository, never an installation discovery route. */
 export function installationInputs(url:URL):InstallationInputs{return {kind:'installation-inputs',url};}
 export function cargoInputs(url:URL):CargoInputs{return {kind:'cargo-inputs',url};}
-/** Git's literal candidate sets and control files remain owned by the fence
- * which selects them. Neither descriptor supplies executable placement. */
+/** The pre-install candidate superset is a race-guard observation. Actual
+ * recipe members acquire selection through their module/data roles. Neither
+ * fence descriptor supplies executable placement. */
 export function dependencySourceInputs(url:URL):DependencySourceInputs{return {kind:'dependency-source-inputs',url};}
 export function installationStatusInputs(url:URL):InstallationStatusInputs{return {kind:'installation-status-inputs',url};}
 /** A chooser may execute this exact optional entry. Absence stays structural;

@@ -55,6 +55,15 @@ test('selector projection never traverses unconsumed callback provenance or unus
   assert.ok(JSON.stringify(roles).length<1024);
   assert.ok(!('causes'in roles.typedDependencies[0]!));assert.ok(!('ownedFiles'in roles));
 });
+test('selector roles omit race-guard metadata while retaining a promoted member',()=>{
+  const context={entry:'<entry>',dataNamespaces:{}};
+  const snapshot:Parameters<typeof rustSelectorRoles>[1]={files:['member.ts'],runtimeFiles:['member.ts','candidate.ts'],ownedFiles:['member.ts','candidate.ts'],
+    moduleFiles:['member.ts'],hostFiles:[],placingFiles:['member.ts'],stagingFiles:['member.ts'],directories:[],memberships:[],observations:[],
+    optionalFiles:[{reader:'fence.ts',path:'candidate.ts',present:true,context,observationOnly:true},{reader:'fence.ts',path:'member.ts',present:true,context,observationOnly:true},{reader:'installer.ts',path:'package.json',present:false,context}]};
+  const roles=rustSelectorRoles('/source',snapshot,[]);
+  assert.deepEqual(roles.files,['member.ts']);assert.deepEqual(roles.optionalFiles.map(row=>row.path),['package.json']);
+  assert.deepEqual(snapshot.runtimeFiles,['member.ts','candidate.ts']);assert.equal(snapshot.optionalFiles.length,3,'selection never mutates the full claim generation');
+});
 test('missing candidates and newly added Rust alternatives are loud pending answers',t=>{
   const f=fixture(t),record=f.build();
   writeFileSync(join(f.root,'missing.json'),'{}');pending(record,f.options,'runtimeKind',/missing.json$/);rmSync(join(f.root,'missing.json'));
