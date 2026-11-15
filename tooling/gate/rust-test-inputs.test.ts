@@ -167,6 +167,35 @@ test('attempt groups retain kernel path order, two-path positions and actual cha
   }
 });
 
+test('capture identities are canonical at decode while attempted pathname spelling stays literal',async t=>{
+  const root=newTestScratch('canonical-capture-path');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const row=image(1,0,'/fixture');row.syscall='openat';row.operation='open';row.args=['ffffffffffffff9c','0','0','0','0','0'];
+  const proof={state:'resolved' as const,path:bytes('/source/file'),finalLink:false,namespace:{dev:'1',ino:'2',rootDev:'3',rootIno:'4'},
+    components:[{path:bytes('/source/file'),kind:'file' as const,dev:'3',ino:'5'}]};
+  row.paths=[{arg:1,dirfdArg:0,value:bytes('../link/../file'),resolution:proof}];
+  row.dirfds=[{arg:0,fd:-100,target:bytes('/source/crate')}];
+  const raw=(name:string,attempt:InputAttempt)=>{
+    const path=join(root,name+'.raw.gz');writeFileSync(path,gzipSync([
+      {kind:'start',version:4,mechanism:'seccomp-user-notification',noNewPrivileges:true},{kind:'root-start',root:1},attempt,
+      {kind:'root-exit',root:1,exit:0,signal:0},{kind:'complete',complete:true,root:1,entered:true,execErrno:0,exit:0,signal:0,attempts:1,errors:0,drainComplete:true,observerSignal:0},
+    ].map(value=>JSON.stringify(value)).join('\n')+'\n'));return path;
+  };
+  const options={cwd:'/source/crate',root:'/source',target:{package:'fixture',name:'test',kind:['test'],source:'src/lib.rs'}};
+  const output=join(root,'valid.gz');await publishInputTrace({...options,raw:raw('valid',row),output});
+  const records:unknown[]=[];await readCompressedRecords(output,value=>{records.push(value);});
+  const observed=records.find(value=>(value as {kind:string}).kind==='observation') as InputIndexObservation;
+  assert.equal(observed.subjects[0]!.kind==='path'&&observed.subjects[0]!.name,'../link/../file');
+  for(const [index,path]of ['/source//file','/source/../file'].entries()){
+    const changed={...row,paths:[{...row.paths[0]!,resolution:{...proof,path:bytes(path)}}]};
+    await assert.rejects(publishInputTrace({...options,raw:raw('invalid-'+index,changed),output:join(root,'invalid-'+index+'.gz')}),/noncanonical capture-time path/);
+  }
+  const changed=records.map(value=>value===observed?{...observed,subjects:observed.subjects.map(subject=>subject.kind==='path'?{
+    ...subject,resolution:{state:'resolved',path:'/source/file',finalLink:false,namespace:proof.namespace,components:[{path:'/source/./file',kind:'file',dev:'3',ino:'5'}]},
+  }:subject)}:value),bad=join(root,'invalid-index.gz');
+  writeFileSync(bad,gzipSync(changed.map(value=>JSON.stringify(value)).join('\n')+'\n'));
+  await assert.rejects(readInputTraceIndex(bad,()=>{}),/malformed capture-time resolution/);
+});
+
 test('descriptor-backed null paths are retained and non-filesystem dirfds never invent path anchors',async t=>{
   const root=newTestScratch('rust-input-descriptors');t.after(()=>rmSync(root,{recursive:true,force:true}));
   const nullPath=image(1,0,'/fixture');nullPath.syscall='statx';nullPath.operation='lookup';

@@ -2,13 +2,14 @@
 // historical pathname against today's filesystem or treats a write as success.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {isAbsolute,relative,resolve,sep} from 'node:path';
+import {isAbsolute,relative,sep} from 'node:path';
 import type {CaptureArtifact} from './file-input-observer.ts';
 import type {InputSubject} from './rust-test-inputs.ts';
 import type {InputRequirement} from './rust-input-operations.ts';
 import type {TestScratchReceipt} from './test-scratch.ts';
 import type {InputSnapshot} from './module-closure.ts';
 import {projectDependencies,type InstalledProjectDependency} from './project-dependencies.ts';
+import {canonicalCapturedPath,capturedPathBoundary,type CapturedBoundaryFactory} from './captured-path.ts';
 
 export type CapturedPathResolution={state:'unavailable';error:number}|{state:'resolved'|'missing'|'not-directory';path:string;finalLink?:boolean;
   namespace?:{dev:string;ino:string;rootDev:string;rootIno:string};
@@ -21,7 +22,7 @@ export type RuntimeProvenanceClass={kind:'owned-output';path:string;root:FreshRo
   |{kind:'build-namespace';path:string;namespace:string}
   |{kind:'host-environment';path:string;basis:'captured-descriptor'|'captured-components'};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
-const canonical=(path:unknown):path is string=>typeof path==='string'&&isAbsolute(path)&&resolve(path)===path;
+const canonical=canonicalCapturedPath;
 function fail(why:string):never{throw Error('Rust input provenance: '+why);}
 
 /** The selected manifest binds this receipt's bytes. Version 1 has exact
@@ -51,14 +52,16 @@ export function readRustBuildProvenance(reference:CaptureArtifact&{path:string})
 
 /** Unknown ABI requests cannot gain authority from their pathname. Component
  * facts describe resolution at the attempt, not the attempted operation's result. */
-export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts){
+export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts,options:{boundary?:CapturedBoundaryFactory}={}){
   if(!canonical(facts.sourceRoot)||facts.buildNamespace!==undefined&&!canonical(facts.buildNamespace))fail('noncanonical boundary');
+  const boundary=options.boundary??capturedPathBoundary,source=boundary(facts.sourceRoot),build=facts.buildNamespace===undefined?undefined:boundary(facts.buildNamespace);
   const artifacts=new Set(facts.artifacts);
+  const outputDirectories=facts.outputDirectories.map(row=>({...row,contains:boundary(row.path)}));
   const roots=facts.roots.map(root=>{
     if(!canonical(root.path)||!/^\d+$/.test(root.dev)||!/^\d+$/.test(root.ino)||!/^\d+$/.test(root.uid)||root.empty!==true
       ||!facts.window||!Number.isFinite(root.createdAt)||root.createdAt<facts.window.start||root.createdAt>facts.window.end
-      ||inside(facts.sourceRoot,root.path))fail('fresh root is not bound to the run window outside source');
-    return structuredClone(root);
+      ||source(root.path))fail('fresh root is not bound to the run window outside source');
+    return {receipt:structuredClone(root),contains:boundary(root.path)};
   });
   return {classify(subject:InputSubject,requirement:InputRequirement):RuntimeProvenanceClass|undefined{
     if(requirement.kind==='unknown'||requirement.kind==='literal')return;
@@ -69,15 +72,15 @@ export function runtimeProvenanceClassifier(facts:RuntimeProvenanceFacts){
     const components=resolution?.components??[];
     // A source alias is independently commit-changeable even if it reaches
     // an output or host file. Its presence cannot be discharged with the endpoint.
-    if(components.some(row=>row.kind==='symlink'&&inside(facts.sourceRoot,row.path)))return;
-    for(const root of roots)if(inside(root.path,path))return {kind:'owned-output',path,root:structuredClone(root)};
+    if(components.some(row=>row.kind==='symlink'&&source(row.path)))return;
+    for(const root of roots)if(root.contains(path))return {kind:'owned-output',path,root:structuredClone(root.receipt)};
     if(artifacts.has(path))return {kind:'cargo-artifact',path};
-    for(const directory of facts.outputDirectories)if(inside(directory.path,path))
+    for(const directory of outputDirectories)if(directory.contains(path))
       return {kind:'build-script-output',path,package:directory.package,directory:directory.path};
-    if(facts.buildNamespace&&inside(facts.buildNamespace,path))
+    if(facts.buildNamespace&&build?.(path))
       return {kind:'build-namespace',path,namespace:facts.buildNamespace};
-    if(facts.buildNamespace&&!inside(facts.sourceRoot,path)&&!inside(facts.buildNamespace,path)
-      &&components.every(row=>!inside(facts.sourceRoot,row.path)&&!inside(facts.buildNamespace!,row.path)))
+    if(build&&!source(path)&&!build(path)
+      &&components.every(row=>!source(row.path)&&!build(row.path)))
       return {kind:'host-environment',path,basis:subject.kind==='descriptor'?'captured-descriptor':'captured-components'};
     return undefined;
   }};

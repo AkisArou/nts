@@ -18,6 +18,7 @@ import {readRustTestExecution,rustTestExecutionClassifier} from './rust-test-exe
 import type {CaptureArtifact} from './file-input-observer.ts';
 import {rustInputReportPool} from './rust-input-report.ts';
 import {readRustBuildProvenance,runtimeProvenanceClassifier,runtimeInstalledInputClassifier} from './rust-input-provenance.ts';
+import type {CapturedBoundaryFactory} from './captured-path.ts';
 
 export type RuntimeSubjectAssessment={subject:InputSubject;requirement:InputRequirement;outcome:'unknown';
   state:'claimed'|'uncovered'|'literal';spelling?:string;identity?:InputIdentity;endpoint?:RuntimeClaimAnswer;
@@ -93,13 +94,13 @@ export type RuntimeTargetInputs={target:RustRuntimeTarget;snapshot:InputSnapshot
  * Atomic publication waits for native/derived equality and terminal drain.
  * There is no second index read whose changed rows could inherit authority.
  * Product status and setup work remain separate from runtime coverage. */
-export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string};memoizeClaims?:boolean}){
+export async function validateRustInputCapture(options:{capture:RustInputCapture;output:string;targets:ReadonlyMap<string,RuntimeTargetInputs>;execution?:CaptureArtifact&{path:string};build?:CaptureArtifact&{path:string};memoizeClaims?:boolean;provenanceBoundary?:CapturedBoundaryFactory}){
   const {capture}=options,validators=new Map<string,ReturnType<typeof runtimeSubjectValidator>>(),installed=new Map<string,ReturnType<typeof runtimeInstalledInputClassifier>>();
   const execution=options.execution?readRustTestExecution(options.execution):undefined,classifier=execution?rustTestExecutionClassifier(execution):undefined,images=new Map<number,InputIndexExecution>();
   const buildReference=options.build??(execution?.cargo.path?{...execution.cargo,path:execution.cargo.path}:undefined);
   const build=buildReference?readRustBuildProvenance(buildReference):{artifacts:[],outputDirectories:[]};
   if(execution?.provenance&&execution.provenance.sourceRoot!==capture.root)throw Error('Rust input validation: capture provenance has a different source root');
-  const provenance=runtimeProvenanceClassifier({sourceRoot:capture.root,...build,roots:execution?.provenance?.roots??[],...(execution?.provenance?{window:execution.provenance.window}:{})});
+  const provenance=runtimeProvenanceClassifier({sourceRoot:capture.root,...build,roots:execution?.provenance?.roots??[],...(execution?.provenance?{window:execution.provenance.window}:{})},{boundary:options.provenanceBoundary});
   if(execution&&buildReference&&(buildReference.sha256!==execution.cargo.sha256||buildReference.bytes!==execution.cargo.bytes))
     throw Error('Rust input validation: Cargo provenance differs from replay receipt');
   if(execution&&JSON.stringify(execution.target)!==JSON.stringify(capture.target))throw Error('Rust input validation: replay receipt has a different Cargo target');

@@ -8,6 +8,7 @@ import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
 import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
 import type {CapturedPathResolution} from './rust-input-provenance.ts';
+import {canonicalCapturedPath} from './captured-path.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -257,6 +258,8 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
         else try{resolution={...fact,path:byteFactText(fact.path,'captured path identity'),components:fact.components.map(part=>{
           const {link,...rest}=part;return {...rest,path:byteFactText(part.path,'captured component identity'),...(link?{link:byteFactText(link,'captured alias target')}:{})};})};}
         catch{resolution={state:'unavailable',error:84};} // EILSEQ: raw bytes remain retained.
+        if(resolution.state!=='unavailable'&&(!canonicalCapturedPath(resolution.path)||resolution.components.some(part=>!canonicalCapturedPath(part.path))))
+          fail('noncanonical capture-time path identity');
       }
       subjects.push({kind:'path',arg:path.arg,dirfdArg:path.dirfdArg,name,raw:path.value.hex,anchor,...(resolution?{resolution}:{})});
     }
@@ -318,9 +321,9 @@ function readSubject(value:unknown,cwd:string,args:readonly string[],request:{sy
       if(proof.state==='unavailable'){if(!integer(proof.error)||proof.error<=0)fail('malformed unavailable resolution');}
       else{
         const decimal=(value:unknown)=>typeof value==='string'&&/^\d+$/.test(value),namespace=indexObject(proof.namespace);
-        if(!['resolved','missing','not-directory'].includes(String(proof.state))||!absolute(proof.path)||typeof proof.finalLink!=='boolean'
+        if(!['resolved','missing','not-directory'].includes(String(proof.state))||!canonicalCapturedPath(proof.path)||typeof proof.finalLink!=='boolean'
           ||!['dev','ino','rootDev','rootIno'].every(key=>decimal(namespace[key]))||!Array.isArray(proof.components)||!proof.components.length||proof.components.length>128
-          ||proof.components.some(item=>{const part=indexObject(item);return !absolute(part.path)||!['directory','file','symlink','other','missing'].includes(String(part.kind))
+          ||proof.components.some(item=>{const part=indexObject(item);return !canonicalCapturedPath(part.path)||!['directory','file','symlink','other','missing'].includes(String(part.kind))
             ||!decimal(part.dev)||!decimal(part.ino)||part.link!==undefined&&(part.kind!=='symlink'||typeof part.link!=='string');}))fail('malformed capture-time resolution');
       }
     }

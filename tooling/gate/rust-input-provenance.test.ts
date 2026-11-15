@@ -2,16 +2,31 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {join,relative,isAbsolute,sep} from 'node:path';
 import {testScratch} from './test-scratch.ts';
 import {readRustBuildProvenance,runtimeProvenanceClassifier,type RuntimeProvenanceFacts,type CapturedPathResolution} from './rust-input-provenance.ts';
 import type {InputSubject} from './rust-test-inputs.ts';
+import {canonicalCapturedPath,capturedPathBoundary} from './captured-path.ts';
 
 const descriptor=(target:string):InputSubject=>({kind:'descriptor',arg:0,fd:3,target,raw:Buffer.from(target).toString('hex')});
 const pathname=(name:string,resolution?:CapturedPathResolution):InputSubject=>({kind:'path',arg:1,dirfdArg:0,name,raw:Buffer.from(name).toString('hex'),anchor:{kind:'absolute'},...(resolution?{resolution}:{})});
 const resolution=(path:string):Extract<CapturedPathResolution,{path:string}>=>({state:'resolved',path,components:[{path,kind:'file',dev:'1',ino:'2'}]});
 const content={kind:'content',following:'follow'} as const;
 const facts=():RuntimeProvenanceFacts=>({sourceRoot:'/source',buildNamespace:'/build',artifacts:['/build/emitted'],outputDirectories:[{package:'crate',path:'/build/owned-out'}],roots:[]});
+
+test('canonical containment equals path-relative boundaries including root and sibling names',()=>{
+  const paths=['/','/source','/source/a','/source/a/file','/source-other','/source2/file','/build','/build/emitted','/μ','/μ/file','/literal\\name'];
+  for(const root of paths){
+    const contains=capturedPathBoundary(root);
+    for(const path of paths){
+      assert.ok(canonicalCapturedPath(path));const part=relative(root,path);
+      assert.equal(contains(path),!isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep),root+' -> '+path);
+    }
+  }
+  for(const path of ['relative','//source','/source/','/source//file','/source/.','/source/../file','/source/./file','/source\0file']){
+    assert.equal(canonicalCapturedPath(path),false,path);assert.throws(()=>capturedPathBoundary(path),/canonical and absolute/);
+  }
+});
 
 test('capture-time physical identities classify host inputs without resolving historical paths again',()=>{
   const classify=runtimeProvenanceClassifier(facts()).classify;
