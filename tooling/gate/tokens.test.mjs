@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTokenPool } from "./token-pool.ts";
+/** @typedef {Parameters<NonNullable<Parameters<typeof createTokenPool>[0]['observe']>>[0]} TokenEvent */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOKEN = join(HERE, "token.sh");
@@ -50,7 +51,9 @@ function run(cmd, args, env, input, holdInput = false) {
 const tokenEnv = (p, step = "examples") => ({ NTS_GATE_TOKENS: p.addr, NTS_GATE_STEP: step, NTS_GATE_TOKEN_HELD: "" });
 
 for(const phase of ['before-request','after-grant'])test('a malformed canonical packet '+phase+' releases every acquired token before refusing',async()=>{
-  const observations=[],p=await pool(1,{observe:event=>observations.push(event)});
+  /** @type {TokenEvent[]} */
+  const observations=[];
+  const p=await pool(1,{observe:/** @param {TokenEvent} event */event=>observations.push(event)});
   const context='NTS_GATE_ENV_CONTEXT',malformed=JSON.stringify({report:{version:0},owned:{}});
   const mutate=`process.env[${JSON.stringify(context)}]=${JSON.stringify(malformed)};`;
   const sabotage=phase==='before-request'?mutate:`
