@@ -148,9 +148,8 @@ test("a records run whose launcher changes TMPDIR without registering it is refu
 });
 
 
-test('a gate-owned foreign record entry takes a real cold fallback inside its enclosing temporary',t=>{
-  const {root,scratch,pin}=recordsRun(t),run=join(scratch,'gate-record-run'),observed=join(scratch,'cold-gate-recorder.json');
-  mkdirSync(run);
+test('a gate-owned foreign oracle entry takes a real cold fallback inside its enclosing temporary',t=>{
+  const {root,scratch,pin}=recordsRun(t),observed=join(scratch,'cold-gate-recorder.json');
   const parent=gateEnvironment(testEnvironment(),{run:join(scratch,'parent-gate'),oracleAdmissionContext:'gate',owned:{...ownMemory(join(scratch,'gate-memory')),NTS_BIN:pin}});
   const parentCapability=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!);
   assert.ok(parentCapability.seal,'the real gate parent supplies its already prepared image');
@@ -158,17 +157,20 @@ test('a gate-owned foreign record entry takes a real cold fallback inside its en
   const enclosing=parentCapability.admission.temporary.path,parentReady=readFileSync(parentCapability.seal.record);
   const manifest=join(root,'package.json');
   writeFileSync(manifest,JSON.stringify({...JSON.parse(readFileSync(manifest,'utf8')),description:'gate-context cold-fallback control'}));
-  const entry=join(root,'tooling/records/record-pending.ts'),boundary='await withPreparedOracle(()=>{}, {entry:import.meta.url,ambient:true});';
-  const source=readFileSync(entry,'utf8');assert.equal(source.split(boundary).length,2);
-  writeFileSync(entry,"import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';\nimport {durableRecord} from '../gate/durable-record.ts';\n"+source.replace(boundary,boundary+`
-      assertSealedOracleRun(process.env);
-      const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
-      durableRecord(${JSON.stringify(observed)},{capability,temporary:context.temporary});
-      return;
-  `));
-  git(root,'add','-f','package.json','tooling/records/record-pending.ts');git(root,'commit','-qm','require a cold image in the foreign gate entry');
-  const result=fullCheckRecordPending(root,pin,run,partOf('outcomes'),{env:parent.env});
-  assert.equal(result.status,0,readFileSync(join(run,RECORDER_LOG),'utf8'));
+  // Shell consumers such as probe.sh retain their enclosing gate capability.
+  // The full-check recorder deliberately starts an independent launcher; its
+  // separate real candidateCommand control above proves that boundary.
+  const probe=join(root,'tooling/private/observe-sealed-entry.ts');mkdirSync(dirname(probe),{recursive:true});
+  writeFileSync(probe,`import {assertSealedOracleRun} from '../differential/oracle-seal/main.ts';
+    import {durableRecord} from '../gate/durable-record.ts';
+    assertSealedOracleRun(process.env);
+    const context=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT),capability=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES);
+    durableRecord(${JSON.stringify(observed)},{capability,temporary:context.temporary});
+  `);
+  git(root,'add','-f','package.json','tooling/private/observe-sealed-entry.ts');git(root,'commit','-qm','require a cold image in the foreign gate entry');
+  const entry=fileURLToPath(new URL('../gate/oracle-entry.ts',import.meta.url));
+  const result=spawnTest(process.execPath,[join(root,'tooling/gate',entry.split('/').at(-1)!),probe],{cwd:root,env:parent.env,encoding:'utf8',maxBuffer:64*2**20},'gate-owned oracle-entry cold fallback');
+  assert.equal(result.status,0,result.stdout+result.stderr);
   const value=JSON.parse(readFileSync(observed,'utf8'));
   assert.equal(value.capability.source,root);assert.equal(value.capability.seal.source,root);
   assert.notEqual(value.capability.seal.record,parentCapability.seal.record,'changed metadata cannot reuse the parent image');
