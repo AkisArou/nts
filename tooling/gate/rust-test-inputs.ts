@@ -6,7 +6,7 @@ import {runAsCommand} from '../differential/command-entry/main.ts';
 import {basename,isAbsolute,relative,resolve,sep} from 'node:path';
 import {durableRecord,durableRecordStream} from './durable-record.ts';
 import {emptyPathDescriptorArgument} from './rust-input-abi.ts';
-import {byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact} from './file-input-observer.ts';
+import {byteFact,byteFactText,canceledLifetime,fileObserverBirth,MAX_OBSERVATION_ROW_BYTES,readCompressedRecords,readFileObservation,readObservationRow,retainedFileObserverReceipt,type ByteFact,type InputAttempt,type InheritedDescriptor,type ObservationEnd,type FileObserverReceipt,type CaptureArtifact,type ExecEntry} from './file-input-observer.ts';
 
 export type RustTarget={package:string;name:string;kind:string[];source:string};
 const inside=(root:string,path:string)=>{const part=relative(root,path);return !isAbsolute(part)&&part!=='..'&&!part.startsWith('..'+sep);};
@@ -60,7 +60,14 @@ export function readDoctestCalls(directory:string):DoctestCall[]{
     return row as DoctestCall;
   });
 }
-type Image={id:number;parent:number;pid:number;birth:string;path:string;cwd:string;args:string[];phase:TracePhase;reason:'first-observation'|'actual-image'|'actual-argv'|'actual-cwd'};
+type ArgvSource={kind:'request';attempt:string;state:'observed'|'missing'}|{kind:'legacy-proc'}|{kind:'missing';reason:string};
+type Image={id:number;parent:number;pid:number;birth:string;path:string;cwd:string;args:string[];argvSource:ArgvSource;phase:TracePhase;reason:'first-observation'|'actual-image'|'actual-argv'|'actual-cwd'};
+export type InputIndexExecRequest={kind:'exec-request';attempt:string;image:number;pid:number;birth:string;cwd:string;canceled:boolean;syscall:'execve'|'execveat';entry:ExecEntry};
+const readable=(value:ByteFact)=>!value.error&&!value.truncated&&!value.null;
+function argvStrings(value:ByteFact):string[]{
+  if(!readable(value))return [];
+  try{const text=byteFactText(value,'exec request argv');return text?text.slice(0,-1).split('\0'):[];}catch{return [];}
+}
 export type InputPathAnchor={kind:'absolute'}|{kind:'cwd';path:string}|{kind:'dirfd';fd:number;path:string;raw:string};
 export type InputSubject={kind:'path';arg:number;dirfdArg:number;name:string;raw:string;anchor:InputPathAnchor}
   |{kind:'descriptor';arg:number;fd:number;target:string;raw:string;pathArgument?:{arg:number;dirfdArg:number;value:ByteFact}};
@@ -102,6 +109,7 @@ const key=(pid:number,birth:string)=>pid+':'+birth;
 export class RustInputPhases{
   private readonly tasks=new Map<string,Image>();
   private readonly argvFacts=new Map<string,string>();
+  private readonly requests=new Map<string,InputIndexExecRequest>();
   private nextImage=0;
   get imageCount():number{return this.nextImage;}
   private root:number|undefined;
@@ -117,16 +125,34 @@ export class RustInputPhases{
     }
   }
   start(pid:number):void{if(this.root!==undefined)fail('duplicate observed root');this.root=pid;}
+  request(row:InputAttempt,image:Image):InputIndexExecRequest|undefined{
+    if(!row.exec)return;
+    if(row.syscall!=='execve'&&row.syscall!=='execveat')fail('exec arguments have no exec syscall');
+    const request:InputIndexExecRequest={kind:'exec-request',attempt:row.id,image:image.id,pid:row.tgid,birth:row.birth,cwd:image.cwd,canceled:row.canceled,syscall:row.syscall,entry:structuredClone(row.exec)};
+    this.requests.delete(key(row.tgid,row.birth));
+    if(!row.canceled)this.requests.set(key(row.tgid,row.birth),request);
+    return request;
+  }
   observe(row:InputAttempt):Image{
     if(!row.factsComplete||!row.birth||row.birth==='0')fail('missing task identity/image facts');
     const identity=key(row.tgid,row.birth),previous=this.tasks.get(identity);
     const path=byteFactText(row.image,'actual task image'),cwd=byteFactText(row.cwd,'actual task cwd');
-    const actualArgv=row.argvRead?row.argv.hex:'';
+    const changed=!!previous&&previous.path!==path,pending=changed?this.requests.get(identity):undefined;
+    if(changed)this.requests.delete(identity);
+    // Only an observed image transition can bind a request. Same-image
+    // re-execs and failed requests remain unbound; cwd changes prove no exec.
+    let request:InputIndexExecRequest|undefined;
+    if(pending&&readable(pending.entry.target)){
+      try{if(byteFactText(pending.entry.target,'requested executable')===path)request=pending;}catch{/* retain the undecodable request, without a binding */}
+    }
+    const actualArgv=request?'request:'+request.attempt:row.argvRead?row.argv.hex:changed?'':this.argvFacts.get(identity)??'';
     if(previous?.path===path&&previous.cwd===cwd&&this.argvFacts.get(identity)===actualArgv)return previous;
     // A chdir changes later pathname anchors, not the source argument already
     // bound when this invocation entered. Actual image/argv changes rebind it.
     const invocationChanged=previous?.path!==path||this.argvFacts.get(identity)!==actualArgv;
-    const args=row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):[];
+    const args=request?argvStrings(request.entry.argv):row.argvRead?byteFactText(row.argv,'actual rustdoc argv').split('\0').filter(Boolean):!invocationChanged?previous?.args??[]:[];
+    const argvSource:ArgvSource=request?{kind:'request',attempt:request.attempt,state:readable(request.entry.argv)?'observed':'missing'}:row.argvRead?{kind:'legacy-proc'}:
+      !invocationChanged&&previous?previous.argvSource:{kind:'missing',reason:'no matching exec request and actual image transition were observed'};
     const parent=this.tasks.get(key(row.ppid,row.parentBirth));
     if(!this.target&&!previous&&!parent&&row.tgid!==this.root)fail('unattributed task '+identity+' parent '+key(row.ppid,row.parentBirth));
     let phase:TracePhase=this.target?{phase:'test-runtime',source:this.target.source}:{...(previous?.phase??parent?.phase??{phase:'cargo-setup'})};
@@ -140,7 +166,7 @@ export class RustInputPhases{
       if(phase.phase!=='rustdoc-setup'||!phase.source)fail('doctest entry has no rustdoc source: '+identity);
       phase={phase:'doctest-runtime',source:phase.source};this.entered.add(identity);
     }
-    const image:Image={id:++this.nextImage,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,phase,
+    const image:Image={id:++this.nextImage,parent:previous?.id??parent?.id??0,pid:row.tgid,birth:row.birth,path,cwd,args,argvSource,phase,
       reason:!previous?'first-observation':previous.path!==path?'actual-image':invocationChanged?'actual-argv':'actual-cwd'};
     this.tasks.set(identity,image);this.argvFacts.set(identity,actualArgv);return image;
   }
@@ -151,13 +177,13 @@ function factPath(value:ByteFact,purpose:string):string|undefined{
   if(value.null)return;
   return byteFactText(value,purpose);
 }
-export type InputIndexStart={kind:'index-start';version:5;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
-export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'>&{argvRaw:string};
+export type InputIndexStart={kind:'index-start';version:5|6;mechanism:'seccomp-user-notification';outcomes:'unknown';target:RustTarget|null;observer:FileObserverReceipt|null};
+export type InputIndexExecution={kind:'execution'}&Omit<Image,'args'|'argvSource'>&{argvRaw:string;argvSource?:ArgvSource};
 export type InputIndexObservation={kind:'observation'}&RuntimeObservation;
-export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number};
+export type InputIndexCounts={images:number;attempts:number;observations:number;probes:number;terminalFacts:number;inherited:number;execRequests:number};
 export type InputIndexEnd={kind:'index-complete';terminal:ObservationEnd;counts:InputIndexCounts;raw:CaptureArtifact&{path:string}};
-export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexObservation|InheritedDescriptor|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
-const emptyCounts=():InputIndexCounts=>({images:0,attempts:0,observations:0,probes:0,terminalFacts:0,inherited:0});
+export type InputIndexRow=InputIndexStart|InputIndexExecution|InputIndexExecRequest|InputIndexObservation|InheritedDescriptor|{kind:'terminal-fact';fact:InputAttempt}|InputIndexEnd;
+const emptyCounts=():InputIndexCounts=>({images:0,attempts:0,observations:0,probes:0,terminalFacts:0,inherited:0,execRequests:0});
 
 export type InputTraceDerivation={raw:string;cwd:string;root:string;target?:RustTarget;doctestCalls?:readonly DoctestCall[];observer?:FileObserverReceipt};
 /** The one bounded raw-to-index transform. Publication and independent
@@ -168,7 +194,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
   if(observer&&observer.abi!==options.observer?.abi)fail('observer ABI receipt mismatch');
   const phases=new RustInputPhases(options.root,options.target,options.doctestCalls),counts=emptyCounts();
   let root:number|undefined,observerBound=false;
-  await emit({kind:'index-start',version:5,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
+  await emit({kind:'index-start',version:6,mechanism:'seccomp-user-notification',outcomes:'unknown',target:options.target??null,observer});
   const capture=await readFileObservation(options.raw,async row=>{
     if(row.kind==='root-start'){root=row.root;phases.start(row.root);return;}
     if(row.kind==='inherited'){counts.inherited++;await emit(row);return;}
@@ -186,6 +212,7 @@ export async function deriveInputTrace(options:InputTraceDerivation,emit:(row:In
       void args;
       await emit({kind:'execution',...context,argvRaw:row.argvRead?row.argv.hex:''});
     }
+    const request=phases.request(row,image);if(request){counts.execRequests++;await emit(request);}
     const subjects:InputSubject[]=[],probes:InputIndexProbe[]=[];
     const probe=(probeKind:string,raw:string,error:number,fd?:number,rawPath?:string)=>{probes.push({probeKind,raw,error,...(fd===undefined?{}:{fd}),...(rawPath===undefined?{}:{rawPath})});};
     const descriptor=(fd:InputAttempt['dirfds'][number],pathArgument?:InputAttempt['paths'][number])=>{
@@ -315,13 +342,14 @@ function receiptValid(value:unknown):value is FileObserverReceipt{
 export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=>void|Promise<void>):Promise<{header:InputIndexStart;complete:InputIndexEnd}>{
   const counts=emptyCounts();let header:InputIndexStart|undefined,complete:InputIndexEnd|undefined,firstImage:{pid:number;path:string}|undefined;
   // Keep only each task's current attribution, never its historical argv rows.
-  const tasks=new Map<string,{id:number;cwd:string;phase:TracePhase['phase'];source?:string}>();
+  const tasks=new Map<string,{id:number;cwd:string;path:string;argvSource?:ArgvSource;phase:TracePhase['phase'];source?:string}>();
+  const requests=new Map<string,InputIndexExecRequest>(),requestIds=new Set<string>();
   await readCompressedRecords(file,async value=>{
     const row=indexObject(value);
     if(complete)fail('data after input index completion');
     if(!header){
       if(row.kind!=='index-start')fail('missing input index header');
-      if(row.version!==5)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
+      if(row.version!==5&&row.version!==6)fail('unsupported input index version '+String(row.version)+'; rederive legacy normalized indices from raw captures');
       const target=row.target;
       if(row.mechanism!=='seccomp-user-notification'||row.outcomes!=='unknown'||target!==null&&(!target||typeof target!=='object'))fail('malformed input index header');
       if(row.observer!==null&&!receiptValid(row.observer))fail('malformed observer receipt');
@@ -337,7 +365,35 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
         ||!['first-observation','actual-image','actual-argv','actual-cwd'].includes(String(row.reason)))fail('malformed input index execution');
       firstImage??={pid:row.pid,path:row.path};counts.images++;
       const phase=indexObject(row.phase);
-      tasks.set(key(row.pid,row.birth),{id:row.id,cwd:row.cwd,phase:phase.phase as TracePhase['phase'],...(typeof phase.source==='string'?{source:phase.source}:{})});
+      const identity=key(row.pid,row.birth),previous=tasks.get(identity);
+      if(header.version===6){
+        const argv=indexObject(row.argvSource);
+        if(argv.kind==='request'){
+          if(typeof argv.attempt!=='string')fail('malformed exec argument reference');
+          if(row.reason==='actual-cwd'){
+            if(previous?.path!==row.path||JSON.stringify(previous.argvSource)!==JSON.stringify(argv))fail('cwd cannot create a new exec argument binding');
+          }else{
+            const request=requests.get(identity);
+            if(row.reason!=='actual-image'||!previous||previous.path===row.path||request?.attempt!==argv.attempt||request.image!==previous.id
+              ||!readable(request.entry.target)||byteFactText(request.entry.target,'requested executable')!==row.path)
+              fail('exec arguments have no matching request and actual image transition');
+            if(argv.state!==(readable(request.entry.argv)?'observed':'missing'))fail('exec argument state differs from its request');
+          }
+        }else if(argv.kind==='missing'){
+          if(typeof argv.reason!=='string'||!argv.reason)fail('missing exec arguments need their reason');
+        }else if(argv.kind!=='legacy-proc')fail('unknown exec argument provenance');
+      }
+      if(previous?.path!==row.path)requests.delete(identity);
+      tasks.set(identity,{id:row.id,cwd:row.cwd,path:row.path,...(row.argvSource?{argvSource:row.argvSource as ArgvSource}:{}),phase:phase.phase as TracePhase['phase'],...(typeof phase.source==='string'?{source:phase.source}:{})});
+    }else if(row.kind==='exec-request'){
+      const entry=indexObject(row.entry);
+      if(typeof row.attempt!=='string'||!/^\d{1,20}$/.test(row.attempt)||requestIds.has(row.attempt)||!integer(row.image)||!integer(row.pid)
+        ||typeof row.birth!=='string'||!/^\d+$/.test(row.birth)||!absolute(row.cwd)||typeof row.canceled!=='boolean'||!['execve','execveat'].includes(String(row.syscall))
+        ||entry.source!=='syscall-entry'||!byteFact(entry.argv)||!byteFact(entry.target))fail('malformed exec request');
+      const context=tasks.get(key(row.pid,row.birth));
+      if(!context||context.id!==row.image||context.cwd!==row.cwd)fail('exec request differs from its actual source image');
+      requestIds.add(row.attempt);requests.delete(key(row.pid,row.birth));
+      if(!row.canceled)requests.set(key(row.pid,row.birth),row as InputIndexExecRequest);counts.execRequests++;
     }else if(row.kind==='observation'){
       if(!integer(row.image)||row.image<1||row.image>counts.images||!phaseValid(row)||!absolute(row.cwd)
         ||typeof row.operation!=='string'||typeof row.syscall!=='string'||row.outcome!=='unknown'||typeof row.canceled!=='boolean'
@@ -363,7 +419,10 @@ export async function readInputTraceIndex(file:string,visit:(row:InputIndexRow)=
       if(terminal.kind!=='complete'||!terminal.complete||!terminal.drainComplete||terminal.errors||terminal.attempts!==counts.attempts||counts.images>counts.attempts)fail('incomplete native input index');
       if(!absolute(raw.path)||!digestValid(raw.sha256)||!integer(raw.bytes)||raw.bytes<1)fail('missing raw capture artifact binding');
       if(header.observer&&(!firstImage||firstImage.pid!==terminal.root||firstImage.path!==header.observer.observedPath))fail('observer receipt has no matching raw root image');
-      for(const field of Object.keys(counts) as (keyof InputIndexCounts)[])if(reported[field]!==counts[field])fail('input index count mismatch: '+field);
+      for(const field of Object.keys(counts) as (keyof InputIndexCounts)[]){
+        if(field==='execRequests'&&header.version===5&&reported[field]===undefined&&counts[field]===0)continue;
+        if(reported[field]!==counts[field])fail('input index count mismatch: '+field);
+      }
       complete=row as InputIndexEnd;
     }else fail('unexpected input index record '+String(row.kind));
     await visit(row as InputIndexRow);

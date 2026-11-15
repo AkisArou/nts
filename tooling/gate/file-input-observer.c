@@ -305,6 +305,95 @@ static Bytes remote_path(pid_t tid, uint64_t address,
   return b;
 }
 static bool good(const Bytes *b) { return !b->error && !b->truncated; }
+/* Read the stopped exec request, never a later /proc cmdline. Missing vectors
+ * remain facts about this request; they do not invent an empty invocation. */
+static Bytes remote_argv(pid_t tid, uint64_t address,
+                         unsigned char data[ARGV_BYTES]) {
+  Bytes result = {.data = data};
+  if (!address) {
+    result.null = true;
+    return result;
+  }
+  for (size_t i = 0; result.size < ARGV_BYTES; i++) {
+    uint64_t pointer;
+    if (address > UINT64_MAX - i * sizeof(pointer)) {
+      result.error = EOVERFLOW;
+      return result;
+    }
+    struct iovec local = {.iov_base = &pointer, .iov_len = sizeof(pointer)};
+    struct iovec remote = {
+        .iov_base = (void *)(uintptr_t)(address + i * sizeof(pointer)),
+        .iov_len = sizeof(pointer)};
+    ssize_t n;
+    do {
+      n = process_vm_readv(tid, &local, 1, &remote, 1, 0);
+    } while (n < 0 && errno == EINTR);
+    if (n != (ssize_t)sizeof(pointer)) {
+      result.error = n < 0 ? errno : EFAULT;
+      return result;
+    }
+    if (!pointer)
+      return result;
+    unsigned char argument[PATH_BYTES];
+    Bytes value = remote_path(tid, pointer, argument);
+    if (!good(&value) || value.null) {
+      result.error = value.error;
+      result.truncated = value.truncated;
+      result.null = value.null;
+      return result;
+    }
+    if (value.size + 1 > ARGV_BYTES - result.size) {
+      result.truncated = true;
+      return result;
+    }
+    memcpy(data + result.size, value.data, value.size);
+    result.size += value.size;
+    data[result.size++] = 0;
+  }
+  result.truncated = true;
+  return result;
+}
+static Bytes exec_target(const struct seccomp_notif *request, const Call *call,
+                         const Bytes *path, unsigned char data[PATH_BYTES]) {
+  Bytes result = {.data = data};
+  if (!good(path) || path->null) {
+    result.error = path->error ? path->error : EFAULT;
+    result.truncated = path->truncated;
+    return result;
+  }
+  char spelling[PATH_BYTES + 128];
+  if (!path->size) {
+    if (strcmp(call->name, "execveat") ||
+        !(request->data.args[4] & AT_EMPTY_PATH)) {
+      result.error = ENOENT;
+      return result;
+    }
+    snprintf(spelling, sizeof(spelling), "/proc/%d/fd/%d", request->pid,
+             (int)request->data.args[0]);
+  } else if (path->data[0] == '/')
+    snprintf(spelling, sizeof(spelling), "/proc/%d/root/%.*s", request->pid,
+             (int)path->size, path->data);
+  else if (!strcmp(call->name, "execveat") &&
+           (int)request->data.args[0] != AT_FDCWD)
+    snprintf(spelling, sizeof(spelling), "/proc/%d/fd/%d/%.*s", request->pid,
+             (int)request->data.args[0], (int)path->size, path->data);
+  else
+    snprintf(spelling, sizeof(spelling), "/proc/%d/cwd/%.*s", request->pid,
+             (int)path->size, path->data);
+  char *physical = realpath(spelling, NULL);
+  if (!physical) {
+    result.error = errno;
+    return result;
+  }
+  result.size = strlen(physical);
+  if (result.size >= PATH_BYTES) {
+    result.size = PATH_BYTES;
+    result.truncated = true;
+  }
+  memcpy(data, physical, result.size);
+  free(physical);
+  return result;
+}
 static void record_error(const char *message, int error) {
   errors++;
   fprintf(output, "{\"kind\":\"error\",\"message\":\"%s\",\"errno\":%d}\n",
@@ -436,8 +525,8 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   // All facts remain live until this notification is serialized. Their bounded
   // backing storage is independent; only metadata travels through Bytes views.
   unsigned char cwd_data[PATH_BYTES], image_data[PATH_BYTES],
-      status_data[16384], argv_data[ARGV_BYTES], path_data[2][PATH_BYTES],
-      descriptor_data[2][PATH_BYTES];
+      status_data[16384], argv_data[ARGV_BYTES], target_data[PATH_BYTES],
+      path_data[2][PATH_BYTES], descriptor_data[2][PATH_BYTES];
   Bytes status, cwd = proc_link(request->pid, "cwd", cwd_data),
                 image = proc_link(request->pid, "exe", image_data);
   task_identity(request->pid, &tgid, &ppid, &status, status_data);
@@ -446,14 +535,6 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   bool complete = good(&cwd) && good(&image) && good(&status) && tgid && birth;
   Bytes argv = {0};
   bool argv_read = false;
-  if (image.size >= 8 &&
-      memcmp(image.data + image.size - 8, "/rustdoc", 8) == 0) {
-    char path[96];
-    snprintf(path, sizeof(path), "/proc/%lu/cmdline", tgid);
-    argv = read_file(path, argv_data, sizeof(argv_data));
-    argv_read = true;
-    complete = complete && good(&argv);
-  }
   Bytes paths[2];
   for (unsigned i = 0; i < call->count; i++) {
     paths[i] = remote_path(request->pid, request->data.args[call->paths[i]],
@@ -493,6 +574,17 @@ static void attempt_json(int listener, const struct seccomp_notif *request) {
   bytes_json(&image);
   fprintf(output, ",\"argvRead\":%s,\"argv\":", argv_read ? "true" : "false");
   bytes_json(&argv);
+  if (!strcmp(call->name, "execve") || !strcmp(call->name, "execveat")) {
+    unsigned argument = !strcmp(call->name, "execve") ? 1 : 2;
+    Bytes requested_argv =
+        remote_argv(request->pid, request->data.args[argument], argv_data);
+    Bytes target = exec_target(request, call, &paths[0], target_data);
+    fputs(",\"exec\":{\"source\":\"syscall-entry\",\"argv\":", output);
+    bytes_json(&requested_argv);
+    fputs(",\"target\":", output);
+    bytes_json(&target);
+    fputc('}', output);
+  }
   fputs(",\"paths\":[", output);
   for (unsigned i = 0; i < call->count; i++) {
     if (i)
@@ -629,7 +721,7 @@ int main(int argc, char **argv) {
   static char buffer[65536];
   if (setvbuf(output, buffer, _IOFBF, sizeof(buffer)))
     fatal("observation buffer");
-  fputs("{\"kind\":\"start\",\"version\":2,\"mechanism\":\"seccomp-user-"
+  fputs("{\"kind\":\"start\",\"version\":3,\"mechanism\":\"seccomp-user-"
         "notification\",\"noNewPrivileges\":true}\n",
         output);
   inherited_descriptors();

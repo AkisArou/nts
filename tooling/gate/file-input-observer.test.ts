@@ -1,13 +1,13 @@
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync,type StdioOptions} from 'node:child_process';
-import {mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,realpathSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {gzipSync,gunzipSync,constants} from 'node:zlib';
 import {byteFactText,fileObserverArguments,prepareFileObserver,readFileObservation,readObservationRow,type InputAttempt,type ObservationRow} from './file-input-observer.ts';
-import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe} from './rust-test-inputs.ts';
+import {publishInputTrace,readInputTraceIndex,classifyInputOpen,type InputIndexObservation,type InputIndexProbe,type InputIndexExecRequest,type InputIndexExecution} from './rust-test-inputs.ts';
 import {authenticateRustInputTrace} from './rust-input-authentication.ts';
 import {runtimeSubjectValidator,validateRustInputCapture} from './rust-input-validation.ts';
 import {runtimeInputRequirement} from './rust-input-operations.ts';
@@ -34,6 +34,16 @@ const subject=String.raw`
 static void *thread_exit(void *unused){(void)unused;syscall(SYS_exit,0);return NULL;}
 int main(int argc,char **argv){
   if(argc<2)return 90;
+  if(!strcmp(argv[1],"exec-args")){
+    if(chdir(argv[2]))return 124;
+    char *missing[]={"missing request","not entered",NULL};
+    execve("/missing-observer-exec-control",missing,NULL);
+    if(errno!=ENOENT)return 121;
+    syscall(SYS_execve,"/missing-observer-exec-control",(char **)1,NULL);
+    syscall(SYS_execveat,AT_FDCWD,"missing-execveat-control",missing,NULL,0);
+    char *next[]={argv[3],"%s","space and empty","",NULL};
+    execv(argv[3],next);return 122;
+  }
   if(!strcmp(argv[1],"anchors")){
     if(chdir(argv[2]))return 124;
     int fd=open("logical/jump/../target",O_RDONLY);if(fd<0)return 125;
@@ -109,6 +119,36 @@ int main(int argc,char **argv){
   return 110;
 }
 `;
+
+test('exec requests retain syscall argv and cwd without inventing successful or readable invocations',async t=>{
+  const root=newTestScratch('file-input-exec-argv');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const env=fixtureEnvironment(t),prepared=prepareFileObserver(root,env),program=join(root,'subject'),input=join(root,'subject.c');
+  writeFileSync(input,subject);
+  const built=spawnTest('cc',['-O1','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',input,'-pthread','-o',program],{env,encoding:'utf8'});
+  assert.equal(built.status,0,built.stderr);
+  const target=realpathSync('/usr/bin/printf'),raw=join(root,'exec.raw.gz');
+  const ran=spawnTest(prepared.executable,fileObserverArguments(raw,program,['exec-args',root,target]),{env,encoding:'utf8'});
+  assert.equal(ran.status,0,ran.stderr);assert.equal(ran.stdout,'space and empty');
+  const attempts:InputAttempt[]=[];await readFileObservation(raw,row=>{if(row.kind==='attempt')attempts.push(row);});
+  assert.ok(attempts.filter(row=>row.syscall==='execve'||row.syscall==='execveat').every(row=>row.exec?.source==='syscall-entry'));
+  const path=join(root,'exec.index.gz');await publishInputTrace({raw,output:path,cwd:root,root,observer:prepared.receipt,target:{package:'fixture',name:'exec',kind:['test'],source:'fixture.rs'}});
+  const requests:InputIndexExecRequest[]=[],images:InputIndexExecution[]=[];
+  await readInputTraceIndex(path,row=>{if(row.kind==='exec-request')requests.push(row);if(row.kind==='execution')images.push(row);});
+  const success=requests.find(row=>!row.entry.target.error&&byteFactText(row.entry.target,'requested target')===target);assert.ok(success);
+  assert.equal(success.cwd,root);
+  assert.deepEqual(byteFactText(success.entry.argv,'requested argv').split('\0'),[target,'%s','space and empty','','']);
+  const entered=images.find(row=>row.path===target&&row.argvSource?.kind==='request');assert.ok(entered);
+  assert.deepEqual(entered.argvSource,{kind:'request',attempt:success.attempt,state:'observed'});
+  const missing=requests.find(row=>row.entry.target.error===2&&!row.entry.argv.error);assert.ok(missing);
+  assert.ok(requests.some(row=>row.syscall==='execveat'&&row.entry.target.error===2));
+  const unreadable=requests.find(row=>row.entry.argv.error!==0);assert.ok(unreadable);
+  for(const request of [missing,unreadable])assert.ok(!images.some(row=>row.argvSource?.kind==='request'&&row.argvSource.attempt===request.attempt),'failed requests stay unbound');
+  assert.ok(images.some(row=>row.argvSource?.kind==='missing'),'initial images have explicit missing argv');
+  const rows=gunzipSync(readFileSync(path)).toString('utf8').trim().split('\n').map(line=>JSON.parse(line));
+  const forged=rows.find(row=>row.kind==='execution'&&row.id===entered.id);forged.argvSource.attempt=missing.attempt;
+  const changed=join(root,'forged.index.gz');writeFileSync(changed,gzipSync(rows.map(row=>JSON.stringify(row)).join('\n')+'\n'));
+  await assert.rejects(readInputTraceIndex(changed,()=>{}),/no matching request and actual image transition/);
+});
 
 test('the native observer retains actual images, attempted inputs and original product streams',async t=>{
   const root=newTestScratch('file-input-observer');t.after(()=>rmSync(root,{recursive:true,force:true}));
