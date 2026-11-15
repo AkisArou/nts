@@ -12696,7 +12696,7 @@
             "path": "../../../tests/interop/native-uname"
           },
           {
-            "kind": "conservative",
+            "kind": "data",
             "path": "../../../tests/workspace"
           },
           {
