@@ -41,8 +41,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
 import { issueOfBranch } from "../tasks/branch.ts";
-import {acceptedRevisionData} from "../gate/reader-inputs/main.ts";
-import {acceptedRevision,type AcceptedRevision} from "../gate/accepted-revision-data.ts";
+import {acceptedRevisionData,acceptedRevision,type AcceptedRevision} from "../gate/accepted-revision-data.ts";
 
 const RECORD_DIRECTORY=acceptedRevisionData(new URL('../../docs/records/',import.meta.url));
 const PLAN=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));

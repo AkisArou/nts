@@ -3,8 +3,7 @@ import {test} from 'node:test';
 import {join} from 'node:path';
 import {writeFileSync} from 'node:fs';
 import {scratchRepo} from '../landing/scratch-repo.ts';
-import {acceptedRevisionData} from './reader-inputs/main.ts';
-import {acceptedRevision} from './accepted-revision-data.ts';
+import {acceptedRevisionData,acceptedRevision} from './accepted-revision-data.ts';
 import {gateSteps,owed,TREE_CHECKS} from './owed.mjs';
 
 const plan=acceptedRevisionData(new URL('../../docs/plan.md',import.meta.url));

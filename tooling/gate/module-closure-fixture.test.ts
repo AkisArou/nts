@@ -44,12 +44,12 @@ test('a declared data directory copies all tracked data without parsing it as ho
 
 test('accepted revision data supplies no candidate bytes while a working data reader still owns the same paths',t=>{
   const f=dataFixture(t);
-  f.write('tooling/gate/reader-inputs/main.ts','export const acceptedRevisionData=url=>({});export const dataDirectory=url=>url;');
-  f.write('accepted.ts',"import {acceptedRevisionData} from './tooling/gate/reader-inputs/main.ts';acceptedRevisionData(new URL('./data/',import.meta.url));acceptedRevisionData(new URL('./missing/',import.meta.url));");
+  f.write('tooling/gate/accepted-revision-data.ts','export const acceptedRevisionData=url=>({});');
+  f.write('accepted.ts',"import {acceptedRevisionData} from './tooling/gate/accepted-revision-data.ts';acceptedRevisionData(new URL('./data/',import.meta.url));acceptedRevisionData(new URL('./missing/',import.meta.url));");
   const graph=moduleGraph({sourceRoot:f.source});
   try{
     const snapshot=graph.describe(['accepted.ts']);
-    assert.deepEqual(snapshot.files,['accepted.ts','tooling/gate/reader-inputs/main.ts']);
+    assert.deepEqual(snapshot.files,['accepted.ts','tooling/gate/accepted-revision-data.ts']);
     assert.deepEqual(snapshot.directories,[]);
     assert.deepEqual(copyModuleClosure(['accepted.ts'],f.destination,{sourceRoot:f.source}),snapshot.files);
     assert.equal(existsSync(join(f.destination,'data')),false);

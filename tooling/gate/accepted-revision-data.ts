@@ -33,7 +33,7 @@ export function acceptedRevision(repo:string):AcceptedRevision|{error:string}{
     const path=paths.get(descriptor);
     if(!path)throw Error('accepted revision read requires its owned descriptor');
     const args=operation==='show'?['show',mainSha+':'+path]:
-      ['grep','--no-color','--no-textconv','-I','-h','-E',pattern!,mainSha,'--',path];
+      ['grep','--no-color','--no-textconv','--no-line-number','--no-column','--no-heading','--no-break','-I','-h','-E',pattern!,mainSha,'--',path];
     const result=spawnSync('git',gitArguments(args),{cwd:repo,encoding:'utf8',maxBuffer:1<<26});
     if(result.error||result.status!==0&&!(operation==='grep'&&result.status===1))
       return {error:result.error?.message||result.stderr.trim()||'git '+operation+' exit '+result.status};

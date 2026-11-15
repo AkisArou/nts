@@ -48,9 +48,11 @@ export function acceptedRevisionDataProblems(facts:SourceFacts):string[]{
     const match=/^(\.{1,2}\/.*)\.([^.]*)$/.exec(facts.name(node));
     if(!match||match[2]!==member)return false;
     const path=relative('.',join(dirname(facts.file),match[1]!)).split(sep).join('/');
-    return path==='tooling/gate/accepted-revision-data.ts'||member==='acceptedRevisionData'&&path==='tooling/gate/reader-inputs/main.ts';
+    return path==='tooling/gate/accepted-revision-data.ts';
   };
-  const descriptors=new Set(facts.calls.filter(call=>owner(call.expression,'acceptedRevisionData')));
+  const descriptors=new Set(facts.calls.filter(call=>facts.readerFactory(call.expression)?.name==='acceptedRevisionData'));
+  for(const call of facts.calls)if(/\.acceptedRevisionData$/.test(facts.name(call.expression))&&!descriptors.has(call))
+    problems.push(`${facts.file}:${facts.line(call.pos)}: acceptedRevisionData must come from tooling/gate/accepted-revision-data.ts`);
   const constant=(node:Node)=>{
     const list=facts.parents.get(node),statement=list&&facts.parents.get(list);
     return !!list&&ast.isVariableDeclarationList(list)&&(list.flags&ast.NodeFlags.Const)!==0

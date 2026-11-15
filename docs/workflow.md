@@ -166,7 +166,8 @@ imports or launches. Only entered modules take part in host-reference traversal;
 data members and exact file inputs keep their input obligations without making
 their strings or imports into readers. A later real import enters a file even
 if an earlier reader reached it as data or exact bytes.
-`acceptedRevisionData(new URL("path", import.meta.url))` declares data read only
+`acceptedRevisionData(new URL("path", import.meta.url))`, from
+`tooling/gate/accepted-revision-data.ts`, declares data read only
 from captured accepted-main blobs. Its opaque value can be consumed only by
 `acceptedRevision(repo).show` or `.grep`; that owner resolves `refs/heads/main`
 once, exposes its read-only revision and always passes that commit to Git.

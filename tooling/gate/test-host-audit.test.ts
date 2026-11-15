@@ -22,7 +22,7 @@ test('every tooling test dependency closure obeys module ownership',()=>{
 test('accepted revision data cannot escape its captured-revision reader',()=>{
   const inspect=(tail:string)=>{
     const problems:string[]=[];
-    inspectHostSource('tooling/gate/reader.ts',`import {acceptedRevisionData as data} from './reader-inputs/main.ts';
+    inspectHostSource('tooling/gate/reader.ts',`import {acceptedRevisionData as data} from './accepted-revision-data.ts';
 import {acceptedRevision as revision,type AcceptedRevision} from './accepted-revision-data.ts';
 const input=data(new URL('../../docs/records/',import.meta.url));${tail}`,
       undefined,(_file,_source,facts)=>problems.push(...acceptedRevisionDataProblems(facts)));
@@ -33,6 +33,10 @@ const input=data(new URL('../../docs/records/',import.meta.url));${tail}`,
   for(const source of ['fileURLToPath(input);','new URL(input);','readFileSync(input);','consume(input);','export {input};',
     'const bad={input};','function f(){return input;}','lookalike(repo).show(input);','revision(repo,main).show(input);'])
     assert.match(inspect(source).join('\n'),/acceptedRevisionData may only be consumed/,source);
+  const problems:string[]=[];
+  inspectHostSource('tooling/gate/reader.ts',"import {acceptedRevisionData} from './lookalike.ts';acceptedRevisionData(new URL('./working/',import.meta.url));",
+    undefined,(_file,_source,facts)=>problems.push(...acceptedRevisionDataProblems(facts)));
+  assert.match(problems.join('\n'),/must come from tooling\/gate\/accepted-revision-data.ts/);
 });
 
 test('the unit population filter belongs only to private controls',()=>{

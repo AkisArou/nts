@@ -1,7 +1,6 @@
 // Syntax adapters produce these same rows for module code and other readers.
 // A data directory is an explicit input, separate from module-owned bytes.
 export type InputKind='module'|'data'|'accepted-revision'|'inspection'|'file'|'optional-file'|'membership'|'project'|'project-config'|'fixture'|'members';
-export {acceptedRevisionData} from '../accepted-revision-data.ts';
 export type DataNamespaces=Readonly<Record<string,string>>;
 export type ReaderInput={path:string;kind:InputKind;dataNamespaces?:DataNamespaces;member?:string;data?:true};
 export type ModuleDeclarations={imports:string[];assets:ReaderInput[]};

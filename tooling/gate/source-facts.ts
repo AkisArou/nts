@@ -5,7 +5,17 @@ import {createRequire} from 'node:module';
 import type {Node,CallExpression,NewExpression,VariableDeclaration,ImportDeclaration,BindingName} from 'typescript/ast';
 import {shellCommands,type ShellCommands} from './shell-commands.ts';
 import {posix} from 'node:path';
-import {fixtureNamespaces,moduleMemberName,type ModuleDeclarations,type ReaderInput,type DataNamespaces} from './reader-inputs/main.ts';
+import {fixtureNamespaces,moduleMemberName,type ModuleDeclarations,type ReaderInput,type DataNamespaces,type InputKind} from './reader-inputs/main.ts';
+
+const INPUT_OWNER='tooling/gate/reader-inputs/main.ts';
+const READER_FACTORIES:Readonly<Record<string,{owner:string;kind:InputKind}>>={
+  dataDirectory:{owner:INPUT_OWNER,kind:'data'},inspectionDirectory:{owner:INPUT_OWNER,kind:'inspection'},
+  fileInput:{owner:INPUT_OWNER,kind:'file'},optionalFile:{owner:INPUT_OWNER,kind:'optional-file'},
+  directoryMembership:{owner:INPUT_OWNER,kind:'membership'},projectInput:{owner:INPUT_OWNER,kind:'project'},
+  projectConfig:{owner:INPUT_OWNER,kind:'project-config'},fixtureInput:{owner:INPUT_OWNER,kind:'fixture'},
+  moduleMembers:{owner:INPUT_OWNER,kind:'members'},
+  acceptedRevisionData:{owner:'tooling/gate/accepted-revision-data.ts',kind:'accepted-revision'},
+};
 
 type Syntax=typeof import('typescript/ast');
 let syntax:Syntax|undefined;
@@ -40,6 +50,13 @@ export class SourceFacts {
   private readonly lines=[0];
   private ambientAliases:Map<string,string>|undefined;
   private moduleEdges:{all:string[];host:string[]}|undefined;
+
+  readerFactory(expression:Node):{name:string;kind:InputKind}|undefined{
+    const match=/^(\.{1,2}\/.*)\.([A-Za-z_]\w*)$/.exec(this.name(expression));
+    const factory=match&&READER_FACTORIES[match[2]!];
+    if(factory&&posix.normalize(posix.join(posix.dirname(this.file),match![1]!))===factory.owner)
+      return {name:match![2]!,kind:factory.kind};
+  }
 
   constructor(file:string,source:string,root:Node){
     this.file=file;this.source=source;this.root=root;
@@ -217,18 +234,17 @@ export class SourceFacts {
         &&ast.isMetaProperty(base.expression)&&base.expression.keywordToken===ast.SyntaxKind.ImportKeyword&&base.expression.name.text==='meta'
         &&!/^(?:\/|[a-z][a-z0-9+.-]*:)/i.test(literal.text)){
         const parent=this.parents.get(node);
-        const called=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.name(parent.expression):'';
-        const owned=/^(\.{1,2}\/.*)\.(dataDirectory|acceptedRevisionData|inspectionDirectory|fileInput|optionalFile|directoryMembership|projectInput|projectConfig|fixtureInput|moduleMembers)$/.exec(called);
-        const owner=owned&&posix.normalize(posix.join(posix.dirname(this.file),owned[1]!))==='tooling/gate/reader-inputs/main.ts';
+        const factory=parent&&ast.isCallExpression(parent)&&parent.arguments[0]===node?this.readerFactory(parent.expression):undefined;
+        const owner=!!factory;
         if(!literal.text.split('/').some(segment=>segment!==''&&segment!=='.'&&segment!=='..')
-          &&!(owner&&owned![2]==='directoryMembership'))continue;
-        if(owner&&['optionalFile','directoryMembership','acceptedRevisionData'].includes(owned![2]!)
+          &&!(factory?.name==='directoryMembership'))continue;
+        if(owner&&['optionalFile','directoryMembership','acceptedRevisionData'].includes(factory.name)
           &&(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==1))
-          throw Error(owned![2]+' needs exactly one URL input: '+this.file);
-        if(owner&&owned![2]==='fixtureInput'){
+          throw Error(factory.name+' needs exactly one URL input: '+this.file);
+        if(factory?.name==='fixtureInput'){
           if(!parent||!ast.isCallExpression(parent)||parent.arguments.length!==2)throw Error('fixtureInput needs an entry and namespace owners: '+this.file);
           assets.push({path:literal.text,kind:'fixture',dataNamespaces:fixtureGrants(parent.arguments[1])});
-        }else if(owner&&owned![2]==='moduleMembers'){
+        }else if(factory?.name==='moduleMembers'){
           if(!parent||!ast.isCallExpression(parent)||![2,3].includes(parent.arguments.length)||!parent.arguments[1]||!ast.isStringLiteral(parent.arguments[1]))
             throw Error('moduleMembers needs a directory and literal member name: '+this.file);
           let data:true|undefined;
@@ -241,8 +257,7 @@ export class SourceFacts {
             data=true;
           }
           assets.push({path:literal.text,kind:'members',member:moduleMemberName(parent.arguments[1].text),...(data?{data}:{})});
-        }else assets.push({path:literal.text,kind:owner&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1
-          ?(owned![2]==='dataDirectory'?'data':owned![2]==='acceptedRevisionData'?'accepted-revision':owned![2]==='inspectionDirectory'?'inspection':owned![2]==='fileInput'?'file':owned![2]==='optionalFile'?'optional-file':owned![2]==='directoryMembership'?'membership':owned![2]==='projectConfig'?'project-config':'project'):'module'});
+        }else assets.push({path:literal.text,kind:factory&&parent&&ast.isCallExpression(parent)&&parent.arguments.length===1?factory.kind:'module'});
       }
     }
     return {imports,assets};
