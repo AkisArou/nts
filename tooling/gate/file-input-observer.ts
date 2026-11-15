@@ -114,7 +114,8 @@ export function readObservationRow(value:unknown):ObservationRow{
     &&(row.imageReaderRecipe===undefined||row.imageReaderRecipe===null||typeof row.imageReaderRecipe==='string'&&/^[0-9a-f]{64}$/.test(row.imageReaderRecipe));
   else if(row.kind==='image-reader-end'){
     const end=object(row.value),stats=object(end.statistics);valid=end.version===1&&end.kind==='complete'
-      &&['elfHits','elfMisses','loaderHits','loaderMisses'].every(key=>natural(stats[key]));
+      &&['elfHits','elfMisses','loaderHits','loaderMisses'].every(key=>natural(stats[key]))
+      &&['contentIdentityHits','contentIdentityMisses','forcedByteFences','hashedBytes'].every(key=>stats[key]===undefined||natural(stats[key]));
   }
   else if(row.kind==='complete')valid=typeof row.complete==='boolean'&&typeof row.entered==='boolean'&&typeof row.drainComplete==='boolean'
     &&['root','execErrno','attempts','errors','observerSignal'].every(key=>natural(row[key]))&&row.root!==0

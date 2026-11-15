@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync,lstatSync} from 'node:fs';
 import {join} from 'node:path';
 import {durableRecord} from './durable-record.ts';
 import {testScratch,TestScratch} from './test-scratch.ts';
@@ -12,7 +12,7 @@ import {runtimeSubjectValidator} from './rust-input-validation.ts';
 import type {InputIndexExecution,InputSubject,RuntimeObservation} from './rust-test-inputs.ts';
 import type {FileObserverReceipt} from './file-input-observer.ts';
 import type {InputSnapshot} from './module-closure.ts';
-import {rustLoaderCapture} from './rust-loader.ts';
+import {rustLoaderCapture,executableFingerprints} from './rust-loader.ts';
 
 const observer:FileObserverReceipt={version:1,observedPath:'/observer',artifactPath:'/observer',sha256:'a'.repeat(64),sourceSha256:'b'.repeat(64),abi:'linux-x86_64-v1'};
 function fixture(t:Parameters<typeof testScratch>[0]){
@@ -103,10 +103,20 @@ test('ELF and loader report caches key exact bytes, environment and hwcaps witho
   assert.equal(cache.capture(f.path,f.cwd,f.env,'platform-a').loader.help,expected);
   cache.capture(f.path,f.cwd,{...f.env,LD_LIBRARY_PATH:join(f.root,'other')},'platform-a');
   cache.capture(f.path,f.cwd,f.env,'platform-b');
-  assert.deepEqual(cache.statistics(),{elfHits:3,elfMisses:1,loaderHits:1,loaderMisses:3});
+  const counts=cache.statistics();assert.deepEqual([counts.elfHits,counts.elfMisses,counts.loaderHits,counts.loaderMisses],[3,1,1,3]);
   writeFileSync(f.path,Buffer.concat([readFileSync(f.path),Buffer.from('different bytes')]));
   cache.capture(f.path,f.cwd,f.env,'platform-a');
   assert.equal(cache.statistics().elfMisses,2);assert.equal(cache.statistics().loaderHits,2);
+});
+
+test('rewriting an image in place changes its exact identity and rehashes its bytes',t=>{
+  const root=testScratch(t,'executable-identity-hash'),path=join(root,'image'),fingerprints=executableFingerprints();
+  writeFileSync(path,'first');const before=lstatSync(path,{bigint:true}),first=fingerprints.read(path),digest=first.sha256;
+  first.sha256='caller mutation';assert.equal(fingerprints.read(path).sha256,digest);assert.equal(fingerprints.statistics().contentIdentityHits,1);
+  writeFileSync(path,'other');const after=lstatSync(path,{bigint:true});assert.equal(after.ino,before.ino);assert.equal(after.size,before.size);assert.notEqual(after.ctimeNs,before.ctimeNs);
+  const changed=fingerprints.read(path);assert.notEqual(changed.sha256,digest);assert.equal(changed.sha256,createHash('sha256').update('other').digest('hex'));
+  assert.equal(fingerprints.statistics().contentIdentityMisses,2);
+  fingerprints.read(path,true);assert.equal(fingerprints.statistics().forcedByteFences,1);
 });
 
 test('capture binds creator-owned scratch identities and leaves historical receipt reuse independent of cleanup',t=>{

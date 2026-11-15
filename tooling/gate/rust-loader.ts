@@ -2,7 +2,7 @@
 // facts are keyed by actual content and the loader's complete relevant context.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {lstatSync,readFileSync,realpathSync} from 'node:fs';
+import {openSync,closeSync,fstatSync,statSync,readFileSync,realpathSync,type BigIntStats} from 'node:fs';
 import {basename,isAbsolute,join,resolve} from 'node:path';
 import {needed} from './node-deps-elf.ts';
 import type {ByteFact} from './file-input-observer.ts';
@@ -10,7 +10,8 @@ export type Executable={path:string;physical:string;sha256:string;bytes:number};
 export type Loader={executable:Executable;elf:string;diagnostics:string;help:string;libraryPath:string|null};
 export type ChildLoaderFact={version:1;pid:number;birth:string;path:string;cwd:string;request?:string}&(
   {state:'unavailable';reason:string}|{state:'captured';request:string;executable:Executable;loader:Loader});
-export type LoaderCacheStatistics={elfHits:number;elfMisses:number;loaderHits:number;loaderMisses:number};
+export type LoaderCacheStatistics={elfHits:number;elfMisses:number;loaderHits:number;loaderMisses:number;
+  contentIdentityHits?:number;contentIdentityMisses?:number;forcedByteFences?:number;hashedBytes?:number};
 export type ChildLoaderObservation={namespaceStable:boolean;capture:ChildLoaderFact};
 export function execEnvironment(value:ByteFact|undefined,decode:(value:ByteFact,purpose:string)=>string):NodeJS.ProcessEnv{
   if(!value)throw Error('missing stopped exec environment');
@@ -39,14 +40,33 @@ export function childLoaderFact(value:unknown):value is ChildLoaderFact{
 }
 function fail(why:string):never{throw Error('Rust loader capture: '+why);}
 const sha=(bytes:string|Buffer)=>createHash('sha256').update(bytes).digest('hex');
+export function executableFingerprints(){
+  const hashes=new Map<string,{sha256:string;bytes:number}>();
+  const counts={contentIdentityHits:0,contentIdentityMisses:0,forcedByteFences:0,hashedBytes:0};
+  const identity=(s:BigIntStats)=>[s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].map(String).join(':');
+  return {statistics:()=>({...counts}),read(path:string,forceBytes=false):Executable{
+    if(!isAbsolute(path)||resolve(path)!==path)fail('executable path is not absolute and canonical: '+path);
+    // Read the opened object itself. Resolving /proc/<tid>/exe and reopening
+    // its logical target could substitute a replacement inode after exec.
+    const fd=openSync(path,'r');
+    try{
+      const before=fstatSync(fd,{bigint:true}),physical=realpathSync(path);
+      if(!before.isFile())fail('executable is not a regular file: '+path);
+      const key=identity(before),cached=hashes.get(key);let content=cached;
+      if(cached&&!forceBytes)counts.contentIdentityHits++;
+      else{
+        if(cached)counts.forcedByteFences++;else counts.contentIdentityMisses++;
+        const bytes=readFileSync(fd);counts.hashedBytes+=bytes.length;content={sha256:sha(bytes),bytes:bytes.length};
+      }
+      if(identity(fstatSync(fd,{bigint:true}))!==key||identity(statSync(path,{bigint:true}))!==key||realpathSync(path)!==physical)
+        fail('executable changed while reading: '+path);
+      if(!content)fail('missing executable content fingerprint');
+      hashes.set(key,content);return {path,physical,...content};
+    }finally{closeSync(fd);}
+  }};
+}
 export function fingerprint(path:string):Executable{
-  if(!isAbsolute(path)||resolve(path)!==path)fail('executable path is not absolute and canonical: '+path);
-  const physical=realpathSync(path),before=lstatSync(physical,{bigint:true});
-  if(!before.isFile())fail('executable is not a regular file: '+path);
-  const bytes=readFileSync(physical),after=lstatSync(physical,{bigint:true});
-  if(before.dev!==after.dev||before.ino!==after.ino||before.size!==after.size||before.mtimeNs!==after.mtimeNs||before.ctimeNs!==after.ctimeNs)
-    fail('executable changed while reading: '+path);
-  return {path,physical,sha256:sha(bytes),bytes:bytes.length};
+  return executableFingerprints().read(path);
 }
 export function interpreter(elf:string):string{
   const matches=[...elf.matchAll(/\[Requesting program interpreter: ([^\]\r\n]+)\]/g)];
@@ -92,18 +112,20 @@ export function loaderSearch(loader:Loader,cwd:string):{directories:{path:string
 
 export function rustLoaderCapture(toolEnvironment:NodeJS.ProcessEnv){
   const elfFacts=new Map<string,string>(),reports=new Map<string,{diagnostics:string;help:string}>();
+  const fingerprints=executableFingerprints();
   const counts={elfHits:0,elfMisses:0,loaderHits:0,loaderMisses:0};
-  return {statistics:()=>({...counts}),capture(path:string,cwd:string,env:NodeJS.ProcessEnv,platform:string,activePath=path):{executable:Executable;loader:Loader}{
-    const active=fingerprint(activePath),executable={...active,path};
+  return {statistics:()=>({...counts,...fingerprints.statistics()}),capture(path:string,cwd:string,env:NodeJS.ProcessEnv,platform:string,activePath=path):{executable:Executable;loader:Loader}{
+    const active=fingerprints.read(activePath),executable={...active,path};let inspected=false;
     for(const [name,value]of Object.entries(env))if(value&&name.startsWith('LD_')&&name!=='LD_LIBRARY_PATH'&&name!=='LD_HWCAP_MASK')
       fail(name+' loader derivation is not implemented');
     let elf=elfFacts.get(active.sha256);
     if(elf===undefined){
       counts.elfMisses++;
+      inspected=true;
       elf=execFileSync('readelf',['-lWd',activePath],{env:toolEnvironment,encoding:'utf8',stdio:['ignore','pipe','pipe']});
       elfFacts.set(active.sha256,elf);
     }else counts.elfHits++;
-    const loaderPath=interpreter(elf),loaderExecutable=fingerprint(loaderPath);
+    const loaderPath=interpreter(elf),loaderExecutable=fingerprints.read(loaderPath);
     // Locale affects --help text, and tunables can affect hwcaps independently
     // of LD_*. Include every such supplied variable rather than a hand-picked
     // subset of the loader's LD_* inputs.
@@ -112,6 +134,7 @@ export function rustLoaderCapture(toolEnvironment:NodeJS.ProcessEnv){
     let report=reports.get(key);
     if(report===undefined){
       counts.loaderMisses++;
+      inspected=true;
       const diagnostics=execFileSync(loaderPath,['--list-diagnostics'],{env,cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']})
         .split('\n').filter(line=>line.startsWith('path.system_dirs[')).join('\n');
       const helpText=execFileSync(loaderPath,['--help'],{env,cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']});
@@ -121,9 +144,9 @@ export function rustLoaderCapture(toolEnvironment:NodeJS.ProcessEnv){
     }else counts.loaderHits++;
     const loader:Loader={executable:loaderExecutable,elf,...report,libraryPath:env.LD_LIBRARY_PATH??null};
     loaderSearch(loader,cwd);
-    const after=fingerprint(activePath);
+    const after=fingerprints.read(activePath,inspected);
     if(active.sha256!==after.sha256||active.physical!==after.physical||active.bytes!==after.bytes
-      ||JSON.stringify(loaderExecutable)!==JSON.stringify(fingerprint(loaderPath)))fail('executable changed during loader capture');
+      ||JSON.stringify(loaderExecutable)!==JSON.stringify(fingerprints.read(loaderPath,inspected)))fail('executable changed during loader capture');
     return {executable,loader};
   }};
 }
