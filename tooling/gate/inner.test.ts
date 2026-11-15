@@ -100,9 +100,14 @@ for (const [initial, fails, keepGoing] of [["stale", false, false], ["fresh", fa
     utimesSync(compiler, 1, 1);
     writeFileSync(join(tree, ".gitignore"), "target/\n");
     writeFileSync(join(bin, "cargo"), `#!${process.execPath}
-import {appendFileSync,writeFileSync,readFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';
+import {appendFileSync,writeFileSync,readFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';import assert from 'node:assert/strict';
 const args=process.argv.slice(2);appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
-if(args[0]==='metadata') console.log(JSON.stringify({packages:[]}));
+if(args[0]==='metadata') {
+  assert.ok(process.env.NTS_GATE_RUN_DIR.startsWith(${JSON.stringify(join(root,'home/.cache/nts-inner')+'/')}),'metadata inherited the outer environment');
+  assert.equal(JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).temporary.path,process.env.TMPDIR);
+  writeFileSync(${JSON.stringify(calls+'.metadata-environment')},'canonical inner environment');
+  console.log(JSON.stringify({packages:[]}));
+}
 if(args[0]==='clippy') writeFileSync(${JSON.stringify(calls+'.clippy-target')},process.env.CARGO_TARGET_DIR);
 if(args[0]==='build') {
   if(${fails}) process.exit(23);
@@ -133,6 +138,7 @@ process.exit(spawnSync(command[0],command.slice(1),{stdio:'inherit'}).status??1)
       ...setenv, process.execPath, script, "--no-agree", ...(keepGoing ? ["--keep-going"] : [])], {env:fixtureEnvironment(t), encoding: "utf8" });
     assert.equal(ran.status, fails ? 1 : 0, ran.stdout + ran.stderr);
     assert.ok(existsSync(calls), ran.stdout + ran.stderr);
+    assert.equal(readFileSync(calls+'.metadata-environment','utf8'),'canonical inner environment');
     const phases = readFileSync(calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
     assert.equal(readFileSync(calls+".clippy-target","utf8"),join(tree,"target/clippy"));
     const build = phases.findIndex(args => args[0] === "build"), tests = phases.findIndex(args => args[0] === "test");

@@ -3,7 +3,6 @@ import {cargoOutput} from '../gate/cargo.ts';
 // vendored-data inputs; check Cargo.lock without network access, Cargo, or a
 // populated registry cache.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";

@@ -110,9 +110,10 @@ function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = 
   return result.status ?? 1;
 }
 
-function text(command: string, args: readonly string[]): string {
+function text(command: string, args: readonly string[], environment?:NodeJS.ProcessEnv): string {
+  if(command==='cargo'&&!environment)throw Error('Cargo metadata requires the sealed inner environment');
   const invocation=command==='cargo'?[process.execPath,CARGO_OWNER,...args]:[command,...args];
-  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, encoding: "utf8" });
+  const result = spawnSync(invocation[0]!, invocation.slice(1), { cwd: ROOT, encoding: "utf8",...(environment?{env:environment}:{}) });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")}: ${result.stderr.trim()}`);
   }
@@ -153,7 +154,7 @@ function changedPaths(base: string): string[] {
 }
 
 function packages(): Package[] {
-  const metadata = JSON.parse(text("cargo", ["metadata", "--no-deps", "--format-version", "1"]));
+  const metadata = JSON.parse(text("cargo", ["metadata", "--no-deps", "--format-version", "1"],launchEnvironment));
   assertTestLayout(ROOT,metadata.packages);
   return metadata.packages.map((pkg: { name: string; manifest_path: string }) => ({
     name: pkg.name,
