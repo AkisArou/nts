@@ -232,6 +232,14 @@ hidden and dependency paths. The runtime walker consumes the same descriptor.
 Its current members enter imports; additions and deletions match only that
 basename. An explicit `{data:true}` also retains the population's data and
 metadata membership without treating other members as host modules.
+The config audit builds its workspace project in the run temporary. One input
+list combines its workspace data namespace with the exact external declaration
+files the project reads, and serves both discovery and staging. Staging copies
+current tracked bytes, including working edits, in repository-relative layout;
+ignored build output stays out. The compiler observes the private tree afresh.
+An external reference missing from that declaration fails the private build
+instead of silently reading outside the step's selected inputs. Diagnostics are
+captured inside the staged lifetime; staging and cleanup failures remain errors.
 `fixtureInput(new URL("entry.ts", import.meta.url), {dataNamespaces: {...}})`
 carries a fixture's actual private data grants to both selection and staging.
 Only that child's declared data directories may be granted. The graph tracks
@@ -1043,6 +1051,12 @@ snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
 ## Decisions
+
+- The config audit builds in a temporary copy of its declared tracked workspace
+  and external inputs, retaining working edits while excluding ignored outputs.
+  One declaration list owns selection and staging, so an undeclared external
+  reference fails the private build. The copy remains alive through diagnostic
+  capture and is removed after the compiler drains.
 
 - **Pressure reclamation uses ownership provenance**: only approved rebuildable
   outputs and clean unbuilt pool checkouts may be removed under the capacity

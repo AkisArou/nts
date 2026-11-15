@@ -26,6 +26,7 @@ const repo = resolve(here, "../..");
 const pkgIndex = fileURLToPath(new URL("./src/index.ts",import.meta.url));
 const workspaceProject=projectConfig(new URL("../../tests/workspace/tsconfig.solution.json",import.meta.url));
 const workspaceMembers=moduleMembers(new URL("../../tests/workspace/",import.meta.url),'nts.config.ts',{data:true});
+/** @type {import('../gate/reader-inputs/main.ts').InputEntry[]} */
 const workspaceInputs=[workspaceMembers,
   {kind:'file',url:fileInput(new URL('../../runtime/native/libc.d.ts',import.meta.url))},
   {kind:'file',url:fileInput(new URL('../../runtime/native/scalars.d.ts',import.meta.url))}];

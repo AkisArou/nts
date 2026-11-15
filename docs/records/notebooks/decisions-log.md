@@ -2967,3 +2967,17 @@ overlapped a scheduled wide run unevenly and supplies sizing data and a
 supportive load control. Its timing is not a calibrated speed claim. Raw
 measurements stay in kept scratch; the task's written record retains the
 decision tables and artifact identities.
+
+## Config audit builds only its declared inputs in private (11-15)
+
+2026-11-15: #790 found that the config audit's forced solution build wrote
+incremental caches, declarations and a package link into the source workspace.
+The audit now builds in its run temporary from one list: the existing workspace
+data namespace and the external libc/scalars declarations. Staging copies
+current tracked bytes, including dirty edits and tracked siblings, preserving
+repository-relative paths and omitting ignored outputs. The compiler asks fresh
+filesystem questions in that copy. A future undeclared external reference fails
+there instead of silently escaping step selection. Diagnostic capture is held
+inside the copy's lifetime, and cleanup preserves a primary error alongside any
+release failure. Full-Program discovery remains an independent selection owner;
+the explicit byte declarations also provide the inputs needed for staging.
