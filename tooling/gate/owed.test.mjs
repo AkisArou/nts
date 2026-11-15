@@ -669,6 +669,17 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
   assert.ok(driver?.arms.some(a => a.run.includes("icu.ts --string-case")));
 });
 
+test("the tooling load experiment has exact placement and a manual full round", () => {
+  for (const added of [false, true]) {
+    const rules = owed([{path:"tooling/gate/tooling-load.ts",added}]);
+    assert.ok(!rules.some(rule => rule.full));
+    superset(gateSteps(rules), ["tooling"], "the standalone load experiment");
+    const driver = rules.find(rule => rule.name === "the standalone tooling load experiment");
+    assert.ok(driver?.arms.some(arm => arm.run.includes("tooling-load.ts --out") && arm.run.includes("named agent unit")));
+    assert.ok(owed([{path:"tooling/gate/tooling-load-unknown.ts",added}]).some(rule => rule.full && rule.fallback));
+  }
+});
+
 test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {
   const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit","test-host","tooling-types","gate-inputs"]);
   for (const path of ["results/benchmarks/cells.tsv","results/typed-release/cells.tsv","results/suite/corpus.md","results/a-new-tool/measurements.json"]) {

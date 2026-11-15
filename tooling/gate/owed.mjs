@@ -469,6 +469,13 @@ export const RULES = [
     ],
   },
   {
+    name: "the standalone tooling load experiment",
+    when: p => p === "tooling/gate/tooling-load.ts",
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "which tests fail only under admitted synthetic load", run: "run node tooling/gate/tooling-load.ts --out <fresh kept-scratch directory> in a named agent unit; inspect the completed round before starting another; this manual experiment is never a gate step" }],
+  },
+  {
     name: "the standalone program generator",
     when: p => p.startsWith("tooling/census/generate/"),
     steps: ["tooling"],
