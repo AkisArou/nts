@@ -36,10 +36,12 @@ pub(super) fn ensure(
         .truncate(false)
         .open(directory.join("entry.lock"))?;
     lock.lock()?;
-    std::fs::write(directory.join("invocation.json"), &identity.record)?;
     let archive = directory.join(format!("lib{}.a", target.name));
     let manifest = directory.join("complete.json");
-    if valid(&manifest, &archive, identity)? {
+    let hit = valid(&manifest, &archive, identity)?;
+    // A future manifest refuses before even diagnostic metadata is rewritten.
+    std::fs::write(directory.join("invocation.json"), &identity.record)?;
+    if hit {
         return Ok(archive);
     }
     if manifest.exists() {
@@ -83,11 +85,16 @@ fn valid(manifest: &Path, archive: &Path, identity: &invocation::Context) -> Res
     if !manifest.is_file() || !archive.is_file() {
         return Ok(false);
     }
-    let entry: Entry = serde_json::from_slice(&std::fs::read(manifest)?)?;
-    if entry.version != 2
-        || entry.identity != identity.key
-        || hash(&std::fs::read(archive)?) != entry.archive
-    {
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(manifest)?)?;
+    if value.get("version").and_then(serde_json::Value::as_u64) != Some(2) {
+        bail!(
+            "unsupported native dependency manifest version {}; expected 2: {}",
+            value.get("version").unwrap_or(&serde_json::Value::Null),
+            manifest.display()
+        );
+    }
+    let entry: Entry = serde_json::from_value(value)?;
+    if entry.identity != identity.key || hash(&std::fs::read(archive)?) != entry.archive {
         return Ok(false);
     }
     for input in entry.inputs {

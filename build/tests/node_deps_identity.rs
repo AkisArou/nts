@@ -368,8 +368,30 @@ fn changed_external_header_flag_and_compiler_cannot_reuse_stale_archive_inputs()
     let old = own.join("cache/archives/old-generation/keep");
     std::fs::create_dir_all(old.parent().expect("old generation")).expect("private old generation");
     std::fs::write(&old, "retained").expect("old bytes");
-    node_deps::ensure(&request).expect("existing generation hit");
+    let warm = node_deps::ensure(&request).expect("existing generation hit");
     assert_eq!(read(old), b"retained");
+    future_manifest_is_read_only(&request, &warm.archives[0]);
+}
+
+fn future_manifest_is_read_only(request: &Request, archive: &Path) {
+    let directory = archive.parent().expect("future entry");
+    let manifest = directory.join("complete.json");
+    let mut value = json(&manifest);
+    value["version"] = Value::from(3);
+    // The new schema's fields must not even be decoded by this reader.
+    value["inputs"] = serde_json::json!({"future":"different observation format"});
+    let future = serde_json::to_vec(&value).expect("future manifest");
+    std::fs::write(&manifest, &future).expect("private future manifest");
+    let invocation = directory.join("invocation.json");
+    std::fs::write(&invocation, "future invocation retained\n").expect("private future diagnostic");
+    let archive_bytes = read(archive);
+    let error = node_deps::ensure(request)
+        .expect_err("future cache state is read-only")
+        .to_string();
+    assert!(error.contains("manifest version 3; expected 2"), "{error}");
+    assert_eq!(read(manifest), future);
+    assert_eq!(read(invocation), b"future invocation retained\n");
+    assert!(read(archive) == archive_bytes);
 }
 
 #[test]

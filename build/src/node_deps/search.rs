@@ -81,10 +81,11 @@ fn forced_header_parents(text: &str) -> Result<Vec<PathBuf>> {
         // GCC -g emits a working-directory marker whose filename ends //.
         // It names a directory, not a header: taking its parent would add the
         // cache's sources namespace and make unrelated cache entries key inputs.
-        if !path.starts_with('<') && !path.ends_with("//") {
-            if let Some(parent) = std::path::Path::new(&path).parent() {
-                parents.push(parent.to_owned());
-            }
+        if !path.starts_with('<')
+            && !path.ends_with("//")
+            && let Some(parent) = std::path::Path::new(&path).parent()
+        {
+            parents.push(parent.to_owned());
         }
     }
     Ok(parents)
