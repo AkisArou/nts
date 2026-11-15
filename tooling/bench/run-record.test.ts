@@ -99,6 +99,8 @@ test('optional build details retain their CPU bases without changing historical 
   assert.match(page,/final waited CPU unavailable/);assert.match(page,/604\.130 CPU s sampled at bound/);
   const malformed=structuredClone(recorded);malformed.rows[0].builds!.version=2 as 1;
   assert.throws(()=>parseRun(malformed),/build details/);
+  const unknown=structuredClone(recorded);unknown.rows[0].builds!.stages[0].column='unknown column';
+  assert.throws(()=>parseRun(unknown),/unknown column/);
 });
 function git(root: string, args: string[]): string {
   const r = spawnSync("git", gitArguments(args), {env:testEnvironment(), cwd: root, encoding: "utf8" });

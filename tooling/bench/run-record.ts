@@ -351,6 +351,8 @@ function decode(value: unknown, derive: boolean): RunRecord {
         isDeepStrictEqual(r.verdicts, expected),
         "changed or missing recorded verdict: " + name,
       );
+    const builds=Object.hasOwn(r,'builds')?readBuildDetails(r.builds):undefined;
+    if(builds)check(builds.stages.every(stage=>columns.includes(stage.column)),name+': build stage names an unknown column');
     return {
       name,
       workloadIdentity,
@@ -358,7 +360,7 @@ function decode(value: unknown, derive: boolean): RunRecord {
       conditions: json(r.conditions, name + ".conditions"),
       cells,
       verdicts: expected,
-      ...(Object.hasOwn(r,'builds')?{builds:readBuildDetails(r.builds)}:{}),
+      ...(builds?{builds}:{}),
     };
   });
   check(new Set(rows.map((r) => r.name)).size === rows.length, "duplicate benchmark row");

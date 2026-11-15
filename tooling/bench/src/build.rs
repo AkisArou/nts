@@ -160,10 +160,11 @@ fn thread_cpu() -> Result<f64> {
     };
     let usage = getrusage(UsageWho::RUSAGE_THREAD)
         .map_err(|error| NotMeasured(format!("cannot read thread CPU: {error}")))?;
-    Ok(
-        (usage.user_time().num_microseconds() + usage.system_time().num_microseconds()) as f64
-            / 1e6,
+    let micros = u64::try_from(
+        usage.user_time().num_microseconds() + usage.system_time().num_microseconds(),
     )
+    .map_err(|error| NotMeasured(format!("invalid thread CPU: {error}")))?;
+    Ok(std::time::Duration::from_micros(micros).as_secs_f64())
 }
 
 #[derive(Debug)]
@@ -484,9 +485,15 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
             assert_eq!(result.stdout, b"answer:0");
         }
         let answer = recorder.thread("nts C", "compiler control", || {
+            let start = thread_cpu()?;
             let mut answer = 0;
-            for i in 0..1_000_000 {
-                answer ^= std::hint::black_box(i);
+            loop {
+                for i in 0..1_000_000 {
+                    answer ^= std::hint::black_box(i);
+                }
+                if thread_cpu()? > start {
+                    break;
+                }
             }
             Ok(answer)
         })?;
@@ -496,7 +503,7 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
         });
         assert!(
             failure
-                .unwrap_err()
+                .expect_err("the supplied compiler phase fails")
                 .to_string()
                 .contains("retained failure")
         );
@@ -508,8 +515,12 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
             assert_eq!(stage["receipt"]["status"], code);
             assert_eq!(stage["receipt"]["waited"]["exit"], code);
             assert!(
-                stage["receipt"]["waited"]["user_s"].as_f64().unwrap()
-                    + stage["receipt"]["waited"]["sys_s"].as_f64().unwrap()
+                stage["receipt"]["waited"]["user_s"]
+                    .as_f64()
+                    .expect("waited user CPU")
+                    + stage["receipt"]["waited"]["sys_s"]
+                        .as_f64()
+                        .expect("waited system CPU")
                     > 0.
             );
         }
@@ -517,7 +528,7 @@ mock.module({active},{{namedExports:{{...real,activeCommand:async(command,args,o
             stages[2]["basis"],
             "getrusage-RUSAGE_THREAD-v1; shared checker CPU excluded"
         );
-        assert!(stages[2]["cpu_s"].as_f64().unwrap() > 0.);
+        assert!(stages[2]["cpu_s"].as_f64().expect("calling thread CPU") > 0.);
         assert_eq!(stages[2]["complete"], true);
         assert_eq!(stages[3]["complete"], false);
         Ok(())

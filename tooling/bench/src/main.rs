@@ -123,6 +123,25 @@ struct Variant {
     generated: Generated,
 }
 
+impl Variant {
+    fn binary(&self, out: &Utf8Path, name: &str) -> Utf8PathBuf {
+        out.join(format!(
+            "{name}.{}",
+            self.label.replace([' ', '(', ')'], "")
+        ))
+    }
+    fn column(&self) -> &'static str {
+        match self.generated {
+            Generated::Specialized => "nts C",
+            Generated::Unspecialized => "nts f64",
+            Generated::Llvm => "nts LLVM",
+            Generated::Jvm => "nts JVM",
+            Generated::JavaReference => "Java",
+            Generated::None => "C++",
+        }
+    }
+}
+
 /// One hand-written reference per case, and it is C++.
 ///
 /// There used to be two, `C (double)` and `C (int)`, because it was not obvious
@@ -957,10 +976,7 @@ fn variants(
             results.push(None);
             continue;
         }
-        let binary = out.join(format!(
-            "{name}.{}",
-            variant.label.replace([' ', '(', ')'], "")
-        ));
+        let binary = variant.binary(out, name);
         // A case may have no hand-written reference. Real-world code taken from
         // somewhere else is the reason: transcribing a WHATWG decoder into C++
         // to have something to divide by is a second implementation to keep
@@ -971,19 +987,13 @@ fn variants(
             results.push(None);
             continue;
         }
-        let libraries = if variant.generated == Generated::None {
-            let libraries = reference_link::Libraries::read(case)?;
-            if let Some(reason) =
-                libraries.probe(&out.join(format!("{name}.reference-link")), builds)?
-            {
-                cpp_absence = Some(reason);
-                results.push(None);
-                continue;
-            }
-            libraries
-        } else {
-            reference_link::Libraries::default()
-        };
+        let (libraries, unavailable) =
+            reference_libraries(case, out, name, variant.generated, builds)?;
+        if let Some(reason) = unavailable {
+            cpp_absence = Some(reason);
+            results.push(None);
+            continue;
+        }
         let front = if variant.generated == Generated::None {
             source
         } else {
@@ -1028,17 +1038,15 @@ fn variants(
             }
             Generated::None => {}
         }
-        let built = compile(
-            root,
-            &cpp,
-            &c,
-            &binary,
+        let request = NativeBuild {
+            cpp: &cpp,
+            c: &c,
+            binary: &binary,
             defines,
-            &libraries,
-            builds,
-            variant.label,
-        )
-        .and_then(|()| {
+            libraries: &libraries,
+            column: variant.column(),
+        };
+        let built = compile(root, request, builds).and_then(|()| {
             measure_or_count(
                 &mut std::process::Command::new(&binary),
                 counting,
@@ -1056,6 +1064,21 @@ fn variants(
             outcomes,
         },
     ))
+}
+
+fn reference_libraries(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    generated: Generated,
+    builds: &mut build::Recorder<'_>,
+) -> Result<(reference_link::Libraries, Option<String>)> {
+    if generated != Generated::None {
+        return Ok((reference_link::Libraries::default(), None));
+    }
+    let libraries = reference_link::Libraries::read(case)?;
+    let unavailable = libraries.probe(&out.join(format!("{name}.reference-link")), builds)?;
+    Ok((libraries, unavailable))
 }
 
 /// Keep program termination apart from a broken compiler, build or tool.
@@ -2402,16 +2425,28 @@ fn prepare_snapshot(
 /// without LTO clang inlines one into the other; the nts workload is necessarily
 /// in a separate unit and could not be. That gap would show up as a codegen
 /// defect that does not exist.
+struct NativeBuild<'a> {
+    cpp: &'a [Utf8PathBuf],
+    c: &'a [Utf8PathBuf],
+    binary: &'a Utf8Path,
+    defines: &'a [&'a str],
+    libraries: &'a reference_link::Libraries,
+    column: &'a str,
+}
+
 fn compile(
     root: &Utf8Path,
-    cpp: &[Utf8PathBuf],
-    c: &[Utf8PathBuf],
-    binary: &Utf8Path,
-    defines: &[&str],
-    libraries: &reference_link::Libraries,
+    request: NativeBuild<'_>,
     builds: &mut build::Recorder<'_>,
-    column: &str,
 ) -> Result<()> {
+    let NativeBuild {
+        cpp,
+        c,
+        binary,
+        defines,
+        libraries,
+        column,
+    } = request;
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
     // `LTO`), for nts's code and the C++ reference alike: the same compiler and
     // the same flags on both sides of the ratio, and the same as `nts build`.
