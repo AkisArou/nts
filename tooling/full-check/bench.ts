@@ -41,6 +41,7 @@ import { candidateCommand } from "../landing/candidate-environment.ts";
 import { launcherEnvironment } from "../landing/run.ts";
 import { writeOutcome } from "./background.ts";
 import { Git } from "./git.ts";
+import { OWN_BEST_REGRESSION } from '../bench/own-best-marker.ts';
 
 const SESSION = fileURLToPath(new URL("./bench-session.ts", import.meta.url));
 const SESSION_OUTCOME = "session.outcome.json";
@@ -109,9 +110,9 @@ export function resultsCommit(tree: Git, base: string): { commit: string } | { n
   return stray.length ? { none: `the results commit also changes ${stray.join(", ")}` } : { commit: head };
 }
 
-/** Cases whose rendered backend/comparator ratio exceeds its prior best allowance. */
+/** Cases where a backend regresses against every established comparator. */
 export function slowerRows(fullMd: string): string[] {
-  return fullMd.split("\n").filter(line => line.startsWith("|") && line.includes("**SLOWER THAN BEST**"))
+  return fullMd.split("\n").filter(line => line.startsWith("|") && line.includes(OWN_BEST_REGRESSION))
     .map(line => line.split("|")[1]!.trim()).filter(Boolean);
 }
 

@@ -18,6 +18,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { readBenchmarkGroups, type BenchmarkGroup } from "./groups.ts";
+import { OWN_BEST_REGRESSION } from './own-best-marker.ts';
 
 export const COMPARATORS = ["node", "Bun JIT", "Bun AOT", "ScriptC"] as const;
 export const BACKENDS = ["nts C", "nts LLVM", "nts JVM"] as const;
@@ -534,7 +535,7 @@ export type BackendResult = {
   /** This backend's time over the reference's, or null unless both ran. */
   references: Record<Reference, number | null>;
   ownBest: Record<Comparator, OwnBestComparison | null>;
-  /** Any comparable ratio is slower than its prior best beyond the compounded allowance. */
+  /** At least one comparison exists, and every established comparator regresses. */
   slowerThanBest: boolean;
 };
 export type RowResult = {
@@ -586,6 +587,7 @@ export function results(runs: RunRecord[]): Results | null {
           const best = Object.fromEntries(COMPARATORS.map((comparator) => [
             comparator, compareBest(current, row.cells[comparator], bestRatio(backend, comparator, history)),
           ])) as BackendResult["ownBest"];
+          const established = Object.values(best).filter((comparison): comparison is OwnBestComparison => comparison !== null);
           return [
             backend,
             {
@@ -594,7 +596,7 @@ export function results(runs: RunRecord[]): Results | null {
                 REFERENCES.map((r) => [r, ratio(current, row.cells[r])]),
               ),
               ownBest: best,
-              slowerThanBest: Object.values(best).some((comparison) => comparison?.slowerThanBest),
+              slowerThanBest: established.length > 0 && established.every((comparison) => comparison.slowerThanBest),
             },
           ];
         }),
@@ -690,7 +692,7 @@ export function renderFull(runs: RunRecord[], groups: readonly BenchmarkGroup[] 
         const quotient=(value:number)=>value.toPrecision(6)+'×';
         return [`${comparator}: ${quotient(currentRatio)}; best ${quotient(best.ratio)}; change ${quotient(relativeRatio)}; allowance ${quotient(tolerance)}; noise ${Object.values(spreads).map(value=>value.toPrecision(6)).join(' · ')} = ${quotient(spreadProduct)}; ${best.compiler}; [${best.run}](runs/${best.run}.json)`+(slowerThanBest?' **SLOWER THAN BEST**':'')];
       });
-      return comparisons.length?comparisons.join('<br>'):'not established';
+      return comparisons.length?comparisons.join('<br>')+(backends[b].slowerThanBest?'<br>'+OWN_BEST_REGRESSION:''):'not established';
     });
     table.push(
       "|" +

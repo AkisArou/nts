@@ -321,6 +321,24 @@ test('ratio uncertainty compounds all four named spreads from the two runs',()=>
   assert.ok(renderFull([old,sealRun(current)]).includes('noise 1.01000 · 1.02000 · 1.03000 · 1.04000'));
 });
 
+test('one comparator speeding up is visible but is not a backend regression',()=>{
+  const old=fixture('node-old'),current=fixture('node-current','2026-10-29T13:00:00.000Z');
+  current.rows[0].cells.node.nanoseconds=50;
+  const backend=results([old,sealRun(current)])!.rows[0].backends['nts C'];
+  assert.equal(backend.ownBest.node?.slowerThanBest,true);
+  assert.equal(backend.ownBest['Bun JIT']?.slowerThanBest,false);
+  assert.equal(backend.slowerThanBest,false);
+});
+
+test('a comparator without history does not vote against an established regression',()=>{
+  const old=fixture('one-established-old'),current=fixture('one-established-current','2026-10-29T13:00:00.000Z');
+  for(const comparator of COMPARATORS)if(comparator!=='node')old.rows[0].cells[comparator]={status:'NOT_PROVIDED',nanoseconds:null,spread:null,checksum:null,verified:false,reason:'no prior timing',details:null};
+  current.rows[0].cells['nts C'].nanoseconds=120;
+  const backend=results([sealRun(old),sealRun(current)])!.rows[0].backends['nts C'];
+  assert.equal(Object.values(backend.ownBest).filter(value=>value!==null).length,1);
+  assert.equal(backend.slowerThanBest,true);
+});
+
 test('missing or unverified comparator timings never fall back to absolute time',()=>{
   const old=fixture('missing-old'),current=fixture('missing-current','2026-10-29T13:00:00.000Z');
   current.rows[0].cells['nts C'].nanoseconds=8000;

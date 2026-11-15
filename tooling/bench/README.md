@@ -10,7 +10,9 @@ ratio with its best prior ratio on the same machine, source/input inventory and
 timing contract. A regression exceeds max(1.05, the product of the current and
 prior backend and comparator spreads). The report retains all four factors,
 their product, the comparator, compiler and run. Invalid, unverified or missing
-pairs remain unestablished. Absolute times are information only.
+pairs remain unestablished. A backend regresses only when every established
+comparator regresses, with at least one established pair. Individual comparator
+flags remain visible as observations. Absolute times are information only.
 `node tooling/records/summary.ts benchmarks` prints the same model as JSON, with
 each backend's ratios to the C++ and Java references beside it; the benchmark
 summary contract is version 2 and its definition is

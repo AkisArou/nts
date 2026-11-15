@@ -1655,7 +1655,10 @@ the first node task.
   product of the four current/prior cell spreads) is a regression. The report
   shows the comparator, all four factors, their product and the prior run;
   absolute times are information only. Missing or unverified pairs remain
-  unestablished. The benchmark JSON summary uses this same model, in version 2.
+  unestablished. A backend regression requires at least one established pair
+  and a regression against every established comparator; individual comparator
+  flags remain observations. The nightly reader consumes the backend verdict.
+  The benchmark JSON summary uses this same model, in version 2.
 - **The full check's later additions** (10-28): native instruction counts
   gated per benchmark row against the noise band; a sanitized,
   reference-counted differential run over the corpus; the compile-time guard
@@ -1693,5 +1696,7 @@ the first node task.
   retains a compatible prior within-run ratio. The four current/prior cell
   spreads compound into its allowance, with a 1.05 floor. Markdown and the
   versioned benchmark JSON summary expose the same comparator, factors and
-  provenance; absolute times do not decide a regression
+  provenance. At least one established pair and agreement across every
+  established comparator decide the backend and nightly row verdict;
+  absolute times do not decide a regression
   ([log](records/notebooks/decisions-log.md#own-best-benchmarks-compare-ratios-11-15)).

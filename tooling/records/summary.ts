@@ -76,8 +76,9 @@ import {gitArguments} from "../gate/git-arguments/main.ts";
 // ratio to its best compatible prior ratio on this machine, workload and
 // harness contract. relativeRatio is currentRatio / best.ratio. Its tolerance
 // is max(1.05, spreadProduct), the product of the four named cell spreads.
-// Missing comparisons are null. The backend's slowerThanBest is true when any
-// comparator exceeds that allowance. Absolute times remain information only.
+// Missing comparisons are null. The backend's slowerThanBest requires at least
+// one established comparison and every such comparator beyond its allowance.
+// Individual comparator flags remain visible. Absolute times are information only.
 // llvmVersusC is LLVM's time over C's beside the
 // larger of their spreads, and `trailing` the backend slower beyond it (c,
 // llvm, or null for neither); null unless both ran.

@@ -15,6 +15,7 @@ import { DEX_RECORD, written as dexRecord } from "../android/dex-record.ts";
 import { compileRecordPath, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { runsRecord, serializeRunRecord } from "../bench/run-outcomes.ts";
 import { BACKENDS, COLUMNS, COMPARATORS, POLICY, publishRun, renderFull, results, sealRun, type Cell, type RunRecord } from "../bench/run-record.ts";
+import { OWN_BEST_REGRESSION } from '../bench/own-best-marker.ts';
 import { censusReportPath, writeCensusReport, type CensusReport } from "../census/census-report.ts";
 import { serializeTest262Record } from "../census/test262-record.ts";
 import { serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
@@ -132,7 +133,7 @@ test("the benchmark summary is the newest complete run, from the model full.md r
   assert.deepEqual([gaps.backends.llvm.ownBest.node?.best.ratio, gaps.backends.llvm.slowerThanBest], [0.47, true]);
   assert.equal(gaps.backends.jvm.ownBest.node?.slowerThanBest,false);
   assert.equal(gaps.backends.jvm.ownBest['Bun JIT']?.slowerThanBest,true);
-  assert.equal(gaps.backends.jvm.slowerThanBest,true);
+  assert.equal(gaps.backends.jvm.slowerThanBest,false);
   assert.equal(gaps.llvmVersusC, null);
 
   // A legacy time is unverified and has no own best; here C trails LLVM.
@@ -166,7 +167,7 @@ test("the page and the summary say the same thing: every count, verdict and rati
     for (const [index, backend] of (["c", "llvm", "jvm"] as const).entries()) {
       const best = one.backends[backend], shown = cells[COLUMNS.length + verdicts.length + 1 + index]!;
       assert.equal(shown === "not established", Object.values(best.ownBest).every(value=>value===null), `${one.name} ${backend}`);
-      assert.equal(shown.includes(" **SLOWER THAN BEST**"), best.slowerThanBest, `${one.name} ${backend}`);
+      assert.equal(shown.includes(OWN_BEST_REGRESSION), best.slowerThanBest, `${one.name} ${backend}`);
     }
   }
 });

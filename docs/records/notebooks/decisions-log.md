@@ -3067,6 +3067,9 @@ contract. A regression exceeds max(1.05, the product of the current backend,
 current comparator, prior backend and prior comparator spreads). The common
 model retains the comparator, all four factors, their product and prior-run
 provenance for Markdown and the benchmark JSON summary. Missing or unverified
-pairs are unestablished; absolute times remain information. The benchmark
+pairs are unestablished; absolute times remain information. The backend verdict
+requires every established comparator to regress and at least one established
+pair; a lone comparator outlier remains a visible observation. The nightly
+reader consumes the shared backend marker. The benchmark
 summary contract takes version 2 while conformance retains version 1. Immutable
 run records and the standing within-run bar keep their existing contracts.

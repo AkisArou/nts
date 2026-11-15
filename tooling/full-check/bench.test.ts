@@ -24,6 +24,7 @@ import { gateEnvironment } from "../gate/canonical-environment.ts";
 import { ownMemory } from "../gate/test-memory.ts";
 import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 import { COLUMNS, COMPARATORS, POLICY, renderFull, sealRun, type Cell } from "../bench/run-record.ts";
+import { OWN_BEST_REGRESSION } from '../bench/own-best-marker.ts';
 import { removable } from "../gate/run-temporary.ts";
 import {runSession,type SessionBudgetObservation} from './bench-session.ts';
 
@@ -66,7 +67,7 @@ test("the results-only commit on its base is the run's; anything else is named",
 
 test("rows full.md marks slower than their own ratio best are read by case", () => {
   const page = ["# Benchmark results", "| Case | nts C | nts C own best ratios |", "|---|---|---|",
-    "|awfy-list|9.68 µs|node: 0.968×; best 0.900×; abc; [run](runs/x.json) **SLOWER THAN BEST**|", "|arrays|1.39 µs|not established|",
+    `|awfy-list|9.68 µs|node: 0.968×; best 0.900×; abc; [run](runs/x.json) **SLOWER THAN BEST**<br>${OWN_BEST_REGRESSION}|`, "|arrays|1.39 µs|node: outlier **SLOWER THAN BEST**|",
     "Prose that mentions **SLOWER THAN BEST** is not a row."].join("\n");
   assert.deepEqual(slowerRows(page), ["awfy-list"]);
 });
@@ -84,6 +85,9 @@ test('the nightly reader consumes the real ratio model without absolute-time loa
   });
   const old=make(1,1),uniform=make(2,3),changed=make(2,3,1.5);
   assert.deepEqual(slowerRows(renderFull([old,uniform])),[]);
+  const nodeOnly=make(2,3);nodeOnly.rows[0].cells.node.nanoseconds!/=2;
+  const outlier=renderFull([old,sealRun(nodeOnly)]);assert.ok(outlier.includes('**SLOWER THAN BEST**'));
+  assert.deepEqual(slowerRows(outlier),[],'a per-comparator detail marker cannot create a nightly row alarm');
   const page=renderFull([old,changed]);assert.deepEqual(slowerRows(page),['ratio-case']);assert.match(page,/node: .*\*\*SLOWER THAN BEST\*\*/);
 });
 
