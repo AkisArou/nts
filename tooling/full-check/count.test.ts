@@ -439,6 +439,7 @@ test('record citation paths retain exact issue boundaries and both issue folder 
 
 test('record retention reads immutable main blobs, independently of working edits and another committed branch',t=>{
   const s=scratchRepo(t,'count-record-citations'),cache=join(s.dir,'cache');
+  assert.deepEqual(readScratchRecordCitations(s.root,cache,s.git(['rev-parse','main']).trim()),[],'Git grep no-match is a measured empty citation set');
   s.commit({'docs/records/receipt.md':'evidence nts-scratch/42/raw.json\n'},'main record');
   const main=s.git(['rev-parse','main']).trim();
   writeFileSync(join(s.root,'docs/records/receipt.md'),'dirty nts-scratch/43/raw.json\n');
